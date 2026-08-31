@@ -479,6 +479,7 @@ namespace QS3D.Core.Measurement
                 items.Add(item);
             }
             RequireObservedCount(knownCount, items.Count, parameterName, "facts");
+            RequireKnownCountStable(source, knownCount, parameterName, "facts");
             items.Sort(CompareFacts);
             for (var i = 1; i < items.Count; i++)
             {
@@ -512,6 +513,7 @@ namespace QS3D.Core.Measurement
                 items.Add(item);
             }
             RequireObservedCount(knownCount, items.Count, parameterName, "adjustments");
+            RequireKnownCountStable(source, knownCount, parameterName, "adjustments");
             items.Sort(CompareAdjustments);
             for (var i = 1; i < items.Count; i++)
             {
@@ -534,6 +536,7 @@ namespace QS3D.Core.Measurement
                 items.Add(RequireText(item, nameof(source)));
             }
             RequireObservedCount(knownCount, items.Count, nameof(source), "messages");
+            RequireKnownCountStable(source, knownCount, nameof(source), "messages");
             items.Sort(StringComparer.Ordinal);
             for (var i = 1; i < items.Count; i++)
             {
@@ -594,10 +597,21 @@ namespace QS3D.Core.Measurement
                 throw TraversalCountError(parameterName, collectionName);
         }
 
+        private static void RequireKnownCountStable<T>(
+            IEnumerable<T> source,
+            int? admittedCount,
+            string parameterName,
+            string collectionName)
+        {
+            var finalCount = RequireSupportedCount(source, parameterName, collectionName);
+            if (finalCount != admittedCount)
+                throw TraversalCountError(parameterName, collectionName);
+        }
+
         private static ArgumentException TraversalCountError(string parameterName, string collectionName)
         {
             return new ArgumentException(
-                "Measurement trace " + collectionName + " count does not match source traversal.",
+                "Measurement trace " + collectionName + " count does not match source traversal; count changed during enumeration.",
                 parameterName);
         }
 

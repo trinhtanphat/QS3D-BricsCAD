@@ -207,33 +207,65 @@ namespace QS3D.Core.Services
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            foreach (var value in sourceElementIds)
+            using (var enumerator = sourceElementIds.GetEnumerator())
             {
-                if (knownCount.HasValue && index >= knownCount.Value)
-                    throw new ArgumentException(
-                        "Dependency impact source traversal exceeds its advertised Count of " + knownCount.Value.ToString(CultureInfo.InvariantCulture) + ".",
-                        nameof(sourceElementIds));
-                if (index >= maxRootCount)
-                    throw RootCountLimitError(maxRootCount, nameof(sourceElementIds));
-                var raw = value ?? string.Empty;
-                if (string.IsNullOrWhiteSpace(raw))
-                    throw new ArgumentException("Dependency impact source id cannot be blank at index " + index.ToString(CultureInfo.InvariantCulture) + ".", nameof(sourceElementIds));
-                if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
-                    throw new ArgumentException("Dependency impact source id must be canonical without surrounding whitespace: " + raw + ".", nameof(sourceElementIds));
-                if (!seen.Add(raw))
-                    throw new ArgumentException("Duplicate dependency impact source id: " + raw + ".", nameof(sourceElementIds));
-                result.Add(raw);
-                index++;
+                while (enumerator.MoveNext())
+                {
+                    RequireKnownCountStableDuringTraversal(sourceElementIds, knownCount, nameof(sourceElementIds));
+                    if (knownCount.HasValue && index >= knownCount.Value)
+                        throw new ArgumentException(
+                            "Dependency impact source traversal exceeds its advertised Count of " + knownCount.Value.ToString(CultureInfo.InvariantCulture) + ".",
+                            nameof(sourceElementIds));
+                    if (index >= maxRootCount)
+                        throw RootCountLimitError(maxRootCount, nameof(sourceElementIds));
+
+                    var value = enumerator.Current;
+                    var raw = value ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(raw))
+                        throw new ArgumentException("Dependency impact source id cannot be blank at index " + index.ToString(CultureInfo.InvariantCulture) + ".", nameof(sourceElementIds));
+                    if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                        throw new ArgumentException("Dependency impact source id must be canonical without surrounding whitespace: " + raw + ".", nameof(sourceElementIds));
+                    if (!seen.Add(raw))
+                        throw new ArgumentException("Duplicate dependency impact source id: " + raw + ".", nameof(sourceElementIds));
+                    result.Add(raw);
+                    index++;
+                }
             }
             if (knownCount.HasValue && index != knownCount.Value)
                 throw new ArgumentException(
                     "Dependency impact source traversal count " + index.ToString(CultureInfo.InvariantCulture) +
                     " does not match its advertised Count of " + knownCount.Value.ToString(CultureInfo.InvariantCulture) + ".",
                     nameof(sourceElementIds));
+            RequireKnownCountStableAfterTraversal(sourceElementIds, knownCount, nameof(sourceElementIds));
             if (result.Count == 0)
                 throw new ArgumentException("Dependency impact planning requires at least one source element id.", nameof(sourceElementIds));
             result.Sort(StringComparer.OrdinalIgnoreCase);
             return result.AsReadOnly();
+        }
+
+        private static void RequireKnownCountStableDuringTraversal(IEnumerable<string> source, int? expectedKnownCount, string parameterName)
+        {
+            if (!expectedKnownCount.HasValue)
+                return;
+
+            var observedKnownCount = TryGetKnownCount(source, out var conflictingKnownCounts, out var invalidNegativeKnownCount);
+            if (invalidNegativeKnownCount)
+                throw new ArgumentException("Dependency impact source exposes an invalid negative known Count during traversal.", parameterName);
+            if (conflictingKnownCounts)
+                throw new ArgumentException("Dependency impact source exposes conflicting known Count values during traversal.", parameterName);
+            if (observedKnownCount != expectedKnownCount)
+                throw new ArgumentException("Dependency impact source known Count changed while its roots were being traversed.", parameterName);
+        }
+
+        private static void RequireKnownCountStableAfterTraversal(IEnumerable<string> source, int? expectedKnownCount, string parameterName)
+        {
+            var observedKnownCount = TryGetKnownCount(source, out var conflictingKnownCounts, out var invalidNegativeKnownCount);
+            if (invalidNegativeKnownCount)
+                throw new ArgumentException("Dependency impact source exposes an invalid negative known Count after traversal.", parameterName);
+            if (conflictingKnownCounts)
+                throw new ArgumentException("Dependency impact source exposes conflicting known Count values after traversal.", parameterName);
+            if (observedKnownCount != expectedKnownCount)
+                throw new ArgumentException("Dependency impact source known Count changed while its roots were being traversed.", parameterName);
         }
 
         private static int? TryGetKnownCount(

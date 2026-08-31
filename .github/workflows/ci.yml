@@ -195,9 +195,23 @@ jobs:
               throw "Required BricsCAD V25 compile reference is missing: $name"
             }
           }
-      - name: Build BricsCAD V25 plugin
+      - name: Build BricsCAD V25 plugin against locked reference generations
         if: ${{ needs.preflight.outputs.build_validation == 'true' }}
-        run: dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64
-      - name: Build #3681 local V25 qualification harness
+        shell: pwsh
+        run: |
+          .\scripts\build-v25-with-stable-references.ps1 `
+            -BricsCadDir $env:BRICSCAD_V25_DIR `
+            -ProjectPath (Join-Path $env:GITHUB_WORKSPACE 'src\QS3D.BricsCAD.V25\QS3D.BricsCAD.V25.csproj') `
+            -SnapshotDir (Join-Path $env:RUNNER_TEMP 'qs3d-v25-plugin-reference-snapshot') `
+            -Configuration Release `
+            -Platform x64
+      - name: Build #3681 local V25 qualification harness against locked reference generations
         if: ${{ needs.preflight.outputs.build_validation == 'true' }}
-        run: dotnet build tests/QS3D.BricsCAD.V25.LocalQualification/QS3D.BricsCAD.V25.LocalQualification.csproj -c Release -p:Platform=x64
+        shell: pwsh
+        run: |
+          .\scripts\build-v25-with-stable-references.ps1 `
+            -BricsCadDir $env:BRICSCAD_V25_DIR `
+            -ProjectPath (Join-Path $env:GITHUB_WORKSPACE 'tests\QS3D.BricsCAD.V25.LocalQualification\QS3D.BricsCAD.V25.LocalQualification.csproj') `
+            -SnapshotDir (Join-Path $env:RUNNER_TEMP 'qs3d-v25-local-qualification-reference-snapshot') `
+            -Configuration Release `
+            -Platform x64

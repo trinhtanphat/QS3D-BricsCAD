@@ -19,7 +19,12 @@ namespace QS3D.Core.SmokeTests
             CountedOversizeFailsBeforeEnumeration();
             NegativeKnownCountFailsBeforeEnumeration();
             ConflictingKnownCountsFailBeforeEnumeration();
+            CountDriftAfterExactTraversalFailsClosed();
+            PostTraversalInterfaceConflictFailsClosed();
+            PostTraversalNegativeKnownCountFailsClosed();
+            HonestTwoPhaseCountRemainsAccepted();
             ConsistentKnownCountsRemainAccepted();
+            PureStreamingInputRemainsAccepted();
             StreamingOversizeStopsAtFirstDisallowedElement();
             ExactBoundaryRemainsAccepted();
             ExistingValidationRemainsStable();
@@ -52,6 +57,70 @@ namespace QS3D.Core.SmokeTests
             Contains("conflicting known counts", error.Message, "Conflicting MEP count failure must identify the contract mismatch.");
         }
 
+        private static void CountDriftAfterExactTraversalFailsClosed()
+        {
+            var source = new PhaseChangingReadOnlyElements(
+                beforeCount: 2,
+                afterCount: 3,
+                new[] { Element(0), Element(1) });
+            var error = Capture<InvalidOperationException>(() => new MepQuantityService().Aggregate(source));
+
+            Equal(1, source.GetEnumeratorCalls, "MEP Count-drift source must be traversed exactly once.");
+            Equal(9, source.CountReads, "MEP Count evidence must be rebound around traversal, after Current, and before publication.");
+            Contains(
+                "known count changed during traversal",
+                error.Message,
+                "MEP post-traversal Count drift must fail before aggregate publication.");
+        }
+
+        private static void PostTraversalInterfaceConflictFailsClosed()
+        {
+            var source = new PhaseChangingMultiCountedElements(
+                beforeGenericCount: 2,
+                beforeReadOnlyCount: 2,
+                beforeNonGenericCount: 2,
+                afterGenericCount: 2,
+                afterReadOnlyCount: 3,
+                afterNonGenericCount: 2,
+                new[] { Element(0), Element(1) });
+            var error = Capture<InvalidOperationException>(() => new MepQuantityService().Aggregate(source));
+
+            Equal(1, source.GetEnumeratorCalls, "MEP post-traversal conflict source must be traversed exactly once.");
+            Contains(
+                "conflicting known counts",
+                error.Message,
+                "MEP post-traversal interface conflict must fail closed.");
+        }
+
+        private static void PostTraversalNegativeKnownCountFailsClosed()
+        {
+            var source = new PhaseChangingReadOnlyElements(
+                beforeCount: 1,
+                afterCount: -1,
+                new[] { Element(0) });
+            var error = Capture<InvalidOperationException>(() => new MepQuantityService().Aggregate(source));
+
+            Equal(1, source.GetEnumeratorCalls, "MEP post-traversal negative Count source must be traversed exactly once.");
+            Contains(
+                "negative known count",
+                error.Message,
+                "MEP post-traversal negative Count must fail closed.");
+        }
+
+        private static void HonestTwoPhaseCountRemainsAccepted()
+        {
+            var source = new PhaseChangingReadOnlyElements(
+                beforeCount: 3,
+                afterCount: 3,
+                new[] { Element(0), Element(1), Element(2) });
+            var groups = new MepQuantityService().Aggregate(source);
+
+            Equal(1, source.GetEnumeratorCalls, "Stable two-phase MEP source must be traversed exactly once.");
+            Equal(12, source.CountReads, "Stable MEP Count evidence must be rebound before/after every advancement, after every Current, and before publication.");
+            Equal(1, groups.Count, "Stable two-phase MEP source grouping changed unexpectedly.");
+            Equal(3, groups[0].ElementCount, "Stable two-phase MEP source element count changed unexpectedly.");
+        }
+
         private static void ConsistentKnownCountsRemainAccepted()
         {
             var source = new MultiCountedElements(
@@ -66,6 +135,16 @@ namespace QS3D.Core.SmokeTests
             Equal(3, groups[0].ElementCount, "Consistent MEP source element count changed unexpectedly.");
             Equal(3, groups[0].QuantityCount, "Consistent MEP source quantity count changed unexpectedly.");
             Equal(3d, groups[0].LengthM, "Consistent MEP source length changed unexpectedly.");
+        }
+
+        private static void PureStreamingInputRemainsAccepted()
+        {
+            var source = new StreamingElements(3);
+            var groups = new MepQuantityService().Aggregate(source);
+
+            Equal(3, source.YieldedCount, "Pure streaming MEP input must still be traversed normally.");
+            Equal(1, groups.Count, "Pure streaming MEP grouping changed unexpectedly.");
+            Equal(3, groups[0].ElementCount, "Pure streaming MEP element count changed unexpectedly.");
         }
 
         private static void StreamingOversizeStopsAtFirstDisallowedElement()
@@ -162,6 +241,43 @@ namespace QS3D.Core.SmokeTests
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
+        private sealed class PhaseChangingReadOnlyElements : IReadOnlyCollection<MepElement>
+        {
+            private readonly int _beforeCount;
+            private readonly int _afterCount;
+            private readonly MepElement[] _items;
+            private bool _traversalCompleted;
+
+            internal PhaseChangingReadOnlyElements(int beforeCount, int afterCount, MepElement[] items)
+            {
+                _beforeCount = beforeCount;
+                _afterCount = afterCount;
+                _items = items ?? throw new ArgumentNullException(nameof(items));
+            }
+
+            public int Count
+            {
+                get
+                {
+                    CountReads++;
+                    return _traversalCompleted ? _afterCount : _beforeCount;
+                }
+            }
+
+            internal int CountReads { get; private set; }
+            internal int GetEnumeratorCalls { get; private set; }
+
+            public IEnumerator<MepElement> GetEnumerator()
+            {
+                GetEnumeratorCalls++;
+                for (var i = 0; i < _items.Length; i++)
+                    yield return _items[i];
+                _traversalCompleted = true;
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
         private sealed class MultiCountedElements : ICollection<MepElement>, IReadOnlyCollection<MepElement>, ICollection
         {
             private readonly int _genericCount;
@@ -196,6 +312,61 @@ namespace QS3D.Core.SmokeTests
             {
                 GetEnumeratorCalls++;
                 return ((IEnumerable<MepElement>)_items).GetEnumerator();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class PhaseChangingMultiCountedElements : ICollection<MepElement>, IReadOnlyCollection<MepElement>, ICollection
+        {
+            private readonly int _beforeGenericCount;
+            private readonly int _beforeReadOnlyCount;
+            private readonly int _beforeNonGenericCount;
+            private readonly int _afterGenericCount;
+            private readonly int _afterReadOnlyCount;
+            private readonly int _afterNonGenericCount;
+            private readonly MepElement[] _items;
+            private bool _traversalCompleted;
+
+            internal PhaseChangingMultiCountedElements(
+                int beforeGenericCount,
+                int beforeReadOnlyCount,
+                int beforeNonGenericCount,
+                int afterGenericCount,
+                int afterReadOnlyCount,
+                int afterNonGenericCount,
+                MepElement[] items)
+            {
+                _beforeGenericCount = beforeGenericCount;
+                _beforeReadOnlyCount = beforeReadOnlyCount;
+                _beforeNonGenericCount = beforeNonGenericCount;
+                _afterGenericCount = afterGenericCount;
+                _afterReadOnlyCount = afterReadOnlyCount;
+                _afterNonGenericCount = afterNonGenericCount;
+                _items = items ?? throw new ArgumentNullException(nameof(items));
+            }
+
+            int ICollection<MepElement>.Count => _traversalCompleted ? _afterGenericCount : _beforeGenericCount;
+            int IReadOnlyCollection<MepElement>.Count => _traversalCompleted ? _afterReadOnlyCount : _beforeReadOnlyCount;
+            int ICollection.Count => _traversalCompleted ? _afterNonGenericCount : _beforeNonGenericCount;
+            bool ICollection<MepElement>.IsReadOnly => true;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+            internal int GetEnumeratorCalls { get; private set; }
+
+            void ICollection<MepElement>.Add(MepElement item) => throw new NotSupportedException();
+            void ICollection<MepElement>.Clear() => throw new NotSupportedException();
+            bool ICollection<MepElement>.Contains(MepElement item) => Array.IndexOf(_items, item) >= 0;
+            void ICollection<MepElement>.CopyTo(MepElement[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
+            bool ICollection<MepElement>.Remove(MepElement item) => throw new NotSupportedException();
+            void ICollection.CopyTo(Array array, int index) => _items.CopyTo(array, index);
+
+            public IEnumerator<MepElement> GetEnumerator()
+            {
+                GetEnumeratorCalls++;
+                for (var i = 0; i < _items.Length; i++)
+                    yield return _items[i];
+                _traversalCompleted = true;
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();

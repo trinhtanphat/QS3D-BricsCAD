@@ -49,14 +49,17 @@ namespace QS3D.Core.SmokeTests
 
         private static void OwnershipIndexResolvesEquivalentHighBitSpellings()
         {
+            const string canonical = "8000000000000000";
+            const string callerAlias = "0x8000000000000000";
+
             var project = new ProjectState("generated-handle-smoke", "Generated handle smoke");
             var owner = new ProjectElement("BEAM-1", ElementCategory.Beam);
-            owner.Properties["GeneratedSolidHandle"] = "0x8000000000000000";
+            owner.Properties["GeneratedSolidHandle"] = canonical;
             project.Elements.Add(owner);
 
             var index = GeneratedHandleOwnershipIndex.Build(project);
-            var found = index.TryFindOwner("8000000000000000", out var resolved, out var propertyKey);
-            Assert(found, "Ownership index must resolve an equivalent high-bit handle spelling.");
+            var found = index.TryFindOwner(callerAlias, out var resolved, out var propertyKey);
+            Assert(found, "Ownership index must resolve a caller-side equivalent high-bit handle spelling against canonical persisted provenance.");
             Assert(ReferenceEquals(owner, resolved), "Ownership index resolved the wrong owner for an equivalent high-bit handle spelling.");
             AssertEqual("GeneratedSolidHandle", propertyKey, "Ownership index returned the wrong owner slot.");
         }

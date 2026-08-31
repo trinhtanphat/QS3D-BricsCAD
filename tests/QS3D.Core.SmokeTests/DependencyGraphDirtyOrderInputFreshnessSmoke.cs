@@ -13,21 +13,20 @@ namespace QS3D.Core.SmokeTests
 
         internal static void Run()
         {
-            IteratorMutationIsObservedAfterEnumeration();
+            IteratorMutationFailsClosedAfterAdmission();
             StableDirtySubsetKeepsTopologicalOrder();
         }
 
-        private static void IteratorMutationIsObservedAfterEnumeration()
+        private static void IteratorMutationFailsClosedAfterAdmission()
         {
             var first = CleanElement("A");
             var second = CleanElement("B");
             second.DependsOn.Add(first.Id);
 
-            var order = new DependencyGraph().TopologicalDirtyOrder(MutateAfterFirstYield(first, second));
+            var error = Throws<InvalidOperationException>(
+                () => new DependencyGraph().TopologicalDirtyOrder(MutateAfterFirstYield(first, second)));
 
-            Equal(2, order.Count, "mutating iterator count");
-            Equal(first.Id, order[0].Id, "mutating iterator dependency first");
-            Equal(second.Id, order[1].Id, "mutating iterator dependent second");
+            Contains(error.Message, "Dependency ordering input changed after semantic element A was admitted");
         }
 
         private static void StableDirtySubsetKeepsTopologicalOrder()
@@ -59,6 +58,28 @@ namespace QS3D.Core.SmokeTests
             var element = new ProjectElement(id, ElementCategory.CustomQuantity);
             element.MarkClean(ElementDirtyFlags.All);
             return element;
+        }
+
+        private static T Throws<T>(Action action) where T : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (T error)
+            {
+                return error;
+            }
+
+            throw new InvalidOperationException(
+                "DependencyGraphDirtyOrderInputFreshnessSmoke expected " + typeof(T).Name + ".");
+        }
+
+        private static void Contains(string value, string expected)
+        {
+            if (value == null || value.IndexOf(expected, StringComparison.Ordinal) < 0)
+                throw new InvalidOperationException(
+                    "DependencyGraphDirtyOrderInputFreshnessSmoke expected text containing '" + expected + "', actual='" + (value ?? string.Empty) + "'.");
         }
 
         private static void Equal<T>(T expected, T actual, string label)

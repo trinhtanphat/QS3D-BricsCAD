@@ -77,7 +77,9 @@ def main() -> int:
             "acquire-v25-compile-references.ps1",
             "BRICSCAD_V25_PINNED_MSI_SHA256",
             "Validate BricsCAD V25 compile references",
-            "dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64",
+            "Build BricsCAD V25 plugin against locked reference generations",
+            ".\\scripts\\build-v25-with-stable-references.ps1",
+            "src\\QS3D.BricsCAD.V25\\QS3D.BricsCAD.V25.csproj",
         ),
         "canonical core branch/PR check",
         failures,
@@ -90,8 +92,15 @@ def main() -> int:
     require(
         acquire,
         (
-            "Get-FileHash",
-            "Get-AuthenticodeSignature",
+            "function Open-PinnedMsiReadLock",
+            "[IO.FileShare]::Read",
+            "[Security.Cryptography.SHA256]::Create()",
+            "$sha.ComputeHash($stream)",
+            "function Test-PinnedMsiGeneration",
+            "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging",
+            "[IO.File]::Move($staging, $msi)",
+            "Test-PinnedMsiGeneration -Path $msi -Label 'Published BricsCAD V25 MSI'",
+            "Get-AuthenticodeSignature -FilePath $msiState.Path",
             "WindowsInstaller.Installer",
             "ProductVersion",
             "ProductName",
@@ -104,6 +113,10 @@ def main() -> int:
         "V25 managed-reference acquisition",
         failures,
     )
+    if "Get-FileHash" in acquire:
+        failures.append("V25 managed-reference acquisition must hash installer generations through held streams, not pathname Get-FileHash")
+    if "Invoke-WebRequest -Uri $candidate.Url -OutFile $msi" in acquire:
+        failures.append("V25 managed-reference acquisition must not download remote bytes directly to the canonical cache pathname")
 
     if failures:
         print("V25 protected-main release/compile preflight FAILED")
@@ -114,7 +127,7 @@ def main() -> int:
     print("PASS: V25 preview release and pre-merge compile contracts are protected-main safe.")
     print(" - preview version synchronization is workspace-only")
     print(" - source HEAD/provenance remains an exact protected-main commit")
-    print(" - canonical core check compiles V25 with immutable Action refs and pinned, verified managed references")
+    print(" - canonical core check compiles V25 through locked, held-verified reference generations with immutable Action refs")
     return 0
 
 

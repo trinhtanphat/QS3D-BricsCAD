@@ -182,24 +182,43 @@ namespace QS3D.Core.Services
             var knownCount = ValidateKnownTargetIdCounts(elementIds);
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            foreach (var value in elementIds)
+            using (var enumerator = elementIds.GetEnumerator())
             {
-                var raw = value ?? string.Empty;
-                if (string.IsNullOrWhiteSpace(raw))
-                    throw new ArgumentException("Regeneration target id cannot be blank at index " + index.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
-                if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
-                    throw new ArgumentException("Regeneration target id must be canonical without surrounding whitespace: " + raw + ".", nameof(elementIds));
-                if (result.Contains(raw))
-                    throw new ArgumentException("Duplicate regeneration target id: " + raw + ".", nameof(elementIds));
-                if (result.Count >= maxCount)
-                    throw new ArgumentException("Regeneration target set cannot exceed project element count of " + maxCount.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
-                result.Add(raw);
-                index++;
+                while (true)
+                {
+                    RequireStableKnownTargetIdCounts(elementIds, knownCount);
+                    if (!enumerator.MoveNext()) break;
+                    RequireStableKnownTargetIdCounts(elementIds, knownCount);
+
+                    if (knownCount.HasValue && index >= knownCount.Value)
+                        throw new InvalidOperationException("Regeneration target id count changed during enumeration.");
+
+                    var value = enumerator.Current;
+                    var raw = value ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(raw))
+                        throw new ArgumentException("Regeneration target id cannot be blank at index " + index.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
+                    if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                        throw new ArgumentException("Regeneration target id must be canonical without surrounding whitespace: " + raw + ".", nameof(elementIds));
+                    if (result.Contains(raw))
+                        throw new ArgumentException("Duplicate regeneration target id: " + raw + ".", nameof(elementIds));
+                    if (result.Count >= maxCount)
+                        throw new ArgumentException("Regeneration target set cannot exceed project element count of " + maxCount.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
+                    result.Add(raw);
+                    index++;
+                }
             }
 
             if (knownCount.HasValue && knownCount.Value != index)
                 throw new InvalidOperationException("Regeneration target id count changed during enumeration.");
+            RequireStableKnownTargetIdCounts(elementIds, knownCount);
             return result;
+        }
+
+        private static void RequireStableKnownTargetIdCounts(IEnumerable<string> elementIds, int? expectedCount)
+        {
+            var observedCount = ValidateKnownTargetIdCounts(elementIds);
+            if (observedCount != expectedCount)
+                throw new InvalidOperationException("Regeneration target id count changed during enumeration.");
         }
 
         private static int? ValidateKnownTargetIdCounts(IEnumerable<string> elementIds)

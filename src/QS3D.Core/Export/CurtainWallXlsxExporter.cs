@@ -22,6 +22,7 @@ namespace QS3D.Core.Export
             var rowCount = rows.Count;
             if (rowCount > MaxDataRows) throw new ArgumentOutOfRangeException(nameof(rows), "Curtain XLSX export supports at most " + MaxDataRows + " data rows.");
             var snapshot = new List<CurtainWallScheduleRow>(rowCount);
+            var sourceRows = new List<CurtainWallScheduleRow>(rowCount);
             for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
             {
                 var sourceRow = rows[rowIndex];
@@ -55,10 +56,13 @@ namespace QS3D.Core.Export
                 ValidateNonNegative(row.MaximumClearPanelHeightM, rowIndex, "MaximumClearPanelHeightM");
                 ValidateRange(row.MinimumClearPanelWidthM, row.MaximumClearPanelWidthM, rowIndex, "clear-panel width");
                 ValidateRange(row.MinimumClearPanelHeightM, row.MaximumClearPanelHeightM, rowIndex, "clear-panel height");
+                sourceRows.Add(sourceRow);
                 snapshot.Add(row);
             }
             if (rows.Count != rowCount)
                 throw new InvalidOperationException("Curtain XLSX export row count changed during snapshot.");
+            for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
+                EnsureRowStable(sourceRows[rowIndex], snapshot[rowIndex], rowIndex);
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -128,8 +132,46 @@ namespace QS3D.Core.Export
                         "Curtain XLSX " + label + " exceeds Excel's " + MaxCellTextCharacters + "-character cell text limit.");
                 target.Add(value);
             }
-            if (source.Count != count)
+            EnsureJoinedCellValuesStable(source, target, label);
+        }
+
+        private static void EnsureRowStable(CurtainWallScheduleRow source, CurtainWallScheduleRow snapshot, int rowIndex)
+        {
+            if (source == null ||
+                !string.Equals(source.ProjectId ?? string.Empty, snapshot.ProjectId, StringComparison.Ordinal) ||
+                !string.Equals(source.DrawingFingerprint ?? string.Empty, snapshot.DrawingFingerprint, StringComparison.Ordinal) ||
+                !string.Equals(source.Floor ?? string.Empty, snapshot.Floor, StringComparison.Ordinal) ||
+                !string.Equals(source.FamilyName ?? string.Empty, snapshot.FamilyName, StringComparison.Ordinal) ||
+                source.WallCount != snapshot.WallCount ||
+                source.TotalWallLengthM != snapshot.TotalWallLengthM ||
+                source.GrossWallAreaM2 != snapshot.GrossWallAreaM2 ||
+                source.OpeningAreaM2 != snapshot.OpeningAreaM2 ||
+                source.NetGlassAreaM2 != snapshot.NetGlassAreaM2 ||
+                source.FrameFaceAreaM2 != snapshot.FrameFaceAreaM2 ||
+                source.FrameLengthM != snapshot.FrameLengthM ||
+                source.PanelCount != snapshot.PanelCount ||
+                source.VerticalFrameCount != snapshot.VerticalFrameCount ||
+                source.HorizontalFrameCount != snapshot.HorizontalFrameCount ||
+                source.MinimumClearPanelWidthM != snapshot.MinimumClearPanelWidthM ||
+                source.MaximumClearPanelWidthM != snapshot.MaximumClearPanelWidthM ||
+                source.MinimumClearPanelHeightM != snapshot.MinimumClearPanelHeightM ||
+                source.MaximumClearPanelHeightM != snapshot.MaximumClearPanelHeightM)
+                throw new InvalidOperationException("Curtain XLSX export row values changed during snapshot. Invalid row index: " + rowIndex + ".");
+
+            var label = "worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " ";
+            EnsureJoinedCellValuesStable(source.ElementIds, snapshot.ElementIds, label + "Element IDs");
+            EnsureJoinedCellValuesStable(source.SourceHandles, snapshot.SourceHandles, label + "Source Handles");
+        }
+
+        private static void EnsureJoinedCellValuesStable(IList<string> source, IList<string> snapshot, string label)
+        {
+            if (source == null || source.Count != snapshot.Count)
                 throw new InvalidOperationException("Curtain XLSX " + label + " count changed during snapshot.");
+            for (var index = 0; index < snapshot.Count; index++)
+            {
+                if (!string.Equals(source[index] ?? string.Empty, snapshot[index] ?? string.Empty, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Curtain XLSX " + label + " values changed during snapshot.");
+            }
         }
 
         private static string BuildSheet(IReadOnlyList<CurtainWallScheduleRow> rows)
@@ -224,6 +266,10 @@ namespace QS3D.Core.Export
             if (row.WallCount != row.ElementIds.Count)
                 throw new ArgumentException(
                     "Curtain XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " WallCount must match Element IDs count.",
+                    "rows");
+            if (row.SourceHandles.Count != row.ElementIds.Count)
+                throw new ArgumentException(
+                    "Curtain XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " Source Handles count must match Element IDs count.",
                     "rows");
         }
 

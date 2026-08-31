@@ -332,7 +332,7 @@ def main() -> int:
             "steps.scope.outputs.source_validation", "needs.preflight.outputs.build_validation",
             "Lightweight non-build candidate", "samples/generated/",
             "python scripts/preflight-repository-professionalism.py",
-            "dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64",
+            ".\\scripts\\build-v25-with-stable-references.ps1",
         ),
         "shared CI",
         failures,

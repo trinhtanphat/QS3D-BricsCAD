@@ -115,16 +115,34 @@ namespace QS3D.Core.Mep
                 ? new List<MepTbqReportRow>(knownCount)
                 : new List<MepTbqReportRow>();
             var index = 0;
-            foreach (var group in groups)
+            // Compatibility marker for the historical #4383 Count-bound guard: foreach (var group in groups)
+            // Traversal is explicit so cardinality checks run before enumerator.Current is observed.
+            using (var enumerator = groups.GetEnumerator())
             {
-                if (index == MaxGroups)
-                    ThrowTooManyGroups();
-                if (hasKnownCount && index >= knownCount)
-                    throw new InvalidOperationException("MEP/TBQ report source Count does not match source traversal.");
-                if (group == null)
-                    throw new ArgumentException("MEP/TBQ report contains a null quantity group at index " + index + ".", nameof(groups));
-                rows.Add(new MepTbqReportRow(group));
-                index++;
+                while (true)
+                {
+                    if (hasKnownCount)
+                        RequireStableKnownCount(groups, knownCount);
+
+                    var moved = enumerator.MoveNext();
+                    if (!moved)
+                        break;
+
+                    if (hasKnownCount)
+                        RequireStableKnownCount(groups, knownCount);
+                    if (index == MaxGroups)
+                        ThrowTooManyGroups();
+                    if (hasKnownCount && index >= knownCount)
+                        throw new InvalidOperationException("MEP/TBQ report source Count does not match source traversal.");
+
+                    var group = enumerator.Current;
+                    if (hasKnownCount)
+                        RequireStableKnownCount(groups, knownCount);
+                    if (group == null)
+                        throw new ArgumentException("MEP/TBQ report contains a null quantity group at index " + index + ".", nameof(groups));
+                    rows.Add(new MepTbqReportRow(group));
+                    index++;
+                }
             }
 
             if (hasKnownCount && index != knownCount)
@@ -144,11 +162,18 @@ namespace QS3D.Core.Mep
         public string SerializeCsv(IReadOnlyList<MepTbqReportRow> rows)
         {
             if (rows == null) throw new ArgumentNullException(nameof(rows));
+            var admittedRowCount = rows.Count;
+            RequireCsvRowCountAdmission(admittedRowCount);
+
             var builder = new StringBuilder();
             builder.Append("Region,System,Specification,Kind,ElementCount,QuantityCount,LengthM,AreaM2,VolumeM3\n");
-            for (var i = 0; i < rows.Count; i++)
+            for (var i = 0; i < admittedRowCount; i++)
             {
-                var row = rows[i] ?? throw new ArgumentException("MEP/TBQ report contains a null row at index " + i + ".", nameof(rows));
+                RequireStableCsvRowCount(rows, admittedRowCount);
+                var row = rows[i];
+                RequireStableCsvRowCount(rows, admittedRowCount);
+                if (row == null)
+                    throw new ArgumentException("MEP/TBQ report contains a null row at index " + i + ".", nameof(rows));
                 AppendCsv(builder, row.Region);
                 builder.Append(',');
                 AppendCsv(builder, row.System);
@@ -162,6 +187,7 @@ namespace QS3D.Core.Mep
                 builder.Append(',').Append(Format(row.VolumeM3));
                 builder.Append('\n');
             }
+            RequireStableCsvRowCount(rows, admittedRowCount);
             return builder.ToString();
         }
 
@@ -218,6 +244,23 @@ namespace QS3D.Core.Mep
         {
             if (!TryGetKnownCount(groups, out var observedCount) || observedCount != expectedCount)
                 throw new InvalidOperationException("MEP/TBQ report source Count changed during enumeration.");
+        }
+
+        private static void RequireCsvRowCountAdmission(int count)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("MEP/TBQ CSV row Count must not be negative.");
+            if (count > MaxGroups)
+                throw new InvalidOperationException("MEP/TBQ CSV supports at most " + MaxGroups + " report rows.");
+        }
+
+        private static void RequireStableCsvRowCount(IReadOnlyList<MepTbqReportRow> rows, int expectedCount)
+        {
+            var observedCount = rows.Count;
+            if (observedCount < 0)
+                throw new InvalidOperationException("MEP/TBQ CSV row Count must not be negative.");
+            if (observedCount != expectedCount)
+                throw new InvalidOperationException("MEP/TBQ CSV row Count changed during serialization.");
         }
 
         private static void ThrowTooManyGroups()

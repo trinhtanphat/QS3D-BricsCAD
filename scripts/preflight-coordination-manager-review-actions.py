@@ -45,7 +45,7 @@ for needle, label in [
     ("var resolved = ResolveReviewTargets();", "validation before effect"),
     ("effect(resolved);", "native effect dispatch after validation"),
     ("entity.Highlight();", "native transient highlight"),
-    ("entity?.Unhighlight();", "native highlight cleanup"),
+    ("entity.Unhighlight();", "native highlight cleanup after non-null Entity validation"),
     ('"_.ISOLATEOBJECTS "', "native isolate action"),
     ('"_.UNISOLATEOBJECTS "', "native isolation restore"),
     ('"OBJECTISOLATIONMODE"', "non-persistent isolation mode guard"),

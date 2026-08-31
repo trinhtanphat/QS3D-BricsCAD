@@ -20,11 +20,19 @@ def helper_contract(text: str) -> None:
         "Resolve-OrdinaryNonReparseFile -Path $PackagePath -Label 'V26 package ZIP'",
         "Assert-NoReparseDirectoryChain -Directory $item.Directory -Label $Label",
         "if (($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)",
+        "$packageCanonicalPath = $package.FullName",
+        "$packageLength = [int64]$package.Length",
+        "$packageLastWriteUtcTicks = [int64]$package.LastWriteTimeUtc.Ticks",
         "[string]::Equals([IO.Path]::GetFileName($outputFullPath), $script:ExpectedChecksumName, [StringComparison]::Ordinal)",
         "Resolve-OrdinaryNonReparseDirectory -Path $outputParentPath -Label 'V26 checksum destination parent'",
         "Assert-SafeExistingOutputLeaf -Path $outputFullPath",
         "$originalOutputBytes = Read-BoundedChecksumBytes",
-        "[IO.File]::Open($package.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)",
+        "[IO.File]::Open($packageCanonicalPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)",
+        "Resolve-OrdinaryNonReparseFile -Path $packageCanonicalPath -Label 'V26 package ZIP after open'",
+        "$packageLength -ne [int64]$stream.Length",
+        "$packageLength -ne [int64]$reboundPackage.Length",
+        "$packageLastWriteUtcTicks -ne [int64]$reboundPackage.LastWriteTimeUtc.Ticks",
+        "V26 package ZIP changed between checksum admission and held-stream binding.",
         "[Security.Cryptography.SHA256]::Create()",
         "$sha256.ComputeHash($stream)",
         "if ($hash -notmatch '^[0-9a-f]{64}$')",
@@ -50,16 +58,22 @@ def helper_contract(text: str) -> None:
         "Remove-SafeChecksumLeaf -Path $backupPath",
         "V26 checksum staging residue remains",
         "V26 checksum backup residue remains",
+        "PackagePath = $packageCanonicalPath",
     )
     for token in required:
         require(token in text, "V26 checksum helper missing safety token: " + token)
 
     source_guard = text.find("Resolve-OrdinaryNonReparseFile -Path $PackagePath")
+    admitted_path = text.find("$packageCanonicalPath = $package.FullName")
+    admitted_length = text.find("$packageLength = [int64]$package.Length")
+    admitted_ticks = text.find("$packageLastWriteUtcTicks = [int64]$package.LastWriteTimeUtc.Ticks")
     output_identity_guard = text.find("[string]::Equals([IO.Path]::GetFileName($outputFullPath), $script:ExpectedChecksumName")
     output_parent_guard = text.find("Resolve-OrdinaryNonReparseDirectory -Path $outputParentPath")
     output_leaf_guard = text.find("Assert-SafeExistingOutputLeaf -Path $outputFullPath")
     snapshot_pos = text.find("$originalOutputBytes = Read-BoundedChecksumBytes")
-    open_pos = text.find("[IO.File]::Open($package.FullName")
+    open_pos = text.find("[IO.File]::Open($packageCanonicalPath")
+    rebound_pos = text.find("Resolve-OrdinaryNonReparseFile -Path $packageCanonicalPath -Label 'V26 package ZIP after open'")
+    binding_failure_pos = text.find("V26 package ZIP changed between checksum admission and held-stream binding.")
     hash_pos = text.find("$sha256.ComputeHash($stream)")
     temp_write = text.find("[IO.File]::WriteAllBytes($tempPath, $recordBytes)")
     temp_guard = text.find("Resolve-OrdinaryNonReparseFile -Path $tempPath")
@@ -73,10 +87,18 @@ def helper_contract(text: str) -> None:
     backup_cleanup_pos = text.find("Remove-SafeChecksumLeaf -Path $backupPath")
     residue_pos = text.find("V26 checksum staging residue remains")
 
-    positions = (source_guard, output_identity_guard, output_parent_guard, output_leaf_guard, snapshot_pos, open_pos, hash_pos, temp_write, temp_guard)
+    positions = (
+        source_guard, admitted_path, admitted_length, admitted_ticks, output_identity_guard,
+        output_parent_guard, output_leaf_guard, snapshot_pos, open_pos, rebound_pos,
+        binding_failure_pos, hash_pos, temp_write, temp_guard,
+    )
     require(min(positions) >= 0, "V26 checksum safety ordering token missing")
-    require(source_guard < output_identity_guard < output_parent_guard < output_leaf_guard < snapshot_pos < open_pos < hash_pos < temp_write < temp_guard,
-            "V26 checksum must bind identities, snapshot bounded prior state, hash guarded source, then validate staging")
+    require(
+        source_guard < admitted_path < admitted_length < admitted_ticks < output_identity_guard <
+        output_parent_guard < output_leaf_guard < snapshot_pos < open_pos < rebound_pos <
+        binding_failure_pos < hash_pos < temp_write < temp_guard,
+        "V26 checksum must snapshot admitted package identity, open and rebound-bind the held generation before hashing, then stage publication",
+    )
     require(started_pos > temp_guard, "V26 checksum mutation state must follow staging validation")
     require(started_pos < replace_pos and started_pos < move_pos,
             "V26 checksum publication-start marker must precede either filesystem publication mutation")
@@ -136,9 +158,16 @@ def main() -> int:
     mutations = (
         ("$script:ExpectedChecksumName = 'QS3D-BricsCAD-V26.zip.sha256'", "$script:ExpectedChecksumName = 'other.sha256'", "canonical output identity"),
         ("if (($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)", "if (($cursor.Attributes -band [IO.FileAttributes]::Hidden) -ne 0)", "directory-chain reparse rejection"),
+        ("$packageCanonicalPath = $package.FullName", "$packageCanonicalPath = [IO.Path]::GetFullPath($PackagePath)", "admitted canonical package identity"),
+        ("$packageLength = [int64]$package.Length", "$packageLength = -1", "admitted package length snapshot"),
+        ("$packageLastWriteUtcTicks = [int64]$package.LastWriteTimeUtc.Ticks", "$packageLastWriteUtcTicks = 0", "admitted package write-time snapshot"),
         ("$originalOutputBytes = Read-BoundedChecksumBytes", "$originalOutputBytes = [byte[]]@()", "bounded prior-state snapshot"),
         ("[IO.FileShare]::Read", "[IO.FileShare]::ReadWrite", "read-only hash handle"),
-        ("$sha256.ComputeHash($stream)", "$sha256.ComputeHash([IO.File]::ReadAllBytes($package.FullName))", "stream-bound hashing"),
+        ("Resolve-OrdinaryNonReparseFile -Path $packageCanonicalPath -Label 'V26 package ZIP after open'", "$reboundPackage = $package", "post-open pathname rebound"),
+        ("$packageLength -ne [int64]$stream.Length", "$false", "held stream length binding"),
+        ("$packageLastWriteUtcTicks -ne [int64]$reboundPackage.LastWriteTimeUtc.Ticks", "$false", "post-open write-time binding"),
+        ("V26 package ZIP changed between checksum admission and held-stream binding.", "generation drift ignored", "generation binding failure"),
+        ("$sha256.ComputeHash($stream)", "$sha256.ComputeHash([IO.File]::ReadAllBytes($packageCanonicalPath))", "stream-bound hashing"),
         ('".tmp-$nonce"', '".tmp"', "nonce staging"),
         ("$publicationStarted = $true", "$publicationStarted = $false # mutation window unguarded", "pre-mutation rollback state"),
         ("[IO.File]::Replace($tempPath, $outputFullPath, $backupPath, $true)", "Copy-Item $tempPath $outputFullPath -Force", "atomic replacement"),
@@ -152,9 +181,20 @@ def main() -> int:
     for token, replacement, label in mutations:
         expect_helper_mutation_failure(helper, token, replacement, label)
 
+    hash_token = "$sha256.ComputeHash($stream)"
+    rebound_token = "Resolve-OrdinaryNonReparseFile -Path $packageCanonicalPath -Label 'V26 package ZIP after open'"
+    require(hash_token in helper and rebound_token in helper, "generation-binding movement mutation source missing")
+    moved = helper.replace(rebound_token, "# rebound moved after hash", 1).replace(hash_token, hash_token + "\n    " + rebound_token, 1)
+    try:
+        helper_contract(moved)
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError("V26 checksum guard accepted post-open generation binding moved after hashing")
+
     expect_workflow_mutation_failure(workflow, ".\\scripts\\write-v26-package-checksum.ps1", "Get-FileHash -LiteralPath 'dist\\QS3D-BricsCAD-V26.zip'", "shared-helper routing")
     expect_workflow_mutation_failure(workflow, "-OutputPath 'dist\\QS3D-BricsCAD-V26.zip.sha256'", "-OutputPath 'dist\\other.sha256'", "canonical checksum destination")
-    print("PASS: V26 release checksum creation is identity-bound, bounded-snapshot protected, stream-hashed, staged, mutation-window rollback-safe, verification-gated, residue-checked, and workflow-routed through the shared helper.")
+    print("PASS: V26 release checksum creation binds the admitted ZIP pathname/length/write-time to the held stream before hashing, then preserves staged rollback-safe publication and shared workflow routing.")
     return 0
 
 

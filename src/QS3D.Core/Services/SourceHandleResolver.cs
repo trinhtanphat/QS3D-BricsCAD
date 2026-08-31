@@ -70,24 +70,105 @@ namespace QS3D.Core.Services
 
         private static IReadOnlyList<string> MaterializeRootElementIds(IEnumerable<string> elementIds)
         {
-            if (elementIds is ICollection<string> collection && collection.Count > MaxRootElementIdInputCount)
-                throw new InvalidOperationException("Locate root selection cannot exceed " + MaxRootElementIdInputCount + " input entries.");
-            if (elementIds is IReadOnlyCollection<string> readOnlyCollection && readOnlyCollection.Count > MaxRootElementIdInputCount)
+            var knownCount = TryGetKnownCount(elementIds, out var conflictingKnownCounts, out var negativeKnownCount);
+            if (negativeKnownCount)
+                throw new InvalidOperationException("Locate root selection exposes an invalid negative known Count value.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("Locate root selection exposes conflicting known Count values.");
+            if (knownCount.HasValue && knownCount.Value > MaxRootElementIdInputCount)
                 throw new InvalidOperationException("Locate root selection cannot exceed " + MaxRootElementIdInputCount + " input entries.");
 
             var roots = new List<string>();
             var inputCount = 0;
-            foreach (var rawId in elementIds)
+            using (var enumerator = elementIds.GetEnumerator())
             {
-                if (inputCount >= MaxRootElementIdInputCount)
-                    throw new InvalidOperationException("Locate root selection cannot exceed " + MaxRootElementIdInputCount + " input entries.");
-                inputCount++;
-                if (string.IsNullOrWhiteSpace(rawId)) continue;
-                if (!string.Equals(rawId, rawId.Trim(), StringComparison.Ordinal))
-                    throw new InvalidOperationException("Locate root selection contains a non-canonical semantic element id. Refresh the semantic selection and retry Locate.");
-                roots.Add(rawId);
+                while (true)
+                {
+                    RequireStableKnownCountDuringTraversal(elementIds, knownCount);
+                    if (!enumerator.MoveNext())
+                        break;
+
+                    RequireStableKnownCountDuringTraversal(elementIds, knownCount);
+                    if (knownCount.HasValue && inputCount >= knownCount.Value)
+                        throw new InvalidOperationException("Locate root selection known Count does not match completed traversal cardinality.");
+                    if (inputCount >= MaxRootElementIdInputCount)
+                        throw new InvalidOperationException("Locate root selection cannot exceed " + MaxRootElementIdInputCount + " input entries.");
+
+                    var rawId = enumerator.Current;
+                    RequireStableKnownCountDuringTraversal(elementIds, knownCount);
+                    inputCount++;
+                    if (string.IsNullOrWhiteSpace(rawId)) continue;
+                    if (!string.Equals(rawId, rawId.Trim(), StringComparison.Ordinal))
+                        throw new InvalidOperationException("Locate root selection contains a non-canonical semantic element id. Refresh the semantic selection and retry Locate.");
+                    roots.Add(rawId);
+                }
             }
+
+            if (knownCount.HasValue && inputCount != knownCount.Value)
+                throw new InvalidOperationException("Locate root selection known Count does not match completed traversal cardinality.");
+
+            RevalidateKnownCountAfterTraversal(elementIds, knownCount);
             return roots.AsReadOnly();
+        }
+
+        private static void RequireStableKnownCountDuringTraversal(IEnumerable<string> elementIds, int? admittedCount)
+        {
+            if (!admittedCount.HasValue)
+                return;
+
+            var reboundCount = TryGetKnownCount(elementIds, out var conflictingKnownCounts, out var negativeKnownCount);
+            if (negativeKnownCount)
+                throw new InvalidOperationException("Locate root selection exposes an invalid negative known Count value during traversal.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("Locate root selection exposes conflicting known Count values during traversal.");
+            if (!reboundCount.HasValue || reboundCount.Value != admittedCount.Value)
+                throw new InvalidOperationException("Locate root selection known Count changed during traversal.");
+        }
+
+        private static void RevalidateKnownCountAfterTraversal(IEnumerable<string> elementIds, int? admittedCount)
+        {
+            if (!admittedCount.HasValue)
+                return;
+
+            var reboundCount = TryGetKnownCount(elementIds, out var conflictingKnownCounts, out var negativeKnownCount);
+            if (negativeKnownCount)
+                throw new InvalidOperationException("Locate root selection exposes an invalid negative known Count value after traversal.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("Locate root selection exposes conflicting known Count values after traversal.");
+            if (!reboundCount.HasValue || reboundCount.Value != admittedCount.Value)
+                throw new InvalidOperationException("Locate root selection known Count changed during traversal.");
+        }
+
+        private static int? TryGetKnownCount(
+            IEnumerable<string> elementIds,
+            out bool conflictingKnownCounts,
+            out bool negativeKnownCount)
+        {
+            conflictingKnownCounts = false;
+            negativeKnownCount = false;
+            int? knownCount = null;
+
+            if (elementIds is ICollection<string> genericCollection)
+                knownCount = ObserveKnownCount(knownCount, genericCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+            if (elementIds is IReadOnlyCollection<string> readOnlyCollection)
+                knownCount = ObserveKnownCount(knownCount, readOnlyCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+            if (elementIds is System.Collections.ICollection nonGenericCollection)
+                knownCount = ObserveKnownCount(knownCount, nonGenericCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+
+            return knownCount;
+        }
+
+        private static int ObserveKnownCount(
+            int? current,
+            int observed,
+            ref bool conflictingKnownCounts,
+            ref bool negativeKnownCount)
+        {
+            if (observed < 0)
+                negativeKnownCount = true;
+            if (current.HasValue && current.Value != observed)
+                conflictingKnownCounts = true;
+            return !current.HasValue || observed > current.Value ? observed : current.Value;
         }
 
         private static IReadOnlyDictionary<string, ProjectElement> BuildElementIndex(ProjectState project)

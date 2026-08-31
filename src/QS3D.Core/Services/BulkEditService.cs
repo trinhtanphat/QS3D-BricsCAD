@@ -222,7 +222,7 @@ namespace QS3D.Core.Services
 
         private static IReadOnlyList<ProjectElement> OwnedDistinct(ProjectState project, IEnumerable<ProjectElement> elements)
         {
-            var knownCount = SnapshotKnownCount(elements, "Bulk edit target collection");
+            var knownCount = SnapshotKnownCount(elements, "Bulk edit target collection", out var knownCountSources);
 
             var projectElements = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var projectElement in project.Elements)
@@ -239,22 +239,35 @@ namespace QS3D.Core.Services
 
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             var inputCount = 0;
-            foreach (var element in elements)
+            using (var enumerator = elements.GetEnumerator())
             {
-                RequireCanObserveNext(knownCount, inputCount, "Bulk edit target collection");
-                if (inputCount >= MaxTargetInputCount)
-                    throw new InvalidOperationException("Bulk edit target collection cannot exceed " + MaxTargetInputCount + " input entries.");
-                inputCount++;
-                if (element == null)
-                    throw new InvalidOperationException("Bulk edit target collection contains a null semantic element entry.");
-                var elementId = (element.Id ?? string.Empty).Trim();
-                if (elementId.Length == 0)
-                    throw new InvalidOperationException("Bulk edit target contains an element with a blank semantic id.");
-                if (!projectElements.TryGetValue(elementId, out var owned) || !ReferenceEquals(owned, element))
-                    throw new InvalidOperationException("Element does not belong to the project instance: " + elementId);
-                unique[elementId] = owned;
+                while (true)
+                {
+                    RequireKnownCountStable(elements, knownCount, knownCountSources, "Bulk edit target collection");
+                    if (!enumerator.MoveNext())
+                    {
+                        RequireKnownCountStable(elements, knownCount, knownCountSources, "Bulk edit target collection");
+                        break;
+                    }
+                    RequireKnownCountStable(elements, knownCount, knownCountSources, "Bulk edit target collection");
+                    RequireCanObserveNext(knownCount, inputCount, "Bulk edit target collection");
+                    if (inputCount >= MaxTargetInputCount)
+                        throw new InvalidOperationException("Bulk edit target collection cannot exceed " + MaxTargetInputCount + " input entries.");
+                    var element = enumerator.Current;
+                    RequireKnownCountStable(elements, knownCount, knownCountSources, "Bulk edit target collection");
+                    inputCount++;
+                    if (element == null)
+                        throw new InvalidOperationException("Bulk edit target collection contains a null semantic element entry.");
+                    var elementId = (element.Id ?? string.Empty).Trim();
+                    if (elementId.Length == 0)
+                        throw new InvalidOperationException("Bulk edit target contains an element with a blank semantic id.");
+                    if (!projectElements.TryGetValue(elementId, out var owned) || !ReferenceEquals(owned, element))
+                        throw new InvalidOperationException("Element does not belong to the project instance: " + elementId);
+                    unique[elementId] = owned;
+                }
             }
             RequireObservedCount(knownCount, inputCount, "Bulk edit target collection");
+            RequireKnownCountStable(elements, knownCount, knownCountSources, "Bulk edit target collection");
             return new List<ProjectElement>(unique.Values).AsReadOnly();
         }
 
@@ -371,22 +384,35 @@ namespace QS3D.Core.Services
 
         private static IReadOnlyList<string> MaterializeBounded(IEnumerable<string> values, string label)
         {
-            var knownCount = SnapshotKnownCount(values, label);
+            var knownCount = SnapshotKnownCount(values, label, out var knownCountSources);
             var result = new List<string>();
             var inputCount = 0;
-            foreach (var value in values)
+            using (var enumerator = values.GetEnumerator())
             {
-                RequireCanObserveNext(knownCount, inputCount, label);
-                if (inputCount >= MaxTargetInputCount)
-                    throw new InvalidOperationException(label + " cannot exceed " + MaxTargetInputCount + " input entries.");
-                inputCount++;
-                result.Add(value);
+                while (true)
+                {
+                    RequireKnownCountStable(values, knownCount, knownCountSources, label);
+                    if (!enumerator.MoveNext())
+                    {
+                        RequireKnownCountStable(values, knownCount, knownCountSources, label);
+                        break;
+                    }
+                    RequireKnownCountStable(values, knownCount, knownCountSources, label);
+                    RequireCanObserveNext(knownCount, inputCount, label);
+                    if (inputCount >= MaxTargetInputCount)
+                        throw new InvalidOperationException(label + " cannot exceed " + MaxTargetInputCount + " input entries.");
+                    var value = enumerator.Current;
+                    RequireKnownCountStable(values, knownCount, knownCountSources, label);
+                    inputCount++;
+                    result.Add(value);
+                }
             }
             RequireObservedCount(knownCount, inputCount, label);
+            RequireKnownCountStable(values, knownCount, knownCountSources, label);
             return result.AsReadOnly();
         }
 
-        private static int? SnapshotKnownCount<T>(IEnumerable<T> values, string label)
+        private static int? SnapshotKnownCount<T>(IEnumerable<T> values, string label, out int knownCountSources)
         {
             var genericCount = values is ICollection<T> collection ? (int?)collection.Count : null;
             var readOnlyCount = values is IReadOnlyCollection<T> readOnlyCollection ? (int?)readOnlyCollection.Count : null;
@@ -396,6 +422,11 @@ namespace QS3D.Core.Services
             ValidateKnownCount(readOnlyCount, label);
             ValidateKnownCount(nonGenericCount, label);
 
+            knownCountSources = 0;
+            if (genericCount.HasValue) knownCountSources |= 1;
+            if (readOnlyCount.HasValue) knownCountSources |= 2;
+            if (nonGenericCount.HasValue) knownCountSources |= 4;
+
             var expected = genericCount ?? readOnlyCount ?? nonGenericCount;
             if (!expected.HasValue) return null;
             if ((genericCount.HasValue && genericCount.Value != expected.Value) ||
@@ -403,6 +434,13 @@ namespace QS3D.Core.Services
                 (nonGenericCount.HasValue && nonGenericCount.Value != expected.Value))
                 throw new InvalidOperationException(label + " reports conflicting known input counts.");
             return expected;
+        }
+
+        private static void RequireKnownCountStable<T>(IEnumerable<T> values, int? expectedKnownCount, int expectedKnownCountSources, string label)
+        {
+            var currentKnownCount = SnapshotKnownCount(values, label, out var currentKnownCountSources);
+            if (expectedKnownCount != currentKnownCount || expectedKnownCountSources != currentKnownCountSources)
+                throw new InvalidOperationException(label + " input count changed during enumeration.");
         }
 
         private static void ValidateKnownCount(int? count, string label)

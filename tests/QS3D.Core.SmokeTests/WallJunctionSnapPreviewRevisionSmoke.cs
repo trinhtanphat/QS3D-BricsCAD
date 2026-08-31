@@ -19,6 +19,7 @@ namespace QS3D.Core.SmokeTests
             PreviewPublicationUsesTwoBoundedRevisionsAndKeepsApprovalFresh();
             PreviewCleanupUsesOneBoundedRevisionForEmptyAndAppliedPlans();
             OrdinaryProjectMetadataStillMarksSemanticStateDirty();
+            PreviewPrefixLookalikeStillMarksSemanticStateDirty();
         }
 
         private static void PreviewPublicationUsesTwoBoundedRevisionsAndKeepsApprovalFresh()
@@ -67,6 +68,37 @@ namespace QS3D.Core.SmokeTests
             project.Metadata["WallJunctionToleranceM"] = "0.005";
             Require(project.ChangeVersion == before + 1L,
                 "ordinary project metadata must continue to advance ChangeVersion.");
+        }
+
+        private static void PreviewPrefixLookalikeStillMarksSemanticStateDirty()
+        {
+            const string key = "WallJunctionSnapPreviewCustomerData";
+            var project = NewProject();
+
+            var beforeSet = project.ChangeVersion;
+            project.Metadata[key] = "alpha";
+            Require(project.ChangeVersion == beforeSet + 1L,
+                "public preview-prefix lookalike set must advance ChangeVersion.");
+
+            var beforeUpdate = project.ChangeVersion;
+            project.Metadata[key] = "beta";
+            Require(project.ChangeVersion == beforeUpdate + 1L,
+                "public preview-prefix lookalike update must advance ChangeVersion.");
+
+            var beforeRemove = project.ChangeVersion;
+            Require(project.Metadata.Remove(key), "public preview-prefix lookalike remove found no key.");
+            Require(project.ChangeVersion == beforeRemove + 1L,
+                "public preview-prefix lookalike remove must advance ChangeVersion.");
+
+            var beforeAdd = project.ChangeVersion;
+            project.Metadata.Add(key, "gamma");
+            Require(project.ChangeVersion == beforeAdd + 1L,
+                "public preview-prefix lookalike Add must advance ChangeVersion.");
+
+            var beforeClear = project.ChangeVersion;
+            project.Metadata.Clear();
+            Require(project.ChangeVersion == beforeClear + 1L,
+                "clearing public preview-prefix lookalike metadata must advance ChangeVersion.");
         }
 
         private static ProjectState NewProject()

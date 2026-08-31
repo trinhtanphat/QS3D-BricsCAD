@@ -11,7 +11,12 @@ namespace QS3D.Core.Domain
     {
         private const int MaximumEntries = 10000;
         private const string ProjectBrowserWorkspaceMetadataKey = "QS3D.ProjectBrowser.WorkspaceState";
-        private const string WallJunctionSnapPreviewMetadataPrefix = "WallJunctionSnapPreview";
+        private const string WallJunctionSnapPreviewPlanHashMetadataKey = "WallJunctionSnapPreviewPlanHash";
+        private const string WallJunctionSnapPreviewSourceFingerprintMetadataKey = "WallJunctionSnapPreviewSourceFingerprint";
+        private const string WallJunctionSnapPreviewCountMetadataKey = "WallJunctionSnapPreviewCount";
+        private const string WallJunctionSnapPreviewUtcMetadataKey = "WallJunctionSnapPreviewUtc";
+        private const string WallJunctionSnapPreviewProjectIdMetadataKey = "WallJunctionSnapPreviewProjectId";
+        private const string WallJunctionSnapPreviewChangeVersionMetadataKey = "WallJunctionSnapPreviewChangeVersion";
         private readonly Dictionary<string, string> _items = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private ProjectState? _project;
 
@@ -105,18 +110,36 @@ namespace QS3D.Core.Domain
             var knownCount = RequireSupportedKnownPersistenceCount(values);
             var next = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var observedCount = 0;
-            foreach (var item in values)
+            using (var enumerator = values.GetEnumerator())
             {
-                if (knownCount.HasValue && observedCount >= knownCount.Value)
-                    throw MetadataTraversalCountMismatchError(knownCount.Value, observedCount + 1);
-                observedCount++;
-                if (item.Key == null) throw new ArgumentNullException(nameof(values), "Project metadata contains a null key.");
-                if (next.ContainsKey(item.Key)) throw new ArgumentException("Project metadata contains a duplicate key: " + item.Key + ".", nameof(values));
-                if (next.Count >= MaximumEntries) throw MetadataCountError();
-                next.Add(item.Key, item.Value ?? string.Empty);
+                while (true)
+                {
+                    RequireStableKnownPersistenceCount(values, knownCount);
+                    if (!enumerator.MoveNext()) break;
+                    RequireStableKnownPersistenceCount(values, knownCount);
+
+                    if (knownCount.HasValue && observedCount >= knownCount.Value)
+                        throw MetadataTraversalCountMismatchError(knownCount.Value, observedCount + 1);
+                    if (observedCount >= MaximumEntries)
+                        throw MetadataCountError();
+
+                    var item = enumerator.Current;
+                    RequireStableKnownPersistenceCount(values, knownCount);
+                    observedCount++;
+                    if (item.Key == null) throw new ArgumentNullException(nameof(values), "Project metadata contains a null key.");
+                    if (next.ContainsKey(item.Key)) throw new ArgumentException("Project metadata contains a duplicate key: " + item.Key + ".", nameof(values));
+                    next.Add(item.Key, item.Value ?? string.Empty);
+                }
             }
+            RequireStableKnownPersistenceCount(values, knownCount);
             if (knownCount.HasValue && observedCount != knownCount.Value)
                 throw MetadataTraversalCountMismatchError(knownCount.Value, observedCount);
+
+            var finalKnownCount = RequireSupportedKnownPersistenceCount(values);
+            if (knownCount.HasValue != finalKnownCount.HasValue ||
+                (knownCount.HasValue && knownCount.Value != finalKnownCount!.Value))
+                throw MetadataTraversalCountChangedError();
+
             ValidateReserved(next);
             _items.Clear();
             foreach (var item in next) _items.Add(item.Key, item.Value);
@@ -205,10 +228,25 @@ namespace QS3D.Core.Domain
             return knownCount;
         }
 
+        private static void RequireStableKnownPersistenceCount(
+            IEnumerable<KeyValuePair<string, string>> values,
+            int? expectedCount)
+        {
+            if (!expectedCount.HasValue) return;
+            var observedCount = RequireSupportedKnownPersistenceCount(values);
+            if (!observedCount.HasValue || observedCount.Value != expectedCount.Value)
+                throw MetadataTraversalCountChangedError();
+        }
+
         private static InvalidOperationException MetadataTraversalCountMismatchError(int expected, int observed)
         {
             return new InvalidOperationException(
                 "Project metadata persistence input Count does not match traversal (expected " + expected + ", observed " + observed + ").");
+        }
+
+        private static InvalidOperationException MetadataTraversalCountChangedError()
+        {
+            return new InvalidOperationException("Project metadata persistence input Count changed during traversal.");
         }
 
         private static InvalidOperationException MetadataCountError()
@@ -228,13 +266,19 @@ namespace QS3D.Core.Domain
             if (string.Equals(key, ProjectBrowserWorkspaceMetadataKey, StringComparison.OrdinalIgnoreCase))
                 return false;
 
-            // Wall Snap preview keys are one workflow-state batch. The command records
-            // one audit revision and performs one final Touch() after publishing the
-            // batch; Apply similarly records one audit revision (or one explicit Touch
-            // for an empty plan). Individual preview-key writes/removes must therefore
-            // not advance ChangeVersion independently or the persisted approval stamp
-            // immediately invalidates itself.
-            return !key.StartsWith(WallJunctionSnapPreviewMetadataPrefix, StringComparison.OrdinalIgnoreCase);
+            // Only the six production-owned Wall Snap preview keys are one workflow-state
+            // batch. Public metadata that merely shares their prefix remains semantic state.
+            return !IsWallJunctionSnapPreviewWorkflowKey(key);
+        }
+
+        private static bool IsWallJunctionSnapPreviewWorkflowKey(string key)
+        {
+            return string.Equals(key, WallJunctionSnapPreviewPlanHashMetadataKey, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(key, WallJunctionSnapPreviewSourceFingerprintMetadataKey, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(key, WallJunctionSnapPreviewCountMetadataKey, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(key, WallJunctionSnapPreviewUtcMetadataKey, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(key, WallJunctionSnapPreviewProjectIdMetadataKey, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(key, WallJunctionSnapPreviewChangeVersionMetadataKey, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void ValidateReserved(IEnumerable<KeyValuePair<string, string>> metadata)

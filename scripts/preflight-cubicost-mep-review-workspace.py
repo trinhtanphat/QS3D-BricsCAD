@@ -41,7 +41,23 @@ required = {
     ],
     "workspace": [
         '[CommandMethod("QS3DMEPREVIEW")]',
+        "private static MepReviewWorkspaceWindow? _published;",
+        "private static MepReviewWorkspaceWindow? _pending;",
+        "var pending = _pending;",
+        "if (pending != null && !TryClosePendingWindow(pending))",
+        "var published = _published;",
+        "published.IsLoaded",
+        "ReleasePublishedWindow(published)",
+        "_pending = window;",
+        "window.Closed += (_, __) => ReleaseWindow(window)",
         "BricsApplication.ShowModelessWindow(window)",
+        "if (!window.IsLoaded)",
+        "_published = window;",
+        "ReleasePendingWindow(window)",
+        "candidate = null;",
+        "TryClosePendingWindow(candidate)",
+        "if (window.IsLoaded) return false;",
+        "ex.GetType().Name",
         "MepRecognitionProfileProvider.Save(profile)",
         "MepRecognitionProfileProvider.Reload()",
         "DocumentManager.MdiActiveDocument",
@@ -86,6 +102,58 @@ for label, tokens in required.items():
         if token not in texts[label]:
             errors.append(f"{label}: missing required token {token!r}")
 
+workspace = texts["workspace"]
+for forbidden in (
+    "private static MepReviewWorkspaceWindow? _window;",
+    "if (_window.IsVisible)",
+    "if (published.IsVisible)",
+    "TryCloseUnpublishedWindow",
+    '"\\nQS3DMEPREVIEW error: " + ex.Message',
+    '"Không queue được " + command + ": " + ex.Message',
+):
+    if forbidden in workspace:
+        errors.append(f"workspace: stale/unsafe publication token {forbidden!r}")
+
+show_start = workspace.find("public void ShowReviewWorkspace()")
+release_start = workspace.find("private static void ReleaseWindow", show_start + 1)
+show = workspace[show_start:release_start] if show_start >= 0 and release_start > show_start else ""
+ordered = [
+    "var pending = _pending;",
+    "candidate = new MepReviewWorkspaceWindow();",
+    "_pending = window;",
+    "window.Closed += (_, __) => ReleaseWindow(window);",
+    "BricsApplication.ShowModelessWindow(window);",
+    "if (!window.IsLoaded)",
+    "_published = window;",
+    "ReleasePendingWindow(window);",
+]
+positions = [show.find(token) for token in ordered]
+if any(position < 0 for position in positions) or positions != sorted(positions) or len(set(positions)) != len(positions):
+    errors.append("workspace: publication order must be drain pending -> construct -> pending-own -> Closed -> host show -> Loaded check -> publish -> release pending")
+else:
+    release_pending_position = positions[-1]
+    cleanup_transfer_position = show.find("candidate = null;", release_pending_position + len(ordered[-1]))
+    if cleanup_transfer_position < 0 or cleanup_transfer_position <= release_pending_position:
+        errors.append("workspace: cleanup ownership must transfer only after pending ownership is released")
+
+if workspace.count("_published = window;") != 1:
+    errors.append("workspace: authoritative publication must have exactly one assignment")
+if workspace.count("_pending = window;") != 1:
+    errors.append("workspace: pending ownership must have exactly one assignment")
+
+close_start = workspace.find("private static bool TryClosePendingWindow")
+class_start = workspace.find("internal sealed class MepReviewWorkspaceWindow", close_start + 1)
+close_body = workspace[close_start:class_start] if close_start >= 0 and class_start > close_start else ""
+for token in (
+    "if (!ReferenceEquals(_pending, window)) return true;",
+    "if (ReferenceEquals(_published, window))",
+    "try { window.Close(); } catch (System.Exception) { }",
+    "if (window.IsLoaded) return false;",
+    "ReleasePendingWindow(window);",
+):
+    if token not in close_body:
+        errors.append(f"workspace: pending-close fail-closed missing {token!r}")
+
 for label in ("provider", "workspace", "zoom"):
     for forbidden in (
         "OpenMode.ForWrite",
@@ -113,7 +181,7 @@ for forbidden in (
     "private readonly Solid3d",
     "private Solid3d",
 ):
-    if forbidden in texts["workspace"]:
+    if forbidden in workspace:
         errors.append(f"workspace: forbidden retained native field {forbidden!r}")
 
 for label in ("takeoff", "exact", "highlight"):

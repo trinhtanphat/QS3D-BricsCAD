@@ -93,9 +93,22 @@ if not errors:
     if text["native"].count("BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;") != 1:
         errors.append("shared native lifecycle coordinator must expose one global DocumentToBeDestroyed subscription site")
 
-    for key in ("recognition", "revision", "health", "bq", "bbs", "door_schedule", "room_schedule"):
+    # Most legacy modeless windows still keep their explicit source wrapper. Revision is hardened:
+    # constructor binding remains explicit, while callbacks resolve a fresh wrapper by native DB identity.
+    for key in ("recognition", "health", "bq", "bbs", "door_schedule", "room_schedule"):
         if "DocumentBoundWindowLifetime.Attach(this, _document);" not in text[key]:
             errors.append(key + " window must auto-close when its source DWG is destroyed")
+    if "DocumentBoundWindowLifetime.Attach(this, document);" not in text["revision"]:
+        errors.append("revision window must auto-close when its constructor-bound source DWG is destroyed")
+    for needle in (
+        "private readonly IntPtr _nativeDatabaseIdentity;",
+        "database.UnmanagedObject == _nativeDatabaseIdentity",
+        "TryGetBoundActiveDocument(out var document)",
+    ):
+        if needle not in text["revision"]:
+            errors.append("revision window missing native-identity live-wrapper contract: " + needle)
+    if "private readonly Document _document" in text["revision"]:
+        errors.append("revision window must not retain a managed Document wrapper across modeless lifetime")
 
     for key, signature in (
         ("bq", "QuantitySummaryWindow(Document document"),
@@ -103,6 +116,7 @@ if not errors:
         ("health", "ModelHealthWindow(Document document"),
         ("door_schedule", "DoorOpeningScheduleWindow(Document document"),
         ("room_schedule", "RoomFinishScheduleWindow(Document document"),
+        ("revision", "RevisionWindow(Document document"),
     ):
         if signature not in text[key]:
             errors.append(key + " must require an explicit source Document")
@@ -118,6 +132,8 @@ if not errors:
         errors.append("QS3DBQ launcher must pass its source Document to QuantitySummaryWindow")
     if "new RebarScheduleWindow(doc, rows, locate, fileName)" not in text["review"]:
         errors.append("QS3DBBSVIEW launcher must pass its source Document to RebarScheduleWindow")
+    if "new RevisionWindow(doc, before, after, rows, locate)" not in text["review"]:
+        errors.append("QS3DREVDIFF launcher must pass its source Document to RevisionWindow")
 
     manager_contracts = {
         "families": ("new FamilyManagerWindow(document)", "family_window"),
@@ -128,12 +144,18 @@ if not errors:
         "schedule_hub": ("new ScheduleHubWindow(document)", "schedule_hub_window"),
         "curtain_hub": ("new CurtainWallWindow(document)", "curtain_hub_window"),
     }
+    publication_tracked_managers = {"families", "levels", "zones"}
     for key, (constructor, window_key) in manager_contracts.items():
         source = text[key]
         window_source = text[window_key]
         if constructor not in source:
             errors.append(key + " launcher lost its explicit source Document constructor")
-        if "Application.ShowModelessWindow(IntPtr.Zero, window, true);" not in source:
+        if key in publication_tracked_managers:
+            if "var publishedWindow = candidate;" not in source:
+                errors.append(key + " launcher must alias the exact candidate before attaching publication lifecycle")
+            if "Application.ShowModelessWindow(IntPtr.Zero, publishedWindow, true);" not in source:
+                errors.append(key + " launcher must show the exact publication-tracked candidate instance")
+        elif "Application.ShowModelessWindow(IntPtr.Zero, window, true);" not in source:
             errors.append(key + " launcher must show the same registered window instance")
         if "DocumentBoundWindowLifetime.Attach(window, document);" in source:
             errors.append(key + " launcher must not duplicate lifetime attachment owned by the window constructor")
@@ -160,4 +182,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
 
-print("PASS: document-bound review/health/BQ/BBS/schedule/manager windows keep one source-DWG registration; per-window code owns only managed H3 subscription tokens, native reactors are centralized with weak callbacks by native database identity, and dynamic hubs remain active-document based.")
+print("PASS: document-bound review/health/BQ/BBS/schedule/manager windows keep one source-DWG registration; publication-tracked Family/Level/Zone managers show their exact lifecycle-owned candidate; Revision retains only stable native database identity for callbacks, native reactors stay centralized, and dynamic hubs remain active-document based.")

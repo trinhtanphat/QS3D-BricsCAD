@@ -31,15 +31,27 @@ namespace QS3D.Core.Diagnostics
 
         private static List<ModelHealthIssue> MaterializeIssues(IEnumerable<ModelHealthIssue> issues)
         {
-            var expectedKnownCount = RequireKnownCountsWithinLimit(issues);
+            var expectedKnownCount = RequireKnownCountsWithinLimit(issues, out var expectedKnownCountSources);
 
             var result = new List<ModelHealthIssue>(Math.Min(MaxIssueCount, 256));
             using (var enumerator = issues.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireKnownCountStable(issues, expectedKnownCount, expectedKnownCountSources);
+                    if (!enumerator.MoveNext())
+                    {
+                        RequireKnownCountStable(issues, expectedKnownCount, expectedKnownCountSources);
+                        break;
+                    }
+
+                    RequireKnownCountStable(issues, expectedKnownCount, expectedKnownCountSources);
+                    if (expectedKnownCount.HasValue && result.Count >= expectedKnownCount.Value)
+                        throw new InvalidOperationException(
+                            "Health summary traversal produced more diagnostic issues than its known count of " + expectedKnownCount.Value + ".");
                     if (result.Count >= MaxIssueCount)
                         throw new InvalidOperationException("Health summary supports at most " + MaxIssueCount + " diagnostic issues.");
+
                     result.Add(enumerator.Current);
                 }
             }
@@ -47,15 +59,44 @@ namespace QS3D.Core.Diagnostics
             if (expectedKnownCount.HasValue && result.Count != expectedKnownCount.Value)
                 throw new InvalidOperationException("Health summary known issue count does not match enumerated issue count.");
 
+            RequireKnownCountStable(issues, expectedKnownCount, expectedKnownCountSources);
             return result;
         }
 
-        private static int? RequireKnownCountsWithinLimit(IEnumerable<ModelHealthIssue> issues)
+        private static void RequireKnownCountStable(
+            IEnumerable<ModelHealthIssue> issues,
+            int? expectedKnownCount,
+            int expectedKnownCountSources)
+        {
+            var currentKnownCount = RequireKnownCountsWithinLimit(issues, out var currentKnownCountSources);
+            if (expectedKnownCountSources != currentKnownCountSources || expectedKnownCount != currentKnownCount)
+                throw new InvalidOperationException(
+                    "Health summary known issue count changed during traversal from " +
+                    (expectedKnownCount.HasValue ? expectedKnownCount.Value.ToString() : "<none>") + " to " +
+                    (currentKnownCount.HasValue ? currentKnownCount.Value.ToString() : "<none>") + ".");
+        }
+
+        private static int? RequireKnownCountsWithinLimit(
+            IEnumerable<ModelHealthIssue> issues,
+            out int knownCountSources)
         {
             var counts = new List<int>(3);
-            if (issues is ICollection<ModelHealthIssue> collection) counts.Add(collection.Count);
-            if (issues is IReadOnlyCollection<ModelHealthIssue> readOnlyCollection) counts.Add(readOnlyCollection.Count);
-            if (issues is System.Collections.ICollection nonGenericCollection) counts.Add(nonGenericCollection.Count);
+            knownCountSources = 0;
+            if (issues is ICollection<ModelHealthIssue> collection)
+            {
+                knownCountSources |= 1;
+                counts.Add(collection.Count);
+            }
+            if (issues is IReadOnlyCollection<ModelHealthIssue> readOnlyCollection)
+            {
+                knownCountSources |= 2;
+                counts.Add(readOnlyCollection.Count);
+            }
+            if (issues is System.Collections.ICollection nonGenericCollection)
+            {
+                knownCountSources |= 4;
+                counts.Add(nonGenericCollection.Count);
+            }
 
             if (counts.Count == 0) return null;
 

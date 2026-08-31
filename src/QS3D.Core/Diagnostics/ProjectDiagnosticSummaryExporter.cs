@@ -109,22 +109,37 @@ namespace QS3D.Core.Diagnostics
 
         private static List<ModelHealthIssue> MaterializeIssues(IEnumerable<ModelHealthIssue> issues)
         {
-            ValidateKnownIssueCounts(issues);
-
-            var result = new List<ModelHealthIssue>(Math.Min(MaxIssueCount, 256));
+            var expectedCount = ValidateKnownIssueCounts(issues, null);
+            var result = new List<ModelHealthIssue>(Math.Min(MaxIssueCount, expectedCount ?? 256));
             using (var enumerator = issues.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    ValidateKnownIssueCounts(issues, expectedCount);
+                    var hasNext = enumerator.MoveNext();
+                    ValidateKnownIssueCounts(issues, expectedCount);
+
+                    if (!hasNext)
+                        break;
+
+                    if (expectedCount.HasValue && result.Count >= expectedCount.Value)
+                        throw new InvalidOperationException("Diagnostic summary issue source yielded more items than its admitted known Count.");
                     if (result.Count >= MaxIssueCount)
                         throw new InvalidOperationException("Diagnostic summary supports at most " + MaxIssueCount.ToString(CultureInfo.InvariantCulture) + " health issues.");
-                    result.Add(enumerator.Current);
+
+                    var current = enumerator.Current;
+                    ValidateKnownIssueCounts(issues, expectedCount);
+                    result.Add(current);
                 }
             }
+
+            ValidateKnownIssueCounts(issues, expectedCount);
+            if (expectedCount.HasValue && result.Count != expectedCount.Value)
+                throw new InvalidOperationException("Diagnostic summary issue source yielded fewer items than its admitted known Count.");
             return result;
         }
 
-        private static void ValidateKnownIssueCounts(IEnumerable<ModelHealthIssue> issues)
+        private static int? ValidateKnownIssueCounts(IEnumerable<ModelHealthIssue> issues, int? admittedCount)
         {
             var knownCounts = new List<int>(3);
             if (issues is ICollection<ModelHealthIssue> genericCollection)
@@ -134,7 +149,7 @@ namespace QS3D.Core.Diagnostics
             if (issues is System.Collections.ICollection nonGenericCollection)
                 knownCounts.Add(nonGenericCollection.Count);
 
-            int? expectedCount = null;
+            int? observedCount = null;
             for (var i = 0; i < knownCounts.Count; i++)
             {
                 var count = knownCounts[i];
@@ -142,10 +157,22 @@ namespace QS3D.Core.Diagnostics
                     throw new InvalidOperationException("Diagnostic summary issue source reports an invalid negative count.");
                 if (count > MaxIssueCount)
                     throw new InvalidOperationException("Diagnostic summary supports at most " + MaxIssueCount.ToString(CultureInfo.InvariantCulture) + " health issues.");
-                if (expectedCount.HasValue && count != expectedCount.Value)
+                if (observedCount.HasValue && count != observedCount.Value)
                     throw new InvalidOperationException("Diagnostic summary issue source reports conflicting known counts.");
-                expectedCount = count;
+                observedCount = count;
             }
+
+            if (admittedCount.HasValue)
+            {
+                if (!observedCount.HasValue || observedCount.Value != admittedCount.Value)
+                    throw new InvalidOperationException("Diagnostic summary issue source Count changed during traversal.");
+            }
+            else if (observedCount.HasValue && admittedCount != observedCount)
+            {
+                return observedCount;
+            }
+
+            return observedCount;
         }
 
         public static void Export(string path, ProjectState project, IEnumerable<ModelHealthIssue> issues)

@@ -272,18 +272,71 @@ namespace QS3D.Core.Persistence
 
         private static List<T> SnapshotBounded<T>(IEnumerable<T> values, int knownCount, string collectionLabel)
         {
+            if (values == null) throw new ArgumentNullException(nameof(values));
             RequireSupportedCount(knownCount, collectionLabel);
+            RequireStableCountEvidence(values, knownCount, collectionLabel, "before traversal");
+
             var bounded = new List<T>(knownCount);
-            foreach (var value in values)
+            using (var enumerator = values.GetEnumerator())
             {
-                if (bounded.Count == MaximumSnapshotEntries)
-                    ThrowTooManyEntries(collectionLabel);
-                bounded.Add(value);
+                while (enumerator.MoveNext())
+                {
+                    if (bounded.Count == MaximumSnapshotEntries)
+                        ThrowTooManyEntries(collectionLabel);
+                    if (bounded.Count >= knownCount)
+                        ThrowKnownCountMismatch(collectionLabel);
+                    var value = enumerator.Current;
+                    bounded.Add(value);
+                }
             }
+
             if (bounded.Count != knownCount)
-                throw new InvalidOperationException(
-                    "Persistence stamp " + collectionLabel + " known count does not match enumerated entry count.");
+                ThrowKnownCountMismatch(collectionLabel);
+
+            RequireStableCountEvidence(values, knownCount, collectionLabel, "after traversal");
             return bounded;
+        }
+
+        private static void RequireStableCountEvidence<T>(
+            IEnumerable<T> values,
+            int knownCount,
+            string collectionLabel,
+            string phase)
+        {
+            int? observed = null;
+            if (values is ICollection<T> genericCollection)
+                MergeCountEvidence(genericCollection.Count, knownCount, collectionLabel, phase, ref observed);
+            if (values is IReadOnlyCollection<T> readOnlyCollection)
+                MergeCountEvidence(readOnlyCollection.Count, knownCount, collectionLabel, phase, ref observed);
+            if (values is System.Collections.ICollection nonGenericCollection)
+                MergeCountEvidence(nonGenericCollection.Count, knownCount, collectionLabel, phase, ref observed);
+        }
+
+        private static void MergeCountEvidence(
+            int candidate,
+            int knownCount,
+            string collectionLabel,
+            string phase,
+            ref int? observed)
+        {
+            RequireSupportedCount(candidate, collectionLabel);
+            if (candidate != knownCount)
+            {
+                if (string.Equals(phase, "before traversal", StringComparison.Ordinal))
+                    ThrowKnownCountMismatch(collectionLabel);
+                throw new InvalidOperationException(
+                    "Persistence stamp " + collectionLabel + " count changed or conflicted " + phase + ".");
+            }
+            if (observed.HasValue && observed.Value != candidate)
+                throw new InvalidOperationException(
+                    "Persistence stamp " + collectionLabel + " exposes conflicting count evidence " + phase + ".");
+            observed = candidate;
+        }
+
+        private static void ThrowKnownCountMismatch(string collectionLabel)
+        {
+            throw new InvalidOperationException(
+                "Persistence stamp " + collectionLabel + " known count does not match enumerated entry count.");
         }
 
         private static void RequireSupportedCount(int count, string collectionLabel)

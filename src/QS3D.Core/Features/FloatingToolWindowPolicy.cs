@@ -99,6 +99,12 @@ namespace QS3D.Core.Features
             foreach (var candidate in visibleWorkAreas)
             {
                 traversed++;
+                if (knownCount.HasValue && traversed > knownCount.Value)
+                {
+                    throw new InvalidOperationException(
+                        "Visible work-area collection yielded more entries than its deterministic Count value.");
+                }
+
                 if (traversed > MaximumVisibleWorkAreas)
                 {
                     throw new InvalidOperationException(
@@ -107,6 +113,19 @@ namespace QS3D.Core.Features
 
                 if (IsValidWorkArea(candidate))
                     validAreas.Add(candidate);
+            }
+
+            var reboundCount = GetKnownCount(visibleWorkAreas);
+            if (knownCount.HasValue)
+            {
+                if (!reboundCount.HasValue || reboundCount.Value != knownCount.Value)
+                    throw new InvalidOperationException("Visible work-area collection Count changed during enumeration.");
+                if (traversed != knownCount.Value)
+                    throw new InvalidOperationException("Visible work-area collection traversal did not match its deterministic Count value.");
+            }
+            else if (reboundCount.HasValue)
+            {
+                throw new InvalidOperationException("Visible work-area collection exposed Count metadata only after enumeration.");
             }
 
             return validAreas.ToArray();

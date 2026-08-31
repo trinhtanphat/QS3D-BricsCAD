@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Windows;
 using Bricscad.ApplicationServices;
+using Application = Bricscad.ApplicationServices.Application;
 using QS3D.BricsCAD.V25.Cad;
 using QS3D.BricsCAD.V25.Services;
 using QS3D.BricsCAD.V25.UI;
@@ -19,12 +21,140 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class ReviewCommands
     {
+        private enum ReviewSurface
+        {
+            Bbs,
+            Recognition,
+            Revision
+        }
+
+        private sealed class PublishedReviewWindow
+        {
+            private readonly WeakReference<Document> _document;
+
+            public PublishedReviewWindow(Window window, Document document)
+            {
+                Window = window ?? throw new ArgumentNullException(nameof(window));
+                if (document == null) throw new ArgumentNullException(nameof(document));
+
+                var database = document.Database;
+                if (database == null || database.UnmanagedObject == IntPtr.Zero)
+                    throw new InvalidOperationException("Review window requires a live native BricsCAD database.");
+
+                NativeDatabaseIdentity = database.UnmanagedObject;
+                _document = new WeakReference<Document>(document);
+            }
+
+            public Window Window { get; }
+            public IntPtr NativeDatabaseIdentity { get; }
+
+            public bool MatchesNativeDatabase(Document document)
+            {
+                if (document == null) return false;
+                try
+                {
+                    var database = document.Database;
+                    return database != null &&
+                           database.UnmanagedObject != IntPtr.Zero &&
+                           database.UnmanagedObject == NativeDatabaseIdentity;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            public bool MatchesManagedWrapper(Document document)
+            {
+                return document != null &&
+                       _document.TryGetTarget(out var ownedDocument) &&
+                       ReferenceEquals(ownedDocument, document);
+            }
+        }
+
+        private static PublishedReviewWindow? _bbsPublished;
+        private static PublishedReviewWindow? _recognitionPublished;
+        private static PublishedReviewWindow? _revisionPublished;
+
+        private static PublishedReviewWindow? GetPublished(ReviewSurface surface)
+        {
+            switch (surface)
+            {
+                case ReviewSurface.Bbs: return _bbsPublished;
+                case ReviewSurface.Recognition: return _recognitionPublished;
+                case ReviewSurface.Revision: return _revisionPublished;
+                default: throw new ArgumentOutOfRangeException(nameof(surface));
+            }
+        }
+
+        private static void SetPublished(ReviewSurface surface, PublishedReviewWindow? value)
+        {
+            switch (surface)
+            {
+                case ReviewSurface.Bbs: _bbsPublished = value; break;
+                case ReviewSurface.Recognition: _recognitionPublished = value; break;
+                case ReviewSurface.Revision: _revisionPublished = value; break;
+                default: throw new ArgumentOutOfRangeException(nameof(surface));
+            }
+        }
+
+        private static bool ReuseOrClosePublished(ReviewSurface surface, Document document, string label)
+        {
+            var previous = GetPublished(surface);
+            if (previous == null) return false;
+
+            if (previous.Window.IsLoaded)
+            {
+                if (previous.MatchesNativeDatabase(document) && previous.MatchesManagedWrapper(document))
+                {
+                    try { previous.Window.Activate(); } catch { }
+                    try { PaletteCoordinator.SetStatus(label + " đã mở cho bản vẽ hiện hành."); } catch { }
+                    return true;
+                }
+
+                try { previous.Window.Close(); }
+                catch (Exception closeError)
+                {
+                    throw new InvalidOperationException(
+                        "Không thể đóng " + label + " trước; không mở instance thứ hai.",
+                        closeError);
+                }
+
+                if (ReferenceEquals(GetPublished(surface), previous))
+                    throw new InvalidOperationException(
+                        label + " trước vẫn đang mở; hãy hoàn tất close trước khi mở lại.");
+            }
+            else if (ReferenceEquals(GetPublished(surface), previous))
+            {
+                SetPublished(surface, null);
+            }
+
+            return false;
+        }
+
+        private static void ShowAndPublish(ReviewSurface surface, Document document, Window candidate, string label)
+        {
+            var published = new PublishedReviewWindow(candidate, document);
+            candidate.Closed += (_, __) =>
+            {
+                if (ReferenceEquals(GetPublished(surface), published))
+                    SetPublished(surface, null);
+            };
+
+            Application.ShowModelessWindow(IntPtr.Zero, candidate, true);
+            if (!candidate.IsLoaded)
+                throw new InvalidOperationException(label + " không đạt trạng thái loaded sau khi host show.");
+
+            SetPublished(surface, published);
+        }
+
         [CommandMethod("QS3DBBSVIEW", CommandFlags.Modal)]
         public void ShowBbs()
         {
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DBBSVIEW", () =>
             {
+                if (ReuseOrClosePublished(ReviewSurface.Bbs, doc, "BBS Viewer")) return;
                 if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
                 {
                     doc.Editor.WriteMessage("\nQS3D BBS: chưa có QS3D project hiện hữu; viewer không tạo project mới.");
@@ -40,7 +170,17 @@ namespace QS3D.BricsCAD.V25
                     PaletteCoordinator.SetStatus("BBS Locate " + row.BarMark + " • " + count + " CAD object");
                 };
                 var fileName = (string.IsNullOrWhiteSpace(doc.Name) ? "QS3D" : Path.GetFileNameWithoutExtension(doc.Name)) + "-BBS.xlsx";
-                Application.ShowModelessWindow(IntPtr.Zero, new RebarScheduleWindow(doc, rows, locate, fileName), true);
+                RebarScheduleWindow? candidate = null;
+                try
+                {
+                    candidate = new RebarScheduleWindow(doc, rows, locate, fileName);
+                    ShowAndPublish(ReviewSurface.Bbs, doc, candidate, "BBS Viewer");
+                    candidate = null;
+                }
+                finally
+                {
+                    if (candidate != null) { try { candidate.Close(); } catch { } }
+                }
             });
         }
 
@@ -53,6 +193,7 @@ namespace QS3D.BricsCAD.V25
             var operation = scanCurrentSpace ? "QS3DB4D" : autoApply ? "QS3DRECOGNIZEAUTO" : "QS3DRECOGNIZE";
             Guard(doc, operation, () =>
             {
+                if (ReuseOrClosePublished(ReviewSurface.Recognition, doc, "Recognition Review")) return;
                 var snapshots = scanCurrentSpace ? EntitySnapshotReader.ReadCurrentSpace(doc) : EntitySnapshotReader.ReadCurrentSelection(doc);
                 snapshots = snapshots.Where(x => !x.HasQs3dGeneratedOwnershipMarker).ToList();
                 string? expectedProjectId = null;
@@ -147,7 +288,17 @@ namespace QS3D.BricsCAD.V25
                     }
                 }
 
-                Application.ShowModelessWindow(IntPtr.Zero, new RecognitionWindow(doc, batch.Results, apply, locate), true);
+                RecognitionWindow? candidate = null;
+                try
+                {
+                    candidate = new RecognitionWindow(doc, batch.Results, apply, locate);
+                    ShowAndPublish(ReviewSurface.Recognition, doc, candidate, "Recognition Review");
+                    candidate = null;
+                }
+                finally
+                {
+                    if (candidate != null) { try { candidate.Close(); } catch { } }
+                }
                 doc.Editor.WriteMessage("\nQS3D " + (scanCurrentSpace ? "B4D" : "Recognition") + ": scanned=" + snapshots.Count + ", auto=" + applied + ", review=" + batch.ReviewRequired.Count + ", skipped=" + skipped + ".");
             });
         }
@@ -172,13 +323,24 @@ namespace QS3D.BricsCAD.V25
             var doc = Active(); if (doc == null) return;
             Guard(doc, "QS3DREVDIFF", () =>
             {
+                if (ReuseOrClosePublished(ReviewSurface.Revision, doc, "Revision Review")) return;
                 if (!ProjectContextCoordinator.TryGetReadOnly(doc, out _))
                     throw new InvalidOperationException("Revision diff cần một QS3D project hiện hữu; review không tạo project mới.");
                 var before = RevisionCoordinator.LoadBaseline(doc);
                 var after = RevisionCoordinator.CaptureCurrent(doc);
                 var rows = new QuantityRevisionReport().Build(before, after);
                 Action<QuantityRevisionRow> locate = row => LocateCurrentElement(doc, row.ElementId, "Revision Locate");
-                Application.ShowModelessWindow(IntPtr.Zero, new RevisionWindow(doc, before, after, rows, locate), true);
+                RevisionWindow? candidate = null;
+                try
+                {
+                    candidate = new RevisionWindow(doc, before, after, rows, locate);
+                    ShowAndPublish(ReviewSurface.Revision, doc, candidate, "Revision Review");
+                    candidate = null;
+                }
+                finally
+                {
+                    if (candidate != null) { try { candidate.Close(); } catch { } }
+                }
                 PaletteCoordinator.SetStatus("Revision diff: " + rows.Count + " thay đổi quantity.");
             });
         }

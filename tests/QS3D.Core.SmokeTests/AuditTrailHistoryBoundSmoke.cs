@@ -18,7 +18,7 @@ namespace QS3D.Core.SmokeTests
             ReadsExactBoundWithoutMutation();
             RejectsOversizedReadWithoutMutation();
             RejectsNegativeKnownCountBeforeEnumeration();
-            SnapshotUsesValidatedCountOnce();
+            SnapshotRevalidatesStableCountAcrossTraversal();
             RejectsRecordAtCapacityWithoutMutation();
             RecordsIntoLastAvailableSlot();
             RejectsOversizedClearWithoutMutation();
@@ -66,15 +66,15 @@ namespace QS3D.Core.SmokeTests
             Equal(0, history.EnumeratorRequests, "negative-count enumeration requests");
         }
 
-        private static void SnapshotUsesValidatedCountOnce()
+        private static void SnapshotRevalidatesStableCountAcrossTraversal()
         {
-            var history = new SingleCountReadHistory(CanonicalEvent());
+            var history = new StableCountHistory(CanonicalEvent());
             var trail = BuildTrail(history);
 
             var events = trail.Events;
 
-            Equal(1, events.Count, "single-count snapshot count");
-            Equal(1, history.CountReads, "single-count snapshot Count reads");
+            Equal(1, events.Count, "stable-count snapshot count");
+            Equal(7, history.CountReads, "stable-count snapshot Count reads");
         }
 
         private static void RejectsRecordAtCapacityWithoutMutation()
@@ -258,11 +258,11 @@ namespace QS3D.Core.SmokeTests
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
-        private sealed class SingleCountReadHistory : IList<AuditEvent>
+        private sealed class StableCountHistory : IList<AuditEvent>
         {
             private readonly List<AuditEvent> _items;
 
-            internal SingleCountReadHistory(params AuditEvent[] items)
+            internal StableCountHistory(params AuditEvent[] items)
             {
                 _items = new List<AuditEvent>(items);
             }
@@ -274,8 +274,6 @@ namespace QS3D.Core.SmokeTests
                 get
                 {
                     CountReads++;
-                    if (CountReads > 1)
-                        throw new InvalidOperationException("Audit history Count was read more than once before snapshot traversal.");
                     return _items.Count;
                 }
             }

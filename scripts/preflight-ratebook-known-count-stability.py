@@ -15,23 +15,43 @@ if SOURCE.is_file():
     source = SOURCE.read_text(encoding="utf-8")
     for token in (
         "var hasKnownCount = TryGetKnownCount(items, out var knownCount);",
+        "while (true)",
+        "RequireStableKnownCount(items, knownCount);",
+        "if (!enumerator.MoveNext())",
         "if (hasKnownCount && index >= knownCount)",
+        "if (index >= MaxItems)",
+        "var item = enumerator.Current;",
         "if (hasKnownCount && index != knownCount)",
-        "var hasFinalKnownCount = TryGetKnownCount(items, out var finalKnownCount);",
-        "if (!hasFinalKnownCount || finalKnownCount != knownCount)",
+        "private static void RequireStableKnownCount(IEnumerable<RateItem> items, int knownCount)",
+        "var hasCurrentKnownCount = TryGetKnownCount(items, out var currentKnownCount);",
+        "if (!hasCurrentKnownCount || currentKnownCount != knownCount)",
         "ThrowKnownCountChangedDuringTraversal();",
         '"Rate book item source known count changed during traversal."',
     ):
         if token not in source:
-            errors.append("RateBook source missing two-phase Count binding token: " + token)
+            errors.append("RateBook source missing stable Count binding/no-overread token: " + token)
+
+    if "while (enumerator.MoveNext())" in source:
+        errors.append("RateBook must not use foreach-equivalent while(MoveNext) shape that cannot pin pre-advance Count stability.")
 
     initial = source.find("var hasKnownCount = TryGetKnownCount(items, out var knownCount);")
-    traversal = source.find("foreach (var item in items)")
-    observed = source.find("if (hasKnownCount && index != knownCount)")
-    rebound = source.find("var hasFinalKnownCount = TryGetKnownCount(items, out var finalKnownCount);")
-    sort = source.find("foreach (var pair in _byScope)")
-    if min(initial, traversal, observed, rebound, sort) < 0 or not (initial < traversal < observed < rebound < sort):
-        errors.append("RateBook must bind Count before traversal and re-bind it before committed sorting/publication")
+    traversal = source.find("while (true)")
+    pre_rebind = source.find("RequireStableKnownCount(items, knownCount);", traversal)
+    move_next = source.find("if (!enumerator.MoveNext())", pre_rebind)
+    post_rebind = source.find("RequireStableKnownCount(items, knownCount);", pre_rebind + 1)
+    overrun = source.find("if (hasKnownCount && index >= knownCount)", post_rebind)
+    ceiling = source.find("if (index >= MaxItems)", overrun)
+    current = source.find("var item = enumerator.Current;", ceiling)
+    observed = source.find("if (hasKnownCount && index != knownCount)", current)
+    final_rebind = source.find("RequireStableKnownCount(items, knownCount);", observed)
+    sort = source.find("foreach (var pair in _byScope)", final_rebind)
+    if min(initial, traversal, pre_rebind, move_next, post_rebind, overrun, ceiling, current, observed, final_rebind, sort) < 0 or not (
+        initial < traversal < pre_rebind < move_next < post_rebind < overrun < ceiling < current < observed < final_rebind < sort
+    ):
+        errors.append(
+            "RateBook must bind Count at admission, re-bind before MoveNext and after successful MoveNext before Current, "
+            "enforce Count/ceiling overflow before Current, and perform a final re-bind before publication"
+        )
 
 if SMOKE.is_file():
     smoke = SMOKE.read_text(encoding="utf-8")
@@ -55,4 +75,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: RateBook re-binds deterministic Count evidence after traversal while preserving early overrun, under-yield and streaming behavior.")
+print("PASS: RateBook keeps historical no-overread/under-yield/final-rebind coverage while binding deterministic Count throughout traversal.")

@@ -86,7 +86,7 @@ namespace QS3D.Core.SmokeTests
                 laterCount: 2);
 
             Expect<InvalidOperationException>(() => CurtainWallPanelFingerprint.Compute(Input(pieces)), "piece Count drift");
-            Equal(1, pieces.IndexReads, "Count-drift validation must not expand the snapshotted input range");
+            Equal(0, pieces.IndexReads, "Count-drift validation must fail before indexed access once admitted Count diverges");
         }
 
         private static CurtainWallPanelFingerprintInput Input(IReadOnlyList<CurtainWallPanelPiece> pieces)

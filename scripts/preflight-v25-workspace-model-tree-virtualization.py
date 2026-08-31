@@ -6,34 +6,46 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 errors = []
 
-safety_path = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.ModelTreeVirtualizationSafety.cs"
+model_safety_path = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.ModelTreeVirtualizationSafety.cs"
+property_safety_path = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.PropertyListVirtualizationSafety.cs"
 workspace_path = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs"
 browser_path = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.ProjectBrowser.cs"
 augmenter_path = ROOT / "src/QS3D.BricsCAD.V25/UI/ReferenceWorkspaceTreeAugmenter.cs"
 theme_path = ROOT / "src/QS3D.BricsCAD.V25/UI/Theme.xaml"
 polish_path = ROOT / "src/QS3D.BricsCAD.V25/UI/ProductionUiPolish.cs"
 
-for path in (safety_path, workspace_path, browser_path, augmenter_path, theme_path, polish_path):
+for path in (model_safety_path, property_safety_path, workspace_path, browser_path, augmenter_path, theme_path, polish_path):
     if not path.is_file():
         errors.append("missing Workspace virtualization contract file: " + str(path.relative_to(ROOT)))
 
 if not errors:
-    safety = safety_path.read_text(encoding="utf-8")
+    model_safety = model_safety_path.read_text(encoding="utf-8")
+    property_safety = property_safety_path.read_text(encoding="utf-8")
     workspace = workspace_path.read_text(encoding="utf-8")
     browser = browser_path.read_text(encoding="utf-8")
     augmenter = augmenter_path.read_text(encoding="utf-8")
     theme = theme_path.read_text(encoding="utf-8")
     polish = polish_path.read_text(encoding="utf-8")
 
-    required_safety = {
+    required_model_safety = {
         "private static void ApplyModelTreeVirtualizationSafety(WorkspacePanel panel)": "ModelTree safety helper missing",
         "VirtualizingPanel.SetVirtualizationMode(panel.ModelTree, VirtualizationMode.Standard);": "ModelTree must pin Standard mode before first host layout",
         "VirtualizingPanel.SetIsVirtualizing(panel.ModelTree, false);": "ModelTree must opt out of recycling virtualization locally",
         "ScrollViewer.SetCanContentScroll(panel.ModelTree, false);": "ModelTree must use physical scrolling so a virtualizing items host is not selected",
         "panel.EnsureProjectBrowserSurface();": "ModelTree must enter its final Project Browser host before first layout",
     }
-    for token, message in required_safety.items():
-        if token not in safety:
+    for token, message in required_model_safety.items():
+        if token not in model_safety:
+            errors.append(message)
+
+    required_property_safety = {
+        "private static void ApplyPropertyListVirtualizationSafety(WorkspacePanel panel)": "PropertyList safety helper missing",
+        "VirtualizingPanel.SetVirtualizationMode(panel.PropertyList, VirtualizationMode.Standard);": "PropertyList must pin Standard mode before grouping/first host layout",
+        "VirtualizingPanel.SetIsVirtualizing(panel.PropertyList, false);": "PropertyList must opt out of virtualization locally before grouping",
+        "ScrollViewer.SetCanContentScroll(panel.PropertyList, false);": "PropertyList must use physical scrolling before grouping",
+    }
+    for token, message in required_property_safety.items():
+        if token not in property_safety:
             errors.append(message)
 
     constructor_match = re.search(
@@ -45,36 +57,50 @@ if not errors:
         errors.append("WorkspacePanel constructor not found")
     else:
         constructor_body = constructor_match.group(1)
-        if not re.search(r"InitializeComponent\(\);\s*ApplyModelTreeVirtualizationSafety\(this\);", constructor_body):
-            errors.append("ModelTree safety must be applied immediately after InitializeComponent and before first host layout")
+        expected_order = re.search(
+            r"InitializeComponent\(\);\s*"
+            r"ApplyModelTreeVirtualizationSafety\(this\);\s*"
+            r"ApplyPropertyListVirtualizationSafety\(this\);\s*"
+            r"BindViewModel\(\);",
+            constructor_body,
+        )
+        if not expected_order:
+            errors.append("Workspace constructor must contain ModelTree then PropertyList before BindViewModel/grouping")
         if constructor_body.count("ApplyModelTreeVirtualizationSafety(this);") != 1:
             errors.append("ModelTree safety must be applied exactly once from the constructor")
+        if constructor_body.count("ApplyPropertyListVirtualizationSafety(this);") != 1:
+            errors.append("PropertyList safety must be applied exactly once from the constructor")
 
-    # Regression contract from licensed V25 preview .10230: all virtualization writes and the
-    # ModelTree -> Project Browser host transition must finish before first host layout. Loaded-time
-    # browser attachment may call EnsureProjectBrowserSurface only as an idempotent no-op.
     forbidden_loaded_tokens = (
         "FrameworkElement.LoadedEvent",
         "OnModelTreeVirtualizationSafetyLoaded",
+        "OnPropertyListVirtualizationSafetyLoaded",
         "RegisterClassHandler",
         "RoutedEventHandler",
         "ReadLocalValue(VirtualizingPanel.VirtualizationModeProperty)",
     )
-    for token in forbidden_loaded_tokens:
-        if token in safety:
-            errors.append("ModelTree safety must remain constructor-only; forbidden Loaded-time token: " + token)
+    for source_name, source in (("ModelTree", model_safety), ("PropertyList", property_safety)):
+        for token in forbidden_loaded_tokens:
+            if token in source:
+                errors.append(source_name + " safety must remain constructor-only; forbidden Loaded-time token: " + token)
 
-    if safety.count("ApplyModelTreeVirtualizationSafety(") != 1:
-        errors.append("ModelTree safety helper must have no call path other than the constructor-owned call in WorkspacePanel.xaml.cs")
+    if model_safety.count("ApplyModelTreeVirtualizationSafety(") != 1:
+        errors.append("ModelTree safety helper must have no call path other than the constructor-owned call")
+    if property_safety.count("ApplyPropertyListVirtualizationSafety(") != 1:
+        errors.append("PropertyList safety helper must have no call path other than the constructor-owned call")
 
-    mode_set_index = safety.find("VirtualizingPanel.SetVirtualizationMode(panel.ModelTree, VirtualizationMode.Standard);")
-    is_virtualizing_index = safety.find("VirtualizingPanel.SetIsVirtualizing(panel.ModelTree, false);")
-    scroll_index = safety.find("ScrollViewer.SetCanContentScroll(panel.ModelTree, false);")
-    surface_index = safety.find("panel.EnsureProjectBrowserSurface();")
-    if min(mode_set_index, is_virtualizing_index, scroll_index, surface_index) < 0:
-        pass
-    elif not (mode_set_index < is_virtualizing_index < scroll_index < surface_index):
+    model_mode = model_safety.find("VirtualizingPanel.SetVirtualizationMode(panel.ModelTree, VirtualizationMode.Standard);")
+    model_virtual = model_safety.find("VirtualizingPanel.SetIsVirtualizing(panel.ModelTree, false);")
+    model_scroll = model_safety.find("ScrollViewer.SetCanContentScroll(panel.ModelTree, false);")
+    model_surface = model_safety.find("panel.EnsureProjectBrowserSurface();")
+    if min(model_mode, model_virtual, model_scroll, model_surface) >= 0 and not (model_mode < model_virtual < model_scroll < model_surface):
         errors.append("ModelTree contract must pin mode, disable virtualization, select physical scrolling, then reparent before first layout")
+
+    property_mode = property_safety.find("VirtualizingPanel.SetVirtualizationMode(panel.PropertyList, VirtualizationMode.Standard);")
+    property_virtual = property_safety.find("VirtualizingPanel.SetIsVirtualizing(panel.PropertyList, false);")
+    property_scroll = property_safety.find("ScrollViewer.SetCanContentScroll(panel.PropertyList, false);")
+    if min(property_mode, property_virtual, property_scroll) >= 0 and not (property_mode < property_virtual < property_scroll):
+        errors.append("PropertyList contract must pin Standard mode, disable virtualization, then select physical scrolling")
 
     if "ApplyVirtualizationDefaults(root)" in polish:
         errors.append("ProductionUiPolish Loaded path must not traverse item controls to apply virtualization defaults")
@@ -100,8 +126,8 @@ if not errors:
     if not re.search(r"\btree\.Items\.Remove\(", augmenter) or not re.search(r"\.Items\.Insert\(", augmenter):
         errors.append("reference-tree registry must retain explicit container reordering evidence covered by the containment")
 
-    # The fix is deliberately narrow. Do not regress the production virtualization policy for
-    # normal data-heavy controls while protecting the small explicit navigation tree.
+    # Keep the global data-heavy virtualization policy intact. The BricsCAD V25 containment is
+    # intentionally local to the two small explicit/grouped Workspace controls above.
     for control in ("TreeView", "ListView", "ListBox"):
         style_match = re.search(
             r'<Style\s+TargetType="\{x:Type\s+' + re.escape(control) + r'\}"[^>]*>(.*?)</Style>',
@@ -118,9 +144,9 @@ if not errors:
             errors.append("Theme.xaml must keep " + control + " recycling virtualization for data-heavy surfaces")
 
 if errors:
-    print("V25 Workspace ModelTree virtualization containment guard failed:")
+    print("V25 Workspace virtualization containment guard failed:")
     for error in errors:
         print(" - " + error)
     sys.exit(1)
 
-print("V25 Workspace ModelTree virtualization containment guard passed")
+print("V25 Workspace virtualization containment guard passed")

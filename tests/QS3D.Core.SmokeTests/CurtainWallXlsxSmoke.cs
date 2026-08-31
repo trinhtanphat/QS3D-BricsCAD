@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -19,6 +20,7 @@ namespace QS3D.Core.SmokeTests
             InvalidProvenanceFailsBeforeDirectoryCreation();
             InvalidSourceHandlePreservesExistingDestination();
             PresentationTextStillUsesOpenXmlSanitization();
+            CountStableCrossRowProvenanceMutationFailsBeforePublication();
         }
 
         private static void ValidWorkbookPreservesTraceAndNumericPayload()
@@ -66,6 +68,7 @@ namespace QS3D.Core.SmokeTests
                 var row = ValidRow();
                 row.WallCount = 0;
                 row.ElementIds.Clear();
+                row.SourceHandles.Clear();
                 CurtainWallXlsxExporter.Export(path, new List<CurtainWallScheduleRow> { row });
                 if (!File.Exists(path)) throw new Exception("Zero-count Curtain XLSX row should remain valid.");
             }
@@ -123,6 +126,24 @@ namespace QS3D.Core.SmokeTests
                 row.FamilyName = "Curtain" + new string(new[] { (char)1 }) + "Family";
                 CurtainWallXlsxExporter.Export(path, new List<CurtainWallScheduleRow> { row });
                 if (!File.Exists(path)) throw new Exception("Presentation-text sanitization compatibility regressed.");
+            }
+            finally { SafeDelete(path); }
+        }
+
+        private static void CountStableCrossRowProvenanceMutationFailsBeforePublication()
+        {
+            var path = TempPath("cross-row-provenance-mutation");
+            try
+            {
+                File.WriteAllText(path, "existing-workbook");
+                var first = ValidRow();
+                var second = ValidRow();
+                second.ProjectId = "PROJECT-2";
+                var rows = new TraversalMutatingRows(first, second);
+                Throws<InvalidOperationException>(() => CurtainWallXlsxExporter.Export(path, rows));
+                Equal("existing-workbook", File.ReadAllText(path), "count-stable cross-row provenance mutation must preserve destination");
+                if (rows.FirstReadCount != 1 || rows.SecondReadCount != 1)
+                    throw new Exception("Curtain XLSX mutation regression must preserve the single-read outer-row contract.");
             }
             finally { SafeDelete(path); }
         }
@@ -189,6 +210,48 @@ namespace QS3D.Core.SmokeTests
         private static void SafeDeleteDirectory(string path)
         {
             try { if (Directory.Exists(path)) Directory.Delete(path, true); } catch { }
+        }
+
+        private sealed class TraversalMutatingRows : IReadOnlyList<CurtainWallScheduleRow>
+        {
+            private readonly CurtainWallScheduleRow _first;
+            private readonly CurtainWallScheduleRow _second;
+
+            internal TraversalMutatingRows(CurtainWallScheduleRow first, CurtainWallScheduleRow second)
+            {
+                _first = first;
+                _second = second;
+            }
+
+            public int Count => 2;
+            public int FirstReadCount { get; private set; }
+            public int SecondReadCount { get; private set; }
+
+            public CurtainWallScheduleRow this[int index]
+            {
+                get
+                {
+                    if (index == 0)
+                    {
+                        FirstReadCount++;
+                        if (FirstReadCount > 1) throw new InvalidOperationException("First caller-owned row index was read more than once.");
+                        return _first;
+                    }
+                    if (index == 1)
+                    {
+                        SecondReadCount++;
+                        if (SecondReadCount > 1) throw new InvalidOperationException("Second caller-owned row index was read more than once.");
+                        _first.ElementIds[0] = "CW-MUTATED";
+                        return _second;
+                    }
+                    throw new ArgumentOutOfRangeException(nameof(index));
+                }
+            }
+
+            public IEnumerator<CurtainWallScheduleRow> GetEnumerator() =>
+                throw new InvalidOperationException("Curtain XLSX exporter must not enumerate caller-owned rows during snapshot validation.");
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
     }
 }

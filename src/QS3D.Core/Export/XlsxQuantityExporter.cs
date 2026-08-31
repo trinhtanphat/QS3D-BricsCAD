@@ -79,6 +79,8 @@ namespace QS3D.Core.Export
                 ValidateStandardRowProvenance(row, rowIndex, workbookElementIds);
                 snapshot.Add(row);
             }
+            if (rows.Count != count)
+                throw new InvalidOperationException("Quantity XLSX export row count changed during snapshot.");
             return snapshot;
         }
 
@@ -87,6 +89,8 @@ namespace QS3D.Core.Export
             var count = source.Count;
             for (var index = 0; index < count; index++)
                 target.Add(source[index] ?? string.Empty);
+            if (source.Count != count)
+                throw new InvalidOperationException("Quantity XLSX provenance count changed during snapshot.");
         }
 
         public static void ExportEd2(string path, IReadOnlyList<QuantityReportRow> detailRows, IReadOnlyList<QuantityReportRow> summaryRows)
@@ -202,6 +206,8 @@ namespace QS3D.Core.Export
                 SnapshotStrings(source.SourceHandles, row.SourceHandles);
                 snapshot.Add(row);
             }
+            if (rows.Count != count)
+                throw new InvalidOperationException(sheetLabel + " row count changed during snapshot.");
             return snapshot;
         }
 

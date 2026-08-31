@@ -86,8 +86,8 @@ namespace QS3D.BricsCAD.V25
     internal static class MepRecognitionProfileStore
     {
         private const int MaxProfileBytes = 512 * 1024;
-        private const int MaxRules = 500;
-        private const int MaxTokensPerRule = 100;
+        private const int MaxRules = MepRecognitionLimits.MaxRules;
+        private const int MaxTokensPerRule = MepRecognitionLimits.MaxTokensPerRule;
         private const string RootName = "qs3dMepRecognitionProfile";
         private const string Version = "1";
 #if BRICSCAD_V26

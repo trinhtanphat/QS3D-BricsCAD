@@ -26,19 +26,23 @@ namespace QS3D.Core.Cost
             var rows = new List<FrozenEstimateProjectionRow>();
             var lineIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            foreach (var line in lines)
+            using (var enumerator = lines.GetEnumerator())
             {
-                if (hasKnownCount && index >= knownCount)
-                    throw new InvalidOperationException("Frozen estimate projection source Count does not match source traversal.");
-                if (index == MaxLines)
-                    ThrowTooManyLines();
-                if (line == null)
-                    throw new ArgumentException("Estimate projection contains a null line at index " + index + ".", nameof(lines));
-                if (!lineIds.Add(line.EstimateLineId))
-                    throw new ArgumentException("Duplicate estimate line id: " + line.EstimateLineId + ".", nameof(lines));
+                while (enumerator.MoveNext())
+                {
+                    if (hasKnownCount && index >= knownCount)
+                        throw new InvalidOperationException("Frozen estimate projection source Count does not match source traversal.");
+                    if (index >= MaxLines)
+                        ThrowTooManyLines();
+                    var line = enumerator.Current;
+                    if (line == null)
+                        throw new ArgumentException("Estimate projection contains a null line at index " + index + ".", nameof(lines));
+                    if (!lineIds.Add(line.EstimateLineId))
+                        throw new ArgumentException("Duplicate estimate line id: " + line.EstimateLineId + ".", nameof(lines));
 
-                rows.Add(FrozenEstimateProjectionRow.From(line));
-                index++;
+                    rows.Add(FrozenEstimateProjectionRow.From(line));
+                    index++;
+                }
             }
 
             if (hasKnownCount && rows.Count != knownCount)

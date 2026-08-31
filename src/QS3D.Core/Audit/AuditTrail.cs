@@ -44,23 +44,34 @@ namespace QS3D.Core.Audit
                 var snapshot = new List<AuditEvent>(storedCount);
                 var observed = 0;
                 long textCharacters = 0L;
-                foreach (var item in _events)
+                using (var enumerator = _events.GetEnumerator())
                 {
-                    observed++;
-                    if (observed > storedCount)
-                        throw HistoryCountMismatch();
-                    if (observed > MaxStoredEvents)
-                        throw TooManyEvents();
-                    if (item == null)
-                        throw new InvalidOperationException("Audit trail contains a null event.");
+                    while (true)
+                    {
+                        RequireStableHistoryCount(storedCount);
+                        if (!enumerator.MoveNext())
+                        {
+                            RequireStableHistoryCount(storedCount);
+                            break;
+                        }
 
-                    // Resource integrity wins before XML/canonical scans or cloning.
-                    AccumulateTextCharacters(item, ref textCharacters);
-                    var validationError = GetStoredEventValidationError(item);
-                    if (validationError != null) throw new InvalidOperationException(validationError);
-                    snapshot.Add(Clone(item));
+                        RequireStableHistoryCount(storedCount);
+                        RequireCanReadCurrent(storedCount, observed);
+                        var item = enumerator.Current;
+                        RequireStableHistoryCount(storedCount);
+                        observed++;
+                        if (item == null)
+                            throw new InvalidOperationException("Audit trail contains a null event.");
+
+                        // Resource integrity wins before XML/canonical scans or cloning.
+                        AccumulateTextCharacters(item, ref textCharacters);
+                        var validationError = GetStoredEventValidationError(item);
+                        if (validationError != null) throw new InvalidOperationException(validationError);
+                        snapshot.Add(Clone(item));
+                    }
                 }
                 RequireObservedHistoryCount(storedCount, observed);
+                RequireStableHistoryCount(storedCount);
                 return snapshot.AsReadOnly();
             }
         }
@@ -135,24 +146,35 @@ namespace QS3D.Core.Audit
 
             var observed = 0;
             long textCharacters = 0L;
-            foreach (var existing in _events)
+            using (var enumerator = _events.GetEnumerator())
             {
-                observed++;
-                if (observed > storedCount)
-                    throw HistoryCountMismatch();
-                if (observed > MaxStoredEvents)
-                    throw TooManyEvents();
-                if (existing == null)
-                    throw new InvalidOperationException("Audit trail contains a null event. Repair the existing audit history before modifying it.");
+                while (true)
+                {
+                    RequireStableHistoryCount(storedCount);
+                    if (!enumerator.MoveNext())
+                    {
+                        RequireStableHistoryCount(storedCount);
+                        break;
+                    }
 
-                // Reject aggregate abuse before XML/canonical scans of the event.
-                AccumulateTextCharacters(existing, ref textCharacters);
-                var validationError = GetStoredEventValidationError(existing);
-                if (validationError != null)
-                    throw new InvalidOperationException(validationError + " Repair the existing audit history before modifying it.");
+                    RequireStableHistoryCount(storedCount);
+                    RequireCanReadCurrent(storedCount, observed);
+                    var existing = enumerator.Current;
+                    RequireStableHistoryCount(storedCount);
+                    observed++;
+                    if (existing == null)
+                        throw new InvalidOperationException("Audit trail contains a null event. Repair the existing audit history before modifying it.");
+
+                    // Reject aggregate abuse before XML/canonical scans of the event.
+                    AccumulateTextCharacters(existing, ref textCharacters);
+                    var validationError = GetStoredEventValidationError(existing);
+                    if (validationError != null)
+                        throw new InvalidOperationException(validationError + " Repair the existing audit history before modifying it.");
+                }
             }
 
             RequireObservedHistoryCount(storedCount, observed);
+            RequireStableHistoryCount(storedCount);
             if (additionalTextCharacters > MaxStoredTextCharacters - textCharacters)
                 throw TextBudgetExceeded();
             if (requireAppendCapacity && observed >= MaxStoredEvents)
@@ -170,6 +192,25 @@ namespace QS3D.Core.Audit
             if (requireAppendCapacity && storedCount >= MaxStoredEvents)
                 throw AppendCapacityExceeded();
             return storedCount;
+        }
+
+        private static void RequireCanReadCurrent(int storedCount, int observed)
+        {
+            if (observed >= storedCount)
+                throw HistoryCountMismatch();
+            if (observed >= MaxStoredEvents)
+                throw TooManyEvents();
+        }
+
+        private void RequireStableHistoryCount(int admittedCount)
+        {
+            var reboundCount = _events.Count;
+            if (reboundCount < 0)
+                throw new InvalidOperationException("Audit trail exposes an invalid negative event count. Repair the existing audit history before reading or modifying it.");
+            if (reboundCount > MaxStoredEvents)
+                throw TooManyEvents();
+            if (reboundCount != admittedCount)
+                throw HistoryCountMismatch();
         }
 
         private static void RequireObservedHistoryCount(int storedCount, int observed)

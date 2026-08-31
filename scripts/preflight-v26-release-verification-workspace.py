@@ -10,6 +10,7 @@ WORKFLOW = ROOT / ".github" / "workflows" / "release-v26.yml"
 CREATE_CALL = r".\scripts\v26-release-verification-workspace.ps1 -Operation Create"
 CHILD_CALL = r".\scripts\v26-release-verification-workspace.ps1 -Operation Child"
 CLEANUP_CALL = r".\scripts\v26-release-verification-workspace.ps1 -Operation Cleanup"
+HELD_HASH_CALL = r".\scripts\verify-v26-held-file.ps1 -Operation Hash -Path $downloadedAsset"
 
 
 def fail(message: str) -> None:
@@ -56,13 +57,16 @@ def validate_workflow(text: str) -> None:
         CLEANUP_CALL,
         "Invoke-WebRequest",
         "-OutFile $downloadedAsset",
-        "Get-FileHash -LiteralPath $downloadedAsset -Algorithm SHA256",
+        HELD_HASH_CALL,
         "Uploaded V26 release asset SHA-256 mismatch",
     ):
         require(text, token, "V26 release workflow")
+    if "Get-FileHash -LiteralPath $downloadedAsset" in text:
+        fail("V26 release workflow: downloaded asset hash reopens the verification workspace child by pathname")
     require_before(text, CREATE_CALL, "Invoke-WebRequest", "workspace acquisition before remote write")
     require_before(text, CHILD_CALL, "Invoke-WebRequest", "owned child before remote write")
-    require_before(text, "Invoke-WebRequest", CLEANUP_CALL, "cleanup after remote write")
+    require_before(text, "-OutFile $downloadedAsset", HELD_HASH_CALL, "remote write before held-generation hash")
+    require_before(text, HELD_HASH_CALL, CLEANUP_CALL, "held-generation hash before owned cleanup")
     if "$verificationRoot = if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP))" in text:
         fail("V26 release workflow: raw RUNNER_TEMP verification-root fallback remains")
     if "Join-Path $verificationRoot ('qs3d-v26-release-asset-'" in text:
@@ -90,10 +94,16 @@ def main() -> None:
     rejected(validate_workflow, workflow.replace(CREATE_CALL, "# create removed", 1), "removed workspace create")
     rejected(validate_workflow, workflow.replace(CHILD_CALL, "# child removed", 1), "removed owned child derivation")
     rejected(validate_workflow, workflow.replace(CLEANUP_CALL, "# cleanup removed", 1), "removed owned cleanup")
+    rejected(
+        validate_workflow,
+        workflow.replace(HELD_HASH_CALL, "Get-FileHash -LiteralPath $downloadedAsset -Algorithm SHA256", 1),
+        "reintroduced pathname hash for downloaded release asset",
+    )
 
     print("PASS V26 release verification workspace safety contract")
     print(" - verification temp root is absolute/non-reparse before workspace creation")
     print(" - remote asset bytes are written only to a fresh owned nonce workspace")
+    print(" - downloaded asset verification consumes a held generation before owned cleanup")
     print(" - recursive cleanup is provenance-checked and limited to that owned workspace")
 
 

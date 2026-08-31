@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
         {
             InvalidKnownCountsFailBeforeEnumeration();
             TraversalMustMatchKnownCount();
+            PostTraversalKnownCountDriftFailsClosed();
             HonestCountedAndStreamingSourcesRemainSupported();
         }
 
@@ -47,6 +48,23 @@ namespace QS3D.Core.SmokeTests
             var overYield = new CountContractRoots(new[] { "ROOT", "B" }, 1, 1, 1, throwOnEnumeration: false);
             Throws<ArgumentException>(() => new DependencyImpactPlanner().Plan(project, overYield));
             Equal(true, overYield.EnumerationStarted);
+        }
+
+        private static void PostTraversalKnownCountDriftFailsClosed()
+        {
+            var project = Fixture();
+
+            var changed = new DriftingCountContractRoots(new[] { "ROOT" }, 1, 1, 1, 2, 2, 2);
+            Throws<ArgumentException>(() => new DependencyImpactPlanner().Plan(project, changed));
+            Equal(true, changed.EnumerationCompleted);
+
+            var conflicting = new DriftingCountContractRoots(new[] { "ROOT" }, 1, 1, 1, 1, 2, 1);
+            Throws<ArgumentException>(() => new DependencyImpactPlanner().Plan(project, conflicting));
+            Equal(true, conflicting.EnumerationCompleted);
+
+            var negative = new DriftingCountContractRoots(new[] { "ROOT" }, 1, 1, 1, -1, -1, -1);
+            Throws<ArgumentException>(() => new DependencyImpactPlanner().Plan(project, negative));
+            Equal(true, negative.EnumerationCompleted);
         }
 
         private static void HonestCountedAndStreamingSourcesRemainSupported()
@@ -139,6 +157,62 @@ namespace QS3D.Core.SmokeTests
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            public bool Contains(string item) => _items.Contains(item);
+            public void CopyTo(string[] array, int arrayIndex) => throw new NotSupportedException();
+            void ICollection.CopyTo(Array array, int index) => throw new NotSupportedException();
+            public void Add(string item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Remove(string item) => throw new NotSupportedException();
+        }
+
+        private sealed class DriftingCountContractRoots : ICollection<string>, IReadOnlyCollection<string>, ICollection
+        {
+            private readonly IReadOnlyList<string> _items;
+            private readonly int _postGenericCount;
+            private readonly int _postReadOnlyCount;
+            private readonly int _postNonGenericCount;
+            private int _genericCount;
+            private int _readOnlyCount;
+            private int _nonGenericCount;
+
+            public DriftingCountContractRoots(
+                IEnumerable<string> items,
+                int initialGenericCount,
+                int initialReadOnlyCount,
+                int initialNonGenericCount,
+                int postGenericCount,
+                int postReadOnlyCount,
+                int postNonGenericCount)
+            {
+                _items = (items ?? Array.Empty<string>()).ToArray();
+                _genericCount = initialGenericCount;
+                _readOnlyCount = initialReadOnlyCount;
+                _nonGenericCount = initialNonGenericCount;
+                _postGenericCount = postGenericCount;
+                _postReadOnlyCount = postReadOnlyCount;
+                _postNonGenericCount = postNonGenericCount;
+            }
+
+            public bool EnumerationCompleted { get; private set; }
+            public int Count => _genericCount;
+            int IReadOnlyCollection<string>.Count => _readOnlyCount;
+            int ICollection.Count => _nonGenericCount;
+            public bool IsReadOnly => true;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+
+            public IEnumerator<string> GetEnumerator() => Enumerate().GetEnumerator();
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private IEnumerable<string> Enumerate()
+            {
+                foreach (var item in _items) yield return item;
+                _genericCount = _postGenericCount;
+                _readOnlyCount = _postReadOnlyCount;
+                _nonGenericCount = _postNonGenericCount;
+                EnumerationCompleted = true;
+            }
 
             public bool Contains(string item) => _items.Contains(item);
             public void CopyTo(string[] array, int arrayIndex) => throw new NotSupportedException();

@@ -135,30 +135,48 @@ namespace QS3D.Core.Export
 
             var byExternalIdentity = new Dictionary<string, IfcRoundTripExchangeResult>(StringComparer.Ordinal);
             var observedResultCount = 0;
-            foreach (var item in results)
+            using (var enumerator = results.GetEnumerator())
             {
-                IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
-                    knownCount,
-                    observedResultCount,
-                    "IFC exchange result");
-                if (observedResultCount == MaxResultsPerCollection)
-                    throw ResultCollectionTooLarge();
-                observedResultCount++;
-
-                if (item == null)
-                    throw new ArgumentException("IFC exchange result collection cannot contain null entries.", nameof(results));
-
-                if (!byExternalIdentity.ContainsKey(item.ExternalObjectId))
+                while (true)
                 {
-                    byExternalIdentity.Add(item.ExternalObjectId, item);
-                    continue;
-                }
+                    IfcRoundTripKnownCountContract.RequireStableDuringTraversal(
+                        results,
+                        knownCount,
+                        "IFC exchange result");
+                    if (!enumerator.MoveNext())
+                        break;
+                    IfcRoundTripKnownCountContract.RequireStableDuringTraversal(
+                        results,
+                        knownCount,
+                        "IFC exchange result");
+                    IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
+                        knownCount,
+                        observedResultCount,
+                        "IFC exchange result");
+                    if (observedResultCount == MaxResultsPerCollection)
+                        throw ResultCollectionTooLarge();
+                    var item = enumerator.Current;
+                    IfcRoundTripKnownCountContract.RequireStableDuringTraversal(
+                        results,
+                        knownCount,
+                        "IFC exchange result");
+                    observedResultCount++;
 
-                byExternalIdentity[item.ExternalObjectId] = new IfcRoundTripExchangeResult(
-                    item.ExternalObjectId,
-                    IfcRoundTripResultState.InvalidOrAmbiguous,
-                    null,
-                    stateDetail: DuplicateExternalIdentityDetail);
+                    if (item == null)
+                        throw new ArgumentException("IFC exchange result collection cannot contain null entries.", nameof(results));
+
+                    if (!byExternalIdentity.ContainsKey(item.ExternalObjectId))
+                    {
+                        byExternalIdentity.Add(item.ExternalObjectId, item);
+                        continue;
+                    }
+
+                    byExternalIdentity[item.ExternalObjectId] = new IfcRoundTripExchangeResult(
+                        item.ExternalObjectId,
+                        IfcRoundTripResultState.InvalidOrAmbiguous,
+                        null,
+                        stateDetail: DuplicateExternalIdentityDetail);
+                }
             }
 
             if (knownCount.HasValue && observedResultCount != knownCount.Value)

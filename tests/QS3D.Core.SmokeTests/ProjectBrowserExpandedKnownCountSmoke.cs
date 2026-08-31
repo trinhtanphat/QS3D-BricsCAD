@@ -18,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             InvalidKnownCountsFailBeforeEnumeration();
             AdvertisedCountGreaterThanTraversalFails();
             AdvertisedCountLessThanTraversalFails();
+            AdvertisedCountOverrunWinsBeforeThrowingTail();
             HonestCountRemainsAccepted();
             EnumerableWithoutKnownCountRemainsAccepted();
         }
@@ -56,6 +57,19 @@ namespace QS3D.Core.SmokeTests
             var source = new CountedExpandedPaths(1, 1, 1, new[] { rootPath, childPath });
 
             ThrowsCountMismatch(() => ProjectBrowserVirtualizationPlanner.BuildViewport(root, source));
+        }
+
+        private static void AdvertisedCountOverrunWinsBeforeThrowingTail()
+        {
+            var root = BuildRoot();
+            var rootPath = ProjectBrowserVirtualizationPlanner.GetRootPath(root);
+            var firstLevel = ProjectBrowserVirtualizationPlanner.BuildViewport(root, new[] { rootPath }, 0, 10);
+            var childPath = firstLevel.Rows.First(x => x.Depth == 1).Path;
+            var source = new ThrowingTailCountedExpandedPaths(rootPath, childPath);
+
+            ThrowsCountMismatch(() => ProjectBrowserVirtualizationPlanner.BuildViewport(root, source));
+            Require(source.EnumerationCount == 1,
+                "Known-Count overrun regression source must be enumerated exactly once.");
         }
 
         private static void HonestCountRemainsAccepted()
@@ -171,6 +185,50 @@ namespace QS3D.Core.SmokeTests
             void ICollection<string>.CopyTo(string[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
             bool ICollection<string>.Remove(string item) => throw new NotSupportedException();
             void ICollection.CopyTo(Array array, int index) => ((ICollection)_items).CopyTo(array, index);
+        }
+
+        private sealed class ThrowingTailCountedExpandedPaths : ICollection<string>, IReadOnlyCollection<string>, ICollection
+        {
+            private readonly string _first;
+            private readonly string _second;
+
+            internal ThrowingTailCountedExpandedPaths(string first, string second)
+            {
+                _first = first ?? throw new ArgumentNullException(nameof(first));
+                _second = second ?? throw new ArgumentNullException(nameof(second));
+            }
+
+            internal int EnumerationCount { get; private set; }
+
+            int ICollection<string>.Count => 1;
+            int IReadOnlyCollection<string>.Count => 1;
+            int ICollection.Count => 1;
+            bool ICollection<string>.IsReadOnly => true;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+
+            public IEnumerator<string> GetEnumerator()
+            {
+                EnumerationCount++;
+                return Enumerate().GetEnumerator();
+            }
+
+            private IEnumerable<string> Enumerate()
+            {
+                yield return _first;
+                yield return _second;
+                throw new InvalidOperationException(
+                    "Expanded-path throwing tail must not win after the declared Count is exceeded.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            void ICollection<string>.Add(string item) => throw new NotSupportedException();
+            void ICollection<string>.Clear() => throw new NotSupportedException();
+            bool ICollection<string>.Contains(string item) =>
+                string.Equals(item, _first, StringComparison.Ordinal) || string.Equals(item, _second, StringComparison.Ordinal);
+            void ICollection<string>.CopyTo(string[] array, int arrayIndex) => throw new NotSupportedException();
+            bool ICollection<string>.Remove(string item) => throw new NotSupportedException();
+            void ICollection.CopyTo(Array array, int index) => throw new NotSupportedException();
         }
 
         private sealed class EnumerableOnly<T> : IEnumerable<T>

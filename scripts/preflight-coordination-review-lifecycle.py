@@ -21,6 +21,7 @@ for token in (
     "private bool _attached;",
     "private bool _disposeInProgress;",
     "private bool _sessionDisposed;",
+    "WindowClosing",
 ):
     require(token in text, "missing lifecycle ownership token: " + token)
 
@@ -42,6 +43,7 @@ if attach is not None:
         ("_section.Click += OnSection;", "_attachments |= Attachment.Section;"),
         ("_restoreView.Click += OnRestoreView;", "_attachments |= Attachment.RestoreView;"),
         ("_grid.SelectionChanged += OnSelectionChanged;", "_attachments |= Attachment.GridSelection;"),
+        ("_window.Closing += OnWindowClosing;", "_attachments |= Attachment.WindowClosing;"),
         ("_window.Closed += OnWindowClosed;", "_attachments |= Attachment.WindowClosed;"),
         ("Application.DocumentManager.DocumentActivated += OnDocumentActivated;", "_attachments |= Attachment.DocumentActivated;"),
         ("Application.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;", "_attachments |= Attachment.DocumentToBeDestroyed;"),
@@ -102,13 +104,14 @@ if detach is not None:
     body = detach.group("body")
     destroyed = body.find("Attachment.DocumentToBeDestroyed")
     activated = body.find("Attachment.DocumentActivated")
-    window = body.find("Attachment.WindowClosed")
+    closed = body.find("Attachment.WindowClosed")
+    closing = body.find("Attachment.WindowClosing")
     grid = body.find("Attachment.GridSelection")
     highlight = body.find("Attachment.Highlight")
-    require(min(destroyed, activated, window, grid, highlight) >= 0,
-            "DetachHandlersBestEffort must cover external and local handler ownership")
-    require(destroyed < activated < window < grid < highlight,
-            "Detach must break BricsCAD publisher roots before local WPF handler cleanup")
+    require(min(destroyed, activated, closed, closing, grid, highlight) >= 0,
+            "DetachHandlersBestEffort must cover external, cancellable-window, terminal-window and local handler ownership")
+    require(destroyed < activated < closed < closing < grid < highlight,
+            "Detach must break BricsCAD publisher roots before window and local WPF handler cleanup")
 
 try_detach = re.search(
     r"private void TryDetach\(Attachment attachment, Action detach\)\s*\{(?P<body>.*?)\n\s*\}\n\n\s*private void DisposeSessionBestEffort",
@@ -139,6 +142,24 @@ if session is not None:
     require(body.find("_session.Dispose();") < body.find("_sessionDisposed = true;"),
             "session ownership may clear only after successful disposal")
 
+closing = re.search(
+    r"private void OnWindowClosing\(object sender, CancelEventArgs e\)\s*\{(?P<body>.*?)\n\s*\}\n\n\s*private void OnWindowClosed",
+    text,
+    re.S,
+)
+require(closing is not None,
+        "cancellable close admission must preserve a retry path before terminal Closed")
+if closing is not None:
+    body = closing.group("body")
+    cleanup = body.find("_session.TryResetTransientStateBestEffort()")
+    debt = body.find("_session.HasTransientState")
+    cancel = body.find("e.Cancel = true;")
+    barrier = body.find("_cleanupBarrier = true;")
+    require(0 <= cleanup < debt < cancel < barrier,
+            "failed window-close cleanup must retain controller/UI retry ownership")
+    require("e.Cancel = false;" not in body,
+            "review close handler must not override cancellation from another subscriber")
+
 # Preserve the pre-existing safety boundary: native CAD effects are reached only after
 # current-document/project identity and persisted issue/relink/full-pair validation.
 for token in (
@@ -155,4 +176,4 @@ if errors:
         print(" - " + error)
     sys.exit(1)
 
-print("PASS Coordination Manager review attachment is transactional and teardown is retryable/fail-soft")
+print("PASS Coordination Manager review attachment is transactional and teardown/close cleanup is retryable/fail-soft")

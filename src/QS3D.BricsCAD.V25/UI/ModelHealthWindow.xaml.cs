@@ -13,6 +13,9 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class ModelHealthWindow : Window
     {
+        private static ModelHealthWindow? _pendingPublication;
+        private static ModelHealthWindow? _published;
+
         private readonly Action<ModelHealthIssue>? _locate;
         private readonly Document _document;
         private readonly IReadOnlyList<ModelHealthIssue> _issues;
@@ -43,11 +46,88 @@ namespace QS3D.BricsCAD.V25.UI
             _changeVersionAtOpen = projectAtOpen.ChangeVersion;
             _drawingFingerprintAtOpen = projectAtOpen.DrawingFingerprint ?? string.Empty;
             InitializeComponent();
-            DocumentBoundWindowLifetime.Attach(this, _document);
-            Activated += (_, __) => RefreshSnapshotFreshness();
-            UpdateTotalSummary();
-            ApplyFilter();
+            Loaded += OnPublicationLoaded;
+            Closed += OnPublicationClosed;
+            ReservePublication(this);
+            try
+            {
+                DocumentBoundWindowLifetime.Attach(this, _document);
+                Activated += (_, __) => RefreshSnapshotFreshness();
+                UpdateTotalSummary();
+                ApplyFilter();
+            }
+            catch
+            {
+                AbandonPublication(this);
+                try { Close(); } catch { }
+                throw;
+            }
         }
+
+        private static void ReservePublication(ModelHealthWindow candidate)
+        {
+            if (candidate == null) throw new ArgumentNullException(nameof(candidate));
+
+            var pending = _pendingPublication;
+            if (pending != null && !ReferenceEquals(pending, candidate))
+                CloseOwnerBeforeReplacement(pending, "pending");
+
+            var published = _published;
+            if (published != null && !ReferenceEquals(published, candidate))
+                CloseOwnerBeforeReplacement(published, "published");
+
+            if (_pendingPublication != null || _published != null)
+                throw new InvalidOperationException("The existing Model Health window did not reach terminal close; replacement was refused.");
+
+            _pendingPublication = candidate;
+        }
+
+        private static void CloseOwnerBeforeReplacement(ModelHealthWindow owner, string state)
+        {
+            if (!owner.IsLoaded && string.Equals(state, "published", StringComparison.Ordinal))
+            {
+                if (ReferenceEquals(_published, owner)) _published = null;
+                return;
+            }
+
+            try
+            {
+                owner.Close();
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Model Health " + state + " owner cleanup failed; replacement was refused.", ex);
+            }
+
+            if (owner.IsLoaded || ReferenceEquals(_pendingPublication, owner) || ReferenceEquals(_published, owner))
+                throw new InvalidOperationException("The existing Model Health " + state + " owner did not reach terminal close; replacement was refused.");
+        }
+
+        private static void AbandonPublication(ModelHealthWindow candidate)
+        {
+            if (ReferenceEquals(_pendingPublication, candidate)) _pendingPublication = null;
+            if (ReferenceEquals(_published, candidate)) _published = null;
+        }
+
+        private void OnPublicationLoaded(object? sender, RoutedEventArgs e)
+        {
+            if (!ReferenceEquals(_pendingPublication, this))
+            {
+                try { Close(); } catch { }
+                return;
+            }
+
+            if (_published != null && !ReferenceEquals(_published, this))
+            {
+                try { Close(); } catch { }
+                return;
+            }
+
+            _pendingPublication = null;
+            _published = this;
+        }
+
+        private void OnPublicationClosed(object? sender, EventArgs e) => AbandonPublication(this);
 
         private void OnLocateClick(object sender, RoutedEventArgs e) => Locate();
         private void OnGridDoubleClick(object sender, MouseButtonEventArgs e) => Locate();

@@ -286,19 +286,24 @@ namespace QS3D.Core.Domain
 
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             var observedEntries = 0;
-            foreach (var element in elements)
+            using (var enumerator = elements.GetEnumerator())
             {
-                observedEntries++;
-                if (expectedKnownCount.HasValue && observedEntries > expectedKnownCount.Value)
-                    throw new InvalidOperationException("Family assignment target collection yielded more entries than its known Count.");
-                if (observedEntries > MaxAssignmentTargetEntries)
-                    throw AssignmentTargetLimitExceeded();
-                if (element == null) throw new ArgumentException("Family assignment elements cannot contain null entries.", nameof(elements));
-                if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
-                    throw new InvalidOperationException("Element does not belong to the project instance: " + element.Id);
-                if (owned.Category != target.Category)
-                    throw new InvalidOperationException("Family '" + target.Name + "' category " + target.Category + " cannot be assigned to element " + owned.Id + " category " + owned.Category + ".");
-                unique[owned.Id] = owned;
+                while (enumerator.MoveNext())
+                {
+                    if (expectedKnownCount.HasValue && observedEntries >= expectedKnownCount.Value)
+                        throw new InvalidOperationException("Family assignment target collection yielded more entries than its known Count.");
+                    if (observedEntries >= MaxAssignmentTargetEntries)
+                        throw AssignmentTargetLimitExceeded();
+
+                    var element = enumerator.Current;
+                    observedEntries++;
+                    if (element == null) throw new ArgumentException("Family assignment elements cannot contain null entries.", nameof(elements));
+                    if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
+                        throw new InvalidOperationException("Element does not belong to the project instance: " + element.Id);
+                    if (owned.Category != target.Category)
+                        throw new InvalidOperationException("Family '" + target.Name + "' category " + target.Category + " cannot be assigned to element " + owned.Id + " category " + owned.Category + ".");
+                    unique[owned.Id] = owned;
+                }
             }
             if (project.ChangeVersion != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Family assignment targets were being enumerated. Retry the operation against the current project state.");

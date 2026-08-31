@@ -19,6 +19,8 @@ namespace QS3D.Core.SmokeTests
             AssertExactProvenanceCellBoundaryIsAccepted();
             AssertOversizeProvenancePreservesExistingDestination();
             AssertInvalidProvenanceControlPreservesExistingDestination();
+            AssertXmlValidControlProvenanceFailsBeforeFilesystemCreation();
+            AssertXmlValidControlProvenancePreservesExistingDestination();
         }
 
         private static void AssertRowCountDriftFailsBeforeExistingDestinationReplacement()
@@ -134,6 +136,45 @@ namespace QS3D.Core.SmokeTests
                 "Room-finish XLSX must reject XML control characters in provenance rather than silently sanitizing source identity.");
         }
 
+        private static void AssertXmlValidControlProvenanceFailsBeforeFilesystemCreation()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-room-finish-xlsx-control-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var untouchedDirectory = Path.Combine(root, "must-not-be-created");
+                var row = ValidRow();
+                row.ElementIds[0] = "E\t1";
+                Exception? observed = null;
+                try
+                {
+                    RoomFinishXlsxExporter.Export(Path.Combine(untouchedDirectory, "room-finish.xlsx"), new[] { row });
+                }
+                catch (Exception ex)
+                {
+                    observed = ex;
+                }
+
+                if (!(observed is ArgumentException))
+                    throw new InvalidOperationException("Room-finish XLSX must reject XML-valid control characters in semantic Element IDs before filesystem mutation.", observed);
+                if (Directory.Exists(untouchedDirectory))
+                    throw new InvalidOperationException("Room-finish XLSX control-bearing provenance touched the filesystem before failing.");
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); }
+                catch { }
+            }
+        }
+
+        private static void AssertXmlValidControlProvenancePreservesExistingDestination()
+        {
+            AssertProvenanceValidationPreservesExistingDestination(
+                row => row.ProjectId = "PROJECT\n1",
+                typeof(ArgumentException),
+                "Room-finish XLSX must reject XML-valid control characters in ProjectId provenance without replacing an existing destination.");
+        }
+
         private static void AssertProvenanceValidationPreservesExistingDestination(
             Action<RoomFinishScheduleRow> mutate,
             Type expectedExceptionType,
@@ -163,6 +204,16 @@ namespace QS3D.Core.SmokeTests
                     throw new InvalidOperationException(failureMessage, observed);
                 if (!string.Equals(File.ReadAllText(destination), sentinel, StringComparison.Ordinal))
                     throw new InvalidOperationException("Room-finish XLSX provenance validation replaced an existing destination file.");
+                var directory = Path.GetDirectoryName(destination) ?? string.Empty;
+                var prefix = Path.GetFileName(destination) + ".tmp-";
+                if (directory.Length > 0 && Directory.Exists(directory))
+                {
+                    foreach (var file in Directory.GetFiles(directory))
+                    {
+                        if (Path.GetFileName(file).StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                            throw new InvalidOperationException("Room-finish XLSX provenance validation left a temporary package behind.");
+                    }
+                }
             }
             finally
             {

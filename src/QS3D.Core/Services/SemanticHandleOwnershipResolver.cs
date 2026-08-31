@@ -138,22 +138,103 @@ namespace QS3D.Core.Services
 
         private static HashSet<string> MaterializeSelectedHandles(IEnumerable<string> selectedHandles)
         {
-            if (selectedHandles is ICollection<string> collection && collection.Count > MaxSelectedHandleInputCount)
-                throw new InvalidOperationException("Semantic handle selection cannot exceed " + MaxSelectedHandleInputCount + " input entries.");
-            if (selectedHandles is IReadOnlyCollection<string> readOnlyCollection && readOnlyCollection.Count > MaxSelectedHandleInputCount)
+            var knownCount = TryGetKnownCount(selectedHandles, out var conflictingKnownCounts, out var negativeKnownCount);
+            if (negativeKnownCount)
+                throw new InvalidOperationException("Semantic handle selection exposes an invalid negative known Count value.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("Semantic handle selection exposes conflicting known Count values.");
+            if (knownCount.HasValue && knownCount.Value > MaxSelectedHandleInputCount)
                 throw new InvalidOperationException("Semantic handle selection cannot exceed " + MaxSelectedHandleInputCount + " input entries.");
 
             var selected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var inputCount = 0;
-            foreach (var rawHandle in selectedHandles)
+            using (var enumerator = selectedHandles.GetEnumerator())
             {
-                if (inputCount >= MaxSelectedHandleInputCount)
-                    throw new InvalidOperationException("Semantic handle selection cannot exceed " + MaxSelectedHandleInputCount + " input entries.");
-                inputCount++;
-                if (string.IsNullOrWhiteSpace(rawHandle)) continue;
-                selected.Add(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(rawHandle));
+                while (true)
+                {
+                    RequireStableKnownCountDuringTraversal(selectedHandles, knownCount);
+                    var moved = enumerator.MoveNext();
+                    RequireStableKnownCountDuringTraversal(selectedHandles, knownCount);
+                    if (!moved) break;
+
+                    if (knownCount.HasValue && inputCount >= knownCount.Value)
+                        throw new InvalidOperationException("Semantic handle selection known Count does not match completed traversal cardinality.");
+                    if (inputCount >= MaxSelectedHandleInputCount)
+                        throw new InvalidOperationException("Semantic handle selection cannot exceed " + MaxSelectedHandleInputCount + " input entries.");
+
+                    var rawHandle = enumerator.Current;
+                    RequireStableKnownCountDuringTraversal(selectedHandles, knownCount);
+                    inputCount++;
+                    if (string.IsNullOrWhiteSpace(rawHandle)) continue;
+                    selected.Add(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(rawHandle));
+                }
             }
+
+            if (knownCount.HasValue && inputCount != knownCount.Value)
+                throw new InvalidOperationException("Semantic handle selection known Count does not match completed traversal cardinality.");
+
+            RevalidateKnownCountAfterTraversal(selectedHandles, knownCount);
             return selected;
+        }
+
+        private static void RequireStableKnownCountDuringTraversal(IEnumerable<string> selectedHandles, int? admittedCount)
+        {
+            if (!admittedCount.HasValue)
+                return;
+
+            var reboundCount = TryGetKnownCount(selectedHandles, out var conflictingKnownCounts, out var negativeKnownCount);
+            if (negativeKnownCount)
+                throw new InvalidOperationException("Semantic handle selection exposes an invalid negative known Count value during traversal.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("Semantic handle selection exposes conflicting known Count values during traversal.");
+            if (!reboundCount.HasValue || reboundCount.Value != admittedCount.Value)
+                throw new InvalidOperationException("Semantic handle selection known Count changed during traversal.");
+        }
+
+        private static void RevalidateKnownCountAfterTraversal(IEnumerable<string> selectedHandles, int? admittedCount)
+        {
+            if (!admittedCount.HasValue)
+                return;
+
+            var reboundCount = TryGetKnownCount(selectedHandles, out var conflictingKnownCounts, out var negativeKnownCount);
+            if (negativeKnownCount)
+                throw new InvalidOperationException("Semantic handle selection exposes an invalid negative known Count value after traversal.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("Semantic handle selection exposes conflicting known Count values after traversal.");
+            if (!reboundCount.HasValue || reboundCount.Value != admittedCount.Value)
+                throw new InvalidOperationException("Semantic handle selection known Count changed during traversal.");
+        }
+
+        private static int? TryGetKnownCount(
+            IEnumerable<string> selectedHandles,
+            out bool conflictingKnownCounts,
+            out bool negativeKnownCount)
+        {
+            conflictingKnownCounts = false;
+            negativeKnownCount = false;
+            int? knownCount = null;
+
+            if (selectedHandles is ICollection<string> genericCollection)
+                knownCount = ObserveKnownCount(knownCount, genericCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+            if (selectedHandles is IReadOnlyCollection<string> readOnlyCollection)
+                knownCount = ObserveKnownCount(knownCount, readOnlyCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+            if (selectedHandles is System.Collections.ICollection nonGenericCollection)
+                knownCount = ObserveKnownCount(knownCount, nonGenericCollection.Count, ref conflictingKnownCounts, ref negativeKnownCount);
+
+            return knownCount;
+        }
+
+        private static int ObserveKnownCount(
+            int? current,
+            int observed,
+            ref bool conflictingKnownCounts,
+            ref bool negativeKnownCount)
+        {
+            if (observed < 0)
+                negativeKnownCount = true;
+            if (current.HasValue && current.Value != observed)
+                conflictingKnownCounts = true;
+            return !current.HasValue || observed > current.Value ? observed : current.Value;
         }
 
         private static IReadOnlyDictionary<string, ProjectElement> SnapshotElementOwnership(ProjectState project)

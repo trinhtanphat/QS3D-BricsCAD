@@ -72,20 +72,6 @@ namespace QS3D.BricsCAD.V25.UI
                 var owned = project.FindFamily(family.Id);
                 if (owned == null || !RaftFoundationPropertySet.IsRaftFamily(owned))
                     throw new InvalidOperationException("Family Móng Bè đang chọn đã stale.");
-
-                // The visible Workspace action promises both create and update.  A Family
-                // without a placed instance enters the Raft authoring prompt below.  Once the
-                // Family owns an instance, the same physical button starts the established
-                // atomic QS3DBUILD3D flow; that command accepts PICKFIRST or prompts the user
-                // to click the source/generated Raft in the native viewport.
-                if (FamilyHasRaftInstance(project, owned))
-                {
-                    panel._viewModel.SetActiveFamily(owned);
-                    panel.SetStatus("Móng Bè: cập nhật hình học 3D native từ đối tượng đang chọn.");
-                    panel.Send("QS3DBUILD3D");
-                    return;
-                }
-
                 var placement = RaftFoundationLevelPlacement.Resolve(project, owned);
                 panel._viewModel.SetActiveFamily(owned);
                 panel.SetStatus(
@@ -98,11 +84,6 @@ namespace QS3D.BricsCAD.V25.UI
                 panel.SetStatus("Không thể bắt đầu Vẽ Móng Bè: " + ex.Message);
             }
         }
-
-        private static bool FamilyHasRaftInstance(ProjectState project, ProjectFamily family) =>
-            project.Elements.Any(element =>
-                element.Category == ElementCategory.Foundation &&
-                string.Equals(element.FamilyId, family.Id, StringComparison.OrdinalIgnoreCase));
 
         private static WorkspacePanel? FindRaftWorkspacePanel(DependencyObject source)
         {

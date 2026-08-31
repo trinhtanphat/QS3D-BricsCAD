@@ -156,21 +156,33 @@ namespace QS3D.Core.Commercial
                 ? new List<EstimatingLine>(knownCount.Value)
                 : new List<EstimatingLine>();
             _byId = new Dictionary<string, EstimatingLine>(StringComparer.OrdinalIgnoreCase);
-            foreach (var line in lines)
+            using (var enumerator = lines.GetEnumerator())
             {
-                if (knownCount.HasValue && snapshot.Count >= knownCount.Value)
-                    throw new InvalidOperationException("Estimating portfolio line count changed during enumeration.");
-                if (snapshot.Count == MaximumLines)
-                    throw new InvalidOperationException("Estimating portfolio supports at most 10000 lines.");
-                if (line == null) throw new ArgumentException("Estimating portfolio contains a null line.", nameof(lines));
-                if (_byId.ContainsKey(line.LineId))
-                    throw new ArgumentException("Duplicate estimating line id: " + line.LineId + ".", nameof(lines));
-                _byId.Add(line.LineId, line);
-                snapshot.Add(line);
+                while (true)
+                {
+                    RequireKnownCountStable(lines, knownCount);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireKnownCountStable(lines, knownCount);
+                    if (knownCount.HasValue && snapshot.Count >= knownCount.Value)
+                        throw new InvalidOperationException("Estimating portfolio line count changed during enumeration.");
+                    if (snapshot.Count >= MaximumLines)
+                        throw new InvalidOperationException("Estimating portfolio supports at most 10000 lines.");
+                    var line = enumerator.Current;
+                    RequireKnownCountStable(lines, knownCount);
+                    if (line == null) throw new ArgumentException("Estimating portfolio contains a null line.", nameof(lines));
+                    if (_byId.ContainsKey(line.LineId))
+                        throw new ArgumentException("Duplicate estimating line id: " + line.LineId + ".", nameof(lines));
+                    _byId.Add(line.LineId, line);
+                    snapshot.Add(line);
+                }
             }
 
             if (knownCount.HasValue && snapshot.Count != knownCount.Value)
                 throw new InvalidOperationException("Estimating portfolio line count changed during enumeration.");
+            var postTraversalKnownCount = SnapshotKnownCount(lines);
+            if (postTraversalKnownCount != knownCount)
+                throw new InvalidOperationException("Estimating portfolio known line count changed during enumeration.");
 
             snapshot.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.LineId, right.LineId));
             _lines = new ReadOnlyCollection<EstimatingLine>(snapshot.ToArray());
@@ -199,6 +211,13 @@ namespace QS3D.Core.Commercial
                 }
                 return total;
             }
+        }
+
+        private static void RequireKnownCountStable(IEnumerable<EstimatingLine> lines, int? expectedKnownCount)
+        {
+            var currentKnownCount = SnapshotKnownCount(lines);
+            if (currentKnownCount != expectedKnownCount)
+                throw new InvalidOperationException("Estimating portfolio known line count changed during enumeration.");
         }
 
         private static int? SnapshotKnownCount(IEnumerable<EstimatingLine> lines)
@@ -260,19 +279,31 @@ namespace QS3D.Core.Commercial
                 ? new List<string>(lineIdKnownCount.Value)
                 : new List<string>();
             var uniqueIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var raw in lineIds)
+            using (var enumerator = lineIds.GetEnumerator())
             {
-                if (lineIdKnownCount.HasValue && ids.Count >= lineIdKnownCount.Value)
-                    throw new InvalidOperationException("Bulk rate assignment selected-line count changed during enumeration.");
-                if (ids.Count == MaximumSelectedLines)
-                    throw new InvalidOperationException("Bulk rate assignment supports at most 10000 selected lines.");
-                var id = CommercialGuard.RequireToken(raw, nameof(lineIds));
-                if (!uniqueIds.Add(id))
-                    throw new ArgumentException("Bulk rate assignment contains duplicate line id: " + id + ".", nameof(lineIds));
-                ids.Add(id);
+                while (true)
+                {
+                    RequireKnownCountStable(lineIds, lineIdKnownCount, MaximumSelectedLines, "selected-line");
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireKnownCountStable(lineIds, lineIdKnownCount, MaximumSelectedLines, "selected-line");
+                    if (lineIdKnownCount.HasValue && ids.Count >= lineIdKnownCount.Value)
+                        throw new InvalidOperationException("Bulk rate assignment selected-line count changed during enumeration.");
+                    if (ids.Count >= MaximumSelectedLines)
+                        throw new InvalidOperationException("Bulk rate assignment supports at most 10000 selected lines.");
+                    var raw = enumerator.Current;
+                    RequireKnownCountStable(lineIds, lineIdKnownCount, MaximumSelectedLines, "selected-line");
+                    var id = CommercialGuard.RequireToken(raw, nameof(lineIds));
+                    if (!uniqueIds.Add(id))
+                        throw new ArgumentException("Bulk rate assignment contains duplicate line id: " + id + ".", nameof(lineIds));
+                    ids.Add(id);
+                }
             }
             if (lineIdKnownCount.HasValue && ids.Count != lineIdKnownCount.Value)
                 throw new InvalidOperationException("Bulk rate assignment selected-line count changed during enumeration.");
+            var postTraversalLineIdCount = SnapshotKnownCount(lineIds, MaximumSelectedLines, "selected-line");
+            if (postTraversalLineIdCount != lineIdKnownCount)
+                throw new InvalidOperationException("Bulk rate assignment selected-line known count changed during enumeration.");
             if (ids.Count == 0) throw new ArgumentException("Bulk rate assignment requires at least one selected line.", nameof(lineIds));
             LineIds = new ReadOnlyCollection<string>(ids.ToArray());
 
@@ -282,19 +313,31 @@ namespace QS3D.Core.Commercial
                 ? new List<UnitRateAssignment>(unitRateKnownCount.Value)
                 : new List<UnitRateAssignment>();
             var units = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var assignment in unitRates)
+            using (var enumerator = unitRates.GetEnumerator())
             {
-                if (unitRateKnownCount.HasValue && rates.Count >= unitRateKnownCount.Value)
-                    throw new InvalidOperationException("Bulk rate assignment unit-rate count changed during enumeration.");
-                if (rates.Count == MaximumUnitRates)
-                    throw new InvalidOperationException("Bulk rate assignment supports at most 256 unit rates.");
-                if (assignment == null) throw new ArgumentException("Bulk rate assignment contains a null unit rate.", nameof(unitRates));
-                if (!units.Add(assignment.Unit))
-                    throw new ArgumentException("Duplicate unit-rate assignment for unit: " + assignment.Unit + ".", nameof(unitRates));
-                rates.Add(assignment);
+                while (true)
+                {
+                    RequireKnownCountStable(unitRates, unitRateKnownCount, MaximumUnitRates, "unit-rate");
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireKnownCountStable(unitRates, unitRateKnownCount, MaximumUnitRates, "unit-rate");
+                    if (unitRateKnownCount.HasValue && rates.Count >= unitRateKnownCount.Value)
+                        throw new InvalidOperationException("Bulk rate assignment unit-rate count changed during enumeration.");
+                    if (rates.Count >= MaximumUnitRates)
+                        throw new InvalidOperationException("Bulk rate assignment supports at most 256 unit rates.");
+                    var assignment = enumerator.Current;
+                    RequireKnownCountStable(unitRates, unitRateKnownCount, MaximumUnitRates, "unit-rate");
+                    if (assignment == null) throw new ArgumentException("Bulk rate assignment contains a null unit rate.", nameof(unitRates));
+                    if (!units.Add(assignment.Unit))
+                        throw new ArgumentException("Duplicate unit-rate assignment for unit: " + assignment.Unit + ".", nameof(unitRates));
+                    rates.Add(assignment);
+                }
             }
             if (unitRateKnownCount.HasValue && rates.Count != unitRateKnownCount.Value)
                 throw new InvalidOperationException("Bulk rate assignment unit-rate count changed during enumeration.");
+            var postTraversalUnitRateCount = SnapshotKnownCount(unitRates, MaximumUnitRates, "unit-rate");
+            if (postTraversalUnitRateCount != unitRateKnownCount)
+                throw new InvalidOperationException("Bulk rate assignment unit-rate known count changed during enumeration.");
             UnitRates = new ReadOnlyCollection<UnitRateAssignment>(rates.ToArray());
         }
 
@@ -303,6 +346,13 @@ namespace QS3D.Core.Commercial
         public string RateSourceId { get; }
         public string RateRevision { get; }
         public IReadOnlyList<UnitRateAssignment> UnitRates { get; }
+
+        private static void RequireKnownCountStable<T>(IEnumerable<T> values, int? expectedKnownCount, int maximum, string subject)
+        {
+            var currentKnownCount = SnapshotKnownCount(values, maximum, subject);
+            if (currentKnownCount != expectedKnownCount)
+                throw new InvalidOperationException("Bulk rate assignment " + subject + " known count changed during enumeration.");
+        }
 
         private static int? SnapshotKnownCount<T>(IEnumerable<T> values, int maximum, string subject)
         {

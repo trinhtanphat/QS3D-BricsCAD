@@ -25,7 +25,7 @@ namespace QS3D.BricsCAD.V25
                 var summary = new HealthSummary(issues);
                 var message = "Handle Ownership Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
                 Report(document, message);
-                Application.ShowModelessWindow(IntPtr.Zero, new ModelHealthWindow(document, issues, issue =>
+                ModelHealthWindowPresenter.Show(document, issues, issue =>
                 {
                     if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)) return;
                     var element = currentProject.FindElement(issue.ElementId);
@@ -33,7 +33,7 @@ namespace QS3D.BricsCAD.V25
                     var count = Cad.CadHandleService.Select(document, Services.SemanticReferenceHandles.Get(element));
                     PaletteCoordinator.SetStatus("Handle Health Định vị " + element.Id + " • " + count + " semantic source/generated reference(s)");
                     if (count > 0) document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
-                }), true);
+                });
             }
             catch (System.Exception)
             {

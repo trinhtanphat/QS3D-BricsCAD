@@ -1,9 +1,16 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
 namespace QS3D.Core.Mep
 {
+    public static class MepRecognitionLimits
+    {
+        public const int MaxRules = 500;
+        public const int MaxTokensPerRule = 100;
+    }
+
     [Flags]
     public enum MepRecognitionSource
     {
@@ -62,13 +69,41 @@ namespace QS3D.Core.Mep
             MepKind = mepKind;
 
             if (tokens == null) throw new ArgumentNullException(nameof(tokens));
+            var knownCount = MepRecognitionCollectionContract.SnapshotKnownCount(
+                tokens, MepRecognitionLimits.MaxTokensPerRule, nameof(tokens), "Recognition rule tokens");
             var normalized = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var token in tokens)
+            var tokenIndex = 0;
+            using (var enumerator = tokens.GetEnumerator())
             {
-                var value = RequireText(token, nameof(tokens));
-                if (seen.Add(value)) normalized.Add(value);
+                while (true)
+                {
+                    MepRecognitionCollectionContract.RequireKnownCountStable(
+                        tokens, knownCount, MepRecognitionLimits.MaxTokensPerRule, nameof(tokens), "Recognition rule tokens");
+                    if (!enumerator.MoveNext())
+                        break;
+                    MepRecognitionCollectionContract.RequireKnownCountStable(
+                        tokens, knownCount, MepRecognitionLimits.MaxTokensPerRule, nameof(tokens), "Recognition rule tokens");
+                    if (knownCount.HasValue && tokenIndex >= knownCount.Value)
+                        throw MepRecognitionCollectionContract.CountMismatch(
+                            knownCount.Value, tokenIndex + 1, nameof(tokens), "Recognition rule tokens");
+                    if (tokenIndex >= MepRecognitionLimits.MaxTokensPerRule)
+                        throw new ArgumentException(
+                            "Recognition rule may contain at most " + MepRecognitionLimits.MaxTokensPerRule + " tokens.",
+                            nameof(tokens));
+                    var token = enumerator.Current;
+                    MepRecognitionCollectionContract.RequireKnownCountStable(
+                        tokens, knownCount, MepRecognitionLimits.MaxTokensPerRule, nameof(tokens), "Recognition rule tokens");
+                    tokenIndex++;
+                    var value = RequireText(token, nameof(tokens));
+                    if (seen.Add(value)) normalized.Add(value);
+                }
             }
+            if (knownCount.HasValue && knownCount.Value != tokenIndex)
+                throw MepRecognitionCollectionContract.CountMismatch(
+                    knownCount.Value, tokenIndex, nameof(tokens), "Recognition rule tokens");
+            MepRecognitionCollectionContract.RequireKnownCountStable(
+                tokens, knownCount, MepRecognitionLimits.MaxTokensPerRule, nameof(tokens), "Recognition rule tokens");
             if (normalized.Count == 0)
                 throw new ArgumentException("At least one recognition token is required.", nameof(tokens));
             _tokens = new ReadOnlyCollection<string>(normalized.ToArray());
@@ -103,8 +138,22 @@ namespace QS3D.Core.Mep
                 throw new ArgumentException("Recognition text is required.", parameterName);
             var trimmed = value.Trim();
             for (var i = 0; i < trimmed.Length; i++)
-                if (char.IsControl(trimmed[i]))
+            {
+                var character = trimmed[i];
+                if (char.IsControl(character))
                     throw new ArgumentException("Recognition text must not contain control characters.", parameterName);
+
+                if (char.IsHighSurrogate(character))
+                {
+                    if (i + 1 >= trimmed.Length || !char.IsLowSurrogate(trimmed[i + 1]))
+                        throw new ArgumentException("Recognition text must contain well-formed UTF-16.", parameterName);
+                    i++;
+                    continue;
+                }
+
+                if (char.IsLowSurrogate(character))
+                    throw new ArgumentException("Recognition text must contain well-formed UTF-16.", parameterName);
+            }
             return trimmed;
         }
     }
@@ -141,18 +190,44 @@ namespace QS3D.Core.Mep
         public MepRecognitionProfile(IEnumerable<MepRecognitionRule> rules)
         {
             if (rules == null) throw new ArgumentNullException(nameof(rules));
+            var knownCount = MepRecognitionCollectionContract.SnapshotKnownCount(
+                rules, MepRecognitionLimits.MaxRules, nameof(rules), "Recognition profile rules");
             var snapshot = new List<MepRecognitionRule>();
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            foreach (var rule in rules)
+            using (var enumerator = rules.GetEnumerator())
             {
-                if (rule == null)
-                    throw new ArgumentException("Recognition profile contains a null rule at index " + index + ".", nameof(rules));
-                if (!ids.Add(rule.Id))
-                    throw new ArgumentException("Duplicate recognition rule id: " + rule.Id + ".", nameof(rules));
-                snapshot.Add(rule);
-                index++;
+                while (true)
+                {
+                    MepRecognitionCollectionContract.RequireKnownCountStable(
+                        rules, knownCount, MepRecognitionLimits.MaxRules, nameof(rules), "Recognition profile rules");
+                    if (!enumerator.MoveNext())
+                        break;
+                    MepRecognitionCollectionContract.RequireKnownCountStable(
+                        rules, knownCount, MepRecognitionLimits.MaxRules, nameof(rules), "Recognition profile rules");
+                    if (knownCount.HasValue && index >= knownCount.Value)
+                        throw MepRecognitionCollectionContract.CountMismatch(
+                            knownCount.Value, index + 1, nameof(rules), "Recognition profile rules");
+                    if (index >= MepRecognitionLimits.MaxRules)
+                        throw new ArgumentException(
+                            "Recognition profile may contain at most " + MepRecognitionLimits.MaxRules + " rules.",
+                            nameof(rules));
+                    var rule = enumerator.Current;
+                    MepRecognitionCollectionContract.RequireKnownCountStable(
+                        rules, knownCount, MepRecognitionLimits.MaxRules, nameof(rules), "Recognition profile rules");
+                    if (rule == null)
+                        throw new ArgumentException("Recognition profile contains a null rule at index " + index + ".", nameof(rules));
+                    if (!ids.Add(rule.Id))
+                        throw new ArgumentException("Duplicate recognition rule id: " + rule.Id + ".", nameof(rules));
+                    snapshot.Add(rule);
+                    index++;
+                }
             }
+            if (knownCount.HasValue && knownCount.Value != index)
+                throw MepRecognitionCollectionContract.CountMismatch(
+                    knownCount.Value, index, nameof(rules), "Recognition profile rules");
+            MepRecognitionCollectionContract.RequireKnownCountStable(
+                rules, knownCount, MepRecognitionLimits.MaxRules, nameof(rules), "Recognition profile rules");
             if (snapshot.Count == 0)
                 throw new ArgumentException("Recognition profile must contain at least one rule.", nameof(rules));
             snapshot.Sort(CompareRules);
@@ -218,6 +293,63 @@ namespace QS3D.Core.Mep
             left.Discipline == right.Discipline &&
             StringComparer.OrdinalIgnoreCase.Equals(left.Category, right.Category) &&
             left.MepKind == right.MepKind;
+    }
+
+    internal static class MepRecognitionCollectionContract
+    {
+        internal static int? SnapshotKnownCount<T>(
+            IEnumerable<T> source,
+            int maximum,
+            string parameterName,
+            string label)
+        {
+            int? knownCount = null;
+            if (source is ICollection<T> collection)
+                ObserveCount(collection.Count, maximum, ref knownCount, parameterName, label);
+            if (source is IReadOnlyCollection<T> readOnlyCollection)
+                ObserveCount(readOnlyCollection.Count, maximum, ref knownCount, parameterName, label);
+            if (source is ICollection nonGenericCollection)
+                ObserveCount(nonGenericCollection.Count, maximum, ref knownCount, parameterName, label);
+            return knownCount;
+        }
+
+        internal static void RequireKnownCountStable<T>(
+            IEnumerable<T> source,
+            int? expectedKnownCount,
+            int maximum,
+            string parameterName,
+            string label)
+        {
+            var observedKnownCount = SnapshotKnownCount(source, maximum, parameterName, label);
+            if (expectedKnownCount != observedKnownCount)
+                throw new ArgumentException(label + " known count changed during traversal.", parameterName);
+        }
+
+        private static void ObserveCount(
+            int count,
+            int maximum,
+            ref int? knownCount,
+            string parameterName,
+            string label)
+        {
+            if (count < 0)
+                throw new ArgumentException(label + " reports a negative known count.", parameterName);
+            if (count > maximum)
+                throw new ArgumentException(label + " may contain at most " + maximum + " entries.", parameterName);
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new ArgumentException(label + " reports conflicting known counts.", parameterName);
+            knownCount = count;
+        }
+
+        internal static ArgumentException CountMismatch(
+            int knownCount,
+            int observedCount,
+            string parameterName,
+            string label) =>
+            new ArgumentException(
+                label + " traversal produced " + observedCount +
+                " entries but its reported known count was " + knownCount + ".",
+                parameterName);
     }
 
     public static class MepRecognitionProfiles

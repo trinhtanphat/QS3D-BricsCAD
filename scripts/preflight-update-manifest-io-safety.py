@@ -33,14 +33,22 @@ for token in (
     "Assert-NoReparseDirectoryChain",
     "Resolve-OrdinaryNonReparseDirectory",
     "Resolve-OrdinaryNonReparseFile",
+    "function Get-StreamingSha256",
+    "function Get-StableFileState",
+    "function Assert-StableFileState",
     "Read-BoundedStrictUtf8File",
     "$stream.Length -gt $script:MaxMetadataBytes",
     "[Text.UTF8Encoding]::new($false, $true)",
     "[Text.DecoderFallbackException]",
     "$metadataFile = Resolve-OrdinaryNonReparseFile",
+    "$metadataState = Get-StableFileState",
     "$metadataText = Read-BoundedStrictUtf8File",
+    "Assert-StableFileState -Expected $metadataState",
     "$payloadFiles[$name] = Resolve-OrdinaryNonReparseFile",
     "$zip = Resolve-OrdinaryNonReparseFile",
+    "$zipState = Get-StableFileState",
+    "Assert-StableFileState -Expected $zipState",
+    "$zipHash = [string]$zipState.Sha256",
     "$package = Resolve-OrdinaryNonReparseDirectory",
     "Manifest verification temp parent",
     "Manifest verification workspace cleanup",
@@ -61,25 +69,30 @@ for token in (
     "Remove-Item -LiteralPath $temp -Recurse",
     "$manifest | ConvertTo-Json | Set-Content -LiteralPath $outputFull",
     "New-Item -ItemType Directory -Path $temp -Force",
+    "$zipHash = (Get-FileHash",
 ):
     forbid(source, token, "V25 update-manifest template")
 
-# Ordering matters: no parser/hash/signature/assembly read may precede the
-# fail-closed ordinary-file and bounded metadata admission.
+# Ordering matters: no parser/trust/parity publication may precede fail-closed
+# ordinary-file admission and stable generation binding.
 ordered = (
     "$package = Resolve-OrdinaryNonReparseDirectory",
     "$zip = Resolve-OrdinaryNonReparseFile",
     "$metadataFile = Resolve-OrdinaryNonReparseFile",
+    "$metadataState = Get-StableFileState",
+    "$zipState = Get-StableFileState",
     "$metadataText = Read-BoundedStrictUtf8File",
+    "Assert-StableFileState -Expected $metadataState",
     "ConvertFrom-Json -ErrorAction Stop",
     "$expectedSigner = Normalize-Thumbprint",
     "Assert-ZipPayloadMatchesSignedStaging -ZipFile $zip -PackageRoot $package",
-    "$zipHash = (Get-FileHash",
+    "$zip = Assert-StableFileState -Expected $zipState",
+    "$zipHash = [string]$zipState.Sha256",
     "[IO.File]::WriteAllText($stagePath",
 )
 positions = [source.find(token) for token in ordered]
 if any(pos < 0 for pos in positions) or positions != sorted(positions):
-    errors.append("V25 update-manifest safety ordering must be path admission -> bounded metadata -> trust/parity -> hash -> atomic publication")
+    errors.append("V25 update-manifest safety ordering must be path admission -> stable capture -> bounded metadata/trust/parity -> stable ZIP recheck/hash -> atomic publication")
 
 # V26 must keep routing through the shared generated V25 template, not grow an
 # independent unguarded implementation.
@@ -91,14 +104,16 @@ for token in (
     require(wrapper, token, "V26 update-manifest wrapper")
 
 # Mutation probes ensure each major protection is independently observable.
-# The strict-UTF8 marker is intentionally bound to the metadata decoder call;
-# the source also constructs a strict UTF8 encoder for atomic manifest output,
-# and that unrelated second constructor must not let a weakened decoder escape.
 required_markers = (
     "$stream.Length -gt $script:MaxMetadataBytes",
     "[Text.UTF8Encoding]::new($false, $true).GetString($bytes)",
     "$metadataFile = Resolve-OrdinaryNonReparseFile",
+    "$metadataState = Get-StableFileState",
+    "Assert-StableFileState -Expected $metadataState",
     "$zip = Resolve-OrdinaryNonReparseFile",
+    "$zipState = Get-StableFileState",
+    "Assert-StableFileState -Expected $zipState",
+    "$zipHash = [string]$zipState.Sha256",
     "$package = Resolve-OrdinaryNonReparseDirectory",
     "Remove-Item -LiteralPath $workspace.FullName -Force",
     "[IO.File]::WriteAllText($stagePath",
@@ -108,8 +123,11 @@ mutations = {
     "remove metadata bound": source.replace("$stream.Length -gt $script:MaxMetadataBytes", "$false", 1),
     "weaken strict UTF8": source.replace("[Text.UTF8Encoding]::new($false, $true).GetString($bytes)", "[Text.Encoding]::UTF8.GetString($bytes)", 1),
     "bypass metadata ordinary file": source.replace("$metadataFile = Resolve-OrdinaryNonReparseFile", "$metadataFile = Get-Item", 1),
+    "remove metadata stable capture": source.replace("$metadataState = Get-StableFileState", "$metadataState = $null", 1),
+    "remove metadata stable recheck": source.replace("Assert-StableFileState -Expected $metadataState", "# removed metadata stable recheck", 1),
     "bypass zip ordinary file": source.replace("$zip = Resolve-OrdinaryNonReparseFile", "$zip = Get-Item", 1),
-    "bypass package root guard": source.replace("$package = Resolve-OrdinaryNonReparseDirectory", "$package = Get-Item", 1),
+    "remove ZIP stable capture": source.replace("$zipState = Get-StableFileState", "$zipState = $null", 1),
+    "remove ZIP stable recheck": source.replace("Assert-StableFileState -Expected $zipState", "# removed ZIP stable recheck", 1),
     "restore recursive cleanup": source.replace("Remove-Item -LiteralPath $workspace.FullName -Force", "Remove-Item -LiteralPath $workspace.FullName -Recurse -Force", 1),
     "direct final write": source.replace("[IO.File]::WriteAllText($stagePath", "[IO.File]::WriteAllText($outputFull", 1),
     "remove replace publication": source.replace("[IO.File]::Replace($stage.FullName, $outputFull, $backupPath, $true)", "[IO.File]::Move($stage.FullName, $outputFull)", 1),
@@ -127,4 +145,4 @@ if errors:
         print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: shared V25/V26 update-manifest generation is bounded, reparse-aware, cleanup-bounded, and atomically published.")
+print("PASS: shared V25/V26 update-manifest generation is bounded, reparse-aware, generation-stable, cleanup-bounded, and atomically published.")

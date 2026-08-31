@@ -14,12 +14,11 @@ else:
         '[CommandMethod("QS3DREBARMODEHEALTH", CommandFlags.Modal)]',
         'ProjectContextCoordinator.TryGetReadOnly(document, out var project)',
         'new GeneratedRebarModeHealthService().Inspect(project)',
-        'var window = new ModelHealthWindow(document, issues, issue =>',
+        'ModelHealthWindowPresenter.Show(document, issues, issue =>',
         'element.Properties.TryGetValue("GeneratedRebarHandles", out var raw)',
         ': element.SourceHandles.ToArray();',
         'CadHandleService.Select(document, handles)',
         'document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false)',
-        'Application.ShowModelessWindow(IntPtr.Zero, window, true)',
         'var message = "QS3DREBARMODEHEALTH lỗi: không thể hoàn tất health check.";',
         'PaletteCoordinator.SetStatus(message)',
         'document.Editor.WriteMessage("\\n" + message)',
@@ -28,9 +27,9 @@ else:
         if token not in text:
             errors.append("Rebar Mode Health command contract missing token: " + token)
 
-    for token in ('catch (System.Exception ex)', 'ex.Message', 'QS3DREBARMODEHEALTH lỗi: " +'):
+    for token in ('Application.ShowModelessWindow(', 'new ModelHealthWindow(', 'catch (System.Exception ex)', 'ex.Message', 'QS3DREBARMODEHEALTH lỗi: " +'):
         if token in text:
-            errors.append("Rebar Mode Health command must not reflect exception detail: " + token)
+            errors.append("Rebar Mode Health command must not bypass presenter or reflect exception detail: " + token)
 
 if errors:
     for error in errors:
@@ -38,4 +37,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QS3DREBARMODEHEALTH preserves rebar-mode review and generated/source handle fallback while top-level exception details remain redacted.")
+print("PASS: QS3DREBARMODEHEALTH routes through transactional Model Health publication while preserving generated/source locate fallback and redacted errors.")

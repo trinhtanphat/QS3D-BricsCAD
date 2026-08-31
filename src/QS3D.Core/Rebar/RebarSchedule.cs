@@ -55,13 +55,27 @@ namespace QS3D.Core.Rebar
             var expectedInputCount = ValidateKnownInputCount(inputs, nameof(inputs));
             var observedInputCount = 0;
             var rows = new List<RebarScheduleRow>();
-            foreach (var input in inputs)
+            using (var enumerator = inputs.GetEnumerator())
             {
-                Append(input ?? throw new ArgumentException("Rebar schedule input cannot contain null.", nameof(inputs)), rows, nameof(inputs));
-                observedInputCount++;
+                while (enumerator.MoveNext())
+                {
+                    if (expectedInputCount.HasValue && observedInputCount >= expectedInputCount.Value)
+                        throw new InvalidOperationException("Rebar schedule input known Count does not match traversal.");
+                    if (rows.Count >= MaxRowCount)
+                        throw new ArgumentOutOfRangeException(nameof(inputs), "Rebar schedule exceeds the supported row bound of " + MaxRowCount + ".");
+
+                    var input = enumerator.Current;
+                    Append(input ?? throw new ArgumentException("Rebar schedule input cannot contain null.", nameof(inputs)), rows, nameof(inputs));
+                    observedInputCount++;
+                }
             }
             if (expectedInputCount.HasValue && observedInputCount != expectedInputCount.Value)
                 throw new InvalidOperationException("Rebar schedule input known Count does not match traversal.");
+
+            var finalInputCount = ValidateKnownInputCount(inputs, nameof(inputs));
+            if (expectedInputCount != finalInputCount)
+                throw new InvalidOperationException("Rebar schedule input known Count changed during traversal.");
+
             ValidateAggregate(rows);
             return rows.AsReadOnly();
         }

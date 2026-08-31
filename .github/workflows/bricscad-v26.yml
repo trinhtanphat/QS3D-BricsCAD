@@ -36,6 +36,12 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
+      - name: Bind V26 host-reference state path
+        shell: powershell
+        run: |
+          $statePath = Join-Path $env:RUNNER_TEMP "qs3d-v26-host-reference-state.json"
+          "V26_HOST_REFERENCE_STATE=$statePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Manual-only CI policy gate
         run: python scripts/preflight-ci-manual-only.py
 
@@ -48,8 +54,13 @@ jobs:
       - name: Validate V26 host references and runtime identity
         shell: powershell
         run: |
-          # The shared helper validates bricscad.exe, BrxMgd.dll, TD_Mgd.dll, and TD_MgdBrep.dll as ordinary non-reparse files and enforces FileMajorPart -ne 26 rejection.
-          & .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $env:BRICSCAD_V26_DIR | Out-Null
+          # Capture the exact ordinary/non-reparse V26 host-reference generations that later build/runtime steps are allowed to consume.
+          & .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $env:BRICSCAD_V26_DIR -StatePath $env:V26_HOST_REFERENCE_STATE | Out-Null
+          # Keep the BRep reference explicit at the workflow boundary while the shared helper owns ordinary-file, reparse, host-major and stable-generation validation.
+          $requiredBrep = Join-Path $env:BRICSCAD_V26_DIR 'TD_MgdBrep.dll'
+          if (-not (Test-Path -LiteralPath $requiredBrep -PathType Leaf)) {
+            throw "Required BricsCAD V26 host reference is missing: TD_MgdBrep.dll"
+          }
           $desktopRuntimes = @(dotnet --list-runtimes | Where-Object { $_ -match '^Microsoft\.WindowsDesktop\.App 8\.' })
           if ($desktopRuntimes.Count -eq 0) {
             throw ".NET 8 Windows Desktop Runtime/SDK is required for the BricsCAD V26 managed host."
@@ -61,13 +72,21 @@ jobs:
       - name: Deterministic Core smoke tests
         run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
 
-      - name: Build BricsCAD V26 plugin
-        run: dotnet build src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj -c Release -p:Platform=x64
+      - name: Build BricsCAD V26 plugin against held reference generations
+        shell: powershell
+        run: |
+          & .\scripts\build-v26-with-stable-references.ps1 `
+            -BricsCadDir $env:BRICSCAD_V26_DIR `
+            -StatePath $env:V26_HOST_REFERENCE_STATE `
+            -ProjectPath 'src\QS3D.BricsCAD.V26\QS3D.BricsCAD.V26.csproj' `
+            -Configuration Release `
+            -Platform x64
 
       - name: Licensed V26 NETLOAD runtime gate
         if: ${{ inputs.run_runtime }}
         shell: powershell
         run: |
+          & .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $env:BRICSCAD_V26_DIR -VerifyStatePath $env:V26_HOST_REFERENCE_STATE | Out-Null
           $plugin = (Resolve-Path "src\QS3D.BricsCAD.V26\bin\x64\Release\net8.0-windows\QS3D.BricsCAD.V26.dll").Path
           & .\scripts\test-bricscad-v26-runtime.ps1 `
             -BricsCadDir $env:BRICSCAD_V26_DIR `

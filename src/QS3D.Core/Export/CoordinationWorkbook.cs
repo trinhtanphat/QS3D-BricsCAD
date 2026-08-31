@@ -155,15 +155,17 @@ namespace QS3D.Core.Export
         private const int IntegerStyle = 2;
         private const int WrappedStyle = 3;
         private const int MaxRows = 1048575;
+        private static readonly DateTimeOffset DeterministicZipEntryTimestamp =
+            new DateTimeOffset(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
         public static void Export(string path, IReadOnlyList<CoordinationClashExportRow> rows)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
-            if (rows.Count == 0) throw new InvalidDataException("Coordination workbook CLASHES requires at least one row.");
-            if (rows.Count > MaxRows) throw new InvalidDataException("Coordination workbook exceeds the Excel row limit.");
+            var admittedRowCount = rows.Count;
+            RequireCoordinationRowCountAdmission(admittedRowCount);
 
-            var snapshot = Snapshot(rows);
+            var snapshot = Snapshot(rows, admittedRowCount);
             var traces = new List<CoordinationTraceProjection>(snapshot.Count);
             var clashXml = BuildClashSheet(snapshot, traces);
             var traceXml = BuildTraceSheet(traces);
@@ -202,13 +204,27 @@ namespace QS3D.Core.Export
             }
         }
 
-        private static List<CoordinationClashExportRow> Snapshot(IReadOnlyList<CoordinationClashExportRow> source)
+        private static void RequireCoordinationRowCountAdmission(int count)
         {
-            var result = new List<CoordinationClashExportRow>(source.Count);
+            if (count <= 0) throw new InvalidDataException("Coordination workbook CLASHES requires at least one row.");
+            if (count > MaxRows) throw new InvalidDataException("Coordination workbook exceeds the Excel row limit.");
+        }
+
+        private static void RequireStableCoordinationRowCount(IReadOnlyList<CoordinationClashExportRow> source, int admittedRowCount)
+        {
+            if (source.Count != admittedRowCount)
+                throw new InvalidDataException("Coordination workbook row Count changed during snapshot.");
+        }
+
+        private static List<CoordinationClashExportRow> Snapshot(IReadOnlyList<CoordinationClashExportRow> source, int admittedRowCount)
+        {
+            var result = new List<CoordinationClashExportRow>(admittedRowCount);
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             string? fingerprint = null;
-            foreach (var row in source)
+            for (var index = 0; index < admittedRowCount; index++)
             {
+                RequireStableCoordinationRowCount(source, admittedRowCount);
+                var row = source[index];
                 if (row == null) throw new InvalidDataException("Coordination workbook contains a null clash row.");
                 var expectedId = CoordinationClashIdentity.Create(row.DrawingFingerprint, row.RuleId, row.LeftHandle, row.RightHandle);
                 if (!string.Equals(row.ClashId, expectedId, StringComparison.Ordinal))
@@ -219,6 +235,7 @@ namespace QS3D.Core.Export
                     throw new InvalidDataException("Coordination workbook rows contain conflicting drawing fingerprints.");
                 result.Add(row);
             }
+            RequireStableCoordinationRowCount(source, admittedRowCount);
             result.Sort((a, b) => StringComparer.Ordinal.Compare(a.ClashId, b.ClashId));
             return result;
         }
@@ -336,6 +353,7 @@ namespace QS3D.Core.Export
         private static void WriteEntry(ZipArchive archive, string name, string content)
         {
             var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
+            entry.LastWriteTime = DeterministicZipEntryTimestamp;
             using (var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false))) writer.Write(content);
         }
 

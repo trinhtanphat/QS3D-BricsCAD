@@ -23,18 +23,48 @@ namespace QS3D.BricsCAD.V25
         public static void Show()
         {
             EnsureCreated();
-            SubscribeToDocumentActivation();
 
-            if (_palette != null)
-                _palette.Visible = true;
+            var palette = _palette;
+            var panel = _panel;
+            if (palette == null || panel == null) return;
 
-            _panel?.RefreshFromActiveDocument();
+            var wasVisible = palette.Visible;
+            var wasSubscribed = _documentActivatedSubscribed;
+
+            try
+            {
+                SubscribeToDocumentActivation();
+                palette.Visible = true;
+                panel.RefreshFromActiveDocument();
+            }
+            catch
+            {
+                if (!wasVisible)
+                {
+                    try { palette.Visible = false; }
+                    catch
+                    {
+                        // Native visibility rollback is best-effort. Event ownership is still
+                        // restored below so a failed Show cannot strand a hidden callback root.
+                    }
+                }
+
+                if (!wasSubscribed)
+                    UnsubscribeFromDocumentActivation();
+
+                throw;
+            }
         }
 
         public static void Hide()
         {
-            if (_palette != null)
-                _palette.Visible = false;
+            var palette = _palette;
+            if (palette != null)
+                palette.Visible = false;
+
+            // A hidden Start Center does not need document callbacks. Releasing the host event
+            // here prevents a dormant PaletteSet from staying rooted for the rest of the session.
+            UnsubscribeFromDocumentActivation();
         }
 
         public static void Dispose()

@@ -18,6 +18,9 @@ namespace QS3D.Core.SmokeTests
             ExactWorkAreaBoundaryIsAccepted();
             KnownOversizedWorkAreaCollectionFailsBeforeEnumeration();
             NonGenericKnownOversizedWorkAreaCollectionFailsBeforeEnumeration();
+            KnownCountOverrunFailsAtFirstUnexpectedEntry();
+            KnownCountUnderYieldFailsClosed();
+            KnownCountDriftAfterTraversalFailsClosed();
             StreamingWorkAreaBoundaryFailsWithoutOverread();
         }
 
@@ -156,6 +159,42 @@ namespace QS3D.Core.SmokeTests
             throw new Exception("Non-generic known oversized work-area input must fail closed.");
         }
 
+        private static void KnownCountOverrunFailsAtFirstUnexpectedEntry()
+        {
+            var areas = new KnownCountOverrunCollection();
+            try
+            {
+                FloatingToolWindowPolicy.Normalize(
+                    new FloatingToolBounds(0d, 0d, 400d, 300d),
+                    areas);
+            }
+            catch (InvalidOperationException)
+            {
+                if (areas.MoveNextCalls != 2)
+                    throw new Exception("Known Count overrun must fail on the first unexpected traversal entry without overread.");
+                return;
+            }
+
+            throw new Exception("Known Count overrun must fail closed.");
+        }
+
+        private static void KnownCountUnderYieldFailsClosed()
+        {
+            ExpectNoValidWorkArea(
+                new KnownCountUnderYieldCollection(),
+                "Known Count under-yield must fail closed before publishing normalized bounds.");
+        }
+
+        private static void KnownCountDriftAfterTraversalFailsClosed()
+        {
+            var areas = new KnownCountDriftCollection();
+            ExpectNoValidWorkArea(
+                areas,
+                "Changed deterministic Count metadata after traversal must fail closed.");
+            if (!areas.EnumerationCompleted)
+                throw new Exception("Count-drift regression must complete the bounded traversal before rebinding Count metadata.");
+        }
+
         private static void StreamingWorkAreaBoundaryFailsWithoutOverread()
         {
             try
@@ -210,6 +249,60 @@ namespace QS3D.Core.SmokeTests
             {
                 EnumerationAttempted = true;
                 throw new Exception("Non-generic known oversized collection must not be enumerated.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class KnownCountOverrunCollection : IReadOnlyCollection<FloatingToolBounds>
+        {
+            public int Count => 1;
+            public int MoveNextCalls { get; private set; }
+
+            public IEnumerator<FloatingToolBounds> GetEnumerator()
+            {
+                return Enumerate();
+            }
+
+            private IEnumerator<FloatingToolBounds> Enumerate()
+            {
+                MoveNextCalls++;
+                yield return new FloatingToolBounds(0d, 0d, 800d, 600d);
+                MoveNextCalls++;
+                yield return new FloatingToolBounds(1000d, 0d, 800d, 600d);
+                MoveNextCalls++;
+                throw new Exception("Known Count overrun policy read beyond the first unexpected entry.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class KnownCountUnderYieldCollection : IReadOnlyCollection<FloatingToolBounds>
+        {
+            public int Count => 2;
+
+            public IEnumerator<FloatingToolBounds> GetEnumerator()
+            {
+                yield return new FloatingToolBounds(0d, 0d, 800d, 600d);
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class KnownCountDriftCollection : IReadOnlyCollection<FloatingToolBounds>
+        {
+            public bool EnumerationCompleted { get; private set; }
+            public int Count => EnumerationCompleted ? 2 : 1;
+
+            public IEnumerator<FloatingToolBounds> GetEnumerator()
+            {
+                return Enumerate();
+            }
+
+            private IEnumerator<FloatingToolBounds> Enumerate()
+            {
+                yield return new FloatingToolBounds(0d, 0d, 800d, 600d);
+                EnumerationCompleted = true;
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();

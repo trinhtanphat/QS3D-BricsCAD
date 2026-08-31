@@ -31,7 +31,7 @@
   -->
   <ItemGroup>
     <Compile Include="..\QS3D.BricsCAD.V25\**\*.cs"
-             Exclude="..\QS3D.BricsCAD.V25\bin\**\*;..\QS3D.BricsCAD.V25\obj\**\*;..\QS3D.BricsCAD.V25\PluginEntry.cs;..\QS3D.BricsCAD.V25\Updates\**\*.cs">
+             Exclude="..\QS3D.BricsCAD.V25\bin\**\*;..\QS3D.BricsCAD.V25\obj\**\*;..\QS3D.BricsCAD.V25\PluginEntry.cs;..\QS3D.BricsCAD.V25\McpEmbeddedServer.cs;..\QS3D.BricsCAD.V25\Updates\**\*.cs">
       <Link>%(RecursiveDir)%(Filename)%(Extension)</Link>
     </Compile>
     <Compile Include="..\QS3D.BricsCAD.V25\Updates\SemanticReleaseVersion.cs">

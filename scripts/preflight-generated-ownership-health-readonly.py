@@ -27,10 +27,10 @@ for filename in FILES:
 
 for filename in LOCATE_FILES:
     text = (COMMAND_ROOT / filename).read_text(encoding="utf-8")
-    marker = "new ModelHealthWindow(document, issues, issue =>"
+    marker = "ModelHealthWindowPresenter.Show(document, issues, issue =>"
     start = text.find(marker)
     if start < 0:
-        errors.append(filename + ": missing model-health Locate callback")
+        errors.append(filename + ": missing presenter-routed model-health Locate callback")
         continue
     callback = text[start:]
     if "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)" not in callback:
@@ -39,6 +39,8 @@ for filename in LOCATE_FILES:
         errors.append(filename + ": Locate callback must resolve ElementId from current project")
     if "project.FindElement(issue.ElementId)" in callback:
         errors.append(filename + ": Locate callback still captures stale ProjectState")
+    if "Application.ShowModelessWindow(" in text or "new ModelHealthWindow(" in text:
+        errors.append(filename + ": ownership Health must not bypass transactional Model Health presenter")
 
 if errors:
     for error in errors:
@@ -46,4 +48,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: generated/ownership Health commands are read-only and modeless Locate re-resolves current semantic state.")
+print("PASS: generated/ownership Health commands are read-only, presenter-routed, and modeless Locate re-resolves current semantic state.")

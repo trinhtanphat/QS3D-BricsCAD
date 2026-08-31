@@ -18,6 +18,9 @@ namespace QS3D.Core.SmokeTests
             ActionMetadataIsConsistent();
             AvailabilityExactBoundaryIsAccepted();
             OversizedKnownAvailabilityIsRejectedBeforeEnumeration();
+            KnownCountOverrunStopsBeforeExtraCurrent();
+            KnownCountDriftAfterTraversalFailsClosed();
+            HonestCountedAvailabilityPreservesTraversal();
             LazyAvailabilityStopsAtBoundaryPlusOne();
             InvalidAndDuplicateActionIdsFailClosed();
         }
@@ -143,6 +146,52 @@ namespace QS3D.Core.SmokeTests
             False(oversized.EnumerationAttempted, "Oversized known-count availability must be rejected before enumeration starts.");
         }
 
+        private static void KnownCountOverrunStopsBeforeExtraCurrent()
+        {
+            var source = new TrackingCountedAvailability(
+                initialCount: 1,
+                reboundCount: 1,
+                new FeatureActionAvailability(FeatureActionId.Add, true),
+                new FeatureActionAvailability(FeatureActionId.Quantity, true));
+
+            ExpectInvalidOperation(
+                () => FeatureActionBarBuilder.Build(AllActionsProfile(), source),
+                "Known-count availability overrun must fail before exposing Current beyond advertised Count.");
+            Equal(2, source.MoveNextCalls);
+            Equal(1, source.CurrentReads);
+            Equal(1, source.CountReads);
+        }
+
+        private static void KnownCountDriftAfterTraversalFailsClosed()
+        {
+            var source = new TrackingCountedAvailability(
+                initialCount: 1,
+                reboundCount: 2,
+                new FeatureActionAvailability(FeatureActionId.Add, true));
+
+            ExpectInvalidOperation(
+                () => FeatureActionBarBuilder.Build(AllActionsProfile(), source),
+                "Availability Count drift after an otherwise exact traversal must fail closed.");
+            Equal(2, source.MoveNextCalls);
+            Equal(1, source.CurrentReads);
+            Equal(2, source.CountReads);
+        }
+
+        private static void HonestCountedAvailabilityPreservesTraversal()
+        {
+            var source = new TrackingCountedAvailability(
+                initialCount: 2,
+                reboundCount: 2,
+                new FeatureActionAvailability(FeatureActionId.Add, true),
+                new FeatureActionAvailability(FeatureActionId.Quantity, true));
+
+            var bar = FeatureActionBarBuilder.Build(AllActionsProfile(), source);
+            Equal(8, bar.Actions.Count);
+            Equal(3, source.MoveNextCalls);
+            Equal(2, source.CurrentReads);
+            Equal(2, source.CountReads);
+        }
+
         private static void LazyAvailabilityStopsAtBoundaryPlusOne()
         {
             var lazy = new BoundaryPlusOneAvailability();
@@ -250,6 +299,83 @@ namespace QS3D.Core.SmokeTests
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class TrackingCountedAvailability : IReadOnlyCollection<FeatureActionAvailability>
+        {
+            private readonly FeatureActionAvailability[] _states;
+            private readonly int _initialCount;
+            private readonly int _reboundCount;
+
+            public TrackingCountedAvailability(
+                int initialCount,
+                int reboundCount,
+                params FeatureActionAvailability[] states)
+            {
+                _initialCount = initialCount;
+                _reboundCount = reboundCount;
+                _states = states ?? throw new ArgumentNullException(nameof(states));
+            }
+
+            public int Count
+            {
+                get
+                {
+                    CountReads++;
+                    return CountReads == 1 ? _initialCount : _reboundCount;
+                }
+            }
+
+            public int CountReads { get; private set; }
+            public int MoveNextCalls { get; private set; }
+            public int CurrentReads { get; private set; }
+
+            public IEnumerator<FeatureActionAvailability> GetEnumerator() => new TrackingEnumerator(this);
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private sealed class TrackingEnumerator : IEnumerator<FeatureActionAvailability>
+            {
+                private readonly TrackingCountedAvailability _owner;
+                private int _index = -1;
+
+                public TrackingEnumerator(TrackingCountedAvailability owner)
+                {
+                    _owner = owner;
+                }
+
+                public FeatureActionAvailability Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        if (_index < 0 || _index >= _owner._states.Length)
+                            throw new InvalidOperationException("Current read outside the valid availability traversal boundary.");
+                        return _owner._states[_index];
+                    }
+                }
+
+                object IEnumerator.Current => Current;
+
+                public bool MoveNext()
+                {
+                    _owner.MoveNextCalls++;
+                    if (_index + 1 >= _owner._states.Length)
+                    {
+                        _index = _owner._states.Length;
+                        return false;
+                    }
+
+                    _index++;
+                    return true;
+                }
+
+                public void Reset() => throw new NotSupportedException();
+
+                public void Dispose()
+                {
+                }
+            }
         }
 
         private sealed class BoundaryPlusOneAvailability : IEnumerable<FeatureActionAvailability>

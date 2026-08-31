@@ -96,28 +96,52 @@ namespace QS3D.Core.Geometry
             if (frames == null) throw new ArgumentNullException(nameof(frames));
             if (openings == null) throw new ArgumentNullException(nameof(openings));
 
-            var frameKnownCount = SnapshotKnownCount(frames, MaxOutputFragments, "frame");
+            var frameKnownCount = SnapshotKnownCount(frames, MaxOutputFragments, "frame", out var frameKnownCountSources);
             var result = frameKnownCount.HasValue
                 ? new List<CurtainWallRect>(frameKnownCount.Value)
                 : new List<CurtainWallRect>();
-            foreach (var frame in frames)
+            using (var frameEnumerator = frames.GetEnumerator())
             {
-                if (result.Count >= MaxOutputFragments) throw new InvalidOperationException("Curtain frame input exceeds safety limit " + MaxOutputFragments + ".");
-                result.Add(ValidateFrame(frame));
+                while (true)
+                {
+                    RequireStableKnownCount(frames, frameKnownCount, frameKnownCountSources, MaxOutputFragments, "frame");
+                    if (!frameEnumerator.MoveNext())
+                        break;
+                    RequireStableKnownCount(frames, frameKnownCount, frameKnownCountSources, MaxOutputFragments, "frame");
+                    if (frameKnownCount.HasValue && result.Count >= frameKnownCount.Value)
+                        throw new InvalidOperationException("Curtain frame collection count changed during enumeration.");
+                    if (result.Count >= MaxOutputFragments)
+                        throw new InvalidOperationException("Curtain frame input exceeds safety limit " + MaxOutputFragments + ".");
+                    var frame = frameEnumerator.Current;
+                    result.Add(ValidateFrame(frame));
+                }
             }
             RequireObservedCount(frameKnownCount, result.Count, "frame");
+            RequireStableKnownCount(frames, frameKnownCount, frameKnownCountSources, MaxOutputFragments, "frame");
 
-            var openingKnownCount = SnapshotKnownCount(openings, MaxOpenings, "opening");
+            var openingKnownCount = SnapshotKnownCount(openings, MaxOpenings, "opening", out var openingKnownCountSources);
             var cuts = openingKnownCount.HasValue
                 ? new List<CurtainOpeningRect>(openingKnownCount.Value)
                 : new List<CurtainOpeningRect>();
-            foreach (var opening in openings)
+            using (var openingEnumerator = openings.GetEnumerator())
             {
-                if (opening == null) throw new ArgumentException("Opening collection contains null.", nameof(openings));
-                if (cuts.Count >= MaxOpenings) throw new InvalidOperationException("Curtain opening input exceeds safety limit " + MaxOpenings + ".");
-                cuts.Add(opening);
+                while (true)
+                {
+                    RequireStableKnownCount(openings, openingKnownCount, openingKnownCountSources, MaxOpenings, "opening");
+                    if (!openingEnumerator.MoveNext())
+                        break;
+                    RequireStableKnownCount(openings, openingKnownCount, openingKnownCountSources, MaxOpenings, "opening");
+                    if (openingKnownCount.HasValue && cuts.Count >= openingKnownCount.Value)
+                        throw new InvalidOperationException("Curtain opening collection count changed during enumeration.");
+                    if (cuts.Count >= MaxOpenings)
+                        throw new InvalidOperationException("Curtain opening input exceeds safety limit " + MaxOpenings + ".");
+                    var opening = openingEnumerator.Current;
+                    if (opening == null) throw new ArgumentException("Opening collection contains null.", nameof(openings));
+                    cuts.Add(opening);
+                }
             }
             RequireObservedCount(openingKnownCount, cuts.Count, "opening");
+            RequireStableKnownCount(openings, openingKnownCount, openingKnownCountSources, MaxOpenings, "opening");
 
             foreach (var opening in cuts)
             {
@@ -133,15 +157,26 @@ namespace QS3D.Core.Geometry
             return result.AsReadOnly();
         }
 
-        private static int? SnapshotKnownCount<T>(IEnumerable<T> values, int maximum, string subject)
+        private static int? SnapshotKnownCount<T>(IEnumerable<T> values, int maximum, string subject, out int knownCountSources)
         {
             int? knownCount = null;
+            var sources = 0;
             if (values is ICollection<T> genericCollection)
+            {
+                sources |= 1;
                 AcceptKnownCount(genericCollection.Count, maximum, subject, ref knownCount);
+            }
             if (values is IReadOnlyCollection<T> readOnlyCollection)
+            {
+                sources |= 2;
                 AcceptKnownCount(readOnlyCollection.Count, maximum, subject, ref knownCount);
+            }
             if (values is ICollection nonGenericCollection)
+            {
+                sources |= 4;
                 AcceptKnownCount(nonGenericCollection.Count, maximum, subject, ref knownCount);
+            }
+            knownCountSources = sources;
             return knownCount;
         }
 
@@ -159,6 +194,18 @@ namespace QS3D.Core.Geometry
         private static void RequireObservedCount(int? knownCount, int observedCount, string subject)
         {
             if (knownCount.HasValue && knownCount.Value != observedCount)
+                throw new InvalidOperationException("Curtain " + subject + " collection count changed during enumeration.");
+        }
+
+        private static void RequireStableKnownCount<T>(
+            IEnumerable<T> values,
+            int? initialKnownCount,
+            int initialKnownCountSources,
+            int maximum,
+            string subject)
+        {
+            var currentKnownCount = SnapshotKnownCount(values, maximum, subject, out var currentKnownCountSources);
+            if (currentKnownCount != initialKnownCount || currentKnownCountSources != initialKnownCountSources)
                 throw new InvalidOperationException("Curtain " + subject + " collection count changed during enumeration.");
         }
 

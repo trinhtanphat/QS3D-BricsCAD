@@ -64,16 +64,41 @@ namespace QS3D.Core.Documentation
             var result = new List<T>(knownCount ?? Math.Min(maxCount, 256));
             using (var enumerator = values.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    ValidateKnownCountEvidence(values, maxCount, capacityError, knownCount, "before MoveNext");
+                    var moved = enumerator.MoveNext();
+                    ValidateKnownCountEvidence(values, maxCount, capacityError, knownCount, "after MoveNext");
+                    if (!moved) break;
                     if (result.Count >= maxCount) throw new InvalidOperationException(capacityError);
-                    result.Add(enumerator.Current);
+                    if (knownCount.HasValue && result.Count >= knownCount.Value)
+                        throw new InvalidOperationException("Semantic schedule collection source known Count does not match completed traversal.");
+                    var current = enumerator.Current;
+                    ValidateKnownCountEvidence(values, maxCount, capacityError, knownCount, "after Current");
+                    result.Add(current);
                 }
             }
 
             if (knownCount.HasValue && result.Count != knownCount.Value)
                 throw new InvalidOperationException("Semantic schedule collection source known Count does not match completed traversal.");
+            ValidateKnownCountEvidence(values, maxCount, capacityError, knownCount, "after traversal");
             return result.AsReadOnly();
+        }
+
+        private static void ValidateKnownCountEvidence<T>(
+            IEnumerable<T> values,
+            int maxCount,
+            string capacityError,
+            int? expectedCount,
+            string phase)
+        {
+            int? observed = null;
+            ValidateKnownCount(values as ICollection<T>, maxCount, capacityError, ref observed);
+            ValidateKnownCount(values as IReadOnlyCollection<T>, maxCount, capacityError, ref observed);
+            ValidateKnownCount(values as System.Collections.ICollection, maxCount, capacityError, ref observed);
+            if (expectedCount.HasValue && observed.HasValue && observed.Value != expectedCount.Value)
+                throw new InvalidOperationException(
+                    "Semantic schedule collection source known Count changed or conflicted " + phase + ".");
         }
 
         private static void ValidateKnownCount<T>(ICollection<T>? values, int maxCount, string capacityError, ref int? knownCount)
@@ -146,11 +171,14 @@ namespace QS3D.Core.Documentation
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (definitions == null) throw new ArgumentNullException(nameof(definitions));
             var list = new List<SemanticScheduleDefinition>(MaxSchedules);
-            foreach (var definition in definitions)
+            using (var enumerator = definitions.GetEnumerator())
             {
-                if (list.Count >= MaxSchedules)
-                    throw new InvalidOperationException("Semantic schedule catalog exceeds the supported 128 definitions.");
-                list.Add(definition);
+                while (enumerator.MoveNext())
+                {
+                    if (list.Count >= MaxSchedules)
+                        throw new InvalidOperationException("Semantic schedule catalog exceeds the supported 128 definitions.");
+                    list.Add(enumerator.Current);
+                }
             }
             ValidateCatalog(list);
             if (list.Count == 0)
@@ -335,7 +363,6 @@ namespace QS3D.Core.Documentation
                 var include = RequireExactlyOneChild(schedule, "include");
                 var exclude = RequireExactlyOneChild(schedule, "exclude");
                 var columns = RequireExactlyOneChild(schedule, "columns");
-
                 ValidateElement(categories, "categories", Array.Empty<string>(), new[] { "category" });
                 foreach (var category in categories.Elements("category"))
                 {

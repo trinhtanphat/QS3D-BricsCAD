@@ -54,7 +54,7 @@ namespace QS3D.BricsCAD.V25
                 var message = "Rebar Health All: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
-                Application.ShowModelessWindow(IntPtr.Zero, new ModelHealthWindow(document, issues, issue =>
+                ModelHealthWindowPresenter.Show(document, issues, issue =>
                 {
                     if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)) return;
                     var element = currentProject.FindElement(issue.ElementId);
@@ -63,7 +63,7 @@ namespace QS3D.BricsCAD.V25
                     var count = CadHandleService.Select(document, handles);
                     PaletteCoordinator.SetStatus("Rebar Health All Định vị " + element.Id + " • " + count + " solid(s)");
                     if (count > 0) document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
-                }), true);
+                });
             }
             catch (System.Exception)
             {

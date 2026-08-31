@@ -150,17 +150,27 @@ namespace QS3D.Core.Coordination
             var snapshot = new List<CoordinationElement>();
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            foreach (var element in elements)
+            using (var enumerator = elements.GetEnumerator())
             {
-                if (index == MaximumElements)
-                    throw TooManyElements();
-                if (element == null)
-                    throw new ArgumentException("Coordination input contains a null element at index " + index + ".", nameof(elements));
-                if (!ids.Add(element.ElementId))
-                    throw new ArgumentException("Duplicate coordination element id: " + element.ElementId + ".", nameof(elements));
-                snapshot.Add(element);
-                index++;
+                while (true)
+                {
+                    RequireStableKnownCount(elements, expectedCount);
+                    if (!enumerator.MoveNext()) break;
+                    RequireStableKnownCount(elements, expectedCount);
+
+                    if (index == MaximumElements)
+                        throw TooManyElements();
+                    var element = enumerator.Current;
+                    RequireStableKnownCount(elements, expectedCount);
+                    if (element == null)
+                        throw new ArgumentException("Coordination input contains a null element at index " + index + ".", nameof(elements));
+                    if (!ids.Add(element.ElementId))
+                        throw new ArgumentException("Duplicate coordination element id: " + element.ElementId + ".", nameof(elements));
+                    snapshot.Add(element);
+                    index++;
+                }
             }
+            RequireStableKnownCount(elements, expectedCount);
             if (expectedCount.HasValue && snapshot.Count != expectedCount.Value)
             {
                 throw new InvalidOperationException(
@@ -264,6 +274,19 @@ namespace QS3D.Core.Coordination
             RequireConsistentKnownCount(readOnlyCount, ref expectedCount);
             RequireConsistentKnownCount(nonGenericCount, ref expectedCount);
             return expectedCount;
+        }
+
+        private static void RequireStableKnownCount(
+            IEnumerable<CoordinationElement> elements,
+            int? expectedCount)
+        {
+            if (!expectedCount.HasValue) return;
+            var observedCount = RequireKnownCountWithinLimit(elements);
+            if (!observedCount.HasValue || observedCount.Value != expectedCount.Value)
+            {
+                throw new InvalidOperationException(
+                    "Coordination input known element Count changed during snapshot.");
+            }
         }
 
         private static void RequireConsistentKnownCount(int? count, ref int? expectedCount)

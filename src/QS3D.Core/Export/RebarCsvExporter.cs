@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -41,15 +42,51 @@ namespace QS3D.Core.Export
         public static string ToCsv(IEnumerable<RebarScheduleRow> rows)
         {
             if (rows == null) throw new ArgumentNullException(nameof(rows));
+            var admittedCount = ReadKnownCount(rows);
+            if (admittedCount.HasValue)
+            {
+                ValidateKnownCount(admittedCount.Value);
+                if (admittedCount.Value > MaxRowCount)
+                    throw new ArgumentOutOfRangeException(nameof(rows), "BBS CSV exceeds the supported row bound of " + MaxRowCount + ".");
+            }
+
+            var sourceRows = new List<RebarScheduleRow>();
+            var snapshots = new List<RebarScheduleRow>();
+            var rowCount = 0;
+            using (var enumerator = rows.GetEnumerator())
+            {
+                while (true)
+                {
+                    ValidateKnownCount(rows, admittedCount);
+                    var moved = enumerator.MoveNext();
+                    ValidateKnownCount(rows, admittedCount);
+                    if (!moved) break;
+                    if (rowCount >= MaxRowCount)
+                        throw new ArgumentOutOfRangeException(nameof(rows), "BBS CSV exceeds the supported row bound of " + MaxRowCount + ".");
+                    if (admittedCount.HasValue && rowCount >= admittedCount.Value)
+                        throw new InvalidOperationException("BBS CSV row Count grew beyond the admitted Count during serialization.");
+
+                    var sourceRow = enumerator.Current;
+                    ValidateKnownCount(rows, admittedCount);
+                    if (sourceRow == null) throw new ArgumentException("BBS row cannot be null.", nameof(rows));
+                    var snapshot = SnapshotRow(sourceRow);
+                    ValidateRow(snapshot);
+                    sourceRows.Add(sourceRow);
+                    snapshots.Add(snapshot);
+                    rowCount++;
+                }
+            }
+
+            ValidateKnownCount(rows, admittedCount);
+            if (admittedCount.HasValue && rowCount != admittedCount.Value)
+                throw new InvalidOperationException("BBS CSV row Count did not match the admitted Count during serialization.");
+            for (var index = 0; index < snapshots.Count; index++)
+                EnsureRowStable(sourceRows[index], snapshots[index], index);
+
             var sb = new StringBuilder();
             sb.Append("ElementId,BarMark,ShapeCode,Notation,DiameterMm,Quantity,CuttingLengthM,TotalLengthM,UnitWeightKgM,NetWeightKg,WastePercent,TotalWeightKg,FabricationStatus,FabricationStandardCode,FabricationDetailingRevision").Append("\r\n");
-            var rowCount = 0;
-            foreach (var row in rows)
+            foreach (var row in snapshots)
             {
-                if (rowCount >= MaxRowCount)
-                    throw new ArgumentOutOfRangeException(nameof(rows), "BBS CSV exceeds the supported row bound of " + MaxRowCount + ".");
-                rowCount++;
-                ValidateRow(row ?? throw new ArgumentException("BBS row cannot be null.", nameof(rows)));
                 sb.Append(QIdentity(row.ElementId, "element id")).Append(',')
                     .Append(Q(row.BarMark)).Append(',')
                     .Append(Q(row.ShapeCode)).Append(',')
@@ -66,9 +103,87 @@ namespace QS3D.Core.Export
                     .Append(Q(row.FabricationStandardCode)).Append(',')
                     .Append(Q(row.FabricationDetailingRevision)).Append("\r\n");
             }
+
             var content = sb.ToString();
             StrictUtf8WithBom.GetByteCount(content);
             return content;
+        }
+
+        private static RebarScheduleRow SnapshotRow(RebarScheduleRow source)
+        {
+            return new RebarScheduleRow
+            {
+                ElementId = source.ElementId ?? string.Empty,
+                BarMark = source.BarMark ?? string.Empty,
+                ShapeCode = source.ShapeCode ?? string.Empty,
+                Notation = source.Notation ?? string.Empty,
+                DiameterMm = source.DiameterMm,
+                Quantity = source.Quantity,
+                CuttingLengthM = source.CuttingLengthM,
+                TotalLengthM = source.TotalLengthM,
+                UnitWeightKgM = source.UnitWeightKgM,
+                NetWeightKg = source.NetWeightKg,
+                WastePercent = source.WastePercent,
+                TotalWeightKg = source.TotalWeightKg,
+                FabricationStatus = source.FabricationStatus ?? string.Empty,
+                FabricationStandardCode = source.FabricationStandardCode ?? string.Empty,
+                FabricationDetailingRevision = source.FabricationDetailingRevision ?? string.Empty
+            };
+        }
+
+        private static void EnsureRowStable(RebarScheduleRow source, RebarScheduleRow snapshot, int rowIndex)
+        {
+            if (source == null ||
+                !string.Equals(source.ElementId ?? string.Empty, snapshot.ElementId, StringComparison.Ordinal) ||
+                !string.Equals(source.BarMark ?? string.Empty, snapshot.BarMark, StringComparison.Ordinal) ||
+                !string.Equals(source.ShapeCode ?? string.Empty, snapshot.ShapeCode, StringComparison.Ordinal) ||
+                !string.Equals(source.Notation ?? string.Empty, snapshot.Notation, StringComparison.Ordinal) ||
+                source.DiameterMm != snapshot.DiameterMm ||
+                source.Quantity != snapshot.Quantity ||
+                source.CuttingLengthM != snapshot.CuttingLengthM ||
+                source.TotalLengthM != snapshot.TotalLengthM ||
+                source.UnitWeightKgM != snapshot.UnitWeightKgM ||
+                source.NetWeightKg != snapshot.NetWeightKg ||
+                source.WastePercent != snapshot.WastePercent ||
+                source.TotalWeightKg != snapshot.TotalWeightKg ||
+                !string.Equals(source.FabricationStatus ?? string.Empty, snapshot.FabricationStatus, StringComparison.Ordinal) ||
+                !string.Equals(source.FabricationStandardCode ?? string.Empty, snapshot.FabricationStandardCode, StringComparison.Ordinal) ||
+                !string.Equals(source.FabricationDetailingRevision ?? string.Empty, snapshot.FabricationDetailingRevision, StringComparison.Ordinal))
+                throw new InvalidOperationException("BBS CSV row values changed during serialization. Invalid row index: " + rowIndex + ".");
+        }
+
+        private static int? ReadKnownCount(IEnumerable<RebarScheduleRow> rows)
+        {
+            int? count = null;
+            if (rows is ICollection<RebarScheduleRow> genericCollection)
+                BindKnownCount(ref count, genericCollection.Count);
+            if (rows is IReadOnlyCollection<RebarScheduleRow> readOnlyCollection)
+                BindKnownCount(ref count, readOnlyCollection.Count);
+            if (rows is ICollection nonGenericCollection)
+                BindKnownCount(ref count, nonGenericCollection.Count);
+            return count;
+        }
+
+        private static void BindKnownCount(ref int? bound, int candidate)
+        {
+            ValidateKnownCount(candidate);
+            if (bound.HasValue && bound.Value != candidate)
+                throw new InvalidOperationException("BBS CSV exposes conflicting row Count evidence.");
+            bound = candidate;
+        }
+
+        private static void ValidateKnownCount(int count)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("BBS CSV row Count cannot be negative.");
+        }
+
+        private static void ValidateKnownCount(IEnumerable<RebarScheduleRow> rows, int? admittedCount)
+        {
+            if (!admittedCount.HasValue) return;
+            var current = ReadKnownCount(rows);
+            if (!current.HasValue || current.Value != admittedCount.Value)
+                throw new InvalidOperationException("BBS CSV row Count changed during serialization.");
         }
 
         private static UTF8Encoding CreateStrictUtf8WithBom()

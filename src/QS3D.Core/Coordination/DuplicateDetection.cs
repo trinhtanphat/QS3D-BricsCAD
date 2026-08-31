@@ -110,7 +110,9 @@ namespace QS3D.Core.Coordination
             DuplicateDetectionOptions? options = null)
         {
             if (elements == null) throw new ArgumentNullException(nameof(elements));
-            return Detect(ProjectCandidates(elements), options);
+            var effective = options ?? new DuplicateDetectionOptions();
+            ValidateOptions(effective);
+            return DetectSnapshot(MaterializeElements(elements), effective);
         }
 
         public DuplicateDetectionResult Detect(
@@ -120,25 +122,81 @@ namespace QS3D.Core.Coordination
             if (candidates == null) throw new ArgumentNullException(nameof(candidates));
             var effective = options ?? new DuplicateDetectionOptions();
             ValidateOptions(effective);
+            return DetectSnapshot(MaterializeCandidates(candidates), effective);
+        }
 
+        private static List<DuplicateCandidate> MaterializeElements(IEnumerable<CoordinationElement> elements)
+        {
+            var expectedCount = RequireKnownCountWithinLimit(elements);
+            var snapshot = new List<DuplicateCandidate>();
+            var elementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var index = 0;
+            using (var enumerator = elements.GetEnumerator())
+            {
+                while (true)
+                {
+                    RequireStableKnownCount(elements, expectedCount);
+                    if (!enumerator.MoveNext()) break;
+                    RequireStableKnownCount(elements, expectedCount);
+
+                    if (index == MaximumElements) throw TooManyElements();
+                    var element = enumerator.Current;
+                    RequireStableKnownCount(elements, expectedCount);
+                    if (element == null)
+                        throw new ArgumentException("Duplicate-detection input contains a null element at index " + index + ".", nameof(elements));
+                    if (!elementIds.Add(element.ElementId))
+                        throw new ArgumentException("Duplicate coordination element id: " + element.ElementId + ".", nameof(elements));
+                    snapshot.Add(new DuplicateCandidate(element));
+                    index++;
+                }
+            }
+
+            RequireStableKnownCount(elements, expectedCount);
+            RequireExpectedCount(snapshot.Count, expectedCount);
+            return snapshot;
+        }
+
+        private static List<DuplicateCandidate> MaterializeCandidates(IEnumerable<DuplicateCandidate> candidates)
+        {
             var expectedCount = RequireKnownCountWithinLimit(candidates);
             var snapshot = new List<DuplicateCandidate>();
             var elementIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            foreach (var candidate in candidates)
+            using (var enumerator = candidates.GetEnumerator())
             {
-                if (index == MaximumElements) throw TooManyElements();
-                if (candidate == null)
-                    throw new ArgumentException("Duplicate-detection input contains a null candidate at index " + index + ".", nameof(candidates));
-                if (!elementIds.Add(candidate.Element.ElementId))
-                    throw new ArgumentException("Duplicate coordination element id: " + candidate.Element.ElementId + ".", nameof(candidates));
-                snapshot.Add(candidate);
-                index++;
+                while (true)
+                {
+                    RequireStableKnownCount(candidates, expectedCount);
+                    if (!enumerator.MoveNext()) break;
+                    RequireStableKnownCount(candidates, expectedCount);
+
+                    if (index == MaximumElements) throw TooManyElements();
+                    var candidate = enumerator.Current;
+                    RequireStableKnownCount(candidates, expectedCount);
+                    if (candidate == null)
+                        throw new ArgumentException("Duplicate-detection input contains a null candidate at index " + index + ".", nameof(candidates));
+                    if (!elementIds.Add(candidate.Element.ElementId))
+                        throw new ArgumentException("Duplicate coordination element id: " + candidate.Element.ElementId + ".", nameof(candidates));
+                    snapshot.Add(candidate);
+                    index++;
+                }
             }
 
-            if (expectedCount.HasValue && snapshot.Count != expectedCount.Value)
-                throw new InvalidOperationException("Duplicate-detection input enumeration count did not match its known element count.");
+            RequireStableKnownCount(candidates, expectedCount);
+            RequireExpectedCount(snapshot.Count, expectedCount);
+            return snapshot;
+        }
 
+        private static void RequireExpectedCount(int actualCount, int? expectedCount)
+        {
+            if (expectedCount.HasValue && actualCount != expectedCount.Value)
+                throw new InvalidOperationException("Duplicate-detection input enumeration count did not match its known element count.");
+        }
+
+        private static DuplicateDetectionResult DetectSnapshot(
+            List<DuplicateCandidate> snapshot,
+            DuplicateDetectionOptions effective)
+        {
             snapshot.Sort(CompareCandidates);
             var pairs = new List<DuplicatePair>();
             var exactCount = 0;
@@ -165,18 +223,6 @@ namespace QS3D.Core.Coordination
             return new DuplicateDetectionResult(
                 frozenPairs,
                 new DuplicateSummary(frozenPairs.Count, exactCount, nearCount, semanticCount));
-        }
-
-        private static IEnumerable<DuplicateCandidate> ProjectCandidates(IEnumerable<CoordinationElement> elements)
-        {
-            var index = 0;
-            foreach (var element in elements)
-            {
-                if (element == null)
-                    throw new ArgumentException("Duplicate-detection input contains a null element at index " + index + ".", nameof(elements));
-                yield return new DuplicateCandidate(element);
-                index++;
-            }
         }
 
         private static DuplicateMatchKind Evaluate(
@@ -258,15 +304,15 @@ namespace QS3D.Core.Coordination
                 throw new ArgumentOutOfRangeException(nameof(options.CoordinateToleranceM));
         }
 
-        private static int? RequireKnownCountWithinLimit(IEnumerable<DuplicateCandidate> candidates)
+        private static int? RequireKnownCountWithinLimit<T>(IEnumerable<T> source)
         {
             int? genericCount = null;
             int? readOnlyCount = null;
             int? nonGenericCount = null;
 
-            if (candidates is ICollection<DuplicateCandidate> collection) genericCount = collection.Count;
-            if (candidates is IReadOnlyCollection<DuplicateCandidate> readOnlyCollection) readOnlyCount = readOnlyCollection.Count;
-            if (candidates is ICollection nonGenericCollection) nonGenericCount = nonGenericCollection.Count;
+            if (source is ICollection<T> collection) genericCount = collection.Count;
+            if (source is IReadOnlyCollection<T> readOnlyCollection) readOnlyCount = readOnlyCollection.Count;
+            if (source is ICollection nonGenericCollection) nonGenericCount = nonGenericCollection.Count;
 
             if ((genericCount.HasValue && genericCount.Value > MaximumElements) ||
                 (readOnlyCount.HasValue && readOnlyCount.Value > MaximumElements) ||
@@ -283,6 +329,14 @@ namespace QS3D.Core.Coordination
             RequireConsistentKnownCount(readOnlyCount, ref expected);
             RequireConsistentKnownCount(nonGenericCount, ref expected);
             return expected;
+        }
+
+        private static void RequireStableKnownCount<T>(IEnumerable<T> source, int? expectedCount)
+        {
+            if (!expectedCount.HasValue) return;
+            var observedCount = RequireKnownCountWithinLimit(source);
+            if (!observedCount.HasValue || observedCount.Value != expectedCount.Value)
+                throw new InvalidOperationException("Duplicate-detection input known element Count changed during snapshot.");
         }
 
         private static void RequireConsistentKnownCount(int? candidate, ref int? expected)

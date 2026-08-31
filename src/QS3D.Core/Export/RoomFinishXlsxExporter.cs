@@ -21,11 +21,13 @@ namespace QS3D.Core.Export
             if (rows == null) throw new ArgumentNullException(nameof(rows));
             var rowCount = RequireConsistentKnownCount(rows, MaxDataRows, "export rows");
             var snapshot = new List<RoomFinishScheduleRow>(rowCount);
+            var sourceRows = new List<RoomFinishScheduleRow>(rowCount);
             for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
             {
                 var sourceRow = rows[rowIndex];
                 if (sourceRow == null)
                     throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
+                sourceRows.Add(sourceRow);
                 var row = SnapshotRow(sourceRow, rowIndex);
                 ValidateCellText(row.Floor, rowIndex, "Floor");
                 ValidateCellText(row.Room, rowIndex, "Room");
@@ -49,6 +51,8 @@ namespace QS3D.Core.Export
             }
             if (rows.Count != rowCount)
                 throw new InvalidOperationException("Room-finish XLSX export row count changed during snapshot.");
+            for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
+                EnsureRowStable(sourceRows[rowIndex], snapshot[rowIndex], rowIndex);
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -139,6 +143,38 @@ namespace QS3D.Core.Export
             }
             if (source.Count != count)
                 throw new InvalidOperationException("Room-finish XLSX row " + rowIndex + " field " + fieldName + " count changed during snapshot.");
+        }
+
+        private static void EnsureRowStable(RoomFinishScheduleRow source, RoomFinishScheduleRow snapshot, int rowIndex)
+        {
+            if (!string.Equals(source.ProjectId ?? string.Empty, snapshot.ProjectId, StringComparison.Ordinal) ||
+                !string.Equals(source.DrawingFingerprint ?? string.Empty, snapshot.DrawingFingerprint, StringComparison.Ordinal) ||
+                !string.Equals(source.Floor ?? string.Empty, snapshot.Floor, StringComparison.Ordinal) ||
+                !string.Equals(source.Room ?? string.Empty, snapshot.Room, StringComparison.Ordinal) ||
+                !string.Equals(source.Category ?? string.Empty, snapshot.Category, StringComparison.Ordinal) ||
+                !string.Equals(source.FamilyName ?? string.Empty, snapshot.FamilyName, StringComparison.Ordinal) ||
+                !string.Equals(source.Material ?? string.Empty, snapshot.Material, StringComparison.Ordinal) ||
+                !string.Equals(source.UnitHint ?? string.Empty, snapshot.UnitHint, StringComparison.Ordinal) ||
+                source.Count != snapshot.Count ||
+                !source.LengthM.Equals(snapshot.LengthM) ||
+                !source.AreaM2.Equals(snapshot.AreaM2) ||
+                !source.PrimaryQuantity.Equals(snapshot.PrimaryQuantity))
+                throw new InvalidOperationException("Room-finish XLSX row " + rowIndex + " values changed during snapshot.");
+
+            EnsureJoinedCellValuesStable(source.ElementIds, snapshot.ElementIds, rowIndex, "ElementIds");
+            EnsureJoinedCellValuesStable(source.RoomIds, snapshot.RoomIds, rowIndex, "RoomIds");
+            EnsureJoinedCellValuesStable(source.SourceHandles, snapshot.SourceHandles, rowIndex, "SourceHandles");
+        }
+
+        private static void EnsureJoinedCellValuesStable(IList<string> source, IList<string> snapshot, int rowIndex, string fieldName)
+        {
+            if (source == null || source.Count != snapshot.Count)
+                throw new InvalidOperationException("Room-finish XLSX row " + rowIndex + " field " + fieldName + " changed during snapshot.");
+            for (var index = 0; index < snapshot.Count; index++)
+            {
+                if (!string.Equals(source[index] ?? string.Empty, snapshot[index] ?? string.Empty, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Room-finish XLSX row " + rowIndex + " field " + fieldName + " changed during snapshot.");
+            }
         }
 
         private static string BuildSheet(IReadOnlyList<RoomFinishScheduleRow> rows)
@@ -240,7 +276,11 @@ namespace QS3D.Core.Export
                         "Room-finish XLSX row " + rowIndex + " field " + fieldName + " contains malformed UTF-16 provenance.",
                         "rows");
 
-                if (current == '\t' || current == '\n' || current == '\r' || current >= '\u0020') continue;
+                if (char.IsControl(current))
+                    throw new ArgumentException(
+                        "Room-finish XLSX row " + rowIndex + " field " + fieldName + " contains a control character in provenance.",
+                        "rows");
+                if (current >= '\u0020') continue;
                 throw new ArgumentException(
                     "Room-finish XLSX row " + rowIndex + " field " + fieldName + " contains an XML control character.",
                     "rows");

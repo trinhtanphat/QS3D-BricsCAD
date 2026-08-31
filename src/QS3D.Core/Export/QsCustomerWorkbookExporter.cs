@@ -33,13 +33,11 @@ namespace QS3D.Core.Export
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (detailRows == null) throw new ArgumentNullException(nameof(detailRows));
             if (summaryRows == null) throw new ArgumentNullException(nameof(summaryRows));
-            if (detailRows.Count == 0) throw new InvalidDataException("Customer workbook CHI_TIET requires at least one row.");
-            if (summaryRows.Count == 0) throw new InvalidDataException("Customer workbook DGKL requires at least one row.");
-            if (detailRows.Count > MaxRows || summaryRows.Count > MaxRows)
-                throw new InvalidDataException("Customer workbook exceeds the Excel row limit.");
 
-            var details = Snapshot(detailRows, true);
-            var summaries = Snapshot(summaryRows, false);
+            var detailCount = BindSourceCount(detailRows, DetailSheet);
+            var summaryCount = BindSourceCount(summaryRows, DgklSheet);
+            var details = Snapshot(detailRows, detailCount, true, DetailSheet);
+            var summaries = Snapshot(summaryRows, summaryCount, false, DgklSheet);
             ValidateScope(details, summaries);
 
             var formwork = summaries.Where(HasAnyFormworkEvidence).ToList();
@@ -89,14 +87,28 @@ namespace QS3D.Core.Export
             }
         }
 
+        private static int BindSourceCount(IReadOnlyList<QuantityReportRow> source, string sheet)
+        {
+            var count = source.Count;
+            if (count <= 0)
+                throw new InvalidDataException("Customer workbook " + sheet + " requires at least one row.");
+            if (count > MaxRows)
+                throw new InvalidDataException("Customer workbook " + sheet + " exceeds the Excel row limit.");
+            return count;
+        }
+
         private static bool HasAnyFormworkEvidence(QuantityReportRow row) =>
             row.HasGrossFormworkM2Evidence || row.HasConcreteContactDeductionM2Evidence || row.HasNetFormworkM2Evidence;
 
-        private static List<QuantityReportRow> Snapshot(IReadOnlyList<QuantityReportRow> source, bool requireSingle)
+        private static List<QuantityReportRow> Snapshot(
+            IReadOnlyList<QuantityReportRow> source,
+            int admittedCount,
+            bool requireSingle,
+            string sheet)
         {
-            var result = new List<QuantityReportRow>(source.Count);
+            var result = new List<QuantityReportRow>(admittedCount);
             string? fingerprint = null;
-            for (var index = 0; index < source.Count; index++)
+            for (var index = 0; index < admittedCount; index++)
             {
                 var row = source[index] ?? throw new InvalidDataException("Customer workbook contains a null quantity row.");
                 if (row.Count <= 0) throw new InvalidDataException("Customer workbook row Count must be positive.");
@@ -182,6 +194,8 @@ namespace QS3D.Core.Export
                     throw new InvalidDataException("Customer workbook rows contain conflicting drawing fingerprints.");
                 result.Add(copy);
             }
+            if (source.Count != admittedCount)
+                throw new InvalidDataException("Customer workbook " + sheet + " row Count changed during snapshot traversal.");
             return result;
         }
 

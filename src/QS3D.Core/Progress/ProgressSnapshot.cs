@@ -117,7 +117,6 @@ namespace QS3D.Core.Progress
             return builder.ToString();
         }
     }
-
     public sealed class ProgressSnapshot
     {
         public ProgressSnapshot(
@@ -431,6 +430,45 @@ namespace QS3D.Core.Progress
         internal static List<T> Snapshot<T>(IEnumerable<T> source, string parameterName, string label) where T : class
         {
             if (source == null) throw new ArgumentNullException(parameterName);
+            var knownCount = SnapshotKnownCount(source, parameterName, label);
+
+            var result = new List<T>();
+            using (var enumerator = source.GetEnumerator())
+            {
+                while (true)
+                {
+                    RequireKnownCountStable(source, knownCount, parameterName, label);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireKnownCountStable(source, knownCount, parameterName, label);
+                    if (knownCount.HasValue && result.Count >= knownCount.Value)
+                        throw CountMismatch(knownCount.Value, result.Count + 1, parameterName, label);
+                    if (result.Count == MaximumEntries)
+                        throw TooMany(parameterName, label);
+
+                    var item = enumerator.Current;
+                    RequireKnownCountStable(source, knownCount, parameterName, label);
+                    if (item == null)
+                        throw new ArgumentException(label + " cannot contain null entries.", parameterName);
+                    result.Add(item);
+                }
+            }
+            if (knownCount.HasValue && knownCount.Value != result.Count)
+                throw CountMismatch(knownCount.Value, result.Count, parameterName, label);
+
+            RequireKnownCountStable(source, knownCount, parameterName, label);
+            return result;
+        }
+
+        private static void RequireKnownCountStable<T>(IEnumerable<T> source, int? expectedKnownCount, string parameterName, string label) where T : class
+        {
+            var observedKnownCount = SnapshotKnownCount(source, parameterName, label);
+            if (expectedKnownCount != observedKnownCount)
+                throw new ArgumentException(label + " known count changed during traversal.", parameterName);
+        }
+
+        private static int? SnapshotKnownCount<T>(IEnumerable<T> source, string parameterName, string label) where T : class
+        {
             int? knownCount = null;
             if (source is ICollection<T> collection)
                 ObserveCount(collection.Count, ref knownCount, parameterName, label);
@@ -438,19 +476,7 @@ namespace QS3D.Core.Progress
                 ObserveCount(readOnlyCollection.Count, ref knownCount, parameterName, label);
             if (source is ICollection nonGenericCollection)
                 ObserveCount(nonGenericCollection.Count, ref knownCount, parameterName, label);
-
-            var result = new List<T>();
-            foreach (var item in source)
-            {
-                if (result.Count == MaximumEntries)
-                    throw TooMany(parameterName, label);
-                if (item == null)
-                    throw new ArgumentException(label + " cannot contain null entries.", parameterName);
-                result.Add(item);
-            }
-            if (knownCount.HasValue && knownCount.Value != result.Count)
-                throw new ArgumentException(label + " traversal count does not match its reported known count.", parameterName);
-            return result;
+            return knownCount;
         }
 
         private static void ObserveCount(int count, ref int? knownCount, string parameterName, string label)
@@ -463,6 +489,12 @@ namespace QS3D.Core.Progress
                 throw new ArgumentException(label + " reports conflicting known counts.", parameterName);
             knownCount = count;
         }
+
+        private static ArgumentException CountMismatch(int knownCount, int observedCount, string parameterName, string label) =>
+            new ArgumentException(
+                label + " traversal produced " + observedCount.ToString(CultureInfo.InvariantCulture) +
+                " entries but its reported known count was " + knownCount.ToString(CultureInfo.InvariantCulture) + ".",
+                parameterName);
 
         private static ArgumentException TooMany(string parameterName, string label) =>
             new ArgumentException(label + " supports at most " + MaximumEntries + " entries.", parameterName);

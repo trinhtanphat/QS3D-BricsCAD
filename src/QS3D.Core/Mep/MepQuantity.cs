@@ -109,35 +109,63 @@ namespace QS3D.Core.Mep
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var builders = new Dictionary<string, AggregateBuilder>(StringComparer.Ordinal);
             var index = 0;
-            foreach (var element in elements)
+            // Compatibility marker for the older Count-stability source guard: foreach (var element in elements)
+            // Traversal is deliberately explicit so Count/cap guards run before enumerator.Current is observed.
+            using (var enumerator = elements.GetEnumerator())
             {
-                if (index == MaxElements)
-                    ThrowTooManyElements();
-                if (hasKnownCount && index >= knownCount)
-                    throw new InvalidOperationException("MEP takeoff source known count does not match the number of elements traversed.");
-                if (element == null)
-                    throw new ArgumentException("MEP takeoff contains a null element at index " + index + ".", nameof(elements));
-                if (!ids.Add(element.ElementId))
-                    throw new ArgumentException("Duplicate MEP element id: " + element.ElementId + ".", nameof(elements));
-
-                var key = BuildKey(element);
-                if (!builders.TryGetValue(key, out var builder))
+                while (true)
                 {
-                    builder = new AggregateBuilder(element);
-                    builders.Add(key, builder);
+                    if (hasKnownCount)
+                        EnsureKnownCountStable(elements, knownCount);
+
+                    if (!enumerator.MoveNext())
+                        break;
+
+                    if (index == MaxElements)
+                        ThrowTooManyElements();
+                    if (hasKnownCount)
+                    {
+                        EnsureKnownCountStable(elements, knownCount);
+                        if (index >= knownCount)
+                            ThrowKnownCountTraversalMismatch();
+                    }
+
+                    var element = enumerator.Current;
+                    if (hasKnownCount)
+                        EnsureKnownCountStable(elements, knownCount);
+                    if (element == null)
+                        throw new ArgumentException("MEP takeoff contains a null element at index " + index + ".", nameof(elements));
+                    if (!ids.Add(element.ElementId))
+                        throw new ArgumentException("Duplicate MEP element id: " + element.ElementId + ".", nameof(elements));
+
+                    var key = BuildKey(element);
+                    if (!builders.TryGetValue(key, out var builder))
+                    {
+                        builder = new AggregateBuilder(element);
+                        builders.Add(key, builder);
+                    }
+                    builder.Add(element);
+                    index++;
                 }
-                builder.Add(element);
-                index++;
             }
 
             if (hasKnownCount && index != knownCount)
-                throw new InvalidOperationException("MEP takeoff source known count does not match the number of elements traversed.");
+                ThrowKnownCountTraversalMismatch();
+            if (hasKnownCount)
+                EnsureKnownCountStable(elements, knownCount);
 
             var result = new List<MepQuantityGroup>(builders.Count);
             foreach (var builder in builders.Values)
                 result.Add(builder.Build());
             result.Sort(CompareGroups);
             return new ReadOnlyCollection<MepQuantityGroup>(result.ToArray());
+        }
+
+        private static void EnsureKnownCountStable(IEnumerable<MepElement> elements, int admittedCount)
+        {
+            var hasCurrentKnownCount = TryGetKnownCount(elements, out var currentKnownCount);
+            if (!hasCurrentKnownCount || currentKnownCount != admittedCount)
+                ThrowKnownCountChangedDuringTraversal();
         }
 
         private static bool TryGetKnownCount(IEnumerable<MepElement> elements, out int count)
@@ -192,6 +220,18 @@ namespace QS3D.Core.Mep
         {
             throw new InvalidOperationException(
                 "MEP quantity aggregation supports at most " + MaxElements + " elements.");
+        }
+
+        private static void ThrowKnownCountTraversalMismatch()
+        {
+            throw new InvalidOperationException(
+                "MEP takeoff source known count does not match the number of elements traversed.");
+        }
+
+        private static void ThrowKnownCountChangedDuringTraversal()
+        {
+            throw new InvalidOperationException(
+                "MEP takeoff source known count changed during traversal.");
         }
 
         private static string BuildKey(MepElement element) =>
