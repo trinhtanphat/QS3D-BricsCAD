@@ -12,7 +12,8 @@ required_source = [
     "var admittedRowCount = rows.Count;",
     "RequireCsvRowCountAdmission(admittedRowCount);",
     "RequireStableCsvRowCount(rows, admittedRowCount);",
-    "var row = rows[i] ?? throw new ArgumentException",
+    "var row = rows[i];",
+    "if (row == null)",
     "MEP/TBQ CSV row Count changed during serialization.",
     "MEP/TBQ CSV row Count must not be negative.",
 ]
@@ -32,7 +33,9 @@ ordered = [
     "RequireCsvRowCountAdmission(admittedRowCount);",
     "for (var i = 0; i < admittedRowCount; i++)",
     "RequireStableCsvRowCount(rows, admittedRowCount);",
-    "var row = rows[i] ?? throw new ArgumentException",
+    "var row = rows[i];",
+    "RequireStableCsvRowCount(rows, admittedRowCount);",
+    "if (row == null)",
     "RequireStableCsvRowCount(rows, admittedRowCount);",
     "return builder.ToString();",
 ]
@@ -47,10 +50,13 @@ required_smoke = [
     "[ModuleInitializer]",
     "GrowthAfterFirstRowRejectsBeforeUnexpectedIndexerRead",
     "ShrinkAfterFirstRowRejectsBeforeMissingIndexerRead",
+    "IndexerInducedCountDriftPreemptsNullRowValidation",
     "PostTraversalCountDriftRejects",
     "NegativeCountRejectsBeforeIndexerRead",
     "OversizedCountRejectsBeforeIndexerRead",
+    "NullRowValidationRemainsInsideAdmittedCount",
     "StableRowsSerializeDeterministically",
+    "new MepTbqReportRow[] { null! }",
     "source.IndexerReads == 1",
     "source.IndexerReads == 0",
 ]
@@ -58,4 +64,4 @@ for token in required_smoke:
     if token not in smoke:
         raise SystemExit(f"MEP/TBQ CSV Count stability guard missing smoke token: {token}")
 
-print("PASS MEP/TBQ CSV row Count stability source guard")
+print("PASS MEP/TBQ CSV row Count stability including post-index rebound")

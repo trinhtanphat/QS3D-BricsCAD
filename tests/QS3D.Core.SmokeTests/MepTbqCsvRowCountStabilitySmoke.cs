@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
         {
             GrowthAfterFirstRowRejectsBeforeUnexpectedIndexerRead();
             ShrinkAfterFirstRowRejectsBeforeMissingIndexerRead();
+            IndexerInducedCountDriftPreemptsNullRowValidation();
             PostTraversalCountDriftRejects();
             NegativeCountRejectsBeforeIndexerRead();
             OversizedCountRejectsBeforeIndexerRead();
@@ -36,6 +37,18 @@ namespace QS3D.Core.SmokeTests
             ThrowsCountIntegrity(() => new MepTbqProjectionService().SerializeCsv(source));
             Require(source.IndexerReads == 1,
                 "MEP/TBQ CSV Count shrink must reject before reading an index outside the new source generation.");
+        }
+
+        private static void IndexerInducedCountDriftPreemptsNullRowValidation()
+        {
+            var source = new MutableCountRows(
+                new MepTbqReportRow[] { null! },
+                before: 1,
+                after: 2,
+                mutateAfterIndexerRead: 1);
+            ThrowsCountIntegrity(() => new MepTbqProjectionService().SerializeCsv(source));
+            Require(source.IndexerReads == 1,
+                "MEP/TBQ CSV indexer-induced Count drift must fail after exactly one admitted indexer read.");
         }
 
         private static void PostTraversalCountDriftRejects()
