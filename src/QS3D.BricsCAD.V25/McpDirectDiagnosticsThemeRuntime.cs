@@ -269,7 +269,17 @@ namespace QS3D.BricsCAD.V25
             Qs3dThemeCoordinator.SetMode(mode, "mcp-theme-set");
             ensureMutationRunning();
             if (audit != null) audit("mode=" + modeText + "; host-wide=true");
-            return ThemeStateJson();
+            return ThemeMutationAckJson(mode);
+        }
+
+        private static string ThemeMutationAckJson(Qs3dThemeMode requestedMode)
+        {
+            var appliedMode = Qs3dThemeCoordinator.CurrentMode;
+            var effectiveDark = Qs3dThemeCoordinator.EffectiveDark;
+            return "{\"applied\":true,\"requested\":\"" + ModeText(requestedMode)
+                   + "\",\"mode\":\"" + ModeText(appliedMode)
+                   + "\",\"effective\":\"" + (effectiveDark ? "dark" : "light")
+                   + "\",\"verification\":\"theme_get\"}";
         }
 
         private static int Integer(string body, string property, int fallback, int minimum, int maximum)
