@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -36,11 +37,61 @@ namespace QS3D.Core.Services
         {
             _graph = graph ?? throw new ArgumentNullException(nameof(graph));
             if (regenerators == null) throw new ArgumentNullException(nameof(regenerators));
-            var materialized = new List<IElementRegenerator>(regenerators);
-            if (materialized.Any(x => x == null))
-                throw new ArgumentException("Regenerator collection cannot contain null entries.", nameof(regenerators));
-            _regenerators = materialized;
+            _regenerators = MaterializeRegenerators(regenerators);
             _ruleEngine = new QuantityRuleEngine();
+        }
+
+        private static List<IElementRegenerator> MaterializeRegenerators(IEnumerable<IElementRegenerator> regenerators)
+        {
+            var knownCount = ReadKnownRegeneratorCount(regenerators);
+            var materialized = new List<IElementRegenerator>(knownCount ?? 0);
+            using (var enumerator = regenerators.GetEnumerator())
+            {
+                EnsureKnownRegeneratorCountStable(regenerators, knownCount);
+                while (true)
+                {
+                    EnsureKnownRegeneratorCountStable(regenerators, knownCount);
+                    var moved = enumerator.MoveNext();
+                    EnsureKnownRegeneratorCountStable(regenerators, knownCount);
+                    if (!moved) break;
+                    if (knownCount.HasValue && materialized.Count >= knownCount.Value)
+                        throw new InvalidOperationException("Regenerator collection enumerated more entries than its reported Count " + knownCount.Value.ToString(CultureInfo.InvariantCulture) + ".");
+                    var current = enumerator.Current;
+                    EnsureKnownRegeneratorCountStable(regenerators, knownCount);
+                    if (current == null)
+                        throw new ArgumentException("Regenerator collection cannot contain null entries.", nameof(regenerators));
+                    materialized.Add(current);
+                }
+            }
+            EnsureKnownRegeneratorCountStable(regenerators, knownCount);
+            if (knownCount.HasValue && materialized.Count != knownCount.Value)
+                throw new InvalidOperationException("Regenerator collection reported Count " + knownCount.Value.ToString(CultureInfo.InvariantCulture) + " but enumerated " + materialized.Count.ToString(CultureInfo.InvariantCulture) + " entries.");
+            return materialized;
+        }
+
+        private static void EnsureKnownRegeneratorCountStable(IEnumerable<IElementRegenerator> regenerators, int? admittedCount)
+        {
+            var observedCount = ReadKnownRegeneratorCount(regenerators);
+            if (observedCount != admittedCount)
+                throw new InvalidOperationException("Regenerator collection changed its reported Count during enumeration.");
+        }
+
+        private static int? ReadKnownRegeneratorCount(IEnumerable<IElementRegenerator> regenerators)
+        {
+            var genericCount = regenerators is ICollection<IElementRegenerator> genericCollection ? (int?)genericCollection.Count : null;
+            var readOnlyCount = regenerators is IReadOnlyCollection<IElementRegenerator> readOnlyCollection ? (int?)readOnlyCollection.Count : null;
+            var nonGenericCount = regenerators is ICollection nonGenericCollection ? (int?)nonGenericCollection.Count : null;
+            if ((genericCount.HasValue && genericCount.Value < 0) ||
+                (readOnlyCount.HasValue && readOnlyCount.Value < 0) ||
+                (nonGenericCount.HasValue && nonGenericCount.Value < 0))
+                throw new ArgumentException("Regenerator collection reported a negative Count.", nameof(regenerators));
+            var expected = genericCount ?? readOnlyCount ?? nonGenericCount;
+            if (!expected.HasValue) return null;
+            if ((genericCount.HasValue && genericCount.Value != expected.Value) ||
+                (readOnlyCount.HasValue && readOnlyCount.Value != expected.Value) ||
+                (nonGenericCount.HasValue && nonGenericCount.Value != expected.Value))
+                throw new ArgumentException("Regenerator collection reported conflicting Count values.", nameof(regenerators));
+            return expected;
         }
 
         public void MarkChanged(ProjectState project, string elementId, ElementDirtyFlags flags)
