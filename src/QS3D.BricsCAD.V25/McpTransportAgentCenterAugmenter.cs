@@ -166,7 +166,7 @@ namespace QS3D.BricsCAD.V25
                 foreach (var key in keys)
                 {
                     var sessionId = key as string;
-                    if (!string.IsNullOrWhiteSpace(sessionId)) result.Add(sessionId);
+                    if (!string.IsNullOrWhiteSpace(sessionId)) result.Add(sessionId!);
                 }
                 return result;
             }
