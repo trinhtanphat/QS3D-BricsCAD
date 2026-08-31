@@ -84,14 +84,30 @@ disable_block = session.split("public static void DisableForegroundAccessFromLoc
 if 'StopSession(reason, false, false, "OFF")' not in disable_block:
     fail("foreground OFF must revoke desktop access without stopping background CAD/API automation")
 
-# WPF click handlers must fail closed without rethrowing into the dispatcher.
-toggle_block = persistence_ui.split("private static void ToggleDesktopForegroundAccess()", 1)[1].split("private static void TrySetInteractionPolicy", 1)[0]
-if "throw;" in toggle_block:
-    fail("foreground toggle must not rethrow failures into the WPF dispatcher")
-if "McpAgentExperience.Error(" not in toggle_block:
-    fail("foreground toggle failure must publish a bounded local error after fail-closed revocation")
-if 'TrySetInteractionPolicy("background_only")' not in toggle_block:
-    fail("foreground toggle failure must restore background_only before reporting failure")
+# WPF click handlers must fail closed without rethrowing into the dispatcher. Support both the
+# legacy local-loopback implementation and the direct v2 runtime helpers without widening the
+# inspected region past the actual click handler/helper that owns fail-closed behavior.
+toggle_tail = persistence_ui.split("private static void ToggleDesktopForegroundAccess()", 1)[1]
+if "private static void ToggleDesktopForegroundAccessCore()" in toggle_tail:
+    toggle_handler = toggle_tail.split("private static void ToggleDesktopForegroundAccessCore()", 1)[0]
+    if "throw;" in toggle_handler:
+        fail("foreground toggle handler must not rethrow failures into the WPF dispatcher")
+    if "FailClosedForegroundAccess(ex);" not in toggle_handler:
+        fail("foreground toggle handler must route failures through fail-closed revocation")
+    fail_closed = persistence_ui.split("private static void FailClosedForegroundAccess(Exception error)", 1)[1].split("private static void", 1)[0]
+    if "McpAgentExperience.Error(" not in fail_closed:
+        fail("foreground toggle failure must publish a bounded local error after fail-closed revocation")
+    if ('McpBackgroundHostRuntime.DisableForegroundFromLocalUser()' not in fail_closed
+            and 'TrySetInteractionPolicy("background_only")' not in fail_closed):
+        fail("foreground toggle failure must restore background_only before reporting failure")
+else:
+    toggle_block = toggle_tail.split("private static void TrySetInteractionPolicy", 1)[0]
+    if "throw;" in toggle_block:
+        fail("foreground toggle must not rethrow failures into the WPF dispatcher")
+    if "McpAgentExperience.Error(" not in toggle_block:
+        fail("foreground toggle failure must publish a bounded local error after fail-closed revocation")
+    if 'TrySetInteractionPolicy("background_only")' not in toggle_block:
+        fail("foreground toggle failure must restore background_only before reporting failure")
 
 # The local mouse/keyboard/screen toggle must own *all* user-screen access. The legacy Resume
 # button may still enable the consent session for compatibility, but background_only must deny a
