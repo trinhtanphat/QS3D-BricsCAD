@@ -201,6 +201,7 @@ namespace QS3D.Core.Cost
                     if (knownCount.HasValue && index == knownCount.Value)
                         ThrowKnownCountMismatch("bill items", knownCount.Value, index + 1);
                     var item = enumerator.Current;
+                    RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);
                     if (item == null) throw new ArgumentException("TBQ workspace contains a null bill item at index " + index + ".", nameof(items));
                     if (!ids.Add(item.ItemCode)) throw new ArgumentException("Duplicate TBQ bill item code: " + item.ItemCode + ".", nameof(items));
                     snapshot.Add(item);
@@ -232,6 +233,7 @@ namespace QS3D.Core.Cost
                     if (knownCount.HasValue && index == knownCount.Value)
                         ThrowKnownCountMismatch("build-up rates", knownCount.Value, index + 1);
                     var item = enumerator.Current;
+                    RequireKnownCountStable(rates, MaxBuildUpRates, "build-up rates", knownCount);
                     if (item == null) throw new ArgumentException("TBQ workspace contains a null build-up rate at index " + index + ".", nameof(rates));
                     if (!ids.Add(item.RateCode)) throw new ArgumentException("Duplicate TBQ build-up rate code: " + item.RateCode + ".", nameof(rates));
                     snapshot.Add(item);
@@ -293,6 +295,7 @@ namespace QS3D.Core.Cost
                     if (knownCount.HasValue && count == knownCount.Value)
                         ThrowKnownCountMismatch(label, knownCount.Value, count + 1);
                     var item = enumerator.Current;
+                    RequireKnownCountStable(source, maximum, label, knownCount);
                     count++;
                     yield return item;
                 }
