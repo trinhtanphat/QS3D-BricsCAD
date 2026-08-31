@@ -19,7 +19,9 @@ QS3D is a clean-room **BIM, semantic 3D, coordination and quantity-takeoff plugi
 | `tests/` | multiple test executables/projects | Deterministic Core regression, architecture, host/runtime harnesses and focused contract tests |
 | `scripts/` + `.github/workflows/` | Python/PowerShell/YAML | Preflight, packaging, install/update, CI, release and runtime-proof tooling |
 
-A matching licensed BricsCAD installation is required for host build/runtime qualification. Proprietary BricsCAD SDK binaries, customer drawings, private project data and third-party product source are intentionally not committed.
+`QS3D.Core` references the pinned `external/QS3D-Platform` submodule for shared vendor-neutral contracts and platform code.
+
+A matching licensed BricsCAD installation is required for host builds and runtime qualification. Proprietary BricsCAD SDK binaries, customer drawings, private project data and third-party product source are intentionally not committed.
 
 ## Capability map
 
