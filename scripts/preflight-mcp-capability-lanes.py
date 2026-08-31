@@ -56,7 +56,7 @@ def main():
     for tool in ("mcp_status", "bricscad_status", "qs3d_status", "qs3d_domain_status", "qs3d_place_single_footing"):
         require(errors, f'Tool("{tool}"' in server, "MCP transport does not publish tool: " + tool)
     for token in (
-        '"executionMode"', '"execution_mode"', '"AUTO"', '"CAD_DIRECT"', '"QS3D_DOMAIN"',
+        '\\"executionMode\\"', '\\"execution_mode\\"', '\\"AUTO\\"', '\\"CAD_DIRECT\\"', '\\"QS3D_DOMAIN\\"',
         '\\"structuredContent\\":{\\"error\\"', '\\"code\\"', '\\"lane\\"', '\\"message\\"',
         "McpToolCapabilityContract.ClassifyFailure",
     ):
