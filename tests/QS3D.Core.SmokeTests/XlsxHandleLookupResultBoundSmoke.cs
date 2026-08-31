@@ -162,7 +162,7 @@ namespace QS3D.Core.SmokeTests
             }
 
             public int Count => _transientCount;
-            int IReadOnlyCollection<string>.Count => _readOnlyCount;
+            int IReadOnlyCollection<string>.Count => _readOnlyCount == _genericCount ? _transientCount : _readOnlyCount;
             public bool IsReadOnly => true;
             internal int CurrentReads { get; private set; }
             internal int GetEnumeratorCalls { get; private set; }
