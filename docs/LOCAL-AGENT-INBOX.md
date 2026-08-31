@@ -1,6 +1,6 @@
 # QS3D local-agent inbox
 
-**Updated:** 2026-08-27 (UTC+7)
+**Updated:** 2026-08-31 (UTC+7)
 
 This file is the **single live queue for LOCAL_ONLY work**. Detailed runbooks remain in the linked local qualification/handoff documents, but a local agent should start here before opening those longer files.
 
@@ -338,6 +338,10 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 
 - Priority: P1
 - Status: IN_PROGRESS
+- Current source/artifact status: `SOURCE_FIX_4998_MERGED / WAITING_POST_MERGE_PUBLISHED_DESCENDANT / LICENSED_RUNTIME_PENDING`
+- Current source boundary: PR #4998 final head `70043ca774b54f4f2fb6dc3b5710299ea1ec6dfc`; protected Shared CI `33374724885` passed `preflight` + `core`; merged to protected main as `80f609057bb95b58f08f3ea88ea22411b88cb558`. This supersedes `.10233` and every pre-merge Workspace crash candidate.
+- Current release truth: latest published preview `.10270` targets pre-merge `f9cf4d2e8c9943e729a1034276920e015a95bc53`, so it is not admissible for this Workspace crash qualification. Wait for a published V25 descendant containing `80f609057b...`; publication/source CI still is not `LOCAL_PASS`. Release coordination: #5004.
+- Current runtime gate: preserve all already accepted bounded PASS rows and do not rerun them; execute only affected/unfinished Workspace rows after an exact post-merge published descendant is pinned and the licensed host is exclusively allocated.
 - Area: Project Browser / Workspace / modeless selection
 - Why local: Core query/grouping/virtualization/selection/workspace-state coordination is source-safe, but final integration depends on real BricsCAD Editor implied selection, live ObjectId/handle resolution, modeless WPF palette lifecycle, document switching, focus/zoom behavior and Unicode/HiDPI rendering.
 - Source-side status: REMOTE_DONE for exclusive Workspace Instance-selection boundaries (`8e89f4cf8aba98cec4c2b92116fbe4ab9ea9474e`, `5e67c17bddb47a7875befafafe6ee3245f327135`, guarded by `c61cf302ba3b1fe67050a2ec35f4cdbfed38f8b2`) and live Family-value Instance Reset (`5e08dde3b6eeb00d6a24fd377f22302c3937470f`, guarded by `e1b39133ed604921bfde67f204a3e71beaae5f42`). Runtime/modeless proof remains `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`; remote agents should only revisit if these source paths materially change.
@@ -355,7 +359,7 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Related source/docs: `src/QS3D.Core/Navigation/ProjectBrowserWorkspaceCoordinator.cs`; `src/QS3D.Core/Navigation/ProjectBrowserSelectionPlanner.cs`; `src/QS3D.Core/Navigation/ProjectBrowserWorkspaceStateStore.cs`; `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs`; `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.SelectionInspection.cs`; `src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs`; `scripts/preflight-workspace-property-safety.py`; `docs/REMOTE-AGENT-SCOPE.md`; `docs/LOCAL-V25-QUALIFICATION.md`
 - Additional #1760 source/docs: `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.FamilySubtype.cs`; `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.QuickDraw.cs`; `scripts/preflight-workspace-family-subtype-add.py`; issue `#1760`; PR `#1772`.
 - Additional #2399 source/docs: `src/QS3D.BricsCAD.V25/PaletteCoordinator.cs`; `src/QS3D.BricsCAD.V25/UI/WorkspacePanel.DedicatedPropertiesPalette.cs`; `scripts/preflight-dedicated-qs3d-properties-palette.py`; `scripts/preflight-qs3d-properties-single-editor-authority.py`; issue `#2399`; PR `#2524`.
-- Updated: 2026-08-26
+- Updated: 2026-08-31
 
 ## LOCAL-013 — clean-room BRC public capability and eligible CAD quantity round-trip
 
@@ -468,36 +472,36 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 - Status: IN_PROGRESS
 - Area: issue `#4041`; BricsCAD V25 Móng Bè Add/Edit/native 3D/Quantity Insight viewport highlight
 - Why local: Acceptance requires the licensed interactive BricsCAD V25 host, real modeless Workspace/Properties rendering, native `Solid3d` geometry, direct viewport highlighting, and fresh-process DWG reopen; hosted/static/source/package evidence cannot establish these behaviors or be promoted to `LOCAL_PASS`.
-- Source/artifact status: `10230_TERMINAL_NO_RESULT_DO_NOT_RETRY / SOURCE_FIX_4268_MERGED / DESCENDANT_10233_ELIGIBLE / WAITING_FRESH_TASK_AND_72_ALLOCATION`
+- Source/artifact status: `10230_TERMINAL_NO_RESULT_DO_NOT_RETRY / SOURCE_FIX_4998_MERGED / WAITING_POST_MERGE_PUBLISHED_DESCENDANT / LICENSED_RUNTIME_PENDING`
 - Remote disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`
 - Consumed runtime artifact: `v0.1.0-preview.10230`; source `9c13be8d8f34a0b3b0a66ceba431a019f3c695d0`; exactly one licensed V25 invocation ended `NO_RESULT / STARTUP_WPF_VIRTUALIZATION_EXCEPTION_AFTER_NETLOAD_BEFORE_BASELINE`. Product/probe NETLOAD completed, then the `VirtualizingStackPanel.SetVirtualizationState` exception family stopped execution before Workspace baseline; `stages=[]`, so none of the preregistered Móng Bè/formwork acceptance matrix ran. Guarded pre-state restoration and literal `HOST_RELEASED -> #72` cleanup were accepted. `.10230` is consumed and must not be retried or repointed.
-- Successor source fix: issue #4173 / protected PR #4268 merged the constructor-owned pre-first-layout `ModelTree` reparent correction as `bc04243aeb452d2f48217fbf31556280cc326d69`; exact source head `6c2fb237e1aecffc64b838524ed004fc12af1033`; protected run `33140765199` passed `preflight` + `core`. This is source/build evidence only and is not `LOCAL_PASS`.
-- Exact eligible descendant: `v0.1.0-preview.10233`; source/tag `94191b0f7b1dd997cb6b5dc0e8276ed9c5ae2964`; official V25 ZIP SHA-256 `85B9D90154460387D9EB65F45554AD2009733310910626C3B8B287AC285B0ECB`; checksum asset SHA-256 `2C0A49C7B568AC31A94596BD22151F595462AA5226F7EF3C32BC7EF59C9D600C`; release workflow `33142138765` completed `SUCCESS`. The release is a verified descendant of #4268 and is artifact/source eligible only; cloud/release success is not licensed runtime PASS.
-- Runtime gate: do not touch the shared licensed host yet. A new attempt requires one current LOCAL-021 task explicitly bound to exact `.10233@94191b0f7b1dd997cb6b5dc0e8276ed9c5ae2964`, literal #72 `OFFLINE_FREEZE`, accepted immutable `OFFLINE_READY` / exclusive-host admission, then one fresh named V25 allocation. The consumed `.10230` task/allocation is never reusable.
+- Successor source fix: the earlier #4268 ModelTree containment was necessary but insufficient. Issue #4173 is now closed after PR #4998 merged the remaining grouped `WorkspacePanel.PropertyList` first-layout containment: final PR head `70043ca774b54f4f2fb6dc3b5710299ea1ec6dfc`, protected Shared CI `33374724885` with `preflight` + `core` SUCCESS, merge `80f609057bb95b58f08f3ea88ea22411b88cb558`. Source/build evidence is not `LOCAL_PASS`.
+- Current release truth: `.10233` is superseded by the later PropertyList repro/fix. The newest published preview `.10270` targets `f9cf4d2e8c9943e729a1034276920e015a95bc53`, the parent before merge `80f609...`; therefore `.10233`, `.10270` and every earlier preview are not admissible. Wait for an exact published V25 descendant containing `80f609057b...`; coordination issue #5004 owns only publication readiness, not runtime PASS.
+- Runtime gate: do not touch the shared licensed host until a published V25 descendant containing `80f609057b...` is pinned. Then require one fresh LOCAL-021 task identity, exact tag/source/package/adapter/Core/probe/runner hashes, literal #72 exclusive-host admission, zero pre-existing BricsCAD processes, one bounded invocation, and exact cleanup. The consumed `.10230` task/allocation is never reusable.
 - Scenario: prove Workspace baseline without the historical startup crash; `Móng > Móng Bè > Add` creates and auto-selects `Móng Bè-N`; prove the dedicated schema (`Tên Family`, `Loại=Móng Bè`, `Tầng`, `Dày`, `Cách đặt`, `Cao độ đầu` with strict `bottom_level`/`top_level`, Display, Mark/Comment/WBS and material fields) without generic Foundation/`Bề dày`/`Offset đáy`; create a 4 m × 6 m × 0.8 m native raft with `19.2 m³`, correct bottom/top Z, edit/regenerate thickness `800 -> 900 -> 800 mm`, Quantity Insight row/highlight behavior, save/QSAVE plus fresh-process cold reopen, and complete cleanup on licensed V25.
-- Evidence: historical `.10222`, `.10225` and `.10228` attempts remain `NO_RESULT`; `.10230@9c13be8d8f34a0b3b0a66ceba431a019f3c695d0` is terminal `NO_RESULT / DO_NOT_RETRY` after NETLOAD and before baseline. No LOCAL-021 `LOCAL_PASS` exists yet. `.10233` is the eligible successor artifact only and has not been licensed-rerun.
+- Evidence: historical `.10222`, `.10225` and `.10228` attempts remain `NO_RESULT`; `.10230@9c13be8d8f34a0b3b0a66ceba431a019f3c695d0` is terminal `NO_RESULT / DO_NOT_RETRY` after NETLOAD and before baseline. No LOCAL-021 `LOCAL_PASS` exists yet. `.10233` and `.10270` are pre-#4998 artifacts and are not eligible for the next licensed run.
 - Evidence required: exact artifact/source/host identity; exact visible property labels and auto-selected Family; semantic/native ownership and 4×6×0.8 m geometry; `19.2 m³`; bottom/top Z and thickness-regeneration values; Quantity Insight/highlight observations; save/fresh-process cold reopen; sanitized Loader/DemandLoad/profile/UI restoration and stable zero owned-host residue.
-- Related docs: `docs/LOCAL-V25-QUALIFICATION.md`; `docs/LOCAL-QUANTITY-REVIEW-CUBICOST-ACCEPTANCE.md`; issues #4041, #4173 and #4282; draft PR #4042; source fix PR #4268.
-- Updated: 2026-08-28
+- Related docs: `docs/LOCAL-V25-QUALIFICATION.md`; `docs/LOCAL-QUANTITY-REVIEW-CUBICOST-ACCEPTANCE.md`; issues #4041, closed #4173, #4282 and #5004; source fix PR #4998.
+- Updated: 2026-08-31
 
 ## LOCAL-022 — Móng đơn placement/edit/save-reopen on V25/V26
 
 - Priority: P0
-- Status: BLOCKED
+- Status: IN_PROGRESS
 - Area: issue `#4034`; BricsCAD V25/V26 Móng đơn Add/placement/edit/regenerate/save-reopen
 - Why local: Final acceptance requires licensed interactive BricsCAD V25/V26 placement, native Foundation geometry, editing/regeneration, persistence and cold-reopen behavior that offline/static gates cannot prove.
-- Source/artifact status: `V25_NO_RESULT / V26_NO_RESULT / POST_10229_V25_NO_RESULT / SOURCE_SUCCESSOR_REQUIRED / WAITING_NEW_DESCENDANT`
+- Source/artifact status: `V25_NO_RESULT / V26_NO_RESULT / SOURCE_FIX_4998_MERGED / WAITING_POST_MERGE_PUBLISHED_DESCENDANT / LICENSED_RUNTIME_PENDING`
 - Remote disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`
 - Consumed exact runtime source: `28e48e6dbd4e8976b31ab16f344ce0f76d7a7bf5`
 - Consumed runtime verdicts: V25 = `NO_RESULT / STARTUP_WPF_VIRTUALIZATION_EXCEPTION_BEFORE_BASELINE`; V26 = `NO_RESULT / STARTUP_WPF_VIRTUALIZATION_EXCEPTION_BEFORE_BASELINE`. Both reached product/probe `NETLOAD` and `QS3D WILL_START`, but the product baseline never arrived and the Móng đơn acceptance matrix was not run. Both cells completed guarded cleanup and ended `HOST_RELEASED`; no `LOCAL_PASS` exists for this lane.
-- Historical startup containment: protected PR #4179 landed the first #4173 Workspace ModelTree virtualization containment at `main@a7b7dfb456654509c9eccf33f854350a61d9e59d`; protected run `33069632255` passed `preflight` + `core`, deterministic smoke and V25 plugin build. That source/build evidence remains historical, but licensed post-fix reproduction proved the containment insufficient and #4173 is now reopened for a successor source fix.
+- Historical startup containment: #4179/#4268 ModelTree containment remained insufficient. The successor source fix is now merged: closed issue #4173 / PR #4998, final head `70043ca774b54f4f2fb6dc3b5710299ea1ec6dfc`, protected Shared CI `33374724885` with `preflight` + `core` SUCCESS, merge `80f609057bb95b58f08f3ea88ea22411b88cb558`. Every earlier preview is superseded for this crash qualification.
 - Consumed post-#4179 descendant: `v0.1.0-preview.10229`; exact source/tag `a7b7dfb456654509c9eccf33f854350a61d9e59d`; ProductVersion `0.1.0-preview.10229`; official V25 ZIP SHA-256 `B7FE681B7958908B6E0E84C76CC6B62E8DFE97B42EAD3F80A4E01864D0F670F1`. Licensed V25 on sibling Foundation lane #4041 reached product/probe `NETLOAD` / `QS3D WILL_START` and again stopped before Workspace baseline with the same `VirtualizingStackPanel` virtualization-state exception class. No Foundation acceptance matrix ran. Therefore `.10229` is `NO_RESULT / DO_NOT_RETRY` for startup-dependent Foundation qualification and must not be used as a LOCAL-022 runtime candidate; this does not claim that #4034 itself executed the Móng đơn matrix on `.10229`.
 - Source basis: #4019 / merged PR #4021, restored/finalized by #4058. No production source fix belongs in this runtime-only lane.
 - Scenario: independently qualify V25 and V26 Cancel, `H2=0`, repeated placement, edit/regenerate, `H2>0`, semantic/native geometry, a generic Foundation control, `QS3DSAVE`/`QSAVE`, and cold reopen on one explicitly authorized exact successor source identity after the reopened startup defect is fixed.
-- Runtime gate: the consumed `28e48e6d...` cells are non-retryable and the old post-#4179 `.10229` allocation request is superseded. Do not launch or attach BricsCAD for LOCAL-022 until reopened #4173 lands a successor source fix, a new exact descendant artifact is pinned, and #72 issues a fresh literal named authorization / `HOST_RELEASED` allocation for `#4034 / LOCAL-022` on that exact successor identity. Later `main` drift alone does not repoint or qualify this runtime lane.
+- Runtime gate: the consumed `28e48e6d...` cells and `.10229` request are non-retryable. Do not launch or attach BricsCAD until an exact published descendant containing `80f609057b...` is pinned. Then use a fresh LOCAL-022 V25 task/allocation first, clean up completely, and only afterward run V26 on the same exact source identity with a separate fresh task/allocation. `.10233`, `.10270` and all earlier previews are inadmissible; release coordination is #5004.
 - Evidence required: exact source/ProductVersion/hash identities for matching V25/V26 adapters and dependencies; per-host matrix verdicts; ownership/geometry/persistence checks; sanitized cleanup/no-residue evidence.
-- Related docs: `docs/agent-work-claims/2026-08-26-codex-issue4046-restore-single-footing-regression.md`; issues #4034, #4173 and #4189; PRs #4058 and #4179.
-- Updated: 2026-08-27
+- Related docs: `docs/agent-work-claims/2026-08-26-codex-issue4046-restore-single-footing-regression.md`; issues #4034, closed #4173, #4189 and #5004; PRs #4058, #4179 and #4998.
+- Updated: 2026-08-31
 
 ## LOCAL-020 — Grid pair-owned intersection marker native lifecycle
 
