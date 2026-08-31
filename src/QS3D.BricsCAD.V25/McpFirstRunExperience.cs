@@ -80,11 +80,12 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
+                var provider = McpTransportCoordinator.SelectedProvider;
                 var onboarding = McpAgentExperience.DetermineOnboarding();
-                if (onboarding.Phase == McpOnboardingPhase.Ready) return;
+                if (IsSelectedTransportReady(provider, onboarding)) return;
                 if (!ReminderDue()) return;
 
-                var message = BuildMessage(onboarding);
+                var message = BuildMessage(provider, onboarding);
                 var toast = new McpToastNotificationWindow(
                     "Kết nối ChatGPT ↔ QS3D",
                     message,
@@ -101,8 +102,44 @@ namespace QS3D.BricsCAD.V25
             catch { }
         }
 
-        private static string BuildMessage(McpOnboardingSnapshot onboarding)
+        private static bool IsSelectedTransportReady(McpTransportProvider provider, McpOnboardingSnapshot cloudflareOnboarding)
         {
+            if (!McpEmbeddedServer.IsRunning) return false;
+            if (provider == McpTransportProvider.OpenAiSecureTunnel)
+                return McpOpenAiSecureTunnelManager.IsRunning
+                       && McpOpenAiSecureTunnelManager.IsReady
+                       && McpTransportCoordinator.IsChatGptRegistrationAcknowledged();
+            if (provider == McpTransportProvider.CloudflareQuickTunnel)
+                return McpCloudflareTunnelManager.IsRunning
+                       && !string.IsNullOrWhiteSpace(McpPublicEndpointResolver.Resolve())
+                       && McpTransportCoordinator.IsChatGptRegistrationAcknowledged();
+            return cloudflareOnboarding.Phase == McpOnboardingPhase.Ready;
+        }
+
+        private static string BuildMessage(McpTransportProvider provider, McpOnboardingSnapshot onboarding)
+        {
+            if (provider == McpTransportProvider.OpenAiSecureTunnel)
+            {
+                if (string.IsNullOrWhiteSpace(McpOpenAiSecureTunnelManager.SavedClientPath))
+                    return "QS3D MCP đã sẵn sàng local. OpenAI Secure MCP Tunnel không cần domain riêng: mở Agent Center để tải/chọn tunnel-client chính thức, tạo Tunnel ID và kết nối ChatGPT.";
+                if (!McpOpenAiSecureTunnelManager.IsValidTunnelId(McpOpenAiSecureTunnelManager.SavedTunnelId))
+                    return "OpenAI Secure MCP Tunnel đã được chọn. Mở Agent Center, nhập Tunnel ID từ OpenAI Platform và Runtime API key cho phiên kết nối; QS3D không lưu key này.";
+                if (!McpOpenAiSecureTunnelManager.IsRunning)
+                    return "OpenAI Secure MCP Tunnel đã cấu hình nhưng chưa chạy. Mở Agent Center để khởi động tunnel-client; không cần Cloudflare hoặc public MCP URL.";
+                if (!McpOpenAiSecureTunnelManager.IsReady)
+                    return "OpenAI tunnel-client đang chạy nhưng chưa READY. Mở Agent Center để xem trạng thái hoặc tunnel-client UI trước khi kết nối ChatGPT.";
+                return "OpenAI Secure MCP Tunnel đã READY. Mở ChatGPT connector settings, chọn Connection = Tunnel với Tunnel ID hiện tại rồi xác nhận lại trong Agent Center.";
+            }
+
+            if (provider == McpTransportProvider.CloudflareQuickTunnel)
+            {
+                if (string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.CloudflaredPath))
+                    return "Cloudflare Quick Tunnel được chọn để test nhưng máy chưa có cloudflared. Mở Agent Center để cài rồi khởi động Quick Tunnel; không cần domain/login Cloudflare.";
+                if (!McpCloudflareTunnelManager.IsRunning || string.IsNullOrWhiteSpace(McpPublicEndpointResolver.Resolve()))
+                    return "Cloudflare Quick Tunnel là transport test-only và chưa có public URL. Mở Agent Center để khởi động; khi URL đổi phải reconnect ChatGPT.";
+                return "Quick Tunnel đã có public URL. Thêm URL hiện tại vào ChatGPT bằng OAuth, sau đó xác nhận lại trong Agent Center. Quick Tunnel chỉ dùng test.";
+            }
+
             if (onboarding.Phase == McpOnboardingPhase.CloudflaredMissing)
                 return "QS3D MCP đã sẵn sàng local nhưng máy chưa có cloudflared. Mở Agent Center để cài tự động, sau đó đăng nhập Cloudflare trên browser và kết nối ChatGPT.";
             if (onboarding.Phase == McpOnboardingPhase.CloudflareLoginRequired)
