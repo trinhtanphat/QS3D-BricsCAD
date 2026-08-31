@@ -33,6 +33,7 @@ if not errors:
         "VirtualizingPanel.SetIsVirtualizing(panel.ModelTree, false);": "ModelTree must opt out of recycling virtualization locally",
         "ScrollViewer.SetCanContentScroll(panel.ModelTree, false);": "ModelTree must use physical scrolling so a virtualizing items host is not selected",
         "panel.EnsureProjectBrowserSurface();": "ModelTree must enter its final Project Browser host before first layout",
+        "ApplyPropertyListVirtualizationSafety(panel);": "constructor-owned ModelTree boundary must also contain PropertyList before BindViewModel grouping",
     }
     for token, message in required_model_safety.items():
         if token not in model_safety:
@@ -60,16 +61,13 @@ if not errors:
         expected_order = re.search(
             r"InitializeComponent\(\);\s*"
             r"ApplyModelTreeVirtualizationSafety\(this\);\s*"
-            r"ApplyPropertyListVirtualizationSafety\(this\);\s*"
             r"BindViewModel\(\);",
             constructor_body,
         )
         if not expected_order:
-            errors.append("Workspace constructor must contain ModelTree then PropertyList before BindViewModel/grouping")
+            errors.append("Workspace constructor must invoke the combined virtualization boundary before BindViewModel/grouping")
         if constructor_body.count("ApplyModelTreeVirtualizationSafety(this);") != 1:
-            errors.append("ModelTree safety must be applied exactly once from the constructor")
-        if constructor_body.count("ApplyPropertyListVirtualizationSafety(this);") != 1:
-            errors.append("PropertyList safety must be applied exactly once from the constructor")
+            errors.append("combined Workspace virtualization boundary must be applied exactly once from the constructor")
 
     forbidden_loaded_tokens = (
         "FrameworkElement.LoadedEvent",
@@ -87,14 +85,15 @@ if not errors:
     if model_safety.count("ApplyModelTreeVirtualizationSafety(") != 1:
         errors.append("ModelTree safety helper must have no call path other than the constructor-owned call")
     if property_safety.count("ApplyPropertyListVirtualizationSafety(") != 1:
-        errors.append("PropertyList safety helper must have no call path other than the constructor-owned call")
+        errors.append("PropertyList safety helper must only be invoked through the constructor-owned ModelTree boundary")
 
     model_mode = model_safety.find("VirtualizingPanel.SetVirtualizationMode(panel.ModelTree, VirtualizationMode.Standard);")
     model_virtual = model_safety.find("VirtualizingPanel.SetIsVirtualizing(panel.ModelTree, false);")
     model_scroll = model_safety.find("ScrollViewer.SetCanContentScroll(panel.ModelTree, false);")
     model_surface = model_safety.find("panel.EnsureProjectBrowserSurface();")
-    if min(model_mode, model_virtual, model_scroll, model_surface) >= 0 and not (model_mode < model_virtual < model_scroll < model_surface):
-        errors.append("ModelTree contract must pin mode, disable virtualization, select physical scrolling, then reparent before first layout")
+    property_call = model_safety.find("ApplyPropertyListVirtualizationSafety(panel);")
+    if min(model_mode, model_virtual, model_scroll, model_surface, property_call) >= 0 and not (model_mode < model_virtual < model_scroll < model_surface < property_call):
+        errors.append("constructor-owned boundary must contain ModelTree, reparent it, then contain PropertyList before BindViewModel")
 
     property_mode = property_safety.find("VirtualizingPanel.SetVirtualizationMode(panel.PropertyList, VirtualizationMode.Standard);")
     property_virtual = property_safety.find("VirtualizingPanel.SetIsVirtualizing(panel.PropertyList, false);")
