@@ -158,9 +158,10 @@ namespace QS3D.BricsCAD.V25
     }
 
     /// <summary>
-    /// Process supervisor for the official OpenAI Secure MCP Tunnel client. QS3D persists only
-    /// non-secret path/id/config metadata. Runtime API key and the local QS3D bearer are injected
-    /// into the child process environment and are referenced from YAML via env: variables.
+    /// Process supervisor for the official OpenAI Secure MCP Tunnel client. QS3D persists
+    /// non-secret path/id/config metadata separately and stores the Runtime API key only in the
+    /// current Windows user's Credential Manager after exact read-back verification. The verified
+    /// key and local QS3D bearer are injected into the child environment; neither is written to YAML.
     /// </summary>
     internal static class McpOpenAiSecureTunnelManager
     {
@@ -274,8 +275,16 @@ namespace QS3D.BricsCAD.V25
                 message = "Không chấp nhận tunnel-client: " + trustError;
                 return false;
             }
-            Directory.CreateDirectory(SettingsDirectory);
-            WriteText(ClientPathFile, fullPath);
+            try
+            {
+                WriteTextVerified(ClientPathFile, fullPath);
+            }
+            catch (Exception ex)
+            {
+                message = "Không lưu/xác minh được đường dẫn tunnel-client: " + ex.Message;
+                SetLastError(message);
+                return false;
+            }
             lock (Sync) _clientTrustSummary = trustSummary;
             message = "Đã chọn tunnel-client qua trust verification; " + trustSummary + ".";
             return true;
@@ -303,17 +312,34 @@ namespace QS3D.BricsCAD.V25
                 return false;
             }
 
-            var key = ResolveRuntimeApiKey(runtimeApiKey);
+            var suppliedKey = (runtimeApiKey ?? string.Empty).Trim();
+            if (!string.IsNullOrWhiteSpace(suppliedKey))
+            {
+                try
+                {
+                    McpPersistentUserSettings.SaveOpenAiRuntimeApiKey(suppliedKey);
+                }
+                catch (Exception ex)
+                {
+                    message = "Không lưu/xác minh được OpenAI Runtime API key an toàn trước khi khởi động tunnel: " + ex.Message;
+                    SetLastError(message);
+                    return false;
+                }
+            }
+
+            // A supplied key is never used directly for launch. SaveOpenAiRuntimeApiKey performs
+            // Credential Manager write + exact read-back verification and only then projects the
+            // verified value into CONTROL_PLANE_API_KEY. Empty input reuses saved/environment state.
+            var key = ResolveRuntimeApiKey(string.Empty);
             if (string.IsNullOrWhiteSpace(key))
             {
-                message = "Thiếu OpenAI Runtime API key. Nhập key cho phiên này hoặc đặt CONTROL_PLANE_API_KEY/OPENAI_API_KEY trong môi trường Windows.";
+                message = "Thiếu OpenAI Runtime API key. Nhập key để lưu bảo mật hoặc cấu hình CONTROL_PLANE_API_KEY/OPENAI_API_KEY trong môi trường Windows.";
                 return false;
             }
 
             try
             {
-                Directory.CreateDirectory(SettingsDirectory);
-                WriteText(TunnelIdFile, normalizedTunnelId);
+                WriteTextVerified(TunnelIdFile, normalizedTunnelId);
                 WriteRuntimeConfig(normalizedTunnelId, McpEmbeddedServer.Endpoint);
                 try { if (File.Exists(HealthUrlPath)) File.Delete(HealthUrlPath); } catch { }
 
@@ -383,9 +409,9 @@ namespace QS3D.BricsCAD.V25
                     return false;
                 }
 
-                WriteText(AutoStartFile, "1");
+                WriteTextVerified(AutoStartFile, "1");
                 McpTransportCoordinator.SetSelectedProvider(McpTransportProvider.OpenAiSecureTunnel);
-                message = "OpenAI Secure MCP Tunnel đang khởi động. tunnel-client đã qua trust verification; QS3D không lưu Runtime API key; chờ READY rồi kết nối ChatGPT bằng Connection = Tunnel.";
+                message = "OpenAI Secure MCP Tunnel đang khởi động. Runtime API key đã được xác minh và lưu bảo mật trong Windows Credential Manager; không ghi secret vào config/timeline. Chờ READY rồi kết nối ChatGPT bằng Connection = Tunnel.";
                 return true;
             }
             catch (Exception ex)
@@ -402,17 +428,28 @@ namespace QS3D.BricsCAD.V25
             var key = ResolveRuntimeApiKey(string.Empty);
             if (string.IsNullOrWhiteSpace(key))
             {
-                SetLastError("OpenAI Secure MCP Tunnel chưa tự khởi động vì Runtime API key không được lưu. Đặt CONTROL_PLANE_API_KEY hoặc khởi động từ Agent Center.");
+                SetLastError("OpenAI Secure MCP Tunnel chưa tự khởi động vì không có Runtime API key đã lưu hoặc biến môi trường CONTROL_PLANE_API_KEY/OPENAI_API_KEY.");
                 return;
             }
             string ignored;
-            Start(SavedTunnelId, key, out ignored);
+            Start(SavedTunnelId, string.Empty, out ignored);
         }
 
         public static void Stop()
         {
-            WriteText(AutoStartFile, "0");
+            Exception? persistenceError = null;
+            try
+            {
+                WriteTextVerified(AutoStartFile, "0");
+            }
+            catch (Exception ex)
+            {
+                persistenceError = ex;
+                SetLastError("Không lưu/xác minh được trạng thái autostart=OFF: " + ex.Message);
+            }
             StopProcessOnly();
+            if (persistenceError != null)
+                throw new InvalidOperationException("OpenAI Secure MCP Tunnel đã dừng nhưng không lưu được trạng thái autostart=OFF.", persistenceError);
         }
 
         public static void StopForHostShutdown()
@@ -716,6 +753,14 @@ namespace QS3D.BricsCAD.V25
             {
                 value = (Environment.GetEnvironmentVariable(ControlPlaneApiKeyEnvironment) ?? string.Empty).Trim();
                 if (!string.IsNullOrWhiteSpace(value)) return value;
+
+                string saved;
+                if (McpPersistentUserSettings.TryReadOpenAiRuntimeApiKey(out saved))
+                {
+                    value = (saved ?? string.Empty).Trim();
+                    if (!string.IsNullOrWhiteSpace(value)) return value;
+                }
+
                 return (Environment.GetEnvironmentVariable(OpenAiApiKeyEnvironment) ?? string.Empty).Trim();
             }
             catch { return string.Empty; }
@@ -796,14 +841,14 @@ namespace QS3D.BricsCAD.V25
             catch { return string.Empty; }
         }
 
-        private static void WriteText(string path, string value)
+        private static void WriteTextVerified(string path, string value)
         {
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(path) ?? SettingsDirectory);
-                File.WriteAllText(path, value ?? string.Empty, new UTF8Encoding(false));
-            }
-            catch { }
+            var expected = value ?? string.Empty;
+            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? SettingsDirectory);
+            File.WriteAllText(path, expected, new UTF8Encoding(false));
+            var verified = File.ReadAllText(path, Encoding.UTF8);
+            if (!string.Equals(verified, expected, StringComparison.Ordinal))
+                throw new IOException("Persistence read-back verification failed for " + Path.GetFileName(path) + ".");
         }
 
         private static void SetLastError(string value)

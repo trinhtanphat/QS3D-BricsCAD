@@ -52,7 +52,9 @@ namespace QS3D.Core.Diagnostics
                     if (result.Count >= MaxIssueCount)
                         throw new InvalidOperationException("Health summary supports at most " + MaxIssueCount + " diagnostic issues.");
 
-                    result.Add(enumerator.Current);
+                    var issue = enumerator.Current;
+                    RequireKnownCountStable(issues, expectedKnownCount, expectedKnownCountSources);
+                    result.Add(issue);
                 }
             }
 

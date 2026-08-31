@@ -72,7 +72,6 @@ def main() -> int:
         "focus owns foreground": "focus.Setters.Add(new Setter(Control.ForegroundProperty, foreground))",
         "focus owns border": "focus.Setters.Add(new Setter(Control.BorderBrushProperty, _palette.FocusBorder))",
         "focus owns thickness": "focus.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(2)))",
-        "button trigger precedence": "Trigger precedence is intentional: focus -> hover -> pressed -> disabled.",
         "responsive scrolling": "HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled",
         "compact footer": "CreateFooter()",
         "transport readiness state": '"Transport sẵn sàng"',
@@ -90,6 +89,24 @@ def main() -> int:
         haystack = command_block if label == "modeless Agent Center command" else text
         if token not in haystack:
             errors.append(f"Agent Center UI missing {label}: {token}")
+
+    # Trigger precedence is behavioral, so verify the executable source order rather than pinning
+    # a prose comment. WPF evaluates later triggers with higher precedence for overlapping setters.
+    style_start = text.find("private Style CreateButtonStyle(")
+    style_end = text.find("private static ControlTemplate CreateButtonTemplate()", style_start)
+    style_block = text[style_start:style_end] if style_start >= 0 and style_end > style_start else ""
+    trigger_order = (
+        "style.Triggers.Add(focus);",
+        "style.Triggers.Add(hover);",
+        "style.Triggers.Add(pressed);",
+        "style.Triggers.Add(disabled);",
+    )
+    if not style_block:
+        errors.append("Agent Center UI missing CreateButtonStyle block for trigger-precedence verification")
+    else:
+        positions = [style_block.find(token) for token in trigger_order]
+        if any(position < 0 for position in positions) or positions != sorted(positions) or len(set(positions)) != len(positions):
+            errors.append("Agent Center button trigger precedence must remain focus -> hover -> pressed -> disabled")
 
     if "ShowDialog()" in command_block:
         errors.append("Agent Center command must return immediately after modeless Show(); ShowDialog() keeps BricsCAD CMDACTIVE non-idle")
