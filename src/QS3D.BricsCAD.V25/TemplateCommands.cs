@@ -11,6 +11,10 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class TemplateCommands
     {
+        private const string ExportUiWarning = "[QS3D] Cảnh báo UI sau export template; dữ liệu export đã hoàn tất nhưng UI chưa cập nhật đầy đủ.";
+        private const string ImportUiWarning = "[QS3D] Cảnh báo UI sau import template; dữ liệu import đã áp dụng nhưng UI chưa cập nhật đầy đủ.";
+        private const string RollbackUiWarning = "[QS3D] Cảnh báo UI sau rollback Template Import; project đã rollback nhưng UI chưa cập nhật đầy đủ.";
+
         [CommandMethod("QS3DTEMPLATEEXPORT", CommandFlags.Modal)]
         public void ExportTemplate()
         {
@@ -90,7 +94,7 @@ namespace QS3D.BricsCAD.V25
                         throw new InvalidOperationException("Template import failed and project rollback also failed.", new AggregateException(importError, restoreError));
                     }
 
-                    RefreshProjectBestEffort(doc, "rollback sau Template Import");
+                    RefreshProjectBestEffort(doc);
                     throw;
                 }
 
@@ -106,45 +110,49 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\n" + message);
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
-                try { document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI sau export template: " + ex.Message); }
-                catch { }
+                TryWrite(document, "\n" + ExportUiWarning);
             }
         }
 
         private static void FinalizeImportUi(Document document, string message)
         {
-            System.Exception? warning = null;
+            var warning = false;
             try { PaletteCoordinator.RefreshProject(); }
-            catch (System.Exception ex) { warning = ex; }
+            catch (System.Exception) { warning = true; }
             try { PaletteCoordinator.SetStatus(message); }
-            catch (System.Exception ex) { if (warning == null) warning = ex; }
+            catch (System.Exception) { warning = true; }
             try { document.Editor.WriteMessage("\nQS3D " + message); }
-            catch (System.Exception ex) { if (warning == null) warning = ex; }
-            if (warning == null) return;
-            try { document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI sau import template: " + warning.Message); }
-            catch { }
+            catch (System.Exception) { warning = true; }
+            if (!warning) return;
+            TryWrite(document, "\n" + ImportUiWarning);
         }
 
-        private static void RefreshProjectBestEffort(Document document, string context)
+        private static void RefreshProjectBestEffort(Document document)
         {
             try { PaletteCoordinator.RefreshProject(); }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
-                try { document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI " + context + ": " + ex.Message); }
-                catch { }
+                TryWrite(document, "\n" + RollbackUiWarning);
             }
+        }
+
+        private static void TryWrite(Document document, string message)
+        {
+            try { document.Editor.WriteMessage(message); }
+            catch { }
         }
 
         private static Document? Active() => Application.DocumentManager.MdiActiveDocument;
         private static void Guard(Document document, string operation, Action action)
         {
             try { action(); }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
-                try { document.Editor.WriteMessage("\n" + operation + " error: " + ex.Message); } catch { }
-                try { PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message); } catch { }
+                var message = operation + " lỗi; thao tác không hoàn tất. Xem log chẩn đoán nếu cần chi tiết kỹ thuật.";
+                TryWrite(document, "\n" + message);
+                try { PaletteCoordinator.SetStatus(message); } catch { }
             }
         }
     }
