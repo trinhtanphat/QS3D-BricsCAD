@@ -247,7 +247,7 @@ namespace QS3D.BricsCAD.V25
                     Rotation = NumberOptional(body, "rotationDeg", 0d) * Math.PI / 180d
                 };
                 if (width > 0d) entity.Width = width;
-                return AddEntity(entity, LayerOptional(body), "cad_create_mtext");
+                return AddEntity(entity, LayerOptional(body), "cad_create_mtext"));
             });
         }
 
@@ -378,9 +378,13 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             var layer = SafeSystemVariable("CLAYER");
+            var build = McpRuntimeBuildProvenance.Current;
             return "{\"product\":\"QS3D-BricsCAD\",\"bricscadVersion\":\"" + Escape(Convert.ToString(Application.Version) ?? string.Empty)
                    + "\",\"activeDocument\":\"" + Escape(document == null ? string.Empty : SafeDocumentName(document))
                    + "\",\"currentLayer\":\"" + Escape(layer)
+                   + "\",\"buildSha\":\"" + Escape(build.BuildSha)
+                   + "\",\"buildId\":\"" + Escape(build.BuildId)
+                   + "\",\"buildUtc\":\"" + Escape(build.BuildUtc)
                    + "\",\"fullCadAgent\":true,\"automationStopped\":" + (_automationStopped ? "true" : "false") + "}";
         }
 
