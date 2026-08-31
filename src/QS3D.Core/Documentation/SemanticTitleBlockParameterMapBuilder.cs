@@ -96,15 +96,30 @@ namespace QS3D.Core.Documentation
             var observedCount = 0;
             using (var enumerator = definitions.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
-                    observedCount++;
-                    if (knownCount.HasValue && observedCount > knownCount.Value)
+                    if (knownCount.HasValue)
+                        RevalidateKnownCountAfterTraversal(definitions, knownCount.Value);
+
+                    var moved = enumerator.MoveNext();
+
+                    if (knownCount.HasValue)
+                        RevalidateKnownCountAfterTraversal(definitions, knownCount.Value);
+                    if (!moved)
+                        break;
+
+                    if (knownCount.HasValue && observedCount >= knownCount.Value)
                         throw new InvalidOperationException(
                             "Semantic title-block mapping source known Count was exceeded during traversal.");
-                    if (observedCount > MaxParameters)
+                    if (observedCount >= MaxParameters)
                         throw ParameterCollectionTooLarge();
-                    result.Add(enumerator.Current);
+
+                    var definition = enumerator.Current;
+                    if (knownCount.HasValue)
+                        RevalidateKnownCountAfterTraversal(definitions, knownCount.Value);
+
+                    result.Add(definition);
+                    observedCount++;
                 }
             }
 
