@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "QS3D.BricsCAD.V25"
 OPENAI = SRC / "McpOpenAiSecureTunnel.cs"
 CENTER = SRC / "McpAgentControlCenter.cs"
+AUGMENTER = SRC / "McpTransportAgentCenterAugmenter.cs"
 BOOTSTRAP = SRC / "McpCloudflaredBootstrapper.cs"
 CLOUDFLARE_FALLBACK = SRC / "McpCloudflareOnboarding.cs"
 FIRST_RUN = SRC / "McpFirstRunExperience.cs"
@@ -26,7 +27,7 @@ def forbid(text: str, token: str, label: str, errors: list[str]) -> None:
 
 def main() -> int:
     errors: list[str] = []
-    for path in (OPENAI, CENTER, BOOTSTRAP, CLOUDFLARE_FALLBACK, FIRST_RUN, V25_ENTRY, V26_ENTRY, DOC):
+    for path in (OPENAI, CENTER, AUGMENTER, BOOTSTRAP, CLOUDFLARE_FALLBACK, FIRST_RUN, V25_ENTRY, V26_ENTRY, DOC):
         if not path.is_file():
             errors.append(f"missing file: {path.relative_to(ROOT)}")
     if errors:
@@ -36,6 +37,7 @@ def main() -> int:
 
     openai = OPENAI.read_text(encoding="utf-8")
     center = CENTER.read_text(encoding="utf-8")
+    augmenter = AUGMENTER.read_text(encoding="utf-8")
     bootstrap = BOOTSTRAP.read_text(encoding="utf-8")
     cloudflare_fallback = CLOUDFLARE_FALLBACK.read_text(encoding="utf-8")
     first_run = FIRST_RUN.read_text(encoding="utf-8")
@@ -94,6 +96,25 @@ def main() -> int:
         need(center, token, label, errors)
 
     for token, label in {
+        'PresentationSource.CurrentSources': "host-safe WPF Agent Center discovery",
+        'AgentCenterTitle': "Agent Center-only augmentation boundary",
+        'Đang cài Cloudflare... ': "Agent Center live install progress",
+        'Hủy cài Cloudflare Tunnel': "Agent Center cloudflared cancel action",
+        'McpCloudflaredBootstrapper.CancelInstall': "Agent Center installer cancellation",
+        'Copy tunnel diagnostics': "Agent Center tunnel diagnostic copy action",
+        'McpOpenAiSecureTunnelManager.GetDiagnosticBundle()': "Agent Center sanitized diagnostic bundle",
+        'Restart tunnel · env key': "Agent Center environment-key-only restart action",
+        'CONTROL_PLANE_API_KEY': "restart environment-key presence check",
+        'OPENAI_API_KEY': "restart fallback environment-key presence check",
+        'QS3D không lưu key đã nhập trong UI': "restart secret non-persistence guidance",
+        'ClientTrustSummary': "visible tunnel trust summary",
+        'LastExitCode': "visible tunnel exit code",
+        'LastError': "visible tunnel last error",
+        'DispatcherTimer': "bounded UI augmenter refresh",
+    }.items():
+        need(augmenter, token, label, errors)
+
+    for token, label in {
         'public static bool BeginInstall': "busy-aware installer return",
         'if (_installing) return false;': "single-flight installer guard",
         'public static bool CancelInstall': "user cancellation",
@@ -108,10 +129,9 @@ def main() -> int:
         'VerifyCloudflareBinary': "cloudflared trust verification",
         'WinVerifyTrust': "cloudflared OS trust verification",
         'signer.IndexOf("Cloudflare"': "Cloudflare signer restriction",
-        'PublishInstallerUiState': "Agent Center installer UI refresh",
+        'PublishInstallerUiState': "installer UI refresh",
         'button.IsEnabled = !busy': "installer button disabled while busy",
-        'EnsureDynamicCancelButton': "Agent Center cancel action",
-        'Đang cài Cloudflare... ': "visible install progress label",
+        'EnsureDynamicCancelButton': "fallback cancel action",
         'File.Move(temporary, destination)': "atomic managed install replacement",
     }.items():
         need(bootstrap, token, label, errors)
@@ -140,7 +160,9 @@ def main() -> int:
         need(first_run, token, label, errors)
 
     for entry_text, name in ((v25, "V25"), (v26, "V26")):
+        need(entry_text, "McpTransportAgentCenterAugmenter.Start()", f"{name} transport UI augmenter startup", errors)
         need(entry_text, "McpTransportCoordinator.TryAutoStartPreferred()", f"{name} preferred transport startup", errors)
+        need(entry_text, "McpTransportAgentCenterAugmenter.Stop", f"{name} transport UI augmenter teardown", errors)
         need(entry_text, "McpTransportCoordinator.StopAllForHostShutdown", f"{name} transport teardown", errors)
 
     for token, label in {
@@ -156,6 +178,8 @@ def main() -> int:
         "Cancel": "canonical installer cancellation contract",
         "stdout/stderr": "canonical tunnel diagnostic capture",
         "Authenticode": "canonical transport binary trust policy",
+        "Copy tunnel diagnostics": "canonical Agent Center diagnostic action",
+        "Restart tunnel": "canonical Agent Center restart action",
     }.items():
         need(doc, token, label, errors)
 
@@ -171,7 +195,7 @@ def main() -> int:
             print("ERROR:", error)
         return 1
 
-    print("PASS MCP transport providers / binary trust / bounded installer recovery / diagnostics / first-run contract")
+    print("PASS MCP transport providers / binary trust / bounded installer recovery / Agent Center diagnostics / first-run contract")
     return 0
 
 
