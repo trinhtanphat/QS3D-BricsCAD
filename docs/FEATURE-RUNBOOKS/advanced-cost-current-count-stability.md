@@ -6,7 +6,7 @@ Lane-Key: `issue-4966`
 
 Advanced cost collection traversal already binds an admitted known Count before traversal and rechecks it before/after `MoveNext`. `IEnumerator.Current` is caller-controlled code too. Before this carrier, rate build-up components, historical cost records, tender lines/requirements/bids, and progress contract/claim inputs could execute `Current`, then perform semantic validation or retain the returned item before checking whether `Current` changed the source's reported Count.
 
-That ordering can make a hostile counted source surface a null/duplicate/reference error, or retain state, before the stronger collection-integrity failure. The deterministic contract is therefore incomplete even when a later traversal checkpoint eventually notices the drift.
+That ordering exposes the Current-induced Count drift boundary: a hostile counted source can surface a null/duplicate/reference error, or retain state, before the stronger collection-integrity failure. The deterministic contract is therefore incomplete even when a later traversal checkpoint eventually notices the drift.
 
 ## Production contract
 
