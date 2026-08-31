@@ -170,7 +170,10 @@ namespace QS3D.Core.Mep
             for (var i = 0; i < admittedRowCount; i++)
             {
                 RequireStableCsvRowCount(rows, admittedRowCount);
-                var row = rows[i] ?? throw new ArgumentException("MEP/TBQ report contains a null row at index " + i + ".", nameof(rows));
+                var row = rows[i];
+                RequireStableCsvRowCount(rows, admittedRowCount);
+                if (row == null)
+                    throw new ArgumentException("MEP/TBQ report contains a null row at index " + i + ".", nameof(rows));
                 AppendCsv(builder, row.Region);
                 builder.Append(',');
                 AppendCsv(builder, row.System);

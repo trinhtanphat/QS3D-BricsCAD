@@ -43,10 +43,11 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
-                McpCloudflareAccountTunnelManager.TryAutoStart();
+                McpTransportAgentCenterAugmenter.Start();
+                McpTransportCoordinator.TryAutoStartPreferred();
                 McpPublicEndpointResolver.Resolve();
             }
-            catch (Exception ex) { ReportOptionalStartupFailure("MCP Cloudflare tunnel", ex); }
+            catch (Exception ex) { ReportOptionalStartupFailure("MCP transport", ex); }
 
             try { McpProjectRecoveryService.Start(); }
             catch (Exception ex) { ReportOptionalStartupFailure("MCP recovery service", ex); }
@@ -75,8 +76,8 @@ namespace QS3D.BricsCAD.V25
             TryCleanup(McpPopupObserver.Stop);
             TryCleanup(McpFirstRunExperience.Stop);
             TryCleanup(McpProjectRecoveryService.Stop);
-            TryCleanup(McpCloudflareAccountTunnelManager.StopForHostShutdown);
-            TryCleanup(McpCloudflareTunnelManager.StopForHostShutdown);
+            TryCleanup(McpTransportAgentCenterAugmenter.Stop);
+            TryCleanup(McpTransportCoordinator.StopAllForHostShutdown);
             TryCleanup(McpEmbeddedServerWatchdog.Stop);
             TryCleanup(McpEmbeddedServer.Stop);
             TryCleanup(UpdateBootstrapper.Stop);
