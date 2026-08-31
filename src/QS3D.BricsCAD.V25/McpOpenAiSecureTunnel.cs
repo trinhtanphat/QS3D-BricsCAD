@@ -1,7 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -167,13 +171,24 @@ namespace QS3D.BricsCAD.V25
         private const string ControlPlaneApiKeyEnvironment = "CONTROL_PLANE_API_KEY";
         private const string OpenAiApiKeyEnvironment = "OPENAI_API_KEY";
         private const string LocalBearerEnvironment = "QS3D_TUNNEL_MCP_AUTH";
+        private const string ExpectedSha256Environment = "QS3D_OPENAI_TUNNEL_CLIENT_SHA256";
+        private const int MaxDiagnosticLines = 80;
         private static readonly Regex TunnelIdRegex = new Regex(
             "^tunnel_[0-9a-f]{32}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        private static readonly Regex Sha256Regex = new Regex(
+            "^[0-9a-fA-F]{64}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        private static readonly Regex ApiKeyRegex = new Regex(
+            "\\bsk-[A-Za-z0-9_\\-]{8,}\\b", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        private static readonly Regex AuthorizationRegex = new Regex(
+            "(?i)(authorization\\s*[:=]\\s*)(bearer\\s+)?[^\\s,;]+", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly object Sync = new object();
+        private static readonly List<string> DiagnosticLines = new List<string>();
 
         private static Process? _process;
         private static bool _stopping;
         private static string _lastError = string.Empty;
+        private static string _clientTrustSummary = string.Empty;
+        private static int? _lastExitCode;
         private static DateTime _lastReadyProbeUtc = DateTime.MinValue;
         private static bool _lastReady;
 
@@ -188,6 +203,15 @@ namespace QS3D.BricsCAD.V25
         public static string SavedClientPath => ReadText(ClientPathFile);
         public static string SavedTunnelId => ReadText(TunnelIdFile);
         public static string LastError { get { lock (Sync) return _lastError; } }
+        public static string ClientTrustSummary { get { lock (Sync) return _clientTrustSummary; } }
+        public static int? LastExitCode { get { lock (Sync) return _lastExitCode; } }
+        public static string LastDiagnostics
+        {
+            get
+            {
+                lock (Sync) return DiagnosticLines.Count == 0 ? string.Empty : string.Join(Environment.NewLine, DiagnosticLines.ToArray());
+            }
+        }
 
         public static bool IsConfigured => IsValidTunnelId(SavedTunnelId) && IsUsableClientPath(SavedClientPath);
 
@@ -243,20 +267,17 @@ namespace QS3D.BricsCAD.V25
         {
             message = string.Empty;
             var fullPath = NormalizeClientPath(path);
-            if (!IsUsableClientPath(fullPath))
+            string trustSummary;
+            string trustError;
+            if (!TryVerifyClientTrust(fullPath, out trustSummary, out trustError))
             {
-                message = "Hãy chọn file tunnel-client.exe chính thức đã tải từ OpenAI.";
-                return false;
-            }
-            string version;
-            if (!TryReadVersion(fullPath, out version))
-            {
-                message = "File đã chọn không chạy được như tunnel-client. Hãy tải lại bản chính thức từ OpenAI.";
+                message = "Không chấp nhận tunnel-client: " + trustError;
                 return false;
             }
             Directory.CreateDirectory(SettingsDirectory);
             WriteText(ClientPathFile, fullPath);
-            message = "Đã chọn tunnel-client" + (string.IsNullOrWhiteSpace(version) ? "." : "; " + version + ".");
+            lock (Sync) _clientTrustSummary = trustSummary;
+            message = "Đã chọn tunnel-client qua trust verification; " + trustSummary + ".";
             return true;
         }
 
@@ -273,9 +294,12 @@ namespace QS3D.BricsCAD.V25
             }
 
             var clientPath = NormalizeClientPath(SavedClientPath);
-            if (!IsUsableClientPath(clientPath))
+            string trustSummary;
+            string trustError;
+            if (!TryVerifyClientTrust(clientPath, out trustSummary, out trustError))
             {
-                message = "Chưa chọn tunnel-client.exe chính thức.";
+                message = "OpenAI tunnel-client không qua trust verification trước khi chạy: " + trustError;
+                SetLastError(message);
                 return false;
             }
 
@@ -297,6 +321,7 @@ namespace QS3D.BricsCAD.V25
                 McpCloudflareAccountTunnelManager.StopForHostShutdown();
                 McpCloudflareTunnelManager.StopForHostShutdown();
                 StopProcessOnly();
+                ClearDiagnostics();
 
                 var startInfo = new ProcessStartInfo
                 {
@@ -304,6 +329,8 @@ namespace QS3D.BricsCAD.V25
                     Arguments = "run --config \"" + ConfigPath + "\"",
                     UseShellExecute = false,
                     CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
                     WorkingDirectory = Path.GetDirectoryName(clientPath) ?? SettingsDirectory
                 };
                 startInfo.EnvironmentVariables[ControlPlaneApiKeyEnvironment] = key;
@@ -314,7 +341,9 @@ namespace QS3D.BricsCAD.V25
                 startInfo.EnvironmentVariables["HEALTH_URL_FILE"] = HealthUrlPath;
                 AddNoProxyLoopback(startInfo);
 
-                var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
+                var process = new Process { StartInfo = startInfo, EnableRaisingEvents = false };
+                process.OutputDataReceived += (_, args) => HandleDiagnosticLine(process, "stdout", args.Data);
+                process.ErrorDataReceived += (_, args) => HandleDiagnosticLine(process, "stderr", args.Data);
                 process.Exited += (_, __) => HandleProcessExit(process);
                 if (!process.Start())
                 {
@@ -328,9 +357,14 @@ namespace QS3D.BricsCAD.V25
                     _stopping = false;
                     _process = process;
                     _lastError = string.Empty;
+                    _clientTrustSummary = trustSummary;
+                    _lastExitCode = null;
                     _lastReady = false;
                     _lastReadyProbeUtc = DateTime.MinValue;
                 }
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+                process.EnableRaisingEvents = true;
                 try
                 {
                     if (process.HasExited)
@@ -351,7 +385,7 @@ namespace QS3D.BricsCAD.V25
 
                 WriteText(AutoStartFile, "1");
                 McpTransportCoordinator.SetSelectedProvider(McpTransportProvider.OpenAiSecureTunnel);
-                message = "OpenAI Secure MCP Tunnel đang khởi động. QS3D không lưu Runtime API key; chờ trạng thái READY rồi kết nối ChatGPT bằng Connection = Tunnel.";
+                message = "OpenAI Secure MCP Tunnel đang khởi động. tunnel-client đã qua trust verification; QS3D không lưu Runtime API key; chờ READY rồi kết nối ChatGPT bằng Connection = Tunnel.";
                 return true;
             }
             catch (Exception ex)
@@ -412,11 +446,29 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        public static string GetDiagnosticBundle()
+        {
+            var builder = new StringBuilder();
+            builder.AppendLine("OpenAI Secure MCP Tunnel diagnostics");
+            builder.AppendLine("state=" + (IsRunning ? (IsReady ? "READY" : "RUNNING") : "STOPPED"));
+            builder.AppendLine("client=" + (string.IsNullOrWhiteSpace(SavedClientPath) ? "not-selected" : SavedClientPath));
+            builder.AppendLine("trust=" + (string.IsNullOrWhiteSpace(ClientTrustSummary) ? "not-verified-in-this-session" : ClientTrustSummary));
+            builder.AppendLine("tunnelId=" + (IsValidTunnelId(SavedTunnelId) ? SavedTunnelId : "not-configured"));
+            builder.AppendLine("exit=" + (LastExitCode.HasValue ? LastExitCode.Value.ToString() : "n/a"));
+            builder.AppendLine("lastError=" + (string.IsNullOrWhiteSpace(LastError) ? "none" : LastError));
+            var diagnostics = LastDiagnostics;
+            builder.AppendLine("--- tunnel-client stdout/stderr (sanitized, bounded) ---");
+            builder.AppendLine(string.IsNullOrWhiteSpace(diagnostics) ? "<none>" : diagnostics);
+            return builder.ToString().TrimEnd();
+        }
+
         public static string Describe()
         {
             return "openai-secure=" + (IsRunning ? (IsReady ? "READY" : "RUNNING") : "STOPPED")
                    + "; configured=" + IsConfigured
                    + (IsValidTunnelId(SavedTunnelId) ? "; tunnelId=" + SavedTunnelId : string.Empty)
+                   + (string.IsNullOrWhiteSpace(ClientTrustSummary) ? string.Empty : "; trust=" + ClientTrustSummary)
+                   + (LastExitCode.HasValue ? "; exit=" + LastExitCode.Value : string.Empty)
                    + (string.IsNullOrWhiteSpace(LastError) ? string.Empty : "; error=" + LastError);
         }
 
@@ -462,8 +514,23 @@ namespace QS3D.BricsCAD.V25
             catch { return false; }
         }
 
+        private static void HandleDiagnosticLine(Process process, string stream, string? line)
+        {
+            if (string.IsNullOrWhiteSpace(line)) return;
+            var clean = SanitizeDiagnosticLine(line);
+            if (clean.Length > 1200) clean = clean.Substring(0, 1200);
+            lock (Sync)
+            {
+                if (!ReferenceEquals(_process, process)) return;
+                DiagnosticLines.Add(DateTime.Now.ToString("HH:mm:ss") + " [" + stream + "] " + clean);
+                while (DiagnosticLines.Count > MaxDiagnosticLines) DiagnosticLines.RemoveAt(0);
+                if (LooksLikeError(clean)) _lastError = clean;
+            }
+        }
+
         private static void HandleProcessExit(Process process)
         {
+            var dispose = false;
             lock (Sync)
             {
                 if (!ReferenceEquals(_process, process)) return;
@@ -471,13 +538,17 @@ namespace QS3D.BricsCAD.V25
                 _process = null;
                 _lastReady = false;
                 _lastReadyProbeUtc = DateTime.MinValue;
+                try { _lastExitCode = process.ExitCode; } catch { _lastExitCode = null; }
                 if (!intentional)
                 {
-                    try { _lastError = "OpenAI tunnel-client đã dừng (exit=" + process.ExitCode + "). Mở tunnel-client UI/log hoặc chạy lại từ Agent Center."; }
-                    catch { _lastError = "OpenAI tunnel-client đã dừng ngoài dự kiến."; }
+                    var exit = _lastExitCode.HasValue ? _lastExitCode.Value.ToString() : "unknown";
+                    var tail = DiagnosticTailUnsafe(4);
+                    _lastError = "OpenAI tunnel-client đã dừng (exit=" + exit + ")."
+                                 + (string.IsNullOrWhiteSpace(tail) ? string.Empty : " Diagnostic cuối: " + tail);
                 }
+                dispose = true;
             }
-            try { process.Dispose(); } catch { }
+            if (dispose) { try { process.Dispose(); } catch { } }
         }
 
         private static void StopProcessOnly()
@@ -493,11 +564,116 @@ namespace QS3D.BricsCAD.V25
             }
             if (process != null)
             {
+                try { process.EnableRaisingEvents = false; } catch { }
+                try { process.CancelOutputRead(); } catch { }
+                try { process.CancelErrorRead(); } catch { }
                 try { if (!process.HasExited) process.Kill(); } catch { }
                 try { process.WaitForExit(1500); } catch { }
                 try { process.Dispose(); } catch { }
             }
             lock (Sync) _stopping = false;
+        }
+
+        private static bool TryVerifyClientTrust(string path, out string summary, out string error)
+        {
+            summary = string.Empty;
+            error = string.Empty;
+            if (!IsUsableClientPath(path))
+            {
+                error = "file phải là tunnel-client*.exe tồn tại trên máy.";
+                return false;
+            }
+
+            string version;
+            if (!TryReadVersion(path, out version))
+            {
+                error = "file không chạy được với --version như tunnel-client.";
+                return false;
+            }
+
+            var trust = VerifyAuthenticode(path);
+            if (trust == 0)
+            {
+                try
+                {
+                    using (var certificate = new X509Certificate2(X509Certificate.CreateFromSignedFile(path)))
+                    {
+                        var signer = certificate.Subject ?? string.Empty;
+                        if (signer.IndexOf("OpenAI", StringComparison.OrdinalIgnoreCase) < 0)
+                        {
+                            error = "Authenticode hợp lệ nhưng signer không phải OpenAI: " + signer + ".";
+                            return false;
+                        }
+                        summary = "version=" + version + "; Authenticode signer=" + signer;
+                        return true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    error = "không đọc được signer certificate: " + ex.Message;
+                    return false;
+                }
+            }
+
+            var expected = (Environment.GetEnvironmentVariable(ExpectedSha256Environment) ?? string.Empty).Trim();
+            if (!Sha256Regex.IsMatch(expected))
+            {
+                error = "binary không có Authenticode OpenAI hợp lệ (WinVerifyTrust=0x" + trust.ToString("X8")
+                        + "). Nếu release chính thức dùng binary không ký, đặt " + ExpectedSha256Environment
+                        + " bằng SHA-256 chính thức của đúng release rồi chọn lại file.";
+                return false;
+            }
+
+            string actual;
+            try { actual = ComputeSha256(path); }
+            catch (Exception ex)
+            {
+                error = "không tính được SHA-256: " + ex.Message;
+                return false;
+            }
+            if (!string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))
+            {
+                error = "SHA-256 không khớp pinned release hash. expected=" + expected.ToLowerInvariant()
+                        + "; actual=" + actual.ToLowerInvariant() + ".";
+                return false;
+            }
+            summary = "version=" + version + "; SHA-256 verified via " + ExpectedSha256Environment + "=" + actual.ToLowerInvariant();
+            return true;
+        }
+
+        private static uint VerifyAuthenticode(string path)
+        {
+            var fileInfo = new WinTrustFileInfo(path);
+            var fileInfoPointer = IntPtr.Zero;
+            var dataPointer = IntPtr.Zero;
+            try
+            {
+                fileInfoPointer = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(WinTrustFileInfo)));
+                Marshal.StructureToPtr(fileInfo, fileInfoPointer, false);
+                var data = new WinTrustData(fileInfoPointer);
+                dataPointer = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(WinTrustData)));
+                Marshal.StructureToPtr(data, dataPointer, false);
+                var action = WinTrustActionGenericVerifyV2;
+                return WinVerifyTrust(IntPtr.Zero, ref action, dataPointer);
+            }
+            catch { return 0xFFFFFFFF; }
+            finally
+            {
+                if (dataPointer != IntPtr.Zero) Marshal.FreeHGlobal(dataPointer);
+                if (fileInfoPointer != IntPtr.Zero) Marshal.FreeHGlobal(fileInfoPointer);
+            }
+        }
+
+        private static string ComputeSha256(string path)
+        {
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var sha = SHA256.Create())
+            {
+                var bytes = sha.ComputeHash(stream);
+                var builder = new StringBuilder(bytes.Length * 2);
+                foreach (var value in bytes) builder.Append(value.ToString("x2"));
+                return builder.ToString();
+            }
         }
 
         private static bool TryReadVersion(string path, out string version)
@@ -524,6 +700,7 @@ namespace QS3D.BricsCAD.V25
                 }
                 var output = (process.StandardOutput.ReadToEnd() + " " + process.StandardError.ReadToEnd()).Trim();
                 if (process.ExitCode != 0 || string.IsNullOrWhiteSpace(output)) return false;
+                output = SanitizeDiagnosticLine(output);
                 version = output.Length <= 160 ? output : output.Substring(0, 160);
                 return true;
             }
@@ -562,6 +739,41 @@ namespace QS3D.BricsCAD.V25
             catch { return false; }
         }
 
+        private static void ClearDiagnostics()
+        {
+            lock (Sync)
+            {
+                DiagnosticLines.Clear();
+                _lastExitCode = null;
+            }
+        }
+
+        private static string SanitizeDiagnosticLine(string value)
+        {
+            var clean = (value ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
+            clean = ApiKeyRegex.Replace(clean, "sk-<redacted>");
+            clean = AuthorizationRegex.Replace(clean, "$1<redacted>");
+            return clean;
+        }
+
+        private static bool LooksLikeError(string value)
+        {
+            return value.IndexOf("error", StringComparison.OrdinalIgnoreCase) >= 0
+                   || value.IndexOf("fatal", StringComparison.OrdinalIgnoreCase) >= 0
+                   || value.IndexOf("unauthorized", StringComparison.OrdinalIgnoreCase) >= 0
+                   || value.IndexOf("forbidden", StringComparison.OrdinalIgnoreCase) >= 0
+                   || value.IndexOf("refused", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static string DiagnosticTailUnsafe(int count)
+        {
+            if (DiagnosticLines.Count == 0 || count <= 0) return string.Empty;
+            var start = Math.Max(0, DiagnosticLines.Count - count);
+            var items = new List<string>();
+            for (var i = start; i < DiagnosticLines.Count; i++) items.Add(DiagnosticLines[i]);
+            return string.Join(" | ", items.ToArray());
+        }
+
         private static void AddNoProxyLoopback(ProcessStartInfo startInfo)
         {
             try
@@ -596,12 +808,65 @@ namespace QS3D.BricsCAD.V25
 
         private static void SetLastError(string value)
         {
-            lock (Sync) _lastError = value ?? string.Empty;
+            lock (Sync) _lastError = SanitizeDiagnosticLine(value ?? string.Empty);
         }
 
         private static void OpenUrl(string url)
         {
             Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
         }
+
+        private static readonly Guid WinTrustActionGenericVerifyV2 = new Guid("00AAC56B-CD44-11D0-8CC2-00C04FC295EE");
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private sealed class WinTrustFileInfo
+        {
+            public WinTrustFileInfo(string filePath)
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(WinTrustFileInfo));
+                FilePath = filePath;
+                FileHandle = IntPtr.Zero;
+                KnownSubject = IntPtr.Zero;
+            }
+            public uint StructSize;
+            [MarshalAs(UnmanagedType.LPWStr)] public string FilePath;
+            public IntPtr FileHandle;
+            public IntPtr KnownSubject;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private sealed class WinTrustData
+        {
+            public WinTrustData(IntPtr fileInfo)
+            {
+                StructSize = (uint)Marshal.SizeOf(typeof(WinTrustData));
+                PolicyCallbackData = IntPtr.Zero;
+                SipClientData = IntPtr.Zero;
+                UiChoice = 2;
+                RevocationChecks = 0;
+                UnionChoice = 1;
+                FileInfoPointer = fileInfo;
+                StateAction = 0;
+                StateData = IntPtr.Zero;
+                UrlReference = IntPtr.Zero;
+                ProviderFlags = 0;
+                UiContext = 0;
+            }
+            public uint StructSize;
+            public IntPtr PolicyCallbackData;
+            public IntPtr SipClientData;
+            public uint UiChoice;
+            public uint RevocationChecks;
+            public uint UnionChoice;
+            public IntPtr FileInfoPointer;
+            public uint StateAction;
+            public IntPtr StateData;
+            public IntPtr UrlReference;
+            public uint ProviderFlags;
+            public uint UiContext;
+        }
+
+        [DllImport("wintrust.dll", ExactSpelling = true, SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern uint WinVerifyTrust(IntPtr hwnd, ref Guid actionId, IntPtr trustData);
     }
 }
