@@ -127,7 +127,7 @@ def main() -> int:
         "runtime mutation epoch context": (runtime, "private static readonly AsyncLocal<int?> MutationEpoch"),
         "runtime mutation epoch state": (runtime, "private static int _automationEpoch;"),
         "runtime epoch invalidation": (runtime, "Interlocked.Increment(ref _automationEpoch);"),
-        "runtime mutation stop recheck": (runtime, "private static void EnsureCurrentMutationRunning()"),
+        "runtime mutation stop recheck": (runtime, "static void EnsureCurrentMutationRunning()"),
         "runtime mutation CAD dispatch": (runtime, "private static string InvokeCadMutation("),
         "runtime command token canonicalizer": (runtime, "private static string NormalizeCadCommandToken("),
         "runtime primary command canonicalization": (runtime, 'var command = NormalizeCadCommandToken(McpTopLevelJson.ExtractString(body, "command"));'),
