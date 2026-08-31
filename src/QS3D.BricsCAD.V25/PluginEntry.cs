@@ -34,6 +34,9 @@ namespace QS3D.BricsCAD.V25
             try { Qs3dThemeCoordinator.Start(); }
             catch (Exception ex) { ReportOptionalStartupFailure("host-wide theme coordinator", ex); }
 
+            try { McpPersistentUserSettings.ApplyStartupSecretsToProcessEnvironment(); }
+            catch (Exception ex) { ReportOptionalStartupFailure("MCP secure settings", ex); }
+
             try
             {
                 McpEmbeddedServer.Start();
