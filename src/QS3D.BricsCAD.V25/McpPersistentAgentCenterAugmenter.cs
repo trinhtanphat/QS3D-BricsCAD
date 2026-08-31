@@ -170,7 +170,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var result = McpBackgroundHostRuntime.Call(
-                    "bricscad_interaction_policy_get", "{}", null, null);
+                    "bricscad_interaction_policy_get", "{}", null, _ => { });
                 return result.IndexOf("\"mode\":\"foreground_fallback\"", StringComparison.Ordinal) >= 0;
             }
             catch { return false; }
