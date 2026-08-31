@@ -51,7 +51,7 @@ Inspect these first:
 4. `src/QS3D.BricsCAD.V25/McpCadAgentRuntime.cs` — direct CAD operations, bounded command dispatch, mutation epoch/emergency recovery and audit.
 5. `src/QS3D.BricsCAD.V25/McpBackgroundHostRuntime.cs` — same-process BricsCAD UI text observation and bounded background controls.
 6. `src/QS3D.BricsCAD.V25/McpDesktopAutomationRuntime.cs` — explicit bounded `desktop_*` primitives plus the bounded single-target `desktop_sequence`.
-7. `src/QS3D.BricsCAD.V25/McpDesktopControlSession.cs` — non-persistent local desktop consent, idle expiry, pause/resume, blue overlay and physical Esc×2 emergency stop.
+7. `src/QS3D.BricsCAD.V25/McpDesktopControlSession.cs` — process-memory-only local desktop consent with session-persistent auto-renew after local Resume, pause/resume, blue overlay and physical Esc×2 emergency stop.
 8. `src/QS3D.BricsCAD.V25/McpDiagnosticHub.cs` — bounded/redacted MCP + QS3D + BricsCAD diagnostic bridge.
 9. `src/QS3D.BricsCAD.V25/McpDirectDiagnosticsThemeRuntime.cs` — direct diagnostics tail/since/snapshot/wait and theme tools.
 10. `src/QS3D.BricsCAD.V25/McpTopLevelJson.cs` — security-sensitive top-level JSON parsing and mutation confirmation.
@@ -192,7 +192,7 @@ While `background_only` is active, global mutation tools `desktop_window_focus`,
 
 ### Desktop-wide tools — explicit fallback
 
-The explicit desktop namespace keeps the 14 Approach-A primitives plus the bounded single-target `desktop_sequence`. Desktop mutation requires `foreground_fallback`, `confirmMutation=true` and local desktop consent. Clipboard/screenshot reads require `confirmSensitiveRead=true` and local consent. Consent is process-memory-only, expires after 10 minutes without a new guarded desktop action and cannot be enabled/resumed by MCP.
+The explicit desktop namespace keeps the 14 Approach-A primitives plus the bounded single-target `desktop_sequence`. Desktop mutation requires `foreground_fallback`, `confirmMutation=true` and local desktop consent. Clipboard/screenshot reads require `confirmSensitiveRead=true` and local consent. Consent is process-memory-only; after an explicit local Resume it remains ON with session-persistent auto-renew for the current BricsCAD process and has no idle-expiry countdown. It still cannot be enabled/resumed by MCP, and Pause desktop, Emergency Stop, physical Esc×2 or BricsCAD/QS3D shutdown revoke it immediately.
 
 Physical **Esc ×2 within 1.2 seconds** revokes desktop consent, advances the emergency-stop epoch, hides the overlay and requests CAD command cancellation. Sequence/drag/input paths must fail closed when the target, consent generation or mutation epoch changes.
 
@@ -271,7 +271,7 @@ The local matrix must cover at least:
 21. provider switching does not cause a non-selected running transport to be reported as selected READY;
 22. public OAuth code/token/refresh replay/resource-binding invariants on the Cloudflare path;
 23. `background_only` startup and same-process background controls;
-24. local desktop-consent OFF rejection, Resume/Pause, idle expiry and blue overlay;
+24. local desktop-consent OFF rejection, local Resume/Pause, AUTO-RENEW remaining ON beyond 10 minutes of idle time, and blue overlay while guarded actions run;
 25. bounded screenshot/clipboard/mouse/drag/type/key behavior only under existing consent/confirmation rules;
 26. bounded `desktop_sequence` success/rejection/cancellation contracts;
 27. physical Esc×2 emergency stop and CAD cancel;
