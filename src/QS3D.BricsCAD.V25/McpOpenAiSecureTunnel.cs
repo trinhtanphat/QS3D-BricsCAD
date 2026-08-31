@@ -275,8 +275,16 @@ namespace QS3D.BricsCAD.V25
                 message = "Không chấp nhận tunnel-client: " + trustError;
                 return false;
             }
-            Directory.CreateDirectory(SettingsDirectory);
-            WriteText(ClientPathFile, fullPath);
+            try
+            {
+                WriteTextVerified(ClientPathFile, fullPath);
+            }
+            catch (Exception ex)
+            {
+                message = "Không lưu/xác minh được đường dẫn tunnel-client: " + ex.Message;
+                SetLastError(message);
+                return false;
+            }
             lock (Sync) _clientTrustSummary = trustSummary;
             message = "Đã chọn tunnel-client qua trust verification; " + trustSummary + ".";
             return true;
@@ -331,8 +339,7 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
-                Directory.CreateDirectory(SettingsDirectory);
-                WriteText(TunnelIdFile, normalizedTunnelId);
+                WriteTextVerified(TunnelIdFile, normalizedTunnelId);
                 WriteRuntimeConfig(normalizedTunnelId, McpEmbeddedServer.Endpoint);
                 try { if (File.Exists(HealthUrlPath)) File.Delete(HealthUrlPath); } catch { }
 
@@ -402,7 +409,7 @@ namespace QS3D.BricsCAD.V25
                     return false;
                 }
 
-                WriteText(AutoStartFile, "1");
+                WriteTextVerified(AutoStartFile, "1");
                 McpTransportCoordinator.SetSelectedProvider(McpTransportProvider.OpenAiSecureTunnel);
                 message = "OpenAI Secure MCP Tunnel đang khởi động. Runtime API key đã được xác minh và lưu bảo mật trong Windows Credential Manager; không ghi secret vào config/timeline. Chờ READY rồi kết nối ChatGPT bằng Connection = Tunnel.";
                 return true;
@@ -430,8 +437,19 @@ namespace QS3D.BricsCAD.V25
 
         public static void Stop()
         {
-            WriteText(AutoStartFile, "0");
+            Exception? persistenceError = null;
+            try
+            {
+                WriteTextVerified(AutoStartFile, "0");
+            }
+            catch (Exception ex)
+            {
+                persistenceError = ex;
+                SetLastError("Không lưu/xác minh được trạng thái autostart=OFF: " + ex.Message);
+            }
             StopProcessOnly();
+            if (persistenceError != null)
+                throw new InvalidOperationException("OpenAI Secure MCP Tunnel đã dừng nhưng không lưu được trạng thái autostart=OFF.", persistenceError);
         }
 
         public static void StopForHostShutdown()
@@ -735,6 +753,14 @@ namespace QS3D.BricsCAD.V25
             {
                 value = (Environment.GetEnvironmentVariable(ControlPlaneApiKeyEnvironment) ?? string.Empty).Trim();
                 if (!string.IsNullOrWhiteSpace(value)) return value;
+
+                string saved;
+                if (McpPersistentUserSettings.TryReadOpenAiRuntimeApiKey(out saved))
+                {
+                    value = (saved ?? string.Empty).Trim();
+                    if (!string.IsNullOrWhiteSpace(value)) return value;
+                }
+
                 return (Environment.GetEnvironmentVariable(OpenAiApiKeyEnvironment) ?? string.Empty).Trim();
             }
             catch { return string.Empty; }
@@ -815,14 +841,14 @@ namespace QS3D.BricsCAD.V25
             catch { return string.Empty; }
         }
 
-        private static void WriteText(string path, string value)
+        private static void WriteTextVerified(string path, string value)
         {
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(path) ?? SettingsDirectory);
-                File.WriteAllText(path, value ?? string.Empty, new UTF8Encoding(false));
-            }
-            catch { }
+            var expected = value ?? string.Empty;
+            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? SettingsDirectory);
+            File.WriteAllText(path, expected, new UTF8Encoding(false));
+            var verified = File.ReadAllText(path, Encoding.UTF8);
+            if (!string.Equals(verified, expected, StringComparison.Ordinal))
+                throw new IOException("Persistence read-back verification failed for " + Path.GetFileName(path) + ".");
         }
 
         private static void SetLastError(string value)
