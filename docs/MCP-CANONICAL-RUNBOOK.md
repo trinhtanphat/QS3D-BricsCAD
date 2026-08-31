@@ -56,14 +56,14 @@ Inspect these first:
 9. `src/QS3D.BricsCAD.V25/McpDirectDiagnosticsThemeRuntime.cs` — direct diagnostics tail/since/snapshot/wait and theme tools.
 10. `src/QS3D.BricsCAD.V25/McpTopLevelJson.cs` — security-sensitive top-level JSON parsing and mutation confirmation.
 11. `src/QS3D.BricsCAD.V25/McpAgentControlCenter.cs` — guided four-tab `QS3DMCPAGENTCENTER` UX and transport selector.
-12. `src/QS3D.BricsCAD.V25/McpOpenAiSecureTunnel.cs` — transport coordinator plus OpenAI `tunnel-client` supervisor, memory-only Runtime API key handling and readiness probing.
+12. `src/QS3D.BricsCAD.V25/McpOpenAiSecureTunnel.cs` — transport coordinator plus OpenAI `tunnel-client` supervisor, binary trust verification, memory-only Runtime API key handling, readiness probing and bounded diagnostics.
 13. `src/QS3D.BricsCAD.V25/McpLocalAgentClient.cs` — local loopback protocol/self-test/emergency-control client.
 14. `src/QS3D.BricsCAD.V25/McpAgentExperience.cs` — bounded local onboarding/action/error timeline; operational metadata only.
 15. `src/QS3D.BricsCAD.V25/McpProjectRecoveryService.cs` — autosave/BAK policy and bounded versioned DWG recovery-to-copy.
 16. `src/QS3D.BricsCAD.V25/McpFirstRunExperience.cs` — rate-limited first-run onboarding toast.
-17. `src/QS3D.BricsCAD.V25/McpCloudflaredBootstrapper.cs` — managed verified `cloudflared` bootstrap and single-flight install state.
+17. `src/QS3D.BricsCAD.V25/McpCloudflaredBootstrapper.cs` — trusted cloudflared discovery/reuse, bounded download, Authenticode verification, progress/cancel and atomic managed install.
 18. `src/QS3D.BricsCAD.V25/McpCloudflareAccountOnboarding.cs` — provider-browser login, persistent Named Tunnel/DNS/autostart.
-19. `src/QS3D.BricsCAD.V25/McpCloudflareOnboarding.cs` — advanced token / Quick Tunnel fallback.
+19. `src/QS3D.BricsCAD.V25/McpCloudflareOnboarding.cs` — advanced token / Quick Tunnel fallback with installer recovery controls.
 20. `src/QS3D.BricsCAD.V25/McpPublicEndpointResolver.cs` — validated public HTTPS `/mcp` source for Cloudflare/public-URL transports only.
 
 `src/QS3D.BricsCAD.V25/McpEmbeddedServer.cs` is legacy historical source and is not the active compiled transport.
@@ -78,11 +78,19 @@ Use this when the user wants ChatGPT/OpenAI products to reach a local/private QS
 
 1. In OpenAI Platform, open **Tunnels** and create/reuse a tunnel. The runtime principal needs Tunnels **Read + Use**; operators that create/edit tunnels additionally need **Manage**.
 2. Obtain the official `tunnel-client` from OpenAI Platform Tunnels or the official `openai/tunnel-client` release.
-3. In Agent Center choose **OpenAI Secure Tunnel**, select `tunnel-client.exe`, and enter the `tunnel_...` ID.
+3. In Agent Center choose **OpenAI Secure Tunnel**, select `tunnel-client.exe`, and enter the `tunnel_...` ID. QS3D verifies `--version` and verifies the executable again immediately before launch.
 4. Enter a **Runtime API key** for the current session, or supply `CONTROL_PLANE_API_KEY`/`OPENAI_API_KEY` in the Windows environment. QS3D does **not** persist the Runtime API key.
 5. Start the Secure Tunnel and wait until the local `tunnel-client` readiness endpoint reports **READY**.
 6. In ChatGPT connector/app settings choose **Connection = Tunnel** and select/paste the same Tunnel ID. This path does not require the QS3D public URL/OAuth screen.
 7. Keep `tunnel-client` running while ChatGPT needs the MCP.
+
+Tunnel-client trust is fail-closed. If the Windows executable has valid Authenticode, the signer must identify OpenAI. If an official OpenAI release is intentionally unsigned, pin the official release SHA-256 in the Windows environment before selecting it:
+
+```text
+QS3D_OPENAI_TUNNEL_CLIENT_SHA256=<64-hex-official-release-sha256>
+```
+
+QS3D computes SHA-256 itself and requires an exact match. A locally invented checksum file or filename is not treated as release provenance. Changing/replacing the executable after selection does not bypass the policy because trust is checked again immediately before every launch.
 
 QS3D writes a non-secret `tunnel-client.yaml` that points to the exact local `McpEmbeddedServer.Endpoint`. The config stores only environment references for secrets. The child process receives:
 
@@ -92,6 +100,8 @@ QS3D writes a non-secret `tunnel-client.yaml` that points to the exact local `Mc
 - loopback-only health/admin binding.
 
 The Runtime API key and local bearer are not written to QS3D config, status timeline or audit. On process restart, a user-entered Runtime API key is gone; automatic restart is possible only when a suitable runtime key already exists in the process environment.
+
+The supervisor captures a bounded tail of `tunnel-client` stdout/stderr for troubleshooting, records the process exit code and exposes a sanitized diagnostic bundle. API-key-like values and Authorization values are redacted before being retained. Diagnostic capture is bounded and must never be promoted into a secret-bearing persistent log.
 
 ### 3.2 Cloudflare Named Tunnel — stable public URL + OAuth/DCR
 
@@ -111,9 +121,22 @@ Existing users with a saved Named Tunnel keep that provider selection on upgrade
 
 Quick Tunnel remains a diagnostic fallback. It can be used without a domain/login, but the `trycloudflare.com` hostname can rotate. Because public-URL OAuth credentials are resource-bound, a changed URL requires a fresh ChatGPT connection. Quick Tunnel is never auto-started and must not be described as a stable production transport.
 
-### 3.4 Cloudflare installer busy state
+### 3.4 Cloudflare installer, progress, cancel and recovery
 
-`McpCloudflaredBootstrapper` is single-flight. A second click while the download/Authenticode check is already running is **busy/informational**, not a failed installation. Agent Center must not create a red “Cài Cloudflare thất bại” toast for that state.
+`McpCloudflaredBootstrapper` is single-flight. A second click while the download/Authenticode check is already running is **busy/informational**, not a failed installation. While busy, the install action is disabled, the UI shows download progress, and a **Cancel / Hủy cài Cloudflare Tunnel** action is available. Agent Center must not create a red “Cài Cloudflare thất bại” toast merely because another install is already running.
+
+Before downloading a duplicate, QS3D searches trusted existing installations, including the WinGet link, Program Files, the explicit `QS3D_CLOUDFLARED_PATH` and PATH. A candidate is accepted only after Windows Authenticode verification with a Cloudflare signer. A trusted existing WinGet/system binary is reused directly.
+
+The managed downloader is bounded: each attempt has an outer limit of **120 seconds**, bounded read/write timeouts, a maximum of three attempts, progress reporting and cancellation. Downloads go to a temporary path, are Authenticode-verified, then replace the managed binary atomically with rollback protection. Cancellation or failure cleans the temporary file and does not intentionally destroy the previous verified binary.
+
+If the managed download is blocked or repeatedly times out, the canonical manual recovery is:
+
+```powershell
+winget install --id Cloudflare.cloudflared
+cloudflared --version
+```
+
+Then return to Agent Center and **Refresh**. QS3D should discover the WinGet binary, verify the Cloudflare Authenticode signer and reuse it instead of downloading a second copy.
 
 ## 4. Authentication contracts
 
@@ -187,8 +210,9 @@ QS3D does not scrape the ChatGPT web conversation. Agent Center mirrors bounded 
 
 Transport status is provider-aware:
 
-- OpenAI: process `RUNNING` versus health `READY`, selected Tunnel ID and user registration acknowledgement; readiness alone is not claimed as proof of a ChatGPT `tools/call`;
+- OpenAI: process `RUNNING` versus health `READY`, selected Tunnel ID, binary-trust summary, last process exit/error and user registration acknowledgement; readiness alone is not claimed as proof of a ChatGPT `tools/call`;
 - Cloudflare: tunnel/public URL, user registration acknowledgement and actual recent authenticated OAuth MCP traffic remain distinct states;
+- Cloudflare installer: trusted source/path plus bounded progress/cancel status are separate from tunnel READY state;
 - Quick Tunnel is explicitly marked test-only.
 
 Both V25 and V26 start embedded MCP and then auto-start only the preferred persistent transport. On clean installs the preference is OpenAI Secure Tunnel; existing saved Named Tunnel users retain Named Tunnel as the inferred preference until they explicitly switch. Quick Tunnel never auto-starts. Host teardown stops the selected/supervised tunnel processes before the embedded MCP stops.
@@ -214,7 +238,7 @@ For the current MCP surface, run/inspect at minimum:
 - `scripts/preflight-mcp-loopback-readonly.py`
 - deterministic Core smoke and trusted V25/V26 compilation where selected by repository CI.
 
-`preflight-mcp-transport-providers.py` must keep the three-provider selector, memory-only Runtime API key/local-bearer boundary, dynamic loopback endpoint, OpenAI readiness contract, V25/V26 startup/teardown wiring and the Cloudflare installer busy-state fix source-guarded.
+`preflight-mcp-transport-providers.py` must keep the three-provider selector, memory-only Runtime API key/local-bearer boundary, dynamic loopback endpoint, OpenAI readiness + binary-trust + bounded stdout/stderr diagnostic contracts, V25/V26 startup/teardown wiring, trusted cloudflared reuse, WinGet recovery, bounded timeout/retry/progress/cancel, and Cloudflare busy-state UX source-guarded.
 
 Hosted/source evidence does not replace real OpenAI/Cloudflare/ChatGPT/licensed-BricsCAD runtime qualification.
 
@@ -227,28 +251,33 @@ The local matrix must cover at least:
 1. exact DLL load in V25/V26 and local MCP health;
 2. four-tab Agent Center with all three transport choices;
 3. clean-install default OpenAI provider and upgrade preservation of an existing Named Tunnel preference;
-4. official Windows `tunnel-client` selection/version check;
-5. valid/invalid `tunnel_...` validation;
-6. Runtime API key used only in memory/child environment and absent from QS3D config/timeline/audit;
-7. local QS3D bearer used through the environment reference and absent from YAML/logs;
-8. Secure Tunnel starts against the exact local fallback/preferred MCP port and reaches `/readyz`;
-9. ChatGPT **Connection = Tunnel** using the same Tunnel ID, with representative `tools/list` and read-only MCP call;
-10. restart behavior: user-entered Runtime API key is not persisted; environment-provided runtime key may auto-start the preferred Secure Tunnel;
-11. Secure Tunnel process exit/restart/host-teardown behavior;
-12. Cloudflare Named Tunnel install/login/stable hostname/public `/mcp` + OAuth/DCR path;
-13. Cloudflare install double-click/busy behavior produces informational state only;
-14. Cloudflare authorization deny/approve, PKCE S256 and representative tool scan;
-15. Quick Tunnel test-only URL churn and required reconnect;
-16. provider switching does not cause a non-selected running transport to be reported as selected READY;
-17. public OAuth code/token/refresh replay/resource-binding invariants on the Cloudflare path;
-18. `background_only` startup and same-process background controls;
-19. local desktop-consent OFF rejection, Resume/Pause, idle expiry and blue overlay;
-20. bounded screenshot/clipboard/mouse/drag/type/key behavior only under existing consent/confirmation rules;
-21. bounded `desktop_sequence` success/rejection/cancellation contracts;
-22. physical Esc×2 emergency stop and CAD cancel;
-23. versioned backup/recovery-to-new-copy;
-24. one confirmed disposable-DWG mutation plus audit/save/reopen;
-25. clean V25/V26 process shutdown with tunnel processes stopped.
+4. official Windows `tunnel-client` selection/version check plus Authenticode signer validation or official SHA-256 pin via `QS3D_OPENAI_TUNNEL_CLIENT_SHA256` for an unsigned release;
+5. replacement/tampering after tunnel-client selection is rejected by the pre-launch trust re-check;
+6. valid/invalid `tunnel_...` validation;
+7. Runtime API key used only in memory/child environment and absent from QS3D config/timeline/audit;
+8. local QS3D bearer used through the environment reference and absent from YAML/logs;
+9. Secure Tunnel starts against the exact local fallback/preferred MCP port and reaches `/readyz`;
+10. ChatGPT **Connection = Tunnel** using the same Tunnel ID, with representative `tools/list` and read-only MCP call;
+11. restart behavior: user-entered Runtime API key is not persisted; environment-provided runtime key may auto-start the preferred Secure Tunnel;
+12. Secure Tunnel process stdout/stderr capture is bounded/sanitized; forced failure records useful exit/error diagnostics without exposing Runtime API key/local bearer;
+13. Secure Tunnel process exit/restart/host-teardown behavior;
+14. Cloudflare installer disables repeat-install action, visibly advances progress and permits Cancel without reporting a synthetic red busy failure;
+15. managed cloudflared download timeout/retry path is bounded at 120 seconds per attempt and cleanup preserves the prior verified binary;
+16. a trusted WinGet `cloudflared` installation is discovered, Authenticode-verified and reused without downloading a duplicate managed binary;
+17. an untrusted or non-Cloudflare-signed `cloudflared.exe` is rejected;
+18. Cloudflare Named Tunnel login/stable hostname/public `/mcp` + OAuth/DCR path;
+19. Cloudflare authorization deny/approve, PKCE S256 and representative tool scan;
+20. Quick Tunnel test-only URL churn and required reconnect;
+21. provider switching does not cause a non-selected running transport to be reported as selected READY;
+22. public OAuth code/token/refresh replay/resource-binding invariants on the Cloudflare path;
+23. `background_only` startup and same-process background controls;
+24. local desktop-consent OFF rejection, Resume/Pause, idle expiry and blue overlay;
+25. bounded screenshot/clipboard/mouse/drag/type/key behavior only under existing consent/confirmation rules;
+26. bounded `desktop_sequence` success/rejection/cancellation contracts;
+27. physical Esc×2 emergency stop and CAD cancel;
+28. versioned backup/recovery-to-new-copy;
+29. one confirmed disposable-DWG mutation plus audit/save/reopen;
+30. clean V25/V26 process shutdown with tunnel processes stopped.
 
 Never commit Runtime API keys, OpenAI admin keys, access/refresh tokens, static bearer secrets, Cloudflare credentials, private paths/DWGs, clipboard contents, typed secrets, proprietary BricsCAD binaries or unsanitized screenshots.
 
@@ -263,15 +292,18 @@ For future MCP work:
 5. preserve one repo/runtime and loopback-only embedded MCP;
 6. preserve all three intentional provider semantics: OpenAI Secure Tunnel = private/no-domain, Cloudflare Named = stable public URL + OAuth, Cloudflare Quick = test only;
 7. never persist OpenAI Runtime API keys or the local bearer; use environment references for the supervised tunnel-client;
-8. do not silently convert Secure Tunnel readiness into proof of actual ChatGPT tool traffic;
-9. preserve `background_only` as the process-start default and keep global desktop input locally consented;
-10. preserve Approach A explicit primitives and Approach B bounded single-target `desktop_sequence`; do not add `desktop_macro` or arbitrary scripting;
-11. do not expose generic shell/process execution through MCP merely to manage transports;
-12. update this runbook and LOCAL-024 whenever provider/runtime behavior changes;
-13. never promote hosted CI to `LOCAL_PASS`.
+8. preserve fail-closed binary trust: Cloudflare Authenticode signer verification and OpenAI Authenticode-or-official-SHA-256 verification before launch;
+9. preserve bounded cloudflared install timeout/retry/progress/cancel and trusted WinGet/system reuse;
+10. preserve bounded/sanitized OpenAI stdout/stderr diagnostics; do not put secrets into copied diagnostics;
+11. do not silently convert Secure Tunnel readiness into proof of actual ChatGPT tool traffic;
+12. preserve `background_only` as the process-start default and keep global desktop input locally consented;
+13. preserve Approach A explicit primitives and Approach B bounded single-target `desktop_sequence`; do not add `desktop_macro` or arbitrary scripting;
+14. do not expose generic shell/process execution through MCP merely to manage transports;
+15. update this runbook and LOCAL-024 whenever provider/runtime behavior changes;
+16. never promote hosted CI to `LOCAL_PASS`.
 
 ## 11. Definition of done
 
-For #4916, source completion requires the provider-aware Agent Center, OpenAI tunnel-client supervisor, Cloudflare single-flight busy-state fix, V25/V26 lifecycle wiring, canonical source guard and docs to pass fresh protected-PR CI on current `main`.
+For #4916, source completion requires the provider-aware Agent Center, OpenAI tunnel-client supervisor with trust + bounded diagnostics, Cloudflare trusted binary reuse plus bounded timeout/progress/Cancel/WinGet recovery, V25/V26 lifecycle wiring, canonical source guard and docs to pass fresh protected-PR CI on current `main`.
 
 Full runtime completion is separate. The exact intended merged/release descendant must pass LOCAL-024 with real Windows + licensed BricsCAD V25/V26 + OpenAI Secure MCP Tunnel + Cloudflare fallback + ChatGPT. Until that evidence exists, the runtime state remains `PENDING_LOCAL` and no hosted check may be cited as `LOCAL_PASS`.
