@@ -4,106 +4,83 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "QS3D.BricsCAD.V25"
-PERMISSIONS = SRC / "McpLocalControlPermissions.cs"
-DESKTOP = SRC / "McpDesktopAutomationRuntime.cs"
-BACKGROUND = SRC / "McpBackgroundHostRuntime.cs"
 AUGMENTER = SRC / "McpPersistentAgentCenterAugmenter.cs"
+SESSION = SRC / "McpDesktopControlSession.cs"
+BACKGROUND = SRC / "McpBackgroundHostRuntime.cs"
 SETTINGS = SRC / "McpPersistentUserSettings.cs"
 INSTALLER = SRC / "Updates" / "VerifiedPreviewInstaller.cs"
 RUNBOOK = ROOT / "docs" / "MCP-CANONICAL-RUNBOOK.md"
 
 
 def fail(message: str) -> None:
-    print(f"ERROR: MCP granular-permissions preflight failed: {message}", file=sys.stderr)
+    print(f"ERROR: MCP local-control permission UI preflight failed: {message}", file=sys.stderr)
     raise SystemExit(1)
 
 
-for path in (PERMISSIONS, DESKTOP, BACKGROUND, AUGMENTER, SETTINGS, INSTALLER, RUNBOOK):
+for path in (AUGMENTER, SESSION, BACKGROUND, SETTINGS, INSTALLER, RUNBOOK):
     if not path.is_file():
         fail("missing required file: " + str(path.relative_to(ROOT)))
 
-permissions = PERMISSIONS.read_text(encoding="utf-8")
-desktop = DESKTOP.read_text(encoding="utf-8")
-background = BACKGROUND.read_text(encoding="utf-8")
 augmenter = AUGMENTER.read_text(encoding="utf-8")
+session = SESSION.read_text(encoding="utf-8")
+background = BACKGROUND.read_text(encoding="utf-8")
 settings = SETTINGS.read_text(encoding="utf-8")
 installer = INSTALLER.read_text(encoding="utf-8")
 runbook = RUNBOOK.read_text(encoding="utf-8")
 
-for token in (
-    "internal static class McpLocalControlPermissions",
-    "private static int _backgroundHostControl = 1;",
-    "private static int _screenRead;",
-    "private static int _mouseInput;",
-    "private static int _keyboardInput;",
-    "private static int _clipboardAccess;",
-    "public static bool BackgroundHostControl",
-    "public static bool ScreenRead",
-    "public static bool MouseInput",
-    "public static bool KeyboardInput",
-    "public static bool ClipboardAccess",
-    "public static bool HasAnyForegroundPermission",
-    "SetBackgroundHostControlFromLocalUser",
-    "SetScreenReadFromLocalUser",
-    "SetMouseInputFromLocalUser",
-    "SetKeyboardInputFromLocalUser",
-    "SetClipboardAccessFromLocalUser",
-    "RequireForTool(string toolName)",
-    'case "bricscad_ui_text_snapshot":',
-    'case "bricscad_ui_invoke":',
-    'case "bricscad_ui_set_text":',
-    'case "desktop_screenshot":',
-    'case "desktop_window_focus":',
-    'case "desktop_mouse_move":',
-    'case "desktop_mouse_click":',
-    'case "desktop_mouse_scroll":',
-    'case "desktop_mouse_drag":',
-    'case "desktop_type":',
-    'case "desktop_key":',
-    'case "desktop_clipboard_read":',
-    'case "desktop_clipboard_write":',
-):
-    if token not in permissions:
-        fail("permission authority missing contract: " + token)
-
-if "Environment." in permissions or "CredWrite" in permissions or "File." in permissions:
-    fail("granular foreground permissions must remain process-memory-only")
-
-if "McpLocalControlPermissions.RequireForTool(tool);" not in desktop:
-    fail("desktop dispatch must enforce granular permission before execution")
-if "McpLocalControlPermissions.RequireForTool(step.Tool);" not in desktop:
-    fail("desktop_sequence must enforce granular permission for each contained step")
-if '"permissions":' not in background or "McpLocalControlPermissions.StatusJson()" not in background:
-    fail("interaction policy status must expose current granular permissions")
-
+# Agent Center must expose the two real authority layers as checkboxes, not a coarse action button.
 for token in (
     "PermissionPanelTag",
-    "BackgroundPermissionTag",
-    "ScreenPermissionTag",
-    "MousePermissionTag",
-    "KeyboardPermissionTag",
-    "ClipboardPermissionTag",
+    "BackgroundModeCheckBoxTag",
+    "DesktopForegroundToggleTag",
     "new CheckBox",
-    "Chạy nền trong BricsCAD (không chiếm chuột/phím)",
-    "Cho phép đọc/chụp màn hình",
-    "Cho phép điều khiển chuột",
-    "Cho phép nhập bàn phím",
-    "Cho phép đọc/ghi clipboard",
-    "McpLocalControlPermissions.SetBackgroundHostControlFromLocalUser",
-    "McpLocalControlPermissions.SetScreenReadFromLocalUser",
-    "McpLocalControlPermissions.SetMouseInputFromLocalUser",
-    "McpLocalControlPermissions.SetKeyboardInputFromLocalUser",
-    "McpLocalControlPermissions.SetClipboardAccessFromLocalUser",
+    "MCP chạy nền BricsCAD/API (không chiếm chuột/phím): BẬT",
+    "Cho phép chuột / bàn phím / màn hình user",
+    "Background là đường mặc định; foreground chỉ dùng khi thật sự cần thao tác desktop.",
+    "RefreshDesktopPermissionPanel",
+    "ToggleDesktopForegroundAccess",
 ):
     if token not in augmenter:
-        fail("Agent Center checkbox UI missing contract: " + token)
+        fail("Agent Center permission UI missing contract: " + token)
 
-if "DesktopForegroundToggleTag" in augmenter:
-    fail("legacy coarse foreground toggle must be removed after granular checkbox UI lands")
-if "Cho phép chuột / bàn phím / màn hình user" in augmenter:
-    fail("legacy coarse foreground label must be removed after granular checkbox UI lands")
+if "CloneActionButton(resumeButton" in augmenter:
+    fail("foreground permission must no longer be rendered as a cloned action button")
+if "private static Button? FindTaggedButton" not in augmenter:
+    fail("existing button lookup for Resume desktop must remain available")
+if "private static CheckBox? FindTaggedCheckBox" not in augmenter:
+    fail("permission panel must track checkbox controls by stable tags")
 
-# Key persistence must remain durable and verified before process publication.
+# Background remains the safe/default path and foreground remains a strictly local explicit fallback.
+for token in (
+    "private static int _interactionPolicy = BackgroundOnly;",
+    'McpDesktopControlSession.RequireLocalConsent("foreground-fallback-enable")',
+):
+    if token not in background:
+        fail("background/foreground policy regression: " + token)
+
+for token in (
+    "DisableForegroundAccessFromLocalUser",
+    'StopSession(reason, false, false, "OFF")',
+    "ResumeFromLocalUser",
+):
+    if token not in session:
+        fail("local desktop-consent regression: " + token)
+
+# UI enable/disable still has to drive the same fail-closed policy + consent implementation.
+toggle_block = augmenter.split("private static void ToggleDesktopForegroundAccess()", 1)[1].split("private static void TrySetInteractionPolicy", 1)[0]
+for token in (
+    'TrySetInteractionPolicy("background_only")',
+    'TrySetInteractionPolicy("foreground_fallback")',
+    "McpDesktopControlSession.ResumeFromLocalUser()",
+    "McpDesktopControlSession.DisableForegroundAccessFromLocalUser",
+    "McpAgentExperience.Error(",
+):
+    if token not in toggle_block:
+        fail("foreground checkbox path missing fail-closed contract: " + token)
+if "throw;" in toggle_block:
+    fail("foreground checkbox failure must not rethrow into the WPF dispatcher")
+
+# Runtime API key must remain durable and verified before process publication.
 for token in (
     "WriteCredential(OpenAiRuntimeKeyTarget, secret);",
     "TryReadOpenAiRuntimeApiKey(out persisted)",
@@ -123,15 +100,15 @@ for forbidden in (
     if forbidden in installer:
         fail("preview updater must not touch MCP credential surface: " + forbidden)
 
+# Canonical docs must match merged credential truth and explain the two permission layers.
 for phrase in (
     "Windows Credential Manager",
     "read-back verification",
     "không ghi plaintext",
-    "BackgroundHostControl",
-    "ScreenRead",
-    "MouseInput",
-    "KeyboardInput",
-    "ClipboardAccess",
+    "background_only",
+    "foreground_fallback",
+    "checkbox",
+    "chuột / bàn phím / màn hình",
 ):
     if phrase not in runbook:
         fail("canonical MCP runbook missing current permission/credential truth: " + phrase)
@@ -144,4 +121,4 @@ for stale in (
     if stale in runbook:
         fail("canonical MCP runbook still contains stale Runtime API-key claim: " + stale)
 
-print("MCP granular local permissions preflight passed.")
+print("MCP local-control permission UI preflight passed.")
