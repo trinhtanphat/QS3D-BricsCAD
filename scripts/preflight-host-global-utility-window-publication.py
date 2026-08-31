@@ -10,24 +10,38 @@ if not properties_path.is_file():
 else:
     source = properties_path.read_text(encoding="utf-8")
     for needle in (
-        "private static ProjectPropertiesWindow? _published;", "var previous = _published;", "if (previous.IsLoaded)",
-        "previous.Activate();", "if (ReferenceEquals(_published, previous))", "_published = null;",
-        "window = new ProjectPropertiesWindow();", "var published = window;", "window.Closed += (_, __) =>",
-        "if (ReferenceEquals(_published, published)) _published = null;", "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
-        "if (!window.IsLoaded)", "host show returned without a loaded window.", "_published = published;", "window = null;",
-        "if (window != null)", "try { window.Close(); } catch { }"):
-        if needle not in source:
-            errors.append("Project Properties missing host-global publication contract: " + needle)
-    published_owner = source.find("_published = published;")
-    clear_window = source.find("window = null;", published_owner) if published_owner >= 0 else -1
-    positions = [source.find(token) for token in (
-        "var previous = _published;", "if (previous.IsLoaded)", "if (ReferenceEquals(_published, previous))",
-        "window = new ProjectPropertiesWindow();", "window.Closed += (_, __) =>",
+        "private static ProjectPropertiesWindow? _pending;", "private static ProjectPropertiesWindow? _published;",
+        "var pending = _pending;", 'CloseOwnerBeforeReplacement(pending, "pending");',
+        "var published = _published;", "if (published.IsLoaded)", "published.Activate();",
+        'CloseOwnerBeforeReplacement(published, "published");', "var window = new ProjectPropertiesWindow();",
+        "candidate = window;", "if (ReferenceEquals(_pending, window)) _pending = null;",
+        "if (ReferenceEquals(_published, window)) _published = null;", "_pending = window;",
         "Application.ShowModelessWindow(IntPtr.Zero, window, true);", "if (!window.IsLoaded)",
-        "_published = published;")]
-    positions.append(clear_window)
-    if min(positions) < 0 or positions != sorted(positions):
-        errors.append("Project Properties must reuse loaded owner, release stale owner, construct, bind Closed, show, confirm Loaded, then publish")
+        "if (!ReferenceEquals(_pending, window))", "_pending = null;", "_published = window;", "candidate = null;",
+        "CloseOwnerBeforeReplacement(ProjectPropertiesWindow window, string state)",
+        "if (window.IsLoaded || ReferenceEquals(_pending, window) || ReferenceEquals(_published, window))",
+        "ex.GetType().Name"):
+        if needle not in source:
+            errors.append("Project Properties missing pending-owner host-global publication contract: " + needle)
+    try:
+        pending_read = source.index("var pending = _pending;")
+        pending_drain = source.index('CloseOwnerBeforeReplacement(pending, "pending");', pending_read)
+        published_read = source.index("var published = _published;", pending_drain)
+        construct = source.index("var window = new ProjectPropertiesWindow();", published_read)
+        pending_assign = source.index("_pending = window;", construct)
+        host_show = source.index("Application.ShowModelessWindow(IntPtr.Zero, window, true);", pending_assign)
+        loaded = source.index("if (!window.IsLoaded)", host_show)
+        exact = source.index("if (!ReferenceEquals(_pending, window))", loaded)
+        clear_pending = source.index("_pending = null;", exact)
+        publish = source.index("_published = window;", clear_pending)
+        clear_candidate = source.index("candidate = null;", publish)
+        if not (pending_read < pending_drain < published_read < construct < pending_assign < host_show < loaded < exact < clear_pending < publish < clear_candidate):
+            errors.append("Project Properties must drain pending before construct and transfer ownership only after Loaded/exact-owner admission")
+    except ValueError as exc:
+        errors.append("Project Properties publication ordering marker missing: " + str(exc))
+    for forbidden in ("ProjectPropertiesWindow? window = null;", "var previous = _published;", "var published = window;", "+ ex.Message"):
+        if forbidden in source:
+            errors.append("Project Properties retains unsafe legacy publication/error pattern: " + forbidden)
 
 geometry_path = ROOT / "src/QS3D.BricsCAD.V25/GeometryExtensionsCommands.cs"
 if not geometry_path.is_file():
@@ -82,4 +96,4 @@ if errors:
     for error in errors:
         print("ERROR:", error)
     raise SystemExit(f"FAILED with {len(errors)} host-global utility publication error(s).")
-print("PASS: Project Properties retains its original host-global publication contract and Geometry Extensions uses pending-owned failure-clean publication")
+print("PASS: Project Properties and Geometry Extensions retain pending-owned, failure-clean host-global publication contracts")

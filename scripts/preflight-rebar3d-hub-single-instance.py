@@ -19,71 +19,75 @@ def forbid(token: str) -> None:
 
 
 for token in (
-    "private static Rebar3DHubWindow? _window;",
+    "private static Rebar3DHubWindow? _pending;",
+    "private static Rebar3DHubWindow? _published;",
     "Rebar3DHubWindow? candidate = null;",
-    "var published = _window;",
+    "var pending = _pending;",
+    'CloseOwnerBeforeReplacement(pending, "pending");',
+    "var published = _published;",
     "if (published.IsLoaded)",
     "published.Activate();",
-    "ReleasePublishedWindow(published);",
-    "candidate = new Rebar3DHubWindow();",
-    "var window = candidate;",
-    "window.Closed += (_, __) => ReleasePublishedWindow(window);",
+    'CloseOwnerBeforeReplacement(published, "published");',
+    "var window = new Rebar3DHubWindow();",
+    "candidate = window;",
+    "if (ReferenceEquals(_pending, window)) _pending = null;",
+    "if (ReferenceEquals(_published, window)) _published = null;",
+    "_pending = window;",
     "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
-    "if (!window.IsLoaded) return;",
-    "_window = window;",
+    "if (!window.IsLoaded)",
+    "if (!ReferenceEquals(_pending, window))",
+    "_pending = null;",
+    "_published = window;",
     "candidate = null;",
-    "finally",
-    "if (candidate != null) TryCloseUnpublishedWindow(candidate);",
-    "private static void ReleasePublishedWindow(Rebar3DHubWindow window)",
-    "if (!ReferenceEquals(_window, window)) return;",
-    "_window = null;",
-    "private static void TryCloseUnpublishedWindow(Rebar3DHubWindow window)",
-    "if (ReferenceEquals(_window, window)) return;",
-    "try { window.Close(); } catch (System.Exception) { }",
+    "private static void CloseOwnerBeforeReplacement(Rebar3DHubWindow window, string state)",
+    "window.Close();",
+    "if (window.IsLoaded || ReferenceEquals(_pending, window) || ReferenceEquals(_published, window))",
+    "ex.GetType().Name",
 ):
     require(token)
 
 for token in (
-    "var window = new Rebar3DHubWindow();",
-    "_window = new Rebar3DHubWindow();",
+    "private static Rebar3DHubWindow? _window;",
+    "var published = _window;",
+    "ReleasePublishedWindow",
+    "TryCloseUnpublishedWindow",
+    "if (!window.IsLoaded) return;",
+    "_window = window;",
+    "+ ex.Message",
 ):
     forbid(token)
 
 show_start = text.find("public void ShowRebarHub()")
-release_start = text.find("private static void ReleasePublishedWindow", show_start + 1)
-show = text[show_start:release_start] if show_start >= 0 and release_start > show_start else ""
+cleanup_start = text.find("private static void CloseOwnerBeforeReplacement", show_start + 1)
+show = text[show_start:cleanup_start] if show_start >= 0 and cleanup_start > show_start else ""
 
-publish_pos = show.find("_window = window;")
-transfer_pos = show.find("candidate = null;", publish_pos + 1) if publish_pos >= 0 else -1
-positions = [
-    show.find("Rebar3DHubWindow? candidate = null;"),
-    show.find("var published = _window;"),
-    show.find("ReleasePublishedWindow(published);"),
-    show.find("candidate = new Rebar3DHubWindow();"),
-    show.find("var window = candidate;"),
-    show.find("window.Closed += (_, __) => ReleasePublishedWindow(window);"),
-    show.find("Application.ShowModelessWindow(IntPtr.Zero, window, true);"),
-    show.find("if (!window.IsLoaded) return;"),
-    publish_pos,
-    transfer_pos,
-    show.find("finally"),
-    show.find("if (candidate != null) TryCloseUnpublishedWindow(candidate);"),
-]
-if min(positions) < 0:
-    errors.append("unable to prove Rebar 3D Hub cleanup/publication ordering")
-elif positions != sorted(positions):
-    errors.append("Rebar 3D Hub candidate must remain cleanup-owned through show/load, transfer only after publication, then finally cleanup only when still unpublished")
+try:
+    candidate = show.index("Rebar3DHubWindow? candidate = null;")
+    pending_read = show.index("var pending = _pending;", candidate)
+    pending_drain = show.index('CloseOwnerBeforeReplacement(pending, "pending");', pending_read)
+    published_read = show.index("var published = _published;", pending_drain)
+    construct = show.index("var window = new Rebar3DHubWindow();", published_read)
+    candidate_assign = show.index("candidate = window;", construct)
+    pending_assign = show.index("_pending = window;", candidate_assign)
+    host_show = show.index("Application.ShowModelessWindow(IntPtr.Zero, window, true);", pending_assign)
+    loaded = show.index("if (!window.IsLoaded)", host_show)
+    exact = show.index("if (!ReferenceEquals(_pending, window))", loaded)
+    clear = show.index("_pending = null;", exact)
+    publish = show.index("_published = window;", clear)
+    transfer = show.index("candidate = null;", publish)
+    if not (candidate < pending_read < pending_drain < published_read < construct < candidate_assign < pending_assign < host_show < loaded < exact < clear < publish < transfer):
+        errors.append("Rebar 3D Hub must drain pending before construction, own pending through show/load/exact proof, then transfer to published")
+except ValueError as exc:
+    errors.append("unable to prove Rebar 3D Hub pending/publication ordering: " + str(exc))
 
-release = text[release_start:] if release_start >= 0 else ""
-match_pos = release.find("if (!ReferenceEquals(_window, window)) return;")
-clear_pos = release.find("_window = null;", match_pos + 1)
-cleanup_start = release.find("private static void TryCloseUnpublishedWindow", clear_pos + 1)
-refuse_pos = release.find("if (ReferenceEquals(_window, window)) return;", cleanup_start + 1)
-close_pos = release.find("window.Close();", refuse_pos + 1)
-if min(match_pos, clear_pos, cleanup_start, refuse_pos, close_pos) < 0:
-    errors.append("unable to prove exact published release and unpublished cleanup refusal")
-elif not (match_pos < clear_pos < cleanup_start < refuse_pos < close_pos):
-    errors.append("cleanup helper must refuse the authoritative published owner before best-effort close")
+cleanup = text[cleanup_start:] if cleanup_start >= 0 else ""
+close_pos = cleanup.find("window.Close();")
+terminal_pos = cleanup.find("if (window.IsLoaded || ReferenceEquals(_pending, window) || ReferenceEquals(_published, window))", close_pos + 1)
+refusal_pos = cleanup.find("replacement was refused", terminal_pos + 1)
+if min(close_pos, terminal_pos, refusal_pos) < 0:
+    errors.append("unable to prove fail-closed terminal cleanup contract")
+elif not (close_pos < terminal_pos < refusal_pos):
+    errors.append("Rebar 3D Hub replacement cleanup must prove terminal ownership release after Close before replacement may proceed")
 
 if errors:
     for error in errors:
@@ -91,4 +95,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: Rebar 3D Hub reuses the loaded owner, publishes only after host load, and terminally closes only still-unpublished failed candidates.")
+print("PASS: Rebar 3D Hub reuses the loaded published owner, retains failed publication in exact pending ownership, and refuses replacement until cleanup is terminal.")
