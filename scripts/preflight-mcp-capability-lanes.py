@@ -50,6 +50,8 @@ def main():
         'Qs3dDomainUnavailableCode = "QS3D_DOMAIN_UNAVAILABLE"',
         'Qs3dContextRequiredCode = "QS3D_CONTEXT_REQUIRED"',
         'Qs3dSourceBugCode = "QS3D_SOURCE_BUG"',
+        "lane == McpToolLane.DesktopAutomation",
+        "QS3D_DOMAIN forbids native CAD and desktop automation mutations",
     ):
         require(errors, token in core, "Core capability contract lost token: " + token)
 
@@ -107,7 +109,7 @@ def main():
             print(" -", error)
         return 1
 
-    print("PASS: MCP function calling separates MCP/BricsCAD/CAD/desktop/QS3D lanes, mode gates and error contracts without coupling CAD-direct to QS3D health.")
+    print("PASS: MCP function calling separates MCP/BricsCAD/CAD/desktop/QS3D lanes, mode gates and error contracts without coupling CAD-direct to QS3D health or permitting desktop mutation fallback in QS3D_DOMAIN.")
     return 0
 
 
