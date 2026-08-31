@@ -21,12 +21,39 @@ namespace QS3D.Core.Recognition
             if (maxCount <= 0) throw new ArgumentOutOfRangeException(nameof(maxCount));
 
             var knownCount = ReadKnownCount(source, maxCount, label);
-            var materialized = source.Take(maxCount + 1).ToList();
-            if (materialized.Count > maxCount)
-                throw new InvalidOperationException(label + " supports at most " + maxCount + " items.");
+            var materialized = new List<T>();
+            using (var enumerator = source.GetEnumerator())
+            {
+                EnsureKnownCountStable(source, knownCount, maxCount, label);
+                while (true)
+                {
+                    EnsureKnownCountStable(source, knownCount, maxCount, label);
+                    var moved = enumerator.MoveNext();
+                    EnsureKnownCountStable(source, knownCount, maxCount, label);
+                    if (!moved) break;
+
+                    if (knownCount.HasValue && materialized.Count >= knownCount.Value)
+                        throw new InvalidOperationException(label + " enumerated more items than its reported Count " + knownCount.Value + ".");
+                    if (materialized.Count >= maxCount)
+                        throw new InvalidOperationException(label + " supports at most " + maxCount + " items.");
+
+                    var current = enumerator.Current;
+                    EnsureKnownCountStable(source, knownCount, maxCount, label);
+                    materialized.Add(current);
+                }
+            }
+
+            EnsureKnownCountStable(source, knownCount, maxCount, label);
             if (knownCount.HasValue && materialized.Count != knownCount.Value)
                 throw new InvalidOperationException(label + " reported Count " + knownCount.Value + " but enumerated " + materialized.Count + " items.");
             return materialized;
+        }
+
+        private static void EnsureKnownCountStable<T>(IEnumerable<T> source, int? admittedCount, int maxCount, string label)
+        {
+            var currentCount = ReadKnownCount(source, maxCount, label);
+            if (currentCount != admittedCount)
+                throw new InvalidOperationException(label + " changed its reported Count during enumeration.");
         }
 
         private static int? ReadKnownCount<T>(IEnumerable<T> source, int maxCount, string label)

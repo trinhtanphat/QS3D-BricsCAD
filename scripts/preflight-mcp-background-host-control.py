@@ -3,8 +3,15 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-DESKTOP = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpDesktopAutomationRuntime.cs"
-BACKGROUND = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpBackgroundHostRuntime.cs"
+SRC = ROOT / "src" / "QS3D.BricsCAD.V25"
+V26_SRC = ROOT / "src" / "QS3D.BricsCAD.V26"
+DESKTOP = SRC / "McpDesktopAutomationRuntime.cs"
+BACKGROUND = SRC / "McpBackgroundHostRuntime.cs"
+SESSION = SRC / "McpDesktopControlSession.cs"
+PERSISTENCE_UI = SRC / "McpPersistentAgentCenterAugmenter.cs"
+SETTINGS = SRC / "McpPersistentUserSettings.cs"
+PLUGIN = SRC / "PluginEntry.cs"
+V26_PLUGIN = V26_SRC / "PluginEntry.cs"
 
 
 def fail(message: str) -> None:
@@ -14,6 +21,11 @@ def fail(message: str) -> None:
 
 desktop = DESKTOP.read_text(encoding="utf-8")
 background = BACKGROUND.read_text(encoding="utf-8")
+session = SESSION.read_text(encoding="utf-8")
+persistence_ui = PERSISTENCE_UI.read_text(encoding="utf-8")
+settings = SETTINGS.read_text(encoding="utf-8")
+plugin = PLUGIN.read_text(encoding="utf-8")
+v26_plugin = V26_PLUGIN.read_text(encoding="utf-8")
 
 for tool in (
     "bricscad_interaction_policy_get",
@@ -43,10 +55,65 @@ requirements = {
     "window PrintWindow path": (desktop, "CaptureWindowBitmap(hwnd"),
     "PrintWindow API": (desktop, "PrintWindow(IntPtr hwnd"),
     "screen BitBlt retained": (desktop, "BitBlt(memory, 0, 0, width, height, screen, x, y, SRCCOPY)"),
+    "foreground toggle": (persistence_ui, "Cho phép chuột / bàn phím / màn hình user"),
+    "foreground off keeps background agent": (session, "DisableForegroundAccessFromLocalUser"),
+    "secure credential target": (settings, "QS3D.BricsCAD.MCP.OpenAI.RuntimeApiKey"),
+    "windows credential write": (settings, 'EntryPoint = "CredWriteW"'),
+    "windows credential read": (settings, 'EntryPoint = "CredReadW"'),
+    "V25 startup secret restore": (plugin, "McpPersistentUserSettings.ApplyStartupSecretsToProcessEnvironment()"),
+    "V26 startup secret restore": (v26_plugin, "McpPersistentUserSettings.ApplyStartupSecretsToProcessEnvironment()"),
+    "V25 persistence UI startup": (plugin, "McpPersistentAgentCenterAugmenter.Start()"),
+    "V26 persistence UI startup": (v26_plugin, "McpPersistentAgentCenterAugmenter.Start()"),
+    "typed key capture": (persistence_ui, "McpPersistentUserSettings.SaveOpenAiRuntimeApiKey(value)"),
 }
 for label, (source, token) in requirements.items():
     if token not in source:
         fail(f"missing {label}: {token}")
+
+# Restore the user-scoped secret before transport autostart on every supported BricsCAD host major.
+for host, host_plugin in (("V25", plugin), ("V26", v26_plugin)):
+    if host_plugin.index("McpPersistentUserSettings.ApplyStartupSecretsToProcessEnvironment()") > host_plugin.index("McpTransportCoordinator.TryAutoStartPreferred()"):
+        fail(f"{host} saved Runtime API key must be restored before transport auto-start")
+
+# Turning desktop permission OFF must not invoke the historical agent-wide StopAutomation path.
+disable_block = session.split("public static void DisableForegroundAccessFromLocalUser", 1)[1].split("public static void RequireLocalConsent", 1)[0]
+if 'StopSession(reason, false, false, "OFF")' not in disable_block:
+    fail("foreground OFF must revoke desktop access without stopping background CAD/API automation")
+
+# WPF click handlers must fail closed without rethrowing into the dispatcher.
+toggle_block = persistence_ui.split("private static void ToggleDesktopForegroundAccess()", 1)[1].split("private static void TrySetInteractionPolicy", 1)[0]
+if "throw;" in toggle_block:
+    fail("foreground toggle must not rethrow failures into the WPF dispatcher")
+if "McpAgentExperience.Error(" not in toggle_block:
+    fail("foreground toggle failure must publish a bounded local error after fail-closed revocation")
+if 'TrySetInteractionPolicy("background_only")' not in toggle_block:
+    fail("foreground toggle failure must restore background_only before reporting failure")
+
+# Do not regress to plaintext secret persistence in QS3D files.
+settings_lower = settings.lower()
+for forbidden in (
+    "file.writealltext",
+    "streamwriter",
+    "runtime-api-key.txt",
+    "secret.txt",
+):
+    if forbidden in settings_lower:
+        fail(f"secret persistence must stay in Windows Credential Manager, found: {forbidden}")
+
+# Wipe the exact native UTF-8 credential blob length, not character count.
+if "i < bytes.Length" not in settings or "Marshal.WriteByte(blob, i, 0)" not in settings:
+    fail("native credential write buffer must be zeroed for every allocated UTF-8 byte")
+
+# Read-side managed/native copies must also be scrubbed from finally, including malformed/decode failures.
+read_block = settings.split("public static bool TryReadOpenAiRuntimeApiKey", 1)[1].split("public static void DeleteOpenAiRuntimeApiKey", 1)[0]
+if "byte[]? readBytes = null;" not in read_block:
+    fail("credential read must retain a finally-visible managed byte buffer for scrubbing")
+if "Array.Clear(readBytes, 0, readBytes.Length);" not in read_block:
+    fail("credential read managed byte buffer must be zeroed from finally")
+if "Marshal.WriteByte(readBlob, i, 0)" not in read_block:
+    fail("credential read native blob must be zeroed before CredFree")
+if read_block.index("Array.Clear(readBytes, 0, readBytes.Length);") < read_block.index("finally"):
+    fail("credential read managed scrub must live in finally so decode failures cannot bypass it")
 
 mutation_block = desktop.split("private static readonly HashSet<string> MutationTools", 1)[1].split("};", 1)[0]
 for tool in (
@@ -57,7 +124,7 @@ for tool in (
     if f'"{tool}"' not in mutation_block:
         fail(f"{tool} must remain behind McpCadAgentRuntime mutation confirmation/epoch guard")
 
-# The new same-process runtime must not become a remote shell/process/file system escape hatch.
+# The same-process runtime must not become a remote shell/process/file system escape hatch.
 for forbidden in (
     "Process.Start(",
     "cmd.exe",
@@ -83,4 +150,4 @@ if "CaptureBitmap(" in window_branch or "BitBlt(" in window_branch:
 if "CaptureBitmap(rect.Left, rect.Top, width, height)" not in screenshot:
     fail("screen screenshot must retain the bounded desktop BitBlt path")
 
-print("MCP background-host preflight passed.")
+print("MCP background-host + persistence preflight passed.")
