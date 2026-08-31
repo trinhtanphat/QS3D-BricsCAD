@@ -128,12 +128,6 @@ namespace QS3D.Core.SmokeTests
                 }
             }
 
-            MepTbqReportRow IList<MepTbqReportRow>.this[int index]
-            {
-                get => this[index];
-                set => throw new NotSupportedException();
-            }
-
             public IEnumerator<MepTbqReportRow> GetEnumerator()
             {
                 yield return _row;
