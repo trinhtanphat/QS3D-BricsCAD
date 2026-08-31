@@ -47,12 +47,12 @@ namespace QS3D.BricsCAD.V25
             "AUDIT", "OVERKILL"
         };
 
-        internal static bool IsTool(string tool)
+        internal static bool IsTool(string? tool)
         {
             return Tools.Contains(tool ?? string.Empty) || McpCadViewStatusRuntime.IsTool(tool);
         }
 
-        internal static bool RequiresMutation(string tool)
+        internal static bool RequiresMutation(string? tool)
         {
             if (McpCadViewStatusRuntime.IsTool(tool)) return McpCadViewStatusRuntime.RequiresMutation(tool);
             return Tools.Contains(tool ?? string.Empty);
