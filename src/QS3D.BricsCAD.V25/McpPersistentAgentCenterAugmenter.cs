@@ -145,7 +145,7 @@ namespace QS3D.BricsCAD.V25
                 McpAgentExperience.Error(
                     "onboarding",
                     "Không lưu được Runtime API key vào Windows Credential Manager: " + ex.Message,
-                    "Tunnel vẫn có thể chạy trong phiên hiện tại; kiểm tra Windows Credential Manager rồi thử lại.");
+                    "Key mới không được dùng cho tunnel trong phiên này; kiểm tra Windows Credential Manager rồi thử lại.");
             }
         }
 
