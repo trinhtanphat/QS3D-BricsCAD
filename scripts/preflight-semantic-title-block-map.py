@@ -46,19 +46,53 @@ def main():
     require(builder, "Unsupported semantic title-block source field", "unknown-field fail closed", failures)
     require(builder, "new List<SemanticTitleBlockParameterValue>(values).AsReadOnly()", "defensive map snapshot", failures)
 
-    require(builder, "observedCount > knownCount.Value", "known Count overrun guard", failures)
+    require(builder, "observedCount >= knownCount.Value", "known Count overrun guard", failures)
     require(builder, "known Count was exceeded during traversal", "known Count overrun diagnostic", failures)
-    require(builder, "RevalidateKnownCountAfterTraversal(definitions, knownCount.Value);", "post-traversal Count rebind", failures)
-    require(builder, "known Count changed during traversal", "post-traversal Count drift diagnostic", failures)
-    require(builder, "conflicting known Count values after traversal", "post-traversal Count conflict diagnostic", failures)
-    require(builder, "negative known Count value after traversal", "post-traversal negative Count diagnostic", failures)
-    require_order(
-        builder,
-        "if (knownCount.HasValue && observedCount > knownCount.Value)",
-        "result.Add(enumerator.Current);",
-        "known Count overrun must fail before retaining Current",
-        failures,
-    )
+    require(builder, "RevalidateKnownCountAfterTraversal(definitions, knownCount.Value);", "Count rebound", failures)
+    require(builder, "known Count changed during traversal", "Count drift diagnostic", failures)
+    require(builder, "conflicting known Count values after traversal", "Count conflict diagnostic", failures)
+    require(builder, "negative known Count value after traversal", "negative Count diagnostic", failures)
+
+    method_start = builder.find("private static List<SemanticTitleBlockParameterDefinition> MaterializeDefinitionsBounded(")
+    method_end = builder.find("private static void RevalidateKnownCountAfterTraversal(", method_start)
+    materialize = builder[method_start:method_end] if method_start >= 0 and method_end > method_start else ""
+    if not materialize:
+        failures.append("bounded title-block materialization method could not be isolated")
+    else:
+        anchors = [
+            "RevalidateKnownCountAfterTraversal(definitions, knownCount.Value);",
+            "var moved = enumerator.MoveNext();",
+            "RevalidateKnownCountAfterTraversal(definitions, knownCount.Value);",
+            "if (!moved)",
+            "if (knownCount.HasValue && observedCount >= knownCount.Value)",
+            "if (observedCount >= MaxParameters)",
+            "var definition = enumerator.Current;",
+            "RevalidateKnownCountAfterTraversal(definitions, knownCount.Value);",
+            "result.Add(definition);",
+            "observedCount++;",
+        ]
+        cursor = 0
+        for anchor in anchors:
+            found = materialize.find(anchor, cursor)
+            if found < 0:
+                failures.append(f"known Count traversal ordering: missing ordered anchor {anchor!r}")
+                break
+            cursor = found + len(anchor)
+
+        if materialize.count("RevalidateKnownCountAfterTraversal(definitions, knownCount.Value);") != 4:
+            failures.append(
+                "known Count traversal must rebind before MoveNext, after MoveNext, after Current, and after traversal"
+            )
+
+        current = materialize.find("var definition = enumerator.Current;")
+        post_current = materialize.find("RevalidateKnownCountAfterTraversal(definitions, knownCount.Value);", current)
+        retention = materialize.find("result.Add(definition);", post_current)
+        if min(current, post_current, retention) < 0 or not (current < post_current < retention):
+            failures.append("Count evidence must be rebound after Current before retaining a definition")
+
+        if "while (enumerator.MoveNext())" in materialize:
+            failures.append("bounded materialization must expose explicit pre/post MoveNext Count rebound boundaries")
+
     require_order(
         builder,
         "RevalidateKnownCountAfterTraversal(definitions, knownCount.Value);",
@@ -98,7 +132,7 @@ def main():
     print("PASS: only explicit semantic Sheet fields can supply P0 values.")
     print("PASS: destination tags are bounded, case-insensitively unique and deterministically ordered.")
     print("PASS: returned parameter values form a defensive read-only snapshot.")
-    print("PASS: deterministic Count evidence rejects overrun before retention and is rebound after exact traversal.")
+    print("PASS: deterministic Count evidence is rebound around MoveNext and after Current before retention.")
     return 0
 
 
