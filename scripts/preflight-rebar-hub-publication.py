@@ -46,21 +46,21 @@ else:
         if needle in text:
             errors.append("Rebar Hub publication contract retains unsafe legacy pattern: " + needle)
 
-    order = (
-        "var pending = _pending;",
-        "var published = _published;",
-        "var window = new Rebar3DHubWindow();",
-        "_pending = window;",
-        "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
-        "if (!window.IsLoaded)",
-        "if (!ReferenceEquals(_pending, window))",
-        "_pending = null;",
-        "_published = window;",
-        "candidate = null;",
-    )
-    positions = [text.find(token) for token in order]
-    if any(pos < 0 for pos in positions) or positions != sorted(positions):
-        errors.append("Rebar Hub publication ownership steps must remain ordered pending-drain -> construct -> pending -> show -> loaded/proof -> publish")
+    try:
+        pending_read = text.index("var pending = _pending;")
+        published_read = text.index("var published = _published;", pending_read)
+        construct = text.index("var window = new Rebar3DHubWindow();", published_read)
+        pending_assign = text.index("_pending = window;", construct)
+        show = text.index("Application.ShowModelessWindow(IntPtr.Zero, window, true);", pending_assign)
+        loaded = text.index("if (!window.IsLoaded)", show)
+        exact = text.index("if (!ReferenceEquals(_pending, window))", loaded)
+        clear = text.index("_pending = null;", exact)
+        publish = text.index("_published = window;", clear)
+        transfer = text.index("candidate = null;", publish)
+        if not (pending_read < published_read < construct < pending_assign < show < loaded < exact < clear < publish < transfer):
+            errors.append("Rebar Hub publication ownership steps must remain ordered pending-drain -> construct -> pending -> show -> loaded/proof -> publish")
+    except ValueError as exc:
+        errors.append("Rebar Hub publication ordering marker missing: " + str(exc))
 
 print("QS3D Rebar 3D Hub publication preflight")
 if errors:
