@@ -13,21 +13,25 @@ namespace QS3D.BricsCAD.V25
 {
     /// <summary>
     /// Adds transport-hardening affordances to the existing Agent Center without changing the
-    /// public MCP surface: cloudflared busy/progress/recovery state plus bounded OpenAI tunnel
-    /// diagnostics and environment-key-only restart. The bootstrapper owns the dynamic Cloudflare
-    /// cancel button so this augmenter never creates a second competing cancel control.
+    /// public MCP surface: cloudflared busy/progress/recovery state, bounded OpenAI tunnel
+    /// diagnostics, secure Runtime API-key persistence, and a local foreground-access toggle.
+    /// The bootstrapper owns the dynamic Cloudflare cancel button so this augmenter never creates
+    /// a second competing cancel control.
     /// </summary>
     internal static class McpTransportAgentCenterAugmenter
     {
         private const string AgentCenterTitle = "QS3D - ChatGPT MCP Agent Center";
         private const string InstallCloudflaredLabel = "Cài / cập nhật Cloudflare Tunnel";
         private const string OpenAiAdminAnchorLabel = "Mở tunnel-client UI";
+        private const string ResumeDesktopLabel = "Resume desktop";
         private const string CloudflareRecoveryTag = "QS3D_MCP_CLOUDFLARED_RECOVERY";
         private const string CloudflareStatusTag = "QS3D_MCP_CLOUDFLARED_STATUS";
         private const string OpenAiCopyDiagnosticsTag = "QS3D_MCP_OPENAI_COPY_DIAGNOSTICS";
         private const string OpenAiOpenLogsTag = "QS3D_MCP_OPENAI_OPEN_LOGS";
         private const string OpenAiRestartTag = "QS3D_MCP_OPENAI_RESTART";
         private const string OpenAiStatusTag = "QS3D_MCP_OPENAI_DIAGNOSTIC_STATUS";
+        private const string DesktopForegroundToggleTag = "QS3D_MCP_DESKTOP_FOREGROUND_TOGGLE";
+        private const string RuntimeKeyCaptureTag = "QS3D_MCP_RUNTIME_KEY_CAPTURE";
         private const string WingetRecoveryCommand = "winget install --id Cloudflare.cloudflared --source winget";
         private static readonly object Sync = new object();
         private static DispatcherTimer? _timer;
@@ -69,6 +73,10 @@ namespace QS3D.BricsCAD.V25
 
         private static void Refresh()
         {
+            // Local-host renewal removes the historical surprise 10-minute expiry while keeping
+            // the fail-safe expiry if the augmenter itself stops unexpectedly.
+            try { McpDesktopControlSession.RenewConsentLeaseFromLocalHost(); } catch { }
+
             try
             {
                 var sources = new List<PresentationSource>();
@@ -94,6 +102,12 @@ namespace QS3D.BricsCAD.V25
 
         private static void RefreshTree(DependencyObject root)
         {
+            var passwordBox = root as PasswordBox;
+            if (passwordBox != null) AttachRuntimeKeyCapture(passwordBox);
+
+            var textBlock = root as TextBlock;
+            if (textBlock != null) RefreshConsentCopy(textBlock);
+
             var panel = root as Panel;
             if (panel != null) RefreshPanel(panel);
 
@@ -125,7 +139,137 @@ namespace QS3D.BricsCAD.V25
                 {
                     RefreshOpenAiDiagnosticsControls(panel, button);
                 }
+                if (string.Equals(text, ResumeDesktopLabel, StringComparison.Ordinal))
+                {
+                    RefreshDesktopForegroundToggle(panel, button);
+                }
             }
+        }
+
+        private static void AttachRuntimeKeyCapture(PasswordBox passwordBox)
+        {
+            if (string.Equals(passwordBox.Tag as string, RuntimeKeyCaptureTag, StringComparison.Ordinal)) return;
+            passwordBox.Tag = RuntimeKeyCaptureTag;
+            passwordBox.LostKeyboardFocus += (_, __) => CaptureRuntimeKey(passwordBox);
+        }
+
+        private static void CaptureRuntimeKey(PasswordBox passwordBox)
+        {
+            try
+            {
+                var value = (passwordBox.Password ?? string.Empty).Trim();
+                if (value.Length == 0) return;
+                McpPersistentUserSettings.SaveOpenAiRuntimeApiKey(value);
+                McpAgentExperience.Info(
+                    "onboarding",
+                    "Runtime API key đã được lưu an toàn trong Windows Credential Manager cho user hiện tại.",
+                    string.Empty,
+                    "QS3D sẽ tự nạp credential này khi BricsCAD khởi động lại; key không được ghi plaintext vào file cấu hình/log.");
+            }
+            catch (Exception ex)
+            {
+                McpAgentExperience.Error(
+                    "onboarding",
+                    "Không lưu được Runtime API key vào Windows Credential Manager: " + ex.Message,
+                    "Tunnel vẫn có thể chạy trong phiên hiện tại; kiểm tra Windows Credential Manager rồi thử lại.");
+            }
+        }
+
+        private static void RefreshConsentCopy(TextBlock textBlock)
+        {
+            var text = textBlock.Text ?? string.Empty;
+            if (text.IndexOf("Consent tự hết hạn sau 10 phút", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                textBlock.Text = text.Replace(
+                    "Consent tự hết hạn sau 10 phút không có desktop action mới.",
+                    "Khi user bật foreground access, QS3D tự renew consent trong suốt phiên BricsCAD; permission vẫn reset OFF sau restart.");
+            }
+            else if (text.IndexOf("Idle timeout 10 phút", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                textBlock.Text = text.Replace("Idle timeout 10 phút", "QS3D auto-renew consent trong phiên");
+            }
+        }
+
+        private static void RefreshDesktopForegroundToggle(Panel panel, Button resumeButton)
+        {
+            var toggle = FindTaggedButton(panel, DesktopForegroundToggleTag);
+            if (toggle == null)
+            {
+                toggle = CloneActionButton(resumeButton, string.Empty, DesktopForegroundToggleTag);
+                toggle.Click += (_, __) => ToggleDesktopForegroundAccess();
+                InsertAfter(panel, resumeButton, toggle);
+            }
+
+            var allowed = McpDesktopControlSession.IsEnabled && IsForegroundFallbackEnabled();
+            toggle.Content = allowed
+                ? "Cho phép chuột / bàn phím / màn hình user: BẬT"
+                : "Cho phép chuột / bàn phím / màn hình user: TẮT";
+        }
+
+        private static bool IsForegroundFallbackEnabled()
+        {
+            try
+            {
+                var result = McpBackgroundHostRuntime.Call(
+                    "bricscad_interaction_policy_get", "{}", null, null);
+                return result.IndexOf("\"mode\":\"foreground_fallback\"", StringComparison.Ordinal) >= 0;
+            }
+            catch { return false; }
+        }
+
+        private static void ToggleDesktopForegroundAccess()
+        {
+            var currentlyAllowed = McpDesktopControlSession.IsEnabled && IsForegroundFallbackEnabled();
+            if (currentlyAllowed)
+            {
+                try
+                {
+                    TrySetInteractionPolicy("background_only");
+                }
+                finally
+                {
+                    // Disable desktop-wide reads/input without stopping API-first CAD automation.
+                    McpDesktopControlSession.DisableForegroundAccessFromLocalUser(
+                        "User đã tắt quyền dùng chuột / bàn phím / màn hình desktop; background CAD/API vẫn được phép chạy.");
+                }
+                McpAgentExperience.Info(
+                    "desktop-control",
+                    "Foreground desktop access đã TẮT; background_only đang được ưu tiên.",
+                    string.Empty,
+                    "ChatGPT vẫn có thể dùng CAD/QS3D API, bounded command dispatch và same-process BricsCAD UI controls mà không chiếm chuột/bàn phím.");
+                return;
+            }
+
+            try
+            {
+                McpDesktopControlSession.ResumeFromLocalUser();
+                TrySetInteractionPolicy("foreground_fallback");
+                McpAgentExperience.Success(
+                    "desktop-control",
+                    "Foreground desktop access đã BẬT theo thao tác local của user.",
+                    "QS3D tự renew consent trong phiên; Esc ×2, nút toggle OFF hoặc đóng BricsCAD sẽ khóa lại.");
+            }
+            catch
+            {
+                try
+                {
+                    McpDesktopControlSession.DisableForegroundAccessFromLocalUser(
+                        "Không bật hoàn chỉnh được foreground fallback nên QS3D đã fail-closed về desktop OFF.");
+                }
+                catch { }
+                throw;
+            }
+        }
+
+        private static void TrySetInteractionPolicy(string mode)
+        {
+            McpEmbeddedServer.EnsureStarted();
+            var payload = "{\"mode\":\"" + mode + "\",\"confirmMutation\":true}";
+            McpLocalAgentClient.CallOne(
+                McpEmbeddedServer.Endpoint,
+                6000,
+                "bricscad_interaction_policy_set",
+                payload);
         }
 
         private static void RefreshCloudflaredControls(Panel panel, Button installButton)
@@ -211,8 +355,8 @@ namespace QS3D.BricsCAD.V25
             var restart = FindTaggedButton(panel, OpenAiRestartTag);
             if (restart == null)
             {
-                restart = CloneActionButton(anchor, "Restart tunnel · env key", OpenAiRestartTag);
-                restart.Click += (_, __) => RestartOpenAiTunnelFromEnvironment();
+                restart = CloneActionButton(anchor, "Restart tunnel · saved/env key", OpenAiRestartTag);
+                restart.Click += (_, __) => RestartOpenAiTunnelFromSavedOrEnvironmentKey();
                 InsertAfter(panel, openLogs, restart);
             }
 
@@ -237,6 +381,7 @@ namespace QS3D.BricsCAD.V25
             var exit = McpOpenAiSecureTunnelManager.LastExitCode;
             var error = McpOpenAiSecureTunnelManager.LastError;
             return "Tunnel diagnostics · trust=" + (string.IsNullOrWhiteSpace(trust) ? "chưa xác minh trong phiên" : trust)
+                   + " · saved credential=" + (McpPersistentUserSettings.HasSavedOpenAiRuntimeApiKey ? "YES" : "NO")
                    + " · exit=" + (exit.HasValue ? exit.Value.ToString() : "n/a")
                    + (string.IsNullOrWhiteSpace(error) ? string.Empty : " · last error=" + error);
         }
@@ -277,7 +422,7 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void RestartOpenAiTunnelFromEnvironment()
+        private static void RestartOpenAiTunnelFromSavedOrEnvironmentKey()
         {
             try
             {
@@ -287,12 +432,13 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                var hasEnvironmentKey = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("CONTROL_PLANE_API_KEY"))
-                                        || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
-                if (!hasEnvironmentKey)
+                McpPersistentUserSettings.ApplyStartupSecretsToProcessEnvironment();
+                var hasRuntimeKey = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("CONTROL_PLANE_API_KEY"))
+                                    || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
+                if (!hasRuntimeKey)
                 {
                     MessageBox.Show(
-                        "Restart tự động chỉ dùng Runtime API key đã có trong môi trường Windows. QS3D không lưu key đã nhập trong UI. Hãy nhập lại key và bấm Khởi động nếu không dùng environment key.",
+                        "Chưa có Runtime API key trong Windows Credential Manager hoặc environment. Nhập key một lần ở Agent Center; QS3D sẽ lưu an toàn cho các lần restart sau.",
                         "QS3D MCP", MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
@@ -303,7 +449,7 @@ namespace QS3D.BricsCAD.V25
                 if (ok)
                     McpAgentExperience.Success("onboarding", message, "Chờ tunnel-client READY rồi tiếp tục ChatGPT.");
                 else
-                    McpAgentExperience.Error("onboarding", message, "Kiểm tra environment key, Tunnel ID, trust verification và diagnostics.");
+                    McpAgentExperience.Error("onboarding", message, "Kiểm tra saved/environment key, Tunnel ID, trust verification và diagnostics.");
                 MessageBox.Show(message, "QS3D MCP", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
             }
             catch (Exception ex)
