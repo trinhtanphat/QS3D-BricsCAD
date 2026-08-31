@@ -77,6 +77,9 @@ namespace QS3D.BricsCAD.V25
         {
             value = string.Empty;
             IntPtr credentialPtr = IntPtr.Zero;
+            byte[]? readBytes = null;
+            IntPtr readBlob = IntPtr.Zero;
+            var readBlobSize = 0;
             try
             {
                 if (!CredRead(OpenAiRuntimeKeyTarget, CredTypeGeneric, 0, out credentialPtr))
@@ -91,15 +94,34 @@ namespace QS3D.BricsCAD.V25
                 if (credential.CredentialBlobSize > MaxSecretCharacters * 4)
                     throw new InvalidOperationException("Saved QS3D MCP credential is unexpectedly large.");
 
-                var bytes = new byte[credential.CredentialBlobSize];
-                Marshal.Copy(credential.CredentialBlob, bytes, 0, bytes.Length);
-                value = NormalizeSecret(Encoding.UTF8.GetString(bytes));
-                Array.Clear(bytes, 0, bytes.Length);
+                readBlob = credential.CredentialBlob;
+                readBlobSize = checked((int)credential.CredentialBlobSize);
+                readBytes = new byte[readBlobSize];
+                Marshal.Copy(readBlob, readBytes, 0, readBytes.Length);
+                value = NormalizeSecret(Encoding.UTF8.GetString(readBytes));
                 return value.Length > 0;
             }
             finally
             {
-                if (credentialPtr != IntPtr.Zero) CredFree(credentialPtr);
+                try
+                {
+                    if (readBytes != null)
+                        Array.Clear(readBytes, 0, readBytes.Length);
+
+                    if (readBlob != IntPtr.Zero && readBlobSize > 0)
+                    {
+                        try
+                        {
+                            for (var i = 0; i < readBlobSize; i++)
+                                Marshal.WriteByte(readBlob, i, 0);
+                        }
+                        catch { }
+                    }
+                }
+                finally
+                {
+                    if (credentialPtr != IntPtr.Zero) CredFree(credentialPtr);
+                }
             }
         }
 
