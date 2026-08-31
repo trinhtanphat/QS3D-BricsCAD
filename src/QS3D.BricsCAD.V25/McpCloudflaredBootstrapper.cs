@@ -7,6 +7,10 @@ using System.Net;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace QS3D.BricsCAD.V25
 {
@@ -15,6 +19,10 @@ namespace QS3D.BricsCAD.V25
         private const string DownloadUrl =
             "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe";
         private const string PathEnvironment = "QS3D_CLOUDFLARED_PATH";
+        private const string InstallLabel = "Cài / cập nhật Cloudflare Tunnel";
+        private const string AdvancedInstallLabel = "Cài / cập nhật Cloudflare Tunnel tự động";
+        private const string CancelLabel = "Hủy cài Cloudflare Tunnel";
+        private const string DynamicCancelTag = "QS3D_CLOUDFLARED_DYNAMIC_CANCEL";
         private const int MaxDownloadAttempts = 3;
         private const int RetryDelayMilliseconds = 750;
         private const int DownloadTimeoutMilliseconds = 120000;
@@ -78,6 +86,7 @@ namespace QS3D.BricsCAD.V25
                 _installProgressPercent = 0;
                 _installStatus = "Đang kiểm tra cloudflared hiện có...";
             }
+            PublishInstallerUiState();
 
             ThreadPool.QueueUserWorkItem(_ =>
             {
@@ -116,6 +125,7 @@ namespace QS3D.BricsCAD.V25
                 client = _activeClient;
             }
             try { client?.CancelAsync(); } catch { }
+            PublishInstallerUiState();
             message = "Đã gửi yêu cầu hủy. QS3D sẽ dọn file tạm và giữ nguyên bản cloudflared đang dùng.";
             return true;
         }
@@ -463,6 +473,120 @@ namespace QS3D.BricsCAD.V25
                 _installProgressPercent = Math.Max(0, Math.Min(100, progressPercent));
                 _installStatus = status ?? string.Empty;
             }
+            PublishInstallerUiState();
+        }
+
+        private static void PublishInstallerUiState()
+        {
+            bool busy;
+            bool cancelling;
+            int progress;
+            lock (Sync)
+            {
+                busy = _installing;
+                cancelling = _cancelRequested;
+                progress = _installProgressPercent;
+            }
+            try
+            {
+                var app = System.Windows.Application.Current;
+                if (app == null) return;
+                app.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                {
+                    try
+                    {
+                        foreach (Window window in app.Windows)
+                            UpdateInstallerVisualTree(window, busy, cancelling, progress, window is McpCloudflareSetupWindow);
+                    }
+                    catch { }
+                }));
+            }
+            catch { }
+        }
+
+        private static void UpdateInstallerVisualTree(DependencyObject root, bool busy, bool cancelling, int progress, bool advancedWindow)
+        {
+            var button = root as Button;
+            if (button != null)
+            {
+                var text = button.Content as string ?? string.Empty;
+                var isInstallButton = string.Equals(text, InstallLabel, StringComparison.Ordinal)
+                                      || string.Equals(text, AdvancedInstallLabel, StringComparison.Ordinal)
+                                      || text.StartsWith("Đang cài Cloudflare...", StringComparison.Ordinal);
+                if (isInstallButton)
+                {
+                    button.IsEnabled = !busy;
+                    button.Content = busy
+                        ? "Đang cài Cloudflare... " + progress + "%"
+                        : advancedWindow ? AdvancedInstallLabel : InstallLabel;
+                    if (!advancedWindow) EnsureDynamicCancelButton(button, busy, cancelling);
+                }
+                else if (string.Equals(text, CancelLabel, StringComparison.Ordinal)
+                         || string.Equals(button.Tag as string, DynamicCancelTag, StringComparison.Ordinal))
+                {
+                    button.IsEnabled = busy && !cancelling;
+                }
+            }
+
+            int count;
+            try { count = VisualTreeHelper.GetChildrenCount(root); }
+            catch { count = 0; }
+            for (var i = 0; i < count; i++)
+            {
+                DependencyObject child;
+                try { child = VisualTreeHelper.GetChild(root, i); }
+                catch { continue; }
+                UpdateInstallerVisualTree(child, busy, cancelling, progress, advancedWindow);
+            }
+        }
+
+        private static void EnsureDynamicCancelButton(Button installButton, bool busy, bool cancelling)
+        {
+            var parent = VisualTreeHelper.GetParent(installButton) as Panel;
+            if (parent == null) return;
+            Button? existing = null;
+            foreach (var child in parent.Children)
+            {
+                var candidate = child as Button;
+                if (candidate != null && string.Equals(candidate.Tag as string, DynamicCancelTag, StringComparison.Ordinal))
+                {
+                    existing = candidate;
+                    break;
+                }
+            }
+
+            if (!busy)
+            {
+                if (existing != null) parent.Children.Remove(existing);
+                return;
+            }
+
+            if (existing == null)
+            {
+                existing = new Button
+                {
+                    Content = CancelLabel,
+                    Tag = DynamicCancelTag,
+                    MinHeight = installButton.MinHeight,
+                    Margin = installButton.Margin,
+                    Padding = installButton.Padding,
+                    HorizontalContentAlignment = installButton.HorizontalContentAlignment,
+                    VerticalContentAlignment = installButton.VerticalContentAlignment,
+                    FontSize = installButton.FontSize,
+                    FontWeight = installButton.FontWeight,
+                    BorderThickness = installButton.BorderThickness,
+                    Style = installButton.Style
+                };
+                existing.Click += (_, __) =>
+                {
+                    string ignored;
+                    CancelInstall(out ignored);
+                };
+                var index = parent.Children.IndexOf(installButton);
+                if (index >= 0 && index + 1 <= parent.Children.Count) parent.Children.Insert(index + 1, existing);
+                else parent.Children.Add(existing);
+            }
+            existing.IsEnabled = !cancelling;
         }
 
         private static string FormatBytes(long value)
