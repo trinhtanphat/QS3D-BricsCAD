@@ -178,6 +178,18 @@ namespace QS3D.BricsCAD.V25
 
         private static void ToggleDesktopForegroundAccess()
         {
+            try
+            {
+                ToggleDesktopForegroundAccessCore();
+            }
+            catch (Exception ex)
+            {
+                FailClosedForegroundAccess(ex);
+            }
+        }
+
+        private static void ToggleDesktopForegroundAccessCore()
+        {
             var currentlyAllowed = McpDesktopControlSession.IsEnabled && IsForegroundFallbackEnabled();
             if (currentlyAllowed)
             {
@@ -198,33 +210,31 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
+            McpDesktopControlSession.ResumeFromLocalUser();
+            TrySetInteractionPolicy("foreground_fallback");
+            McpAgentExperience.Success(
+                "desktop-control",
+                "Foreground desktop access đã BẬT theo thao tác local của user.",
+                "QS3D giữ consent ON trong phiên; Esc ×2, nút toggle OFF hoặc đóng BricsCAD sẽ khóa lại.");
+        }
+
+        private static void FailClosedForegroundAccess(Exception error)
+        {
+            try { TrySetInteractionPolicy("background_only"); } catch { }
             try
             {
-                McpDesktopControlSession.ResumeFromLocalUser();
-                TrySetInteractionPolicy("foreground_fallback");
-                McpAgentExperience.Success(
-                    "desktop-control",
-                    "Foreground desktop access đã BẬT theo thao tác local của user.",
-                    "QS3D giữ consent ON trong phiên; Esc ×2, nút toggle OFF hoặc đóng BricsCAD sẽ khóa lại.");
+                McpDesktopControlSession.DisableForegroundAccessFromLocalUser(
+                    "Foreground toggle gặp lỗi nên QS3D đã fail-closed về desktop OFF.");
             }
-            catch (Exception ex)
+            catch { }
+            try
             {
-                try { TrySetInteractionPolicy("background_only"); } catch { }
-                try
-                {
-                    McpDesktopControlSession.DisableForegroundAccessFromLocalUser(
-                        "Không bật hoàn chỉnh được foreground fallback nên QS3D đã fail-closed về desktop OFF.");
-                }
-                catch { }
-                try
-                {
-                    McpAgentExperience.Error(
-                        "desktop-control",
-                        "Không bật được foreground desktop access: " + ex.Message,
-                        "QS3D đã fail-closed về desktop OFF/background_only; thử lại từ Agent Center nếu vẫn cần foreground access.");
-                }
-                catch { }
+                McpAgentExperience.Error(
+                    "desktop-control",
+                    "Không đổi được foreground desktop access: " + (error == null ? "unknown error" : error.Message),
+                    "QS3D đã fail-closed về desktop OFF/background_only; thử lại từ Agent Center nếu vẫn cần foreground access.");
             }
+            catch { }
         }
 
         private static void TrySetInteractionPolicy(string mode)
