@@ -101,9 +101,11 @@ namespace QS3D.Core.Agent
             if (mode == McpExecutionMode.CadDirect && lane == McpToolLane.Qs3dDomain)
                 throw ModeViolation(toolName, mode, lane,
                     "CAD_DIRECT forbids QS3D business mutations; use a cad_* tool or switch execution mode.");
-            if (mode == McpExecutionMode.Qs3dDomain && lane == McpToolLane.CadDirect && !IsEmergencyCadControl(toolName))
+            if (mode == McpExecutionMode.Qs3dDomain
+                && (lane == McpToolLane.CadDirect || lane == McpToolLane.DesktopAutomation)
+                && !IsEmergencyCadControl(toolName))
                 throw ModeViolation(toolName, mode, lane,
-                    "QS3D_DOMAIN forbids native CAD mutations so business failures cannot silently degrade to approximate geometry.");
+                    "QS3D_DOMAIN forbids native CAD and desktop automation mutations so business failures cannot silently degrade to approximate geometry or UI fallback.");
         }
 
         public static McpToolFailure ClassifyFailure(string toolName, Exception? exception)
