@@ -19,13 +19,15 @@ namespace QS3D.Core.SmokeTests
             KnownCountOverrunStopsBeforeUnexpectedCurrent();
             ZeroCountOverrunNeverReadsCurrent();
             UnderYieldFailsExactCardinality();
+            MoveNextInducedCountDriftFailsBeforeCurrent();
+            CurrentInducedCountDriftFailsBeforeRetention();
             PostTraversalCountDriftFailsClosed();
             StableCountedSnapshotReadsEachAdmittedCurrentExactlyOnce();
         }
 
         private static void KnownCountOverrunStopsBeforeUnexpectedCurrent()
         {
-            var source = new InstrumentedReadOnlyList<int>(new[] { 11, 22 }, 1, 1);
+            var source = new InstrumentedReadOnlyList<int>(new[] { 11, 22 }, 1, 1, 1, 1, 1, 1, 1, 1);
             ExpectInvalidData(source);
             Require(source.MoveNextCalls == 2, "Count=1/yield=2 must detect the second item with MoveNext.");
             Require(source.CurrentReads == 1, "Count=1/yield=2 must reject before observing the second Current.");
@@ -33,7 +35,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void ZeroCountOverrunNeverReadsCurrent()
         {
-            var source = new InstrumentedReadOnlyList<int>(new[] { 11 }, 0, 0);
+            var source = new InstrumentedReadOnlyList<int>(new[] { 11 }, 0, 0, 0, 0);
             ExpectInvalidData(source);
             Require(source.MoveNextCalls == 1, "Count=0/yield=1 must detect the first item with MoveNext.");
             Require(source.CurrentReads == 0, "Count=0/yield=1 must reject before any Current read.");
@@ -41,15 +43,32 @@ namespace QS3D.Core.SmokeTests
 
         private static void UnderYieldFailsExactCardinality()
         {
-            var source = new InstrumentedReadOnlyList<int>(new[] { 11 }, 2, 2);
+            var source = new InstrumentedReadOnlyList<int>(new[] { 11 }, 2, 2, 2, 2, 2, 2, 2);
             ExpectInvalidData(source);
             Require(source.MoveNextCalls == 2, "Count=2/yield=1 must traverse to normal termination.");
             Require(source.CurrentReads == 1, "Under-yield must read only the one admitted item.");
         }
 
+        private static void MoveNextInducedCountDriftFailsBeforeCurrent()
+        {
+            var source = new InstrumentedReadOnlyList<int>(new[] { 11 }, 1, 1, 2);
+            ExpectInvalidData(source);
+            Require(source.MoveNextCalls == 1, "MoveNext-induced Count drift must fail at the first traversal boundary.");
+            Require(source.CurrentReads == 0, "MoveNext-induced Count drift must fail before Current is observed.");
+        }
+
+        private static void CurrentInducedCountDriftFailsBeforeRetention()
+        {
+            var source = new InstrumentedReadOnlyList<int>(new[] { 11 }, true, 1, 1, 1, 2);
+            ExpectInvalidData(source);
+            Require(source.MoveNextCalls == 1, "Current-induced Count drift must fail on the first admitted item.");
+            Require(source.CurrentReads == 1, "Current-induced Count drift must read the admitted Current exactly once.");
+            Require(source.CountReads == 4, "Current-induced Count drift must be observed immediately after Current.");
+        }
+
         private static void PostTraversalCountDriftFailsClosed()
         {
-            var source = new InstrumentedReadOnlyList<int>(new[] { 11 }, 1, 2);
+            var source = new InstrumentedReadOnlyList<int>(new[] { 11 }, 1, 1, 1, 1, 1, 1, 2);
             ExpectInvalidData(source);
             Require(source.MoveNextCalls == 2, "Count drift must be checked after normal traversal termination.");
             Require(source.CurrentReads == 1, "Post-traversal Count drift must not add extra Current reads.");
@@ -57,12 +76,12 @@ namespace QS3D.Core.SmokeTests
 
         private static void StableCountedSnapshotReadsEachAdmittedCurrentExactlyOnce()
         {
-            var source = new InstrumentedReadOnlyList<int>(new[] { 11, 22 }, 2, 2);
+            var source = new InstrumentedReadOnlyList<int>(new[] { 11, 22 }, 2);
             var result = InvokeSnapshot(source);
             Require(result.SequenceEqual(new[] { 11, 22 }), "Stable counted input must preserve values and order.");
             Require(source.MoveNextCalls == 3, "Stable two-item input must include terminal MoveNext.");
             Require(source.CurrentReads == 2, "Stable input must read Current exactly once per admitted item.");
-            Require(source.CountReads == 2, "Stable input must bind Count before traversal and re-read it after traversal.");
+            Require(source.CountReads == 10, "Stable two-item input must bind Count at admission, around traversal, after Current, and before publication.");
         }
 
         private static void ExpectInvalidData(InstrumentedReadOnlyList<int> source)
@@ -98,11 +117,18 @@ namespace QS3D.Core.SmokeTests
         {
             private readonly T[] _items;
             private readonly int[] _counts;
+            private readonly bool _advanceCountOnCurrent;
             private int _countIndex;
 
             internal InstrumentedReadOnlyList(T[] items, params int[] counts)
+                : this(items, false, counts)
+            {
+            }
+
+            internal InstrumentedReadOnlyList(T[] items, bool advanceCountOnCurrent, params int[] counts)
             {
                 _items = items;
+                _advanceCountOnCurrent = advanceCountOnCurrent;
                 _counts = counts.Length == 0 ? new[] { items.Length } : counts;
             }
 
@@ -138,6 +164,8 @@ namespace QS3D.Core.SmokeTests
                     get
                     {
                         _owner.CurrentReads++;
+                        if (_owner._advanceCountOnCurrent)
+                            _owner._countIndex++;
                         return _owner._items[_index];
                     }
                 }
