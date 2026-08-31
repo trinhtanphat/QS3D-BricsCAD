@@ -9,14 +9,17 @@ namespace QS3D.BricsCAD.V25
 {
     /// <summary>
     /// Local-only Agent Center augmentation for restart-safe Runtime API-key persistence and the
-    /// foreground desktop fallback toggle. Kept separate from transport diagnostics so concurrent
-    /// transport/tunnel UI hardening can evolve without overwriting these local permission controls.
+    /// explicit background-vs-foreground desktop permission UI. Kept separate from transport
+    /// diagnostics so tunnel/onboarding work can evolve without widening desktop authority.
     /// </summary>
     internal static class McpPersistentAgentCenterAugmenter
     {
         private const string AgentCenterTitle = "QS3D - ChatGPT MCP Agent Center";
         private const string ResumeDesktopLabel = "Resume desktop";
+        private const string PermissionPanelTag = "QS3D_MCP_LOCAL_CONTROL_PERMISSION_PANEL";
+        private const string BackgroundModeCheckBoxTag = "QS3D_MCP_BACKGROUND_MODE_CHECKBOX";
         private const string DesktopForegroundToggleTag = "QS3D_MCP_DESKTOP_FOREGROUND_TOGGLE";
+        private const string PermissionStatusTag = "QS3D_MCP_LOCAL_CONTROL_PERMISSION_STATUS";
         private const string RuntimeKeyCaptureTag = "QS3D_MCP_RUNTIME_KEY_CAPTURE";
         private const string RuntimeKeyLabelPrefix = "Runtime API key · chỉ giữ trong RAM";
         private static readonly object Sync = new object();
@@ -116,7 +119,88 @@ namespace QS3D.BricsCAD.V25
                 if (button == null) continue;
                 var text = button.Content as string ?? string.Empty;
                 if (string.Equals(text, ResumeDesktopLabel, StringComparison.Ordinal))
-                    RefreshDesktopForegroundToggle(panel, button);
+                {
+                    RefreshDesktopPermissionPanel(panel, button);
+                    return;
+                }
+            }
+        }
+
+        private static void RefreshDesktopPermissionPanel(Panel parent, Button resumeButton)
+        {
+            var permissionPanel = FindTaggedPanel(parent, PermissionPanelTag);
+            if (permissionPanel == null)
+            {
+                permissionPanel = new StackPanel
+                {
+                    Tag = PermissionPanelTag,
+                    Margin = new Thickness(0, 8, 0, 0)
+                };
+
+                permissionPanel.Children.Add(new TextBlock
+                {
+                    Text = "Quyền điều khiển ChatGPT MCP",
+                    FontWeight = FontWeights.SemiBold,
+                    Margin = new Thickness(0, 0, 0, 4),
+                    TextWrapping = TextWrapping.Wrap
+                });
+
+                permissionPanel.Children.Add(new CheckBox
+                {
+                    Tag = BackgroundModeCheckBoxTag,
+                    Content = "MCP chạy nền BricsCAD/API (không chiếm chuột/phím): BẬT",
+                    IsChecked = true,
+                    IsEnabled = false,
+                    Margin = new Thickness(0, 2, 0, 2),
+                    ToolTip = "Đây là đường mặc định: direct CAD/QS3D API và same-process BricsCAD background controls không di chuyển chuột hoặc gõ bàn phím của user."
+                });
+
+                var foreground = new CheckBox
+                {
+                    Tag = DesktopForegroundToggleTag,
+                    Content = "Cho phép chuột / bàn phím / màn hình user",
+                    Margin = new Thickness(0, 2, 0, 2),
+                    ToolTip = "Bật fallback foreground cho desktop_* khi thật sự cần. Quyền này vẫn chịu confirmMutation/confirmSensitiveRead, local consent và Esc×2 Emergency Stop."
+                };
+                foreground.Click += (_, __) => ToggleDesktopForegroundAccess();
+                permissionPanel.Children.Add(foreground);
+
+                permissionPanel.Children.Add(new TextBlock
+                {
+                    Text = "Background là đường mặc định; foreground chỉ dùng khi thật sự cần thao tác desktop.",
+                    Margin = new Thickness(20, 2, 0, 2),
+                    TextWrapping = TextWrapping.Wrap,
+                    Opacity = 0.78
+                });
+
+                permissionPanel.Children.Add(new TextBlock
+                {
+                    Tag = PermissionStatusTag,
+                    Margin = new Thickness(20, 2, 0, 0),
+                    TextWrapping = TextWrapping.Wrap,
+                    Opacity = 0.78
+                });
+
+                InsertAfter(parent, resumeButton, permissionPanel);
+            }
+
+            var background = FindTaggedCheckBox(permissionPanel, BackgroundModeCheckBoxTag);
+            if (background != null)
+            {
+                background.IsChecked = true;
+                background.Content = "MCP chạy nền BricsCAD/API (không chiếm chuột/phím): BẬT";
+            }
+
+            var foregroundToggle = FindTaggedCheckBox(permissionPanel, DesktopForegroundToggleTag);
+            var allowed = McpDesktopControlSession.IsEnabled && IsForegroundFallbackEnabled();
+            if (foregroundToggle != null) foregroundToggle.IsChecked = allowed;
+
+            var status = FindTaggedTextBlock(permissionPanel, PermissionStatusTag);
+            if (status != null)
+            {
+                status.Text = allowed
+                    ? "Foreground: BẬT · desktop consent " + McpDesktopControlSession.ConsentState + " · Esc×2 để dừng ngay."
+                    : "Foreground: TẮT · ChatGPT vẫn dùng CAD/QS3D API và background BricsCAD controls.";
             }
         }
 
@@ -147,22 +231,6 @@ namespace QS3D.BricsCAD.V25
                     "Không lưu được Runtime API key vào Windows Credential Manager: " + ex.Message,
                     "Key mới không được dùng cho tunnel trong phiên này; kiểm tra Windows Credential Manager rồi thử lại.");
             }
-        }
-
-        private static void RefreshDesktopForegroundToggle(Panel panel, Button resumeButton)
-        {
-            var toggle = FindTaggedButton(panel, DesktopForegroundToggleTag);
-            if (toggle == null)
-            {
-                toggle = CloneActionButton(resumeButton, string.Empty, DesktopForegroundToggleTag);
-                toggle.Click += (_, __) => ToggleDesktopForegroundAccess();
-                InsertAfter(panel, resumeButton, toggle);
-            }
-
-            var allowed = McpDesktopControlSession.IsEnabled && IsForegroundFallbackEnabled();
-            toggle.Content = allowed
-                ? "Cho phép chuột / bàn phím / màn hình user: BẬT"
-                : "Cho phép chuột / bàn phím / màn hình user: TẮT";
         }
 
         private static bool IsForegroundFallbackEnabled()
@@ -215,7 +283,7 @@ namespace QS3D.BricsCAD.V25
             McpAgentExperience.Success(
                 "desktop-control",
                 "Foreground desktop access đã BẬT theo thao tác local của user.",
-                "QS3D giữ consent ON trong phiên; Esc ×2, nút toggle OFF hoặc đóng BricsCAD sẽ khóa lại.");
+                "QS3D giữ consent ON trong phiên; Esc ×2, bỏ tick checkbox foreground hoặc đóng BricsCAD sẽ khóa lại.");
         }
 
         private static void FailClosedForegroundAccess(Exception error)
@@ -224,7 +292,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 McpDesktopControlSession.DisableForegroundAccessFromLocalUser(
-                    "Foreground toggle gặp lỗi nên QS3D đã fail-closed về desktop OFF.");
+                    "Foreground checkbox gặp lỗi nên QS3D đã fail-closed về desktop OFF.");
             }
             catch { }
             try
@@ -248,33 +316,34 @@ namespace QS3D.BricsCAD.V25
                 payload);
         }
 
-        private static Button? FindTaggedButton(Panel panel, string tag)
+        private static StackPanel? FindTaggedPanel(Panel panel, string tag)
         {
             foreach (UIElement child in panel.Children)
             {
-                var button = child as Button;
-                if (button != null && string.Equals(button.Tag as string, tag, StringComparison.Ordinal)) return button;
+                var stack = child as StackPanel;
+                if (stack != null && string.Equals(stack.Tag as string, tag, StringComparison.Ordinal)) return stack;
             }
             return null;
         }
 
-        private static Button CloneActionButton(Button source, string content, string tag)
+        private static CheckBox? FindTaggedCheckBox(Panel panel, string tag)
         {
-            return new Button
+            foreach (UIElement child in panel.Children)
             {
-                Content = content,
-                Tag = tag,
-                MinHeight = source.MinHeight,
-                Margin = source.Margin,
-                Padding = source.Padding,
-                HorizontalContentAlignment = source.HorizontalContentAlignment,
-                VerticalContentAlignment = source.VerticalContentAlignment,
-                FontSize = source.FontSize,
-                FontWeight = source.FontWeight,
-                BorderThickness = source.BorderThickness,
-                FocusVisualStyle = source.FocusVisualStyle,
-                Style = source.Style
-            };
+                var checkBox = child as CheckBox;
+                if (checkBox != null && string.Equals(checkBox.Tag as string, tag, StringComparison.Ordinal)) return checkBox;
+            }
+            return null;
+        }
+
+        private static TextBlock? FindTaggedTextBlock(Panel panel, string tag)
+        {
+            foreach (UIElement child in panel.Children)
+            {
+                var textBlock = child as TextBlock;
+                if (textBlock != null && string.Equals(textBlock.Tag as string, tag, StringComparison.Ordinal)) return textBlock;
+            }
+            return null;
         }
 
         private static void InsertAfter(Panel panel, UIElement anchor, UIElement value)
