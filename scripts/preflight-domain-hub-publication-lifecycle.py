@@ -76,13 +76,20 @@ ordered = (
     "if (!window.IsLoaded)",
     "_published = window;",
     "ReleasePendingWindow(window);",
-    "candidate = null;",
 )
 positions = [show.find(token) for token in ordered]
 if min(positions) < 0:
     errors.append("unable to prove Domain Hub pending -> show -> loaded -> publish ordering")
 elif positions != sorted(positions) or len(set(positions)) != len(positions):
-    errors.append("Domain Hub must drain pending -> construct -> pending-own -> attach exact Closed -> show -> confirm loaded -> publish -> release pending -> transfer local cleanup")
+    errors.append("Domain Hub must drain pending -> construct -> pending-own -> attach exact Closed -> show -> confirm loaded -> publish -> release pending")
+else:
+    release_pending_position = positions[-1]
+    cleanup_transfer_position = show.find(
+        "candidate = null;",
+        release_pending_position + len("ReleasePendingWindow(window);"),
+    )
+    if cleanup_transfer_position < 0 or cleanup_transfer_position <= release_pending_position:
+        errors.append("Domain Hub local cleanup ownership must transfer only after pending ownership is released")
 
 close_start = commands.find("private static bool TryClosePendingWindow")
 status_start = commands.find("private static void ReportStatus", close_start + 1)
