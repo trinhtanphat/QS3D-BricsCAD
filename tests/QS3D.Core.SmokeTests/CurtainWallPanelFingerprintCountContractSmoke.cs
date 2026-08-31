@@ -40,9 +40,9 @@ namespace QS3D.Core.SmokeTests
             Require(growError.Message.IndexOf("Count", StringComparison.Ordinal) >= 0,
                 "Curtain panel Pieces Count growth did not report the changed Count contract.");
             Require(growsAfterOneItem.CountReadCount >= 2,
-                "Curtain panel Pieces Count was not re-read after indexed snapshot materialization.");
-            Require(growsAfterOneItem.IndexerAccessCount == 1,
-                "Curtain panel Pieces snapshot did not consume exactly the originally advertised item count.");
+                "Curtain panel Pieces Count was not re-read after admission.");
+            Require(growsAfterOneItem.IndexerAccessCount == 0,
+                "Curtain panel Pieces Count growth must fail before indexed snapshot access.");
 
             var becomesNonEmpty = new ChangingCountPieces(
                 Array.Empty<CurtainWallPanelPiece>(),

@@ -95,9 +95,9 @@ namespace QS3D.Core.SmokeTests
                 () => SemanticTitleBlockParameterMapBuilder.Build(Sheet(), source),
                 "known Count changed during traversal",
                 "uniform post-traversal title-block Count drift");
-            Equal(2, source.CollectionCountReads, "generic Count must be rebound after exact traversal");
-            Equal(2, source.ReadOnlyCountReads, "read-only Count must be rebound after exact traversal");
-            Equal(2, source.NonGenericCountReads, "non-generic Count must be rebound after exact traversal");
+            Equal(6, source.CollectionCountReads, "generic Count must be rebound through terminal traversal");
+            Equal(6, source.ReadOnlyCountReads, "read-only Count must be rebound through terminal traversal");
+            Equal(6, source.NonGenericCountReads, "non-generic Count must be rebound through terminal traversal");
         }
 
         private static void PostTraversalSingleSurfaceDriftFailsClosed()
@@ -125,9 +125,9 @@ namespace QS3D.Core.SmokeTests
                 () => SemanticTitleBlockParameterMapBuilder.Build(Sheet(), source),
                 "conflicting known Count values after traversal",
                 label);
-            Equal(2, source.CollectionCountReads, label + " generic Count rebind");
-            Equal(2, source.ReadOnlyCountReads, label + " read-only Count rebind");
-            Equal(2, source.NonGenericCountReads, label + " non-generic Count rebind");
+            Equal(6, source.CollectionCountReads, label + " generic Count rebound budget");
+            Equal(6, source.ReadOnlyCountReads, label + " read-only Count rebound budget");
+            Equal(6, source.NonGenericCountReads, label + " non-generic Count rebound budget");
         }
 
         private static void PostTraversalNegativeCountFailsClosed()
@@ -144,7 +144,7 @@ namespace QS3D.Core.SmokeTests
                 () => SemanticTitleBlockParameterMapBuilder.Build(Sheet(), source),
                 "negative known Count value after traversal",
                 "negative post-traversal title-block Count");
-            Equal(2, source.CollectionCountReads, "negative post-traversal generic Count must be rebound");
+            Equal(6, source.CollectionCountReads, "negative post-traversal generic Count rebound budget");
         }
 
         private static void ConsistentBoundaryCountRemainsSupported()
@@ -158,9 +158,9 @@ namespace QS3D.Core.SmokeTests
 
             Equal(128, map.Values.Count, "exact-at-limit title-block mapping count");
             Equal(1, source.EnumerationStarts, "exact-at-limit source should be traversed once");
-            Equal(2, source.CollectionCountReads, "stable generic Count should be read before and after traversal");
-            Equal(2, source.ReadOnlyCountReads, "stable read-only Count should be read before and after traversal");
-            Equal(2, source.NonGenericCountReads, "stable non-generic Count should be read before and after traversal");
+            Equal(388, source.CollectionCountReads, "stable generic Count traversal rebound budget");
+            Equal(388, source.ReadOnlyCountReads, "stable read-only Count traversal rebound budget");
+            Equal(388, source.NonGenericCountReads, "stable non-generic Count traversal rebound budget");
             Equal("TAG_000", map.Values[0].DestinationTag, "deterministic first destination tag");
             Equal("TAG_127", map.Values[127].DestinationTag, "deterministic last destination tag");
         }

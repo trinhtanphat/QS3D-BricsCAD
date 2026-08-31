@@ -96,7 +96,7 @@ for name, workflow, package_boundary, publish_markers in (
 for token in (
     "$tagCreatedByThisRun = $true",
     "$releaseId = [long]$release.id",
-    "Release tag does not target exact qualified workflow SHA; release remains a draft.",
+    "Assert-RemoteReleaseTagTargetsWorkflowSha",
     "gh release download $env:RELEASE_TAG",
     "rollback-v25-draft-release.ps1",
 ):
@@ -107,4 +107,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: customer release identity stays strict/exact, runtime diagnostics use the complete host-major helper, commercial packaging is clean-source signed/provenance-bound, and both commercial/cloud workflows preflight before package and publish; commercial publication retains exact-tag ownership and rollback.")
+print("PASS: customer release identity stays strict/exact, runtime diagnostics use the complete host-major helper, commercial packaging is clean-source signed/provenance-bound, and both commercial/cloud workflows preflight before package and publish; commercial publication retains exact-tag ownership, exact-tag assertion, and rollback.")
