@@ -7,7 +7,8 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class Rebar3DHubCommands
     {
-        private static Rebar3DHubWindow? _window;
+        private static Rebar3DHubWindow? _pending;
+        private static Rebar3DHubWindow? _published;
 
         [CommandMethod("QS3DREBARHUB", CommandFlags.Modal)]
         public void ShowRebarHub()
@@ -18,7 +19,11 @@ namespace QS3D.BricsCAD.V25
             Rebar3DHubWindow? candidate = null;
             try
             {
-                var published = _window;
+                var pending = _pending;
+                if (pending != null)
+                    CloseOwnerBeforeReplacement(pending, "pending");
+
+                var published = _published;
                 if (published != null)
                 {
                     if (published.IsLoaded)
@@ -28,40 +33,66 @@ namespace QS3D.BricsCAD.V25
                         return;
                     }
 
-                    ReleasePublishedWindow(published);
+                    CloseOwnerBeforeReplacement(published, "published");
                 }
 
-                candidate = new Rebar3DHubWindow();
-                var window = candidate;
-                window.Closed += (_, __) => ReleasePublishedWindow(window);
+                var window = new Rebar3DHubWindow();
+                candidate = window;
+                window.Closed += (_, __) =>
+                {
+                    if (ReferenceEquals(_pending, window)) _pending = null;
+                    if (ReferenceEquals(_published, window)) _published = null;
+                };
+
+                _pending = window;
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
-                if (!window.IsLoaded) return;
+                if (!window.IsLoaded)
+                    throw new InvalidOperationException("Rebar 3D Hub did not remain loaded after host publication.");
+                if (!ReferenceEquals(_pending, window))
+                    throw new InvalidOperationException("Rebar 3D Hub publication ownership changed unexpectedly.");
 
-                _window = window;
+                _pending = null;
+                _published = window;
                 candidate = null;
-                PaletteCoordinator.SetStatus("Rebar 3D Hub đã mở; lệnh luôn gửi sang drawing đang active tại thời điểm bấm.");
+                try { PaletteCoordinator.SetStatus("Rebar 3D Hub đã mở; lệnh luôn gửi sang drawing đang active tại thời điểm bấm."); } catch { }
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
-                document.Editor.WriteMessage("\nQS3DREBARHUB lỗi: " + ex.Message);
-                PaletteCoordinator.SetStatus("QS3DREBARHUB lỗi: " + ex.Message);
-            }
-            finally
-            {
-                if (candidate != null) TryCloseUnpublishedWindow(candidate);
+                if (candidate != null && ReferenceEquals(_pending, candidate))
+                {
+                    try { candidate.Close(); } catch { }
+                }
+
+                var message = "QS3DREBARHUB không thể mở Rebar 3D Hub (" + ex.GetType().Name + ").";
+                try { document.Editor.WriteMessage("\n" + message); } catch { }
+                try { PaletteCoordinator.SetStatus(message); } catch { }
             }
         }
 
-        private static void ReleasePublishedWindow(Rebar3DHubWindow window)
+        private static void CloseOwnerBeforeReplacement(Rebar3DHubWindow window, string state)
         {
-            if (!ReferenceEquals(_window, window)) return;
-            _window = null;
-        }
+            if (window == null) throw new ArgumentNullException(nameof(window));
 
-        private static void TryCloseUnpublishedWindow(Rebar3DHubWindow window)
-        {
-            if (ReferenceEquals(_window, window)) return;
-            try { window.Close(); } catch (System.Exception) { }
+            if (!window.IsLoaded && string.Equals(state, "published", StringComparison.Ordinal))
+            {
+                if (ReferenceEquals(_published, window)) _published = null;
+                return;
+            }
+
+            try
+            {
+                window.Close();
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    "Rebar 3D Hub " + state + " cleanup failed; replacement was refused.",
+                    ex);
+            }
+
+            if (window.IsLoaded || ReferenceEquals(_pending, window) || ReferenceEquals(_published, window))
+                throw new InvalidOperationException(
+                    "Rebar 3D Hub " + state + " owner did not reach terminal close; replacement was refused.");
         }
     }
 }

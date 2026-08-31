@@ -64,12 +64,18 @@ namespace QS3D.Core.Documentation
             var result = new List<T>(knownCount ?? Math.Min(maxCount, 256));
             using (var enumerator = values.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    ValidateKnownCountEvidence(values, maxCount, capacityError, knownCount, "before MoveNext");
+                    var moved = enumerator.MoveNext();
+                    ValidateKnownCountEvidence(values, maxCount, capacityError, knownCount, "after MoveNext");
+                    if (!moved) break;
                     if (result.Count >= maxCount) throw new InvalidOperationException(capacityError);
                     if (knownCount.HasValue && result.Count >= knownCount.Value)
                         throw new InvalidOperationException("Semantic schedule collection source known Count does not match completed traversal.");
-                    result.Add(enumerator.Current);
+                    var current = enumerator.Current;
+                    ValidateKnownCountEvidence(values, maxCount, capacityError, knownCount, "after Current");
+                    result.Add(current);
                 }
             }
 
@@ -164,16 +170,30 @@ namespace QS3D.Core.Documentation
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (definitions == null) throw new ArgumentNullException(nameof(definitions));
-            var list = new List<SemanticScheduleDefinition>(MaxSchedules);
+
+            var knownCount = ResolveSaveKnownCount(definitions);
+            var list = new List<SemanticScheduleDefinition>(knownCount ?? MaxSchedules);
             using (var enumerator = definitions.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableSaveKnownCount(definitions, knownCount, "before MoveNext");
+                    var moved = enumerator.MoveNext();
+                    RequireStableSaveKnownCount(definitions, knownCount, "after MoveNext");
+                    if (!moved) break;
+                    if (knownCount.HasValue && list.Count >= knownCount.Value)
+                        throw new InvalidOperationException("Semantic schedule catalog source known Count does not match traversal.");
                     if (list.Count >= MaxSchedules)
                         throw new InvalidOperationException("Semantic schedule catalog exceeds the supported 128 definitions.");
-                    list.Add(enumerator.Current);
+                    var current = enumerator.Current;
+                    RequireStableSaveKnownCount(definitions, knownCount, "after Current");
+                    list.Add(current);
                 }
             }
+            if (knownCount.HasValue && list.Count != knownCount.Value)
+                throw new InvalidOperationException("Semantic schedule catalog source known Count does not match traversal.");
+            RequireStableSaveKnownCount(definitions, knownCount, "after traversal");
+
             ValidateCatalog(list);
             if (list.Count == 0)
             {
@@ -184,8 +204,54 @@ namespace QS3D.Core.Documentation
 
             var payload = Serialize(list);
             if (payload.Length > MaxPayloadChars) throw new InvalidOperationException("Semantic schedule catalog exceeds the 1 MiB metadata limit.");
-            if (project.Metadata.TryGetValue(MetadataKey, out var current) && string.Equals(current, payload, StringComparison.Ordinal)) return;
+            if (project.Metadata.TryGetValue(MetadataKey, out var storedPayload) && string.Equals(storedPayload, payload, StringComparison.Ordinal)) return;
             project.Metadata[MetadataKey] = payload;
+        }
+
+        private static int? ResolveSaveKnownCount(IEnumerable<SemanticScheduleDefinition> definitions)
+        {
+            int? knownCount = null;
+            ObserveSaveKnownCount(definitions as ICollection<SemanticScheduleDefinition>, ref knownCount);
+            ObserveSaveKnownCount(definitions as IReadOnlyCollection<SemanticScheduleDefinition>, ref knownCount);
+            ObserveSaveKnownCount(definitions as System.Collections.ICollection, ref knownCount);
+            return knownCount;
+        }
+
+        private static void ObserveSaveKnownCount(ICollection<SemanticScheduleDefinition>? definitions, ref int? knownCount)
+        {
+            if (definitions != null) ObserveSaveKnownCount(definitions.Count, ref knownCount);
+        }
+
+        private static void ObserveSaveKnownCount(IReadOnlyCollection<SemanticScheduleDefinition>? definitions, ref int? knownCount)
+        {
+            if (definitions != null) ObserveSaveKnownCount(definitions.Count, ref knownCount);
+        }
+
+        private static void ObserveSaveKnownCount(System.Collections.ICollection? definitions, ref int? knownCount)
+        {
+            if (definitions != null) ObserveSaveKnownCount(definitions.Count, ref knownCount);
+        }
+
+        private static void ObserveSaveKnownCount(int count, ref int? knownCount)
+        {
+            if (count < 0)
+                throw new InvalidOperationException("Semantic schedule catalog source reports an invalid negative known Count.");
+            if (count > MaxSchedules)
+                throw new InvalidOperationException("Semantic schedule catalog exceeds the supported 128 definitions.");
+            if (knownCount.HasValue && knownCount.Value != count)
+                throw new InvalidOperationException("Semantic schedule catalog source exposes conflicting known Count values.");
+            knownCount = count;
+        }
+
+        private static void RequireStableSaveKnownCount(
+            IEnumerable<SemanticScheduleDefinition> definitions,
+            int? expectedCount,
+            string phase)
+        {
+            if (!expectedCount.HasValue) return;
+            var observed = ResolveSaveKnownCount(definitions);
+            if (!observed.HasValue || observed.Value != expectedCount.Value)
+                throw new InvalidOperationException("Semantic schedule catalog source known Count changed " + phase + ".");
         }
 
         public static void Upsert(ProjectState project, SemanticScheduleDefinition definition)
@@ -357,7 +423,6 @@ namespace QS3D.Core.Documentation
                 var include = RequireExactlyOneChild(schedule, "include");
                 var exclude = RequireExactlyOneChild(schedule, "exclude");
                 var columns = RequireExactlyOneChild(schedule, "columns");
-
                 ValidateElement(categories, "categories", Array.Empty<string>(), new[] { "category" });
                 foreach (var category in categories.Elements("category"))
                 {

@@ -41,10 +41,10 @@ def main() -> int:
         "$tagCreatedByThisRun = $true",
         'Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases"',
         "$releaseId = [long]$release.id",
-        "gh release upload $env:RELEASE_TAG $asset --repo $env:GITHUB_REPOSITORY",
-        "git ls-remote --tags origin $tagRef ($tagRef + '^{}')",
-        "Malformed remote tag response; release remains a draft.",
-        "Release tag does not target exact qualified workflow SHA; release remains a draft.",
+        "gh release upload $env:RELEASE_TAG $resolvedAsset --repo $env:GITHUB_REPOSITORY",
+        "function Assert-RemoteReleaseTagTargetsWorkflowSha",
+        "git ls-remote --tags origin $tagRef $peeledRef",
+        "Assert-RemoteReleaseTagTargetsWorkflowSha",
         "gh release download $env:RELEASE_TAG",
         "$downloadedNames = @(Get-ChildItem -LiteralPath $downloadRoot -File | ForEach-Object Name | Sort-Object)",
         "Draft release asset set mismatch.",
@@ -103,8 +103,8 @@ def main() -> int:
     ownership_pos = text.find("$tagCreatedByThisRun = $true", tag_create_pos)
     release_create_pos = text.find('Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases"', ownership_pos)
     release_id_pos = text.find("$releaseId = [long]$release.id", release_create_pos)
-    upload_pos = text.find("gh release upload $env:RELEASE_TAG $asset --repo $env:GITHUB_REPOSITORY", release_id_pos)
-    tag_pos = text.find("Release tag does not target exact qualified workflow SHA; release remains a draft.", upload_pos)
+    upload_pos = text.find("gh release upload $env:RELEASE_TAG $resolvedAsset --repo $env:GITHUB_REPOSITORY", release_id_pos)
+    tag_pos = text.find("Assert-RemoteReleaseTagTargetsWorkflowSha", upload_pos)
     download_pos = text.find("gh release download $env:RELEASE_TAG", tag_pos)
     set_pos = text.find("Draft release asset set mismatch.", download_pos)
     hash_pos = text.find("Draft release asset SHA-256 mismatch for $name; release remains a draft.", set_pos)
@@ -113,9 +113,9 @@ def main() -> int:
     signature_pos = text.find("verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT", checksum_pos)
     publish_pos = text.find("$published = Invoke-RestMethod -Method Patch -Uri $releaseUri", signature_pos)
     positions = (tag_create_pos, ownership_pos, release_create_pos, release_id_pos, upload_pos, tag_pos, download_pos, set_pos, hash_pos, copy_pos, checksum_pos, signature_pos, publish_pos)
-    require(min(positions) >= 0 and list(positions) == sorted(positions), "V25 release must create exact owned tag -> create exact draft -> upload -> bind tag SHA -> download exact asset set -> held hash -> stable ZIP copy/checksum -> signature verify -> publish exact release")
+    require(min(positions) >= 0 and list(positions) == sorted(positions), "V25 release must create exact owned tag -> create exact draft -> upload resolved asset path -> assert exact tag SHA -> download exact asset set -> held hash -> stable ZIP copy/checksum -> signature verify -> publish exact release")
 
-    print("PASS: V25 commercial publication uses positive exact-tag ownership, exact draft identity, exact asset set, held-generation hashes, stable ZIP checksum, Authenticode verification, and only then exact-release publication.")
+    print("PASS: V25 commercial publication uses positive exact-tag ownership, exact draft identity, resolved-path exact asset upload, exact asset set, reusable exact-tag assertion, held-generation hashes, stable ZIP checksum, Authenticode verification, and only then exact-release publication.")
     return 0
 
 

@@ -3,18 +3,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = {
-    "Family": ROOT / "src/QS3D.BricsCAD.V25/FamilyManagerCommands.cs",
-    "Level": ROOT / "src/QS3D.BricsCAD.V25/FloorLevelCommands.cs",
+    "Family": (ROOT / "src/QS3D.BricsCAD.V25/FamilyManagerCommands.cs", "FamilyManagerWindow"),
+    "Level": (ROOT / "src/QS3D.BricsCAD.V25/FloorLevelCommands.cs", "FloorLevelWindow"),
 }
 errors = []
 
-for label, path in CASES.items():
+for label, (path, window_type) in CASES.items():
     if not path.is_file():
         errors.append(f"missing {label} manager command source: {path.relative_to(ROOT)}")
         continue
 
     source = path.read_text(encoding="utf-8")
     required = [
+        "private static PublishedManager? _pending;",
         "private static PublishedManager? _published;",
         "private readonly WeakReference<Document> _document;",
         "database.UnmanagedObject == IntPtr.Zero",
@@ -24,48 +25,78 @@ for label, path in CASES.items():
         "_document.TryGetTarget(out var ownedDocument)",
         "ReferenceEquals(ownedDocument, document)",
         "ExistingProjectMutationContext.TryGet(document, out _);",
+        "var pending = _pending;",
+        'CloseOwnerBeforeReplacement(pending, "pending");',
         "var previous = _published;",
-        "if (previous.Window.IsLoaded)",
-        "if (previous.Matches(document) && previous.MatchesManagedWrapper(document))",
+        "previous.Window.IsLoaded &&",
+        "previous.Matches(document) &&",
+        "previous.MatchesManagedWrapper(document)",
         "previous.Window.Activate();",
-        "previous.Window.Close();",
-        "if (ReferenceEquals(_published, previous))",
-        "_published = null;",
-        "var publishedWindow = candidate;",
-        "var published = new PublishedManager(publishedWindow, document);",
-        "publishedWindow.Closed += (_, __) =>",
-        "if (ReferenceEquals(_published, published)) _published = null;",
-        "Application.ShowModelessWindow(IntPtr.Zero, publishedWindow, true);",
-        "_published = published;",
+        'CloseOwnerBeforeReplacement(previous, "published");',
+        f"var window = new {window_type}(document);",
+        "var owner = new PublishedManager(window, document);",
+        "window.Closed += (_, __) =>",
+        "if (ReferenceEquals(_pending, owner)) _pending = null;",
+        "if (ReferenceEquals(_published, owner)) _published = null;",
+        "_pending = owner;",
+        "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
+        "if (!window.IsLoaded)",
+        "if (!ReferenceEquals(_pending, owner))",
+        "_pending = null;",
+        "_published = owner;",
         "candidate = null;",
-        "if (candidate != null)",
-        "try { candidate.Close(); } catch { }",
+        "candidate != null && ReferenceEquals(_pending, candidate)",
+        "candidate.Window.Close();",
+        'string.Equals(state, "published", StringComparison.Ordinal)',
+        "owner.Window.Close();",
+        "owner.Window.IsLoaded || ReferenceEquals(_pending, owner) || ReferenceEquals(_published, owner)",
+        "ex.GetType().Name",
     ]
     for needle in required:
         if needle not in source:
             errors.append(f"{label} manager missing lifecycle contract: {needle}")
 
     forbidden = [
-        "if (previous.Matches(document))\n",
-        "_published = null;\n                        try { previous.Window.Close();",
+        "var publishedWindow = candidate;",
+        "Application.ShowModelessWindow(IntPtr.Zero, publishedWindow, true);",
         "try { previous.Window.Close(); } catch { }",
+        "ex.Message",
     ]
     for needle in forbidden:
         if needle in source:
-            errors.append(f"{label} manager contains unsafe publication shortcut: {needle.strip()}")
+            errors.append(f"{label} manager contains unsafe publication shortcut: {needle}")
 
-    warm = source.find("ExistingProjectMutationContext.TryGet(document, out _);")
-    capture = source.find("var previous = _published;")
-    reuse = source.find("if (previous.Matches(document) && previous.MatchesManagedWrapper(document))")
-    close = source.find("previous.Window.Close();")
-    retained = source.find("if (ReferenceEquals(_published, previous))", close)
-    construct = source.find("candidate = new ")
-    show = source.find("Application.ShowModelessWindow(IntPtr.Zero, publishedWindow, true);")
-    publish = source.find("_published = published;", show)
-    if min(warm, capture, reuse, close, retained, construct, show, publish) < 0:
-        errors.append(f"{label} manager ordering tokens are incomplete")
-    elif not (warm < capture < reuse < close < retained < construct < show < publish):
-        errors.append(f"{label} manager must warm-bind, arbitrate/reuse, terminal-close, construct, show, then publish in fail-closed order")
+    try:
+        warm = source.index("ExistingProjectMutationContext.TryGet(document, out _);")
+        pending_read = source.index("var pending = _pending;", warm)
+        pending_close = source.index('CloseOwnerBeforeReplacement(pending, "pending");', pending_read)
+        published_read = source.index("var previous = _published;", pending_close)
+        reuse = source.index("previous.MatchesManagedWrapper(document)", published_read)
+        published_close = source.index('CloseOwnerBeforeReplacement(previous, "published");', reuse)
+        construct = source.index(f"var window = new {window_type}(document);", published_close)
+        owner = source.index("var owner = new PublishedManager(window, document);", construct)
+        closed = source.index("window.Closed +=", owner)
+        own_pending = source.index("_pending = owner;", closed)
+        show = source.index("Application.ShowModelessWindow(IntPtr.Zero, window, true);", own_pending)
+        loaded = source.index("if (!window.IsLoaded)", show)
+        exact = source.index("if (!ReferenceEquals(_pending, owner))", loaded)
+        clear = source.index("_pending = null;", exact)
+        publish = source.index("_published = owner;", clear)
+        release = source.index("candidate = null;", publish)
+        if not (warm < pending_read < pending_close < published_read < reuse < published_close < construct < owner < closed < own_pending < show < loaded < exact < clear < publish < release):
+            errors.append(f"{label} manager must drain pending, arbitrate published owner, construct exact candidate, own before host show, prove loaded/exact ownership, then publish")
+    except ValueError as exc:
+        errors.append(f"{label} manager ordering token missing: {exc}")
+
+    try:
+        helper = source.index("private static void CloseOwnerBeforeReplacement")
+        stale = source.index('string.Equals(state, "published", StringComparison.Ordinal)', helper)
+        close = source.index("owner.Window.Close();", stale)
+        terminal = source.index("owner.Window.IsLoaded || ReferenceEquals(_pending, owner) || ReferenceEquals(_published, owner)", close)
+        if not (helper < stale < close < terminal):
+            errors.append(f"{label} manager cleanup must stale-repair only published owners and prove terminal close")
+    except ValueError as exc:
+        errors.append(f"{label} manager cleanup ordering token missing: {exc}")
 
 print("QS3D Family/Level manager single-instance veto-safe preflight")
 if errors:
@@ -74,4 +105,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
 
-print("PASS: Family and Level managers preserve exact native+managed-wrapper affinity, terminal close arbitration, veto safety, publication-after-show and instance-safe Closed release.")
+print("PASS: Family and Level managers preserve exact native+managed-wrapper affinity, pending-first ownership, terminal close arbitration, loaded/exact publication proof, stale-callback isolation, and redacted host failures.")

@@ -1,42 +1,50 @@
-# Domain Hub transactional publication lifecycle
+# Domain Hub modeless publication lifecycle
 
 ## Scope
 
-`QS3DDOMAIN` is intentionally a host-global modeless command hub. `DomainHubWindow` does not retain a BricsCAD `Document`; each button resolves `Application.DocumentManager.MdiActiveDocument` at click time and dispatches to that active drawing. This package hardens only the launch/publication lifecycle and does not introduce document ownership or change any underlying domain command semantics.
+`QS3DDOMAIN` is intentionally a host-global modeless command hub. `DomainHubWindow` does not retain a BricsCAD `Document`; each button resolves `Application.DocumentManager.MdiActiveDocument` at click time and dispatches to that active drawing. This package hardens launch/publication failure ownership only and does not change underlying domain command semantics.
 
-## Proven defects
+## Proven defect on main
 
-The historical launcher assigned a freshly constructed `DomainHubWindow` into static `_window` before `Application.ShowModelessWindow(...)` succeeded and attached a `Closed` callback that unconditionally cleared `_window`. A show exception or non-loaded return could therefore leave an abandoned candidate with a live callback. If a later invocation published a newer window, a delayed `Closed` from the abandoned candidate could clear the newer owner.
-
-Issue #4761 corrected authoritative publication and exact-owner release, but the successor source still returned on a non-loaded candidate or entered the outer exception handler after a show exception without terminally closing that unpublished candidate. Static ownership stayed correct, yet the failed WPF/native-host candidate and callback/resources were not source-proven to be released. Issue #4878 closes that resource-lifetime gap by keeping the candidate locally cleanup-owned until publication succeeds.
+The previous source kept an unpublished candidate only in a local variable. If `Application.ShowModelessWindow(...)` threw, or returned with `IsLoaded == false`, `finally` attempted `Close()` and then discarded local ownership. If that close threw or the candidate remained loaded, the next command invocation had no authoritative pointer to the failed candidate and could construct another modeless Domain Hub. The catch path also surfaced raw host `ex.Message` text to the active editor.
 
 ## Source-ready contract
 
-- An already loaded published Domain Hub is reused/activated; repeated invocation does not construct a duplicate.
-- A stale unloaded publication is cleared only through an exact-owner release helper.
-- A new candidate is held in a local cleanup slot before construction/host show and attaches an exact-window `Closed` callback before host show.
-- The candidate is not published until `Application.ShowModelessWindow` returns successfully and `IsLoaded` is still true.
-- A show exception or non-loaded return leaves static publication unchanged and the `finally` path best-effort terminal-closes only the still-unpublished candidate.
-- Cleanup ownership transfers only after `_window = window` authoritative publication. The cleanup helper refuses to close the exact currently published owner.
-- Terminal `Closed` clears publication only when the closing window is still the exact published owner; stale callbacks cannot clear a newer owner.
-- The window remains host-global and retains no managed `Document`, database, `ObjectId`, `DBObject`, or native entity ownership. Command buttons continue resolving the active document at click time.
+- At most one authoritative loaded publication exists in `_published`.
+- A new candidate becomes `_pending` before modeless host publication.
+- The exact pending owner remains authoritative across invocations until terminal close is proven or ownership transfers to `_published` after a successful loaded publication.
+- Every invocation drains a prior `_pending` candidate before constructing another. If best-effort close leaves it loaded, the command fails closed and constructs no duplicate.
+- `Closed` clears only matching pending/published ownership; stale callbacks cannot clear a newer owner.
+- An already-loaded `_published` window is reused/activated.
+- Static publication transfers only after `Application.ShowModelessWindow` returns and `IsLoaded` is true.
+- User-visible failure status is stable/redacted. Diagnostics may write exception type, never raw host exception message.
+- The window remains host-global and continues resolving the active document at click time rather than retaining a managed `Document`.
 
-## Hosted validation
+## Remote deterministic validation
 
-Run Shared CI on one exact pushed candidate. Reservation/Lane-Key/path-collision admission, generic guard, all discovered feature guards, deterministic Core smoke, trusted BricsCAD V25 reference validation, V25 plugin compilation, and final build must remain green. The focused `scripts/preflight-domain-hub-publication-lifecycle.py` pins local candidate cleanup ownership, candidate publication ordering, cleanup transfer after publication, exact-owner terminal release, and the host-global active-document dispatch boundary.
+Run on one exact pushed candidate:
+
+```text
+python scripts/preflight-domain-hub-publication.py
+python scripts/preflight-domain-hub-publication-lifecycle.py
+dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64
+```
+
+The focused and historical guards pin pending ownership, drain-before-construct ordering, loaded-only publication, exact-owner release, fail-closed close semantics, exception redaction, and the host-global active-document boundary. Remote/static/build evidence is never `LOCAL_PASS`.
 
 ## LOCAL_ONLY licensed V25 matrix
 
-On one exact source/plugin identity in licensed BricsCAD V25, using disposable drawings only:
+Use one exact source/plugin identity in licensed BricsCAD V25 and disposable drawings only. Record BricsCAD ProductVersion, exact source SHA, loaded DLL hash, drawing identity, and sanitized command trace.
 
-1. Invoke `QS3DDOMAIN` repeatedly and prove exactly one Domain Hub remains live and subsequent invocations activate/reuse it.
-2. With drawing A active, click representative hub commands and prove dispatch targets A. Switch to drawing B without recreating the hub and prove subsequent clicks target B.
-3. Close the hub normally, reopen it, and repeat rapid close/reopen sequencing; prove a terminal callback from an older window never clears the newer live owner.
-4. With an authorized harness/probe, exercise a modeless-show exception; prove the unpublished candidate is terminally closed, no static owner is published, and the next normal invocation opens exactly one hub.
-5. With an authorized harness/probe, exercise a host-show path that returns with `IsLoaded == false`; prove the unpublished candidate is terminally closed and no window/callback resource residue remains.
-6. Prove cleanup ownership transfers after successful publication: a successfully loaded/published hub must remain live and must not be closed by the launch `finally` path.
-7. Close all drawings while the hub remains available; command clicks must fail softly with the existing no-active-drawing status and must not create or retain a document implicitly.
-8. Reopen a disposable drawing and prove the same host-global hub can dispatch again to the newly active document.
-9. Close the hub and host; verify zero owned modeless/process/private-state residue remains.
+1. **Normal publication/reuse** — invoke `QS3DDOMAIN` twice and prove exactly one Domain Hub remains live; the second invocation activates/reuses it.
+2. **Normal close/reopen** — close the hub normally, invoke again, and prove exactly one replacement opens with no stale-owner effect.
+3. **Active-document dispatch** — with drawing A active, execute representative hub commands; switch to drawing B without recreating the hub and prove later clicks target B.
+4. **Show exception** — with an approved local harness/probe, force modeless host publication to throw. Prove no static publication occurs and the failed exact candidate remains pending-owned until terminally closed.
+5. **Non-loaded show return** — force host show to return with `IsLoaded == false`; prove the candidate remains pending-owned until terminal close and is never published.
+6. **Pending close failure** — force best-effort `Close()` to throw or leave the failed candidate loaded. Invoke `QS3DDOMAIN` again and prove it fails closed without constructing a second candidate.
+7. **Pending recovery** — after the exact failed candidate is terminally closed, invoke again and prove one clean publication can proceed.
+8. **Stale callback isolation** — after recovery/publication of a newer owner, trigger/observe terminal close of an older candidate and prove it cannot clear the newer authoritative owner.
+9. **Error redaction** — inject a host exception containing a unique sentinel and prove user-visible editor/status output never contains the sentinel; exception type may be present in diagnostics.
+10. **Cleanup** — close all hubs/drawings/host as required by the local harness and verify no owned modeless/process/private-state residue remains.
 
-Hosted source/static/build evidence is never `LOCAL_PASS`. Record only sanitized exact-SHA/ProductVersion licensed evidence through the canonical local qualification flow.
+Report `LOCAL_PASS` only when this licensed-host matrix is actually executed against the exact candidate SHA. Otherwise report only remote/static/build evidence.

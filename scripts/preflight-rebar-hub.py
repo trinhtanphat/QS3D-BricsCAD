@@ -32,8 +32,29 @@ if code.is_file():
 
 if command.is_file():
     text = command.read_text(encoding="utf-8")
-    for needle in ('CommandMethod("QS3DREBARHUB"', "new Rebar3DHubWindow()", "ShowModelessWindow"):
-        if needle not in text: errors.append("QS3DREBARHUB command missing: " + needle)
+    for needle in (
+        'CommandMethod("QS3DREBARHUB"',
+        "new Rebar3DHubWindow()",
+        "private static Rebar3DHubWindow? _pending;",
+        "private static Rebar3DHubWindow? _published;",
+        'CloseOwnerBeforeReplacement(pending, "pending");',
+        "_pending = window;",
+        "ShowModelessWindow",
+        "if (!window.IsLoaded)",
+        "if (!ReferenceEquals(_pending, window))",
+        "_pending = null;",
+        "_published = window;",
+        "if (ReferenceEquals(_pending, window)) _pending = null;",
+        "if (ReferenceEquals(_published, window)) _published = null;",
+        "ex.GetType().Name",
+    ):
+        if needle not in text: errors.append("QS3DREBARHUB publication contract missing: " + needle)
+    for forbidden in (
+        "private static Rebar3DHubWindow? _window;",
+        "TryCloseUnpublishedWindow",
+        "+ ex.Message",
+    ):
+        if forbidden in text: errors.append("QS3DREBARHUB retains unsafe legacy publication/error pattern: " + forbidden)
 
 owners = {}
 for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):
@@ -50,4 +71,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: Rebar 3D Hub XAML, dispatcher, modeless command and registered product workflows are wired.")
+print("PASS: Rebar 3D Hub XAML/dispatcher workflows are wired and launcher publication is pending-first, duplicate-safe, and host-error redacted.")
