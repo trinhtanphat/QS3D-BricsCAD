@@ -52,9 +52,10 @@ namespace QS3D.BricsCAD.V25
         {
             lock (Sync)
             {
+                var previous = LoadProvider();
                 Directory.CreateDirectory(SettingsDirectory);
                 File.WriteAllText(ProviderPath, provider.ToString(), new UTF8Encoding(false));
-                ForgetChatGptRegistrationAcknowledgement();
+                if (previous != provider) ForgetChatGptRegistrationAcknowledgement();
             }
         }
 
@@ -330,6 +331,24 @@ namespace QS3D.BricsCAD.V25
                     _lastReady = false;
                     _lastReadyProbeUtc = DateTime.MinValue;
                 }
+                try
+                {
+                    if (process.HasExited)
+                    {
+                        HandleProcessExit(process);
+                        message = string.IsNullOrWhiteSpace(LastError)
+                            ? "OpenAI tunnel-client đã dừng ngay sau khi khởi động."
+                            : LastError;
+                        return false;
+                    }
+                }
+                catch (InvalidOperationException)
+                {
+                    message = "Không đọc được trạng thái OpenAI tunnel-client sau khi khởi động.";
+                    StopProcessOnly();
+                    return false;
+                }
+
                 WriteText(AutoStartFile, "1");
                 McpTransportCoordinator.SetSelectedProvider(McpTransportProvider.OpenAiSecureTunnel);
                 message = "OpenAI Secure MCP Tunnel đang khởi động. QS3D không lưu Runtime API key; chờ trạng thái READY rồi kết nối ChatGPT bằng Connection = Tunnel.";
