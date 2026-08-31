@@ -48,10 +48,10 @@ namespace QS3D.Core.Services
                 }
             }
 
-            if (_changeVersion != enumerationVersion)
-                throw new InvalidOperationException("Selection changed while replacement element ids were being enumerated. Retry replacement against the current selection state.");
+            RequireUnchangedSelectionVersion(enumerationVersion);
 
             var finalKnownCount = ResolveKnownCount(ids);
+            RequireUnchangedSelectionVersion(enumerationVersion);
             if (knownCount.HasValue != finalKnownCount.HasValue ||
                 (knownCount.HasValue && knownCount.Value != finalKnownCount!.Value))
                 throw new InvalidOperationException(
@@ -80,6 +80,12 @@ namespace QS3D.Core.Services
             _ids.Clear();
             _changeVersion = nextVersion;
             Changed?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void RequireUnchangedSelectionVersion(long expectedVersion)
+        {
+            if (_changeVersion != expectedVersion)
+                throw new InvalidOperationException("Selection changed while replacement element ids were being enumerated. Retry replacement against the current selection state.");
         }
 
         private static int? ResolveKnownCount(IEnumerable<string> ids)
