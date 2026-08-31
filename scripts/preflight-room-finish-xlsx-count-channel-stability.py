@@ -21,15 +21,28 @@ for token in required_source:
     if token not in source:
         raise SystemExit("missing Room-finish XLSX count-channel stability source token: " + token)
 
-before = source.index('rowCount.Revalidate(rows, "before row indexer")')
-read = source.index("var sourceRow = rows[rowIndex];")
-after = source.index('rowCount.Revalidate(rows, "after row indexer")')
-snapshot = source.index("var row = SnapshotRow(sourceRow, rowIndex);")
-post_snapshot = source.index('rowCount.Revalidate(rows, "after row snapshot")')
-post_traversal = source.index('rowCount.Revalidate(rows, "after snapshot traversal")')
-post_stability = source.index('rowCount.Revalidate(rows, "after row stability validation")')
-if not (before < read < after < snapshot < post_snapshot < post_traversal < post_stability):
-    raise SystemExit("Room-finish row traversal must revalidate all admitted Count channels around caller indexer/snapshot boundaries")
+indexer_contract = '''rowCount.Revalidate(rows, "before row indexer");
+                var sourceRow = rows[rowIndex];
+                rowCount.Revalidate(rows, "after row indexer");'''
+if indexer_contract not in source:
+    raise SystemExit("Room-finish XLSX must revalidate admitted Count channels immediately around the caller row indexer")
+
+snapshot_contract = '''var row = SnapshotRow(sourceRow, rowIndex);
+                rowCount.Revalidate(rows, "after row snapshot");'''
+if snapshot_contract not in source:
+    raise SystemExit("Room-finish XLSX must revalidate admitted Count channels immediately after semantic row snapshot")
+
+traversal_contract = '''rowCount.Revalidate(rows, "after snapshot traversal");
+            for (var rowIndex = 0; rowIndex < rowCount.Value; rowIndex++)
+                EnsureRowStable(sourceRows[rowIndex], snapshot[rowIndex], rowIndex);
+            rowCount.Revalidate(rows, "after row stability validation");'''
+if traversal_contract not in source:
+    raise SystemExit("Room-finish XLSX must revalidate admitted Count channels after traversal and source-row stability validation")
+
+filesystem_boundary = '''rowCount.Revalidate(rows, "after row stability validation");
+            var fullPath = Path.GetFullPath(path);'''
+if filesystem_boundary not in source:
+    raise SystemExit("Room-finish XLSX final Count revalidation must precede filesystem publication setup")
 
 required_smoke = [
     "RejectsIndexerInducedGenericCountDriftBeforeFilesystem();",
