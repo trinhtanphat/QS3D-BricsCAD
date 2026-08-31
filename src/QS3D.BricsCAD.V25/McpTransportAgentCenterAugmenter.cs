@@ -15,7 +15,7 @@ namespace QS3D.BricsCAD.V25
     /// <summary>
     /// Adds transport-hardening affordances to the existing Agent Center without changing the
     /// public MCP surface: cloudflared busy/progress/recovery state plus bounded OpenAI tunnel
-    /// diagnostics and environment-key-only restart. The bootstrapper owns the dynamic Cloudflare
+    /// diagnostics and saved/environment-key restart. The bootstrapper owns the dynamic Cloudflare
     /// cancel button so this augmenter never creates a second competing cancel control.
     /// </summary>
     internal static class McpTransportAgentCenterAugmenter
@@ -321,7 +321,7 @@ namespace QS3D.BricsCAD.V25
             var restart = FindTaggedButton(panel, OpenAiRestartTag);
             if (restart == null)
             {
-                restart = CloneActionButton(anchor, "Restart tunnel · env key", OpenAiRestartTag);
+                restart = CloneActionButton(anchor, "Restart tunnel · saved/env key", OpenAiRestartTag);
                 restart.Click += (_, __) => RestartOpenAiTunnelFromEnvironment();
                 InsertAfter(panel, openLogs, restart);
             }
@@ -397,12 +397,16 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                var hasEnvironmentKey = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("CONTROL_PLANE_API_KEY"))
-                                        || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
-                if (!hasEnvironmentKey)
+                // Re-project a restart-safe saved credential before checking the process environment.
+                // This is idempotent for environment-backed setups and keeps the actual child launch
+                // on the same verified CONTROL_PLANE_API_KEY path as normal autostart.
+                McpPersistentUserSettings.ApplyStartupSecretsToProcessEnvironment();
+                var hasRuntimeKey = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("CONTROL_PLANE_API_KEY"))
+                                    || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
+                if (!hasRuntimeKey)
                 {
                     MessageBox.Show(
-                        "Restart tự động chỉ dùng Runtime API key đã có trong môi trường Windows. QS3D không lưu key đã nhập trong UI. Hãy nhập lại key và bấm Khởi động nếu không dùng environment key.",
+                        "Không có Runtime API key đã lưu trong Windows Credential Manager hoặc biến môi trường Windows. Nhập key và bấm Khởi động để lưu/xác minh trước khi restart tunnel.",
                         "QS3D MCP", MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
@@ -413,7 +417,7 @@ namespace QS3D.BricsCAD.V25
                 if (ok)
                     McpAgentExperience.Success("onboarding", message, "Chờ tunnel-client READY rồi tiếp tục ChatGPT.");
                 else
-                    McpAgentExperience.Error("onboarding", message, "Kiểm tra environment key, Tunnel ID, trust verification và diagnostics.");
+                    McpAgentExperience.Error("onboarding", message, "Kiểm tra saved/environment key, Tunnel ID, trust verification và diagnostics.");
                 MessageBox.Show(message, "QS3D MCP", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
             }
             catch (Exception ex)
