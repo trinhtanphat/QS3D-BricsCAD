@@ -14,7 +14,14 @@ def main() -> int:
     text = CENTER.read_text(encoding="utf-8")
     errors: list[str] = []
 
+    command_start = text.find("public sealed class McpAgentControlCenterCommands")
+    command_end = text.find("internal sealed class McpAgentControlCenterWindow", command_start)
+    command_block = text[command_start:command_end] if command_start >= 0 and command_end > command_start else ""
+    if not command_block:
+        errors.append("Agent Center UI missing canonical QS3DMCPAGENTCENTER command block")
+
     required = {
+        "modeless Agent Center command": "new McpAgentControlCenterWindow().Show();",
         "layout rounding": "UseLayoutRounding = true",
         "dashboard shell": "CreateDashboardShell()",
         "section card component": "CreateSectionCard(",
@@ -80,8 +87,12 @@ def main() -> int:
         "Quick Tunnel bounded poll cap": "_quickUrlPollTicks >= 20",
     }
     for label, token in required.items():
-        if token not in text:
+        haystack = command_block if label == "modeless Agent Center command" else text
+        if token not in haystack:
             errors.append(f"Agent Center UI missing {label}: {token}")
+
+    if "ShowDialog()" in command_block:
+        errors.append("Agent Center command must return immediately after modeless Show(); ShowDialog() keeps BricsCAD CMDACTIVE non-idle")
 
     preserved = {
         "install flow": "McpCloudflaredBootstrapper.BeginInstall",
@@ -124,7 +135,7 @@ def main() -> int:
             print("ERROR:", error)
         return 1
 
-    print("PASS MCP Agent Center UIUX four-tab/toast/theme/local-consent/connectivity contract")
+    print("PASS MCP Agent Center UIUX four-tab/toast/theme/local-consent/connectivity/modeless-command contract")
     return 0
 
 
