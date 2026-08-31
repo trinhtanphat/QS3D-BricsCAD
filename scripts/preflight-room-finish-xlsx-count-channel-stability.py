@@ -8,7 +8,7 @@ source = SOURCE.read_text(encoding="utf-8")
 smoke = SMOKE.read_text(encoding="utf-8")
 
 required_source = [
-    "KnownCountContract<RoomFinishScheduleRow>",
+    "private sealed class KnownCountContract<T>",
     "BindKnownCount(rows, MaxDataRows, \"export rows\")",
     "rowCount.Revalidate(rows, \"before row indexer\")",
     "var sourceRow = rows[rowIndex];",
@@ -27,7 +27,8 @@ after = source.index('rowCount.Revalidate(rows, "after row indexer")')
 snapshot = source.index("var row = SnapshotRow(sourceRow, rowIndex);")
 post_snapshot = source.index('rowCount.Revalidate(rows, "after row snapshot")')
 post_traversal = source.index('rowCount.Revalidate(rows, "after snapshot traversal")')
-if not (before < read < after < snapshot < post_snapshot < post_traversal):
+post_stability = source.index('rowCount.Revalidate(rows, "after row stability validation")')
+if not (before < read < after < snapshot < post_snapshot < post_traversal < post_stability):
     raise SystemExit("Room-finish row traversal must revalidate all admitted Count channels around caller indexer/snapshot boundaries")
 
 required_smoke = [
