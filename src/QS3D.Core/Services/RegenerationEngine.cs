@@ -147,9 +147,6 @@ namespace QS3D.Core.Services
             RequireElementStructureFresh(project, sourceElements);
             if (unresolved.Count == 0) return 0;
 
-            // Resolve the requested subset in one captured project-order scan. The previous implementation
-            // scanned live project.Elements after caller target enumeration, which could silently switch to
-            // replacement same-id instances when callers directly edited the public collection without Touch().
             var targets = new List<ProjectElement>(unresolved.Count);
             var seenProjectIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in sourceElements)
@@ -245,6 +242,7 @@ namespace QS3D.Core.Services
                         throw new InvalidOperationException("Regeneration target id count changed during enumeration.");
 
                     var value = enumerator.Current;
+                    RequireStableKnownTargetIdCounts(elementIds, knownCount);
                     var raw = value ?? string.Empty;
                     if (string.IsNullOrWhiteSpace(raw))
                         throw new ArgumentException("Regeneration target id cannot be blank at index " + index.ToString(CultureInfo.InvariantCulture) + ".", nameof(elementIds));
@@ -327,9 +325,6 @@ namespace QS3D.Core.Services
 
             for (var pass = 0; pass < maxPasses; pass++)
             {
-                // TopologicalDirtyOrder derives ordering directly from each candidate's DependsOn
-                // list. Rebuilding the reverse-dependency index here never participates in that
-                // ordering and previously caused a redundant full-project scan on every pass.
                 var dirty = _graph.TopologicalDirtyOrder(candidateList);
                 if (dirty.Count == 0) break;
                 var progress = 0;
