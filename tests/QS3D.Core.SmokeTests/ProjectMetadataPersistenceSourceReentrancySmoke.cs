@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
@@ -100,21 +99,6 @@ namespace QS3D.Core.SmokeTests
         private static void False(bool value, string label)
         {
             if (value) throw new InvalidOperationException(label + ": expected false.");
-        }
-
-        private abstract class SingleItemEnumerator : IEnumerator<KeyValuePair<string, string>>
-        {
-            private int _state;
-            protected int CurrentReadCount;
-            public abstract KeyValuePair<string, string> Current { get; }
-            object IEnumerator.Current => Current;
-            public virtual bool MoveNext()
-            {
-                _state++;
-                return _state == 1;
-            }
-            public void Reset() => throw new NotSupportedException();
-            public void Dispose() { }
         }
 
         private sealed class FinalCountReentrantCollection : ICollection<KeyValuePair<string, string>>
