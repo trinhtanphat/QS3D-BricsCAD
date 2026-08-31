@@ -45,12 +45,12 @@ namespace QS3D.BricsCAD.V25
             "cad_view_set"
         };
 
-        internal static bool IsTool(string tool)
+        internal static bool IsTool(string? tool)
         {
             return Tools.Contains(tool ?? string.Empty);
         }
 
-        internal static bool RequiresMutation(string tool)
+        internal static bool RequiresMutation(string? tool)
         {
             return MutationTools.Contains(tool ?? string.Empty);
         }
@@ -295,7 +295,7 @@ namespace QS3D.BricsCAD.V25
                 if (CommandTrackers.ContainsKey(document)) return;
                 if (CommandTrackers.Count >= 32)
                 {
-                    Document removable = null;
+                    Document? removable = null;
                     foreach (var pair in CommandTrackers)
                     {
                         if (!ReferenceEquals(pair.Key, document)) { removable = pair.Key; break; }
