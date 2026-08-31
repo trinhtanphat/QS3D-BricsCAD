@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using QS3D.Core.Rebar;
 
 namespace QS3D.Core.SmokeTests
@@ -10,6 +12,9 @@ namespace QS3D.Core.SmokeTests
             DemandKeepsMaterialComponentsSeparate();
             CanonicalIdentityFailsClosed();
             DuplicateCutIdentityFailsClosed();
+            TransientMoveNextCountDriftFailsClosed();
+            TransientCurrentCountDriftFailsClosed();
+            StableCountedListStillSucceeds();
             NonFinitePolicyFailsClosed();
             ProcurementKeepsKerfAndOffCutSeparate();
             ExcessWasteFailsClosed();
@@ -17,17 +22,11 @@ namespace QS3D.Core.SmokeTests
 
         private static void DemandKeepsMaterialComponentsSeparate()
         {
-            var demand = new RebarStockDemand(
-                "G-01",
-                "CB400-V",
-                20d,
-                12d,
-                new[]
-                {
-                    new RebarCutRequirement("C-01", 4.5d, 2),
-                    new RebarCutRequirement("C-02", 2d, 1)
-                },
-                new RebarCutAllowancePolicy(0.003d, 0.02d));
+            var demand = NewDemand(new[]
+            {
+                new RebarCutRequirement("C-01", 4.5d, 2),
+                new RebarCutRequirement("C-02", 2d, 1)
+            });
 
             Equal(3L, demand.RequiredCutCount);
             Equal(2, demand.RequiredCuts.Count);
@@ -45,10 +44,7 @@ namespace QS3D.Core.SmokeTests
         {
             Throws<ArgumentException>(() => new RebarCutRequirement(" CUT-A", 3d, 1));
             Throws<ArgumentException>(() => new RebarStockDemand(
-                "G-02 ",
-                "CB500-V",
-                16d,
-                12d,
+                "G-02 ", "CB500-V", 16d, 12d,
                 new[] { new RebarCutRequirement("CUT-A", 3d, 1) },
                 new RebarCutAllowancePolicy()));
         }
@@ -56,16 +52,37 @@ namespace QS3D.Core.SmokeTests
         private static void DuplicateCutIdentityFailsClosed()
         {
             Throws<ArgumentException>(() => new RebarStockDemand(
-                "G-03",
-                "CB500-V",
-                16d,
-                12d,
+                "G-03", "CB500-V", 16d, 12d,
                 new[]
                 {
                     new RebarCutRequirement("CUT-A", 3d, 1),
                     new RebarCutRequirement("cut-a", 2d, 1)
                 },
                 new RebarCutAllowancePolicy()));
+        }
+
+        private static void TransientMoveNextCountDriftFailsClosed()
+        {
+            Throws<InvalidOperationException>(() => NewDemand(new HostileRequiredCuts(DriftBoundary.MoveNext)));
+        }
+
+        private static void TransientCurrentCountDriftFailsClosed()
+        {
+            Throws<InvalidOperationException>(() => NewDemand(new HostileRequiredCuts(DriftBoundary.Current)));
+        }
+
+        private static void StableCountedListStillSucceeds()
+        {
+            var demand = NewDemand(new HostileRequiredCuts(DriftBoundary.None));
+            Equal(2, demand.RequiredCuts.Count);
+            Equal(2L, demand.RequiredCutCount);
+        }
+
+        private static RebarStockDemand NewDemand(IReadOnlyList<RebarCutRequirement> cuts)
+        {
+            return new RebarStockDemand(
+                "G-01", "CB400-V", 20d, 12d, cuts,
+                new RebarCutAllowancePolicy(0.003d, 0.02d));
         }
 
         private static void NonFinitePolicyFailsClosed()
@@ -86,6 +103,60 @@ namespace QS3D.Core.SmokeTests
         private static void ExcessWasteFailsClosed()
         {
             Throws<ArgumentOutOfRangeException>(() => new RebarStockProcurementQuantities(12d, 1, 0.01d, 12d));
+        }
+
+        private enum DriftBoundary { None, MoveNext, Current }
+
+        private sealed class HostileRequiredCuts : IReadOnlyList<RebarCutRequirement>
+        {
+            private readonly RebarCutRequirement[] _items =
+            {
+                new RebarCutRequirement("CUT-A", 3d, 1),
+                new RebarCutRequirement("CUT-B", 2d, 1)
+            };
+            private readonly DriftBoundary _boundary;
+            private bool _drifting;
+
+            public HostileRequiredCuts(DriftBoundary boundary) { _boundary = boundary; }
+            public int Count => _items.Length + (_drifting ? 1 : 0);
+            public RebarCutRequirement this[int index] => _items[index];
+            public IEnumerator<RebarCutRequirement> GetEnumerator() => new HostileEnumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private sealed class HostileEnumerator : IEnumerator<RebarCutRequirement>
+            {
+                private readonly HostileRequiredCuts _owner;
+                private int _index = -1;
+
+                public HostileEnumerator(HostileRequiredCuts owner) { _owner = owner; }
+
+                public bool MoveNext()
+                {
+                    if (_owner._boundary == DriftBoundary.Current)
+                        _owner._drifting = false;
+                    _index++;
+                    var hasNext = _index < _owner._items.Length;
+                    if (hasNext && _owner._boundary == DriftBoundary.MoveNext)
+                        _owner._drifting = true;
+                    return hasNext;
+                }
+
+                public RebarCutRequirement Current
+                {
+                    get
+                    {
+                        if (_owner._boundary == DriftBoundary.MoveNext)
+                            _owner._drifting = false;
+                        else if (_owner._boundary == DriftBoundary.Current)
+                            _owner._drifting = true;
+                        return _owner._items[_index];
+                    }
+                }
+
+                object IEnumerator.Current => Current;
+                public void Reset() { throw new NotSupportedException(); }
+                public void Dispose() { }
+            }
         }
 
         private static void Near(double expected, double actual)
@@ -112,15 +183,8 @@ namespace QS3D.Core.SmokeTests
 
         private static void Throws<T>(Action action) where T : Exception
         {
-            try
-            {
-                action();
-            }
-            catch (T)
-            {
-                return;
-            }
-
+            try { action(); }
+            catch (T) { return; }
             throw new Exception("Expected " + typeof(T).Name + ".");
         }
     }
