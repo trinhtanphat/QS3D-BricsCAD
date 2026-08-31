@@ -29,8 +29,6 @@ namespace QS3D.BricsCAD.V25
         private static bool _enabled;
         private static string _consentState = "OFF";
         private static long _consentGeneration;
-        // Kept only for source/binary compatibility with older status surfaces. Idle expiry is disabled.
-        private static DateTime _idleDeadlineUtc = DateTime.MinValue;
         private static IntPtr _keyboardHook;
         private static DateTime _lastPhysicalEscapeUtc = DateTime.MinValue;
         private static int _activeScopes;
@@ -88,7 +86,6 @@ namespace QS3D.BricsCAD.V25
                 _enabled = true;
                 _consentState = "ON";
                 unchecked { _consentGeneration++; }
-                _idleDeadlineUtc = DateTime.MinValue;
                 _lastPhysicalEscapeUtc = DateTime.MinValue;
             }
 
@@ -108,7 +105,6 @@ namespace QS3D.BricsCAD.V25
                     {
                         _enabled = false;
                         _consentState = "PAUSED";
-                        _idleDeadlineUtc = DateTime.MinValue;
                         unchecked { _consentGeneration++; }
                     }
                     ReleaseKeyboardHook();
@@ -228,7 +224,6 @@ namespace QS3D.BricsCAD.V25
                 hadSession = _enabled || _activeScopes > 0;
                 _enabled = false;
                 _consentState = string.IsNullOrWhiteSpace(state) ? "OFF" : state;
-                _idleDeadlineUtc = DateTime.MinValue;
                 unchecked { _consentGeneration++; }
                 _activeScopes = 0;
                 _activeTool = string.Empty;
@@ -325,7 +320,6 @@ namespace QS3D.BricsCAD.V25
                                 _lastPhysicalEscapeUtc = DateTime.MinValue;
                                 _enabled = false;
                                 _consentState = "PAUSED";
-                                _idleDeadlineUtc = DateTime.MinValue;
                                 unchecked { _consentGeneration++; }
                                 _activeScopes = 0;
                                 _activeTool = string.Empty;
