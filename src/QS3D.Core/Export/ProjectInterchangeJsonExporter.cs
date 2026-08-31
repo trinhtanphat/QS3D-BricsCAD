@@ -14,6 +14,7 @@ namespace QS3D.Core.Export
     {
         public const string FormatName = "QS3D.SemanticSnapshot";
         public const int FormatVersion = 1;
+        public const int MaxElementStringArrayItems = 4096;
 
         public static string Build(ProjectState project)
         {
@@ -201,6 +202,11 @@ namespace QS3D.Core.Export
             var index = 0;
             foreach (var value in values)
             {
+                if (items.Count >= MaxElementStringArrayItems)
+                    throw new InvalidDataException(
+                        "Interchange export " + label + " exceeds the guarded " +
+                        MaxElementStringArrayItems.ToString(CultureInfo.InvariantCulture) + "-item per-element limit.");
+
                 var raw = value ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(raw))
                     throw new InvalidDataException("Interchange export " + label + " contains an empty value at index " + index.ToString(CultureInfo.InvariantCulture) + ".");
