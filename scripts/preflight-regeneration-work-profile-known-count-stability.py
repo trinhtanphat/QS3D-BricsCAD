@@ -21,10 +21,11 @@ if method_start < 0 or method_end < 0:
     fail("MaterializeBounded source boundary is missing")
 method = source[method_start:method_end]
 
+stable_token = "RequireStableKnownCountContract(values, knownCount, maxCount, parameterName, label);"
 required_source = [
     "using (var enumerator = values.GetEnumerator())",
     "while (true)",
-    "RequireStableKnownCountContract(values, knownCount, maxCount, parameterName, label);",
+    stable_token,
     "if (!enumerator.MoveNext()) break;",
     "if (knownCount.HasValue && result.Count >= knownCount.Value)",
     "if (result.Count >= maxCount)",
@@ -45,26 +46,32 @@ for forbidden in (
     if forbidden in method:
         fail("MaterializeBounded contains stale traversal shape: " + forbidden)
 
-first_stable = method.index("RequireStableKnownCountContract(values, knownCount, maxCount, parameterName, label);")
+stable_positions = []
+cursor = 0
+while True:
+    position = method.find(stable_token, cursor)
+    if position < 0:
+        break
+    stable_positions.append(position)
+    cursor = position + len(stable_token)
+if len(stable_positions) != 4:
+    fail("MaterializeBounded must expose pre-traversal, post-MoveNext, post-Current and final stable Count checks")
+
+pre_traversal, post_move, post_current, final_stable = stable_positions
 move_next = method.index("if (!enumerator.MoveNext()) break;")
-second_stable = method.index(
-    "RequireStableKnownCountContract(values, knownCount, maxCount, parameterName, label);",
-    first_stable + 1,
-)
 known_guard = method.index("if (knownCount.HasValue && result.Count >= knownCount.Value)")
 max_guard = method.index("if (result.Count >= maxCount)")
 current_read = method.index("var value = enumerator.Current;")
+null_guard = method.index("if (ReferenceEquals(value, null))")
+retention = method.index("result.Add(value);")
 count_mismatch = method.index("if (knownCount.HasValue && result.Count != knownCount.Value)")
-final_stable = method.index(
-    "RequireStableKnownCountContract(values, knownCount, maxCount, parameterName, label);",
-    second_stable + 1,
-)
 if not (
-    first_stable < move_next < second_stable < known_guard < current_read
-    and second_stable < max_guard < current_read
-    and current_read < count_mismatch < final_stable
+    pre_traversal < move_next < post_move < known_guard < current_read
+    and post_move < max_guard < current_read
+    and current_read < post_current < null_guard < retention
+    and retention < count_mismatch < final_stable
 ):
-    fail("stable Count checks and capacity guards must bracket MoveNext/Current and final publication in fail-closed order")
+    fail("stable Count checks and capacity guards must bracket MoveNext, Current, retention and final publication in fail-closed order")
 
 required_smoke = [
     "TargetOverrunRejectsBeforeSecondCurrent",

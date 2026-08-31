@@ -22,8 +22,11 @@ def main():
     required_metadata = [
         'public bool Remove(string key) => Remove(key, true);',
         'private bool Remove(string key, bool touchMutation)',
+        'var nextMutationVersion = checked(_mutationVersion + 1L);',
         'if (touchMutation) TouchProject();',
-        'return _items.Remove(key);',
+        'var removed = _items.Remove(key);',
+        'if (removed) _mutationVersion = nextMutationVersion;',
+        'return removed;',
         'private void TouchProject()',
         'project.Touch();',
     ]
@@ -70,13 +73,18 @@ def main():
         return 1
 
     private_remove = metadata.find("private bool Remove(string key, bool touchMutation)")
-    touch = metadata.find("if (touchMutation) TouchProject();", private_remove)
-    storage_remove = metadata.find("return _items.Remove(key);", private_remove)
-    if min(private_remove, touch, storage_remove) < 0 or not private_remove < touch < storage_remove:
-        print("ERROR: public metadata Remove must retain exact-once project revision ownership before storage mutation.")
+    generation_admission = metadata.find("var nextMutationVersion = checked(_mutationVersion + 1L);", private_remove)
+    touch = metadata.find("if (touchMutation) TouchProject();", generation_admission)
+    storage_remove = metadata.find("var removed = _items.Remove(key);", touch)
+    generation_commit = metadata.find("if (removed) _mutationVersion = nextMutationVersion;", storage_remove)
+    result = metadata.find("return removed;", generation_commit)
+    if min(private_remove, generation_admission, touch, storage_remove, generation_commit, result) < 0 or not (
+        private_remove < generation_admission < touch < storage_remove < generation_commit < result
+    ):
+        print("ERROR: public metadata Remove must retain exact-once project revision ownership, checked mutation-generation admission, storage mutation, then post-storage generation commit.")
         return 1
 
-    print("PASS: ClearIfMissing repairs whitespace/missing ActiveFamilyId through revision-owning metadata Remove, preserves valid padded identities, and remains module-smoke guarded.")
+    print("PASS: ClearIfMissing repairs whitespace/missing ActiveFamilyId through revision-owning metadata Remove, preserves valid padded identities, and pins post-storage metadata mutation generation.")
     return 0
 
 

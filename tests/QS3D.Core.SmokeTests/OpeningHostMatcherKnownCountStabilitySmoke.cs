@@ -14,11 +14,16 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             AdvertisedOverrunRejectsBeforeSecondCurrent();
-            AssertTransientRejected(TransientMode.Growth);
-            AssertTransientRejected(TransientMode.Shrink);
-            AssertTransientRejected(TransientMode.Negative);
-            AssertTransientRejected(TransientMode.Conflict);
+            AssertMoveNextTransientRejected(TransientMode.Growth);
+            AssertMoveNextTransientRejected(TransientMode.Shrink);
+            AssertMoveNextTransientRejected(TransientMode.Negative);
+            AssertMoveNextTransientRejected(TransientMode.Conflict);
+            AssertCurrentTransientRejected(TransientMode.Growth);
+            AssertCurrentTransientRejected(TransientMode.Shrink);
+            AssertCurrentTransientRejected(TransientMode.Negative);
+            AssertCurrentTransientRejected(TransientMode.Conflict);
             StableCountedInputStillMatches();
+            StreamingInputStillMatches();
         }
 
         private static void AdvertisedOverrunRejectsBeforeSecondCurrent()
@@ -29,12 +34,21 @@ namespace QS3D.Core.SmokeTests
             Equal(1, source.CurrentReads);
         }
 
-        private static void AssertTransientRejected(TransientMode mode)
+        private static void AssertMoveNextTransientRejected(TransientMode mode)
         {
-            var source = HostileSegments.Transient(mode, Segment("HOST-" + mode, 0d));
+            var source = HostileSegments.MoveNextTransient(mode, Segment("HOST-MOVE-" + mode, 0d));
             Throws<InvalidOperationException>(() => Match(source));
             Equal(1, source.MoveNextCalls);
             Equal(0, source.CurrentReads);
+        }
+
+        private static void AssertCurrentTransientRejected(TransientMode mode)
+        {
+            var source = HostileSegments.CurrentTransient(mode, Segment("HOST-CURRENT-" + mode, 0d));
+            Throws<InvalidOperationException>(() => Match(source));
+            Equal(1, source.MoveNextCalls);
+            Equal(1, source.CurrentReads);
+            Equal(1, source.PostCurrentCountRebounds);
         }
 
         private static void StableCountedInputStillMatches()
@@ -45,6 +59,19 @@ namespace QS3D.Core.SmokeTests
             Equal("HOST-STABLE", result.HostElementId);
             Equal(1, result.CandidateHostCount);
             Equal(1, source.CurrentReads);
+        }
+
+        private static void StreamingInputStillMatches()
+        {
+            var result = Match(Streaming(Segment("HOST-STREAM", 0d)));
+            Equal(OpeningHostMatchStatus.Matched, result.Status);
+            Equal("HOST-STREAM", result.HostElementId);
+            Equal(1, result.CandidateHostCount);
+        }
+
+        private static IEnumerable<OpeningHostSegment> Streaming(OpeningHostSegment segment)
+        {
+            yield return segment;
         }
 
         private static OpeningHostMatchResult Match(IEnumerable<OpeningHostSegment> source) =>
@@ -62,6 +89,13 @@ namespace QS3D.Core.SmokeTests
             Conflict
         }
 
+        private enum TriggerPoint
+        {
+            None,
+            MoveNext,
+            Current
+        }
+
         private sealed class HostileSegments :
             ICollection<OpeningHostSegment>,
             IReadOnlyCollection<OpeningHostSegment>,
@@ -70,26 +104,37 @@ namespace QS3D.Core.SmokeTests
             private readonly OpeningHostSegment[] _items;
             private readonly int _advertisedCount;
             private readonly TransientMode _mode;
+            private readonly TriggerPoint _triggerPoint;
             private bool _transientActive;
+            private bool _awaitingPostCurrentRebound;
 
-            private HostileSegments(OpeningHostSegment[] items, int advertisedCount, TransientMode mode)
+            private HostileSegments(
+                OpeningHostSegment[] items,
+                int advertisedCount,
+                TransientMode mode,
+                TriggerPoint triggerPoint)
             {
                 _items = items;
                 _advertisedCount = advertisedCount;
                 _mode = mode;
+                _triggerPoint = triggerPoint;
             }
 
             internal static HostileSegments Stable(params OpeningHostSegment[] items) =>
-                new HostileSegments(items, items.Length, TransientMode.Stable);
+                new HostileSegments(items, items.Length, TransientMode.Stable, TriggerPoint.None);
 
             internal static HostileSegments Overrun(params OpeningHostSegment[] items) =>
-                new HostileSegments(items, 1, TransientMode.Stable);
+                new HostileSegments(items, 1, TransientMode.Stable, TriggerPoint.None);
 
-            internal static HostileSegments Transient(TransientMode mode, params OpeningHostSegment[] items) =>
-                new HostileSegments(items, items.Length, mode);
+            internal static HostileSegments MoveNextTransient(TransientMode mode, params OpeningHostSegment[] items) =>
+                new HostileSegments(items, items.Length, mode, TriggerPoint.MoveNext);
+
+            internal static HostileSegments CurrentTransient(TransientMode mode, params OpeningHostSegment[] items) =>
+                new HostileSegments(items, items.Length, mode, TriggerPoint.Current);
 
             internal int MoveNextCalls { get; private set; }
             internal int CurrentReads { get; private set; }
+            internal int PostCurrentCountRebounds { get; private set; }
 
             int ICollection<OpeningHostSegment>.Count => ReadCount(CountSurface.Generic);
             int IReadOnlyCollection<OpeningHostSegment>.Count => ReadCount(CountSurface.ReadOnly);
@@ -109,6 +154,11 @@ namespace QS3D.Core.SmokeTests
 
             private int ReadCount(CountSurface surface)
             {
+                if (_awaitingPostCurrentRebound)
+                {
+                    PostCurrentCountRebounds++;
+                    _awaitingPostCurrentRebound = false;
+                }
                 if (!_transientActive || _mode == TransientMode.Stable) return _advertisedCount;
                 switch (_mode)
                 {
@@ -133,9 +183,10 @@ namespace QS3D.Core.SmokeTests
                 public bool MoveNext()
                 {
                     _owner.MoveNextCalls++;
+                    _owner._transientActive = false;
                     if (_index + 1 >= _owner._items.Length) return false;
                     _index++;
-                    if (_index == 0 && _owner._mode != TransientMode.Stable)
+                    if (_index == 0 && _owner._triggerPoint == TriggerPoint.MoveNext && _owner._mode != TransientMode.Stable)
                         _owner._transientActive = true;
                     return true;
                 }
@@ -145,7 +196,8 @@ namespace QS3D.Core.SmokeTests
                     get
                     {
                         _owner.CurrentReads++;
-                        _owner._transientActive = false;
+                        _owner._transientActive = _owner._triggerPoint == TriggerPoint.Current && _owner._mode != TransientMode.Stable;
+                        _owner._awaitingPostCurrentRebound = _owner._transientActive;
                         return _owner._items[_index];
                     }
                 }

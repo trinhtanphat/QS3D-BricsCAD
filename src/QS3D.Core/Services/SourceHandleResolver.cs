@@ -80,8 +80,10 @@ namespace QS3D.Core.Services
 
             var roots = new List<string>();
             var inputCount = 0;
+            RequireStableKnownCountDuringTraversal(elementIds, knownCount);
             using (var enumerator = elementIds.GetEnumerator())
             {
+                RequireStableKnownCountDuringTraversal(elementIds, knownCount);
                 while (true)
                 {
                     RequireStableKnownCountDuringTraversal(elementIds, knownCount);
