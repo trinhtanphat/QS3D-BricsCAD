@@ -26,7 +26,7 @@ Every tool accepts optional `executionMode` and the compatibility alias `executi
 
 - `AUTO`: normal planner-selected routing.
 - `CAD_DIRECT`: native CAD/BricsCAD/desktop operations are allowed; QS3D business mutations are rejected. QS3D status remains readable.
-- `QS3D_DOMAIN`: QS3D business mutations are allowed; read-only CAD/host diagnostics and emergency controls remain available, but native CAD mutations are rejected so failed business semantics cannot silently fall back to approximate geometry.
+- `QS3D_DOMAIN`: QS3D business mutations are allowed. Read-only CAD/host/desktop diagnostics and emergency controls remain available, but native CAD and desktop automation mutations are rejected so failed business semantics cannot silently fall back to approximate geometry or UI-driven CAD edits.
 
 If both aliases are supplied, they must resolve to the same value.
 
@@ -38,4 +38,4 @@ MCP tool failures return `isError: true` plus structured `error.code`, `error.la
 
 A request such as “draw a 10 x 20 rectangle” should use a `cad_*` tool and has no QS3D project prerequisite. A request such as “place the active single-footing Family on the active Floor” uses `qs3d_place_single_footing`; if its business context is missing, the tool returns a QS3D-domain error while CAD-direct remains usable.
 
-In `AUTO`, a caller may explicitly choose a CAD equivalent after a QS3D error. In `QS3D_DOMAIN`, that fallback is intentionally blocked unless the caller changes the execution mode, preventing silent semantic degradation.
+In `AUTO`, a caller may explicitly choose a CAD equivalent after a QS3D error. In `QS3D_DOMAIN`, native CAD and desktop mutation fallbacks are intentionally blocked unless the caller changes the execution mode, preventing silent semantic degradation.
