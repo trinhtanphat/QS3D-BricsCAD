@@ -137,22 +137,35 @@ namespace QS3D.Core.Services
             var knownCount = GetKnownCount(source);
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var observedCount = 0;
-            foreach (var raw in source)
+            using (var enumerator = source.GetEnumerator())
             {
-                observedCount++;
-                if (string.IsNullOrWhiteSpace(raw))
-                    throw new InvalidOperationException("Physical opening target-state contains an empty opening id.");
-                if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
-                    throw new InvalidOperationException("Physical opening target-state contains a non-canonical opening id with leading or trailing whitespace.");
-                var id = raw;
-                if (id.Length > MaxElementIdLength)
-                    throw new InvalidOperationException("Physical opening target id exceeds " + MaxElementIdLength + " characters.");
-                if (!result.Add(id))
-                    throw new InvalidOperationException("Physical opening target-state contains duplicate opening id: " + id + ".");
-                if (result.Count > MaxOpeningIds)
-                    throw new InvalidOperationException("Physical opening target-state exceeds the " + MaxOpeningIds + " opening id limit.");
+                while (true)
+                {
+                    RequireKnownCountStable(source, knownCount, "before MoveNext");
+                    var hasNext = enumerator.MoveNext();
+                    RequireKnownCountStable(source, knownCount, "after MoveNext");
+                    if (!hasNext) break;
+                    if (knownCount.HasValue && observedCount >= knownCount.Value)
+                        throw new InvalidOperationException("Physical opening target-state traversal exceeds its advertised opening id Count.");
+                    if (observedCount >= MaxOpeningIds)
+                        throw new InvalidOperationException("Physical opening target-state exceeds the " + MaxOpeningIds + " opening id limit.");
+
+                    var raw = enumerator.Current;
+                    RequireKnownCountStable(source, knownCount, "after Current");
+                    observedCount++;
+                    if (string.IsNullOrWhiteSpace(raw))
+                        throw new InvalidOperationException("Physical opening target-state contains an empty opening id.");
+                    if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
+                        throw new InvalidOperationException("Physical opening target-state contains a non-canonical opening id with leading or trailing whitespace.");
+                    var id = raw;
+                    if (id.Length > MaxElementIdLength)
+                        throw new InvalidOperationException("Physical opening target id exceeds " + MaxElementIdLength + " characters.");
+                    if (!result.Add(id))
+                        throw new InvalidOperationException("Physical opening target-state contains duplicate opening id: " + id + ".");
+                }
             }
 
+            RequireKnownCountStable(source, knownCount, "after traversal");
             RequireObservedCount(knownCount, observedCount);
             return result.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
         }
@@ -183,6 +196,24 @@ namespace QS3D.Core.Services
                 throw new InvalidOperationException("Physical opening target-state reports an invalid negative opening id count.");
             if (count.Value > MaxOpeningIds)
                 throw new InvalidOperationException("Physical opening target-state exceeds the " + MaxOpeningIds + " opening id limit.");
+        }
+
+        private static void RequireKnownCountStable(IEnumerable<string> openingIds, int? expectedKnownCount, string boundary)
+        {
+            if (!expectedKnownCount.HasValue) return;
+            int? observedKnownCount;
+            try
+            {
+                observedKnownCount = GetKnownCount(openingIds);
+            }
+            catch (InvalidOperationException ex)
+            {
+                throw new InvalidOperationException(
+                    "Physical opening target-state known Count changed during enumeration at " + boundary + ".",
+                    ex);
+            }
+            if (observedKnownCount != expectedKnownCount)
+                throw new InvalidOperationException("Physical opening target-state known Count changed during enumeration at " + boundary + ".");
         }
 
         private static void RequireObservedCount(int? knownCount, int observedCount)
