@@ -9,9 +9,8 @@ source = SOURCE.read_text(encoding="utf-8")
 smoke = SMOKE.read_text(encoding="utf-8")
 
 required_source = [
-    "RequireUnchangedSelectionVersion(enumerationVersion);\n\n            var finalKnownCount = ResolveKnownCount(ids);\n            RequireUnchangedSelectionVersion(enumerationVersion);",
-    "private void RequireUnchangedSelectionVersion(long expectedVersion)",
-    "Selection changed while replacement element ids were being enumerated",
+    "if (_changeVersion != enumerationVersion)\n                throw new InvalidOperationException(\"Selection changed while replacement element ids were being enumerated.",
+    "var finalKnownCount = ResolveKnownCount(ids);",
 ]
 required_smoke = [
     "FinalCountReentrancyCannotPublishStaleSelection();",
@@ -28,9 +27,12 @@ if missing:
     raise SystemExit("SelectionState final Count reentrancy preflight failed; missing contract token(s): " + repr(missing))
 
 final_count = source.find("var finalKnownCount = ResolveKnownCount(ids);")
-post_check = source.find("RequireUnchangedSelectionVersion(enumerationVersion);", final_count)
+post_check = source.find("if (_changeVersion != enumerationVersion)", final_count)
 publication = source.find("if (_ids.SetEquals(next)) return;", final_count)
 if final_count < 0 or post_check < 0 or publication < 0 or not (final_count < post_check < publication):
     raise SystemExit("SelectionState final Count reentrancy preflight failed: final Count callback must be followed by version validation before publication")
+
+if source.count("if (_changeVersion != enumerationVersion)") < 2:
+    raise SystemExit("SelectionState final Count reentrancy preflight failed: traversal and final-Count publication boundaries both require version validation")
 
 print("PASS SelectionState final Count reentrancy publication guard")
