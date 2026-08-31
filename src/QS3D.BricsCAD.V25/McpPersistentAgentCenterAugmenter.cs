@@ -18,7 +18,7 @@ namespace QS3D.BricsCAD.V25
         private const string ResumeDesktopLabel = "Resume desktop";
         private const string DesktopForegroundToggleTag = "QS3D_MCP_DESKTOP_FOREGROUND_TOGGLE";
         private const string RuntimeKeyCaptureTag = "QS3D_MCP_RUNTIME_KEY_CAPTURE";
-        private const string RuntimeKeyLabelPrefix = "Runtime API key · chỉ giữ trong RAM";
+        private const string RuntimeKeyLabelPrefix = "Runtime API key";
         private static readonly object Sync = new object();
         private static DispatcherTimer? _timer;
         private static EventHandler? _tickHandler;

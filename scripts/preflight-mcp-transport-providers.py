@@ -68,7 +68,7 @@ def main() -> int:
         '/readyz': "readiness probe",
         'CreateNoWindow = true': "bounded child process launch",
         'UseShellExecute = false': "non-shell tunnel-client launch",
-        'WriteText(AutoStartFile, "1")': "non-secret auto-start metadata",
+        'WriteTextVerified(AutoStartFile, "1")': "verified non-secret auto-start metadata",
         'if (previous != provider) ForgetChatGptRegistrationAcknowledgement();': "idempotent provider selection registration preservation",
         'QS3D_OPENAI_TUNNEL_CLIENT_SHA256': "pinned unsigned-release SHA-256 fallback",
         'TryVerifyClientTrust': "pre-launch tunnel-client trust verification",
