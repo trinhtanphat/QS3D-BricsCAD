@@ -36,9 +36,9 @@ def main() -> int:
     errors: list[str] = []
 
     run_block = method_block(runtime, "private static string RunCadCommandSequence")
-    save_block = method_block(runtime, "private static string SaveActiveDocument")
     active_document_block = method_block(runtime, "private static string BuildActiveDocumentJson")
     call_block = method_block(runtime, "public static string Call")
+    direct_route_block = method_block(direct, "internal static bool CanHandleCadCommandSequence")
     direct_command_block = method_block(direct, "internal static string CallCadCommandSequence")
     extrude_block = method_block(direct, "private static string Extrude")
     boolean_block = method_block(direct, "private static string Boolean")
@@ -46,24 +46,11 @@ def main() -> int:
     dbmod_block = method_block(direct, "private static void WaitForCleanDbmod")
 
     require(errors, run_block, (
-        'if (command == "QSAVE") return SaveActiveDocument(document);',
+        'var command = NormalizeCadCommandToken(',
         'var inputs = NormalizeCommandInputs(',
-    ), "legacy QSAVE fallback")
-
-    require(errors, save_block, (
-        'Path.IsPathRooted(filename)',
-        'SafeSystemVariable("CMDACTIVE")',
-        'EnsureCurrentMutationRunning();',
-        'using (document.LockDocument())',
-        'document.Database.Save();',
-        'SafeSystemVariable("DBMOD")',
-        'dbmod != "0"',
-        '\\"completed\\":true',
-        '\\"saved\\":true',
-        'completed=true',
-    ), "legacy synchronous QSAVE fallback guard")
-    if "SendStringToExecute" in save_block:
-        errors.append("legacy QSAVE fallback must not queue a native command with SendStringToExecute")
+    ), "legacy generic command fallback")
+    if 'SaveActiveDocument(' in run_block:
+        errors.append("legacy generic command fallback must not own QSAVE after direct command routing")
 
     require(errors, active_document_block, (
         'var hasLocalPath = Path.IsPathRooted(filename);',
@@ -82,6 +69,11 @@ def main() -> int:
     ), "canonical mutation dispatch")
     if "internal static void EnsureCurrentMutationRunning()" not in runtime:
         errors.append("shared mutation epoch verifier is not exposed internally to the bounded direct runtime")
+
+    require(errors, direct_route_block, (
+        'string.Equals(command, "EXTRUDE", StringComparison.Ordinal)',
+        'string.Equals(command, "QSAVE", StringComparison.Ordinal)',
+    ), "direct command ownership")
 
     require(errors, direct, (
         '"cad_create_box"',
@@ -149,7 +141,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: MCP direct 3D/save tools use database-resident curve inputs for Region creation, transient clones for boolean kernel operands, preserve bounded mutation routing, intercept QSAVE in CAD context, avoid Database.Save after reopen, and confirm save completion with a bounded DBMOD settle wait.")
+    print("PASS: MCP direct 3D/save tools keep QSAVE owned by the bounded direct CAD runtime, use database-resident curve inputs for Region creation, transient clones for boolean kernel operands, preserve bounded mutation routing, avoid Database.Save after reopen, and confirm save completion with a bounded DBMOD settle wait.")
     return 0
 
 
