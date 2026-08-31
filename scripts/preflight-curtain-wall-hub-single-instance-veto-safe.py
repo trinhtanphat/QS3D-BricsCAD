@@ -27,7 +27,8 @@ for token in (
     "private static IntPtr _pendingNativeDatabaseIdentity;",
     "if (!PreparePublishedWindow(document, nativeDatabaseIdentity))",
     "candidate = new CurtainWallWindow(document);",
-    "candidate.Closed += (_, __) => ReleaseOwnedWindow(candidate);",
+    "var ownedCandidate = candidate;",
+    "candidate.Closed += (_, __) => ReleaseOwnedWindow(ownedCandidate);",
     "if (!ReservePendingWindow(candidate, document, nativeDatabaseIdentity))",
     "Application.ShowModelessWindow(IntPtr.Zero, candidate, true);",
     "if (!candidate.IsLoaded)",
@@ -47,6 +48,7 @@ for token in (
 
 for token in (
     "_window = new CurtainWallWindow(document);",
+    "candidate.Closed += (_, __) => ReleaseOwnedWindow(candidate);",
     "Application.ShowModelessWindow(IntPtr.Zero, candidate, true);\n                if (!candidate.IsLoaded) return;",
 ):
     forbid(token)
@@ -69,15 +71,16 @@ show_start = text.find("public void ShowCurtainWallHub()")
 prepare_method_start = text.find("private static bool PreparePublishedWindow", show_start + 1)
 show = text[show_start:prepare_method_start] if show_start >= 0 and prepare_method_start > show_start else ""
 construct_pos = show.find("candidate = new CurtainWallWindow(document);")
-closed_pos = show.find("candidate.Closed += (_, __) => ReleaseOwnedWindow(candidate);", construct_pos + 1)
+owner_pos = show.find("var ownedCandidate = candidate;", construct_pos + 1)
+closed_pos = show.find("candidate.Closed += (_, __) => ReleaseOwnedWindow(ownedCandidate);", owner_pos + 1)
 reserve_pos = show.find("if (!ReservePendingWindow(candidate, document, nativeDatabaseIdentity))", closed_pos + 1)
 show_pos = show.find("Application.ShowModelessWindow(IntPtr.Zero, candidate, true);", reserve_pos + 1)
 loaded_pos = show.find("if (!candidate.IsLoaded)", show_pos + 1)
 promote_pos = show.find("if (!PromotePendingWindow(candidate, document, nativeDatabaseIdentity))", loaded_pos + 1)
-if min(construct_pos, closed_pos, reserve_pos, show_pos, loaded_pos, promote_pos) < 0 or not (
-    construct_pos < closed_pos < reserve_pos < show_pos < loaded_pos < promote_pos
+if min(construct_pos, owner_pos, closed_pos, reserve_pos, show_pos, loaded_pos, promote_pos) < 0 or not (
+    construct_pos < owner_pos < closed_pos < reserve_pos < show_pos < loaded_pos < promote_pos
 ):
-    errors.append("Curtain Wall Hub must construct -> attach Closed -> reserve pending -> host show -> confirm loaded -> promote")
+    errors.append("Curtain Wall Hub must construct -> pin stable Closed owner -> attach Closed -> reserve pending -> host show -> confirm loaded -> promote")
 
 reserve_method_start = text.find("private static bool ReservePendingWindow")
 promote_method_start = text.find("private static bool PromotePendingWindow", reserve_method_start + 1)
@@ -99,4 +102,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: Curtain Wall Hub has pending-first reentrancy ownership, exact published-owner replacement, terminal-close veto safety, and exact-owner cleanup.")
+print("PASS: Curtain Wall Hub has stable exact Closed ownership, pending-first reentrancy ownership, terminal-close veto safety, and exact-owner cleanup.")
