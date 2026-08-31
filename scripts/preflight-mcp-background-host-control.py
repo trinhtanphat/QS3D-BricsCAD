@@ -10,6 +10,8 @@ BACKGROUND = SRC / "McpBackgroundHostRuntime.cs"
 SESSION = SRC / "McpDesktopControlSession.cs"
 PERSISTENCE_UI = SRC / "McpPersistentAgentCenterAugmenter.cs"
 SETTINGS = SRC / "McpPersistentUserSettings.cs"
+TUNNEL = SRC / "McpOpenAiSecureTunnel.cs"
+AGENT_CENTER = SRC / "McpAgentControlCenter.cs"
 PLUGIN = SRC / "PluginEntry.cs"
 V26_PLUGIN = V26_SRC / "PluginEntry.cs"
 
@@ -24,6 +26,8 @@ background = BACKGROUND.read_text(encoding="utf-8")
 session = SESSION.read_text(encoding="utf-8")
 persistence_ui = PERSISTENCE_UI.read_text(encoding="utf-8")
 settings = SETTINGS.read_text(encoding="utf-8")
+tunnel = TUNNEL.read_text(encoding="utf-8")
+agent_center = AGENT_CENTER.read_text(encoding="utf-8")
 plugin = PLUGIN.read_text(encoding="utf-8")
 v26_plugin = V26_PLUGIN.read_text(encoding="utf-8")
 
@@ -89,6 +93,13 @@ if "McpAgentExperience.Error(" not in toggle_block:
 if 'TrySetInteractionPolicy("background_only")' not in toggle_block:
     fail("foreground toggle failure must restore background_only before reporting failure")
 
+# The local mouse/keyboard/screen toggle must own *all* user-screen access. The legacy Resume
+# button may still enable the consent session for compatibility, but background_only must deny a
+# desktop screenshot until the explicit foreground/screen toggle moves policy to foreground_fallback.
+interaction_block = background.split("private static bool UsesGlobalInteraction", 1)[1].split("private static string PolicyJson", 1)[0]
+if 'case "desktop_screenshot":' not in interaction_block:
+    fail("background_only must deny desktop_screenshot so toggle OFF really means no user-screen access")
+
 # Do not regress to plaintext secret persistence in QS3D files.
 settings_lower = settings.lower()
 for forbidden in (
@@ -114,6 +125,38 @@ if "Marshal.WriteByte(readBlob, i, 0)" not in read_block:
     fail("credential read native blob must be zeroed before CredFree")
 if read_block.index("Array.Clear(readBytes, 0, readBytes.Length);") < read_block.index("finally"):
     fail("credential read managed scrub must live in finally so decode failures cannot bypass it")
+
+# Tunnel start must make an explicitly typed Runtime API key restart-safe at the authoritative
+# Start transaction; LostKeyboardFocus is only a convenience and must not be the persistence boundary.
+start_block = tunnel.split("public static bool Start(", 1)[1].split("public static void TryAutoStart", 1)[0]
+if "McpPersistentUserSettings.SaveOpenAiRuntimeApiKey" not in start_block:
+    fail("OpenAI tunnel Start must persist+readback-verify an explicitly supplied Runtime API key")
+
+# Restart-critical non-secret metadata must not report success after a swallowed write failure.
+for token, label in (
+    ("WriteTextVerified(ClientPathFile", "tunnel-client path"),
+    ("WriteTextVerified(TunnelIdFile", "Tunnel ID"),
+    ('WriteTextVerified(AutoStartFile, "1"', "autostart enable"),
+    ('WriteTextVerified(AutoStartFile, "0"', "autostart disable"),
+):
+    if token not in tunnel:
+        fail(f"restart-critical {label} must use verified persistence")
+
+resolve_block = tunnel.split("private static string ResolveRuntimeApiKey", 1)[1].split("private static string NormalizeClientPath", 1)[0]
+if "McpPersistentUserSettings.TryReadOpenAiRuntimeApiKey" not in resolve_block:
+    fail("Runtime API key resolution must directly fall back to Windows Credential Manager")
+
+# Canonical UI/status copy must match the actual restart-safe Credential Manager behavior.
+user_copy = (agent_center + persistence_ui + tunnel).lower()
+for stale in (
+    "runtime api key · chỉ giữ trong ram",
+    "qs3d không lưu runtime api key",
+    "runtime api key không được lưu",
+):
+    if stale in user_copy:
+        fail(f"stale Runtime API key persistence copy remains: {stale}")
+if "windows credential manager" not in user_copy:
+    fail("Runtime API key UI/status copy must identify Windows Credential Manager persistence")
 
 mutation_block = desktop.split("private static readonly HashSet<string> MutationTools", 1)[1].split("};", 1)[0]
 for tool in (
