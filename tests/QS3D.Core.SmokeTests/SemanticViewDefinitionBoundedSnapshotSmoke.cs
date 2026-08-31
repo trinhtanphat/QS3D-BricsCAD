@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using QS3D.Core.Documentation;
 using QS3D.Core.Domain;
@@ -12,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             CategoriesStopAtFirstOverBoundItem();
             IncludeIdsStopAtFirstOverBoundItem();
             ExcludeIdsStopAtFirstOverBoundItem();
+            CurrentInducedKnownCountDriftFailsBeforeRetention();
             AcceptedCollectionsRemainDefensiveSnapshots();
         }
 
@@ -45,6 +47,18 @@ namespace QS3D.Core.SmokeTests
                     categories: new[] { ElementCategory.Beam },
                     excludeElementIds: OverBoundedIds("Exclude source enumerated beyond the first over-bound id.")),
                 "Semantic view supports at most 100000 excludeElementIds.");
+        }
+
+        private static void CurrentInducedKnownCountDriftFailsBeforeRetention()
+        {
+            var source = new CurrentCountDriftingCollection<string>("E-1");
+            MustFailCapacity(
+                () => new SemanticViewDefinition(
+                    "V-COUNT-DRIFT",
+                    "Count drift",
+                    includeElementIds: source),
+                "Semantic view includeElementIds source Count changed during snapshot.");
+            Equal(1, source.CurrentReads);
         }
 
         private static void AcceptedCollectionsRemainDefensiveSnapshots()
@@ -105,6 +119,59 @@ namespace QS3D.Core.SmokeTests
         private static void Equal<T>(T expected, T actual)
         {
             if (!Equals(expected, actual)) throw new Exception("Expected " + expected + ", got " + actual + ".");
+        }
+
+        private sealed class CurrentCountDriftingCollection<T> : IReadOnlyCollection<T>, ICollection
+        {
+            private readonly T _value;
+            private int _count = 1;
+
+            public CurrentCountDriftingCollection(T value)
+            {
+                _value = value;
+            }
+
+            public int CurrentReads { get; private set; }
+            public int Count => _count;
+            public object SyncRoot => this;
+            public bool IsSynchronized => false;
+
+            public IEnumerator<T> GetEnumerator() => new Enumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public void CopyTo(Array array, int index) => throw new NotSupportedException();
+
+            private sealed class Enumerator : IEnumerator<T>
+            {
+                private readonly CurrentCountDriftingCollection<T> _owner;
+                private bool _moved;
+
+                public Enumerator(CurrentCountDriftingCollection<T> owner)
+                {
+                    _owner = owner;
+                }
+
+                public T Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        _owner._count = 2;
+                        return _owner._value;
+                    }
+                }
+
+                object IEnumerator.Current => Current!;
+
+                public bool MoveNext()
+                {
+                    if (_moved) return false;
+                    _moved = true;
+                    return true;
+                }
+
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
         }
     }
 }
