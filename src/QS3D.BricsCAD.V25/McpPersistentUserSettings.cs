@@ -158,7 +158,7 @@ namespace QS3D.BricsCAD.V25
                 Array.Clear(bytes, 0, bytes.Length);
                 if (blob != IntPtr.Zero)
                 {
-                    for (var i = 0; i < secret.Length && i < MaxSecretCharacters; i++) Marshal.WriteByte(blob, i, 0);
+                    for (var i = 0; i < bytes.Length; i++) Marshal.WriteByte(blob, i, 0);
                     Marshal.FreeCoTaskMem(blob);
                 }
             }
