@@ -447,6 +447,7 @@ namespace QS3D.Core.Progress
                         throw TooMany(parameterName, label);
 
                     var item = enumerator.Current;
+                    RequireKnownCountStable(source, knownCount, parameterName, label);
                     if (item == null)
                         throw new ArgumentException(label + " cannot contain null entries.", parameterName);
                     result.Add(item);
