@@ -220,6 +220,7 @@ namespace QS3D.Core.Services
                         throw RootCountLimitError(maxRootCount, nameof(sourceElementIds));
 
                     var value = enumerator.Current;
+                    RequireKnownCountStableDuringTraversal(sourceElementIds, knownCount, nameof(sourceElementIds));
                     var raw = value ?? string.Empty;
                     if (string.IsNullOrWhiteSpace(raw))
                         throw new ArgumentException("Dependency impact source id cannot be blank at index " + index.ToString(CultureInfo.InvariantCulture) + ".", nameof(sourceElementIds));

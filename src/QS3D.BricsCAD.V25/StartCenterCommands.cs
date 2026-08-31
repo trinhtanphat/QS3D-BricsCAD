@@ -12,12 +12,12 @@ namespace QS3D.BricsCAD.V25
             {
                 StartCenterPaletteCoordinator.Show();
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
                 try
                 {
                     Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
-                        "\nQS3DSTART error: " + ex.Message);
+                        "\nQS3DSTART could not open the Start Center.");
                 }
                 catch (System.Exception)
                 {

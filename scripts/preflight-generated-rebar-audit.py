@@ -6,46 +6,14 @@ ROOT = Path(__file__).resolve().parents[1]
 errors = []
 
 contracts = {
-    "column longitudinal": (
-        "src/QS3D.BricsCAD.V25/Cad/ColumnRebarSolidBuilder.cs",
-        'geometry.rebar.column',
-        "BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)",
-    ),
-    "beam longitudinal": (
-        "src/QS3D.BricsCAD.V25/Cad/BeamRebarSolidBuilder.cs",
-        'geometry.rebar.beam',
-        "BuildSelected(Document document, ProjectState project)",
-    ),
-    "shape rebar": (
-        "src/QS3D.BricsCAD.V25/Cad/ShapeRebarSolidBuilder.cs",
-        'geometry.rebar.shape',
-        "BuildSelected(Document document, ProjectState project)",
-    ),
-    "column ties": (
-        "src/QS3D.BricsCAD.V25/Cad/ColumnTieSolidBuilder.cs",
-        'geometry.rebar.column.tie',
-        "BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)",
-    ),
-    "beam stirrups": (
-        "src/QS3D.BricsCAD.V25/Cad/BeamStirrupSolidBuilder.cs",
-        'geometry.rebar.beam.stirrup',
-        "BuildSelected(Document document, ProjectState project)",
-    ),
-    "slab mesh": (
-        "src/QS3D.BricsCAD.V25/Cad/SlabMeshSolidBuilder.cs",
-        'geometry.rebar.slab.mesh',
-        "BuildSelected(Document document, ProjectState project)",
-    ),
-    "structural-wall mesh": (
-        "src/QS3D.BricsCAD.V25/Cad/StructuralWallMeshSolidBuilder.cs",
-        'geometry.rebar.wall.mesh',
-        "BuildSelected(Document document, ProjectState project)",
-    ),
-    "foundation mesh": (
-        "src/QS3D.BricsCAD.V25/Cad/FoundationMeshSolidBuilder.cs",
-        'geometry.rebar.foundation.mesh',
-        "BuildSelected(Document document, ProjectState project)",
-    ),
+    "column longitudinal": ("src/QS3D.BricsCAD.V25/Cad/ColumnRebarSolidBuilder.cs", 'geometry.rebar.column', "BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)"),
+    "beam longitudinal": ("src/QS3D.BricsCAD.V25/Cad/BeamRebarSolidBuilder.cs", 'geometry.rebar.beam', "BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)"),
+    "shape rebar": ("src/QS3D.BricsCAD.V25/Cad/ShapeRebarSolidBuilder.cs", 'geometry.rebar.shape', "BuildSelected(Document document, ProjectState project)"),
+    "column ties": ("src/QS3D.BricsCAD.V25/Cad/ColumnTieSolidBuilder.cs", 'geometry.rebar.column.tie', "BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)"),
+    "beam stirrups": ("src/QS3D.BricsCAD.V25/Cad/BeamStirrupSolidBuilder.cs", 'geometry.rebar.beam.stirrup', "BuildSelected(Document document, ProjectState project)"),
+    "slab mesh": ("src/QS3D.BricsCAD.V25/Cad/SlabMeshSolidBuilder.cs", 'geometry.rebar.slab.mesh', "BuildSelected(Document document, ProjectState project)"),
+    "structural-wall mesh": ("src/QS3D.BricsCAD.V25/Cad/StructuralWallMeshSolidBuilder.cs", 'geometry.rebar.wall.mesh', "BuildSelected(Document document, ProjectState project)"),
+    "foundation mesh": ("src/QS3D.BricsCAD.V25/Cad/FoundationMeshSolidBuilder.cs", 'geometry.rebar.foundation.mesh', "BuildSelected(Document document, ProjectState project)"),
 }
 
 for label, (relative, event_name, build_signature) in contracts.items():
@@ -103,4 +71,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: every generated rebar/mesh replacement family records its canonical audit event through the pre-CAD-commit semantic update path, with both Column Rebar and Column Tie consuming admitted PICKFIRST snapshots and no duplicate Shape Rebar audit in the post-commit UI layer.")
+print("PASS: every generated rebar/mesh replacement family records its canonical audit event through the pre-CAD-commit semantic update path; Column Rebar, Beam Rebar and Column Tie consume admitted selection snapshots, with no duplicate Shape Rebar audit in the post-commit UI layer.")
