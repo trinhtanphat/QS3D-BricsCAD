@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -54,6 +55,7 @@ namespace QS3D.Core.Diagnostics
 
     public sealed class QsRuleProfile
     {
+        private const int MaximumRules = 10000;
         private readonly IReadOnlyList<QsRuleDefinition> _rules;
         private readonly Dictionary<string, QsRuleDefinition> _byHealthIssueCode;
 
@@ -62,7 +64,7 @@ namespace QS3D.Core.Diagnostics
             ProfileId = QsRuleDefinition.RequireProfileId(profileId);
             if (rules == null) throw new ArgumentNullException(nameof(rules));
 
-            var materialized = rules.ToList();
+            var materialized = MaterializeRules(rules);
             if (materialized.Any(rule => rule == null))
                 throw new ArgumentException("QS rule profile cannot contain null rules.", nameof(rules));
 
@@ -102,6 +104,61 @@ namespace QS3D.Core.Diagnostics
         public QsRuleDefinition? Resolve(ModelHealthIssue issue)
         {
             return TryResolve(issue, out var rule) ? rule : null;
+        }
+
+        private static List<QsRuleDefinition> MaterializeRules(IEnumerable<QsRuleDefinition> rules)
+        {
+            var admittedCount = ReadKnownCount(rules);
+            var materialized = new List<QsRuleDefinition>();
+            using (var enumerator = rules.GetEnumerator())
+            {
+                RequireKnownCountStable(rules, admittedCount);
+                while (true)
+                {
+                    RequireKnownCountStable(rules, admittedCount);
+                    var moved = enumerator.MoveNext();
+                    RequireKnownCountStable(rules, admittedCount);
+                    if (!moved) break;
+
+                    if (admittedCount.HasValue && materialized.Count >= admittedCount.Value)
+                        throw new InvalidOperationException("QS rule profile enumerated more rules than its reported Count " + admittedCount.Value + ".");
+                    if (materialized.Count >= MaximumRules)
+                        throw new InvalidOperationException("QS rule profile supports at most " + MaximumRules + " rules.");
+
+                    var current = enumerator.Current;
+                    RequireKnownCountStable(rules, admittedCount);
+                    materialized.Add(current);
+                }
+            }
+
+            RequireKnownCountStable(rules, admittedCount);
+            if (admittedCount.HasValue && materialized.Count != admittedCount.Value)
+                throw new InvalidOperationException(
+                    "QS rule profile reported Count " + admittedCount.Value + " but enumerated " + materialized.Count + " rules.");
+            return materialized;
+        }
+
+        private static void RequireKnownCountStable(IEnumerable<QsRuleDefinition> rules, int? admittedCount)
+        {
+            var currentCount = ReadKnownCount(rules);
+            if (currentCount != admittedCount)
+                throw new InvalidOperationException("QS rule profile rule Count changed during materialization.");
+        }
+
+        private static int? ReadKnownCount(IEnumerable<QsRuleDefinition> rules)
+        {
+            var counts = new List<int>(3);
+            if (rules is ICollection<QsRuleDefinition> collection) counts.Add(collection.Count);
+            if (rules is IReadOnlyCollection<QsRuleDefinition> readOnlyCollection) counts.Add(readOnlyCollection.Count);
+            if (rules is ICollection nonGenericCollection) counts.Add(nonGenericCollection.Count);
+
+            if (counts.Any(count => count < 0))
+                throw new InvalidOperationException("QS rule profile reported a negative rule Count.");
+            if (counts.Any(count => count > MaximumRules))
+                throw new InvalidOperationException("QS rule profile supports at most " + MaximumRules + " rules.");
+            if (counts.Count > 1 && counts.Any(count => count != counts[0]))
+                throw new InvalidOperationException("QS rule profile reported conflicting rule Count values.");
+            return counts.Count == 0 ? (int?)null : counts[0];
         }
     }
 }
