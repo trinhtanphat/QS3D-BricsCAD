@@ -199,7 +199,7 @@ namespace QS3D.BricsCAD.V25
             public uint Persist;
             public uint AttributeCount;
             public IntPtr Attributes;
-            [MarshalAs(UnmanagedType.LPWStr)] public string TargetAlias;
+            [MarshalAs(UnmanagedType.LPWStr)] public string? TargetAlias;
             [MarshalAs(UnmanagedType.LPWStr)] public string UserName;
         }
 
