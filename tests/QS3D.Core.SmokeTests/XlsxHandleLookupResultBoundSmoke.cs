@@ -225,16 +225,35 @@ namespace QS3D.Core.SmokeTests
 
             internal int CurrentReads { get; private set; }
 
-            public IEnumerator<string> GetEnumerator()
-            {
-                for (var index = 0; index < _count; index++)
-                {
-                    CurrentReads++;
-                    yield return _prefix + index;
-                }
-            }
-
+            public IEnumerator<string> GetEnumerator() => new Enumerator(this);
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private sealed class Enumerator : IEnumerator<string>
+            {
+                private readonly CountingIdentitySequence _owner;
+                private int _index = -1;
+
+                internal Enumerator(CountingIdentitySequence owner) => _owner = owner;
+
+                public bool MoveNext()
+                {
+                    _index++;
+                    return _index < _owner._count;
+                }
+
+                public string Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        return _owner._prefix + _index;
+                    }
+                }
+
+                object IEnumerator.Current => Current;
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
         }
     }
 }
