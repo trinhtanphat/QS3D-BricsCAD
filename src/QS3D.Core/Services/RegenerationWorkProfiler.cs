@@ -128,9 +128,9 @@ namespace QS3D.Core.Services
             var result = new List<T>();
             using (var enumerator = values.GetEnumerator())
             {
+                RequireStableKnownCountContract(values, knownCount, maxCount, parameterName, label);
                 while (true)
                 {
-                    RequireStableKnownCountContract(values, knownCount, maxCount, parameterName, label);
                     if (!enumerator.MoveNext()) break;
                     RequireStableKnownCountContract(values, knownCount, maxCount, parameterName, label);
 
@@ -140,6 +140,7 @@ namespace QS3D.Core.Services
                         throw CollectionTooLarge(maxCount, parameterName, label);
 
                     var value = enumerator.Current;
+                    RequireStableKnownCountContract(values, knownCount, maxCount, parameterName, label);
                     if (ReferenceEquals(value, null))
                         throw new ArgumentException("Regeneration work profile " + label + " collection cannot contain null entries.", parameterName);
                     result.Add(value);
