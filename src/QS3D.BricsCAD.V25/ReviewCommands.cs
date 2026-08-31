@@ -72,9 +72,34 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        private static PublishedReviewWindow? _bbsPending;
+        private static PublishedReviewWindow? _recognitionPending;
+        private static PublishedReviewWindow? _revisionPending;
         private static PublishedReviewWindow? _bbsPublished;
         private static PublishedReviewWindow? _recognitionPublished;
         private static PublishedReviewWindow? _revisionPublished;
+
+        private static PublishedReviewWindow? GetPending(ReviewSurface surface)
+        {
+            switch (surface)
+            {
+                case ReviewSurface.Bbs: return _bbsPending;
+                case ReviewSurface.Recognition: return _recognitionPending;
+                case ReviewSurface.Revision: return _revisionPending;
+                default: throw new ArgumentOutOfRangeException(nameof(surface));
+            }
+        }
+
+        private static void SetPending(ReviewSurface surface, PublishedReviewWindow? value)
+        {
+            switch (surface)
+            {
+                case ReviewSurface.Bbs: _bbsPending = value; break;
+                case ReviewSurface.Recognition: _recognitionPending = value; break;
+                case ReviewSurface.Revision: _revisionPending = value; break;
+                default: throw new ArgumentOutOfRangeException(nameof(surface));
+            }
+        }
 
         private static PublishedReviewWindow? GetPublished(ReviewSurface surface)
         {
@@ -100,6 +125,23 @@ namespace QS3D.BricsCAD.V25
 
         private static bool ReuseOrClosePublished(ReviewSurface surface, Document document, string label)
         {
+            var pending = GetPending(surface);
+            if (pending != null)
+            {
+                if (pending.MatchesNativeDatabase(document) && pending.MatchesManagedWrapper(document))
+                {
+                    if (pending.Window.IsLoaded)
+                    {
+                        try { pending.Window.Activate(); } catch { }
+                    }
+                    try { PaletteCoordinator.SetStatus(label + " đang được host mở cho bản vẽ hiện hành."); } catch { }
+                    return true;
+                }
+
+                throw new InvalidOperationException(
+                    label + " đang được host mở cho bản vẽ khác; không mở instance thứ hai.");
+            }
+
             var previous = GetPublished(surface);
             if (previous == null) return false;
 
@@ -134,18 +176,38 @@ namespace QS3D.BricsCAD.V25
 
         private static void ShowAndPublish(ReviewSurface surface, Document document, Window candidate, string label)
         {
-            var published = new PublishedReviewWindow(candidate, document);
+            var owner = new PublishedReviewWindow(candidate, document);
+            if (GetPending(surface) != null)
+                throw new InvalidOperationException(label + " đã có một host-show đang pending; không mở instance thứ hai.");
+
+            SetPending(surface, owner);
             candidate.Closed += (_, __) =>
             {
-                if (ReferenceEquals(GetPublished(surface), published))
+                if (ReferenceEquals(GetPending(surface), owner))
+                    SetPending(surface, null);
+                if (ReferenceEquals(GetPublished(surface), owner))
                     SetPublished(surface, null);
             };
 
-            Application.ShowModelessWindow(IntPtr.Zero, candidate, true);
-            if (!candidate.IsLoaded)
-                throw new InvalidOperationException(label + " không đạt trạng thái loaded sau khi host show.");
+            try
+            {
+                Application.ShowModelessWindow(IntPtr.Zero, candidate, true);
+                if (!candidate.IsLoaded)
+                    throw new InvalidOperationException(label + " không đạt trạng thái loaded sau khi host show.");
+                if (!ReferenceEquals(GetPending(surface), owner))
+                    throw new InvalidOperationException(label + " mất pending owner trong lúc host show; không publish instance không còn sở hữu.");
 
-            SetPublished(surface, published);
+                SetPublished(surface, owner);
+                SetPending(surface, null);
+            }
+            catch
+            {
+                if (ReferenceEquals(GetPending(surface), owner))
+                    SetPending(surface, null);
+                if (ReferenceEquals(GetPublished(surface), owner))
+                    SetPublished(surface, null);
+                throw;
+            }
         }
 
         [CommandMethod("QS3DBBSVIEW", CommandFlags.Modal)]
@@ -242,9 +304,9 @@ namespace QS3D.BricsCAD.V25
                                     ? "Nhận dạng chắc chắn: đã áp dụng atomically " + committed + " đối tượng sau live confidence recheck."
                                     : "Nhận dạng: đã áp dụng atomically " + committed + " đối tượng.");
                         }
-                        catch (System.Exception uiError)
+                        catch (System.Exception)
                         {
-                            doc.Editor.WriteMessage("\nQS3D Recognition batch đã commit; UI refresh warning: " + uiError.Message);
+                            doc.Editor.WriteMessage("\nQS3D Recognition batch đã commit; UI refresh không hoàn tất. Dữ liệu đã commit vẫn được giữ nguyên.");
                         }
                     }
                     return committed;
@@ -275,16 +337,16 @@ namespace QS3D.BricsCAD.V25
                                 PaletteCoordinator.RefreshProject();
                                 PaletteCoordinator.SetStatus("Nhận dạng auto: đã áp dụng atomically " + autoCommitted + " đối tượng; preflight skip " + skipped + ".");
                             }
-                            catch (System.Exception uiError)
+                            catch (System.Exception)
                             {
-                                doc.Editor.WriteMessage("\nQS3D Recognition auto batch đã commit; UI refresh warning: " + uiError.Message);
+                                doc.Editor.WriteMessage("\nQS3D Recognition auto batch đã commit; UI refresh không hoàn tất. Dữ liệu đã commit vẫn được giữ nguyên.");
                             }
                         }
                     }
-                    catch (System.Exception ex)
+                    catch (System.Exception)
                     {
-                        doc.Editor.WriteMessage("\nQS3D Recognition auto batch rolled back: " + ex.Message);
-                        PaletteCoordinator.SetStatus("Nhận dạng auto: batch đã rollback, không giữ partial semantic capture. " + ex.Message);
+                        doc.Editor.WriteMessage("\nQS3D Recognition auto batch đã rollback an toàn; không giữ partial semantic capture.");
+                        PaletteCoordinator.SetStatus("Nhận dạng auto: batch đã rollback an toàn; không giữ partial semantic capture.");
                     }
                 }
 
@@ -372,6 +434,14 @@ namespace QS3D.BricsCAD.V25
 
         private static int Regenerate(ProjectState project) => new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
         private static Document? Active() => Application.DocumentManager.MdiActiveDocument;
-        private static void Guard(Document document, string operation, Action action) { try { action(); } catch (System.Exception ex) { document.Editor.WriteMessage("\n" + operation + " error: " + ex.Message); PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message); } }
+        private static void Guard(Document document, string operation, Action action)
+        {
+            try { action(); }
+            catch (System.Exception)
+            {
+                try { document.Editor.WriteMessage("\n" + operation + " lỗi; thao tác đã dừng an toàn."); } catch { }
+                try { PaletteCoordinator.SetStatus(operation + " lỗi; thao tác đã dừng an toàn."); } catch { }
+            }
+        }
     }
 }
