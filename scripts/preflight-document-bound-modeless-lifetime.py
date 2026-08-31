@@ -144,17 +144,46 @@ if not errors:
         "schedule_hub": ("new ScheduleHubWindow(document)", "schedule_hub_window"),
         "curtain_hub": ("new CurtainWallWindow(document)", "curtain_hub_window"),
     }
-    publication_tracked_managers = {"families", "levels", "zones"}
+    legacy_publication_tracked_managers = {"families", "levels"}
     for key, (constructor, window_key) in manager_contracts.items():
         source = text[key]
         window_source = text[window_key]
         if constructor not in source:
             errors.append(key + " launcher lost its explicit source Document constructor")
-        if key in publication_tracked_managers:
+        if key in legacy_publication_tracked_managers:
             if "var publishedWindow = candidate;" not in source:
                 errors.append(key + " launcher must alias the exact candidate before attaching publication lifecycle")
             if "Application.ShowModelessWindow(IntPtr.Zero, publishedWindow, true);" not in source:
                 errors.append(key + " launcher must show the exact publication-tracked candidate instance")
+        elif key == "zones":
+            for needle in (
+                "private static PublishedManager? _pending;",
+                "private static PublishedManager? _published;",
+                "var owner = new PublishedManager(window, document);",
+                "_pending = owner;",
+                "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
+                "if (!window.IsLoaded)",
+                "if (!ReferenceEquals(_pending, owner))",
+                "_pending = null;",
+                "_published = owner;",
+                "if (ReferenceEquals(_pending, owner)) _pending = null;",
+                "if (ReferenceEquals(_published, owner)) _published = null;",
+            ):
+                if needle not in source:
+                    errors.append("zones launcher missing pending-first exact publication lifecycle token: " + needle)
+            try:
+                construct = source.index("var window = new ZoneManagerWindow(document);")
+                owner = source.index("var owner = new PublishedManager(window, document);", construct)
+                pending = source.index("_pending = owner;", owner)
+                show = source.index("Application.ShowModelessWindow(IntPtr.Zero, window, true);", pending)
+                loaded = source.index("if (!window.IsLoaded)", show)
+                exact = source.index("if (!ReferenceEquals(_pending, owner))", loaded)
+                clear = source.index("_pending = null;", exact)
+                publish = source.index("_published = owner;", clear)
+                if not (construct < owner < pending < show < loaded < exact < clear < publish):
+                    errors.append("zones launcher must own pending before host show and publish only after loaded/exact-owner proof")
+            except ValueError as exc:
+                errors.append("zones launcher publication ordering marker missing: " + str(exc))
         elif "Application.ShowModelessWindow(IntPtr.Zero, window, true);" not in source:
             errors.append(key + " launcher must show the same registered window instance")
         if "DocumentBoundWindowLifetime.Attach(window, document);" in source:
@@ -182,4 +211,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
 
-print("PASS: document-bound review/health/BQ/BBS/schedule/manager windows keep one source-DWG registration; publication-tracked Family/Level/Zone managers show their exact lifecycle-owned candidate; Revision retains only stable native database identity for callbacks, native reactors stay centralized, and dynamic hubs remain active-document based.")
+print("PASS: document-bound review/health/BQ/BBS/schedule/manager windows keep one source-DWG registration; Family/Level retain exact publication aliases while Zone Manager is pending-first and loaded/exact-owner proven before publication; Revision retains only stable native database identity for callbacks, native reactors stay centralized, and dynamic hubs remain active-document based.")

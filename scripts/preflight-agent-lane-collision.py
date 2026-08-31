@@ -530,12 +530,22 @@ def validate_pull_request_event(
     except (TypeError, ValueError) as exc:
         raise ValueError("pull request number is missing or invalid") from exc
 
-    lane_key = extract_lane_key(pr.get("body"))
-    if lane_key is None:
-        raise ValueError(
-            f"PR #{number} head '{head_ref}' requires a Lane-Key in the PR body; "
-            "use 'Lane-Key: issue-<number>' or a stable integration batch key"
-        )
+    explicit_lane_key = extract_lane_key(pr.get("body"))
+    issue_number = branch_issue_number(head_ref) if head_ref.startswith("agent/") else None
+    if issue_number is not None:
+        lane_key = f"issue-{issue_number}"
+        if explicit_lane_key is not None and explicit_lane_key != lane_key:
+            raise ValueError(
+                f"PR #{number} Lane-Key '{explicit_lane_key}' does not match "
+                f"branch-derived Lane-Key '{lane_key}'"
+            )
+    else:
+        lane_key = explicit_lane_key
+        if lane_key is None:
+            raise ValueError(
+                f"PR #{number} head '{head_ref}' requires a Lane-Key in the PR body; "
+                "use 'Lane-Key: issue-<number>' or a stable integration batch key"
+            )
     return lane_key, find_duplicate_carriers(number, lane_key, open_prs)
 
 
