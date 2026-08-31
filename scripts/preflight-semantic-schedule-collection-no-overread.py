@@ -64,16 +64,35 @@ if "result.Add(enumerator.Current)" in snapshot:
     fail("SnapshotBounded<T> must rebind Count after Current before retaining the value")
 
 required_save_tokens = (
+    "var knownCount = ResolveSaveKnownCount(definitions);",
     "using (var enumerator = definitions.GetEnumerator())",
-    "while (enumerator.MoveNext())",
+    'RequireStableSaveKnownCount(definitions, knownCount, "before MoveNext")',
+    "var moved = enumerator.MoveNext();",
+    'RequireStableSaveKnownCount(definitions, knownCount, "after MoveNext")',
+    "if (!moved) break;",
+    "if (knownCount.HasValue && list.Count >= knownCount.Value)",
     "if (list.Count >= MaxSchedules)",
-    "list.Add(enumerator.Current)",
+    "var current = enumerator.Current;",
+    'RequireStableSaveKnownCount(definitions, knownCount, "after Current")',
+    "list.Add(current)",
 )
 for token in required_save_tokens:
     if token not in save:
         fail(f"Save is missing explicit admission token: {token}")
-if save.index("if (list.Count >= MaxSchedules)") > save.index("list.Add(enumerator.Current)"):
-    fail("Save reads Current before the 128-definition admission check")
+
+save_pre_move = save.index('RequireStableSaveKnownCount(definitions, knownCount, "before MoveNext")')
+save_move = save.index("var moved = enumerator.MoveNext();", save_pre_move)
+save_post_move = save.index('RequireStableSaveKnownCount(definitions, knownCount, "after MoveNext")', save_move)
+save_break = save.index("if (!moved) break;", save_post_move)
+save_known_guard = save.index("if (knownCount.HasValue && list.Count >= knownCount.Value)", save_break)
+save_cap = save.index("if (list.Count >= MaxSchedules)", save_known_guard)
+save_current = save.index("var current = enumerator.Current;", save_cap)
+save_post_current = save.index('RequireStableSaveKnownCount(definitions, knownCount, "after Current")', save_current)
+save_add = save.index("list.Add(current)", save_post_current)
+if not (save_pre_move < save_move < save_post_move < save_break < save_known_guard < save_cap < save_current < save_post_current < save_add):
+    fail("Save Count/capacity no-overread ordering is not fail-closed")
+if "list.Add(enumerator.Current)" in save:
+    fail("Save must rebind Count after Current before retaining a definition")
 if "foreach (var definition in definitions)" in save:
     fail("Save regressed to foreach and therefore exposes Current before the body guard")
 
