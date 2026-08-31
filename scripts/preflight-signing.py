@@ -89,7 +89,7 @@ if release.is_file():
         '$tagRefUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/git/refs"',
         "$tagCreatedByThisRun = $true",
         "$releaseId = [long]$release.id",
-        "Release tag does not target exact qualified workflow SHA; release remains a draft.",
+        "Assert-RemoteReleaseTagTargetsWorkflowSha",
         "gh release download $env:RELEASE_TAG",
         "Draft release asset SHA-256 mismatch for $name; release remains a draft.",
         "verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT",
@@ -124,7 +124,7 @@ if release.is_file():
     tag_create_index = text.find("$createdTag = Invoke-RestMethod -Method Post -Uri $tagRefUri", publication_index)
     tag_owned_index = text.find("$tagCreatedByThisRun = $true", tag_create_index)
     draft_index = text.find("$releaseId = [long]$release.id", tag_owned_index)
-    tag_verify_index = text.find("Release tag does not target exact qualified workflow SHA; release remains a draft.", draft_index)
+    tag_verify_index = text.find("Assert-RemoteReleaseTagTargetsWorkflowSha", draft_index)
     download_index = text.find("gh release download $env:RELEASE_TAG", tag_verify_index)
     hash_index = text.find("Draft release asset SHA-256 mismatch for $name; release remains a draft.", download_index)
     signature_index = text.find("verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT", hash_index)
@@ -132,7 +132,7 @@ if release.is_file():
     rollback_index = text.find("rollback-v25-draft-release.ps1", publish_draft_index)
     publish_order = (publication_index, tag_create_index, tag_owned_index, draft_index, tag_verify_index, download_index, hash_index, signature_index, publish_draft_index, rollback_index)
     if any(index < 0 for index in publish_order) or list(publish_order) != sorted(publish_order):
-        errors.append("commercial publication must own exact tag -> create exact draft -> verify exact tag target/downloaded bytes/hashes/signatures -> publish exact release -> retain bounded rollback")
+        errors.append("commercial publication must own exact tag -> create exact draft -> assert exact tag target -> verify downloaded bytes/hashes/signatures -> publish exact release -> retain bounded rollback")
 
 for path in ROOT.rglob("*.pfx"):
     errors.append("private signing certificate must not be committed: " + str(path.relative_to(ROOT)))
@@ -145,4 +145,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: the commercial V25 workflow is signed-only, exact-source/product bound, ephemeral-key isolated, Authenticode/timestamp verified before and after finalization, runtime-gated for stable releases, provenance-bound across the job boundary, and exact-draft-byte verified before bounded publication.")
+print("PASS: the commercial V25 workflow is signed-only, exact-source/product bound, ephemeral-key isolated, Authenticode/timestamp verified before and after finalization, runtime-gated for stable releases, provenance-bound across the job boundary, and exact-draft-byte verified after exact-tag assertion before bounded publication.")
