@@ -10,7 +10,7 @@ namespace QS3D.BricsCAD.V25
     {
         private const string SelectionGuidance = "Tie 3D: chọn Column semantic có closed rectangle POLYLINE; khai báo RebarTieDiameterMm/RebarTieSpacingMm nếu cần override.";
         private const string OperationFailure = "QS3DREBARTIES3D lỗi: không thể tạo/cập nhật đai cột. Kiểm tra selection, project semantic và dữ liệu rebar rồi thử lại.";
-        private const string UiSyncWarning = "Tie 3D: đã cập nhật đai cột nhưng đồng bộ giao diện chưa hoàn tất. Dữ liệu CAD/project đã được giữ nguyên; hãy refresh giao diện.";
+        private const string UiSyncWarning = "UI sync warning: đã cập nhật đai cột nhưng đồng bộ giao diện chưa hoàn tất. Dữ liệu CAD/project đã được giữ nguyên; hãy refresh giao diện.";
 
         [CommandMethod("QS3DREBARTIES3D", CommandFlags.UsePickSet)]
         public void BuildColumnTies()
