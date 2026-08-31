@@ -13,9 +13,10 @@ namespace QS3D.BricsCAD.V25
     /// <summary>
     /// Deterministic MCP mutations that use native BricsCAD/Teigha APIs. This runtime is
     /// deliberately narrow: it owns direct solids/saves plus bounded QS3D authoring bridges and
-    /// one command-specific EXTRUDE fallback grammar. Every entry point confirmation-gates,
-    /// re-checks the shared emergency stop before CAD dispatch and immediately before mutation,
-    /// and writes bounded diagnostics.
+    /// one command-specific EXTRUDE fallback grammar. It is also the published extension point
+    /// for bounded direct CAD view/status tools. Mutation entries confirmation-gate, re-check the
+    /// shared emergency stop before CAD dispatch and immediately before mutation, and write
+    /// bounded diagnostics.
     /// </summary>
     internal static class McpCadDirectModelRuntime
     {
@@ -49,6 +50,12 @@ namespace QS3D.BricsCAD.V25
 
         internal static bool IsTool(string tool)
         {
+            return Tools.Contains(tool ?? string.Empty) || McpCadViewStatusRuntime.IsTool(tool);
+        }
+
+        internal static bool RequiresMutation(string tool)
+        {
+            if (McpCadViewStatusRuntime.IsTool(tool)) return McpCadViewStatusRuntime.RequiresMutation(tool);
             return Tools.Contains(tool ?? string.Empty);
         }
 
@@ -89,12 +96,28 @@ namespace QS3D.BricsCAD.V25
                 "Place the active QS3D Móng đơn Family at drawing x,y. Active Floor elevation is resolved by the shared Móng đơn authoring workflow.",
                 Numeric("x", "y") + "," + ConfirmProperty(),
                 "\"x\",\"y\",\"confirmMutation\"");
+            foreach (var descriptor in McpCadViewStatusRuntime.ToolDescriptors()) yield return descriptor;
         }
 
         internal static string Call(string tool, string arguments)
         {
             if (!IsTool(tool)) throw new InvalidOperationException("Unknown direct MCP CAD model tool: " + tool);
             var body = string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments;
+            if (McpCadViewStatusRuntime.IsTool(tool))
+            {
+                var mutation = McpCadViewStatusRuntime.RequiresMutation(tool);
+                if (mutation)
+                {
+                    RequireConfirmedMutation(body, tool);
+                    EnsureAutomationRunning();
+                }
+                return McpDiagnosticHub.InvokeInCadContext(() =>
+                {
+                    if (mutation) EnsureAutomationRunning();
+                    return McpCadViewStatusRuntime.CallInCadContext(tool, body);
+                });
+            }
+
             RequireConfirmedMutation(body, tool);
             EnsureAutomationRunning();
             return McpDiagnosticHub.InvokeInCadContext(() =>
