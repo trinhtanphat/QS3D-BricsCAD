@@ -31,6 +31,10 @@ namespace QS3D.Core.SmokeTests
                 var invalidTrailing = Path.Combine(root, "invalid-trailing.xlsx");
                 CreateWorkbook(invalidTrailing, duplicateTarget: false, invalidTrailingRow: true);
                 AssertInvalid(invalidTrailing, "row number is invalid or exceeds");
+
+                var duplicateWithInvalidTrailing = Path.Combine(root, "duplicate-invalid-trailing.xlsx");
+                CreateWorkbook(duplicateWithInvalidTrailing, duplicateTarget: true, invalidTrailingRow: true);
+                AssertInvalid(duplicateWithInvalidTrailing, "row number is invalid or exceeds");
             }
             finally
             {
