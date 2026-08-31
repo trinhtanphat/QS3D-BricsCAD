@@ -56,9 +56,13 @@ namespace QS3D.Core.Geometry
 
             var pieces = new List<CurtainWallPanelPiece>(pieceCount);
             for (var index = 0; index < pieceCount; index++)
-                pieces.Add(SnapshotAndValidate(inputPieces[index]));
-            if (inputPieces.Count != pieceCount)
-                throw new InvalidOperationException("Curtain panel fingerprint Pieces Count changed while being validated.");
+            {
+                RequireStablePieceCount(inputPieces, pieceCount);
+                var sourcePiece = inputPieces[index];
+                RequireStablePieceCount(inputPieces, pieceCount);
+                pieces.Add(SnapshotAndValidate(sourcePiece));
+            }
+            RequireStablePieceCount(inputPieces, pieceCount);
 
             var canonical = new StringBuilder("CURTAIN_PANEL_V1")
                 .Append('|').Append(R(sourceLengthM))
@@ -87,6 +91,17 @@ namespace QS3D.Core.Geometry
                 var digest = sha.ComputeHash(Encoding.UTF8.GetBytes(canonical.ToString()));
                 return string.Concat(digest.Select(x => x.ToString("x2", CultureInfo.InvariantCulture)));
             }
+        }
+
+        private static void RequireStablePieceCount(IReadOnlyList<CurtainWallPanelPiece> pieces, int admittedCount)
+        {
+            var currentCount = pieces.Count;
+            if (currentCount < 0)
+                throw new InvalidOperationException("Curtain panel fingerprint Pieces Count must not be negative.");
+            if (currentCount > MaxPieces)
+                throw new InvalidOperationException("Curtain panel fingerprint exceeds " + MaxPieces + " pieces.");
+            if (currentCount != admittedCount)
+                throw new InvalidOperationException("Curtain panel fingerprint Pieces Count changed while being validated.");
         }
 
         private static CurtainWallPanelPiece SnapshotAndValidate(CurtainWallPanelPiece piece)
