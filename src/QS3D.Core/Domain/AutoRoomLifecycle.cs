@@ -235,8 +235,9 @@ namespace QS3D.Core.Domain
         public static void MarkActive(ProjectElement room, string sourceSignature)
         {
             if (room == null) throw new ArgumentNullException(nameof(room));
+            var normalizedSourceSignature = NormalizeSourceHandleText(sourceSignature);
             room.Properties[BoundaryStateKey] = BoundaryStateActive;
-            room.Properties[BoundarySourceSignatureKey] = NormalizeSourceHandleText(sourceSignature);
+            room.Properties[BoundarySourceSignatureKey] = normalizedSourceSignature;
             room.Properties.Remove("BoundaryStaleUtc");
             room.Properties.Remove("BoundaryStaleReason");
         }
