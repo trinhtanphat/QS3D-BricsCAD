@@ -339,6 +339,11 @@ namespace QS3D.Core.Cost
                         index,
                         "Rate build-up component collection");
                     var component = componentEnumerator.Current;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        components,
+                        hasKnownComponentCount,
+                        knownComponentCount,
+                        "Rate build-up component collection");
                     if (component == null)
                         throw new ArgumentException("Rate build-up contains a null component at index " + index + ".", nameof(components));
                     if (!resourceCodes.Add(component.ResourceCode))
@@ -469,6 +474,11 @@ namespace QS3D.Core.Cost
                         index,
                         "Historical cost catalog");
                     var record = recordEnumerator.Current;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        records,
+                        hasKnownRecordCount,
+                        knownRecordCount,
+                        "Historical cost catalog");
                     if (record == null)
                         throw new ArgumentException("Historical cost catalog contains a null record at index " + index + ".", nameof(records));
                     if (!ids.Add(record.RecordId))
@@ -711,6 +721,11 @@ namespace QS3D.Core.Cost
                         index,
                         "Tender quote line collection");
                     var line = lineEnumerator.Current;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        lines,
+                        hasKnownLineCount,
+                        knownLineCount,
+                        "Tender quote line collection");
                     if (line == null)
                         throw new ArgumentException("Tender bid contains a null line at index " + index + ".", nameof(lines));
                     if (byItem.ContainsKey(line.ItemCode))
@@ -867,6 +882,11 @@ namespace QS3D.Core.Cost
                         index,
                         "Tender requirement collection");
                     var requirement = requirementEnumerator.Current;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        requirements,
+                        hasKnownRequirementCount,
+                        knownRequirementCount,
+                        "Tender requirement collection");
                     if (requirement == null)
                         throw new ArgumentException("Tender requirements contain a null item at index " + index + ".", nameof(requirements));
                     if (!ids.Add(requirement.ItemCode))
@@ -916,6 +936,11 @@ namespace QS3D.Core.Cost
                         index,
                         "Tender bid collection");
                     var bid = bidEnumerator.Current;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        bids,
+                        hasKnownBidCount,
+                        knownBidCount,
+                        "Tender bid collection");
                     if (bid == null)
                         throw new ArgumentException("Tender comparison contains a null bid at index " + index + ".", nameof(bids));
                     if (!ids.Add(bid.BidId))
@@ -1080,6 +1105,11 @@ namespace QS3D.Core.Cost
                         contractIndex,
                         "Progress contract item collection");
                     var item = contractEnumerator.Current;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        contractItems,
+                        hasKnownContractCount,
+                        knownContractCount,
+                        "Progress contract item collection");
                     if (item == null) throw new ArgumentException("Progress contract contains a null item.", nameof(contractItems));
                     if (contracts.ContainsKey(item.ItemCode))
                         throw new ArgumentException("Duplicate progress contract item code: " + item.ItemCode + ".", nameof(contractItems));
@@ -1118,6 +1148,11 @@ namespace QS3D.Core.Cost
                         claimIndex,
                         "Progress claim line collection");
                     var line = claimEnumerator.Current;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        claimLines,
+                        hasKnownClaimCount,
+                        knownClaimCount,
+                        "Progress claim line collection");
                     if (line == null) throw new ArgumentException("Progress claim contains a null line.", nameof(claimLines));
                     if (claims.ContainsKey(line.ItemCode))
                         throw new ArgumentException("Duplicate progress claim item code: " + line.ItemCode + ".", nameof(claimLines));
