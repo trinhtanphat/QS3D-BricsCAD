@@ -41,11 +41,14 @@ def main() -> int:
     save_block = between(runtime, "private static string SaveActiveDocument", "private static string RunQs3dCommand")
     active_document_block = between(runtime, "private static string BuildActiveDocumentJson", "private static string BuildSelectionJson")
     call_block = between(runtime, "public static string Call", "private static string Mutation")
+    direct_command_block = between(direct, "internal static string CallCadCommandSequence", "private static string CreateBox")
+    direct_save_block = between(direct, "private static string Save()", "private static string NormalizeExtrudeInputs")
+    dbmod_block = between(direct, "private static void WaitForCleanDbmod", "private static void RequireConfirmedMutation")
 
     require(errors, run_block, (
         'if (command == "QSAVE") return SaveActiveDocument(document);',
         'var inputs = NormalizeCommandInputs(',
-    ), "QSAVE command route")
+    ), "legacy QSAVE fallback")
 
     require(errors, save_block, (
         'Path.IsPathRooted(filename)',
@@ -58,9 +61,9 @@ def main() -> int:
         '\\"completed\\":true',
         '\\"saved\\":true',
         'completed=true',
-    ), "synchronous QSAVE completion guard")
+    ), "legacy synchronous QSAVE fallback guard")
     if "SendStringToExecute" in save_block:
-        errors.append("QSAVE completion path must not queue a native command with SendStringToExecute")
+        errors.append("legacy QSAVE fallback must not queue a native command with SendStringToExecute")
 
     require(errors, active_document_block, (
         'var hasLocalPath = Path.IsPathRooted(filename);',
@@ -91,7 +94,27 @@ def main() -> int:
         'NormalizeExtrudeInputs',
         'EnsureWritableDirectory',
         'McpCadAgentRuntime.EnsureCurrentMutationRunning();',
+        'string.Equals(command, "QSAVE", StringComparison.Ordinal)',
     ), "direct CAD runtime")
+    require(errors, direct_command_block, (
+        'McpDiagnosticHub.InvokeInCadContext(() =>',
+        'Save();',
+        '\\"command\\":\\"QSAVE\\"',
+    ), "direct QSAVE route")
+    require(errors, direct_save_block, (
+        'document.Database.SaveAs(filename, DwgVersion.Current);',
+        'WaitForCleanDbmod();',
+        'document.Database.SaveAs(fullPath, DwgVersion.Current);',
+        'route=SaveAs-current-path',
+    ), "save/reopen regression guard")
+    if 'document.Database.Save();' in direct_save_block:
+        errors.append("direct cad_save must not use Database.Save(), which regressed after close/reopen with eCantOpenFile")
+    require(errors, dbmod_block, (
+        'DateTime.UtcNow.AddSeconds(2)',
+        'Application.GetSystemVariable("DBMOD")',
+        'Thread.Sleep(25)',
+        'dbmod == 0',
+    ), "bounded DBMOD completion wait")
     if "Process.Start" in direct or "cmd.exe" in direct or "powershell" in direct.lower():
         errors.append("direct CAD runtime must not introduce process/shell execution")
 
@@ -107,7 +130,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: MCP direct 3D/save tools are published through the embedded server, routed through the canonical confirmation/mutation epoch, preserve bounded EXTRUDE grammar, and keep QSAVE/SaveAs completion guards.")
+    print("PASS: MCP direct 3D/save tools preserve bounded mutation routing, intercept QSAVE in CAD context, avoid Database.Save after reopen, and confirm save completion with a bounded DBMOD settle wait.")
     return 0
 
 
