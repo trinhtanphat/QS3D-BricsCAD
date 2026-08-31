@@ -50,14 +50,15 @@ def main() -> int:
         'var command = NormalizeCadCommandToken(',
         'var inputs = NormalizeCommandInputs(',
     ), "legacy generic command fallback")
-    if 'SaveActiveDocument(' in run_block:
-        errors.append("legacy generic command fallback must not own QSAVE after direct command routing")
+    if ('SaveActiveDocument(' in run_block
+            and 'McpCadDirectModelRuntime.CanHandleCadCommandSequence(args)' not in call_block):
+        errors.append("legacy generic command fallback must not own QSAVE unless canonical direct command routing intercepts it first")
 
     require(errors, active_document_block, (
         'var hasLocalPath = Path.IsPathRooted(filename);',
         'var modified = SafeInteger(SafeSystemVariable("DBMOD")) != "0";',
         'hasLocalPath && !modified',
-        '\\"modified\\"',
+        '\"modified\"',
     ), "active-document saved/dirty truth")
     if 'string.IsNullOrWhiteSpace(filename) ? "false" : "true"' in active_document_block:
         errors.append("cad_active_document.saved still aliases filename presence instead of DBMOD dirty state")
@@ -92,7 +93,7 @@ def main() -> int:
     require(errors, direct_command_block, (
         'McpDiagnosticHub.InvokeInCadContext(() =>',
         'Save();',
-        '\\"command\\":\\"QSAVE\\"',
+        '\"command\":\"QSAVE\"',
     ), "direct QSAVE route")
 
     require(errors, extrude_block, (
