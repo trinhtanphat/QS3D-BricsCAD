@@ -71,11 +71,20 @@ if command.is_file():
 
     helper_start = text.find("private static bool TryClosePendingWindow")
     helper = text[helper_start:] if helper_start >= 0 else ""
-    helper_positions = [helper.find(token) for token in (
-        "if (!ReferenceEquals(_pending, window)) return true;", "if (ReferenceEquals(_published, window))",
-        "if (window.IsLoaded)", "window.Close();", "if (window.IsLoaded) return false;", "ReleasePendingWindow(window);")]
+    non_owner = helper.find("if (!ReferenceEquals(_pending, window)) return true;")
+    published_owner = helper.find("if (ReferenceEquals(_published, window))", non_owner + 1)
+    published_release = helper.find("ReleasePendingWindow(window);", published_owner + 1)
+    published_return = helper.find("return true;", published_release + 1)
+    close_if_loaded = helper.find("if (window.IsLoaded)", published_return + 1)
+    close_call = helper.find("window.Close();", close_if_loaded + 1)
+    live_failure = helper.find("if (window.IsLoaded) return false;", close_call + 1)
+    terminal_release = helper.find("ReleasePendingWindow(window);", live_failure + 1)
+    helper_positions = [
+        non_owner, published_owner, published_release, published_return,
+        close_if_loaded, close_call, live_failure, terminal_release,
+    ]
     if min(helper_positions) < 0 or helper_positions != sorted(helper_positions):
-        errors.append("Geometry Extensions pending cleanup must refuse non-owner cleanup, protect published owner, close best-effort, retain live failures, and release only terminal pending owner")
+        errors.append("Geometry Extensions pending cleanup must refuse non-owner cleanup, release pending ownership for an already-published owner, close failed pending candidates best-effort, retain live failures, and release only terminal pending ownership")
     if "ex.Message" in text:
         errors.append("Geometry Extensions launcher must not expose raw host exception messages")
 
