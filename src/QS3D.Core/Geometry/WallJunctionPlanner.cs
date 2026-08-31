@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -181,8 +182,7 @@ namespace QS3D.Core.Geometry
             if (!Finite(angularToleranceRadians) || angularToleranceRadians <= 0d || angularToleranceRadians >= Math.PI / 4d)
                 throw new ArgumentOutOfRangeException(nameof(angularToleranceRadians));
 
-            var raw = source.Take(MaxSegments + 1).ToList();
-            if (raw.Count > MaxSegments) throw new InvalidOperationException("Wall junction planning supports at most " + MaxSegments.ToString(CultureInfo.InvariantCulture) + " segments per batch.");
+            var raw = MaterializeSegments(source);
             var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var segments = new List<SegmentInfo>(raw.Count);
             foreach (var segment in raw)
@@ -265,6 +265,56 @@ namespace QS3D.Core.Geometry
                 .ThenBy(x => x.Kind)
                 .ToList()
                 .AsReadOnly();
+        }
+
+        private static List<WallAxisSegment> MaterializeSegments(IEnumerable<WallAxisSegment> source)
+        {
+            var knownCount = ReadKnownCount(source);
+            var raw = new List<WallAxisSegment>(knownCount ?? 0);
+            using (var enumerator = source.GetEnumerator())
+            {
+                EnsureKnownCountStable(source, knownCount);
+                while (true)
+                {
+                    EnsureKnownCountStable(source, knownCount);
+                    var moved = enumerator.MoveNext();
+                    EnsureKnownCountStable(source, knownCount);
+                    if (!moved) break;
+                    if (knownCount.HasValue && raw.Count >= knownCount.Value)
+                        throw new InvalidOperationException("Wall junction source enumerated more segments than its reported Count " + knownCount.Value.ToString(CultureInfo.InvariantCulture) + ".");
+                    if (raw.Count >= MaxSegments)
+                        throw new InvalidOperationException("Wall junction planning supports at most " + MaxSegments.ToString(CultureInfo.InvariantCulture) + " segments per batch.");
+                    var current = enumerator.Current;
+                    EnsureKnownCountStable(source, knownCount);
+                    raw.Add(current);
+                }
+            }
+            EnsureKnownCountStable(source, knownCount);
+            if (knownCount.HasValue && raw.Count != knownCount.Value)
+                throw new InvalidOperationException("Wall junction source reported Count " + knownCount.Value.ToString(CultureInfo.InvariantCulture) + " but enumerated " + raw.Count.ToString(CultureInfo.InvariantCulture) + " segments.");
+            return raw;
+        }
+
+        private static void EnsureKnownCountStable(IEnumerable<WallAxisSegment> source, int? admittedCount)
+        {
+            var currentCount = ReadKnownCount(source);
+            if (currentCount != admittedCount)
+                throw new InvalidOperationException("Wall junction source changed its reported Count during enumeration.");
+        }
+
+        private static int? ReadKnownCount(IEnumerable<WallAxisSegment> source)
+        {
+            var counts = new List<int>(3);
+            if (source is ICollection<WallAxisSegment> collection) counts.Add(collection.Count);
+            if (source is IReadOnlyCollection<WallAxisSegment> readOnlyCollection) counts.Add(readOnlyCollection.Count);
+            if (source is ICollection nonGenericCollection) counts.Add(nonGenericCollection.Count);
+            if (counts.Any(count => count > MaxSegments))
+                throw new InvalidOperationException("Wall junction planning supports at most " + MaxSegments.ToString(CultureInfo.InvariantCulture) + " segments per batch.");
+            if (counts.Any(count => count < 0))
+                throw new InvalidOperationException("Wall junction source reported a negative Count.");
+            if (counts.Count > 1 && counts.Any(count => count != counts[0]))
+                throw new InvalidOperationException("Wall junction source reported conflicting Count values.");
+            return counts.Count == 0 ? (int?)null : counts[0];
         }
 
         private static IEnumerable<Point2> Intersections(SegmentInfo a, SegmentInfo b, double tolerance)
