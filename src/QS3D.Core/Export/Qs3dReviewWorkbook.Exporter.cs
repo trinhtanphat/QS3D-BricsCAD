@@ -77,21 +77,34 @@ namespace QS3D.Core.Export
             if (expectedCount < 0)
                 throw new InvalidDataException("QS3D Review " + label + " collection advertised a negative Count.");
 
+            void RequireStableCount()
+            {
+                if (source.Count != expectedCount)
+                    throw new InvalidDataException("QS3D Review " + label + " collection Count changed during traversal.");
+            }
+
             var result = new List<T>();
             using (var enumerator = source.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableCount();
+                    var moved = enumerator.MoveNext();
+                    RequireStableCount();
+                    if (!moved)
+                        break;
+
                     if (result.Count >= expectedCount)
                         throw new InvalidDataException("QS3D Review " + label + " collection Count does not match completed traversal.");
-                    result.Add(enumerator.Current);
+                    var value = enumerator.Current;
+                    RequireStableCount();
+                    result.Add(value);
                 }
             }
 
             if (result.Count != expectedCount)
                 throw new InvalidDataException("QS3D Review " + label + " collection Count does not match completed traversal.");
-            if (source.Count != expectedCount)
-                throw new InvalidDataException("QS3D Review " + label + " collection Count changed after traversal.");
+            RequireStableCount();
             return result;
         }
 
