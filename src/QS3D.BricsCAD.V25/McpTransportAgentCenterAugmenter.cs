@@ -249,15 +249,23 @@ namespace QS3D.BricsCAD.V25
                     "Foreground desktop access đã BẬT theo thao tác local của user.",
                     "QS3D tự renew consent trong phiên; Esc ×2, nút toggle OFF hoặc đóng BricsCAD sẽ khóa lại.");
             }
-            catch
+            catch (Exception ex)
             {
+                try { TrySetInteractionPolicy("background_only"); } catch { }
                 try
                 {
                     McpDesktopControlSession.DisableForegroundAccessFromLocalUser(
                         "Không bật hoàn chỉnh được foreground fallback nên QS3D đã fail-closed về desktop OFF.");
                 }
                 catch { }
-                throw;
+                try
+                {
+                    McpAgentExperience.Error(
+                        "desktop-control",
+                        "Không bật được foreground desktop access: " + ex.Message,
+                        "QS3D đã fail-closed về desktop OFF/background_only; thử lại từ Agent Center nếu vẫn cần foreground access.");
+                }
+                catch { }
             }
         }
 
