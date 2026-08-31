@@ -41,15 +41,23 @@ required = {
     ],
     "workspace": [
         '[CommandMethod("QS3DMEPREVIEW")]',
-        "private static MepReviewWorkspaceWindow? _window;",
+        "private static MepReviewWorkspaceWindow? _published;",
+        "private static MepReviewWorkspaceWindow? _pending;",
+        "var pending = _pending;",
+        "if (pending != null && !TryClosePendingWindow(pending))",
+        "var published = _published;",
         "published.IsLoaded",
         "ReleasePublishedWindow(published)",
-        "window.Closed += (_, __) => ReleasePublishedWindow(window)",
+        "_pending = window;",
+        "window.Closed += (_, __) => ReleaseWindow(window)",
         "BricsApplication.ShowModelessWindow(window)",
-        "if (!window.IsLoaded) return;",
-        "_window = window;",
+        "if (!window.IsLoaded)",
+        "_published = window;",
+        "ReleasePendingWindow(window)",
         "candidate = null;",
-        "TryCloseUnpublishedWindow(candidate)",
+        "TryClosePendingWindow(candidate)",
+        "if (window.IsLoaded) return false;",
+        "ex.GetType().Name",
         "MepRecognitionProfileProvider.Save(profile)",
         "MepRecognitionProfileProvider.Reload()",
         "DocumentManager.MdiActiveDocument",
@@ -96,29 +104,55 @@ for label, tokens in required.items():
 
 workspace = texts["workspace"]
 for forbidden in (
+    "private static MepReviewWorkspaceWindow? _window;",
     "if (_window.IsVisible)",
     "if (published.IsVisible)",
+    "TryCloseUnpublishedWindow",
+    '"\\nQS3DMEPREVIEW error: " + ex.Message',
+    '"Không queue được " + command + ": " + ex.Message',
 ):
     if forbidden in workspace:
-        errors.append(f"workspace: stale visibility-based publication token {forbidden!r}")
+        errors.append(f"workspace: stale/unsafe publication token {forbidden!r}")
 
+show_start = workspace.find("public void ShowReviewWorkspace()")
+release_start = workspace.find("private static void ReleaseWindow", show_start + 1)
+show = workspace[show_start:release_start] if show_start >= 0 and release_start > show_start else ""
 ordered = [
-    "window.Closed += (_, __) => ReleasePublishedWindow(window)",
-    "BricsApplication.ShowModelessWindow(window)",
-    "if (!window.IsLoaded) return;",
-    "_window = window;",
+    "var pending = _pending;",
+    "candidate = new MepReviewWorkspaceWindow();",
+    "_pending = window;",
+    "window.Closed += (_, __) => ReleaseWindow(window);",
+    "BricsApplication.ShowModelessWindow(window);",
+    "if (!window.IsLoaded)",
+    "_published = window;",
+    "ReleasePendingWindow(window);",
 ]
-positions = [workspace.find(token) for token in ordered]
+positions = [show.find(token) for token in ordered]
 if any(position < 0 for position in positions) or positions != sorted(positions) or len(set(positions)) != len(positions):
-    errors.append("workspace: publication order must be Closed -> host show -> Loaded check -> publish")
+    errors.append("workspace: publication order must be drain pending -> construct -> pending-own -> Closed -> host show -> Loaded check -> publish -> release pending")
 else:
-    publication_position = positions[-1]
-    cleanup_transfer_position = workspace.find("candidate = null;", publication_position + len(ordered[-1]))
-    if cleanup_transfer_position < 0 or cleanup_transfer_position <= publication_position:
-        errors.append("workspace: cleanup ownership must transfer only after authoritative publication")
+    release_pending_position = positions[-1]
+    cleanup_transfer_position = show.find("candidate = null;", release_pending_position + len(ordered[-1]))
+    if cleanup_transfer_position < 0 or cleanup_transfer_position <= release_pending_position:
+        errors.append("workspace: cleanup ownership must transfer only after pending ownership is released")
 
-if workspace.count("_window = window;") != 1:
+if workspace.count("_published = window;") != 1:
     errors.append("workspace: authoritative publication must have exactly one assignment")
+if workspace.count("_pending = window;") != 1:
+    errors.append("workspace: pending ownership must have exactly one assignment")
+
+close_start = workspace.find("private static bool TryClosePendingWindow")
+class_start = workspace.find("internal sealed class MepReviewWorkspaceWindow", close_start + 1)
+close_body = workspace[close_start:class_start] if close_start >= 0 and class_start > close_start else ""
+for token in (
+    "if (!ReferenceEquals(_pending, window)) return true;",
+    "if (ReferenceEquals(_published, window))",
+    "try { window.Close(); } catch (System.Exception) { }",
+    "if (window.IsLoaded) return false;",
+    "ReleasePendingWindow(window);",
+):
+    if token not in close_body:
+        errors.append(f"workspace: pending-close fail-closed missing {token!r}")
 
 for label in ("provider", "workspace", "zoom"):
     for forbidden in (
