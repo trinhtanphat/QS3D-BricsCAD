@@ -38,7 +38,8 @@ namespace QS3D.BricsCAD.V25
                 }
 
                 candidate = new CurtainWallWindow(document);
-                candidate.Closed += (_, __) => ReleaseOwnedWindow(candidate);
+                var ownedCandidate = candidate;
+                candidate.Closed += (_, __) => ReleaseOwnedWindow(ownedCandidate);
                 if (!ReservePendingWindow(candidate, document, nativeDatabaseIdentity))
                 {
                     ReportBlocked(document, "Vách Kính Hub đang được host publish; không mở bản sao thứ hai.",
