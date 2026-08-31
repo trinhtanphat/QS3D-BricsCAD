@@ -52,11 +52,16 @@ namespace QS3D.Core.SmokeTests
         {
             McpToolCapabilityContract.EnsureAllowed("qs3d_place_single_footing", McpExecutionMode.Qs3dDomain, true);
             McpToolCapabilityContract.EnsureAllowed("cad_active_document", McpExecutionMode.Qs3dDomain, false);
+            McpToolCapabilityContract.EnsureAllowed("desktop_cursor_position", McpExecutionMode.Qs3dDomain, false);
             McpToolCapabilityContract.EnsureAllowed("cad_agent_stop", McpExecutionMode.Qs3dDomain, true);
 
-            var blocked = Capture<McpToolContractException>(() =>
+            var blockedCad = Capture<McpToolContractException>(() =>
                 McpToolCapabilityContract.EnsureAllowed("cad_create_line", McpExecutionMode.Qs3dDomain, true));
-            Equal(McpToolCapabilityContract.ExecutionModeViolationCode, blocked.Code, "QS3D_DOMAIN must block native CAD mutations");
+            Equal(McpToolCapabilityContract.ExecutionModeViolationCode, blockedCad.Code, "QS3D_DOMAIN must block native CAD mutations");
+
+            var blockedDesktop = Capture<McpToolContractException>(() =>
+                McpToolCapabilityContract.EnsureAllowed("desktop_mouse_click", McpExecutionMode.Qs3dDomain, true));
+            Equal(McpToolCapabilityContract.ExecutionModeViolationCode, blockedDesktop.Code, "QS3D_DOMAIN must block desktop automation mutations");
         }
 
         private static void MapsStableFailures()
