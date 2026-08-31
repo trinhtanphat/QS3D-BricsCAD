@@ -63,17 +63,21 @@ def main() -> int:
     for token in (
         "AssertRowCountDriftFailsBeforeExistingDestinationReplacement();",
         "AssertRowCountDriftFailsBeforeFilesystemCreation();",
-        "RoomFinishXlsxExporter.Export(destination, new CountDriftingRows(ValidRow()))",
+        "var rows = new CountDriftingRows(ValidRow());",
+        "RoomFinishXlsxExporter.Export(destination, rows)",
+        "export rows count changed before row indexer",
+        "rows.IndexerReads != 0",
+        "internal int IndexerReads { get; private set; }",
+        "IndexerReads++;",
         "preserve-existing-room-finish-destination",
         "must-not-be-created",
-        "row count changed during snapshot",
     ):
         require(smoke, token, "deterministic Room-finish XLSX count-drift smoke contract")
 
     require(registration, "RoomFinishXlsxCountIntegritySmoke.Run();", "smoke registration")
 
     print(
-        "PASS: Room-finish XLSX binds and revalidates all admitted deterministic outer collection Counts around caller traversal, "
+        "PASS: Room-finish XLSX binds and revalidates all admitted deterministic outer collection Counts before caller indexing, "
         "preserves nested concrete-list drift semantics, fails before filesystem output, "
         "and registers deterministic regression coverage."
     )
