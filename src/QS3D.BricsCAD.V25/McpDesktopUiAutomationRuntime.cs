@@ -230,18 +230,11 @@ namespace QS3D.BricsCAD.V25
         private static IntPtr RequiredWindow(string body)
         {
             var raw = McpTopLevelJson.ExtractString(body ?? "{}", "windowHandle").Trim();
-            if (raw.Length == 0 || raw.Length > 32) throw new InvalidOperationException("windowHandle is required.");
-            long value;
-            var candidate = raw.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? raw.Substring(2) : raw;
-            if (raw.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-            {
-                if (!long.TryParse(candidate, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value))
-                    throw new InvalidOperationException("windowHandle is invalid.");
-            }
-            else if (!long.TryParse(candidate, NumberStyles.Integer, CultureInfo.InvariantCulture, out value)
-                     && !long.TryParse(candidate, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value))
-                throw new InvalidOperationException("windowHandle is invalid.");
-            var hwnd = new IntPtr(value);
+            ulong value;
+            if (raw.Length == 0 || raw.Length > 16
+                || !ulong.TryParse(raw, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value) || value == 0)
+                throw new InvalidOperationException("windowHandle must be a non-zero hexadecimal window handle up to 16 characters.");
+            var hwnd = new IntPtr(unchecked((long)value));
             RequireWindow(hwnd);
             return hwnd;
         }
@@ -258,7 +251,8 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 using (var process = Process.GetProcessById((int)processId))
-                    if (process.SessionId != Process.GetCurrentProcess().SessionId)
+                using (var current = Process.GetCurrentProcess())
+                    if (process.SessionId != current.SessionId)
                         throw new InvalidOperationException("Target window is outside the current interactive session.");
             }
             catch (ArgumentException) { throw new InvalidOperationException("Target window process no longer exists."); }
@@ -304,10 +298,10 @@ namespace QS3D.BricsCAD.V25
                    + "},\"additionalProperties\":false" + requiredJson + "}}";
         }
 
-        private static string WindowHandleProperty() { return "\"windowHandle\":{\"type\":\"string\",\"maxLength\":32}"; }
+        private static string WindowHandleProperty() { return "\"windowHandle\":{\"type\":\"string\",\"pattern\":\"^[0-9A-Fa-f]{1,16}$\"}"; }
         private static string ConfirmMutationProperty() { return "\"confirmMutation\":{\"type\":\"boolean\",\"const\":true}"; }
         private static string ConfirmSensitiveReadProperty() { return "\"confirmSensitiveRead\":{\"type\":\"boolean\",\"const\":true}"; }
-        private static string HandleText(IntPtr hwnd) { return hwnd.ToInt64().ToString(CultureInfo.InvariantCulture); }
+        private static string HandleText(IntPtr hwnd) { return unchecked((ulong)hwnd.ToInt64()).ToString("X", CultureInfo.InvariantCulture); }
         private static string Bound(string value, int maximum) { var text = value ?? string.Empty; return text.Length <= maximum ? text : text.Substring(0, maximum); }
         private static string Escape(string value) { return McpEmbeddedServer.JsonEscape(value ?? string.Empty); }
         private static string JsonNumber(double value) { return double.IsNaN(value) || double.IsInfinity(value) ? "null" : value.ToString("R", CultureInfo.InvariantCulture); }
