@@ -169,6 +169,7 @@ namespace QS3D.Core.Geometry
                         ThrowTooManySegments();
 
                     var segment = enumerator.Current;
+                    RequireStableKnownInputCount(source, knownCount);
                     segments.Add(segment);
                     observedCount++;
                 }
