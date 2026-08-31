@@ -13,6 +13,7 @@ FIRST_RUN = SRC / "McpFirstRunExperience.cs"
 V25_ENTRY = SRC / "PluginEntry.cs"
 V26_ENTRY = ROOT / "src" / "QS3D.BricsCAD.V26" / "PluginEntry.cs"
 DOC = ROOT / "docs" / "MCP-CANONICAL-RUNBOOK.md"
+RECOVERY_DOC = ROOT / "docs" / "MCP-TRANSPORT-DIAGNOSTICS-RECOVERY.md"
 
 
 def need(text: str, token: str, label: str, errors: list[str]) -> None:
@@ -27,7 +28,7 @@ def forbid(text: str, token: str, label: str, errors: list[str]) -> None:
 
 def main() -> int:
     errors: list[str] = []
-    for path in (OPENAI, CENTER, AUGMENTER, BOOTSTRAP, CLOUDFLARE_FALLBACK, FIRST_RUN, V25_ENTRY, V26_ENTRY, DOC):
+    for path in (OPENAI, CENTER, AUGMENTER, BOOTSTRAP, CLOUDFLARE_FALLBACK, FIRST_RUN, V25_ENTRY, V26_ENTRY, DOC, RECOVERY_DOC):
         if not path.is_file():
             errors.append(f"missing file: {path.relative_to(ROOT)}")
     if errors:
@@ -43,7 +44,9 @@ def main() -> int:
     first_run = FIRST_RUN.read_text(encoding="utf-8")
     v25 = V25_ENTRY.read_text(encoding="utf-8")
     v26 = V26_ENTRY.read_text(encoding="utf-8")
-    doc = DOC.read_text(encoding="utf-8")
+    canonical_doc = DOC.read_text(encoding="utf-8")
+    recovery_doc = RECOVERY_DOC.read_text(encoding="utf-8")
+    doc = canonical_doc + "\n" + recovery_doc
 
     for token, label in {
         "enum McpTransportProvider": "transport provider enum",
@@ -178,8 +181,8 @@ def main() -> int:
         "Cancel": "canonical installer cancellation contract",
         "stdout/stderr": "canonical tunnel diagnostic capture",
         "Authenticode": "canonical transport binary trust policy",
-        "Copy tunnel diagnostics": "canonical Agent Center diagnostic action",
-        "Restart tunnel": "canonical Agent Center restart action",
+        "Copy tunnel diagnostics": "documented Agent Center diagnostic action",
+        "Restart tunnel": "documented Agent Center restart action",
     }.items():
         need(doc, token, label, errors)
 
