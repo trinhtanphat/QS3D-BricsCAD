@@ -96,10 +96,25 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
     ]
     require_all(workflow_text, workflow_contract, "workflow", errors)
 
-    draft_create_contract = [
+    draft_create_workflow_contract = [
         "$draftTransactionMarker =",
         "QS3D-DRAFT-CREATE-V26:",
         "$expectedReleaseName = \"QS3D for BricsCAD V26 $env:RELEASE_TAG\"",
+        "$draftCreateError = $_",
+        "$reconciledDraft = Resolve-AmbiguousDraftCreate",
+        "draft-create acknowledgement was ambiguous, but exactly one transaction-owned draft was recovered",
+        "$release = $reconciledDraft",
+    ]
+    require_all(workflow_text, draft_create_workflow_contract, "workflow draft-create acknowledgement", errors)
+
+    draft_create_start = workflow_text.find("function Resolve-AmbiguousDraftCreate")
+    draft_create_end = workflow_text.find("function Assert-PublishedReleaseMatchesVerifiedTransaction", draft_create_start + 1)
+    if draft_create_start < 0 or draft_create_end <= draft_create_start:
+        errors.append("workflow draft-create acknowledgement missing bounded Resolve-AmbiguousDraftCreate function scope")
+        draft_create_scope = ""
+    else:
+        draft_create_scope = workflow_text[draft_create_start:draft_create_end]
+    draft_create_function_contract = [
         "function Resolve-AmbiguousDraftCreate",
         "releases?per_page=100&page=$page",
         "$maxPages = 20",
@@ -111,12 +126,8 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
         "ReleaseSnapshot.body",
         "$body.IndexOf($TransactionMarker, [StringComparison]::Ordinal)",
         "matching V26 draft-create transaction marker",
-        "$draftCreateError = $_",
-        "$reconciledDraft = Resolve-AmbiguousDraftCreate",
-        "draft-create acknowledgement was ambiguous, but exactly one transaction-owned draft was recovered",
-        "$release = $reconciledDraft",
     ]
-    require_all(workflow_text, draft_create_contract, "workflow draft-create acknowledgement", errors)
+    require_all(draft_create_scope, draft_create_function_contract, "workflow Resolve-AmbiguousDraftCreate", errors)
 
     for stale in ["$preCreateTagLines", "$tagWasAbsentBeforeCreate", "$releaseCreatedByThisRun", "-TagWasAbsentBeforeCreate", "if (git tag --list $env:RELEASE_TAG) { throw"]:
         if stale in workflow_text:
