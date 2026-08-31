@@ -53,7 +53,8 @@ def main() -> int:
     require(text, "$releaseId = [long]$release.id", "exact draft identity capture")
     require(text, "gh release download $env:RELEASE_TAG", "downloaded draft-byte verification")
     require(text, "$published = Invoke-RestMethod -Method Patch -Uri $releaseUri", "exact-release publish transition")
-    require(text, "if ($published.draft -ne $false)", "published-state confirmation")
+    require(text, "Assert-PublishedReleaseMatchesVerifiedTransaction", "successful publish exact-transaction assertion")
+    require(text, "-ReleaseSnapshot $published", "successful publish response binding")
     require(text, "rollback-v25-draft-release.ps1", "bounded failure rollback")
 
     publication = text.find("- name: Create draft, verify uploaded bytes, then publish")
@@ -62,12 +63,14 @@ def main() -> int:
     download = text.find("gh release download $env:RELEASE_TAG", draft_identity)
     signature = text.find("verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT", download)
     publish = text.find("$published = Invoke-RestMethod -Method Patch -Uri $releaseUri", signature)
-    rollback = text.find("rollback-v25-draft-release.ps1", publish)
-    publish_order = (publication, tag_owned, draft_identity, download, signature, publish, rollback)
+    publish_assert = text.find("Assert-PublishedReleaseMatchesVerifiedTransaction", publish)
+    publish_snapshot = text.find("-ReleaseSnapshot $published", publish_assert)
+    rollback = text.find("rollback-v25-draft-release.ps1", publish_snapshot)
+    publish_order = (publication, tag_owned, draft_identity, download, signature, publish, publish_assert, publish_snapshot, rollback)
     if any(index < 0 for index in publish_order) or list(publish_order) != sorted(publish_order):
-        raise AssertionError("commercial publication must own exact tag -> capture exact draft -> verify downloaded bytes/signatures -> publish exact release -> retain bounded rollback")
+        raise AssertionError("commercial publication must own exact tag -> capture exact draft -> verify downloaded bytes/signatures -> publish exact release -> verify successful response against exact transaction -> retain bounded rollback")
 
-    print("PASS: commercial V25 releases are signed-only, remove the ephemeral private key before re-verification, runtime-test the exact finalized signed plugin, verify draft bytes before exact-release publication, and retain bounded restart-safe rollback.")
+    print("PASS: commercial V25 releases are signed-only, remove the ephemeral private key before re-verification, runtime-test the exact finalized signed plugin, verify draft bytes before publication, verify the successful publish response against the exact transaction, and retain bounded restart-safe rollback.")
     return 0
 
 
