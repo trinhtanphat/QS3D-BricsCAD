@@ -11,9 +11,10 @@ namespace QS3D.BricsCAD.V25
 {
     /// <summary>
     /// Deterministic MCP mutations that use native BricsCAD/Teigha APIs. This runtime is
-    /// deliberately narrow: it owns direct solids/saves plus one command-specific EXTRUDE
-    /// fallback grammar. Every entry point confirmation-gates, re-checks the shared emergency
-    /// stop before CAD dispatch and immediately before mutation, and writes bounded diagnostics.
+    /// deliberately narrow: it owns direct solids/saves plus bounded QS3D authoring bridges and
+    /// one command-specific EXTRUDE fallback grammar. Every entry point confirmation-gates,
+    /// re-checks the shared emergency stop before CAD dispatch and immediately before mutation,
+    /// and writes bounded diagnostics.
     /// </summary>
     internal static class McpCadDirectModelRuntime
     {
@@ -25,7 +26,8 @@ namespace QS3D.BricsCAD.V25
             "cad_boolean_subtract",
             "cad_boolean_intersect",
             "cad_save",
-            "cad_save_as"
+            "cad_save_as",
+            "qs3d_place_single_footing"
         };
 
         private static readonly HashSet<string> KnownCommandTokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -82,6 +84,11 @@ namespace QS3D.BricsCAD.V25
                 "Safely save the active drawing to an absolute writable .dwg path after overwrite and protected-directory checks.",
                 "\"path\":{\"type\":\"string\",\"maxLength\":1024},\"overwrite\":{\"type\":\"boolean\"}," + ConfirmProperty(),
                 "\"path\",\"confirmMutation\"");
+            yield return Descriptor(
+                "qs3d_place_single_footing",
+                "Place the active QS3D Móng đơn Family at drawing x,y. Active Floor elevation is resolved by the shared Móng đơn authoring workflow.",
+                Numeric("x", "y") + "," + ConfirmProperty(),
+                "\"x\",\"y\",\"confirmMutation\"");
         }
 
         internal static string Call(string tool, string arguments)
@@ -103,6 +110,7 @@ namespace QS3D.BricsCAD.V25
                     case "cad_boolean_intersect": result = Boolean(body, BooleanOperationType.BoolIntersect, "intersect"); break;
                     case "cad_save": result = Save(); break;
                     case "cad_save_as": result = SaveAs(body); break;
+                    case "qs3d_place_single_footing": result = PlaceSingleFooting(body); break;
                     default: throw new InvalidOperationException("Unknown direct MCP CAD model tool: " + tool);
                 }
                 return result;
@@ -241,6 +249,17 @@ namespace QS3D.BricsCAD.V25
                 RecordMutation(document, "cad-boolean", "targetHandle=" + targetHandle + "; consumedHandle=" + toolHandle + "; operation=" + operationName);
                 return "{\"updated\":true,\"resultHandle\":\"" + Escape(targetHandle) + "\",\"consumedHandle\":\"" + Escape(toolHandle) + "\",\"operation\":\"" + operationName + "\"}";
             }
+        }
+
+        private static string PlaceSingleFooting(string body)
+        {
+            var x = NumberRequired(body, "x");
+            var y = NumberRequired(body, "y");
+            var document = RequireDocument();
+            EnsureAutomationRunning();
+            var handle = SingleFootingCommands.PlaceActiveSingleFootingAt(document, new Point3d(x, y, 0d));
+            RecordMutation(document, "qs3d-place-single-footing", "handle=" + handle);
+            return "{\"created\":true,\"handle\":\"" + Escape(handle) + "\",\"type\":\"SingleFooting\",\"elevationPolicy\":\"active-floor\"}";
         }
 
         private static string Save()
