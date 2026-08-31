@@ -63,7 +63,7 @@ namespace QS3D.Core.SmokeTests
             var counted = new CountProbeCollection<CoordinationRule>(1, Rule("R1"));
             var countedProfile = new CoordinationRuleProfile("P1", 1, counted);
             Equal(1, countedProfile.Rules.Count, "honest counted result");
-            Equal(2, counted.CountReads, "honest counted Count rebind");
+            Equal(7, counted.CountReads, "honest counted Count rebind");
 
             var streaming = new StreamingProbe<CoordinationRule>(2, i => Rule("S" + i));
             var streamingProfile = new CoordinationRuleProfile("P2", 1, streaming);

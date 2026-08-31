@@ -73,8 +73,18 @@ namespace QS3D.Core.Export
             var candidates = new List<IfcRoundTripQuantityEvidence>();
             using (var enumerator = evidence.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    IfcRoundTripKnownCountContract.RequireStableDuringTraversal(
+                        evidence,
+                        knownCount,
+                        "IFC round-trip quantity evidence");
+                    if (!enumerator.MoveNext())
+                        break;
+                    IfcRoundTripKnownCountContract.RequireStableDuringTraversal(
+                        evidence,
+                        knownCount,
+                        "IFC round-trip quantity evidence");
                     IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount(
                         knownCount,
                         candidates.Count,
@@ -82,6 +92,10 @@ namespace QS3D.Core.Export
                     if (candidates.Count == MaxCandidates)
                         ThrowTooManyCandidates();
                     var candidate = enumerator.Current;
+                    IfcRoundTripKnownCountContract.RequireStableDuringTraversal(
+                        evidence,
+                        knownCount,
+                        "IFC round-trip quantity evidence");
                     if (candidate == null)
                         throw new ArgumentException("Quantity evidence collection cannot contain null entries.", nameof(evidence));
                     candidates.Add(candidate);

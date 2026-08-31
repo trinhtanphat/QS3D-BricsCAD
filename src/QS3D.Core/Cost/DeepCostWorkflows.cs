@@ -73,6 +73,8 @@ namespace QS3D.Core.Cost
                     if (index == MaximumEdges)
                         ThrowTooManyEdges();
                     var edge = edgeEnumerator.Current;
+                    if (knownCount.HasValue)
+                        RequireKnownCountStableDuringTraversal(edges, knownCount.Value);
                     if (edge == null)
                         throw new ArgumentException("Rate reference graph contains a null edge at index " + index + ".", nameof(edges));
                     var key = edge.SourceRateCode + "\u001f" + ((int)edge.TargetKind) + "\u001f" + edge.TargetId;
@@ -263,6 +265,11 @@ namespace QS3D.Core.Cost
                         index,
                         "Build-up analysis rate collection");
                     var rate = rateEnumerator.Current;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        rates,
+                        hasKnownRateCount,
+                        knownRateCount,
+                        "Build-up analysis rate collection");
                     if (rate == null)
                         throw new ArgumentException("Build-up analysis contains a null rate at index " + index + ".", nameof(rates));
                     if (!ids.Add(rate.RateCode))
@@ -468,6 +475,11 @@ namespace QS3D.Core.Cost
                         index,
                         "Trade analysis item collection");
                     var item = itemEnumerator.Current;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        items,
+                        hasKnownItemCount,
+                        knownItemCount,
+                        "Trade analysis item collection");
                     if (item == null)
                         throw new ArgumentException("Trade analysis contains a null item at index " + index + ".", nameof(items));
                     if (!ids.Add(item.ItemCode))
@@ -663,6 +675,11 @@ namespace QS3D.Core.Cost
                         index,
                         "BQ library entry collection");
                     var entry = entryEnumerator.Current;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        entries,
+                        hasKnownEntryCount,
+                        knownEntryCount,
+                        "BQ library entry collection");
                     if (entry == null)
                         throw new ArgumentException("BQ library contains a null entry at index " + index + ".", nameof(entries));
                     if (!ids.Add(entry.ItemCode))
@@ -717,6 +734,11 @@ namespace QS3D.Core.Cost
                         index,
                         "BQ project import collection");
                     var entry = projectEntryEnumerator.Current;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        projectEntries,
+                        hasKnownProjectEntryCount,
+                        knownProjectEntryCount,
+                        "BQ project import collection");
                     if (entry == null)
                         throw new ArgumentException("Project import contains a null BQ entry at index " + index + ".", nameof(projectEntries));
                     if (!incomingIds.Add(entry.ItemCode))

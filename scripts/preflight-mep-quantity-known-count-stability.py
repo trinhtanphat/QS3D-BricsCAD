@@ -21,6 +21,7 @@ if SOURCE.is_file():
         "if (!enumerator.MoveNext())",
         "if (index >= knownCount)",
         "var element = enumerator.Current;",
+        "if (element == null)",
         "if (hasKnownCount && index != knownCount)",
         "private static void EnsureKnownCountStable",
         "var hasCurrentKnownCount = TryGetKnownCount(elements, out var currentKnownCount);",
@@ -37,13 +38,15 @@ if SOURCE.is_file():
     move_next = source.find("if (!enumerator.MoveNext())", loop)
     second_rebind = source.find("EnsureKnownCountStable(elements, knownCount);", first_rebind + 1)
     current = source.find("var element = enumerator.Current;", loop)
+    third_rebind = source.find("EnsureKnownCountStable(elements, knownCount);", current)
+    null_acceptance = source.find("if (element == null)", current)
     final_mismatch = source.find("if (hasKnownCount && index != knownCount)")
     final_rebind = source.find("EnsureKnownCountStable(elements, knownCount);", final_mismatch)
     publication = source.find("var result = new List<MepQuantityGroup>(builders.Count);")
-    if min(initial, loop, first_rebind, move_next, second_rebind, current, final_mismatch, final_rebind, publication) < 0 or not (
-        initial < loop < first_rebind < move_next < second_rebind < current < final_mismatch < final_rebind < publication
+    if min(initial, loop, first_rebind, move_next, second_rebind, current, third_rebind, null_acceptance, final_mismatch, final_rebind, publication) < 0 or not (
+        initial < loop < first_rebind < move_next < second_rebind < current < third_rebind < null_acceptance < final_mismatch < final_rebind < publication
     ):
-        errors.append("MEP quantity aggregation must bind Count before and after each MoveNext before Current, then rebind before publication")
+        errors.append("MEP quantity aggregation must bind Count before/after MoveNext and immediately after Current before returned-item acceptance, then rebind before publication")
 
 if SMOKE.is_file():
     smoke = SMOKE.read_text(encoding="utf-8")
@@ -57,8 +60,8 @@ if SMOKE.is_file():
         '"conflicting known counts"',
         '"negative known count"',
         "StreamingOversizeStopsAtFirstDisallowedElement();",
-        "Equal(7, source.CountReads",
         "Equal(9, source.CountReads",
+        "Equal(12, source.CountReads",
     ):
         if token not in smoke:
             errors.append("MEP quantity smoke missing Count-stability assertion/control: " + token)
@@ -69,9 +72,13 @@ if MID_SMOKE.is_file():
         "CountDriftBeforeMoveNextFailsBeforeAdvancement();",
         "CountDriftAfterMoveNextFailsBeforeCurrent();",
         "TransientCountDriftCannotRestoreBeforePublication();",
+        "CountDriftFromCurrentFailsBeforeNullAcceptance();",
+        "CountDriftsFromCurrent",
+        "ReadCurrent",
         "CurrentReads",
         "MoveNextCalls",
         '"known count changed during traversal"',
+        '"MEP Current-induced Count drift must win over ordinary returned-item validation."',
     ):
         if token not in smoke:
             errors.append("MEP quantity mid-traversal smoke missing assertion/control: " + token)
@@ -83,4 +90,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: MEP quantity aggregation binds deterministic Count evidence around every caller-controlled advancement and before publication.")
+print("PASS: MEP quantity aggregation rebinds deterministic Count evidence around advancement and immediately after Current before item acceptance/publication.")

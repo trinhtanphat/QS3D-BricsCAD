@@ -15,7 +15,6 @@ if ($Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw "Reposito
 if ($ReleaseId -lt 0) { throw 'ReleaseId must be zero or positive.' }
 if ($ReleaseTag -notmatch '^v[0-9A-Za-z.+-]+$') { throw "Unexpected V25 release tag: $ReleaseTag" }
 if ($WorkflowSha -notmatch '^[0-9a-fA-F]{40}$') { throw 'WorkflowSha must be a full 40-hex commit SHA.' }
-if (-not $TagCreatedByThisRun) { throw 'Rollback requires positive proof that this workflow run created the exact release tag ref.' }
 if ([string]::IsNullOrWhiteSpace($Token)) { throw 'GitHub token is required for bounded draft rollback.' }
 
 $headers = @{
@@ -27,15 +26,10 @@ $headers = @{
 
 function Test-GitHubNotFound {
     param([Parameter(Mandatory = $true)]$ErrorRecord)
-
     $response = $ErrorRecord.Exception.Response
     if ($null -eq $response) { return $false }
-    try {
-        return ([int]$response.StatusCode -eq 404)
-    }
-    catch {
-        return $false
-    }
+    try { return ([int]$response.StatusCode -eq 404) }
+    catch { return $false }
 }
 
 function Resolve-ExactRemoteTagSha {
@@ -73,15 +67,9 @@ function Assert-NoReleaseOwnsTag {
 }
 
 function Assert-DraftDeleteCommittedAfterError {
-    param(
-        [Parameter(Mandatory = $true)]$DeleteError,
-        [Parameter(Mandatory = $true)][string]$ReleaseUri
-    )
-
+    param([Parameter(Mandatory = $true)]$DeleteError, [Parameter(Mandatory = $true)][string]$ReleaseUri)
     $remainingRelease = $null
-    try {
-        $remainingRelease = Invoke-RestMethod -Method Get -Uri $ReleaseUri -Headers $headers
-    }
+    try { $remainingRelease = Invoke-RestMethod -Method Get -Uri $ReleaseUri -Headers $headers }
     catch {
         if (Test-GitHubNotFound -ErrorRecord $_) {
             Write-Host "V25 draft DELETE acknowledgement was ambiguous, but the exact release is authoritatively absent; treating draft deletion as committed."
@@ -89,32 +77,17 @@ function Assert-DraftDeleteCommittedAfterError {
         }
         throw "Unable to reconcile V25 draft DELETE acknowledgement. Delete error: $($DeleteError.Exception.Message) Reconciliation error: $($_.Exception.Message)"
     }
-
-    if ($null -eq $remainingRelease -or [long]$remainingRelease.id -ne $ReleaseId) {
-        throw "V25 draft DELETE reconciliation returned a mismatched release identity; refusing to assume deletion."
-    }
-    if (-not [string]::Equals([string]$remainingRelease.url, $ReleaseUri, [StringComparison]::Ordinal)) {
-        throw "V25 draft DELETE reconciliation returned a mismatched repository identity; refusing to assume deletion."
-    }
-    if ($remainingRelease.draft -ne $true) {
-        throw "V25 draft DELETE reconciliation found release $ReleaseId but it is no longer an owned draft; refusing to assume deletion."
-    }
-    if (-not [string]::Equals([string]$remainingRelease.tag_name, $ReleaseTag, [StringComparison]::Ordinal)) {
-        throw "V25 draft DELETE reconciliation found a mismatched release tag; refusing to assume deletion."
-    }
+    if ($null -eq $remainingRelease -or [long]$remainingRelease.id -ne $ReleaseId) { throw "V25 draft DELETE reconciliation returned a mismatched release identity; refusing to assume deletion." }
+    if (-not [string]::Equals([string]$remainingRelease.url, $ReleaseUri, [StringComparison]::Ordinal)) { throw "V25 draft DELETE reconciliation returned a mismatched repository identity; refusing to assume deletion." }
+    if ($remainingRelease.draft -ne $true) { throw "V25 draft DELETE reconciliation found release $ReleaseId but it is no longer an owned draft; refusing to assume deletion." }
+    if (-not [string]::Equals([string]$remainingRelease.tag_name, $ReleaseTag, [StringComparison]::Ordinal)) { throw "V25 draft DELETE reconciliation found a mismatched release tag; refusing to assume deletion." }
     throw "Exact owned V25 draft $ReleaseId still exists after DELETE error; refusing to assume deletion. Original error: $($DeleteError.Exception.Message)"
 }
 
 function Assert-TagDeleteCommittedAfterError {
-    param(
-        [Parameter(Mandatory = $true)]$DeleteError,
-        [Parameter(Mandatory = $true)][string]$TagGetUri
-    )
-
+    param([Parameter(Mandatory = $true)]$DeleteError, [Parameter(Mandatory = $true)][string]$TagGetUri)
     $remainingTag = $null
-    try {
-        $remainingTag = Invoke-RestMethod -Method Get -Uri $TagGetUri -Headers $headers
-    }
+    try { $remainingTag = Invoke-RestMethod -Method Get -Uri $TagGetUri -Headers $headers }
     catch {
         if (Test-GitHubNotFound -ErrorRecord $_) {
             Write-Host "V25 tag DELETE acknowledgement was ambiguous, but the exact tag is authoritatively absent; treating tag deletion as committed."
@@ -122,21 +95,14 @@ function Assert-TagDeleteCommittedAfterError {
         }
         throw "Unable to reconcile V25 tag DELETE acknowledgement. Delete error: $($DeleteError.Exception.Message) Reconciliation error: $($_.Exception.Message)"
     }
-
     $expectedRef = "refs/tags/$ReleaseTag"
-    if ($null -eq $remainingTag -or -not [string]::Equals([string]$remainingTag.ref, $expectedRef, [StringComparison]::Ordinal)) {
-        throw "V25 tag DELETE reconciliation returned a mismatched ref identity; refusing to assume deletion."
-    }
-    if ($null -eq $remainingTag.object -or -not [string]::Equals([string]$remainingTag.object.sha, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "V25 tag DELETE reconciliation found a moved or ambiguous tag identity; refusing to assume deletion."
-    }
+    if ($null -eq $remainingTag -or -not [string]::Equals([string]$remainingTag.ref, $expectedRef, [StringComparison]::Ordinal)) { throw "V25 tag DELETE reconciliation returned a mismatched ref identity; refusing to assume deletion." }
+    if ($null -eq $remainingTag.object -or -not [string]::Equals([string]$remainingTag.object.sha, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase)) { throw "V25 tag DELETE reconciliation found a moved or ambiguous tag identity; refusing to assume deletion." }
     throw "Exact owned V25 tag $ReleaseTag still exists after DELETE error; refusing to assume deletion. Original error: $($DeleteError.Exception.Message)"
 }
 
 $resolvedBefore = Resolve-ExactRemoteTagSha
-if (-not [string]::Equals($resolvedBefore, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase)) {
-    throw "Remote tag $ReleaseTag moved to $resolvedBefore; refusing destructive rollback."
-}
+if (-not [string]::Equals($resolvedBefore, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase)) { throw "Remote tag $ReleaseTag moved to $resolvedBefore; refusing destructive rollback." }
 
 if ($ReleaseId -gt 0) {
     $releaseUri = "https://api.github.com/repos/$Repository/releases/$ReleaseId"
@@ -145,30 +111,36 @@ if ($ReleaseId -gt 0) {
     if (-not [string]::Equals([string]$release.url, $releaseUri, [StringComparison]::Ordinal)) { throw "Release repository identity mismatch for $ReleaseId; refusing destructive rollback." }
     if ($release.draft -ne $true) { throw "Release $ReleaseId is not a draft; refusing destructive rollback." }
     if (-not [string]::Equals([string]$release.tag_name, $ReleaseTag, [StringComparison]::Ordinal)) { throw "Release $ReleaseId tag mismatch; refusing destructive rollback." }
-    try {
-        Invoke-RestMethod -Method Delete -Uri $releaseUri -Headers $headers | Out-Null
-    }
-    catch {
-        Assert-DraftDeleteCommittedAfterError -DeleteError $_ -ReleaseUri $releaseUri
-    }
+    try { Invoke-RestMethod -Method Delete -Uri $releaseUri -Headers $headers | Out-Null }
+    catch { Assert-DraftDeleteCommittedAfterError -DeleteError $_ -ReleaseUri $releaseUri }
 }
 
+# Even when the tag is not deletion-owned, an ambiguous draft POST may have committed without an id.
+# Exhaustive release enumeration therefore precedes the tag-ownership branch and fails closed on any survivor.
 Assert-NoReleaseOwnsTag
 
-$resolvedAfter = Resolve-ExactRemoteTagSha
-if (-not [string]::Equals($resolvedAfter, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase)) {
-    throw "Remote tag $ReleaseTag changed during rollback; refusing tag deletion."
+if (-not $TagCreatedByThisRun) {
+    $resolvedPreserved = Resolve-ExactRemoteTagSha
+    if (-not [string]::Equals($resolvedPreserved, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase)) { throw "Non-owned V25 release tag $ReleaseTag changed during draft rollback; refusing to claim restart safety." }
+    Write-Host "Preserving exact V25 tag $ReleaseTag because this run lacks positive tag-creation ownership proof."
+    return [pscustomobject]@{
+        ReleaseId = $ReleaseId
+        ReleaseTag = $ReleaseTag
+        WorkflowSha = $WorkflowSha.ToLowerInvariant()
+        TagCreatedByThisRun = $false
+        DraftDeleted = ($ReleaseId -gt 0)
+        TagDeleted = $false
+    }
 }
+
+$resolvedAfter = Resolve-ExactRemoteTagSha
+if (-not [string]::Equals($resolvedAfter, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase)) { throw "Remote tag $ReleaseTag changed during rollback; refusing tag deletion." }
 
 $escapedReleaseTag = [Uri]::EscapeDataString($ReleaseTag)
 $tagRefUri = "https://api.github.com/repos/$Repository/git/refs/tags/$escapedReleaseTag"
 $tagGetUri = "https://api.github.com/repos/$Repository/git/ref/tags/$escapedReleaseTag"
-try {
-    Invoke-RestMethod -Method Delete -Uri $tagRefUri -Headers $headers | Out-Null
-}
-catch {
-    Assert-TagDeleteCommittedAfterError -DeleteError $_ -TagGetUri $tagGetUri
-}
+try { Invoke-RestMethod -Method Delete -Uri $tagRefUri -Headers $headers | Out-Null }
+catch { Assert-TagDeleteCommittedAfterError -DeleteError $_ -TagGetUri $tagGetUri }
 
 [pscustomobject]@{
     ReleaseId = $ReleaseId

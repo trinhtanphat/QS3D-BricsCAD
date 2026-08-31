@@ -25,85 +25,40 @@ namespace QS3D.BricsCAD.V25
                 throw;
             }
 
-            try
-            {
-                McpDiagnosticHub.Start();
-            }
-            catch (Exception ex)
-            {
-                ReportOptionalStartupFailure("diagnostics bridge", ex);
-            }
+            try { McpDiagnosticHub.Start(); }
+            catch (Exception ex) { ReportOptionalStartupFailure("diagnostics bridge", ex); }
 
-            try
-            {
-                McpPopupObserver.Start();
-            }
-            catch (Exception ex)
-            {
-                ReportOptionalStartupFailure("popup notification observer", ex);
-            }
+            try { McpPopupObserver.Start(); }
+            catch (Exception ex) { ReportOptionalStartupFailure("popup notification observer", ex); }
 
-            try
-            {
-                Qs3dThemeCoordinator.Start();
-            }
-            catch (Exception ex)
-            {
-                ReportOptionalStartupFailure("host-wide theme coordinator", ex);
-            }
+            try { Qs3dThemeCoordinator.Start(); }
+            catch (Exception ex) { ReportOptionalStartupFailure("host-wide theme coordinator", ex); }
 
             try
             {
                 McpEmbeddedServer.Start();
+                McpEmbeddedServerWatchdog.Start();
             }
-            catch (Exception ex)
-            {
-                ReportOptionalStartupFailure("MCP server", ex);
-            }
+            catch (Exception ex) { ReportOptionalStartupFailure("MCP server", ex); }
 
             try
             {
-                // Provider-browser login + persistent Named Tunnel is the normal production path.
-                // Quick/static-bearer modes stay explicit Advanced/test fallbacks in Agent Center.
-                McpCloudflareAccountTunnelManager.TryAutoStart();
+                McpTransportAgentCenterAugmenter.Start();
+                McpTransportCoordinator.TryAutoStartPreferred();
                 McpPublicEndpointResolver.Resolve();
             }
-            catch (Exception ex)
-            {
-                ReportOptionalStartupFailure("MCP Cloudflare tunnel", ex);
-            }
+            catch (Exception ex) { ReportOptionalStartupFailure("MCP transport", ex); }
 
-            try
-            {
-                McpProjectRecoveryService.Start();
-            }
-            catch (Exception ex)
-            {
-                ReportOptionalStartupFailure("MCP recovery service", ex);
-            }
+            try { McpProjectRecoveryService.Start(); }
+            catch (Exception ex) { ReportOptionalStartupFailure("MCP recovery service", ex); }
 
-            try
-            {
-                McpFirstRunExperience.Start();
-            }
-            catch (Exception ex)
-            {
-                ReportOptionalStartupFailure("MCP onboarding experience", ex);
-            }
+            try { McpFirstRunExperience.Start(); }
+            catch (Exception ex) { ReportOptionalStartupFailure("MCP onboarding experience", ex); }
 
-            try
-            {
-                QuantityContextMenuCoordinator.Start();
-            }
-            catch (Exception ex)
-            {
-                ReportOptionalStartupFailure("Quantity context menu", ex);
-            }
+            try { QuantityContextMenuCoordinator.Start(); }
+            catch (Exception ex) { ReportOptionalStartupFailure("Quantity context menu", ex); }
 
-            try
-            {
-                UpdateBootstrapper.Start();
-            }
+            try { UpdateBootstrapper.Start(); }
             catch (Exception ex)
             {
                 ReportOptionalStartupFailure("Update service", ex);
@@ -117,14 +72,13 @@ namespace QS3D.BricsCAD.V25
 
         private static void TeardownHostServices()
         {
-            // Revoke desktop-wide consent before stopping network services so no injected input
-            // can outlive the BricsCAD/QS3D host lifecycle.
             TryCleanup(McpDesktopControlSession.Shutdown);
             TryCleanup(McpPopupObserver.Stop);
             TryCleanup(McpFirstRunExperience.Stop);
             TryCleanup(McpProjectRecoveryService.Stop);
-            TryCleanup(McpCloudflareAccountTunnelManager.StopForHostShutdown);
-            TryCleanup(McpCloudflareTunnelManager.StopForHostShutdown);
+            TryCleanup(McpTransportAgentCenterAugmenter.Stop);
+            TryCleanup(McpTransportCoordinator.StopAllForHostShutdown);
+            TryCleanup(McpEmbeddedServerWatchdog.Stop);
             TryCleanup(McpEmbeddedServer.Stop);
             TryCleanup(UpdateBootstrapper.Stop);
             TryCleanup(QuantityContextMenuCoordinator.Stop);
@@ -147,22 +101,14 @@ namespace QS3D.BricsCAD.V25
         private static void TryCleanup(Action cleanup)
         {
             try { cleanup(); }
-            catch
-            {
-                // BricsCAD may already be tearing native UI/document services down.
-                // One cleanup failure must never strand the remaining host services.
-            }
+            catch { }
         }
 
         private static void ReportOptionalStartupFailure(string component, Exception error)
         {
             try
             {
-                McpDiagnosticHub.Record(
-                    "qs3d",
-                    "warning",
-                    "startup-warning",
-                    component + ": " + error.Message,
+                McpDiagnosticHub.Record("qs3d", "warning", "startup-warning", component + ": " + error.Message,
                     Application.DocumentManager.MdiActiveDocument);
             }
             catch { }
@@ -173,10 +119,7 @@ namespace QS3D.BricsCAD.V25
                     "\nQS3D " + component + " startup warning: " + error.Message +
                     " Core CAD commands remain available; restart BricsCAD before release qualification.");
             }
-            catch
-            {
-                // Startup diagnostics must never turn an optional service failure into a load failure.
-            }
+            catch { }
         }
     }
 }

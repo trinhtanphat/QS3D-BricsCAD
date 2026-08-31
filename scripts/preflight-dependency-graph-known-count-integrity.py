@@ -17,7 +17,7 @@ required_source = (
     'RejectKnownOversizedInput(elements, "Dependency graph rebuild", out var knownCountSources)',
     'RejectKnownOversizedInput(elements, "Dependency ordering", out var knownCountSources)',
     'using (var enumerator = elements.GetEnumerator())',
-    'while (enumerator.MoveNext())',
+    'while (true)',
     'RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency graph rebuild");',
     'RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency ordering");',
     'currentKnownCountSources != initialKnownCountSources',
@@ -26,18 +26,43 @@ missing = [token for token in required_source if token not in source]
 if missing:
     raise SystemExit("Dependency Count-integrity source contract missing: " + repr(missing))
 
-rebuild_guard = source.index('RequireTraversalCapacity(knownCount, elementCount, "Dependency graph rebuild");')
-rebuild_current = source.index("var element = enumerator.Current;", rebuild_guard)
-if rebuild_guard > rebuild_current:
-    raise SystemExit("Dependency rebuild known-Count guard must execute before IEnumerator.Current.")
-
-ordering_guard = source.index('RequireTraversalCapacity(knownCount, materialized.Count, "Dependency ordering");')
-ordering_current = source.index("var element = enumerator.Current;", ordering_guard)
-if ordering_guard > ordering_current:
-    raise SystemExit("Dependency ordering known-Count guard must execute before IEnumerator.Current.")
-
+if "while (enumerator.MoveNext())" in source:
+    raise SystemExit("Dependency traversal must rebind known Count before caller-controlled MoveNext.")
 if "foreach (var element in elements)" in source:
     raise SystemExit("Caller-controlled dependency traversal must not regress to foreach.")
+
+
+def require_explicit_traversal(method_start, method_end, label, count_expression):
+    start = source.index(method_start)
+    end = source.index(method_end, start + len(method_start))
+    method = source[start:end]
+    stable = 'RequireStableKnownCount(elements, knownCount, knownCountSources, "' + label + '");'
+    move = method.index("if (!enumerator.MoveNext())")
+    pre = method.rfind(stable, 0, move)
+    termination = method.index(stable, move + 1)
+    capacity = method.index('RequireTraversalCapacity(knownCount, ' + count_expression + ', "' + label + '");', move + 1)
+    post = method.rfind(stable, move + 1, capacity)
+    current = method.index("var element = enumerator.Current;", capacity)
+    final = method.rfind(stable)
+
+    if pre < 0 or not (pre < move < post < capacity < current):
+        raise SystemExit(label + " must preserve Count rebound -> MoveNext -> Count rebound -> capacity -> Current ordering.")
+    if termination <= move or termination >= method.index("break;", move):
+        raise SystemExit(label + " must rebind known Count on terminating MoveNext before leaving enumeration.")
+    if final <= current:
+        raise SystemExit(label + " must preserve a final known-Count rebound after traversal.")
+
+
+require_explicit_traversal(
+    "public void Rebuild",
+    "public bool TryGetElement",
+    "Dependency graph rebuild",
+    "elementCount")
+require_explicit_traversal(
+    "public IReadOnlyList<ProjectElement> TopologicalDirtyOrder",
+    "private static OrderingSnapshot CaptureOrderingSnapshot",
+    "Dependency ordering",
+    "materialized.Count")
 
 required_smoke = (
     "[ModuleInitializer]",

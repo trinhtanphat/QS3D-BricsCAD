@@ -48,8 +48,15 @@ namespace QS3D.Core.Services
             var elementCount = 0;
             using (var enumerator = elements.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency graph rebuild");
+                    if (!enumerator.MoveNext())
+                    {
+                        RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency graph rebuild");
+                        break;
+                    }
+                    RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency graph rebuild");
                     RequireTraversalCapacity(knownCount, elementCount, "Dependency graph rebuild");
                     if (elementCount >= MaxElementInputCount)
                         throw new InvalidOperationException("Dependency graph rebuild exceeds the supported " + MaxElementInputCount + " element limit.");
@@ -160,8 +167,15 @@ namespace QS3D.Core.Services
             var snapshots = new List<OrderingSnapshot>();
             using (var enumerator = elements.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency ordering");
+                    if (!enumerator.MoveNext())
+                    {
+                        RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency ordering");
+                        break;
+                    }
+                    RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency ordering");
                     RequireTraversalCapacity(knownCount, materialized.Count, "Dependency ordering");
                     if (materialized.Count >= MaxElementInputCount)
                         throw new InvalidOperationException("Dependency ordering exceeds the supported " + MaxElementInputCount + " element limit.");

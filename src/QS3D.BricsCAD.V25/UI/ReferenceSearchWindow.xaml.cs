@@ -12,10 +12,12 @@ namespace QS3D.BricsCAD.V25.UI
     {
         private const int MaxQueryLength = 512;
         private readonly Document _document;
+        private readonly IntPtr _nativeDatabaseIdentity;
 
         public ReferenceSearchWindow(Document document)
         {
             _document = document ?? throw new ArgumentNullException(nameof(document));
+            _nativeDatabaseIdentity = GetNativeDatabaseIdentity(_document);
             InitializeComponent();
             DocumentBoundWindowLifetime.Attach(this, _document);
             Loaded += (_, __) =>
@@ -24,6 +26,13 @@ namespace QS3D.BricsCAD.V25.UI
                 QueryBox.Focus();
                 QueryBox.SelectAll();
             };
+        }
+
+        internal bool IsBoundTo(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            return nativeDatabaseIdentity != IntPtr.Zero
+                && _nativeDatabaseIdentity == nativeDatabaseIdentity
+                && ReferenceEquals(_document, document);
         }
 
         private void OnSearchClick(object sender, RoutedEventArgs e)
@@ -74,8 +83,13 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void EnsureActive()
         {
-            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+            var active = Application.DocumentManager.MdiActiveDocument;
+            if (!ReferenceEquals(active, _document))
                 throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Tham khảo thi công trước khi mở kết quả.");
+
+            var activeIdentity = GetNativeDatabaseIdentity(active);
+            if (activeIdentity != _nativeDatabaseIdentity)
+                throw new InvalidOperationException("Bản vẽ Tham khảo thi công đã đổi native database; hãy đóng cửa sổ và mở lại từ bản vẽ hiện tại.");
         }
 
         private static string NormalizeQuery(string? raw)
@@ -149,6 +163,18 @@ namespace QS3D.BricsCAD.V25.UI
             if (string.IsNullOrWhiteSpace(name)) return "Bản vẽ chưa lưu";
             try { return System.IO.Path.GetFileName(name); }
             catch { return name; }
+        }
+
+        private static IntPtr GetNativeDatabaseIdentity(Document document)
+        {
+            var database = document.Database;
+            if (database == null)
+                throw new InvalidOperationException("Reference Search requires a BricsCAD document database.");
+
+            var identity = database.UnmanagedObject;
+            if (identity == IntPtr.Zero)
+                throw new InvalidOperationException("Reference Search requires a live native BricsCAD database.");
+            return identity;
         }
 
         private void SetStatus(string text)
