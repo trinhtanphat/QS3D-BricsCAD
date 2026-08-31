@@ -7,6 +7,7 @@ SRC = ROOT / "src" / "QS3D.BricsCAD.V25"
 OPENAI = SRC / "McpOpenAiSecureTunnel.cs"
 CENTER = SRC / "McpAgentControlCenter.cs"
 BOOTSTRAP = SRC / "McpCloudflaredBootstrapper.cs"
+CLOUDFLARE_FALLBACK = SRC / "McpCloudflareOnboarding.cs"
 FIRST_RUN = SRC / "McpFirstRunExperience.cs"
 V25_ENTRY = SRC / "PluginEntry.cs"
 V26_ENTRY = ROOT / "src" / "QS3D.BricsCAD.V26" / "PluginEntry.cs"
@@ -25,7 +26,7 @@ def forbid(text: str, token: str, label: str, errors: list[str]) -> None:
 
 def main() -> int:
     errors: list[str] = []
-    for path in (OPENAI, CENTER, BOOTSTRAP, FIRST_RUN, V25_ENTRY, V26_ENTRY, DOC):
+    for path in (OPENAI, CENTER, BOOTSTRAP, CLOUDFLARE_FALLBACK, FIRST_RUN, V25_ENTRY, V26_ENTRY, DOC):
         if not path.is_file():
             errors.append(f"missing file: {path.relative_to(ROOT)}")
     if errors:
@@ -36,6 +37,7 @@ def main() -> int:
     openai = OPENAI.read_text(encoding="utf-8")
     center = CENTER.read_text(encoding="utf-8")
     bootstrap = BOOTSTRAP.read_text(encoding="utf-8")
+    cloudflare_fallback = CLOUDFLARE_FALLBACK.read_text(encoding="utf-8")
     first_run = FIRST_RUN.read_text(encoding="utf-8")
     v25 = V25_ENTRY.read_text(encoding="utf-8")
     v26 = V26_ENTRY.read_text(encoding="utf-8")
@@ -62,6 +64,18 @@ def main() -> int:
         'UseShellExecute = false': "non-shell tunnel-client launch",
         'WriteText(AutoStartFile, "1")': "non-secret auto-start metadata",
         'if (previous != provider) ForgetChatGptRegistrationAcknowledgement();': "idempotent provider selection registration preservation",
+        'QS3D_OPENAI_TUNNEL_CLIENT_SHA256': "pinned unsigned-release SHA-256 fallback",
+        'TryVerifyClientTrust': "pre-launch tunnel-client trust verification",
+        'VerifyAuthenticode': "tunnel-client Authenticode verification",
+        'WinVerifyTrust': "OS trust-provider verification",
+        'ComputeSha256': "tunnel-client SHA-256 verification",
+        'RedirectStandardOutput = true': "tunnel-client stdout capture",
+        'RedirectStandardError = true': "tunnel-client stderr capture",
+        'HandleDiagnosticLine': "bounded tunnel-client diagnostic capture",
+        'MaxDiagnosticLines': "bounded tunnel-client diagnostic history",
+        'SanitizeDiagnosticLine': "tunnel-client diagnostic secret redaction",
+        'GetDiagnosticBundle': "copyable tunnel diagnostic bundle",
+        'LastExitCode': "tunnel-client exit-code diagnostics",
     }.items():
         need(openai, token, label, errors)
 
@@ -82,10 +96,38 @@ def main() -> int:
     for token, label in {
         'public static bool BeginInstall': "busy-aware installer return",
         'if (_installing) return false;': "single-flight installer guard",
-        'return true;': "installer started result",
+        'public static bool CancelInstall': "user cancellation",
+        'DownloadTimeoutMilliseconds = 120000': "bounded download timeout",
+        'ReadWriteTimeoutMilliseconds = 30000': "bounded download read/write timeout",
+        'DownloadFileAsync': "non-blocking cloudflared download",
+        'InstallProgressPercent': "download progress state",
+        'InstallStatus': "download status state",
+        'TryResolveTrustedInstalledBinary': "trusted installed-binary discovery",
+        '"WinGet"': "WinGet installation discovery",
+        'winget install --id Cloudflare.cloudflared': "WinGet recovery hint",
+        'VerifyCloudflareBinary': "cloudflared trust verification",
+        'WinVerifyTrust': "cloudflared OS trust verification",
+        'signer.IndexOf("Cloudflare"': "Cloudflare signer restriction",
+        'PublishInstallerUiState': "Agent Center installer UI refresh",
+        'button.IsEnabled = !busy': "installer button disabled while busy",
+        'EnsureDynamicCancelButton': "Agent Center cancel action",
+        'Đang cài Cloudflare... ': "visible install progress label",
+        'File.Move(temporary, destination)': "atomic managed install replacement",
     }.items():
         need(bootstrap, token, label, errors)
     forbid(bootstrap, 'completed(false, "Cloudflare Tunnel đang được tải/cài. Vui lòng chờ.")', "busy state reported as failure callback", errors)
+    forbid(bootstrap, 'client.DownloadFile(', "unbounded synchronous cloudflared download", errors)
+
+    for token, label in {
+        'TryResolveTrustedInstalledBinary': "trusted cloudflared launch resolution",
+        'Hủy cài Cloudflare Tunnel': "advanced installer cancel button",
+        '_installButton.IsEnabled = !busy': "advanced installer busy disable",
+        '_cancelInstallButton.IsEnabled = busy': "advanced cancel enable state",
+        'InstallProgressPercent': "advanced installer progress display",
+        'CancelCloudflaredInstall': "advanced cancellation action",
+        'cài bằng WinGet rồi Refresh': "trusted WinGet recovery guidance",
+    }.items():
+        need(cloudflare_fallback, token, label, errors)
 
     for token, label in {
         'McpTransportCoordinator.SelectedProvider': "selected-provider first-run routing",
@@ -108,21 +150,28 @@ def main() -> int:
         "Connection = Tunnel": "canonical ChatGPT tunnel onboarding",
         "Runtime API key": "canonical runtime-key guidance",
         "LOCAL_ONLY": "runtime qualification boundary",
+        "QS3D_OPENAI_TUNNEL_CLIENT_SHA256": "canonical unsigned tunnel-client hash pinning",
+        "winget install --id Cloudflare.cloudflared": "canonical WinGet recovery command",
+        "120 seconds": "canonical cloudflared download timeout",
+        "Cancel": "canonical installer cancellation contract",
+        "stdout/stderr": "canonical tunnel diagnostic capture",
+        "Authenticode": "canonical transport binary trust policy",
     }.items():
         need(doc, token, label, errors)
 
     # Secrets may enter only through process environment. They must never be serialized as values
-    # into QS3D-owned config/settings files.
+    # into QS3D-owned config/settings files or copied into the diagnostic bundle.
     forbid(openai, "WriteText(ControlPlaneApiKeyEnvironment", "persisted Runtime API key", errors)
     forbid(openai, "File.WriteAllText(ControlPlaneApiKeyEnvironment", "persisted Runtime API key", errors)
     forbid(openai, "WriteText(LocalBearerEnvironment", "persisted local bearer", errors)
+    forbid(openai, "builder.AppendLine(key", "Runtime API key copied into diagnostics", errors)
 
     if errors:
         for error in errors:
             print("ERROR:", error)
         return 1
 
-    print("PASS MCP transport providers / Secure Tunnel / Cloudflare busy-install / first-run contract")
+    print("PASS MCP transport providers / binary trust / bounded installer recovery / diagnostics / first-run contract")
     return 0
 
 
