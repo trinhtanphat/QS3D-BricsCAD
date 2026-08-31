@@ -106,7 +106,7 @@ namespace QS3D.Core.Agent
                     "QS3D_DOMAIN forbids native CAD mutations so business failures cannot silently degrade to approximate geometry.");
         }
 
-        public static McpToolFailure ClassifyFailure(string toolName, Exception exception)
+        public static McpToolFailure ClassifyFailure(string toolName, Exception? exception)
         {
             var contract = exception as McpToolContractException;
             if (contract != null)
@@ -186,14 +186,14 @@ namespace QS3D.Core.Agent
             return string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToUpperInvariant();
         }
 
-        private static bool IsArgumentFailure(Exception exception, string message)
+        private static bool IsArgumentFailure(Exception? exception, string message)
         {
             if (exception is ArgumentException || exception is FormatException || exception is OverflowException)
                 return true;
             return ContainsAny(message, "confirmMutation=true is required", "must be a finite number", "must be >", "must be >=", "is required and", "Only one QS3D command name", "invalid MCP");
         }
 
-        private static bool IsQs3dSourceBug(Exception exception, string message)
+        private static bool IsQs3dSourceBug(Exception? exception, string message)
         {
             if (exception is NullReferenceException || exception is IndexOutOfRangeException || exception is InvalidCastException)
                 return true;
