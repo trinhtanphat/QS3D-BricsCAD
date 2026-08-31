@@ -8,6 +8,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
+using QS3D.Core.Agent;
 
 namespace QS3D.BricsCAD.V25
 {
@@ -797,7 +798,10 @@ namespace QS3D.BricsCAD.V25
             var tools = new List<string>
             {
                 Tool("connector_info", "Return embedded MCP endpoint, protocol, public endpoint and automation state.", ""),
-                Tool("qs3d_status", "Read privacy-safe BricsCAD/QS3D host status.", ""),
+                Tool("mcp_status", "Return separated MCP, BricsCAD, CAD-direct, desktop and QS3D-domain capability state.", ""),
+                Tool("bricscad_status", "Read privacy-safe BricsCAD host/document status without QS3D business state.", ""),
+                Tool("qs3d_status", "Deprecated compatibility alias for QS3D domain-only status.", ""),
+                Tool("qs3d_domain_status", "Read QS3D business-domain health and context without CAD host fields.", ""),
                 Tool("cad_active_document", "Read privacy-safe active document identity without local filesystem path.", ""),
                 Tool("cad_selection", "Read current implied selection handles/types/layers.", ""),
                 Tool("cad_database_snapshot", "Read bounded ModelSpace entity snapshot.", "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":1000}"),
@@ -817,7 +821,8 @@ namespace QS3D.BricsCAD.V25
                 Tool("cad_layer", "Create layer or make layer current.", "\"action\":{\"type\":\"string\",\"enum\":[\"create\",\"set_current\"]},\"name\":{\"type\":\"string\",\"maxLength\":255}," + ConfirmProperty(), "action","name","confirmMutation"),
                 Tool("cad_command_catalog", "Return allowlisted native commands available to cad_command_sequence.", ""),
                 Tool("cad_command_sequence", "Run one allowlisted BricsCAD command with bounded newline-delimited prompt inputs.", "\"command\":{\"type\":\"string\",\"maxLength\":40},\"inputs\":{\"type\":\"string\",\"maxLength\":16000}," + ConfirmProperty(), "command","confirmMutation"),
-                Tool("qs3d_run_command", "Run one QS3D* command name.", "\"command\":{\"type\":\"string\",\"pattern\":\"^QS3D[A-Za-z0-9_]*$\",\"maxLength\":80}," + ConfirmProperty(), "command","confirmMutation"),
+                Tool("qs3d_run_command", "Run one QS3D* business command name.", "\"command\":{\"type\":\"string\",\"pattern\":\"^QS3D[A-Za-z0-9_]*$\",\"maxLength\":80}," + ConfirmProperty(), "command","confirmMutation"),
+                Tool("qs3d_place_single_footing", "Place the active QS3D Móng đơn Family at drawing x,y using active Floor semantics.", "\"x\":{\"type\":\"number\"},\"y\":{\"type\":\"number\"}," + ConfirmProperty(), "x","y","confirmMutation"),
                 Tool("cad_ui_click", "Click inside active BricsCAD-process window only.", "\"x\":{\"type\":\"integer\"},\"y\":{\"type\":\"integer\"},\"button\":{\"type\":\"string\",\"enum\":[\"left\",\"right\",\"middle\"]},\"count\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":3}," + ConfirmProperty(), "x","y","button","confirmMutation"),
                 Tool("cad_ui_type", "Type bounded Unicode text into active BricsCAD-process window only.", "\"text\":{\"type\":\"string\",\"maxLength\":8000},\"pressEnter\":{\"type\":\"boolean\"}," + ConfirmProperty(), "text","confirmMutation"),
                 Tool("cad_ui_key", "Press named key in active BricsCAD-process window only.", "\"key\":{\"type\":\"string\",\"maxLength\":16},\"ctrl\":{\"type\":\"boolean\"},\"alt\":{\"type\":\"boolean\"},\"shift\":{\"type\":\"boolean\"}," + ConfirmProperty(), "key","confirmMutation"),
@@ -857,7 +862,12 @@ namespace QS3D.BricsCAD.V25
                     return ScreenshotToolSuccess(runtimeResult);
                 return ToolSuccess(runtimeResult);
             }
-            catch (Exception ex) { return ToolError(ex.Message); }
+            catch (McpToolContractException ex) { return ToolError(ex.Code, McpToolCapabilityContract.LaneName(ex.Lane), ex.Message); }
+            catch (Exception ex)
+            {
+                var failure = McpToolCapabilityContract.ClassifyFailure(tool, ex);
+                return ToolError(failure.Code, McpToolCapabilityContract.LaneName(failure.Lane), failure.Message);
+            }
         }
 
         private static string ScreenshotToolSuccess(string jsonValue)
@@ -918,9 +928,27 @@ namespace QS3D.BricsCAD.V25
             return trimmed.Length >= 2 && trimmed[0] == '{' && trimmed[trimmed.Length - 1] == '}';
         }
 
-        private static string ToolError(string message)
+        private static string ToolError(string code, string lane, string message)
         {
-            return "{\"content\":[{\"type\":\"text\",\"text\":\"" + JsonEscape(message ?? "MCP tool failed.") + "\"}],\"isError\":true}";
+            var safeCode = string.IsNullOrWhiteSpace(code) ? McpToolCapabilityContract.ToolFailedCode : code;
+            var safeLane = string.IsNullOrWhiteSpace(lane) ? "unknown" : lane;
+            var safeMessage = string.IsNullOrWhiteSpace(message) ? "MCP tool failed." : message;
+            return "{\"content\":[{\"type\":\"text\",\"text\":\"" + JsonEscape(safeCode + ": " + safeMessage)
+                   + "\"}],\"structuredContent\":{\"error\":{\"code\":\"" + JsonEscape(safeCode)
+                   + "\",\"lane\":\"" + JsonEscape(safeLane) + "\",\"message\":\"" + JsonEscape(safeMessage)
+                   + "\"}},\"isError\":true}";
+        }
+
+        private static string ExecutionModeProperties()
+        {
+            return "\"executionMode\":{\"type\":\"string\",\"enum\":[\"AUTO\",\"CAD_DIRECT\",\"QS3D_DOMAIN\"]}"
+                   + ",\"execution_mode\":{\"type\":\"string\",\"enum\":[\"AUTO\",\"CAD_DIRECT\",\"QS3D_DOMAIN\"]}";
+        }
+
+        private static string MergeToolProperties(string properties)
+        {
+            var modes = ExecutionModeProperties();
+            return string.IsNullOrWhiteSpace(properties) ? modes : modes + "," + properties;
         }
 
         private static string Tool(string name, string description, string properties, params string[] required)
@@ -929,14 +957,29 @@ namespace QS3D.BricsCAD.V25
                 ? string.Empty
                 : ",\"required\":[\"" + string.Join("\",\"", required) + "\"]";
             return "{\"name\":\"" + JsonEscape(name) + "\",\"description\":\"" + JsonEscape(description)
-                   + "\",\"inputSchema\":{\"type\":\"object\",\"properties\":{" + (properties ?? string.Empty)
+                   + "\",\"inputSchema\":{\"type\":\"object\",\"properties\":{" + MergeToolProperties(properties)
                    + "},\"additionalProperties\":false" + requiredJson + "},\"annotations\":" + ToolAnnotations(name) + "}";
+        }
+
+        private static string WithExecutionModeProperties(string descriptor)
+        {
+            var raw = (descriptor ?? string.Empty).Trim();
+            if (!LooksLikeJsonObject(raw) || raw.IndexOf("\"executionMode\"", StringComparison.Ordinal) >= 0) return raw;
+            const string marker = "\"properties\":{";
+            var index = raw.IndexOf(marker, StringComparison.Ordinal);
+            if (index < 0) return raw;
+            var insertion = index + marker.Length;
+            var modes = ExecutionModeProperties();
+            var suffix = insertion < raw.Length && raw[insertion] == '}' ? modes : modes + ",";
+            return raw.Insert(insertion, suffix);
         }
 
         private static string WithToolAnnotations(string descriptor)
         {
             var raw = (descriptor ?? string.Empty).Trim();
-            if (!LooksLikeJsonObject(raw) || raw.IndexOf("\"annotations\"", StringComparison.Ordinal) >= 0) return raw;
+            if (!LooksLikeJsonObject(raw)) return raw;
+            raw = WithExecutionModeProperties(raw);
+            if (raw.IndexOf("\"annotations\"", StringComparison.Ordinal) >= 0) return raw;
             string name;
             try { name = McpTopLevelJson.ExtractString(raw, "name"); }
             catch (InvalidOperationException) { return raw; }
@@ -960,7 +1003,10 @@ namespace QS3D.BricsCAD.V25
             switch (name ?? string.Empty)
             {
                 case "connector_info":
+                case "mcp_status":
+                case "bricscad_status":
                 case "qs3d_status":
+                case "qs3d_domain_status":
                 case "cad_active_document":
                 case "cad_selection":
                 case "cad_database_snapshot":
@@ -991,6 +1037,7 @@ namespace QS3D.BricsCAD.V25
                 case "cad_entity_set_layer":
                 case "cad_command_sequence":
                 case "qs3d_run_command":
+                case "qs3d_place_single_footing":
                 case "cad_ui_click":
                 case "cad_ui_type":
                 case "cad_ui_key":
