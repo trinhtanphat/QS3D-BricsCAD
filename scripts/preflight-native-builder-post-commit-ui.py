@@ -41,12 +41,14 @@ else:
         "internal static class CadPostCommitUi",
         "public static void TryRegen(Document document, string operation)",
         "document.Editor.Regen();",
-        "catch (Exception ex)",
-        "viewport regen warning",
+        "catch (Exception)",
+        "viewport could not refresh.",
         "document.Editor.WriteMessage(",
     ):
         if token not in helper:
             errors.append("post-commit UI helper missing token: " + token)
+    if "ex.Message" in helper or ".Message" in helper:
+        errors.append("post-commit UI helper must not expose caught host/native exception detail")
     if "throw;" in helper or "throw new" in helper:
         errors.append("post-commit UI helper must never rethrow a viewport/warning failure")
     if helper.count("catch") < 2:
@@ -90,4 +92,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: native body builders commit ownership and project timestamp before CAD commit; viewport Regen is best-effort post-commit UI and cannot turn a durable model commit into a rollback path.")
+print("PASS: native body builders commit ownership and project timestamp before CAD commit; viewport Regen is best-effort stable-redacted post-commit UI and cannot turn a durable model commit into a rollback path.")

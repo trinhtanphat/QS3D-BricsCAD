@@ -12,12 +12,17 @@ for path in (SOURCE, SMOKE, RUNBOOK):
 
 source = SOURCE.read_text(encoding="utf-8")
 smoke = SMOKE.read_text(encoding="utf-8")
+materializer_start = source.index("        private static IReadOnlyList<string> MaterializeIdentityValues")
+materializer_end = source.index("    public static class XlsxHandleReader", materializer_start)
+materializer = source[materializer_start:materializer_end]
 
 required_source = (
     "MaximumIdentityValues = 16384",
     "MaterializeIdentityValues(handles, nameof(handles))",
     "MaterializeIdentityValues(elementIds, nameof(elementIds))",
-    "observed > MaximumIdentityValues",
+    "observed >= MaximumIdentityValues",
+    "ReadKnownCount(values, label)",
+    "RequireKnownCountStable(values, admittedCount, label)",
     "identity values",
     "StringComparer.OrdinalIgnoreCase",
 )
@@ -25,16 +30,22 @@ missing = [token for token in required_source if token not in source]
 if missing:
     raise SystemExit("Xlsx lookup bounded materialization source contract missing: " + repr(missing))
 
+if "foreach (var value in values)" in materializer:
+    raise SystemExit("Xlsx lookup identity materialization must not regress to unguarded foreach traversal.")
 legacy = "handles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly()"
 if legacy in source:
     raise SystemExit("Xlsx lookup must not use unbounded LINQ materialization for handles.")
 
 required_smoke = (
-    "HandlesRejectFirstOverBoundObservation",
-    "ElementIdsRejectFirstOverBoundObservation",
+    "KnownOverBoundRejectsBeforeEnumeration",
+    "KnownOverYieldRejectsBeforeUnexpectedCurrent",
+    "KnownUnderYieldRejectsAtTraversalEnd",
+    "HandlesRejectFirstStreamingOverBoundObservationBeforeCurrent",
+    "ElementIdsRejectFirstStreamingOverBoundObservationBeforeCurrent",
     "StableInputsPreserveCanonicalizationAndDeduplication",
     "MaximumIdentityValues + 1",
-    "CurrentReads",
+    "Equal(MaximumIdentityValues, source.CurrentReads, \"handles Current reads\")",
+    "Equal(MaximumIdentityValues, source.CurrentReads, \"element-id Current reads\")",
 )
 missing_smoke = [token for token in required_smoke if token not in smoke]
 if missing_smoke:
