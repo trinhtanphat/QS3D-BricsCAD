@@ -3,7 +3,6 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-HUB = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpDiagnosticHub.cs"
 RUNTIME = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpDirectDiagnosticsThemeRuntime.cs"
 
 
@@ -12,39 +11,33 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
-hub = HUB.read_text(encoding="utf-8")
 runtime = RUNTIME.read_text(encoding="utf-8")
 
-hub_requirements = {
-    "stream epoch state": "_streamEpoch",
-    "fresh generation identity": 'Guid.NewGuid().ToString("N")',
-    "epoch read surface": "StreamEpoch",
-    "epoch on persisted events": 'streamEpoch',
-}
-for label, token in hub_requirements.items():
-    if token not in hub:
-        fail(f"hub is missing {label}: {token}")
-
-runtime_requirements = {
+requirements = {
+    "privacy-safe generation identity": 'Guid.NewGuid().ToString("N")',
+    "stream epoch state": "StreamEpoch",
     "epoch-bound cursor input": 'afterStreamEpoch',
-    "current epoch binding": "McpDiagnosticHub.StreamEpoch",
     "cursor epoch validation": "RequireCursorEpoch",
     "explicit stale cursor reset": "cursorReset",
-    "batch epoch output": "streamEpoch",
-    "event epoch parser": "StreamEpochRegex",
+    "batch epoch output": 'streamEpoch',
+    "cursor object": 'cursor',
 }
-for label, token in runtime_requirements.items():
+for label, token in requirements.items():
     if token not in runtime:
         fail(f"direct diagnostics runtime is missing {label}: {token}")
 
 if 'afterSequence > 0' not in runtime or 'afterStreamEpoch' not in runtime:
     fail("nonzero numeric cursors must be fail-closed unless bound to an epoch")
+if "StringComparison.OrdinalIgnoreCase" not in runtime:
+    fail("cursor epoch comparison must be case-insensitive for canonical hex input")
 if "MaxWaitMilliseconds = 15000" not in runtime:
     fail("existing bounded diagnostics wait contract must remain 15 seconds")
 if "MaxScannedEventsPerFile = 50000" not in runtime:
     fail("existing bounded canonical diagnostics scan contract must remain")
 if "McpCadAgentRuntime.AuditFilePath" not in runtime or 'yield return path + ".1";' not in runtime:
     fail("diagnostics must stay limited to canonical current/rotated audit files")
+if 'latestSequence' not in runtime:
+    fail("existing latestSequence compatibility field must remain")
 
 for forbidden in (
     "Directory.GetFiles(",
