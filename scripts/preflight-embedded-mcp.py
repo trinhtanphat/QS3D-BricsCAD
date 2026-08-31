@@ -138,11 +138,11 @@ def main() -> int:
     require(coordinator, "McpRibbonCommandOverride.Reset()", errors, "ribbon override teardown")
 
     require(plugin, "McpEmbeddedServer.Start();", errors, "embedded MCP startup")
-    require(plugin, "McpCloudflareAccountTunnelManager.TryAutoStart();", errors, "browser-auth named-tunnel auto-start")
-    require(plugin, "TryCleanup(McpCloudflareAccountTunnelManager.StopForHostShutdown);", errors, "browser-auth tunnel teardown")
-    require(plugin, "TryCleanup(McpCloudflareTunnelManager.StopForHostShutdown);", errors, "quick/token tunnel teardown")
+    require(plugin, "McpTransportCoordinator.TryAutoStartPreferred();", errors, "preferred MCP transport auto-start")
+    require(plugin, "TryCleanup(McpTransportCoordinator.StopAllForHostShutdown);", errors, "provider-aware MCP transport teardown")
     require(plugin, "TryCleanup(McpEmbeddedServer.Stop);", errors, "embedded MCP teardown")
     require(plugin, 'ReportOptionalStartupFailure("MCP server", ex)', errors, "fail-soft MCP startup")
+    require(plugin, 'ReportOptionalStartupFailure("MCP transport", ex)', errors, "fail-soft MCP transport startup")
 
     for command in (
         "QS3DMCPSETTINGSHTTP", "QS3DMCPDOCSHTTP", "QS3DMCPCHECKHTTP", "QS3DAIDASHBOARDHTTP",
@@ -257,9 +257,9 @@ def main() -> int:
     print(
         "PASS: active modular MCP v2 provides bounded authenticated loopback transport with exact "
         "JSON media-type handling; McpCadAgentRuntime owns atomic CAD dispatch/mutation and "
-        "BricsCAD-confined recovery. Click-first verified Cloudflare onboarding, canonical HTTPS "
-        "/mcp resolution, Ribbon routing and sanitized local protocol controls remain wired while "
-        "the legacy monolith is excluded from V25/V26 compilation."
+        "BricsCAD-confined recovery. Provider-aware MCP transport startup/teardown, click-first "
+        "onboarding, canonical HTTPS /mcp resolution, Ribbon routing and sanitized local protocol "
+        "controls remain wired while the legacy monolith is excluded from V25/V26 compilation."
     )
     return 0
 
