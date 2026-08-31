@@ -12,6 +12,8 @@ namespace QS3D.Core.Export
 {
     public sealed class XlsxHandleLookupResult
     {
+        private const int MaximumIdentityValues = 16384;
+
         public XlsxHandleLookupResult(IEnumerable<string> handles, string drawingFingerprint, bool usesLegacyDecimalHandles)
             : this(handles, Array.Empty<string>(), drawingFingerprint, usesLegacyDecimalHandles, string.Empty, false, false)
         {
@@ -33,8 +35,8 @@ namespace QS3D.Core.Export
         {
             if (handles == null) throw new ArgumentNullException(nameof(handles));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
-            Handles = handles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
-            ElementIds = elementIds.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+            Handles = MaterializeIdentityValues(handles, nameof(handles));
+            ElementIds = MaterializeIdentityValues(elementIds, nameof(elementIds));
             DrawingFingerprint = (drawingFingerprint ?? string.Empty).Trim();
             UsesLegacyDecimalHandles = usesLegacyDecimalHandles;
             WorksheetName = (worksheetName ?? string.Empty).Trim();
@@ -49,6 +51,25 @@ namespace QS3D.Core.Export
         public string WorksheetName { get; }
         public bool IsModernSchema { get; }
         public bool IsEd2Detail { get; }
+
+        private static IReadOnlyList<string> MaterializeIdentityValues(IEnumerable<string> values, string label)
+        {
+            var result = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var observed = 0;
+            foreach (var value in values)
+            {
+                observed++;
+                if (observed > MaximumIdentityValues)
+                    throw new InvalidOperationException(
+                        "Xlsx handle lookup " + label + " exceeds the supported bound of " +
+                        MaximumIdentityValues + " identity values.");
+                if (string.IsNullOrWhiteSpace(value)) continue;
+                var canonical = value.Trim();
+                if (seen.Add(canonical)) result.Add(canonical);
+            }
+            return result.AsReadOnly();
+        }
     }
 
     public static class XlsxHandleReader
