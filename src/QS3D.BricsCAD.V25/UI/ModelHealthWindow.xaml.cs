@@ -13,6 +13,9 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class ModelHealthWindow : Window
     {
+        private const string LocateFailureMessage = "Không thể định vị Model Health. Hãy xác nhận đúng bản vẽ và thử lại.";
+        private const string FreshnessFailureReason = "Không thể xác nhận project hiện hành. Đóng cửa sổ và chạy lại Health.";
+
         private static ModelHealthWindow? _pendingPublication;
         private static ModelHealthWindow? _published;
 
@@ -182,9 +185,9 @@ namespace QS3D.BricsCAD.V25.UI
                 EnsureActiveAndCurrent();
                 _locate(issue);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                MessageBox.Show(this, "Không thể định vị Model Health: " + ex.Message, "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(this, LocateFailureMessage, "QS3D", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 
@@ -211,9 +214,9 @@ namespace QS3D.BricsCAD.V25.UI
                 if (MatchesSnapshot(current)) return;
                 MarkSnapshotStale("Semantic project đã thay đổi hoặc được reload kể từ lúc Health được tạo.");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                MarkSnapshotStale("Không thể xác nhận project hiện hành: " + ex.Message);
+                MarkSnapshotStale(FreshnessFailureReason);
             }
         }
 

@@ -7,6 +7,7 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class FamilyManagerCommands
     {
+        private static PublishedManager? _pending;
         private static PublishedManager? _published;
 
         private sealed class PublishedManager
@@ -59,65 +60,88 @@ namespace QS3D.BricsCAD.V25
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
 
-            FamilyManagerWindow? candidate = null;
+            PublishedManager? candidate = null;
             try
             {
                 ExistingProjectMutationContext.TryGet(document, out _);
 
+                var pending = _pending;
+                if (pending != null)
+                    CloseOwnerBeforeReplacement(pending, "pending");
+
                 var previous = _published;
                 if (previous != null)
                 {
-                    if (previous.Window.IsLoaded)
+                    if (previous.Window.IsLoaded &&
+                        previous.Matches(document) &&
+                        previous.MatchesManagedWrapper(document))
                     {
-                        if (previous.Matches(document) && previous.MatchesManagedWrapper(document))
-                        {
-                            try { previous.Window.Activate(); } catch { }
-                            try { PaletteCoordinator.SetStatus("Family Manager đã mở cho bản vẽ hiện hành."); } catch { }
-                            return;
-                        }
-
-                        try { previous.Window.Close(); }
-                        catch (Exception closeError)
-                        {
-                            throw new InvalidOperationException(
-                                "Không thể đóng Family Manager trước; không mở instance thứ hai.",
-                                closeError);
-                        }
-
-                        if (ReferenceEquals(_published, previous))
-                            throw new InvalidOperationException(
-                                "Family Manager trước vẫn đang mở; hãy hoàn tất cleanup/close trước khi mở manager hiện hành.");
+                        try { previous.Window.Activate(); } catch { }
+                        try { PaletteCoordinator.SetStatus("Family Manager đã mở cho bản vẽ hiện hành."); } catch { }
+                        return;
                     }
-                    else if (ReferenceEquals(_published, previous))
-                    {
-                        _published = null;
-                    }
+
+                    CloseOwnerBeforeReplacement(previous, "published");
                 }
 
-                candidate = new FamilyManagerWindow(document);
-                var publishedWindow = candidate;
-                var published = new PublishedManager(publishedWindow, document);
-                publishedWindow.Closed += (_, __) =>
+                var window = new FamilyManagerWindow(document);
+                var owner = new PublishedManager(window, document);
+                candidate = owner;
+                window.Closed += (_, __) =>
                 {
-                    if (ReferenceEquals(_published, published)) _published = null;
+                    if (ReferenceEquals(_pending, owner)) _pending = null;
+                    if (ReferenceEquals(_published, owner)) _published = null;
                 };
 
-                Application.ShowModelessWindow(IntPtr.Zero, publishedWindow, true);
-                _published = published;
+                _pending = owner;
+                Application.ShowModelessWindow(IntPtr.Zero, window, true);
+                if (!window.IsLoaded)
+                    throw new InvalidOperationException("Family Manager did not remain loaded after host publication.");
+                if (!ReferenceEquals(_pending, owner))
+                    throw new InvalidOperationException("Family Manager publication ownership changed unexpectedly.");
+
+                _pending = null;
+                _published = owner;
                 candidate = null;
                 try { PaletteCoordinator.SetStatus("Family Manager: CRUD • properties • inheritance-safe semantic assignment • khóa theo bản vẽ."); } catch { }
             }
             catch (Exception ex)
             {
-                if (candidate != null)
+                if (candidate != null && ReferenceEquals(_pending, candidate))
                 {
-                    try { candidate.Close(); } catch { }
+                    try { candidate.Window.Close(); } catch { }
                 }
 
-                var message = "QS3DFAMILIES lỗi: " + ex.Message;
+                var message = "QS3DFAMILIES không thể mở Family Manager (" + ex.GetType().Name + ").";
                 try { PaletteCoordinator.SetStatus(message); } catch { }
                 try { document.Editor.WriteMessage("\n" + message); } catch { }
             }
+        }
+
+        private static void CloseOwnerBeforeReplacement(PublishedManager owner, string state)
+        {
+            if (owner == null) throw new ArgumentNullException(nameof(owner));
+
+            if (!owner.Window.IsLoaded && string.Equals(state, "published", StringComparison.Ordinal))
+            {
+                if (ReferenceEquals(_published, owner)) _published = null;
+                return;
+            }
+
+            try
+            {
+                owner.Window.Close();
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    "Family Manager " + state + " cleanup failed; replacement was refused.",
+                    ex);
+            }
+
+            if (owner.Window.IsLoaded || ReferenceEquals(_pending, owner) || ReferenceEquals(_published, owner))
+                throw new InvalidOperationException(
+                    "Family Manager " + state + " owner did not reach terminal close; replacement was refused.");
         }
     }
 }

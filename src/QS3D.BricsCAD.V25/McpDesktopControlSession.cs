@@ -128,6 +128,15 @@ namespace QS3D.BricsCAD.V25
             StopSession(reason, true, false, "OFF");
         }
 
+        /// <summary>
+        /// Revokes desktop-wide reads/input while leaving API-first CAD/background automation alive.
+        /// This is the normal OFF path for the foreground-access toggle.
+        /// </summary>
+        public static void DisableForegroundAccessFromLocalUser(string reason)
+        {
+            StopSession(reason, false, false, "OFF");
+        }
+
         public static void RequireLocalConsent(string tool)
         {
             ExpireConsentIfIdle();

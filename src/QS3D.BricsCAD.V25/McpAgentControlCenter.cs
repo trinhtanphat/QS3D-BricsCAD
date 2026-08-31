@@ -30,7 +30,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 McpEmbeddedServer.EnsureStarted();
-                new McpAgentControlCenterWindow().ShowDialog();
+                new McpAgentControlCenterWindow().Show();
             }
             catch (Exception ex)
             {
