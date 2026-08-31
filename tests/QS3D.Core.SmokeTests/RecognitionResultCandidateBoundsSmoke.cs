@@ -32,8 +32,8 @@ namespace QS3D.Core.SmokeTests
             var observed = 0;
             Throws<InvalidOperationException>(() =>
                 new RecognitionResult(snapshot, new LyingCountReadOnlyList(() => observed++)));
-            if (observed != 10001)
-                throw new InvalidOperationException("RecognitionResult lazy candidate enumeration did not stop at the established rule-cap sentinel.");
+            if (observed != 2)
+                throw new InvalidOperationException("RecognitionResult known-Count overrun must fail on the second MoveNext before traversing toward the hard-cap sentinel.");
         }
 
         private static void Throws<TException>(Action action) where TException : Exception

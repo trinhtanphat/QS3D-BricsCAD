@@ -66,7 +66,9 @@ namespace QS3D.Core.Export
                     if (admittedCount.HasValue && rowCount >= admittedCount.Value)
                         throw new InvalidOperationException("BBS CSV row Count grew beyond the admitted Count during serialization.");
 
-                    var sourceRow = enumerator.Current ?? throw new ArgumentException("BBS row cannot be null.", nameof(rows));
+                    var sourceRow = enumerator.Current;
+                    ValidateKnownCount(rows, admittedCount);
+                    if (sourceRow == null) throw new ArgumentException("BBS row cannot be null.", nameof(rows));
                     var snapshot = SnapshotRow(sourceRow);
                     ValidateRow(snapshot);
                     sourceRows.Add(sourceRow);

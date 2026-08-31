@@ -21,76 +21,87 @@ def forbid(text: str, token: str, label: str) -> None:
 
 
 for token in (
-    "private static DomainHubWindow? _window;",
+    "private static DomainHubWindow? _published;",
+    "private static DomainHubWindow? _pending;",
     "DomainHubWindow? candidate = null;",
-    "var published = _window;",
-    "if (published != null)",
-    "if (published.IsLoaded)",
-    "ReleasePublishedWindow(published);",
+    "var pending = _pending;",
+    "if (pending != null && !TryClosePendingWindow(pending))",
+    "var previous = _published;",
+    "if (previous != null)",
+    "if (previous.IsLoaded)",
+    "ReleasePublishedWindow(previous);",
     "candidate = new DomainHubWindow();",
     "var window = candidate;",
-    "window.Closed += (_, __) => ReleasePublishedWindow(window);",
+    "_pending = window;",
+    "window.Closed += (_, __) => ReleaseWindow(window);",
     "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
-    "if (!window.IsLoaded) return;",
-    "_window = window;",
+    "if (!window.IsLoaded)",
+    "_published = window;",
+    "ReleasePendingWindow(window);",
     "candidate = null;",
     "finally",
-    "if (candidate != null) TryCloseUnpublishedWindow(candidate);",
+    "if (candidate != null)",
+    "TryClosePendingWindow(candidate);",
     "private static void ReleasePublishedWindow(DomainHubWindow window)",
-    "if (!ReferenceEquals(_window, window)) return;",
-    "_window = null;",
-    "private static void TryCloseUnpublishedWindow(DomainHubWindow window)",
-    "if (ReferenceEquals(_window, window)) return;",
-    "try { window.Close(); } catch (System.Exception) { }",
+    "if (!ReferenceEquals(_published, window)) return;",
+    "_published = null;",
+    "private static void ReleasePendingWindow(DomainHubWindow window)",
+    "if (!ReferenceEquals(_pending, window)) return;",
+    "_pending = null;",
+    "private static bool TryClosePendingWindow(DomainHubWindow window)",
+    "if (window.IsLoaded) return false;",
+    "ReportStatus(document, \"QS3DDOMAIN lỗi khi mở cửa sổ.\");",
+    "ex.GetType().Name",
 ):
     require(commands, token, "Domain Hub publication lifecycle")
 
 for token in (
+    "private static DomainHubWindow? _window;",
     "_window = new DomainHubWindow();",
     "_window.Closed += (_, __) => _window = null;",
     "window.Closed += (_, __) => _window = null;",
-    "var window = new DomainHubWindow();",
+    '"\\nQS3DDOMAIN error: " + ex.Message',
 ):
     forbid(commands, token, "Domain Hub publication lifecycle")
 
 show_start = commands.find("public void ShowDomainHub()")
-release_start = commands.find("private static void ReleasePublishedWindow", show_start + 1)
+release_start = commands.find("private static void ReleaseWindow", show_start + 1)
 show = commands[show_start:release_start] if show_start >= 0 and release_start > show_start else ""
-positions = [
-    show.find("DomainHubWindow? candidate = null;"),
-    show.find("var published = _window;"),
-    show.find("candidate = new DomainHubWindow();"),
-    show.find("window.Closed += (_, __) => ReleasePublishedWindow(window);"),
-    show.find("Application.ShowModelessWindow(IntPtr.Zero, window, true);"),
-    show.find("if (!window.IsLoaded) return;"),
-    show.find("_window = window;"),
-]
+ordered = (
+    "var pending = _pending;",
+    "candidate = new DomainHubWindow();",
+    "_pending = window;",
+    "window.Closed += (_, __) => ReleaseWindow(window);",
+    "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
+    "if (!window.IsLoaded)",
+    "_published = window;",
+    "ReleasePendingWindow(window);",
+)
+positions = [show.find(token) for token in ordered]
 if min(positions) < 0:
-    errors.append("unable to prove Domain Hub transactional publication ordering")
+    errors.append("unable to prove Domain Hub pending -> show -> loaded -> publish ordering")
 elif positions != sorted(positions) or len(set(positions)) != len(positions):
-    errors.append("Domain Hub must own candidate locally -> inspect prior owner -> construct candidate -> attach exact Closed callback -> show -> confirm loaded -> publish")
+    errors.append("Domain Hub must drain pending -> construct -> pending-own -> attach exact Closed -> show -> confirm loaded -> publish -> release pending")
 else:
-    publication_position = positions[-1]
-    cleanup_transfer_position = show.find("candidate = null;", publication_position + len("_window = window;"))
-    finally_position = show.find("finally", cleanup_transfer_position + 1)
-    cleanup_position = show.find("if (candidate != null) TryCloseUnpublishedWindow(candidate);", finally_position + 1)
-    if cleanup_transfer_position < 0 or finally_position < 0 or cleanup_position < 0:
-        errors.append("Domain Hub must transfer cleanup ownership after publication and close any remaining unpublished candidate in finally")
-    elif not (publication_position < cleanup_transfer_position < finally_position < cleanup_position):
-        errors.append("Domain Hub cleanup transfer must occur only after authoritative publication and before finally cleanup")
+    release_pending_position = positions[-1]
+    cleanup_transfer_position = show.find(
+        "candidate = null;",
+        release_pending_position + len("ReleasePendingWindow(window);"),
+    )
+    if cleanup_transfer_position < 0 or cleanup_transfer_position <= release_pending_position:
+        errors.append("Domain Hub local cleanup ownership must transfer only after pending ownership is released")
 
-release = commands[release_start:] if release_start >= 0 else ""
-owner_check = release.find("if (!ReferenceEquals(_window, window)) return;")
-clear = release.find("_window = null;", owner_check + 1)
-if owner_check < 0 or clear < 0 or owner_check >= clear:
-    errors.append("Domain Hub terminal release must verify exact published owner before clearing publication")
-
-cleanup_start = commands.find("private static void TryCloseUnpublishedWindow", release_start + 1)
-cleanup = commands[cleanup_start:] if cleanup_start >= 0 else ""
-published_guard = cleanup.find("if (ReferenceEquals(_window, window)) return;")
-close = cleanup.find("try { window.Close(); } catch (System.Exception) { }", published_guard + 1)
-if published_guard < 0 or close < 0 or published_guard >= close:
-    errors.append("Domain Hub unpublished cleanup must refuse the authoritative owner and best-effort terminal-close only the local candidate")
+close_start = commands.find("private static bool TryClosePendingWindow")
+status_start = commands.find("private static void ReportStatus", close_start + 1)
+close_body = commands[close_start:status_start] if close_start >= 0 and status_start > close_start else ""
+for token in (
+    "if (!ReferenceEquals(_pending, window)) return true;",
+    "if (ReferenceEquals(_published, window))",
+    "try { window.Close(); } catch (Exception) { }",
+    "if (window.IsLoaded) return false;",
+    "ReleasePendingWindow(window);",
+):
+    require(close_body, token, "Domain Hub pending-close fail-closed")
 
 # The Domain Hub is intentionally host-global: it must not retain a managed Document.
 for token in (
@@ -113,4 +124,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: Domain Hub publication is loaded-only, exact-owner released, failed candidates are terminally cleaned up, and active-document dispatch remains host-global.")
+print("PASS: Domain Hub publication is pending-owned until terminal close or loaded-only publication, duplicate-safe, exact-owner released, redacted, and active-document dispatch remains host-global.")

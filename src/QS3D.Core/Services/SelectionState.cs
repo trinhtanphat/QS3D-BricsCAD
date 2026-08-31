@@ -52,6 +52,8 @@ namespace QS3D.Core.Services
                 throw new InvalidOperationException("Selection changed while replacement element ids were being enumerated. Retry replacement against the current selection state.");
 
             var finalKnownCount = ResolveKnownCount(ids);
+            if (_changeVersion != enumerationVersion)
+                throw new InvalidOperationException("Selection changed while replacement element ids were being enumerated. Retry replacement against the current selection state.");
             if (knownCount.HasValue != finalKnownCount.HasValue ||
                 (knownCount.HasValue && knownCount.Value != finalKnownCount!.Value))
                 throw new InvalidOperationException(
