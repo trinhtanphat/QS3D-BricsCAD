@@ -8,14 +8,23 @@ smoke = (root / "tests/QS3D.Core.SmokeTests/XlsxHandleReaderRowScanSmoke.cs").re
 required = [
     "private const int MaxHeaderRows = 10;",
     "var headerRows = new List<XElement>(MaxHeaderRows);",
+    "var targetMatches = 0;",
     'foreach (var row in sheet.Descendants(ns + "row"))',
+    "targetMatches++;",
     "headerRows.Count < MaxHeaderRows",
+    "if (targetMatches > 1)",
     'throw new InvalidDataException("Excel worksheet contains duplicate row number " + rowNumber + ".");',
     "foreach (var headerRow in headerRows)",
 ]
 for token in required:
     if token not in source:
         raise SystemExit(f"ERROR: XLSX handle row-scan contract missing token: {token}")
+
+scan = source.find('foreach (var row in sheet.Descendants(ns + "row"))')
+scan_end = source.find("if (targetMatches > 1)", scan)
+validation = source.find("declaredRow == int.MaxValue || declaredRow > MaxRows", scan)
+if min(scan, scan_end, validation) < 0 or not (scan < validation < scan_end):
+    raise SystemExit("ERROR: XLSX target duplicate rejection must occur after the full declared-row validation scan")
 
 for forbidden in [
     'var rows = sheet.Descendants(ns + "row").ToList();',
@@ -27,7 +36,13 @@ for forbidden in [
 
 if "XlsxHandleReaderRowScanSmoke.Run();" not in registration:
     raise SystemExit("ERROR: XLSX handle row-scan smoke is not registered")
-for token in ["duplicateTarget: true", "invalidTrailingRow: true", 'ReadHandleLookup(valid, 20)']:
+for token in [
+    "duplicateTarget: true",
+    "invalidTrailingRow: true",
+    'ReadHandleLookup(valid, 20)',
+    'duplicate-invalid-trailing.xlsx',
+    'CreateWorkbook(duplicateWithInvalidTrailing, duplicateTarget: true, invalidTrailingRow: true)',
+]:
     if token not in smoke:
         raise SystemExit(f"ERROR: XLSX handle row-scan smoke missing coverage token: {token}")
 
