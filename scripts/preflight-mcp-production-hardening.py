@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 V25 = ROOT / "src" / "QS3D.BricsCAD.V25"
 SERVER = V25 / "McpEmbeddedServerV2.cs"
 RUNTIME = V25 / "McpCadAgentRuntime.cs"
+DOMAIN = V25 / "McpQs3dDomainRuntime.cs"
 TOP_LEVEL_JSON = V25 / "McpTopLevelJson.cs"
 V25_PROJECT = V25 / "QS3D.BricsCAD.V25.csproj"
 V26_PROJECT = ROOT / "src" / "QS3D.BricsCAD.V26" / "QS3D.BricsCAD.V26.csproj"
@@ -35,6 +36,7 @@ def main() -> int:
     try:
         server = read(SERVER)
         runtime = read(RUNTIME)
+        domain = read(DOMAIN)
         top_level_json = read(TOP_LEVEL_JSON)
         v25_project = read(V25_PROJECT)
         v26_project = read(V26_PROJECT)
@@ -139,6 +141,9 @@ def main() -> int:
         "runtime atomic timeout cancellation": (runtime, "Interlocked.CompareExchange(ref item.DispatchState, CadWorkCancelledBeforeStart, CadWorkQueued)"),
         "runtime uncertain timeout truth": (runtime, "completion is uncertain"),
         "runtime no-auto-retry truth": (runtime, "Do not retry automatically"),
+        "QS3D domain mutation stop recheck": (domain, "McpCadAgentRuntime.EnsureCurrentMutationRunning();"),
+        "QS3D domain command validation": (domain, "Regex.IsMatch(command, McpCadAgentRuntime.Qs3dCommandPattern"),
+        "QS3D domain command dispatch": (domain, 'document.SendStringToExecute(command + "\\n", true, false, true);'),
         "V25 legacy monolith exclusion": (v25_project, '<Compile Remove="McpEmbeddedServer.cs" />'),
         "V26 legacy monolith exclusion": (v26_project, "..\\QS3D.BricsCAD.V25\\McpEmbeddedServer.cs"),
     }
@@ -234,8 +239,17 @@ def main() -> int:
     invoke_mutation = method_block(runtime, "private static string InvokeCadMutation(")
     if not invoke_mutation or "EnsureAutomationRunning(epoch.Value);" not in invoke_mutation:
         errors.append("queued CAD mutations do not re-check the captured stop epoch at CAD-context execution")
-    if runtime.count("return InvokeCadMutation(") < 12:
-        errors.append("one or more direct/native command mutations bypass the mutation-aware CAD dispatcher")
+
+    # Verify every native mutation owned by McpCadAgentRuntime individually. The old numeric
+    # count included two QS3D mutations that now correctly live in McpQs3dDomainRuntime.
+    native_mutation_methods = (
+        "CreateLine", "CreateCircle", "CreateArc", "CreatePolyline", "CreateText", "CreateMText",
+        "TransformEntity", "DeleteEntity", "SetEntityLayer", "LayerAction", "RunCadCommandSequence",
+    )
+    for method in native_mutation_methods:
+        block = method_block(runtime, f"private static string {method}(")
+        if not block or "return InvokeCadMutation(" not in block:
+            errors.append(f"native CAD mutation {method} bypasses the mutation-aware CAD dispatcher")
 
     normalize_command = method_block(runtime, "private static string NormalizeCadCommandToken(")
     if not normalize_command or "token[index] == '_' || token[index] == '.'" not in normalize_command:
@@ -290,7 +304,7 @@ def main() -> int:
     if '"1. Run QS3DMCPACCOUNTSETUP.' in connector:
         errors.append("generated guide must not make a typed BricsCAD setup command the default path")
 
-    for source_name, text in (("transport", server), ("runtime", runtime)):
+    for source_name, text in (("transport", server), ("runtime", runtime), ("domain", domain)):
         for forbidden in ("powershell.exe", "cmd.exe", "Process.Start(", "mouse_event("):
             if forbidden in text:
                 errors.append(f"compiled MCP {source_name} exposes forbidden OS execution/input token: {forbidden}")
@@ -305,8 +319,8 @@ def main() -> int:
         "PASS: compiled modular MCP transport/runtime use strict bounded HTTP framing/UTF-8, exact JSON "
         "media type admission, loopback-or-exact-public-resource Origin validation, strict recursive RFC JSON grammar, valid JSON-RPC ids, "
         "serialized bounded sessions, epoch-invalidated mutation dispatch/UI input, canonical command-prefix rejection, "
-        "strict negotiated protocol-version validation and 404 expiry truth; CAD timeout/recovery and validated "
-        "Cloudflare endpoint/onboarding boundaries remain fail-closed."
+        "strict negotiated protocol-version validation and 404 expiry truth; CAD timeout/recovery, QS3D domain mutation "
+        "boundaries and validated Cloudflare endpoint/onboarding boundaries remain fail-closed."
     )
     return 0
 
