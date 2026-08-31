@@ -5,10 +5,65 @@ The build failed. Fix the build errors and run again.
 
 RED verified: smoke build fails because the capability contract is missing.
 RUN: dotnet run --project D:\a\QS3D-BricsCAD\QS3D-BricsCAD\tests\QS3D.Core.SmokeTests\QS3D.Core.SmokeTests.csproj -c Release
-D:\a\QS3D-BricsCAD\QS3D-BricsCAD\src\QS3D.Core\Agent\McpToolCapabilityContract.cs(131,37): error CS8604: Possible null reference argument for parameter 'exception' in 'bool McpToolCapabilityContract.IsQs3dSourceBug(Exception exception, string message)'. [D:\a\QS3D-BricsCAD\QS3D-BricsCAD\src\QS3D.Core\QS3D.Core.csproj]
-D:\a\QS3D-BricsCAD\QS3D-BricsCAD\src\QS3D.Core\Agent\McpToolCapabilityContract.cs(140,35): error CS8604: Possible null reference argument for parameter 'exception' in 'bool McpToolCapabilityContract.IsArgumentFailure(Exception exception, string message)'. [D:\a\QS3D-BricsCAD\QS3D-BricsCAD\src\QS3D.Core\QS3D.Core.csproj]
+PASS advanced cost aggregate precision
+PASS advanced cost transient Count stability
+PASS commercial aggregate precision
+PASS commercial Current-induced Count acceptance boundary
+PASS deep cost Current-induced Count stability
+PASS deep cost transient Count stability
+PASS estimating Current-induced Count acceptance boundary
+PASS quantity evidence known-Count overrun ordering
+PASS TBQ workspace transient Count stability
+PASS Trade Cost aggregate precision
+PASS polygon scanline exact orientation cancellation
+PASS quantity evidence graph/export parity
+PASS coordination issue persistence cold-reopen
+PASS coordination Excel issue lifecycle conflict guard
+PASS coordination issue XLSX provenance round-trip
+PASS coordination issue XLSX sheet relationship integrity
+PASS Beam Core formwork regeneration is rule-safe
+PASS synthetic golden-project full-P0 E2E regression
+PASS quantity exact-face measurement trace/evidence/XLSX parity
+PASS P0 unified export acceptance
+PASS repository synthetic QSDB strict-load and metre-binding regression
+PASS PolylineMetrics rectangle
+PASS UnitScale mm length
+PASS ProjectUnitPolicy
+PASS Geometry tolerance
+PASS QuantityEngine length
+PASS Formula variables
+PASS Formula functions
+PASS Formula division by zero
+PASS Quantity rule engine
+PASS Rebar count parser
+PASS Rebar spacing parser
+PASS Rebar compound parser
+PASS Rebar multiplied parser
+PASS Rebar weight
+PASS Quantity report grouping
+PASS Quantity totals
+PASS Wall quantity with opening
+PASS Wall semantic regenerator
+PASS Opening semantic regenerator
+PASS Room finish generator
+PASS Dependency transitive
+PASS Dependency cycle guard
+PASS Regeneration dirty propagation
+PASS Bulk edit
+PASS Model health host/orphan
+PASS Revision compare
+PASS QSDB roundtrip
+PASS Project file lock
+PASS XLSX exporter package
+ALL PASS
 
-The build failed. Fix the build errors and run again.
+RUN: C:\hostedtoolcache\windows\Python\3.12.10\x64\python.exe scripts/preflight-mcp-capability-lanes.py
+ERROR: MCP capability-lane preflight failed:
+ - MCP transport lost mode/error contract token: "executionMode"
+ - MCP transport lost mode/error contract token: "execution_mode"
+ - MCP transport lost mode/error contract token: "AUTO"
+ - MCP transport lost mode/error contract token: "CAD_DIRECT"
+ - MCP transport lost mode/error contract token: "QS3D_DOMAIN"
 
 Traceback (most recent call last):
   File "D:\a\QS3D-BricsCAD\QS3D-BricsCAD\scripts\agent-apply-mcp-capability-split.py", line 664, in <module>
@@ -16,8 +71,8 @@ Traceback (most recent call last):
                      ^^^^^^
   File "D:\a\QS3D-BricsCAD\QS3D-BricsCAD\scripts\agent-apply-mcp-capability-split.py", line 658, in main
     verify_green()
-  File "D:\a\QS3D-BricsCAD\QS3D-BricsCAD\scripts\agent-apply-mcp-capability-split.py", line 645, in verify_green
-    run(["dotnet", "run", "--project", str(SMOKE_PROJECT), "-c", "Release"])
+  File "D:\a\QS3D-BricsCAD\QS3D-BricsCAD\scripts\agent-apply-mcp-capability-split.py", line 652, in verify_green
+    run([sys.executable, script])
   File "D:\a\QS3D-BricsCAD\QS3D-BricsCAD\scripts\agent-apply-mcp-capability-split.py", line 50, in run
     raise RuntimeError("command failed with exit code " + str(completed.returncode))
 RuntimeError: command failed with exit code 1
