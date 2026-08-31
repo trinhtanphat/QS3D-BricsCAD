@@ -20,8 +20,15 @@ required_source = [
     "SemanticScheduleCatalog.MaxIds",
     "SemanticScheduleCatalog.MaxColumns",
     "private static IReadOnlyList<T> SnapshotBounded<T>",
+    'ValidateKnownCountEvidence(values, maxCount, capacityError, knownCount, "before MoveNext");',
+    "var moved = enumerator.MoveNext();",
+    'ValidateKnownCountEvidence(values, maxCount, capacityError, knownCount, "after MoveNext");',
+    "if (!moved) break;",
     "if (result.Count >= maxCount) throw new InvalidOperationException(capacityError);",
-    "result.Add(enumerator.Current);",
+    "var current = enumerator.Current;",
+    'ValidateKnownCountEvidence(values, maxCount, capacityError, knownCount, "after Current");',
+    "result.Add(current);",
+    'ValidateKnownCountEvidence(values, maxCount, capacityError, knownCount, "after traversal");',
     "return result.AsReadOnly();",
 ]
 for marker in required_source:
@@ -38,10 +45,23 @@ for marker in legacy:
     if marker in source:
         raise SystemExit(f"legacy unbounded constructor materialization remains: {marker}")
 
-guard = source.index("if (result.Count >= maxCount) throw new InvalidOperationException(capacityError);")
-add = source.index("result.Add(enumerator.Current);", guard)
-if guard > add:
-    raise SystemExit("bounded snapshot guard must execute before adding the over-bound item")
+snapshot_start = source.index("private static IReadOnlyList<T> SnapshotBounded<T>")
+snapshot_end = source.index("private static void ValidateKnownCountEvidence<T>", snapshot_start)
+snapshot = source[snapshot_start:snapshot_end]
+if "while (enumerator.MoveNext())" in snapshot:
+    raise SystemExit("semantic schedule snapshot must expose Count rebound points around MoveNext")
+
+pre_move = snapshot.index('ValidateKnownCountEvidence(values, maxCount, capacityError, knownCount, "before MoveNext");')
+move = snapshot.index("var moved = enumerator.MoveNext();", pre_move)
+post_move = snapshot.index('ValidateKnownCountEvidence(values, maxCount, capacityError, knownCount, "after MoveNext");', move)
+break_guard = snapshot.index("if (!moved) break;", post_move)
+capacity_guard = snapshot.index("if (result.Count >= maxCount) throw new InvalidOperationException(capacityError);", break_guard)
+count_guard = snapshot.index("if (knownCount.HasValue && result.Count >= knownCount.Value)", capacity_guard)
+current = snapshot.index("var current = enumerator.Current;", count_guard)
+post_current = snapshot.index('ValidateKnownCountEvidence(values, maxCount, capacityError, knownCount, "after Current");', current)
+add = snapshot.index("result.Add(current);", post_current)
+if not (pre_move < move < post_move < break_guard < capacity_guard < count_guard < current < post_current < add):
+    raise SystemExit("semantic schedule Count/capacity/Current ordering is not fail-closed")
 
 required_smoke = [
     "CategoriesAcceptExactLimit();",
@@ -49,6 +69,13 @@ required_smoke = [
     "IncludeIdsStopAtFirstOverBoundItem();",
     "ExcludeIdsStopAtFirstOverBoundItem();",
     "ColumnsStopAtFirstOverBoundItem();",
+    "MoveNextCountDriftFailsBeforeCurrent();",
+    "CurrentCountDriftFailsBeforeRetention();",
+    "StableKnownCountRemainsAccepted();",
+    "DriftKnownCountCollection",
+    '"after MoveNext"',
+    '"after Current"',
+    "Equal(0, source.CurrentReads);",
     "for (var i = 0; i <= 5000; i++)",
     "RepeatCategories(5000)",
     "Category source enumerated beyond the first over-bound item.",
@@ -69,4 +96,4 @@ for marker in required_smoke:
 if "SemanticScheduleDefinitionBoundedSnapshotSmoke.Run();" not in registration:
     raise SystemExit("bounded snapshot smoke is not registered")
 
-print("semantic schedule definition bounds preflight: PASS")
+print("semantic schedule definition bounds/count-stability preflight: PASS")
