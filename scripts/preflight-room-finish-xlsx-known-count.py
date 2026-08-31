@@ -48,8 +48,10 @@ def main() -> int:
 
     if not (row_count < row_loop and pre_indexer < post_indexer < post_snapshot < post_traversal < post_stability < path_resolution):
         raise SystemExit("FAIL: Room-finish top-level count contract must bind before traversal and revalidate admitted channels before filesystem mutation")
-    if not (helper < contract and min(read_only, generic, non_generic, conflict, negative, maximum, deterministic_required, drift) > contract):
-        raise SystemExit("FAIL: Room-finish known-count contract must preserve all deterministic collection interface/range/conflict/drift semantics")
+    if not (helper < read_only < generic < non_generic < contract):
+        raise SystemExit("FAIL: Room-finish known-count binder must admit every deterministic collection interface before constructing the contract")
+    if min(conflict, negative, maximum, deterministic_required, drift) < contract:
+        raise SystemExit("FAIL: Room-finish known-count contract must preserve range/conflict/deterministic/drift rejection semantics")
     if "var count = BindKnownCount(source" in exporter or "var count = RequireConsistentKnownCount(source" in exporter:
         raise SystemExit("FAIL: issue-4215 must not broaden into nested concrete-list count semantics")
     require(exporter, "var count = source.Count;", "existing nested concrete-list snapshot behavior")
