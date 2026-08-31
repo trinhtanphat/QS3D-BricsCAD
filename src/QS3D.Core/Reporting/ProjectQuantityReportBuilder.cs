@@ -361,12 +361,29 @@ namespace QS3D.Core.Reporting
             var selected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var selectedInstances = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             var observedCount = 0;
-            foreach (var raw in elementIds)
+            using var enumerator = elementIds.GetEnumerator();
+            while (true)
             {
-                observedCount++;
-                if (observedCount > MaxSelectionElementIds)
+                if (knownCount.HasValue)
+                    RequireStableKnownSelectionCount(elementIds, knownCount.Value);
+
+                var moved = enumerator.MoveNext();
+
+                if (knownCount.HasValue)
+                    RequireStableKnownSelectionCount(elementIds, knownCount.Value);
+                if (!moved) break;
+
+                if (knownCount.HasValue && observedCount >= knownCount.Value)
+                    throw SelectionCountMismatch(knownCount.Value, observedCount + 1);
+                if (observedCount >= MaxSelectionElementIds)
                     throw SelectionTooLarge();
 
+                var raw = enumerator.Current;
+
+                if (knownCount.HasValue)
+                    RequireStableKnownSelectionCount(elementIds, knownCount.Value);
+
+                observedCount++;
                 if (string.IsNullOrWhiteSpace(raw))
                     throw new ArgumentException("Quantity report element ids must not be blank.", nameof(elementIds));
                 if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
@@ -380,8 +397,12 @@ namespace QS3D.Core.Reporting
 
             if (project.ChangeVersion != selectionVersion)
                 throw new InvalidOperationException("Project changed while quantity report element ids were being enumerated; recompute the selection against the current project state.");
-            if (knownCount.HasValue && observedCount != knownCount.Value)
-                throw SelectionCountMismatch(knownCount.Value, observedCount);
+            if (knownCount.HasValue)
+            {
+                RequireStableKnownSelectionCount(elementIds, knownCount.Value);
+                if (observedCount != knownCount.Value)
+                    throw SelectionCountMismatch(knownCount.Value, observedCount);
+            }
 
             ReportingProjectIdentityGuard.RequireUniqueElementIds(project, "Quantity report selection");
             foreach (var selectedInstance in selectedInstances)
@@ -403,6 +424,15 @@ namespace QS3D.Core.Reporting
             if (elementIds is ICollection nonGenericCollection)
                 ObserveKnownSelectionCount(nonGenericCollection.Count, ref knownCount);
             return knownCount;
+        }
+
+        private static void RequireStableKnownSelectionCount(IEnumerable<string> elementIds, int expectedCount)
+        {
+            var currentCount = SnapshotKnownSelectionCount(elementIds);
+            if (!currentCount.HasValue || currentCount.Value != expectedCount)
+                throw new InvalidOperationException(
+                    "Quantity report selection input changed during enumeration; Count changed from " + expectedCount +
+                    " to " + (currentCount.HasValue ? currentCount.Value.ToString(CultureInfo.InvariantCulture) : "<unavailable>") + ".");
         }
 
         private static void ObserveKnownSelectionCount(int count, ref int? knownCount)
