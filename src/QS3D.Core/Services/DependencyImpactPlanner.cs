@@ -207,7 +207,10 @@ namespace QS3D.Core.Services
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            using (var enumerator = sourceElementIds.GetEnumerator())
+            RequireKnownCountStableDuringTraversal(sourceElementIds, knownCount, nameof(sourceElementIds));
+            var enumerator = sourceElementIds.GetEnumerator();
+            RequireKnownCountStableDuringTraversal(sourceElementIds, knownCount, nameof(sourceElementIds));
+            using (enumerator)
             {
                 while (enumerator.MoveNext())
                 {
