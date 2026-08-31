@@ -63,11 +63,12 @@ def main() -> int:
         'Authorization: env:': "local bearer env reference",
         'McpEmbeddedServer.Endpoint': "dynamic loopback endpoint binding",
         'McpEmbeddedServer.GetBearerToken()': "existing local bearer boundary",
+        'McpPersistentUserSettings.SaveOpenAiRuntimeApiKey': "direct-start credential persistence",
         'HEALTH_LISTEN_ADDR': "loopback health endpoint",
         '/readyz': "readiness probe",
         'CreateNoWindow = true': "bounded child process launch",
         'UseShellExecute = false': "non-shell tunnel-client launch",
-        'WriteText(AutoStartFile, "1")': "non-secret auto-start metadata",
+        'WriteTextVerified(AutoStartFile, "1")': "verified non-secret auto-start metadata",
         'if (previous != provider) ForgetChatGptRegistrationAcknowledgement();': "idempotent provider selection registration preservation",
         'QS3D_OPENAI_TUNNEL_CLIENT_SHA256': "pinned unsigned-release SHA-256 fallback",
         'TryVerifyClientTrust': "pre-launch tunnel-client trust verification",
@@ -90,7 +91,7 @@ def main() -> int:
         'Cloudflare Named': "Named selector",
         'Cloudflare Quick · test': "Quick selector",
         'Connection = Tunnel': "ChatGPT tunnel guidance",
-        'Runtime API key · chỉ giữ trong RAM': "runtime-key memory-only guidance",
+        'Runtime API key · lưu bảo mật trong Windows Credential Manager': "restart-safe Runtime API key guidance",
         'SelectOpenAiTunnelClient': "user-selected tunnel-client path",
         'StartOpenAiSecureTunnel': "OpenAI start action",
         'McpOpenAiSecureTunnelManager.IsReady': "OpenAI ready status",
@@ -113,16 +114,20 @@ def main() -> int:
         'OpenOpenAiLogs': "on-demand sanitized log materialization",
         'tunnel-diagnostics.log': "bounded support log destination",
         'McpOpenAiSecureTunnelManager.GetDiagnosticBundle()': "Agent Center sanitized diagnostic bundle",
-        'Restart tunnel · env key': "Agent Center environment-key-only restart action",
-        'CONTROL_PLANE_API_KEY': "restart environment-key presence check",
-        'OPENAI_API_KEY': "restart fallback environment-key presence check",
-        'QS3D không lưu key đã nhập trong UI': "restart secret non-persistence guidance",
+        'Restart tunnel · saved/env key': "Agent Center saved/environment restart action",
+        'McpPersistentUserSettings.ApplyStartupSecretsToProcessEnvironment()': "saved credential re-projection before restart",
+        'CONTROL_PLANE_API_KEY': "restart verified process key check",
+        'OPENAI_API_KEY': "restart fallback environment-key check",
+        'Windows Credential Manager': "restart saved-key guidance",
         'ClientTrustSummary': "visible tunnel trust summary",
         'LastExitCode': "visible tunnel exit code",
         'LastError': "visible tunnel last error",
         'DispatcherTimer': "bounded UI augmenter refresh",
     }.items():
         need(augmenter, token, label, errors)
+
+    forbid(center, 'Runtime API key · chỉ giữ trong RAM', "stale RAM-only Runtime API key guidance", errors)
+    forbid(augmenter, 'QS3D không lưu key đã nhập trong UI', "stale UI-key non-persistence guidance", errors)
 
     # The single-cancel-owner invariant is structural: the augmenter must not create or wire its
     # own installer-cancel identity/handler, while the bootstrapper below must own the dynamic one.
@@ -216,7 +221,7 @@ def main() -> int:
             print("ERROR:", error)
         return 1
 
-    print("PASS MCP transport providers / binary trust / bounded installer recovery / single cancel owner / Agent Center diagnostics / first-run contract")
+    print("PASS MCP transport providers / binary trust / bounded installer recovery / single cancel owner / Agent Center diagnostics / restart-safe credential contract / first-run contract")
     return 0
 
 

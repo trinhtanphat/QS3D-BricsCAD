@@ -8,7 +8,7 @@ source = SOURCE.read_text(encoding="utf-8")
 smoke = SMOKE.read_text(encoding="utf-8")
 
 required_source = [
-    "var sourceRows = new List<RoomFinishScheduleRow>(rowCount);",
+    "var sourceRows = new List<RoomFinishScheduleRow>(rowCount.Value);",
     "sourceRows.Add(sourceRow);",
     "EnsureRowStable(sourceRows[rowIndex], snapshot[rowIndex], rowIndex);",
     "EnsureJoinedCellValuesStable(source.ElementIds, snapshot.ElementIds, rowIndex, \"ElementIds\");",
@@ -35,10 +35,11 @@ if missing:
 if forbidden:
     raise SystemExit("Room-finish XLSX snapshot-stability preflight failed; caller-owned rows must not be re-read: " + ", ".join(forbidden))
 
-count_check = source.find('if (rows.Count != rowCount)')
+count_check = source.find('rowCount.Revalidate(rows, "after snapshot traversal");')
 stability_check = source.find('EnsureRowStable(sourceRows[rowIndex], snapshot[rowIndex], rowIndex);')
+final_count_check = source.find('rowCount.Revalidate(rows, "after row stability validation");')
 io_boundary = source.find('var fullPath = Path.GetFullPath(path);')
-if min(count_check, stability_check, io_boundary) < 0 or not (count_check < stability_check < io_boundary):
-    raise SystemExit("Room-finish XLSX snapshot-stability preflight failed; stability verification must follow the outer count check and precede filesystem work.")
+if min(count_check, stability_check, final_count_check, io_boundary) < 0 or not (count_check < stability_check < final_count_check < io_boundary):
+    raise SystemExit("Room-finish XLSX snapshot-stability preflight failed; stability verification must follow outer Count revalidation and precede final Count revalidation/filesystem work.")
 
 print("PASS Room-finish XLSX single-read cross-row snapshot integrity source guard")
