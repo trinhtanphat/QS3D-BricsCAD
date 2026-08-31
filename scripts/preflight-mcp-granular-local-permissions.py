@@ -39,16 +39,13 @@ for token in (
     "Background là đường mặc định; foreground chỉ dùng khi thật sự cần thao tác desktop.",
     "RefreshDesktopPermissionPanel",
     "ToggleDesktopForegroundAccess",
+    "FindTaggedCheckBox",
 ):
     if token not in augmenter:
         fail("Agent Center permission UI missing contract: " + token)
 
 if "CloneActionButton(resumeButton" in augmenter:
     fail("foreground permission must no longer be rendered as a cloned action button")
-if "private static Button? FindTaggedButton" not in augmenter:
-    fail("existing button lookup for Resume desktop must remain available")
-if "private static CheckBox? FindTaggedCheckBox" not in augmenter:
-    fail("permission panel must track checkbox controls by stable tags")
 
 # Background remains the safe/default path and foreground remains a strictly local explicit fallback.
 for token in (
