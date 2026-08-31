@@ -18,11 +18,14 @@ else:
         "if (window != null)", "try { window.Close(); } catch { }"):
         if needle not in source:
             errors.append("Project Properties missing host-global publication contract: " + needle)
+    published_owner = source.find("_published = published;")
+    clear_window = source.find("window = null;", published_owner) if published_owner >= 0 else -1
     positions = [source.find(token) for token in (
         "var previous = _published;", "if (previous.IsLoaded)", "if (ReferenceEquals(_published, previous))",
         "window = new ProjectPropertiesWindow();", "window.Closed += (_, __) =>",
         "Application.ShowModelessWindow(IntPtr.Zero, window, true);", "if (!window.IsLoaded)",
-        "_published = published;", "window = null;")]
+        "_published = published;")]
+    positions.append(clear_window)
     if min(positions) < 0 or positions != sorted(positions):
         errors.append("Project Properties must reuse loaded owner, release stale owner, construct, bind Closed, show, confirm Loaded, then publish")
 
