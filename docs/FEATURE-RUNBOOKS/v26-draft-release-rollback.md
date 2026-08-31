@@ -3,13 +3,14 @@
 Origin lane: `issue-4780`  
 Publish-acknowledgement hardening: `issue-4812`  
 Rollback DELETE-acknowledgement hardening: `issue-4815`  
-Tag-create acknowledgement hardening: `issue-4827`
+Tag-create acknowledgement hardening: `issue-4827`  
+Draft-create acknowledgement hardening: `issue-4880`
 
 ## Purpose
 
 The manual V26 release lane creates a GitHub draft release before uploading and remotely verifying package assets. A post-create failure must not strand transaction-owned remote state, because a same-tag retry would otherwise fail before publication and require manual cleanup.
 
-The final `draft=false` publish request, destructive cleanup requests, and the initial tag-create request all have commit-unknown boundaries. GitHub can commit one of those mutations while the runner loses its HTTP acknowledgement. The workflow/helper therefore reconcile authoritative remote state rather than inferring success or failure from transport outcomes alone.
+The final `draft=false` publish request, destructive cleanup requests, the initial tag-create request, and the draft-create request all have commit-unknown boundaries. GitHub can commit one of those mutations while the runner loses its HTTP acknowledgement. The workflow/helper therefore reconcile authoritative remote state rather than inferring success or failure from transport outcomes alone.
 
 This runbook defines bounded automatic rollback and acknowledgement-reconciliation contracts. It does not authorize release dispatch, signing, or licensed BricsCAD runtime claims.
 
@@ -21,7 +22,27 @@ Inside the publication transaction, the workflow queries the exact GitHub ref `r
 
 If the create POST throws, the workflow performs an authoritative exact-ref lookup. An authoritative absence preserves the original create failure. If the exact lightweight ref now exists at `GITHUB_SHA`, the acknowledgement is classified as ambiguous: the tag becomes reusable but `tagCreatedByThisRun` remains false. A moved, annotated, mismatched, or unreachable tag fails closed.
 
-The separate `tagReadyForRelease` state records successful exact-tag admission without implying destructive ownership. The draft release is created only after that admission. `releaseId=0` remains an intentional rollback state until a positive draft identity is received.
+The separate `tagReadyForRelease` state records successful exact-tag admission without implying destructive ownership. The draft release is created only after that admission.
+
+## Draft-create acknowledgement reconciliation
+
+`issue-4880` closes the commit-unknown boundary around the draft-release POST without introducing blind retries or tag-only identity guesses.
+
+Immediately before draft creation, the workflow generates a unique workflow transaction marker and embeds it in the release body. The normal release notes remain intact, while the marker provides a request-scoped identity that can be rediscovered after an acknowledgement loss.
+
+A normally acknowledged create response is accepted only after validating positive numeric release id, repository API identity, `draft=true`, exact release tag, exact `target_commitish == GITHUB_SHA`, exact requested prerelease state and exact expected V26 release name. `releaseId` is assigned only after those checks.
+
+If the POST throws, the workflow performs bounded authenticated enumeration of repository releases with drafts included and never retries POST. A candidate must simultaneously match:
+
+- the exact unique transaction marker in the release body;
+- `draft=true`;
+- exact `tag_name == RELEASE_TAG`;
+- exact `target_commitish == GITHUB_SHA`;
+- exact expected V26 release name;
+- requested prerelease state;
+- positive release id and repository API identity.
+
+Exactly one matching draft is required. Zero matches preserve the original create error. Multiple matches, a published marker match, moved target SHA, wrong tag/name/prerelease state, missing repository identity, page-budget exhaustion or reconciliation transport failure all fail closed. When exactly one candidate survives, its positive release id becomes the transaction identity and the workflow continues through the existing asset/upload/verification and publish acknowledgement gates. Rollback therefore receives an exact draft id even when the original create acknowledgement was lost.
 
 ## Publication envelope and publish acknowledgement
 
@@ -65,13 +86,17 @@ This means a lost DELETE response can no longer produce a false manual-cleanup b
 
 ## Deterministic source guard
 
-`scripts/preflight-v26-draft-release-rollback.py` pins restart-safe exact-tag admission, reusable non-owned exact-tag behavior, positive tag ownership, ambiguous tag-create acknowledgement reconciliation, draft-only deletion, exhaustive release-owner enumeration, non-owned tag preservation, exact-SHA checks, publish acknowledgement reconciliation, and rollback wiring. It mutation-probes:
+`scripts/preflight-v26-draft-release-rollback.py` pins restart-safe exact-tag admission, reusable non-owned exact-tag behavior, positive tag ownership, ambiguous tag-create acknowledgement reconciliation, draft-create transaction marker generation, bounded draft-inclusive create acknowledgement reconciliation, exact marker/tag/SHA/name/prerelease/draft identity, unique-candidate recovery, zero/multiple-candidate failure, draft-only deletion, exhaustive release-owner enumeration, non-owned tag preservation, exact-SHA checks, publish acknowledgement reconciliation, and rollback wiring. It mutation-probes:
 
 - exact reusable-tag lookup and lightweight commit/SHA identity;
 - positive ownership only from an acknowledged exact create response;
-- ambiguous create acknowledgement reconciliation without promotion to deletion ownership;
+- ambiguous tag-create acknowledgement reconciliation without promotion to deletion ownership;
 - `tagReadyForRelease` admission independently from tag ownership;
-- explicit classification of GitHub 404 as the sole authoritative absence signal;
+- unique draft-create transaction marker binding before POST;
+- bounded draft-inclusive enumeration after create acknowledgement loss;
+- exact marker/tag/target-SHA/name/prerelease/draft candidate identity;
+- refusal of zero or multiple recovered draft identities;
+- explicit classification of GitHub 404 as the sole authoritative absence signal for destructive reconciliation;
 - exact-release GET after a draft DELETE exception;
 - committed-draft-deletion recovery only on authoritative absence;
 - refusal to infer success when the exact draft still exists or changed;
