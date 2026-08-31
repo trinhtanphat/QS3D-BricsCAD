@@ -58,12 +58,15 @@ PASS XLSX exporter package
 ALL PASS
 
 RUN: C:\hostedtoolcache\windows\Python\3.12.10\x64\python.exe scripts/preflight-mcp-capability-lanes.py
-ERROR: MCP capability-lane preflight failed:
- - MCP transport lost mode/error contract token: "executionMode"
- - MCP transport lost mode/error contract token: "execution_mode"
- - MCP transport lost mode/error contract token: "AUTO"
- - MCP transport lost mode/error contract token: "CAD_DIRECT"
- - MCP transport lost mode/error contract token: "QS3D_DOMAIN"
+PASS: MCP function calling separates MCP/BricsCAD/CAD/desktop/QS3D lanes, mode gates and error contracts without coupling CAD-direct to QS3D health.
+
+RUN: C:\hostedtoolcache\windows\Python\3.12.10\x64\python.exe scripts/preflight-mcp-single-footing-direct.py
+PASS: qs3d_place_single_footing is QS3D-domain owned, prompt-free, confirmation/epoch gated, and reuses shared Active Floor authoring while CAD-direct remains independent.
+
+RUN: C:\hostedtoolcache\windows\Python\3.12.10\x64\python.exe scripts/preflight-mcp-full-agent.py
+Full MCP CAD agent preflight FAILED:
+ - MCP CAD runtime missing script blank-terminator anti-chain guard: inputs may not continue after a blank command terminator
+ - MCP CAD runtime missing script known-command anti-injection guard: inputs may not inject another CAD/QS3D command
 
 Traceback (most recent call last):
   File "D:\a\QS3D-BricsCAD\QS3D-BricsCAD\scripts\agent-apply-mcp-capability-split.py", line 664, in <module>
