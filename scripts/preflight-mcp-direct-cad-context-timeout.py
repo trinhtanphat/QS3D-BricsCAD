@@ -37,8 +37,19 @@ def main() -> int:
     if "CadReadTimeoutMilliseconds = 10000" in hub:
         errors.append("direct CAD-context wait must leave response budget instead of consuming the full 10-second window")
 
-    if "catch (Exception ex) { return ToolError(ex.Message); }" not in call_tool:
-        errors.append("embedded MCP server must keep converting runtime failures into MCP tool errors")
+    # Runtime failures must still be converted into MCP tool errors. The lane split
+    # enriches that conversion with stable error code/lane fields instead of the old
+    # message-only ToolError overload.
+    structured_error_tokens = (
+        "catch (McpToolContractException ex)",
+        "return ToolError(ex.Code, McpToolCapabilityContract.LaneName(ex.Lane), ex.Message);",
+        "catch (Exception ex)",
+        "var failure = McpToolCapabilityContract.ClassifyFailure(tool, ex);",
+        "return ToolError(failure.Code, McpToolCapabilityContract.LaneName(failure.Lane), failure.Message);",
+    )
+    for token in structured_error_tokens:
+        if token not in call_tool:
+            errors.append(f"embedded MCP server structured tool-error conversion missing token: {token}")
 
     if "Interlocked.CompareExchange(ref item.State, CadReadCancelledBeforeStart, CadReadQueued)" not in invoke:
         errors.append("queued CAD work must remain cancellable before it starts")
@@ -49,7 +60,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: direct CAD-context work reserves response budget, fails closed before start, and preserves completion-uncertain semantics after work begins.")
+    print("PASS: direct CAD-context work reserves response budget, fails closed before start, preserves completion-uncertain semantics after work begins, and converts runtime failures into structured MCP tool errors.")
     return 0
 
 
