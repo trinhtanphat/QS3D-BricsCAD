@@ -15,17 +15,37 @@ def metadata_revision_owned(metadata):
     set_public = metadata.find('Set(canonicalKey, xmlValue, addOnly, true);')
     remove_public = metadata.find('public bool Remove(string key) => Remove(key, true);')
     remove_private = metadata.find('private bool Remove(string key, bool touchMutation)')
+    remove_generation_admission = metadata.find('var nextMutationVersion = checked(_mutationVersion + 1L);', remove_private)
     remove_touch = metadata.find('if (touchMutation) TouchProject();', remove_private)
-    remove_storage = metadata.find('return _items.Remove(key);', remove_private)
+    remove_storage = metadata.find('var removed = _items.Remove(key);', remove_private)
+    remove_generation_commit = metadata.find('if (removed) _mutationVersion = nextMutationVersion;', remove_storage)
     set_private = metadata.find('private void Set(string key, string value, bool addOnly, bool touchMutation)')
+    set_generation_admission = metadata.find('var nextMutationVersion = checked(_mutationVersion + 1L);', set_private)
     set_touch = metadata.find('if (touchMutation) TouchProject();', set_private)
     set_storage = metadata.find('if (addOnly) _items.Add(key, normalizedValue); else _items[key] = normalizedValue;', set_private)
+    set_generation_commit = metadata.find('_mutationVersion = nextMutationVersion;', set_storage)
     touch_owner = metadata.find('private void TouchProject()')
     project_touch = metadata.find('project.Touch();', touch_owner)
     return (
-        min(setter, set_public, remove_public, remove_private, remove_touch, remove_storage, set_private, set_touch, set_storage, touch_owner, project_touch) >= 0
-        and remove_private < remove_touch < remove_storage
-        and set_private < set_touch < set_storage
+        min(
+            setter,
+            set_public,
+            remove_public,
+            remove_private,
+            remove_generation_admission,
+            remove_touch,
+            remove_storage,
+            remove_generation_commit,
+            set_private,
+            set_generation_admission,
+            set_touch,
+            set_storage,
+            set_generation_commit,
+            touch_owner,
+            project_touch,
+        ) >= 0
+        and remove_private < remove_generation_admission < remove_touch < remove_storage < remove_generation_commit
+        and set_private < set_generation_admission < set_touch < set_storage < set_generation_commit
         and touch_owner < project_touch
     )
 
@@ -80,7 +100,7 @@ if SOURCE.is_file() and METADATA.is_file():
         errors.append("Save must perform exactly five project freshness checks across enumeration, planning and mutation boundaries.")
 
     if not metadata_revision_owned(metadata):
-        errors.append("ProjectMetadataDictionary must own exact-once project revision updates for public Remove/indexer persistence mutations.")
+        errors.append("ProjectMetadataDictionary must own exact-once project revision updates for public Remove/indexer persistence mutations and commit metadata mutation generation only after storage mutation succeeds.")
 
     for token in (
         "project.ChangeVersion,",
@@ -135,4 +155,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: SemanticDocumentationCatalogStore.Save rejects structural drift immediately before metadata persistence while ProjectMetadataDictionary owns exact-once revision mutation.")
+print("PASS: SemanticDocumentationCatalogStore.Save rejects structural drift immediately before metadata persistence while ProjectMetadataDictionary owns exact-once revision mutation and post-storage mutation-generation commit.")

@@ -11,6 +11,10 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class RebarGeometryCommands
     {
+        private const string SelectionGuidance = "Rebar 3D: chọn Column semantic có closed rectangle POLYLINE + RebarNotation.";
+        private const string OperationFailure = "QS3DREBAR3D lỗi: không thể tạo/cập nhật thép dọc cột. Kiểm tra selection, project semantic và dữ liệu rebar rồi thử lại.";
+        private const string UiSyncWarning = "UI sync warning: đã cập nhật thép dọc cột nhưng đồng bộ giao diện chưa hoàn tất. Dữ liệu CAD/project đã được giữ nguyên; hãy refresh giao diện.";
+
         [CommandMethod("QS3DREBAR3D", CommandFlags.UsePickSet)]
         public void BuildRebar3D()
         {
@@ -18,10 +22,12 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
+                // Capture PICKFIRST once before canonical project binding. The same
+                // ObjectId snapshot is passed through semantic admission and native build.
                 var selectedIds = CadSelectionGuard.ReadImpliedSelection(document);
                 if (selectedIds.Length == 0)
                 {
-                    Report(document, "Rebar 3D: chọn Column semantic có closed rectangle POLYLINE + RebarNotation.");
+                    Report(document, SelectionGuidance);
                     return;
                 }
 
@@ -46,7 +52,7 @@ namespace QS3D.BricsCAD.V25
                 var previewTargets = ResolveColumnTargets(previewProject, selectedHandles);
                 if (previewTargets.Count == 0)
                 {
-                    Report(document, "Rebar 3D: chọn Column semantic có closed rectangle POLYLINE + RebarNotation.");
+                    Report(document, SelectionGuidance);
                     return;
                 }
 
@@ -63,15 +69,15 @@ namespace QS3D.BricsCAD.V25
                 if (!expectedTargetIds.SetEquals(targets.Select(x => x.Id)))
                     throw new InvalidOperationException("Rebar 3D: semantic Column target set đã thay đổi sau khi đọc PICKFIRST selection; hãy chọn lại target.");
 
-                var count = ColumnRebarSolidBuilder.BuildSelected(document, project);
+                var count = ColumnRebarSolidBuilder.BuildSelected(document, project, selectedIds);
                 var message = count == 0
-                    ? "Rebar 3D: chọn Column semantic có closed rectangle POLYLINE + RebarNotation."
+                    ? SelectionGuidance
                     : "Rebar 3D: đã tạo/cập nhật " + count + " thanh đứng cho cột được chọn.";
                 FinalizeUi(document, message);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Report(document, "QS3DREBAR3D lỗi: " + ex.Message);
+                Report(document, OperationFailure);
             }
         }
 
@@ -90,9 +96,9 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                TryWriteMessage(document, "\nQS3D " + message + " UI sync warning: " + ex.Message);
+                TryWriteMessage(document, "\nQS3D " + message + " " + UiSyncWarning);
             }
         }
 
