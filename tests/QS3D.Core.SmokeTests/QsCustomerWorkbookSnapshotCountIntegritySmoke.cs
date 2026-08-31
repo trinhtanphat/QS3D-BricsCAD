@@ -15,6 +15,9 @@ namespace QS3D.Core.SmokeTests
         {
             RejectsShrinkAfterAdmissionBeforeDestinationReplacement();
             RejectsGrowthAfterAdmissionBeforeDestinationReplacement();
+            RejectsConflictingAdmittedCountChannelsBeforeIndexer();
+            RejectsTransientGenericCountDriftAroundIndexer();
+            AcceptsStableMultiInterfaceCountChannels();
         }
 
         private static void RejectsShrinkAfterAdmissionBeforeDestinationReplacement()
@@ -33,6 +36,43 @@ namespace QS3D.Core.SmokeTests
                 new DriftingRows(items, 1, 2),
                 new DriftingRows(items, 1, 2),
                 "growth");
+        }
+
+        private static void RejectsConflictingAdmittedCountChannelsBeforeIndexer()
+        {
+            var row = Row("E1", "A1");
+            var details = new MultiCountRows(row, genericAdmissionCount: 2, driftGenericAfterIndexer: false);
+            RefusesDrift(details, new[] { row }, "conflicting admitted channels");
+            if (details.IndexerReads != 0)
+                throw new Exception("Customer workbook conflicting Count channels must fail before caller row indexer access.");
+        }
+
+        private static void RejectsTransientGenericCountDriftAroundIndexer()
+        {
+            var row = Row("E1", "A1");
+            var details = new MultiCountRows(row, genericAdmissionCount: 1, driftGenericAfterIndexer: true);
+            RefusesDrift(details, new[] { row }, "transient generic Count drift");
+            if (details.IndexerReads != 1)
+                throw new Exception("Customer workbook transient Count drift must fail immediately after the first caller row indexer.");
+        }
+
+        private static void AcceptsStableMultiInterfaceCountChannels()
+        {
+            var row = Row("E1", "A1");
+            var details = new MultiCountRows(row, genericAdmissionCount: 1, driftGenericAfterIndexer: false);
+            var summaries = new MultiCountRows(row, genericAdmissionCount: 1, driftGenericAfterIndexer: false);
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-customer-workbook-count-stable-" + Guid.NewGuid().ToString("N"));
+            var path = Path.Combine(root, "customer.xlsx");
+            try
+            {
+                QsCustomerWorkbookExporter.Export(path, details, summaries);
+                if (!File.Exists(path) || new FileInfo(path).Length == 0)
+                    throw new Exception("Customer workbook stable multi-interface Count control did not publish an XLSX file.");
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); } catch { }
+            }
         }
 
         private static void RefusesDrift(
@@ -121,6 +161,64 @@ namespace QS3D.Core.SmokeTests
             }
 
             IEnumerator IEnumerable.GetEnumerator() { return GetEnumerator(); }
+        }
+
+        private sealed class MultiCountRows : IReadOnlyList<QuantityReportRow>, ICollection<QuantityReportRow>, ICollection
+        {
+            private readonly QuantityReportRow _row;
+            private readonly int _genericAdmissionCount;
+            private readonly bool _driftGenericAfterIndexer;
+            private bool _genericDriftPending;
+
+            public MultiCountRows(QuantityReportRow row, int genericAdmissionCount, bool driftGenericAfterIndexer)
+            {
+                _row = row;
+                _genericAdmissionCount = genericAdmissionCount;
+                _driftGenericAfterIndexer = driftGenericAfterIndexer;
+            }
+
+            public int Count => 1;
+            int ICollection<QuantityReportRow>.Count
+            {
+                get
+                {
+                    if (_genericDriftPending)
+                    {
+                        _genericDriftPending = false;
+                        return 2;
+                    }
+                    return _genericAdmissionCount;
+                }
+            }
+            int ICollection.Count => 1;
+            public bool IsReadOnly => true;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+            public int IndexerReads { get; private set; }
+
+            public QuantityReportRow this[int index]
+            {
+                get
+                {
+                    if (index != 0) throw new ArgumentOutOfRangeException(nameof(index));
+                    IndexerReads++;
+                    if (_driftGenericAfterIndexer) _genericDriftPending = true;
+                    return _row;
+                }
+            }
+
+            public IEnumerator<QuantityReportRow> GetEnumerator()
+            {
+                yield return _row;
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() { return GetEnumerator(); }
+            public bool Contains(QuantityReportRow item) => ReferenceEquals(item, _row);
+            public void CopyTo(QuantityReportRow[] array, int arrayIndex) => array[arrayIndex] = _row;
+            void ICollection.CopyTo(Array array, int index) => array.SetValue(_row, index);
+            public void Add(QuantityReportRow item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Remove(QuantityReportRow item) => throw new NotSupportedException();
         }
     }
 }
