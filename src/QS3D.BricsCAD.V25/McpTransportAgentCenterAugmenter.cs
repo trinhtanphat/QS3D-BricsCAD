@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -22,6 +23,8 @@ namespace QS3D.BricsCAD.V25
         private const string AgentCenterTitle = "QS3D - ChatGPT MCP Agent Center";
         private const string InstallCloudflaredLabel = "Cài / cập nhật Cloudflare Tunnel";
         private const string OpenAiAdminAnchorLabel = "Mở tunnel-client UI";
+        private const string PendingChatGptTunnelLabel = "ChatGPT Tunnel chưa xác nhận";
+        private const string WaitingChatGptTunnelTrafficLabel = "ChatGPT Tunnel · chờ MCP traffic";
         private const string CloudflareRecoveryTag = "QS3D_MCP_CLOUDFLARED_RECOVERY";
         private const string CloudflareStatusTag = "QS3D_MCP_CLOUDFLARED_STATUS";
         private const string OpenAiCopyDiagnosticsTag = "QS3D_MCP_OPENAI_COPY_DIAGNOSTICS";
@@ -30,8 +33,11 @@ namespace QS3D.BricsCAD.V25
         private const string OpenAiStatusTag = "QS3D_MCP_OPENAI_DIAGNOSTIC_STATUS";
         private const string WingetRecoveryCommand = "winget install --id Cloudflare.cloudflared --source winget";
         private static readonly object Sync = new object();
+        private static readonly HashSet<string> KnownMcpSessionIds = new HashSet<string>(StringComparer.Ordinal);
         private static DispatcherTimer? _timer;
         private static EventHandler? _tickHandler;
+        private static bool _sessionSnapshotInitialized;
+        private static bool _sessionReflectionWarningPublished;
 
         public static void Start()
         {
@@ -61,6 +67,9 @@ namespace QS3D.BricsCAD.V25
                 handler = _tickHandler;
                 _timer = null;
                 _tickHandler = null;
+                KnownMcpSessionIds.Clear();
+                _sessionSnapshotInitialized = false;
+                _sessionReflectionWarningPublished = false;
             }
             if (timer == null) return;
             try { timer.Stop(); } catch { }
@@ -71,6 +80,8 @@ namespace QS3D.BricsCAD.V25
         {
             try
             {
+                RefreshChatGptTunnelTrafficEvidence();
+
                 var sources = new List<PresentationSource>();
                 foreach (PresentationSource source in PresentationSource.CurrentSources) sources.Add(source);
                 foreach (var source in sources)
@@ -92,8 +103,107 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        private static void RefreshChatGptTunnelTrafficEvidence()
+        {
+            var currentSessionIds = SnapshotEmbeddedMcpSessionIds();
+            if (currentSessionIds == null) return;
+
+            var provider = McpTransportCoordinator.SelectedProvider;
+            var openAiTunnelRunning = provider == McpTransportProvider.OpenAiSecureTunnel
+                                      && McpOpenAiSecureTunnelManager.IsRunning;
+            var sawNewSession = false;
+
+            lock (Sync)
+            {
+                if (!_sessionSnapshotInitialized || !openAiTunnelRunning)
+                {
+                    ReplaceKnownSessionIds(currentSessionIds);
+                    _sessionSnapshotInitialized = true;
+                    return;
+                }
+
+                foreach (var sessionId in currentSessionIds)
+                {
+                    if (!KnownMcpSessionIds.Contains(sessionId))
+                    {
+                        sawNewSession = true;
+                        break;
+                    }
+                }
+                ReplaceKnownSessionIds(currentSessionIds);
+            }
+
+            if (!sawNewSession || McpTransportCoordinator.IsChatGptRegistrationAcknowledged()) return;
+
+            try
+            {
+                McpTransportCoordinator.MarkChatGptRegistrationAcknowledged();
+                McpAgentExperience.Success(
+                    "onboarding",
+                    "Đã tự xác nhận OpenAI Tunnel sau khi embedded MCP nhận một session initialize mới trong lúc tunnel-client đang chạy.",
+                    "ChatGPT Tunnel đã có MCP traffic; tiếp tục tools/list hoặc tool call để xác nhận end-to-end.");
+            }
+            catch (Exception ex)
+            {
+                McpAgentExperience.Warning(
+                    "onboarding",
+                    "Không thể tự ghi nhận MCP traffic cho OpenAI Tunnel: " + ex.Message,
+                    "Giữ tunnel-client chạy và thử initialize/tools/list lại; nút xác nhận thủ công vẫn là fallback.");
+            }
+        }
+
+        private static HashSet<string>? SnapshotEmbeddedMcpSessionIds()
+        {
+            try
+            {
+                var field = typeof(McpEmbeddedServer).GetField("Sessions", BindingFlags.NonPublic | BindingFlags.Static);
+                var sessions = field == null ? null : field.GetValue(null);
+                var keysProperty = sessions == null ? null : sessions.GetType().GetProperty("Keys", BindingFlags.Public | BindingFlags.Instance);
+                var keys = keysProperty == null ? null : keysProperty.GetValue(sessions, null) as IEnumerable;
+                if (keys == null) throw new InvalidOperationException("Không đọc được MCP session keys.");
+
+                var result = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var key in keys)
+                {
+                    var sessionId = key as string;
+                    if (!string.IsNullOrWhiteSpace(sessionId)) result.Add(sessionId);
+                }
+                return result;
+            }
+            catch (Exception ex)
+            {
+                var publishWarning = false;
+                lock (Sync)
+                {
+                    if (!_sessionReflectionWarningPublished)
+                    {
+                        _sessionReflectionWarningPublished = true;
+                        publishWarning = true;
+                    }
+                }
+                if (publishWarning)
+                {
+                    McpAgentExperience.Warning(
+                        "onboarding",
+                        "Không bật được auto-confirm ChatGPT Tunnel traffic: " + ex.Message,
+                        "MCP vẫn hoạt động; dùng nút xác nhận thủ công và kiểm tra preflight nếu source layout đã đổi.");
+                }
+                return null;
+            }
+        }
+
+        private static void ReplaceKnownSessionIds(HashSet<string> currentSessionIds)
+        {
+            KnownMcpSessionIds.Clear();
+            foreach (var sessionId in currentSessionIds) KnownMcpSessionIds.Add(sessionId);
+        }
+
         private static void RefreshTree(DependencyObject root)
         {
+            var text = root as TextBlock;
+            if (text != null && string.Equals(text.Text, PendingChatGptTunnelLabel, StringComparison.Ordinal))
+                text.Text = WaitingChatGptTunnelTrafficLabel;
+
             var panel = root as Panel;
             if (panel != null) RefreshPanel(panel);
 
