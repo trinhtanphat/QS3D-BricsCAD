@@ -33,7 +33,7 @@ Every tool schema accepts optional `executionMode` and compatibility alias `exec
 
 - `AUTO`: normal routing; any published lane may be used.
 - `CAD_DIRECT`: QS3D business mutations are rejected with `EXECUTION_MODE_VIOLATION`; read-only QS3D domain status remains available. Native CAD, BricsCAD status, desktop automation, and emergency controls remain usable.
-- `QS3D_DOMAIN`: QS3D mutations are allowed. Read-only CAD/host diagnostics and emergency controls remain usable, but native CAD mutations are rejected so the system cannot silently replace failed business semantics with approximate geometry.
+- `QS3D_DOMAIN`: QS3D mutations are allowed. Read-only CAD/host/desktop diagnostics and emergency controls remain usable, but native CAD and desktop automation mutations are rejected so the system cannot silently replace failed business semantics with approximate geometry or UI-driven CAD edits.
 
 ## Error Contract
 
@@ -58,4 +58,4 @@ Existing tool names remain published. `qs3d_run_command` keeps its bounded `^QS3
 
 ## Testing
 
-Add a pure Core smoke test for lane classification, execution-mode gates, aliases, and error mapping. Add source preflight guards proving QS3D placement is no longer owned by `McpCadDirectModelRuntime`, status fields are separated, both execution-mode aliases are published, structured errors exist, and native CAD dispatch contains no QS3D-health dependency. Existing V25/V26 build and aggregate preflight remain mandatory before merge.
+Add a pure Core smoke test for lane classification, execution-mode gates, aliases, and error mapping, including proof that `QS3D_DOMAIN` allows desktop observation but blocks desktop mutations. Add source preflight guards proving QS3D placement is no longer owned by `McpCadDirectModelRuntime`, status fields are separated, both execution-mode aliases are published, structured errors exist, `QS3D_DOMAIN` cannot mutate through the desktop lane, and native CAD dispatch contains no QS3D-health dependency. Existing V25/V26 build and aggregate preflight remain mandatory before merge.
