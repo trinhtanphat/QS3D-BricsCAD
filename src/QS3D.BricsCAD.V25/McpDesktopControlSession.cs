@@ -12,7 +12,9 @@ namespace QS3D.BricsCAD.V25
 {
     /// <summary>
     /// Local-only approval boundary for desktop-wide MCP input/sensitive reads.
-    /// Consent is process-memory-only, expires after idle time and cannot be enabled through MCP.
+    /// Consent cannot be enabled through MCP. The local Agent Center host may renew an enabled
+    /// consent lease so long-running sessions do not surprise-expire; Esc x2, explicit OFF and
+    /// process shutdown remain authoritative revocation boundaries.
     /// </summary>
     internal static class McpDesktopControlSession
     {
@@ -83,7 +85,11 @@ namespace QS3D.BricsCAD.V25
             ExpireConsentIfIdle();
             lock (Sync)
             {
-                if (_enabled) return;
+                if (_enabled)
+                {
+                    _idleDeadlineUtc = DateTime.UtcNow + ConsentIdleTimeout;
+                    return;
+                }
             }
 
             // The emergency hook must exist before consent becomes usable.
@@ -124,7 +130,20 @@ namespace QS3D.BricsCAD.V25
             McpAgentExperience.Success(
                 "desktop-control",
                 "User đã Resume desktop control cho phiên BricsCAD hiện tại.",
-                "Consent tự hết hạn sau 10 phút không có desktop action; Esc ×2 hoặc Pause để dừng ngay.");
+                "QS3D local host sẽ tự renew consent trong phiên; Esc ×2, toggle OFF hoặc đóng BricsCAD để dừng ngay.");
+        }
+
+        /// <summary>
+        /// Local-process keepalive only. This is deliberately not exposed through MCP, so a remote
+        /// caller cannot revive a permission that the user turned off. The short lease remains a
+        /// fail-safe if the local UI augmenter/watchdog itself stops running.
+        /// </summary>
+        public static void RenewConsentLeaseFromLocalHost()
+        {
+            lock (Sync)
+            {
+                if (_enabled) _idleDeadlineUtc = DateTime.UtcNow + ConsentIdleTimeout;
+            }
         }
 
         public static void PauseFromLocalUser(string reason)
@@ -137,6 +156,15 @@ namespace QS3D.BricsCAD.V25
             StopSession(reason, true, false, "OFF");
         }
 
+        /// <summary>
+        /// Revokes desktop-wide reads/input while leaving the API-first CAD agent mutation runtime
+        /// alive. This is the normal OFF path for the foreground-access toggle.
+        /// </summary>
+        public static void DisableForegroundAccessFromLocalUser(string reason)
+        {
+            StopSession(reason, false, false, "OFF");
+        }
+
         public static void RequireLocalConsent(string tool)
         {
             ExpireConsentIfIdle();
@@ -144,7 +172,7 @@ namespace QS3D.BricsCAD.V25
             {
                 if (!_enabled)
                     throw new InvalidOperationException(
-                        "Local desktop-control consent is " + _consentState + ". Open QS3D MCP Agent Center > Agent and Resume desktop locally before using "
+                        "Local desktop-control consent is " + _consentState + ". Open QS3D MCP Agent Center > Agent and enable foreground desktop access locally before using "
                         + (tool ?? "this desktop tool") + ".");
             }
         }
@@ -199,8 +227,8 @@ namespace QS3D.BricsCAD.V25
             ReleaseKeyboardHook();
             McpAgentExperience.Warning(
                 "desktop-control",
-                "Desktop consent đã EXPIRED sau 10 phút không có desktop action mới.",
-                "Kiểm tra drawing/backup nếu cần, sau đó Resume desktop từ Agent Center khi muốn tiếp tục.");
+                "Desktop consent đã EXPIRED vì local-host lease không còn được renew.",
+                "Kiểm tra trạng thái QS3D/Agent Center, sau đó bật lại foreground access local nếu muốn tiếp tục.");
         }
 
         public static void Shutdown()
@@ -233,8 +261,8 @@ namespace QS3D.BricsCAD.V25
             if (hide) HideOverlay();
 
             var next = IsEnabled
-                ? "Desktop consent vẫn ON; Idle còn " + FormatRemaining(IdleRemaining) + ". Esc ×2 luôn có thể dừng."
-                : "Desktop consent đang " + ConsentState + ". Kiểm tra drawing/backup rồi Resume local nếu muốn tiếp tục.";
+                ? "Desktop consent vẫn ON; local host đang auto-renew. Esc ×2 luôn có thể dừng."
+                : "Desktop consent đang " + ConsentState + ". Kiểm tra drawing/backup rồi bật lại local nếu muốn tiếp tục.";
             var message = terminalState == "failed" && !string.IsNullOrWhiteSpace(failureMessage)
                 ? "Desktop action thất bại: " + scope.Tool + " · " + BoundMessage(failureMessage)
                 : "Desktop action " + terminalState + ": " + scope.Tool;
@@ -281,7 +309,7 @@ namespace QS3D.BricsCAD.V25
                 McpAgentExperience.Warning(
                     "desktop-control",
                     string.IsNullOrWhiteSpace(reason) ? "Desktop control đã dừng." : reason,
-                    "Kiểm tra drawing/backup; muốn tiếp tục user phải Resume desktop từ QS3D Agent Center.");
+                    "Background CAD/API có thể tiếp tục nếu Agent mutation chưa bị emergency-stop; foreground desktop muốn dùng lại phải được user bật local.");
             }
 
             if (cancelCadCommand && McpEmbeddedServer.IsRunning)
