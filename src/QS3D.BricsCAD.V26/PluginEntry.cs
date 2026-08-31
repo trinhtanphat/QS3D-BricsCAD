@@ -35,6 +35,7 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
+                McpTransportAgentCenterAugmenter.Start();
                 McpTransportCoordinator.TryAutoStartPreferred();
                 McpPublicEndpointResolver.Resolve();
             }
@@ -90,6 +91,7 @@ namespace QS3D.BricsCAD.V25
             TryCleanup(McpDesktopControlSession.Shutdown);
             TryCleanup(McpFirstRunExperience.Stop);
             TryCleanup(McpProjectRecoveryService.Stop);
+            TryCleanup(McpTransportAgentCenterAugmenter.Stop);
             TryCleanup(McpTransportCoordinator.StopAllForHostShutdown);
             TryCleanup(McpEmbeddedServer.Stop);
             TryCleanup(UpdateBootstrapper.Stop);
