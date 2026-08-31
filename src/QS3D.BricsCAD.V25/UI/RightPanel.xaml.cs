@@ -17,6 +17,17 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class RightPanel : UserControl
     {
         private const int MaxLayerSearchTokens = 8;
+        private const string RefreshFailureStatus = "Không thể đọc trạng thái DWG. Hãy thử làm mới lại.";
+        private const string RefreshWarningSuffix = " • cảnh báo: panel chưa làm mới hoàn toàn.";
+        private const string ClearSelectionFailureStatus = "Không thể đồng bộ trạng thái bỏ chọn với CAD. Hãy thử lại.";
+        private const string XrefSelectionFailureStatus = "Không thể đồng bộ lựa chọn Xref với CAD. Hãy thử lại.";
+        private const string LayerVisibilityFailureStatus = "Không thể cập nhật hiển thị layer. Trạng thái panel đã được làm mới lại.";
+        private const string LayerLockFailureStatus = "Không thể cập nhật khóa layer. Trạng thái panel đã được làm mới lại.";
+        private const string XrefReloadFailureStatus = "Không thể nạp lại Xref. Kiểm tra bản vẽ và thử lại.";
+        private const string XrefMoveFailureStatus = "Không thể chuẩn bị Xref để di chuyển. Hãy thử lại.";
+        private const string XrefDetachFailureStatus = "Không thể gỡ Xref khỏi bản vẽ. Hãy thử lại.";
+        private const string CommandDispatchFailureStatus = "Không thể gửi lệnh sang BricsCAD. Hãy thử lại trên bản vẽ đang active.";
+
         private readonly RightPanelViewModel _viewModel = new RightPanelViewModel();
         private bool _refreshingLayers;
         private bool _refreshingDrawings;
@@ -69,9 +80,9 @@ namespace QS3D.BricsCAD.V25.UI
                 ReloadLayers();
                 _viewModel.Status = _viewModel.Drawings.Count + " bản vẽ • " + _viewModel.Layers.Count + " layer";
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _viewModel.Status = "Lỗi đọc DWG: " + ex.Message;
+                _viewModel.Status = RefreshFailureStatus;
             }
         }
 
@@ -206,9 +217,9 @@ namespace QS3D.BricsCAD.V25.UI
                 ReloadLayers();
                 _viewModel.Status = successStatus;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _viewModel.Status = successStatus + " • cảnh báo làm mới panel: " + ex.Message;
+                _viewModel.Status = successStatus + RefreshWarningSuffix;
             }
         }
 
@@ -249,9 +260,9 @@ namespace QS3D.BricsCAD.V25.UI
                 doc.Editor.SetImpliedSelection(Array.Empty<ObjectId>());
                 _viewModel.Status = "Đã bỏ chọn bản vẽ/Xref.";
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _viewModel.Status = "Không thể bỏ chọn CAD: " + ex.Message;
+                _viewModel.Status = ClearSelectionFailureStatus;
             }
         }
 
@@ -270,9 +281,9 @@ namespace QS3D.BricsCAD.V25.UI
                         ? "Đã bỏ chọn bản vẽ/Xref."
                         : "Bản vẽ chính " + item.Name + " • đã bỏ chọn Xref trong CAD.";
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    _viewModel.Status = "Không thể bỏ chọn Xref trong CAD: " + ex.Message;
+                    _viewModel.Status = ClearSelectionFailureStatus;
                 }
                 return;
             }
@@ -283,9 +294,9 @@ namespace QS3D.BricsCAD.V25.UI
                     ? "Xref " + item.Name + " • đã chọn " + count + " instance trong space hiện tại"
                     : "Xref " + item.Name + " chưa có instance trong space hiện tại.";
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _viewModel.Status = "Lỗi chọn Xref: " + ex.Message;
+                _viewModel.Status = XrefSelectionFailureStatus;
             }
         }
 
@@ -313,10 +324,10 @@ namespace QS3D.BricsCAD.V25.UI
                     : (visible ? "Hiện " : "Ẩn ") + item.Name;
                 ReloadLayers();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _viewModel.Status = ex.Message;
-                ReloadLayers();
+                _viewModel.Status = LayerVisibilityFailureStatus;
+                TryReloadLayersAfterFailure();
             }
         }
 
@@ -336,10 +347,10 @@ namespace QS3D.BricsCAD.V25.UI
                 _viewModel.Status = (visible ? "Đã hiện " : "Đã ẩn ") + count + " layer";
                 ReloadLayers();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _viewModel.Status = ex.Message;
-                ReloadLayers();
+                _viewModel.Status = LayerVisibilityFailureStatus;
+                TryReloadLayersAfterFailure();
             }
         }
 
@@ -360,11 +371,35 @@ namespace QS3D.BricsCAD.V25.UI
                 ReloadLayers();
                 RefreshDrawingsOnly();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _viewModel.Status = ex.Message;
+                _viewModel.Status = LayerLockFailureStatus;
+                TryRefreshLayersAndDrawingsAfterFailure();
+            }
+        }
+
+        private void TryReloadLayersAfterFailure()
+        {
+            try
+            {
+                ReloadLayers();
+            }
+            catch (Exception)
+            {
+                _viewModel.Status = LayerVisibilityFailureStatus + RefreshWarningSuffix;
+            }
+        }
+
+        private void TryRefreshLayersAndDrawingsAfterFailure()
+        {
+            try
+            {
                 ReloadLayers();
                 RefreshDrawingsOnly();
+            }
+            catch (Exception)
+            {
+                _viewModel.Status = LayerLockFailureStatus + RefreshWarningSuffix;
             }
         }
 
@@ -380,9 +415,9 @@ namespace QS3D.BricsCAD.V25.UI
                 XrefService.Reload(doc, item.Name);
                 RefreshAfterXrefMutation("Đã nạp lại Xref " + item.Name);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _viewModel.Status = ex.Message;
+                _viewModel.Status = XrefReloadFailureStatus;
             }
         }
 
@@ -402,9 +437,9 @@ namespace QS3D.BricsCAD.V25.UI
                 if (TrySend(doc, "_MOVE"))
                     _viewModel.Status = "Di chuyển " + count + " instance của " + item.Name + ".";
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _viewModel.Status = ex.Message;
+                _viewModel.Status = XrefMoveFailureStatus;
             }
         }
 
@@ -419,9 +454,9 @@ namespace QS3D.BricsCAD.V25.UI
                 XrefService.Detach(doc, item.Name);
                 RefreshAfterXrefMutation("Đã gỡ Xref " + item.Name);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _viewModel.Status = ex.Message;
+                _viewModel.Status = XrefDetachFailureStatus;
             }
         }
 
@@ -468,9 +503,9 @@ namespace QS3D.BricsCAD.V25.UI
                 document.SendStringToExecute(normalized + " ", true, false, false);
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _viewModel.Status = "Không thể gửi lệnh " + normalized + ": " + ex.Message;
+                _viewModel.Status = CommandDispatchFailureStatus;
                 return false;
             }
         }
