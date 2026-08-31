@@ -37,8 +37,11 @@ def main() -> int:
     server = SERVER.read_text(encoding="utf-8")
     errors: list[str] = []
 
-    run_block = between(runtime, "private static string RunCadCommandSequence", "private static string RunQs3dCommand")
-    save_block = between(runtime, "private static string SaveActiveDocument", "private static string RunQs3dCommand")
+    # QS3D command dispatch moved to McpQs3dDomainRuntime. Keep these legacy CAD
+    # slices bounded by the next stable McpCadAgentRuntime method instead of by the
+    # removed RunQs3dCommand implementation.
+    run_block = between(runtime, "private static string RunCadCommandSequence", "private static string CommandCatalogJson")
+    save_block = between(runtime, "private static string SaveActiveDocument", "private static string CommandCatalogJson")
     active_document_block = between(runtime, "private static string BuildActiveDocumentJson", "private static string BuildSelectionJson")
     call_block = between(runtime, "public static string Call", "private static string Mutation")
     direct_command_block = between(direct, "internal static string CallCadCommandSequence", "private static string CreateBox")
