@@ -57,6 +57,10 @@ namespace QS3D.BricsCAD.V25
             var secret = NormalizeSecret(value);
             if (secret.Length == 0) throw new InvalidOperationException("Runtime API key is empty.");
             WriteCredential(OpenAiRuntimeKeyTarget, secret);
+            string persisted;
+            if (!TryReadOpenAiRuntimeApiKey(out persisted)
+                || !string.Equals(persisted, secret, StringComparison.Ordinal))
+                throw new InvalidOperationException("Runtime API key persistence verification failed.");
             Environment.SetEnvironmentVariable("CONTROL_PLANE_API_KEY", secret, EnvironmentVariableTarget.Process);
         }
 
