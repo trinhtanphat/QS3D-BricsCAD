@@ -167,7 +167,6 @@ def main() -> int:
         'case "cad_entity_delete": return Mutation(',
         'case "cad_entity_set_layer": return Mutation(',
         'case "cad_layer": return Mutation(',
-        'case "cad_command_sequence": return Mutation(',
         'case "qs3d_run_command": return Mutation(',
         'case "cad_ui_click": return Mutation(',
         'case "cad_ui_type": return Mutation(',
@@ -176,6 +175,21 @@ def main() -> int:
     for route in mutation_routes:
         if route not in runtime:
             errors.append(f"MCP runtime mutation bypasses confirmation/stop gate: {route}")
+
+    command_sequence_start = runtime.find('case "cad_command_sequence":')
+    command_sequence_end = runtime.find('case "qs3d_run_command"', command_sequence_start)
+    if command_sequence_start < 0 or command_sequence_end <= command_sequence_start:
+        errors.append("cannot inspect MCP cad_command_sequence mutation route")
+    else:
+        command_sequence_route = runtime[command_sequence_start:command_sequence_end]
+        for token in (
+            "return Mutation(args, tool, () =>",
+            "McpCadDirectModelRuntime.CanHandleCadCommandSequence(args)",
+            "McpCadDirectModelRuntime.CallCadCommandSequence(args)",
+            "RunCadCommandSequence(args)",
+        ):
+            if token not in command_sequence_route:
+                errors.append(f"MCP cad_command_sequence route lost mutation/direct-fallback contract: {token}")
 
     if "public int Cancelled;" in runtime or "Volatile.Read(ref item.Cancelled) == 0" in runtime:
         errors.append("CAD dispatch still uses a check-then-act cancellation flag")
