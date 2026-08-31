@@ -111,7 +111,7 @@ implied_only_cases = (
         "private static void FinalizeUi",
         "Column Tie",
         "ExistingProjectMutationContext.Require(document, \"Column Tie 3D\")",
-        "ColumnTieSolidBuilder.BuildSelected(document, project)",
+        "ColumnTieSolidBuilder.BuildSelected(document, project, selectedIds)",
     ),
 )
 
@@ -148,4 +148,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: all guarded rebar 3D command families establish their existing PICKFIRST/interactive selection contract before binding the canonical project; empty/cancel paths fail closed without project creation/binding and PICKFIRST-only Column commands do not gain a new prompt.")
+print("PASS: all guarded rebar 3D command families establish their existing PICKFIRST/interactive selection contract before binding the canonical project; empty/cancel paths fail closed without project creation/binding and PICKFIRST-only Column commands pass the admitted snapshot into native generation without gaining a new prompt.")
