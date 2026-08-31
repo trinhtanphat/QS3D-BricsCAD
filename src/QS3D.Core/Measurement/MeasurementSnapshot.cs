@@ -22,22 +22,33 @@ namespace QS3D.Core.Measurement
 
             var items = new List<MeasurementTrace>();
             var identities = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var trace in traces)
+            using (var enumerator = traces.GetEnumerator())
             {
-                RequireTraversalCapacity(knownCount, items.Count, nameof(traces));
-                if (items.Count >= MaximumTraceCount)
-                    throw TraceCountError(nameof(traces));
-                if (trace == null)
-                    throw new ArgumentException("Measurement snapshot traces cannot contain null entries.", nameof(traces));
+                while (true)
+                {
+                    RequireKnownCountStable(traces, knownCount, nameof(traces));
+                    var hasNext = enumerator.MoveNext();
+                    RequireKnownCountStable(traces, knownCount, nameof(traces));
+                    if (!hasNext) break;
 
-                var identity = IdentityKey(trace);
-                if (!identities.Add(identity))
-                    throw new ArgumentException(
-                        "Measurement snapshot contains duplicate measurement identity: " +
-                        trace.SemanticIdentity + "/" + trace.SourceIdentity + "/" + trace.QuantityKey + ".",
-                        nameof(traces));
+                    RequireTraversalCapacity(knownCount, items.Count, nameof(traces));
+                    if (items.Count >= MaximumTraceCount)
+                        throw TraceCountError(nameof(traces));
 
-                items.Add(trace);
+                    var trace = enumerator.Current;
+                    RequireKnownCountStable(traces, knownCount, nameof(traces));
+                    if (trace == null)
+                        throw new ArgumentException("Measurement snapshot traces cannot contain null entries.", nameof(traces));
+
+                    var identity = IdentityKey(trace);
+                    if (!identities.Add(identity))
+                        throw new ArgumentException(
+                            "Measurement snapshot contains duplicate measurement identity: " +
+                            trace.SemanticIdentity + "/" + trace.SourceIdentity + "/" + trace.QuantityKey + ".",
+                            nameof(traces));
+
+                    items.Add(trace);
+                }
             }
 
             RequireObservedCount(knownCount, items.Count, nameof(traces));
@@ -100,8 +111,8 @@ namespace QS3D.Core.Measurement
             int? admittedCount,
             string paramName)
         {
-            var finalCount = RequireSupportedCount(traces, paramName);
-            if (finalCount != admittedCount)
+            var observedCount = RequireSupportedCount(traces, paramName);
+            if (observedCount != admittedCount)
                 throw new ArgumentException("Measurement snapshot count changed during enumeration.", paramName);
         }
 
