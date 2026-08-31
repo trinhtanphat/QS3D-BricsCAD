@@ -247,7 +247,7 @@ namespace QS3D.BricsCAD.V25
                     Rotation = NumberOptional(body, "rotationDeg", 0d) * Math.PI / 180d
                 };
                 if (width > 0d) entity.Width = width;
-                return AddEntity(entity, LayerOptional(body), "cad_create_mtext"));
+                return AddEntity(entity, LayerOptional(body), "cad_create_mtext");
             });
         }
 
