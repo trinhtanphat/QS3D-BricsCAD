@@ -10,6 +10,8 @@ BACKGROUND = SRC / "McpBackgroundHostRuntime.cs"
 SESSION = SRC / "McpDesktopControlSession.cs"
 PERSISTENCE_UI = SRC / "McpPersistentAgentCenterAugmenter.cs"
 SETTINGS = SRC / "McpPersistentUserSettings.cs"
+TUNNEL = SRC / "McpOpenAiSecureTunnel.cs"
+AGENT_CENTER = SRC / "McpAgentControlCenter.cs"
 PLUGIN = SRC / "PluginEntry.cs"
 V26_PLUGIN = V26_SRC / "PluginEntry.cs"
 
@@ -24,6 +26,8 @@ background = BACKGROUND.read_text(encoding="utf-8")
 session = SESSION.read_text(encoding="utf-8")
 persistence_ui = PERSISTENCE_UI.read_text(encoding="utf-8")
 settings = SETTINGS.read_text(encoding="utf-8")
+tunnel = TUNNEL.read_text(encoding="utf-8")
+agent_center = AGENT_CENTER.read_text(encoding="utf-8")
 plugin = PLUGIN.read_text(encoding="utf-8")
 v26_plugin = V26_PLUGIN.read_text(encoding="utf-8")
 
@@ -80,14 +84,37 @@ disable_block = session.split("public static void DisableForegroundAccessFromLoc
 if 'StopSession(reason, false, false, "OFF")' not in disable_block:
     fail("foreground OFF must revoke desktop access without stopping background CAD/API automation")
 
-# WPF click handlers must fail closed without rethrowing into the dispatcher.
-toggle_block = persistence_ui.split("private static void ToggleDesktopForegroundAccess()", 1)[1].split("private static void TrySetInteractionPolicy", 1)[0]
-if "throw;" in toggle_block:
-    fail("foreground toggle must not rethrow failures into the WPF dispatcher")
-if "McpAgentExperience.Error(" not in toggle_block:
-    fail("foreground toggle failure must publish a bounded local error after fail-closed revocation")
-if 'TrySetInteractionPolicy("background_only")' not in toggle_block:
-    fail("foreground toggle failure must restore background_only before reporting failure")
+# WPF click handlers must fail closed without rethrowing into the dispatcher. Support both the
+# legacy local-loopback implementation and the direct v2 runtime helpers without widening the
+# inspected region past the actual click handler/helper that owns fail-closed behavior.
+toggle_tail = persistence_ui.split("private static void ToggleDesktopForegroundAccess()", 1)[1]
+if "private static void ToggleDesktopForegroundAccessCore()" in toggle_tail:
+    toggle_handler = toggle_tail.split("private static void ToggleDesktopForegroundAccessCore()", 1)[0]
+    if "throw;" in toggle_handler:
+        fail("foreground toggle handler must not rethrow failures into the WPF dispatcher")
+    if "FailClosedForegroundAccess(ex);" not in toggle_handler:
+        fail("foreground toggle handler must route failures through fail-closed revocation")
+    fail_closed = persistence_ui.split("private static void FailClosedForegroundAccess(Exception error)", 1)[1].split("private static void", 1)[0]
+    if "McpAgentExperience.Error(" not in fail_closed:
+        fail("foreground toggle failure must publish a bounded local error after fail-closed revocation")
+    if ('McpBackgroundHostRuntime.DisableForegroundFromLocalUser()' not in fail_closed
+            and 'TrySetInteractionPolicy("background_only")' not in fail_closed):
+        fail("foreground toggle failure must restore background_only before reporting failure")
+else:
+    toggle_block = toggle_tail.split("private static void TrySetInteractionPolicy", 1)[0]
+    if "throw;" in toggle_block:
+        fail("foreground toggle must not rethrow failures into the WPF dispatcher")
+    if "McpAgentExperience.Error(" not in toggle_block:
+        fail("foreground toggle failure must publish a bounded local error after fail-closed revocation")
+    if 'TrySetInteractionPolicy("background_only")' not in toggle_block:
+        fail("foreground toggle failure must restore background_only before reporting failure")
+
+# The local mouse/keyboard/screen toggle must own *all* user-screen access. The legacy Resume
+# button may still enable the consent session for compatibility, but background_only must deny a
+# desktop screenshot until the explicit foreground/screen toggle moves policy to foreground_fallback.
+interaction_block = background.split("private static bool UsesGlobalInteraction", 1)[1].split("private static string PolicyJson", 1)[0]
+if 'case "desktop_screenshot":' not in interaction_block:
+    fail("background_only must deny desktop_screenshot so toggle OFF really means no user-screen access")
 
 # Do not regress to plaintext secret persistence in QS3D files.
 settings_lower = settings.lower()
@@ -114,6 +141,38 @@ if "Marshal.WriteByte(readBlob, i, 0)" not in read_block:
     fail("credential read native blob must be zeroed before CredFree")
 if read_block.index("Array.Clear(readBytes, 0, readBytes.Length);") < read_block.index("finally"):
     fail("credential read managed scrub must live in finally so decode failures cannot bypass it")
+
+# Tunnel start must make an explicitly typed Runtime API key restart-safe at the authoritative
+# Start transaction; LostKeyboardFocus is only a convenience and must not be the persistence boundary.
+start_block = tunnel.split("public static bool Start(", 1)[1].split("public static void TryAutoStart", 1)[0]
+if "McpPersistentUserSettings.SaveOpenAiRuntimeApiKey" not in start_block:
+    fail("OpenAI tunnel Start must persist+readback-verify an explicitly supplied Runtime API key")
+
+# Restart-critical non-secret metadata must not report success after a swallowed write failure.
+for token, label in (
+    ("WriteTextVerified(ClientPathFile", "tunnel-client path"),
+    ("WriteTextVerified(TunnelIdFile", "Tunnel ID"),
+    ('WriteTextVerified(AutoStartFile, "1"', "autostart enable"),
+    ('WriteTextVerified(AutoStartFile, "0"', "autostart disable"),
+):
+    if token not in tunnel:
+        fail(f"restart-critical {label} must use verified persistence")
+
+resolve_block = tunnel.split("private static string ResolveRuntimeApiKey", 1)[1].split("private static string NormalizeClientPath", 1)[0]
+if "McpPersistentUserSettings.TryReadOpenAiRuntimeApiKey" not in resolve_block:
+    fail("Runtime API key resolution must directly fall back to Windows Credential Manager")
+
+# Canonical UI/status copy must match the actual restart-safe Credential Manager behavior.
+user_copy = (agent_center + persistence_ui + tunnel).lower()
+for stale in (
+    "runtime api key · chỉ giữ trong ram",
+    "qs3d không lưu runtime api key",
+    "runtime api key không được lưu",
+):
+    if stale in user_copy:
+        fail(f"stale Runtime API key persistence copy remains: {stale}")
+if "windows credential manager" not in user_copy:
+    fail("Runtime API key UI/status copy must identify Windows Credential Manager persistence")
 
 mutation_block = desktop.split("private static readonly HashSet<string> MutationTools", 1)[1].split("};", 1)[0]
 for tool in (

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Bricscad.ApplicationServices;
-using Bricscad.EditorInput;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
@@ -27,14 +26,13 @@ namespace QS3D.BricsCAD.V25.Cad
             public CadElementVerticalPlacement VerticalPlacement { get; set; } = null!;
         }
 
-        public static int BuildSelected(Document document, ProjectState project)
+        public static int BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
-            var selection = document.Editor.SelectImplied();
-            if (selection.Status != PromptStatus.OK || selection.Value == null) return 0;
-            var ids = selection.Value.GetObjectIds();
-            if (ids.Length == 0) return 0;
+            if (selectedIds == null) throw new ArgumentNullException(nameof(selectedIds));
+            if (selectedIds.Length == 0) return 0;
+            var ids = (ObjectId[])selectedIds.Clone();
 
             var pending = new List<PendingUpdate>();
             var processedElements = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

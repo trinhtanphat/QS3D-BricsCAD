@@ -64,30 +64,37 @@ namespace QS3D.Core.Revisions
             var knownCount = SnapshotKnownSummaryCount(rows);
             var summarizable = new List<QuantityRevisionRow>();
             var index = 0;
-            foreach (var row in rows)
+            using (var enumerator = rows.GetEnumerator())
             {
-                if (knownCount.HasValue && index >= knownCount.Value)
-                    throw KnownSummaryCountTraversalMismatch(knownCount.Value, index + 1);
-                if (row == null)
-                    throw new ArgumentException("Quantity revision summary contains a null row at index " + index + ".", nameof(rows));
-                if (!string.IsNullOrEmpty(row.QuantityName) && row.QuantityName.Any(char.IsControl))
-                    ValidateCanonicalRequired(row.QuantityName, "summary row " + index + " quantity key");
-                if (!string.IsNullOrWhiteSpace(row.QuantityName))
+                while (true)
                 {
-                    ValidateCanonicalRequired(row.QuantityName, "summary row " + index + " quantity key");
-                    summarizable.Add(row);
+                    RequireStableKnownSummaryCount(rows, knownCount);
+                    var moved = enumerator.MoveNext();
+                    RequireStableKnownSummaryCount(rows, knownCount);
+                    if (!moved) break;
+
+                    if (knownCount.HasValue && index >= knownCount.Value)
+                        throw KnownSummaryCountTraversalMismatch(knownCount.Value, index + 1);
+
+                    var row = enumerator.Current;
+                    RequireStableKnownSummaryCount(rows, knownCount);
+                    if (row == null)
+                        throw new ArgumentException("Quantity revision summary contains a null row at index " + index + ".", nameof(rows));
+                    if (!string.IsNullOrEmpty(row.QuantityName) && row.QuantityName.Any(char.IsControl))
+                        ValidateCanonicalRequired(row.QuantityName, "summary row " + index + " quantity key");
+                    if (!string.IsNullOrWhiteSpace(row.QuantityName))
+                    {
+                        ValidateCanonicalRequired(row.QuantityName, "summary row " + index + " quantity key");
+                        summarizable.Add(row);
+                    }
+                    index++;
                 }
-                index++;
             }
 
             if (knownCount.HasValue && index != knownCount.Value)
                 throw KnownSummaryCountTraversalMismatch(knownCount.Value, index);
 
-            var finalKnownCount = SnapshotKnownSummaryCount(rows);
-            if (knownCount != finalKnownCount)
-                throw new InvalidOperationException(
-                    "Quantity revision summary input known Count changed during traversal from " +
-                    FormatKnownCount(knownCount) + " to " + FormatKnownCount(finalKnownCount) + ".");
+            RequireStableKnownSummaryCount(rows, knownCount);
 
             var result = new List<QuantityRevisionSummary>();
             foreach (var group in summarizable.GroupBy(x => x.QuantityName, StringComparer.OrdinalIgnoreCase).OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
@@ -119,6 +126,15 @@ namespace QS3D.Core.Revisions
             if (rows is ICollection nonGenericCollection)
                 ObserveKnownSummaryCount(nonGenericCollection.Count, ref knownCount);
             return knownCount;
+        }
+
+        private static void RequireStableKnownSummaryCount(IEnumerable<QuantityRevisionRow> rows, int? knownCount)
+        {
+            var currentKnownCount = SnapshotKnownSummaryCount(rows);
+            if (knownCount != currentKnownCount)
+                throw new InvalidOperationException(
+                    "Quantity revision summary input known Count changed during traversal from " +
+                    FormatKnownCount(knownCount) + " to " + FormatKnownCount(currentKnownCount) + ".");
         }
 
         private static void ObserveKnownSummaryCount(int count, ref int? knownCount)

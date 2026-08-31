@@ -62,7 +62,10 @@ for token in [
     'id.Length > MaxElementIdLength ||',
     '!string.Equals(id, id.Trim(), StringComparison.Ordinal) ||',
     '!seen.Add(id))',
-    'if (result.Count > MaxOpeningIds)',
+    'if (knownCount.HasValue && observedCount >= knownCount.Value)',
+    'if (observedCount >= MaxOpeningIds)',
+    'var raw = enumerator.Current;',
+    'RequireKnownCountStable(source, knownCount, "after Current")',
     'if (serialized.Length > MaxSerializedLength)',
     'Convert.ToBase64String',
     'Convert.FromBase64String',
@@ -72,6 +75,12 @@ for token in [
 ]:
     if token not in codec:
         errors.append("PhysicalOpeningCutTargetStateCodec missing bounded/fail-closed contract: " + token)
+
+known_overrun = codec.find('if (knownCount.HasValue && observedCount >= knownCount.Value)')
+streaming_overrun = codec.find('if (observedCount >= MaxOpeningIds)')
+current_read = codec.find('var raw = enumerator.Current;')
+if min(known_overrun, streaming_overrun, current_read) < 0 or not (known_overrun < current_read and streaming_overrun < current_read):
+    errors.append("PhysicalOpeningCutTargetStateCodec must reject known and streaming over-yield before unexpected Current")
 
 for token in [
     'PhysicalOpeningCutTargetState.TryRead(host, out var cutOpeningIds)',
@@ -113,4 +122,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: straight-host selected opening cuts preserve a bounded explicit accumulated cut set through the shared Core codec, validate prior state before mutation, reject non-canonical/duplicate ids, subtract only newly selected openings, fingerprint the persisted exact cut set, and invalidate all physical-cut metadata on host rebuild.")
+print("PASS: straight-host selected opening cuts preserve a bounded explicit accumulated cut set through the shared Core codec, validate prior state before mutation, reject non-canonical/duplicate ids and over-yield before unexpected Current, subtract only newly selected openings, fingerprint the persisted exact cut set, and invalidate all physical-cut metadata on host rebuild.")

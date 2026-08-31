@@ -39,7 +39,7 @@ namespace QS3D.BricsCAD.V25
                 var handle = BqNativeTableBuilder.Build(document, project, world);
                 FinalizeUi(document, "BQ Table: đã tạo/cập nhật native Table " + handle + " • regen " + regenerated + ".");
             }
-            catch (Exception ex) { Report(document, "QS3DBQTABLE lỗi: " + ex.Message); }
+            catch (Exception) { Report(document, "QS3DBQTABLE lỗi: thao tác không hoàn tất; kiểm tra project/CAD state và thử lại."); }
         }
 
         [CommandMethod("QS3DBQTABLEREFRESH", CommandFlags.Modal)]
@@ -56,7 +56,7 @@ namespace QS3D.BricsCAD.V25
                 var handle = BqNativeTableBuilder.Build(document, project, position);
                 FinalizeUi(document, "BQ Table: đã refresh native Table " + handle + " tại WCS position đã lưu • regen " + regenerated + ".");
             }
-            catch (Exception ex) { Report(document, "QS3DBQTABLEREFRESH lỗi: " + ex.Message); }
+            catch (Exception) { Report(document, "QS3DBQTABLEREFRESH lỗi: refresh không hoàn tất; kiểm tra project/CAD state và thử lại."); }
         }
 
         [CommandMethod("QS3DBQTABLEREMOVE", CommandFlags.Modal)]
@@ -70,7 +70,7 @@ namespace QS3D.BricsCAD.V25
                 BqNativeTableBuilder.Remove(document, project);
                 FinalizeUi(document, "BQ Table: đã xóa owned native Table/metadata (nếu có).");
             }
-            catch (Exception ex) { Report(document, "QS3DBQTABLEREMOVE lỗi: " + ex.Message); }
+            catch (Exception) { Report(document, "QS3DBQTABLEREMOVE lỗi: remove không hoàn tất; kiểm tra project/CAD state và thử lại."); }
         }
 
         [CommandMethod("QS3DBQTABLEHEALTH", CommandFlags.Modal)]
@@ -97,7 +97,7 @@ namespace QS3D.BricsCAD.V25
                 var suffix = issues.Count > visible.Length ? "\n- … +" + (issues.Count - visible.Length) + " issue(s)" : string.Empty;
                 Report(document, "BQ Table health: " + issues.Count + " issue(s).\n- " + string.Join("\n- ", visible) + suffix);
             }
-            catch (Exception ex) { Report(document, "QS3DBQTABLEHEALTH lỗi: " + ex.Message); }
+            catch (Exception) { Report(document, "QS3DBQTABLEHEALTH lỗi: health check không hoàn tất; kiểm tra project/CAD state và thử lại."); }
         }
 
         private static QS3D.Core.Domain.ProjectState RequireExistingProject(Document document, string operation)
@@ -139,7 +139,10 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
             }
-            catch (Exception ex) { TryWrite(document, "\nQS3D " + message + " UI sync warning: " + ex.Message); }
+            catch (Exception)
+            {
+                TryWrite(document, "\nQS3D " + message + " UI sync warning: native Table đã commit nhưng viewport/palette không refresh đầy đủ.");
+            }
         }
 
         private static void Report(Document document, string message)

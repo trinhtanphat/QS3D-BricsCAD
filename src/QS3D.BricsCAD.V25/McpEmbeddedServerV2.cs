@@ -79,7 +79,7 @@ namespace QS3D.BricsCAD.V25
                 var listener = StartLoopbackListener(out boundPort);
                 Volatile.Write(ref _boundPort, boundPort);
                 _listener = listener;
-                _listenerThread = new Thread(ServeLoop) { IsBackground = true, Name = "QS3D MCP loopback server v2" };
+                _listenerThread = new Thread(() => ServeLoop(listener)) { IsBackground = true, Name = "QS3D MCP loopback server v2" };
                 _listenerThread.Start();
             }
         }
@@ -150,16 +150,29 @@ namespace QS3D.BricsCAD.V25
                    + (string.IsNullOrWhiteSpace(LastError) ? string.Empty : "; lastError=" + LastError);
         }
 
-        private static void ServeLoop()
+        private static bool OwnsListener(TcpListener listener)
         {
-            while (!_stopping)
+            lock (Sync)
+            {
+                return !_stopping && ReferenceEquals(_listener, listener);
+            }
+        }
+
+        private static void ServeLoop(TcpListener listener)
+        {
+            while (OwnsListener(listener))
             {
                 TcpClient? client = null;
                 try
                 {
-                    var listener = _listener;
-                    if (listener == null) return;
+                    if (!OwnsListener(listener)) return;
                     client = listener.AcceptTcpClient();
+                    if (!OwnsListener(listener))
+                    {
+                        try { client.Close(); } catch { }
+                        client = null;
+                        return;
+                    }
                     client.NoDelay = true;
                     if (!ClientSlots.Wait(0))
                     {
@@ -172,14 +185,14 @@ namespace QS3D.BricsCAD.V25
                 }
                 catch (SocketException ex)
                 {
-                    if (_stopping) return;
+                    if (!OwnsListener(listener)) return;
                     SetLastError("socket: " + ex.Message);
                     Thread.Sleep(100);
                 }
                 catch (ObjectDisposedException) { return; }
                 catch (Exception ex)
                 {
-                    if (_stopping) return;
+                    if (!OwnsListener(listener)) return;
                     SetLastError("listener: " + ex.Message);
                     Thread.Sleep(100);
                 }
@@ -1304,30 +1317,52 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
                 var path = TokenFilePath;
-                try
+                if (File.Exists(path))
                 {
-                    if (File.Exists(path))
+                    var saved = File.ReadAllText(path, Encoding.UTF8).Trim();
+                    if (saved.Length >= 32)
                     {
-                        var saved = File.ReadAllText(path, Encoding.UTF8).Trim();
-                        if (saved.Length >= 32)
-                        {
-                            _bearerToken = saved;
-                            _tokenSource = "saved token file";
-                            return;
-                        }
+                        _bearerToken = saved;
+                        _tokenSource = "saved token file";
+                        return;
                     }
-                    _bearerToken = GenerateToken();
-                    var directory = Path.GetDirectoryName(path);
-                    if (string.IsNullOrWhiteSpace(directory)) throw new InvalidOperationException("Could not resolve MCP config directory.");
-                    Directory.CreateDirectory(directory);
-                    File.WriteAllText(path, _bearerToken, new UTF8Encoding(false));
-                    _tokenSource = "generated token file";
                 }
-                catch
+
+                var generated = GenerateToken();
+                PersistBearerTokenAtomically(path, generated);
+                _bearerToken = generated;
+                _tokenSource = "generated verified token file";
+            }
+        }
+
+        private static void PersistBearerTokenAtomically(string path, string token)
+        {
+            var directory = Path.GetDirectoryName(path);
+            if (string.IsNullOrWhiteSpace(directory))
+                throw new InvalidOperationException("Could not resolve MCP config directory.");
+            Directory.CreateDirectory(directory);
+
+            var tempPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
+                using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
                 {
-                    _bearerToken = GenerateToken();
-                    _tokenSource = "ephemeral process token";
+                    writer.Write(token);
+                    writer.Flush();
+                    stream.Flush(true);
                 }
+
+                if (File.Exists(path)) File.Replace(tempPath, path, null, true);
+                else File.Move(tempPath, path);
+
+                var verified = File.ReadAllText(path, Encoding.UTF8).Trim();
+                if (!ConstantTimeEquals(verified, token))
+                    throw new InvalidOperationException("MCP bearer token persistence verification failed.");
+            }
+            finally
+            {
+                try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
             }
         }
 

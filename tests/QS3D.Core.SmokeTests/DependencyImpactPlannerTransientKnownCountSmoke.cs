@@ -18,6 +18,9 @@ namespace QS3D.Core.SmokeTests
             TransientShrinkRejectsBeforeCurrent();
             TransientNegativeRejectsBeforeCurrent();
             TransientConflictRejectsBeforeCurrent();
+            CurrentGrowthRejectsImmediatelyAfterCurrent();
+            CurrentShrinkRejectsImmediatelyAfterCurrent();
+            CurrentNegativeRejectsImmediatelyAfterCurrent();
             StableCountedInputStillPlans();
             StreamingInputStillPlans();
         }
@@ -52,6 +55,30 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentException>(() => new DependencyImpactPlanner().Plan(Fixture(), source));
             Require(source.MoveNextCalls == 1 && source.CurrentReads == 0,
                 "Dependency-impact transient Count conflict must reject before semantic Current.");
+        }
+
+        private static void CurrentGrowthRejectsImmediatelyAfterCurrent()
+        {
+            var source = new TransientCurrentRoots("ROOT", 1, 2);
+            Throws<ArgumentException>(() => new DependencyImpactPlanner().Plan(Fixture(), source));
+            Require(source.MoveNextCalls == 1 && source.CurrentReads == 1 && source.CountReadsAfterCurrent == 1,
+                "Dependency-impact Current-time Count growth must reject at the immediate post-Current rebound.");
+        }
+
+        private static void CurrentShrinkRejectsImmediatelyAfterCurrent()
+        {
+            var source = new TransientCurrentRoots("ROOT", 1, 0);
+            Throws<ArgumentException>(() => new DependencyImpactPlanner().Plan(Fixture(), source));
+            Require(source.MoveNextCalls == 1 && source.CurrentReads == 1 && source.CountReadsAfterCurrent == 1,
+                "Dependency-impact Current-time Count shrink must reject at the immediate post-Current rebound.");
+        }
+
+        private static void CurrentNegativeRejectsImmediatelyAfterCurrent()
+        {
+            var source = new TransientCurrentRoots("ROOT", 1, -1);
+            Throws<ArgumentException>(() => new DependencyImpactPlanner().Plan(Fixture(), source));
+            Require(source.MoveNextCalls == 1 && source.CurrentReads == 1 && source.CountReadsAfterCurrent == 1,
+                "Dependency-impact Current-time negative Count must reject at the immediate post-Current rebound.");
         }
 
         private static void StableCountedInputStillPlans()
@@ -146,6 +173,63 @@ namespace QS3D.Core.SmokeTests
                     }
                     _moved = true;
                     _owner._afterMoveNext = true;
+                    return true;
+                }
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
+        }
+
+        private sealed class TransientCurrentRoots : IReadOnlyCollection<string>
+        {
+            private readonly string _value;
+            private readonly int _admittedCount;
+            private readonly int _transientCount;
+            private bool _afterCurrent;
+
+            internal TransientCurrentRoots(string value, int admittedCount, int transientCount)
+            {
+                _value = value;
+                _admittedCount = admittedCount;
+                _transientCount = transientCount;
+            }
+
+            public int Count
+            {
+                get
+                {
+                    if (!_afterCurrent) return _admittedCount;
+                    CountReadsAfterCurrent++;
+                    _afterCurrent = false;
+                    return _transientCount;
+                }
+            }
+            internal int MoveNextCalls { get; private set; }
+            internal int CurrentReads { get; private set; }
+            internal int CountReadsAfterCurrent { get; private set; }
+            public IEnumerator<string> GetEnumerator() => new Enumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private sealed class Enumerator : IEnumerator<string>
+            {
+                private readonly TransientCurrentRoots _owner;
+                private bool _moved;
+                internal Enumerator(TransientCurrentRoots owner) => _owner = owner;
+                public string Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        _owner._afterCurrent = true;
+                        return _owner._value;
+                    }
+                }
+                object IEnumerator.Current => Current;
+                public bool MoveNext()
+                {
+                    _owner.MoveNextCalls++;
+                    if (_moved) return false;
+                    _moved = true;
                     return true;
                 }
                 public void Reset() => throw new NotSupportedException();

@@ -31,7 +31,7 @@ else:
             "apply": "store.Apply(project, profile)",
             "regen": "RegenerateDirty(project)",
             "restore": "rollback.Restore(project)",
-            "rollback_ui": 'RefreshProjectBestEffort(doc, "rollback sau Template Import")',
+            "rollback_ui": "RefreshProjectBestEffort(doc);",
             "success_ui": "FinalizeImportUi(doc, message);",
         }
         positions = {}
@@ -80,18 +80,29 @@ else:
         finalizer = text[finalizer_start:refresh_start]
         refresh = text[refresh_start:guard_start]
         guard = text[guard_start:]
-        if "try { PaletteCoordinator.RefreshProject(); }" not in finalizer or "catch (System.Exception ex)" not in finalizer:
-            errors.append("successful template import UI refresh must be best-effort")
-        if "try { PaletteCoordinator.RefreshProject(); }" not in refresh or "catch (System.Exception ex)" not in refresh:
-            errors.append("rollback palette refresh must be best-effort")
-        if 'try { document.Editor.WriteMessage("\\n" + operation + " error: " + ex.Message); } catch { }' not in guard:
-            errors.append("outer template guard must not throw while reporting command failures")
-        if 'try { PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message); } catch { }' not in guard:
-            errors.append("outer template guard status reporting must be best-effort")
+        if "try { PaletteCoordinator.RefreshProject(); }" not in finalizer or "catch (System.Exception)" not in finalizer:
+            errors.append("successful template import UI refresh must remain best-effort and redact caught host detail")
+        if "TryWrite(document, \"\\n\" + ImportUiWarning);" not in finalizer:
+            errors.append("successful template import UI warning must use the stable redacted warning")
+        if "try { PaletteCoordinator.RefreshProject(); }" not in refresh or "catch (System.Exception)" not in refresh:
+            errors.append("rollback palette refresh must remain best-effort and redact caught host detail")
+        if "TryWrite(document, \"\\n\" + RollbackUiWarning);" not in refresh:
+            errors.append("rollback palette refresh warning must use the stable redacted warning")
+        if 'var message = operation + " lỗi; thao tác không hoàn tất. Xem log chẩn đoán nếu cần chi tiết kỹ thuật.";' not in guard:
+            errors.append("outer template guard must report a stable operation-specific failure")
+        if 'TryWrite(document, "\\n" + message);' not in guard:
+            errors.append("outer template guard editor reporting must stay best-effort")
+        if "try { PaletteCoordinator.SetStatus(message); } catch { }" not in guard:
+            errors.append("outer template guard status reporting must stay best-effort")
+
+        forbidden = ("ex.Message", "warning.Message", "importError.Message", "restoreError.Message")
+        for token in forbidden:
+            if token in finalizer or token in refresh or token in guard:
+                errors.append("template UI/guard failure surfaces must not expose raw caught exception detail: " + token)
 
 if errors:
     for error in errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("PASS: template import pins existing-project freshness across review/confirmation and isolates rollback/committed UI reporting failures.")
+print("PASS: template import pins existing-project freshness across review/confirmation and preserves rollback/committed UI reporting with host-detail redaction.")

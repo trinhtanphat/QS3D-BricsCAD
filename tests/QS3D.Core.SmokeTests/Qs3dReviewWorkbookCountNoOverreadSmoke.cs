@@ -22,6 +22,9 @@ namespace QS3D.Core.SmokeTests
             MoveNextInducedCountDriftFailsBeforeCurrent();
             CurrentInducedCountDriftFailsBeforeRetention();
             PostTraversalCountDriftFailsClosed();
+            AdmissionConflictingGenericCountFailsBeforeTraversal();
+            CurrentInducedGenericCountDriftFailsBeforeRetention();
+            StableMultiInterfaceSnapshotRemainsAccepted();
             StableCountedSnapshotReadsEachAdmittedCurrentExactlyOnce();
         }
 
@@ -74,6 +77,32 @@ namespace QS3D.Core.SmokeTests
             Require(source.CurrentReads == 1, "Post-traversal Count drift must not add extra Current reads.");
         }
 
+        private static void AdmissionConflictingGenericCountFailsBeforeTraversal()
+        {
+            var source = new MultiCountReadOnlyList<int>(new[] { 11 }, genericCount: 2, nonGenericCount: 1, driftGenericOnCurrent: false);
+            ExpectInvalidData(source);
+            Require(source.MoveNextCalls == 0, "Conflicting ICollection<T>.Count must fail during admission before traversal.");
+            Require(source.CurrentReads == 0, "Admission Count conflict must fail before Current.");
+        }
+
+        private static void CurrentInducedGenericCountDriftFailsBeforeRetention()
+        {
+            var source = new MultiCountReadOnlyList<int>(new[] { 11 }, genericCount: 1, nonGenericCount: 1, driftGenericOnCurrent: true);
+            ExpectInvalidData(source);
+            Require(source.MoveNextCalls == 1, "Secondary Count drift from Current must fail on the first admitted item.");
+            Require(source.CurrentReads == 1, "Secondary Count drift must observe exactly one Current before rejection.");
+            Require(source.GenericCountReads >= 4, "ICollection<T>.Count must be rebound immediately after Current.");
+        }
+
+        private static void StableMultiInterfaceSnapshotRemainsAccepted()
+        {
+            var source = new MultiCountReadOnlyList<int>(new[] { 11, 22 }, genericCount: 2, nonGenericCount: 2, driftGenericOnCurrent: false);
+            var result = InvokeSnapshot(source);
+            Require(result.SequenceEqual(new[] { 11, 22 }), "Stable multi-interface input must preserve values and order.");
+            Require(source.CurrentReads == 2, "Stable multi-interface input must read each Current once.");
+            Require(source.GenericCountReads > 1 && source.NonGenericCountReads > 1, "All admitted Count channels must be rebound during traversal.");
+        }
+
         private static void StableCountedSnapshotReadsEachAdmittedCurrentExactlyOnce()
         {
             var source = new InstrumentedReadOnlyList<int>(new[] { 11, 22 }, 2);
@@ -84,7 +113,7 @@ namespace QS3D.Core.SmokeTests
             Require(source.CountReads == 10, "Stable two-item input must bind Count at admission, around traversal, after Current, and before publication.");
         }
 
-        private static void ExpectInvalidData(InstrumentedReadOnlyList<int> source)
+        private static void ExpectInvalidData<T>(IReadOnlyList<T> source)
         {
             try
             {
@@ -96,15 +125,15 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
-        private static IReadOnlyList<int> InvokeSnapshot(InstrumentedReadOnlyList<int> source)
+        private static IReadOnlyList<T> InvokeSnapshot<T>(IReadOnlyList<T> source)
         {
             var method = typeof(Qs3dReviewWorkbookExporter).GetMethod(
                 "SnapshotCounted",
                 BindingFlags.NonPublic | BindingFlags.Static)
                 ?? throw new InvalidOperationException("Review workbook SnapshotCounted helper is missing.");
-            var closed = method.MakeGenericMethod(typeof(int));
+            var closed = method.MakeGenericMethod(typeof(T));
             var admittedCount = source.Count;
-            return (IReadOnlyList<int>)(closed.Invoke(null, new object[] { source, admittedCount, "smoke" })
+            return (IReadOnlyList<T>)(closed.Invoke(null, new object[] { source, admittedCount, "smoke" })
                 ?? throw new InvalidOperationException("Review workbook SnapshotCounted returned null."));
         }
 
@@ -166,6 +195,75 @@ namespace QS3D.Core.SmokeTests
                         _owner.CurrentReads++;
                         if (_owner._advanceCountOnCurrent)
                             _owner._countIndex++;
+                        return _owner._items[_index];
+                    }
+                }
+
+                object IEnumerator.Current => Current!;
+
+                public bool MoveNext()
+                {
+                    _owner.MoveNextCalls++;
+                    _index++;
+                    return _index < _owner._items.Length;
+                }
+
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
+        }
+
+        private sealed class MultiCountReadOnlyList<T> : IReadOnlyList<T>, ICollection<T>, ICollection
+        {
+            private readonly T[] _items;
+            private int _genericCount;
+            private int _nonGenericCount;
+            private readonly bool _driftGenericOnCurrent;
+
+            internal MultiCountReadOnlyList(T[] items, int genericCount, int nonGenericCount, bool driftGenericOnCurrent)
+            {
+                _items = items;
+                _genericCount = genericCount;
+                _nonGenericCount = nonGenericCount;
+                _driftGenericOnCurrent = driftGenericOnCurrent;
+            }
+
+            internal int MoveNextCalls { get; private set; }
+            internal int CurrentReads { get; private set; }
+            internal int GenericCountReads { get; private set; }
+            internal int NonGenericCountReads { get; private set; }
+
+            public int Count => _items.Length;
+            int ICollection<T>.Count { get { GenericCountReads++; return _genericCount; } }
+            int ICollection.Count { get { NonGenericCountReads++; return _nonGenericCount; } }
+            public T this[int index] => _items[index];
+            bool ICollection<T>.IsReadOnly => true;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+
+            public IEnumerator<T> GetEnumerator() => new Enumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            void ICollection<T>.Add(T item) => throw new NotSupportedException();
+            void ICollection<T>.Clear() => throw new NotSupportedException();
+            bool ICollection<T>.Contains(T item) => ((ICollection<T>)_items).Contains(item);
+            void ICollection<T>.CopyTo(T[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
+            bool ICollection<T>.Remove(T item) => throw new NotSupportedException();
+            void ICollection.CopyTo(Array array, int index) => _items.CopyTo(array, index);
+
+            private sealed class Enumerator : IEnumerator<T>
+            {
+                private readonly MultiCountReadOnlyList<T> _owner;
+                private int _index = -1;
+
+                internal Enumerator(MultiCountReadOnlyList<T> owner) => _owner = owner;
+
+                public T Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        if (_owner._driftGenericOnCurrent)
+                            _owner._genericCount = checked(_owner._genericCount + 1);
                         return _owner._items[_index];
                     }
                 }
