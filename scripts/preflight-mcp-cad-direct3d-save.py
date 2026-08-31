@@ -42,6 +42,8 @@ def main() -> int:
     active_document_block = between(runtime, "private static string BuildActiveDocumentJson", "private static string BuildSelectionJson")
     call_block = between(runtime, "public static string Call", "private static string Mutation")
     direct_command_block = between(direct, "internal static string CallCadCommandSequence", "private static string CreateBox")
+    extrude_block = between(direct, "private static string Extrude", "private static string Boolean")
+    boolean_block = between(direct, "private static string Boolean", "private static string PlaceSingleFooting")
     direct_save_block = between(direct, "private static string Save()", "private static string NormalizeExtrudeInputs")
     dbmod_block = between(direct, "private static void WaitForCleanDbmod", "private static void RequireConfirmedMutation")
 
@@ -101,6 +103,25 @@ def main() -> int:
         'Save();',
         '\\"command\\":\\"QSAVE\\"',
     ), "direct QSAVE route")
+
+    require(errors, extrude_block, (
+        'OpenEntity(transaction, document.Database, handle, OpenMode.ForRead) as Curve',
+        'Region.CreateFromCurves(new DBObjectCollection { source })',
+        'regionSource=database-resident',
+    ), "database-resident closed-curve extrusion")
+    if 'source.Clone()' in extrude_block or 'new DBObjectCollection { clone }' in extrude_block:
+        errors.append("cad_extrude must not feed a transient Curve clone to Region.CreateFromCurves")
+
+    require(errors, boolean_block, (
+        'var operandClone = operand.Clone() as Solid3d;',
+        'target.BooleanOperation(operation, operandClone);',
+        'if (!operand.IsErased) operand.Erase();',
+        'operandClone.Dispose();',
+        'operand=transient-clone',
+    ), "transient boolean kernel operand")
+    if 'target.BooleanOperation(operation, operand);' in boolean_block:
+        errors.append("direct boolean must not pass the database-resident tool Solid3d directly to BooleanOperation")
+
     require(errors, direct_save_block, (
         'document.Database.SaveAs(filename, DwgVersion.Current);',
         'WaitForCleanDbmod();',
@@ -130,7 +151,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: MCP direct 3D/save tools preserve bounded mutation routing, intercept QSAVE in CAD context, avoid Database.Save after reopen, and confirm save completion with a bounded DBMOD settle wait.")
+    print("PASS: MCP direct 3D/save tools use database-resident curve inputs for Region creation, transient clones for boolean kernel operands, preserve bounded mutation routing, intercept QSAVE in CAD context, avoid Database.Save after reopen, and confirm save completion with a bounded DBMOD settle wait.")
     return 0
 
 
