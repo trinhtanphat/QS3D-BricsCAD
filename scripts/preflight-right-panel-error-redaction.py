@@ -1,11 +1,21 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml.cs"
 errors = []
+
+
+def bounded_method(text: str, signature: str) -> str:
+    start = text.find(signature)
+    if start < 0:
+        return ""
+    end_candidates = [text.find("\n        private ", start + len(signature)), text.find("\n        public ", start + len(signature))]
+    end_candidates = [value for value in end_candidates if value >= 0]
+    end = min(end_candidates) if end_candidates else len(text)
+    return text[start:end]
+
 
 if not SOURCE.is_file():
     errors.append("missing RightPanel.xaml.cs")
@@ -33,48 +43,41 @@ else:
             errors.append("Right Panel missing stable redacted status constant: " + token)
 
     method_contracts = {
-        "Refresh": ("RefreshFailureStatus", "RefreshDrawingsOnly();", "ReloadLayers();"),
-        "RefreshAfterXrefMutation": ("RefreshWarningSuffix", "RefreshDrawingsOnly();", "ReloadLayers();"),
-        "OnClearDrawingSelectionClick": ("ClearSelectionFailureStatus", "SetImpliedSelection(Array.Empty<ObjectId>())"),
-        "OnDrawingSelectionChanged": ("ClearSelectionFailureStatus", "XrefSelectionFailureStatus", "XrefService.SelectInstances"),
-        "SetLayerFromCheckBox": ("LayerVisibilityFailureStatus", "TryReloadLayersAfterFailure();", "LayerVisibilityService.SetVisible"),
-        "SetSelectedLayers": ("LayerVisibilityFailureStatus", "TryReloadLayersAfterFailure();", "LayerVisibilityService.SetVisible"),
-        "SetSelectedLayerLocks": ("LayerLockFailureStatus", "TryRefreshLayersAndDrawingsAfterFailure();", "LayerVisibilityService.SetLocked"),
-        "OnReloadXrefClick": ("XrefReloadFailureStatus", "XrefService.Reload"),
-        "OnMoveDrawingClick": ("XrefMoveFailureStatus", "XrefService.SelectInstances", 'TrySend(doc, "_MOVE")'),
-        "OnDeleteDrawingClick": ("XrefDetachFailureStatus", "XrefService.Detach"),
-        "TrySend": ("CommandDispatchFailureStatus", "SendStringToExecute", "return false;"),
+        "public void Refresh()": ("RefreshFailureStatus", "RefreshDrawingsOnly();", "ReloadLayers();"),
+        "private void RefreshAfterXrefMutation(string successStatus)": ("RefreshWarningSuffix", "RefreshDrawingsOnly();", "ReloadLayers();"),
+        "private void OnClearDrawingSelectionClick(object sender, RoutedEventArgs e)": ("ClearSelectionFailureStatus", "SetImpliedSelection(Array.Empty<ObjectId>())"),
+        "private void OnDrawingSelectionChanged(object sender, SelectionChangedEventArgs e)": ("ClearSelectionFailureStatus", "XrefSelectionFailureStatus", "XrefService.SelectInstances"),
+        "private void SetLayerFromCheckBox(object sender, bool visible)": ("LayerVisibilityFailureStatus", "TryReloadLayersAfterFailure();", "LayerVisibilityService.SetVisible"),
+        "private void SetSelectedLayers(bool visible)": ("LayerVisibilityFailureStatus", "TryReloadLayersAfterFailure();", "LayerVisibilityService.SetVisible"),
+        "private void SetSelectedLayerLocks(bool locked)": ("LayerLockFailureStatus", "TryRefreshLayersAndDrawingsAfterFailure();", "LayerVisibilityService.SetLocked"),
+        "private void OnReloadXrefClick(object sender, RoutedEventArgs e)": ("XrefReloadFailureStatus", "XrefService.Reload"),
+        "private void OnMoveDrawingClick(object sender, RoutedEventArgs e)": ("XrefMoveFailureStatus", "XrefService.SelectInstances", 'TrySend(doc, "_MOVE")'),
+        "private void OnDeleteDrawingClick(object sender, RoutedEventArgs e)": ("XrefDetachFailureStatus", "XrefService.Detach"),
+        "private bool TrySend(Document document, string command)": ("CommandDispatchFailureStatus", "SendStringToExecute", "return false;"),
     }
 
-    method_names = list(method_contracts)
-    for index, method in enumerate(method_names):
-        start = text.find(" " + method + "(")
-        if start < 0:
-            errors.append("Right Panel missing bounded method: " + method)
+    for signature, tokens in method_contracts.items():
+        body = bounded_method(text, signature)
+        if not body:
+            errors.append("Right Panel missing bounded method: " + signature)
             continue
-        end_candidates = [text.find("\n        private ", start + 1), text.find("\n        public ", start + 1)]
-        end_candidates = [value for value in end_candidates if value >= 0]
-        end = min(end_candidates) if end_candidates else len(text)
-        body = text[start:end]
-        for token in method_contracts[method]:
+        for token in tokens:
             if token not in body:
-                errors.append(method + " missing failure/behavior contract: " + token)
+                errors.append(signature + " missing failure/behavior contract: " + token)
         if "catch (Exception ex)" in body or "ex.Message" in body:
-            errors.append(method + " still leaks raw exception text")
+            errors.append(signature + " still leaks raw exception text")
 
-    for helper, primary_status in (
-        ("TryReloadLayersAfterFailure", "LayerVisibilityFailureStatus"),
-        ("TryRefreshLayersAndDrawingsAfterFailure", "LayerLockFailureStatus"),
+    for signature, primary_status, refresh_tokens in (
+        ("private void TryReloadLayersAfterFailure()", "LayerVisibilityFailureStatus", ("ReloadLayers();",)),
+        ("private void TryRefreshLayersAndDrawingsAfterFailure()", "LayerLockFailureStatus", ("ReloadLayers();", "RefreshDrawingsOnly();")),
     ):
-        start = text.find(" " + helper + "(")
-        if start < 0:
-            errors.append("Right Panel missing bounded recovery helper: " + helper)
+        body = bounded_method(text, signature)
+        if not body:
+            errors.append("Right Panel missing bounded recovery helper: " + signature)
             continue
-        end = text.find("\n        private ", start + 1)
-        body = text[start:end if end >= 0 else len(text)]
-        for token in ("try", "catch (Exception)", primary_status, "RefreshWarningSuffix"):
+        for token in ("try", "catch (Exception)", primary_status, "RefreshWarningSuffix") + refresh_tokens:
             if token not in body:
-                errors.append(helper + " missing best-effort recovery contract: " + token)
+                errors.append(signature + " missing best-effort recovery contract: " + token)
 
     if text.count("catch (Exception)") < 12:
         errors.append("Right Panel redaction guard expected all CAD failure catches to use non-binding Exception catches")
