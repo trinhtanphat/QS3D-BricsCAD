@@ -7,6 +7,7 @@ SRC = ROOT / "src" / "QS3D.BricsCAD.V25"
 OPENAI = SRC / "McpOpenAiSecureTunnel.cs"
 CENTER = SRC / "McpAgentControlCenter.cs"
 BOOTSTRAP = SRC / "McpCloudflaredBootstrapper.cs"
+FIRST_RUN = SRC / "McpFirstRunExperience.cs"
 V25_ENTRY = SRC / "PluginEntry.cs"
 V26_ENTRY = ROOT / "src" / "QS3D.BricsCAD.V26" / "PluginEntry.cs"
 DOC = ROOT / "docs" / "MCP-CANONICAL-RUNBOOK.md"
@@ -24,7 +25,7 @@ def forbid(text: str, token: str, label: str, errors: list[str]) -> None:
 
 def main() -> int:
     errors: list[str] = []
-    for path in (OPENAI, CENTER, BOOTSTRAP, V25_ENTRY, V26_ENTRY, DOC):
+    for path in (OPENAI, CENTER, BOOTSTRAP, FIRST_RUN, V25_ENTRY, V26_ENTRY, DOC):
         if not path.is_file():
             errors.append(f"missing file: {path.relative_to(ROOT)}")
     if errors:
@@ -35,6 +36,7 @@ def main() -> int:
     openai = OPENAI.read_text(encoding="utf-8")
     center = CENTER.read_text(encoding="utf-8")
     bootstrap = BOOTSTRAP.read_text(encoding="utf-8")
+    first_run = FIRST_RUN.read_text(encoding="utf-8")
     v25 = V25_ENTRY.read_text(encoding="utf-8")
     v26 = V26_ENTRY.read_text(encoding="utf-8")
     doc = DOC.read_text(encoding="utf-8")
@@ -59,6 +61,7 @@ def main() -> int:
         'CreateNoWindow = true': "bounded child process launch",
         'UseShellExecute = false': "non-shell tunnel-client launch",
         'WriteText(AutoStartFile, "1")': "non-secret auto-start metadata",
+        'if (previous != provider) ForgetChatGptRegistrationAcknowledgement();': "idempotent provider selection registration preservation",
     }.items():
         need(openai, token, label, errors)
 
@@ -83,6 +86,16 @@ def main() -> int:
     }.items():
         need(bootstrap, token, label, errors)
     forbid(bootstrap, 'completed(false, "Cloudflare Tunnel đang được tải/cài. Vui lòng chờ.")', "busy state reported as failure callback", errors)
+
+    for token, label in {
+        'McpTransportCoordinator.SelectedProvider': "selected-provider first-run routing",
+        'IsSelectedTransportReady(': "provider-aware first-run completion",
+        'McpOpenAiSecureTunnelManager.IsReady': "Secure Tunnel first-run readiness",
+        'Connection = Tunnel': "Secure Tunnel first-run ChatGPT guidance",
+        'không cần Cloudflare hoặc public MCP URL': "no-Cloudflare Secure Tunnel first-run guidance",
+        'Cloudflare Quick Tunnel': "Quick Tunnel first-run guidance",
+    }.items():
+        need(first_run, token, label, errors)
 
     for entry_text, name in ((v25, "V25"), (v26, "V26")):
         need(entry_text, "McpTransportCoordinator.TryAutoStartPreferred()", f"{name} preferred transport startup", errors)
@@ -109,7 +122,7 @@ def main() -> int:
             print("ERROR:", error)
         return 1
 
-    print("PASS MCP transport providers / Secure Tunnel / Cloudflare busy-install contract")
+    print("PASS MCP transport providers / Secure Tunnel / Cloudflare busy-install / first-run contract")
     return 0
 
 
