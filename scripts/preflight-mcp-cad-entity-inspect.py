@@ -17,7 +17,9 @@ def between(text: str, start: str, end: str) -> str:
 
 def main() -> int:
     runtime = RUNTIME.read_text(encoding="utf-8")
-    inspect = between(runtime, "private static string InspectEntity", "private static string BuildStatusJson")
+    # BuildStatusJson was split into lane-specific status methods. The inspect
+    # implementation still ends immediately before the BricsCAD status builder.
+    inspect = between(runtime, "private static string InspectEntity", "private static string BuildBricscadStatusJson")
     describe = between(runtime, "private static string DescribeEntity", "private static Entity OpenEntity")
     snapshot = between(runtime, "private static string BuildDatabaseSnapshotJson", "private static string BuildViewStateJson")
 
