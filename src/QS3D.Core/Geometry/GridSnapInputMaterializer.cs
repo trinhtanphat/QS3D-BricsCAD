@@ -35,7 +35,9 @@ namespace QS3D.Core.Geometry
                     if (result.Count >= maxCurves)
                         throw new InvalidOperationException(label + " supports at most " + maxCurves + " curves.");
 
-                    result.Add(enumerator.Current);
+                    var curve = enumerator.Current;
+                    ValidateKnownCount(curves, admittedCount, label);
+                    result.Add(curve);
                 }
             }
 

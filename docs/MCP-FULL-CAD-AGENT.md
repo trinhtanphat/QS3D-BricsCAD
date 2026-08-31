@@ -26,7 +26,7 @@ The canonical UI entry is `QS3DMCPAGENTCENTER` under **TOOL > MCP (AI)**. The Co
 9. Approve the local BricsCAD OAuth prompt only for a connection you initiated.
 10. ChatGPT completes authorization-code + PKCE S256, then scans and calls tools through `/mcp`.
 11. Back in Agent Center, acknowledge that the MCP was added and run the protocol/read-only self-test.
-12. Leave desktop-wide control OFF unless a workflow genuinely needs to cross application boundaries. Resume it locally from **Agent** only when required; consent expires after 10 minutes of desktop-action inactivity.
+12. Leave desktop-wide control OFF unless a workflow genuinely needs to cross application boundaries. Resume it locally from **Agent** only when required; after Resume it stays ON with AUTO-RENEW for the current BricsCAD process until a local safety control or shutdown revokes it.
 
 Quick Tunnel remains `Quick Tunnel · test only`. Its hostname can change, so resource-bound OAuth clients/tokens must be reconnected after the URL changes. A stable Named Tunnel is the production default.
 
@@ -128,11 +128,12 @@ Network/tool confirmation is not enough for cross-application desktop mutation o
 - every ordinary desktop mutation and `desktop_sequence` requires top-level `confirmMutation=true`;
 - `desktop_clipboard_read`, `desktop_screenshot`, and a sequence containing screenshot require `confirmSensitiveRead=true` at the appropriate outer call;
 - those mutation/sensitive-read tools additionally require **local desktop consent** from Agent Center;
-- local desktop consent is process-memory-only, resets on every BricsCAD start and expires after 10 minutes without a newly started guarded desktop action;
+- local desktop consent is process-memory-only, resets on every BricsCAD start and, after explicit local Resume, remains ON with AUTO-RENEW for the current BricsCAD process without idle expiry;
 - Pause/Resume are local-only and cannot be invoked by a remote MCP method;
+- Pause desktop, Emergency Stop, physical Esc×2 and BricsCAD/QS3D shutdown revoke consent immediately;
 - guarded calls display a click-through blue border/banner naming the active `desktop_*` tool and Action ID;
 - a physical **Esc ×2 within 1.2 seconds** revokes desktop consent, advances the mutation epoch, hides the overlay and requests CAD command cancellation;
-- the user must locally Resume desktop control before cross-application automation can continue.
+- the user must locally Resume desktop control before cross-application automation can continue after revocation.
 
 Read-only cursor/window observation remains available without enabling desktop mutation consent. Sensitive reads still require local consent.
 
@@ -223,7 +224,7 @@ The matrix must prove:
 8. PKCE S256 exchange and tools discovery, including all 15 current desktop tools and no `desktop_macro` alias;
 9. representative read-only CAD calls plus desktop cursor/window observation/wait;
 10. desktop mutation/sensitive-read rejection while local desktop consent is OFF;
-11. local Resume/Pause, 10-minute idle expiry + visible blue overlay;
+11. local Resume/Pause, AUTO-RENEW remaining ON beyond 10 minutes of idle time, and visible blue overlay while guarded desktop actions run;
 12. `desktop_clipboard_read` and `desktop_screenshot` rejection without `confirmSensitiveRead=true`, then bounded success/crop on disposable content;
 13. confirmed exact-target disposable desktop move/click/scroll/drag/type/key/clipboard-write behavior;
 14. bounded single-target `desktop_sequence` success;

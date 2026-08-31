@@ -30,7 +30,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 McpEmbeddedServer.EnsureStarted();
-                new McpAgentControlCenterWindow().ShowDialog();
+                new McpAgentControlCenterWindow().Show();
             }
             catch (Exception ex)
             {
@@ -663,7 +663,7 @@ namespace QS3D.BricsCAD.V25
             controls.Children.Add(_desktopConsentText);
             controls.Children.Add(new TextBlock
             {
-                Text = "Desktop-wide input mặc định OFF sau mỗi lần mở BricsCAD. Consent tự hết hạn sau 10 phút không có desktop action mới. ChatGPT không có tool để Resume quyền này; chỉ user tại máy local mới bật lại được. Khi thao tác sẽ có viền xanh; Esc ×2 trong 1.2 giây dừng ngay.",
+                Text = "Desktop-wide input mặc định OFF sau mỗi lần mở BricsCAD. Sau khi user Resume, consent tự giữ ON và auto-renew trong suốt phiên BricsCAD; không còn giới hạn idle 10 phút. ChatGPT không có tool để Resume quyền này; chỉ user tại máy local mới bật lại được. Khi thao tác sẽ có viền xanh; Esc ×2 trong 1.2 giây dừng ngay.",
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = _palette.TextSecondary,
                 FontSize = 11.5,
@@ -694,7 +694,7 @@ namespace QS3D.BricsCAD.V25
                 Margin = new Thickness(0, 10, 0, 8),
                 Child = new TextBlock
                 {
-                    Text = "Sau PAUSED / EXPIRED / failed: Kiểm tra drawing/backup trước. Nếu trạng thái CAD đúng, user có thể Resume desktop local để ChatGPT tiếp tục.",
+                    Text = "Sau PAUSED / Emergency Stop / failed: Kiểm tra drawing/backup trước. Nếu trạng thái CAD đúng, user có thể Resume desktop local để ChatGPT tiếp tục.",
                     Foreground = _palette.TextPrimary,
                     TextWrapping = TextWrapping.Wrap,
                     FontSize = 11.5
@@ -1494,7 +1494,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 McpDesktopControlSession.ResumeFromLocalUser();
-                ShowToast(ToastKind.Success, "Resume desktop", "Desktop consent ON. Idle timeout 10 phút; Esc ×2 hoặc Pause desktop để dừng ngay.");
+                ShowToast(ToastKind.Success, "Resume desktop", "Desktop consent ON · auto-renew trong phiên, không còn timeout 10 phút; Esc ×2 hoặc Pause desktop để dừng ngay.");
             }
             catch (Exception ex) { ShowToast(ToastKind.Error, "Resume desktop", ex.Message); }
             RefreshStatus();
@@ -1658,8 +1658,7 @@ namespace QS3D.BricsCAD.V25
             var authenticated = McpCloudflareAccountTunnelManager.IsAuthenticated;
             var desktopConsent = McpDesktopControlSession.IsEnabled;
             var desktopState = McpDesktopControlSession.ConsentState;
-            var idleRemaining = McpDesktopControlSession.IdleRemaining;
-            var idleText = desktopConsent ? FormatIdle(idleRemaining) : "—";
+            var idleText = desktopConsent ? "AUTO-RENEW" : "—";
             var transportReady = provider == McpTransportProvider.OpenAiSecureTunnel
                 ? mcpRunning && openAiReady
                 : mcpRunning && selectedTunnelRunning && !string.IsNullOrWhiteSpace(publicUrl);
@@ -1707,7 +1706,7 @@ namespace QS3D.BricsCAD.V25
                 provider == McpTransportProvider.OpenAiSecureTunnel ? (openAiReady ? _palette.Success : _palette.TextMuted) : (recentOAuthMcpActivity ? _palette.Success : _palette.TextMuted)));
             _statusRows.Children.Add(CreateStatusRow("Onboarding", onboardingTitle));
             _statusRows.Children.Add(CreateStatusRow("Desktop consent", desktopState, desktopConsent ? _palette.Success : _palette.Warning));
-            _statusRows.Children.Add(CreateStatusRow("Idle còn", idleText));
+            _statusRows.Children.Add(CreateStatusRow("Gia hạn", idleText));
             _statusRows.Children.Add(CreateStatusRow("Action ID", string.IsNullOrWhiteSpace(McpAgentExperience.LastActionId) ? "—" : McpAgentExperience.LastActionId));
             _statusRows.Children.Add(CreateStatusRow("Action state", string.IsNullOrWhiteSpace(McpAgentExperience.LastTerminalState)
                 ? "—" : McpAgentExperience.LastTerminalState + " · " + McpAgentExperience.LastDurationMilliseconds + " ms"));
@@ -1715,8 +1714,8 @@ namespace QS3D.BricsCAD.V25
 
             if (_desktopConsentText != null)
             {
-                _desktopConsentText.Text = "Desktop control: " + desktopState + (desktopConsent ? " · Idle còn " + idleText : " · local Resume required");
-                _desktopConsentText.Foreground = desktopConsent ? _palette.Success : (desktopState == "EXPIRED" || desktopState == "PAUSED" ? _palette.Warning : _palette.TextMuted);
+                _desktopConsentText.Text = "Desktop control: " + desktopState + (desktopConsent ? " · " + idleText : " · local Resume required");
+                _desktopConsentText.Foreground = desktopConsent ? _palette.Success : (desktopState == "PAUSED" ? _palette.Warning : _palette.TextMuted);
             }
             if (_desktopActivityText != null)
             {

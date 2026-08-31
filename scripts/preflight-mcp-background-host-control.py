@@ -8,7 +8,7 @@ V26_SRC = ROOT / "src" / "QS3D.BricsCAD.V26"
 DESKTOP = SRC / "McpDesktopAutomationRuntime.cs"
 BACKGROUND = SRC / "McpBackgroundHostRuntime.cs"
 SESSION = SRC / "McpDesktopControlSession.cs"
-AUGMENTER = SRC / "McpTransportAgentCenterAugmenter.cs"
+PERSISTENCE_UI = SRC / "McpPersistentAgentCenterAugmenter.cs"
 SETTINGS = SRC / "McpPersistentUserSettings.cs"
 PLUGIN = SRC / "PluginEntry.cs"
 V26_PLUGIN = V26_SRC / "PluginEntry.cs"
@@ -22,7 +22,7 @@ def fail(message: str) -> None:
 desktop = DESKTOP.read_text(encoding="utf-8")
 background = BACKGROUND.read_text(encoding="utf-8")
 session = SESSION.read_text(encoding="utf-8")
-augmenter = AUGMENTER.read_text(encoding="utf-8")
+persistence_ui = PERSISTENCE_UI.read_text(encoding="utf-8")
 settings = SETTINGS.read_text(encoding="utf-8")
 plugin = PLUGIN.read_text(encoding="utf-8")
 v26_plugin = V26_PLUGIN.read_text(encoding="utf-8")
@@ -55,16 +55,16 @@ requirements = {
     "window PrintWindow path": (desktop, "CaptureWindowBitmap(hwnd"),
     "PrintWindow API": (desktop, "PrintWindow(IntPtr hwnd"),
     "screen BitBlt retained": (desktop, "BitBlt(memory, 0, 0, width, height, screen, x, y, SRCCOPY)"),
-    "foreground toggle": (augmenter, "Cho phép chuột / bàn phím / màn hình user"),
+    "foreground toggle": (persistence_ui, "Cho phép chuột / bàn phím / màn hình user"),
     "foreground off keeps background agent": (session, "DisableForegroundAccessFromLocalUser"),
-    "local consent auto-renew": (session, "RenewConsentLeaseFromLocalHost"),
-    "augmenter renews lease": (augmenter, "McpDesktopControlSession.RenewConsentLeaseFromLocalHost()"),
     "secure credential target": (settings, "QS3D.BricsCAD.MCP.OpenAI.RuntimeApiKey"),
     "windows credential write": (settings, 'EntryPoint = "CredWriteW"'),
     "windows credential read": (settings, 'EntryPoint = "CredReadW"'),
     "V25 startup secret restore": (plugin, "McpPersistentUserSettings.ApplyStartupSecretsToProcessEnvironment()"),
     "V26 startup secret restore": (v26_plugin, "McpPersistentUserSettings.ApplyStartupSecretsToProcessEnvironment()"),
-    "typed key capture": (augmenter, "McpPersistentUserSettings.SaveOpenAiRuntimeApiKey(value)"),
+    "V25 persistence UI startup": (plugin, "McpPersistentAgentCenterAugmenter.Start()"),
+    "V26 persistence UI startup": (v26_plugin, "McpPersistentAgentCenterAugmenter.Start()"),
+    "typed key capture": (persistence_ui, "McpPersistentUserSettings.SaveOpenAiRuntimeApiKey(value)"),
 }
 for label, (source, token) in requirements.items():
     if token not in source:
@@ -81,11 +81,13 @@ if 'StopSession(reason, false, false, "OFF")' not in disable_block:
     fail("foreground OFF must revoke desktop access without stopping background CAD/API automation")
 
 # WPF click handlers must fail closed without rethrowing into the dispatcher.
-toggle_block = augmenter.split("private static void ToggleDesktopForegroundAccess()", 1)[1].split("private static void TrySetInteractionPolicy", 1)[0]
+toggle_block = persistence_ui.split("private static void ToggleDesktopForegroundAccess()", 1)[1].split("private static void TrySetInteractionPolicy", 1)[0]
 if "throw;" in toggle_block:
     fail("foreground toggle must not rethrow failures into the WPF dispatcher")
 if "McpAgentExperience.Error(" not in toggle_block:
     fail("foreground toggle failure must publish a bounded local error after fail-closed revocation")
+if 'TrySetInteractionPolicy("background_only")' not in toggle_block:
+    fail("foreground toggle failure must restore background_only before reporting failure")
 
 # Do not regress to plaintext secret persistence in QS3D files.
 settings_lower = settings.lower()

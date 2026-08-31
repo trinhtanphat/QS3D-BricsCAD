@@ -87,12 +87,14 @@ namespace QS3D.Core.Rebar
             {
                 while (cutEnumerator.MoveNext())
                 {
+                    RequireStableKnownRequiredCutCount(requiredCuts, knownRequiredCutCount, nameof(requiredCuts));
                     if (cuts.Count == knownRequiredCutCount)
                         throw new InvalidOperationException("Rebar stock demand requiredCuts yielded more entries than its admitted known Count.");
                     if (cuts.Count >= MaxCutRequirements)
                         throw new ArgumentOutOfRangeException(nameof(requiredCuts), "Rebar stock demand exceeds the supported cut-requirement bound.");
 
                     var cut = cutEnumerator.Current;
+                    RequireStableKnownRequiredCutCount(requiredCuts, knownRequiredCutCount, nameof(requiredCuts));
                     if (cut == null)
                         throw new ArgumentException("Required cuts must not contain null entries.", nameof(requiredCuts));
                     if (!identities.Add(cut.CutId))
@@ -113,9 +115,7 @@ namespace QS3D.Core.Rebar
             if (cuts.Count != knownRequiredCutCount)
                 throw new InvalidOperationException("Rebar stock demand requiredCuts yielded fewer entries than its admitted known Count.");
 
-            var reboundRequiredCutCount = ValidateKnownRequiredCutCount(requiredCuts, nameof(requiredCuts));
-            if (reboundRequiredCutCount != knownRequiredCutCount)
-                throw new InvalidOperationException("Rebar stock demand requiredCuts changed known Count during traversal.");
+            RequireStableKnownRequiredCutCount(requiredCuts, knownRequiredCutCount, nameof(requiredCuts));
 
             if (cuts.Count == 0)
                 throw new ArgumentException("At least one required cut is required.", nameof(requiredCuts));
@@ -173,6 +173,16 @@ namespace QS3D.Core.Rebar
                     throw new InvalidOperationException("Rebar stock demand requiredCuts exposes conflicting known Count values.");
             }
             return expected;
+        }
+
+        private static void RequireStableKnownRequiredCutCount(
+            IReadOnlyList<RebarCutRequirement> requiredCuts,
+            int expected,
+            string parameterName)
+        {
+            var current = ValidateKnownRequiredCutCount(requiredCuts, parameterName);
+            if (current != expected)
+                throw new InvalidOperationException("Rebar stock demand requiredCuts changed known Count during traversal.");
         }
 
         private static string RequireCanonicalText(string value, string parameterName)
