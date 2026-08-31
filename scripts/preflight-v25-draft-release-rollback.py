@@ -80,6 +80,7 @@ def validate(helper_text: str, workflow_text: str) -> list[str]:
         "$reconciledTag = Get-ExactReusableReleaseTag",
         "tag-create acknowledgement failed and the exact release tag is authoritatively absent",
         "tag-create acknowledgement was ambiguous, but the exact lightweight tag now exists at workflow SHA; reusing it without deletion ownership.",
+        "QS3D-DRAFT-CREATE-V25:",
         "$releaseId = [long]0",
         "$releaseId = [long]$release.id",
         "$verifiedAssetIds = @{}",
