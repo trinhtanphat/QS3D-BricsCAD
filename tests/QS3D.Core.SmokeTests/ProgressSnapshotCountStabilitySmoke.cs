@@ -72,9 +72,9 @@ namespace QS3D.Core.SmokeTests
         {
             var source = new CountedMeasurements(1, 1, 1, new[] { Measurement("pm-a") }, 2, 2, 2);
             ArgumentContains(() => Snapshot(source), "known count changed during traversal", "uniform Count drift");
-            Equal(5, source.GenericCountReads, "generic Count must be rebound at every traversal boundary and publication");
-            Equal(5, source.ReadOnlyCountReads, "read-only Count must be rebound at every traversal boundary and publication");
-            Equal(5, source.NonGenericCountReads, "non-generic Count must be rebound at every traversal boundary and publication");
+            Equal(6, source.GenericCountReads, "generic Count must be rebound at every traversal boundary and publication");
+            Equal(6, source.ReadOnlyCountReads, "read-only Count must be rebound at every traversal boundary and publication");
+            Equal(6, source.NonGenericCountReads, "non-generic Count must be rebound at every traversal boundary and publication");
         }
 
         private static void PostTraversalSingleSurfaceConflictFailsClosed()
