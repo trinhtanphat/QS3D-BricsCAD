@@ -102,7 +102,18 @@ for forbidden in (
 
 # Wipe the exact native UTF-8 credential blob length, not character count.
 if "i < bytes.Length" not in settings or "Marshal.WriteByte(blob, i, 0)" not in settings:
-    fail("native credential buffer must be zeroed for every allocated UTF-8 byte")
+    fail("native credential write buffer must be zeroed for every allocated UTF-8 byte")
+
+# Read-side managed/native copies must also be scrubbed from finally, including malformed/decode failures.
+read_block = settings.split("public static bool TryReadOpenAiRuntimeApiKey", 1)[1].split("public static void DeleteOpenAiRuntimeApiKey", 1)[0]
+if "byte[]? readBytes = null;" not in read_block:
+    fail("credential read must retain a finally-visible managed byte buffer for scrubbing")
+if "Array.Clear(readBytes, 0, readBytes.Length);" not in read_block:
+    fail("credential read managed byte buffer must be zeroed from finally")
+if "Marshal.WriteByte(readBlob, i, 0)" not in read_block:
+    fail("credential read native blob must be zeroed before CredFree")
+if read_block.index("Array.Clear(readBytes, 0, readBytes.Length);") < read_block.index("finally"):
+    fail("credential read managed scrub must live in finally so decode failures cannot bypass it")
 
 mutation_block = desktop.split("private static readonly HashSet<string> MutationTools", 1)[1].split("};", 1)[0]
 for tool in (
