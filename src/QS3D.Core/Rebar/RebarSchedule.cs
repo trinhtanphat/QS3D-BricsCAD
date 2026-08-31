@@ -57,14 +57,23 @@ namespace QS3D.Core.Rebar
             var rows = new List<RebarScheduleRow>();
             using (var enumerator = inputs.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireKnownInputCountStable(inputs, expectedInputCount, nameof(inputs));
+                    if (!enumerator.MoveNext())
+                    {
+                        RequireKnownInputCountStable(inputs, expectedInputCount, nameof(inputs));
+                        break;
+                    }
+
+                    RequireKnownInputCountStable(inputs, expectedInputCount, nameof(inputs));
                     if (expectedInputCount.HasValue && observedInputCount >= expectedInputCount.Value)
                         throw new InvalidOperationException("Rebar schedule input known Count does not match traversal.");
                     if (rows.Count >= MaxRowCount)
                         throw new ArgumentOutOfRangeException(nameof(inputs), "Rebar schedule exceeds the supported row bound of " + MaxRowCount + ".");
 
                     var input = enumerator.Current;
+                    RequireKnownInputCountStable(inputs, expectedInputCount, nameof(inputs));
                     Append(input ?? throw new ArgumentException("Rebar schedule input cannot contain null.", nameof(inputs)), rows, nameof(inputs));
                     observedInputCount++;
                 }
@@ -72,10 +81,7 @@ namespace QS3D.Core.Rebar
             if (expectedInputCount.HasValue && observedInputCount != expectedInputCount.Value)
                 throw new InvalidOperationException("Rebar schedule input known Count does not match traversal.");
 
-            var finalInputCount = ValidateKnownInputCount(inputs, nameof(inputs));
-            if (expectedInputCount != finalInputCount)
-                throw new InvalidOperationException("Rebar schedule input known Count changed during traversal.");
-
+            RequireKnownInputCountStable(inputs, expectedInputCount, nameof(inputs));
             ValidateAggregate(rows);
             return rows.AsReadOnly();
         }
@@ -151,6 +157,16 @@ namespace QS3D.Core.Rebar
                     throw new ArgumentException("Rebar schedule element id must not contain control characters.", parameterName);
             }
             return value;
+        }
+
+        private static void RequireKnownInputCountStable(
+            IEnumerable<RebarScheduleInput> inputs,
+            int? expectedInputCount,
+            string parameterName)
+        {
+            var currentInputCount = ValidateKnownInputCount(inputs, parameterName);
+            if (currentInputCount != expectedInputCount)
+                throw new InvalidOperationException("Rebar schedule input known Count changed during traversal.");
         }
 
         private static int? ValidateKnownInputCount(IEnumerable<RebarScheduleInput> inputs, string parameterName)
