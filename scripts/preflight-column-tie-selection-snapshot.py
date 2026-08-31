@@ -17,9 +17,10 @@ if not errors:
 
     required_command = [
         'CommandMethod("QS3DREBARTIES3D", CommandFlags.UsePickSet)',
+        'var selectedIds = CadSelectionGuard.ReadImpliedSelection(document);',
+        'if (selectedIds.Length == 0)',
         'ExistingProjectMutationContext.Require(document, "Column Tie 3D")',
-        'ColumnTieSolidBuilder.BuildSelected(document, project)',
-        'count == 0',
+        'ColumnTieSolidBuilder.BuildSelected(document, project, selectedIds)',
         'SelectionGuidance',
         'OperationFailure',
         'UiSyncWarning',
@@ -30,33 +31,36 @@ if not errors:
         if token not in command:
             errors.append("ColumnTieCommands.cs missing contract token: " + token)
 
-    forbidden_command = [
-        "CadSelectionGuard.ReadImpliedSelection",
-        ".SelectImplied()",
-        "ex.Message",
-        "exception.Message",
-    ]
-    for token in forbidden_command:
+    acquire = command.find('var selectedIds = CadSelectionGuard.ReadImpliedSelection(document);')
+    empty = command.find('if (selectedIds.Length == 0)', acquire)
+    require = command.find('ExistingProjectMutationContext.Require(document, "Column Tie 3D")', empty)
+    build = command.find('ColumnTieSolidBuilder.BuildSelected(document, project, selectedIds)', require)
+    if min(acquire, empty, require, build) < 0 or not (acquire < empty < require < build):
+        errors.append("Column Tie must enforce PICKFIRST snapshot -> empty return -> canonical project bind -> same-snapshot native build")
+
+    for token in (".SelectImplied()", "ex.Message", "exception.Message"):
         if token in command:
-            errors.append("ColumnTieCommands.cs must not expose/re-read selection detail: " + token)
+            errors.append("ColumnTieCommands.cs must not expose/re-read native selection detail: " + token)
 
     required_builder = [
-        "document.Editor.SelectImplied()",
-        "selection.Value.GetObjectIds()",
-        "if (ids.Length == 0) return 0;",
-        "ProjectStateSnapshot.Capture(project)",
-        "using (document.LockDocument())",
-        "GeneratedTieRebarOwnershipGuard.Build(project)",
-        "MaxTiesPerElement",
-        "MaxTiesPerBatch",
-        "transaction.Commit()",
+        'BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)',
+        'if (selectedIds == null) throw new ArgumentNullException(nameof(selectedIds));',
+        'if (selectedIds.Length == 0) return 0;',
+        'var ids = (ObjectId[])selectedIds.Clone();',
+        'ProjectStateSnapshot.Capture(project)',
+        'using (document.LockDocument())',
+        'GeneratedTieRebarOwnershipGuard.Build(project)',
+        'MaxTiesPerElement',
+        'MaxTiesPerBatch',
+        'transaction.Commit()',
     ]
     for token in required_builder:
         if token not in builder:
             errors.append("ColumnTieSolidBuilder.cs missing preserved safety token: " + token)
 
-    if builder.count("document.Editor.SelectImplied()") != 1:
-        errors.append("ColumnTieSolidBuilder.cs must own exactly one implied-selection acquisition")
+    for token in ('document.Editor.SelectImplied()', 'CadSelectionGuard.ReadImpliedSelection'):
+        if token in builder:
+            errors.append("ColumnTieSolidBuilder.cs must consume the admitted snapshot without re-reading selection: " + token)
 
 if errors:
     for error in errors:
@@ -64,4 +68,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Column Tie command delegates one authoritative implied-selection read to the native builder, preserves rollback/ownership/bounds, and redacts host exception detail from user-visible command/UI-sync failures.")
+print("PASS: Column Tie captures PICKFIRST once before project binding, passes the exact cloned snapshot into native generation, preserves rollback/ownership/bounds, and redacts host exception detail from user-visible command/UI-sync failures.")
