@@ -9,7 +9,7 @@ contracts = {
     "column longitudinal": (
         "src/QS3D.BricsCAD.V25/Cad/ColumnRebarSolidBuilder.cs",
         'geometry.rebar.column',
-        "BuildSelected(Document document, ProjectState project)",
+        "BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)",
     ),
     "beam longitudinal": (
         "src/QS3D.BricsCAD.V25/Cad/BeamRebarSolidBuilder.cs",
@@ -103,4 +103,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: every generated rebar/mesh replacement family records its canonical audit event through the pre-CAD-commit semantic update path, with Column Tie consuming its admitted PICKFIRST snapshot and no duplicate Shape Rebar audit in the post-commit UI layer.")
+print("PASS: every generated rebar/mesh replacement family records its canonical audit event through the pre-CAD-commit semantic update path, with both Column Rebar and Column Tie consuming admitted PICKFIRST snapshots and no duplicate Shape Rebar audit in the post-commit UI layer.")
