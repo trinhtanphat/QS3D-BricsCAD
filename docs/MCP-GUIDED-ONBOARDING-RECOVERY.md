@@ -22,10 +22,10 @@ Approach A keeps each desktop primitive explicit and individually bounded:
 - `desktop_mouse_drag` — exact-window bounded drag with continuous target/emergency-stop revalidation;
 - `desktop_wait_for_window` — bounded read-only wait for a visible current-session window;
 - `desktop_screenshot` optional crop (`cropX`, `cropY`, `cropWidth`, `cropHeight`);
-- local desktop consent auto-expires after 10 minutes without a new guarded desktop action;
+- local desktop consent is process-memory-only and, after an explicit local Resume, stays ON with session-persistent auto-renew until Pause/Emergency Stop/Esc×2/host shutdown;
 - explicit local **Pause desktop** / **Resume desktop**;
 - local timeline includes bounded Action ID, duration and terminal state;
-- Agent Center shows waiting/active/paused/expired/re-enable guidance and recovery hints.
+- Agent Center shows waiting/active/paused/re-enable guidance and recovery hints.
 
 ### Approach B — selected / bounded sequence
 
@@ -50,7 +50,7 @@ When a workflow needs a new dialog/application handle, ChatGPT obtains that hand
 `QS3DMCPAGENTCENTER` is the canonical local control surface with four tabs:
 
 1. **Kết nối** — embedded MCP, cloudflared, Cloudflare browser login, Named Tunnel, public MCP URL and ChatGPT OAuth registration.
-2. **Agent** — local desktop-control state, idle countdown, Pause/Resume, Action ID/duration/result, current action/next step, Emergency Stop and CAD cancel.
+2. **Agent** — local desktop-control state, AUTO-RENEW/session state, Pause/Resume, Action ID/duration/result, current action/next step, Emergency Stop and CAD cancel.
 3. **Backup & khôi phục** — BricsCAD autosave/BAK status, manual versioned snapshot, latest-snapshot recovery to a new file and backup-folder access.
 4. **Nâng cao** — protocol/read-only self-test, Quick Tunnel test fallback, engineering bearer compatibility, timeline and audit-folder access.
 
@@ -135,8 +135,9 @@ The `desktop_*` MCP namespace can cross application boundaries, so network confi
 - clipboard/screenshot sensitive reads still require `confirmSensitiveRead=true`;
 - mutation and sensitive reads additionally require **local desktop consent** enabled by the user in the Agent tab;
 - that consent is memory-only and resets every BricsCAD process start;
-- it automatically becomes `EXPIRED` after 10 minutes without a newly started guarded desktop action;
+- after an explicit local Resume it stays `ON` with AUTO-RENEW for the current BricsCAD process and does not expire because of idle time;
 - user can explicitly **Pause desktop** and **Resume desktop** locally;
+- Emergency Stop, physical Esc×2, or BricsCAD/QS3D shutdown revoke it immediately;
 - there is no MCP tool that can remotely enable/resume local consent.
 
 While a guarded desktop action or sequence is active, QS3D shows a click-through **blue desktop border/banner** naming the current MCP tool and its bounded Action ID.
@@ -150,7 +151,7 @@ A physical **Esc twice within 1.2 seconds**:
 5. prevents subsequent sequence steps/input;
 6. requires a local user to Resume desktop before cross-application automation resumes.
 
-After `PAUSED`, `EXPIRED`, cancellation or failure, the Agent tab tells the user to **Kiểm tra drawing/backup** before resuming desktop control.
+After `PAUSED`, Emergency Stop, cancellation or failure, the Agent tab tells the user to **Kiểm tra drawing/backup** before resuming desktop control.
 
 ## Status interaction with ChatGPT
 
@@ -244,7 +245,7 @@ The exact intended merged/release SHA remains `PENDING_LOCAL` under `LOCAL-024` 
 5. `tools/list` including all 15 current desktop tools and no `desktop_macro` alias;
 6. read-only CAD plus cursor/window observation;
 7. `desktop_wait_for_window` success + timeout behavior;
-8. local desktop-consent OFF rejection, Resume, Pause and 10-minute idle-expiry behavior;
+8. local desktop-consent OFF rejection, local Resume/Pause, AUTO-RENEW remaining ON beyond 10 minutes of idle time, and explicit revocation by safety controls;
 9. blue overlay with Action ID while guarded desktop tools/sequence run;
 10. clipboard/screenshot sensitive-read gating plus cropped screenshot on disposable content;
 11. exact-window click/scroll and bounded drag on disposable content;
