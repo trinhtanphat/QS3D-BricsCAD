@@ -221,7 +221,7 @@ mutations = {
     "published exact SHA": (helper, workflow.replace("ReleaseSnapshot.target_commitish, $env:GITHUB_SHA", "ReleaseSnapshot.target_commitish, ('0' * 40)", 2)),
     "published exact name": (helper, workflow.replace("ReleaseSnapshot.name, $ExpectedReleaseName", "ReleaseSnapshot.name, 'other'", 2)),
     "published prerelease": (helper, workflow.replace("ReleaseSnapshot.prerelease -ne $IsPrerelease", "$false", 2)),
-    "published remote tag proof": (helper, workflow.replace("Assert-RemoteReleaseTagTargetsWorkflowSha", "# removed", 1)),
+    "published remote tag proof": (helper, workflow.replace("Published V25 release transaction marker mismatch during acknowledgement reconciliation.' }\n            Assert-RemoteReleaseTagTargetsWorkflowSha", "Published V25 release transaction marker mismatch during acknowledgement reconciliation.' }\n            # removed", 1)),
     "published asset count": (helper, workflow.replace("@($ReleaseSnapshot.assets).Count -ne $ExpectedAssets.Count", "$false", 1)),
     "published asset id": (helper, workflow.replace("[long]$publishedAsset.id -ne $expectedAssetId", "$false", 1)),
     "published asset bytes": (helper, workflow.replace("[int64]$publishedAsset.size -ne $localLength", "$false", 1)),
