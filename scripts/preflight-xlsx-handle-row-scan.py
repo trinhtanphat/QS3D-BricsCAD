@@ -20,11 +20,20 @@ for token in required:
     if token not in source:
         raise SystemExit(f"ERROR: XLSX handle row-scan contract missing token: {token}")
 
-scan = source.find('foreach (var row in sheet.Descendants(ns + "row"))')
-scan_end = source.find("if (targetMatches > 1)", scan)
-validation = source.find("declaredRow == int.MaxValue || declaredRow > MaxRows", scan)
-if min(scan, scan_end, validation) < 0 or not (scan < validation < scan_end):
-    raise SystemExit("ERROR: XLSX target duplicate rejection must occur after the full declared-row validation scan")
+scan_anchor = 'foreach (var row in sheet.Descendants(ns + "row"))'
+duplicate_anchor = "if (targetMatches > 1)"
+scan_start = source.index(scan_anchor)
+duplicate_start = source.index(duplicate_anchor, scan_start + len(scan_anchor))
+scan_region = source[scan_start:duplicate_start]
+for token in [
+    "declaredRow == int.MaxValue || declaredRow > MaxRows",
+    "targetMatches++;",
+    "headerRows.Add(row);",
+]:
+    if token not in scan_region:
+        raise SystemExit(f"ERROR: XLSX full row scan must perform validation/selection before duplicate rejection: {token}")
+if not scan_region.rstrip().endswith("}"):
+    raise SystemExit("ERROR: XLSX duplicate rejection must follow the completed worksheet-row scan")
 
 for forbidden in [
     'var rows = sheet.Descendants(ns + "row").ToList();',
