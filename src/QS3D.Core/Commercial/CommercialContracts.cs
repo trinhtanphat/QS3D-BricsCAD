@@ -106,6 +106,7 @@ namespace QS3D.Core.Commercial
                         throw new InvalidOperationException("Commercial audit log supports at most 10000 events.");
 
                     var record = enumerator.Current;
+                    RequireStableKnownCountDuringTraversal(records, knownCount);
                     if (record == null) throw new ArgumentException("Commercial audit batch contains a null record.", nameof(records));
                     RequireUniqueEventId(record.EventId, eventIds);
                     snapshot.Add(record);
@@ -296,6 +297,7 @@ namespace QS3D.Core.Commercial
                         throw new InvalidOperationException(paramName + " supports at most " + maximum + " entries.");
 
                     var item = enumerator.Current;
+                    RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum);
                     if (item == null)
                         throw new ArgumentException(paramName + " contains a null item.", paramName);
                     result.Add(item);

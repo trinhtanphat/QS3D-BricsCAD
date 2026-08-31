@@ -41,7 +41,15 @@ required = {
     ],
     "workspace": [
         '[CommandMethod("QS3DMEPREVIEW")]',
+        "private static MepReviewWorkspaceWindow? _window;",
+        "published.IsLoaded",
+        "ReleasePublishedWindow(published)",
+        "window.Closed += (_, __) => ReleasePublishedWindow(window)",
         "BricsApplication.ShowModelessWindow(window)",
+        "if (!window.IsLoaded) return;",
+        "_window = window;",
+        "candidate = null;",
+        "TryCloseUnpublishedWindow(candidate)",
         "MepRecognitionProfileProvider.Save(profile)",
         "MepRecognitionProfileProvider.Reload()",
         "DocumentManager.MdiActiveDocument",
@@ -86,6 +94,32 @@ for label, tokens in required.items():
         if token not in texts[label]:
             errors.append(f"{label}: missing required token {token!r}")
 
+workspace = texts["workspace"]
+for forbidden in (
+    "if (_window.IsVisible)",
+    "if (published.IsVisible)",
+):
+    if forbidden in workspace:
+        errors.append(f"workspace: stale visibility-based publication token {forbidden!r}")
+
+ordered = [
+    "window.Closed += (_, __) => ReleasePublishedWindow(window)",
+    "BricsApplication.ShowModelessWindow(window)",
+    "if (!window.IsLoaded) return;",
+    "_window = window;",
+]
+positions = [workspace.find(token) for token in ordered]
+if any(position < 0 for position in positions) or positions != sorted(positions) or len(set(positions)) != len(positions):
+    errors.append("workspace: publication order must be Closed -> host show -> Loaded check -> publish")
+else:
+    publication_position = positions[-1]
+    cleanup_transfer_position = workspace.find("candidate = null;", publication_position + len(ordered[-1]))
+    if cleanup_transfer_position < 0 or cleanup_transfer_position <= publication_position:
+        errors.append("workspace: cleanup ownership must transfer only after authoritative publication")
+
+if workspace.count("_window = window;") != 1:
+    errors.append("workspace: authoritative publication must have exactly one assignment")
+
 for label in ("provider", "workspace", "zoom"):
     for forbidden in (
         "OpenMode.ForWrite",
@@ -113,7 +147,7 @@ for forbidden in (
     "private readonly Solid3d",
     "private Solid3d",
 ):
-    if forbidden in texts["workspace"]:
+    if forbidden in workspace:
         errors.append(f"workspace: forbidden retained native field {forbidden!r}")
 
 for label in ("takeoff", "exact", "highlight"):
