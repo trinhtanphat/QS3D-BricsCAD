@@ -224,18 +224,21 @@ namespace QS3D.Core.SmokeTests
 
         private static void AssertRowCountDrift(string destination)
         {
+            var rows = new CountDriftingRows(ValidRow());
             try
             {
-                RoomFinishXlsxExporter.Export(destination, new CountDriftingRows(ValidRow()));
+                RoomFinishXlsxExporter.Export(destination, rows);
             }
             catch (InvalidOperationException ex)
             {
-                if (ex.Message.IndexOf("row count changed during snapshot", StringComparison.OrdinalIgnoreCase) < 0)
-                    throw new InvalidOperationException("Room-finish XLSX row-count drift must identify snapshot count instability.", ex);
+                if (ex.Message.IndexOf("export rows count changed before row indexer", StringComparison.OrdinalIgnoreCase) < 0)
+                    throw new InvalidOperationException("Room-finish XLSX row-count drift must identify pre-indexer count-contract instability.", ex);
+                if (rows.IndexerReads != 0)
+                    throw new InvalidOperationException("Room-finish XLSX row-count drift must fail before invoking the caller-controlled row indexer.");
                 return;
             }
 
-            throw new InvalidOperationException("Room-finish XLSX exporter accepted a source whose row count changed during snapshot.");
+            throw new InvalidOperationException("Room-finish XLSX exporter accepted a source whose admitted row count changed before traversal.");
         }
 
         private static string ReadWorksheet(string path)
@@ -288,6 +291,8 @@ namespace QS3D.Core.SmokeTests
                 _row = row;
             }
 
+            internal int IndexerReads { get; private set; }
+
             public int Count
             {
                 get
@@ -301,6 +306,7 @@ namespace QS3D.Core.SmokeTests
             {
                 get
                 {
+                    IndexerReads++;
                     if (index != 0) throw new ArgumentOutOfRangeException(nameof(index));
                     return _row;
                 }

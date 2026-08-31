@@ -60,6 +60,14 @@ Issue #4689 / PR #4767 owns the passive same-process popup observer so modal war
 
 `McpDiagnosticHub`/the direct diagnostics tools remain the canonical log path for MCP transport/OAuth/QS3D/BricsCAD lifecycle errors. There is no arbitrary filesystem reader.
 
+## Runtime API key persistence and restart
+
+A non-empty Runtime API key supplied to `McpOpenAiSecureTunnelManager.Start(...)` is synchronously persisted through `McpPersistentUserSettings` to the current Windows user's generic credential in **Windows Credential Manager**. The save path performs an exact **read-back verify** before the verified value is projected into `CONTROL_PLANE_API_KEY`; if write or read-back verification fails, tunnel launch fails closed before `ProcessStartInfo` is created.
+
+The Runtime API key is never written to `tunnel-client.yaml`, transport metadata, audit/timeline, or plaintext settings. Tunnel ID, selected client path, provider and autostart remain non-secret metadata. After a BricsCAD **restart**, both V25 and V26 restore the saved credential into the process environment before `McpTransportCoordinator.TryAutoStartPreferred()`, so a previously configured OpenAI Secure MCP Tunnel can reconnect without re-entering the key.
+
+Foreground desktop permission is intentionally different: it is not persisted across a host restart. Interaction policy starts as `background_only` and desktop-wide mouse/keyboard/screen access requires a fresh local user opt-in for the current BricsCAD session.
+
 ## Security invariants
 
 - No arbitrary shell, PowerShell, cmd, process launch, script/eval or executable path.

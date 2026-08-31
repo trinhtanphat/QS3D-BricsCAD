@@ -22,27 +22,30 @@ def main() -> int:
 
     row_count = require(
         exporter,
-        'var rowCount = RequireConsistentKnownCount(rows, MaxDataRows, "export rows");',
-        "outer deterministic known-count binding",
+        'var rowCount = BindKnownCount(rows, MaxDataRows, "export rows");',
+        "outer deterministic known-count contract binding",
     )
-    row_loop = require(exporter, "for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)", "indexed outer traversal")
-    row_bind = require(exporter, "if (rows.Count != rowCount)", "post-traversal outer Count binding")
-    row_failure = require(
-        exporter,
-        'throw new InvalidOperationException("Room-finish XLSX export row count changed during snapshot.");',
-        "outer count-drift failure",
-    )
+    pre_indexer = require(exporter, 'rowCount.Revalidate(rows, "before row indexer");', "pre-indexer Count revalidation")
+    row_loop = require(exporter, "for (var rowIndex = 0; rowIndex < rowCount.Value; rowIndex++)", "indexed outer traversal")
+    post_indexer = require(exporter, 'rowCount.Revalidate(rows, "after row indexer");', "post-indexer Count revalidation")
+    post_traversal = require(exporter, 'rowCount.Revalidate(rows, "after snapshot traversal");', "post-traversal Count revalidation")
+    post_stability = require(exporter, 'rowCount.Revalidate(rows, "after row stability validation");', "pre-filesystem Count revalidation")
     path_resolution = require(exporter, "var fullPath = Path.GetFullPath(path);", "filesystem boundary")
-    if not (row_count < row_loop < row_bind < row_failure < path_resolution):
-        raise SystemExit("FAIL: Room-finish outer known-count/drift validation must fail before filesystem output")
+    if not (row_count < row_loop and pre_indexer < post_indexer < post_traversal < post_stability < path_resolution):
+        raise SystemExit("FAIL: Room-finish outer known-count contract must revalidate caller Count channels through traversal before filesystem output")
 
     for token, label in (
-        ("private static int RequireConsistentKnownCount<T>(IEnumerable<T> source, int maximum, string label)", "known-count helper"),
-        ("var readOnly = source as IReadOnlyCollection<T>;", "IReadOnlyCollection<T> count binding"),
-        ("var generic = source as ICollection<T>;", "ICollection<T> count binding"),
-        ("var nonGeneric = source as ICollection;", "non-generic ICollection count binding"),
-        ('throw new InvalidOperationException("Room-finish XLSX " + label + " exposes conflicting known collection counts.");', "conflicting known-count rejection"),
-        ('throw new ArgumentException("Room-finish XLSX " + label + " must expose a deterministic collection count.", "rows");', "missing deterministic-count rejection"),
+        ("private static KnownCountContract<T> BindKnownCount<T>(IEnumerable<T> source, int maximum, string label)", "known-count contract binder"),
+        ("private sealed class KnownCountContract<T>", "known-count contract type"),
+        ("source is IReadOnlyCollection<T>", "IReadOnlyCollection<T> channel admission"),
+        ("source is ICollection<T>", "ICollection<T> channel admission"),
+        ("source is ICollection", "non-generic ICollection channel admission"),
+        ("if (_readOnlyCount) observe(((IReadOnlyCollection<T>)source).Count);", "IReadOnlyCollection<T> count revalidation"),
+        ("if (_genericCount) observe(((ICollection<T>)source).Count);", "ICollection<T> count revalidation"),
+        ("if (_nonGenericCount) observe(((ICollection)source).Count);", "non-generic ICollection count revalidation"),
+        ('throw new InvalidOperationException("Room-finish XLSX " + _label + " exposes conflicting known collection counts " + phase + ".");', "conflicting known-count rejection"),
+        ('throw new ArgumentException("Room-finish XLSX " + _label + " must expose a deterministic collection count.", "rows");', "missing deterministic-count rejection"),
+        ('throw new InvalidOperationException("Room-finish XLSX " + _label + " count changed " + phase + ". Expected " + Value + " but observed " + observed + ".");', "admitted count drift rejection"),
     ):
         require(exporter, token, label)
 
@@ -60,18 +63,22 @@ def main() -> int:
     for token in (
         "AssertRowCountDriftFailsBeforeExistingDestinationReplacement();",
         "AssertRowCountDriftFailsBeforeFilesystemCreation();",
-        "RoomFinishXlsxExporter.Export(destination, new CountDriftingRows(ValidRow()))",
+        "var rows = new CountDriftingRows(ValidRow());",
+        "RoomFinishXlsxExporter.Export(destination, rows)",
+        "export rows count changed before row indexer",
+        "rows.IndexerReads != 0",
+        "internal int IndexerReads { get; private set; }",
+        "IndexerReads++;",
         "preserve-existing-room-finish-destination",
         "must-not-be-created",
-        "row count changed during snapshot",
     ):
         require(smoke, token, "deterministic Room-finish XLSX count-drift smoke contract")
 
     require(registration, "RoomFinishXlsxCountIntegritySmoke.Run();", "smoke registration")
 
     print(
-        "PASS: Room-finish XLSX binds all deterministic outer collection Counts before indexed traversal, "
-        "preserves post-snapshot drift detection and nested concrete-list drift semantics, fails before filesystem output, "
+        "PASS: Room-finish XLSX binds and revalidates all admitted deterministic outer collection Counts before caller indexing, "
+        "preserves nested concrete-list drift semantics, fails before filesystem output, "
         "and registers deterministic regression coverage."
     )
     return 0
