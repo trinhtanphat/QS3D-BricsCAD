@@ -57,7 +57,8 @@ required_workflow = (
     "gh release upload $env:RELEASE_TAG $resolvedAsset --repo $env:GITHUB_REPOSITORY",
     "gh release download $env:RELEASE_TAG",
     "$published = Invoke-RestMethod -Method Patch -Uri $releaseUri",
-    "if ($published.draft -ne $false)",
+    "Assert-PublishedReleaseMatchesVerifiedTransaction",
+    "-ReleaseSnapshot $published",
     "rollback-v25-draft-release.ps1",
 )
 for token in required_workflow:
@@ -101,10 +102,12 @@ draft_id = workflow.find("$releaseId = [long]$release.id", tag_owned)
 download = workflow.find("gh release download $env:RELEASE_TAG", draft_id)
 signature = workflow.find("verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT", download)
 publish = workflow.find("$published = Invoke-RestMethod -Method Patch -Uri $releaseUri", signature)
-rollback = workflow.find("rollback-v25-draft-release.ps1", publish)
-publication_order = (publication, tag_create, tag_owned, draft_id, download, signature, publish, rollback)
+publish_assert = workflow.find("Assert-PublishedReleaseMatchesVerifiedTransaction", publish)
+publish_snapshot = workflow.find("-ReleaseSnapshot $published", publish_assert)
+rollback = workflow.find("rollback-v25-draft-release.ps1", publish_snapshot)
+publication_order = (publication, tag_create, tag_owned, draft_id, download, signature, publish, publish_assert, publish_snapshot, rollback)
 if any(index < 0 for index in publication_order) or list(publication_order) != sorted(publication_order):
-    errors.append("commercial publication must positively own exact tag -> capture exact draft -> verify downloaded signed bytes -> publish exact release -> retain bounded rollback")
+    errors.append("commercial publication must positively own exact tag -> capture exact draft -> verify downloaded signed bytes -> publish exact release -> verify successful response against exact transaction -> retain bounded rollback")
 
 required_signing = (
     "Get-SignTool",
@@ -171,4 +174,4 @@ if errors:
     print(f"FAILED with {len(errors)} commercial release signing hardening error(s).")
     sys.exit(1)
 
-print("PASS: commercial V25 release remains signed-only, exact-version/source bound, RFC3161 PE timestamped, ephemeral-key cleaned, least-privilege published, exact-tag owned, draft-byte verified, and restart-safe under bounded rollback.")
+print("PASS: commercial V25 release remains signed-only, exact-version/source bound, RFC3161 PE timestamped, ephemeral-key cleaned, least-privilege published, exact-tag owned, draft-byte verified, exact publish response transaction-verified, and restart-safe under bounded rollback.")
