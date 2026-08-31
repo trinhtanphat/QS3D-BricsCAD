@@ -3,8 +3,13 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-DESKTOP = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpDesktopAutomationRuntime.cs"
-BACKGROUND = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpBackgroundHostRuntime.cs"
+SRC = ROOT / "src" / "QS3D.BricsCAD.V25"
+DESKTOP = SRC / "McpDesktopAutomationRuntime.cs"
+BACKGROUND = SRC / "McpBackgroundHostRuntime.cs"
+SESSION = SRC / "McpDesktopControlSession.cs"
+AUGMENTER = SRC / "McpTransportAgentCenterAugmenter.cs"
+SETTINGS = SRC / "McpPersistentUserSettings.cs"
+PLUGIN = SRC / "PluginEntry.cs"
 
 
 def fail(message: str) -> None:
@@ -14,6 +19,10 @@ def fail(message: str) -> None:
 
 desktop = DESKTOP.read_text(encoding="utf-8")
 background = BACKGROUND.read_text(encoding="utf-8")
+session = SESSION.read_text(encoding="utf-8")
+augmenter = AUGMENTER.read_text(encoding="utf-8")
+settings = SETTINGS.read_text(encoding="utf-8")
+plugin = PLUGIN.read_text(encoding="utf-8")
 
 for tool in (
     "bricscad_interaction_policy_get",
@@ -43,10 +52,39 @@ requirements = {
     "window PrintWindow path": (desktop, "CaptureWindowBitmap(hwnd"),
     "PrintWindow API": (desktop, "PrintWindow(IntPtr hwnd"),
     "screen BitBlt retained": (desktop, "BitBlt(memory, 0, 0, width, height, screen, x, y, SRCCOPY)"),
+    "foreground toggle": (augmenter, "Cho phép chuột / bàn phím / màn hình user"),
+    "foreground off keeps background agent": (session, "DisableForegroundAccessFromLocalUser"),
+    "local consent auto-renew": (session, "RenewConsentLeaseFromLocalHost"),
+    "augmenter renews lease": (augmenter, "McpDesktopControlSession.RenewConsentLeaseFromLocalHost()"),
+    "secure credential target": (settings, "QS3D.BricsCAD.MCP.OpenAI.RuntimeApiKey"),
+    "windows credential write": (settings, 'EntryPoint = "CredWriteW"'),
+    "windows credential read": (settings, 'EntryPoint = "CredReadW"'),
+    "startup secret restore": (plugin, "McpPersistentUserSettings.ApplyStartupSecretsToProcessEnvironment()"),
+    "typed key capture": (augmenter, "McpPersistentUserSettings.SaveOpenAiRuntimeApiKey(value)"),
 }
 for label, (source, token) in requirements.items():
     if token not in source:
         fail(f"missing {label}: {token}")
+
+# Restore the user-scoped secret before transport autostart so BricsCAD restart reconnect works.
+if plugin.index("McpPersistentUserSettings.ApplyStartupSecretsToProcessEnvironment()") > plugin.index("McpTransportCoordinator.TryAutoStartPreferred()"):
+    fail("saved Runtime API key must be restored before transport auto-start")
+
+# Turning desktop permission OFF must not invoke the historical agent-wide StopAutomation path.
+disable_block = session.split("public static void DisableForegroundAccessFromLocalUser", 1)[1].split("public static void RequireLocalConsent", 1)[0]
+if 'StopSession(reason, false, false, "OFF")' not in disable_block:
+    fail("foreground OFF must revoke desktop access without stopping background CAD/API automation")
+
+# Do not regress to plaintext secret persistence in QS3D files.
+settings_lower = settings.lower()
+for forbidden in (
+    "file.writealltext",
+    "streamwriter",
+    "runtime-api-key.txt",
+    "secret.txt",
+):
+    if forbidden in settings_lower:
+        fail(f"secret persistence must stay in Windows Credential Manager, found: {forbidden}")
 
 mutation_block = desktop.split("private static readonly HashSet<string> MutationTools", 1)[1].split("};", 1)[0]
 for tool in (
@@ -57,7 +95,7 @@ for tool in (
     if f'"{tool}"' not in mutation_block:
         fail(f"{tool} must remain behind McpCadAgentRuntime mutation confirmation/epoch guard")
 
-# The new same-process runtime must not become a remote shell/process/file system escape hatch.
+# The same-process runtime must not become a remote shell/process/file system escape hatch.
 for forbidden in (
     "Process.Start(",
     "cmd.exe",
@@ -83,4 +121,4 @@ if "CaptureBitmap(" in window_branch or "BitBlt(" in window_branch:
 if "CaptureBitmap(rect.Left, rect.Top, width, height)" not in screenshot:
     fail("screen screenshot must retain the bounded desktop BitBlt path")
 
-print("MCP background-host preflight passed.")
+print("MCP background-host + persistence preflight passed.")
