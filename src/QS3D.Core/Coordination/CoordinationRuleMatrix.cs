@@ -126,8 +126,18 @@ namespace QS3D.Core.Coordination
             var observedCount = 0;
             using (var enumerator = items.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    if (hasKnownCount)
+                        RequireStableKnownCount(items, knownCount, collectionLabel);
+
+                    var moved = enumerator.MoveNext();
+
+                    if (hasKnownCount)
+                        RequireStableKnownCount(items, knownCount, collectionLabel);
+                    if (!moved)
+                        break;
+
                     if (hasKnownCount && observedCount >= knownCount)
                     {
                         throw new InvalidOperationException(
@@ -137,6 +147,8 @@ namespace QS3D.Core.Coordination
                         ThrowTooManyEntries(collectionLabel);
 
                     var item = enumerator.Current;
+                    if (hasKnownCount)
+                        RequireStableKnownCount(items, knownCount, collectionLabel);
                     snapshot.Add(item);
                     observedCount++;
                 }
@@ -150,17 +162,20 @@ namespace QS3D.Core.Coordination
             }
 
             if (hasKnownCount)
-            {
-                var stillHasKnownCount = TryGetKnownCount(items, out var reboundKnownCount);
-                if (!stillHasKnownCount || reboundKnownCount != knownCount)
-                {
-                    throw new InvalidOperationException(
-                        collectionLabel + " known Count changed during traversal from " + knownCount +
-                        " to " + (stillHasKnownCount ? reboundKnownCount.ToString(CultureInfo.InvariantCulture) : "<unavailable>") + ".");
-                }
-            }
+                RequireStableKnownCount(items, knownCount, collectionLabel);
 
             return snapshot.ToArray();
+        }
+
+        private static void RequireStableKnownCount<T>(IEnumerable<T> items, int admittedCount, string collectionLabel)
+        {
+            var stillHasKnownCount = TryGetKnownCount(items, out var reboundKnownCount);
+            if (!stillHasKnownCount || reboundKnownCount != admittedCount)
+            {
+                throw new InvalidOperationException(
+                    collectionLabel + " known Count changed during traversal from " + admittedCount +
+                    " to " + (stillHasKnownCount ? reboundKnownCount.ToString(CultureInfo.InvariantCulture) : "<unavailable>") + ".");
+            }
         }
 
         private static bool TryGetKnownCount<T>(IEnumerable<T> items, out int count)
