@@ -83,6 +83,7 @@ namespace QS3D.BricsCAD.V25
         {
             switch (toolName ?? string.Empty)
             {
+                case "desktop_screenshot":
                 case "desktop_window_focus":
                 case "desktop_mouse_move":
                 case "desktop_mouse_click":

@@ -162,16 +162,16 @@ namespace QS3D.Core.Mep
         public string SerializeCsv(IReadOnlyList<MepTbqReportRow> rows)
         {
             if (rows == null) throw new ArgumentNullException(nameof(rows));
-            var admittedRowCount = rows.Count;
-            RequireCsvRowCountAdmission(admittedRowCount);
+            var rowCountContract = CaptureCsvRowCountContract(rows);
+            var admittedRowCount = rowCountContract.ReadOnlyCount;
 
             var builder = new StringBuilder();
             builder.Append("Region,System,Specification,Kind,ElementCount,QuantityCount,LengthM,AreaM2,VolumeM3\n");
             for (var i = 0; i < admittedRowCount; i++)
             {
-                RequireStableCsvRowCount(rows, admittedRowCount);
+                RequireStableCsvRowCounts(rows, rowCountContract);
                 var row = rows[i];
-                RequireStableCsvRowCount(rows, admittedRowCount);
+                RequireStableCsvRowCounts(rows, rowCountContract);
                 if (row == null)
                     throw new ArgumentException("MEP/TBQ report contains a null row at index " + i + ".", nameof(rows));
                 AppendCsv(builder, row.Region);
@@ -187,7 +187,7 @@ namespace QS3D.Core.Mep
                 builder.Append(',').Append(Format(row.VolumeM3));
                 builder.Append('\n');
             }
-            RequireStableCsvRowCount(rows, admittedRowCount);
+            RequireStableCsvRowCounts(rows, rowCountContract);
             return builder.ToString();
         }
 
@@ -246,6 +246,32 @@ namespace QS3D.Core.Mep
                 throw new InvalidOperationException("MEP/TBQ report source Count changed during enumeration.");
         }
 
+        private static CsvRowCountContract CaptureCsvRowCountContract(IReadOnlyList<MepTbqReportRow> rows)
+        {
+            var readOnlyCount = rows.Count;
+            RequireCsvRowCountAdmission(readOnlyCount);
+
+            int? genericCount = null;
+            if (rows is ICollection<MepTbqReportRow> genericCollection)
+            {
+                genericCount = genericCollection.Count;
+                RequireCsvRowCountAdmission(genericCount.Value);
+                if (genericCount.Value != readOnlyCount)
+                    throw new InvalidOperationException("MEP/TBQ CSV row source reports conflicting Count channels.");
+            }
+
+            int? nonGenericCount = null;
+            if (rows is ICollection nonGenericCollection)
+            {
+                nonGenericCount = nonGenericCollection.Count;
+                RequireCsvRowCountAdmission(nonGenericCount.Value);
+                if (nonGenericCount.Value != readOnlyCount)
+                    throw new InvalidOperationException("MEP/TBQ CSV row source reports conflicting Count channels.");
+            }
+
+            return new CsvRowCountContract(readOnlyCount, genericCount, nonGenericCount);
+        }
+
         private static void RequireCsvRowCountAdmission(int count)
         {
             if (count < 0)
@@ -254,13 +280,60 @@ namespace QS3D.Core.Mep
                 throw new InvalidOperationException("MEP/TBQ CSV supports at most " + MaxGroups + " report rows.");
         }
 
-        private static void RequireStableCsvRowCount(IReadOnlyList<MepTbqReportRow> rows, int expectedCount)
+        private static void RequireStableCsvRowCounts(IReadOnlyList<MepTbqReportRow> rows, CsvRowCountContract expected)
         {
-            var observedCount = rows.Count;
-            if (observedCount < 0)
-                throw new InvalidOperationException("MEP/TBQ CSV row Count must not be negative.");
-            if (observedCount != expectedCount)
+            var observedReadOnlyCount = rows.Count;
+            RequireCsvRowCountAdmission(observedReadOnlyCount);
+            if (observedReadOnlyCount != expected.ReadOnlyCount)
                 throw new InvalidOperationException("MEP/TBQ CSV row Count changed during serialization.");
+
+            if (expected.GenericCount.HasValue)
+            {
+                if (!(rows is ICollection<MepTbqReportRow> genericCollection))
+                    throw new InvalidOperationException("MEP/TBQ CSV row Count channels changed during serialization.");
+                var observedGenericCount = genericCollection.Count;
+                RequireCsvRowCountAdmission(observedGenericCount);
+                if (observedGenericCount != expected.GenericCount.Value)
+                    throw new InvalidOperationException("MEP/TBQ CSV row Count changed during serialization.");
+            }
+            else if (rows is ICollection<MepTbqReportRow>)
+            {
+                throw new InvalidOperationException("MEP/TBQ CSV row Count channels changed during serialization.");
+            }
+
+            if (expected.NonGenericCount.HasValue)
+            {
+                if (!(rows is ICollection nonGenericCollection))
+                    throw new InvalidOperationException("MEP/TBQ CSV row Count channels changed during serialization.");
+                var observedNonGenericCount = nonGenericCollection.Count;
+                RequireCsvRowCountAdmission(observedNonGenericCount);
+                if (observedNonGenericCount != expected.NonGenericCount.Value)
+                    throw new InvalidOperationException("MEP/TBQ CSV row Count changed during serialization.");
+            }
+            else if (rows is ICollection)
+            {
+                throw new InvalidOperationException("MEP/TBQ CSV row Count channels changed during serialization.");
+            }
+
+            // Secondary Count getters are caller-controlled too. Re-read the primary channel only
+            // when a secondary channel was observed, preserving the historical primary-only cadence.
+            if ((expected.GenericCount.HasValue || expected.NonGenericCount.HasValue) &&
+                rows.Count != expected.ReadOnlyCount)
+                throw new InvalidOperationException("MEP/TBQ CSV row Count changed during serialization.");
+        }
+
+        private sealed class CsvRowCountContract
+        {
+            internal CsvRowCountContract(int readOnlyCount, int? genericCount, int? nonGenericCount)
+            {
+                ReadOnlyCount = readOnlyCount;
+                GenericCount = genericCount;
+                NonGenericCount = nonGenericCount;
+            }
+
+            internal int ReadOnlyCount { get; }
+            internal int? GenericCount { get; }
+            internal int? NonGenericCount { get; }
         }
 
         private static void ThrowTooManyGroups()

@@ -11,6 +11,8 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             EarlyKnownCountOverrunWinsBeforeUnexpectedRowValidation();
+            TransientMoveNextCountDriftFailsBeforeCurrent();
+            TransientCurrentCountDriftFailsBeforeRetention();
             PostTraversalCountDriftFailsClosed();
             PostTraversalNegativeCountFailsClosed();
             PostTraversalCountConflictFailsClosed();
@@ -27,6 +29,24 @@ namespace QS3D.Core.SmokeTests
             var error = Throws<InvalidOperationException>(() => new QuantityRevisionReport().Summarize(source));
             Contains(error.Message, "Count reported 1 rows but traversal produced 2");
             Equal(2, source.MoveNextCalls);
+        }
+
+        private static void TransientMoveNextCountDriftFailsBeforeCurrent()
+        {
+            var source = new TransientCountRows(Row("Volume", 1d, 2d), DriftBoundary.MoveNext);
+            var error = Throws<InvalidOperationException>(() => new QuantityRevisionReport().Summarize(source));
+            Contains(error.Message, "known Count changed during traversal from 1 to 2");
+            Equal(1, source.MoveNextCalls);
+            Equal(0, source.CurrentReads);
+        }
+
+        private static void TransientCurrentCountDriftFailsBeforeRetention()
+        {
+            var source = new TransientCountRows(Row("Area", 2d, 3d), DriftBoundary.Current);
+            var error = Throws<InvalidOperationException>(() => new QuantityRevisionReport().Summarize(source));
+            Contains(error.Message, "known Count changed during traversal from 1 to 2");
+            Equal(1, source.MoveNextCalls);
+            Equal(1, source.CurrentReads);
         }
 
         private static void PostTraversalCountDriftFailsClosed()
@@ -103,6 +123,82 @@ namespace QS3D.Core.SmokeTests
             yield return row;
         }
 
+        private enum DriftBoundary
+        {
+            MoveNext,
+            Current
+        }
+
+        private sealed class TransientCountRows : ICollection<QuantityRevisionRow>, IReadOnlyCollection<QuantityRevisionRow>, ICollection
+        {
+            private readonly QuantityRevisionRow _row;
+            private readonly DriftBoundary _boundary;
+            private bool _drifting;
+
+            internal TransientCountRows(QuantityRevisionRow row, DriftBoundary boundary)
+            {
+                _row = row;
+                _boundary = boundary;
+            }
+
+            internal int MoveNextCalls { get; private set; }
+            internal int CurrentReads { get; private set; }
+
+            private int ExposedCount => _drifting ? 2 : 1;
+            int ICollection<QuantityRevisionRow>.Count => ExposedCount;
+            int IReadOnlyCollection<QuantityRevisionRow>.Count => ExposedCount;
+            int ICollection.Count => ExposedCount;
+            bool ICollection<QuantityRevisionRow>.IsReadOnly => true;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+
+            public IEnumerator<QuantityRevisionRow> GetEnumerator() => new Enumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            void ICollection<QuantityRevisionRow>.Add(QuantityRevisionRow item) => throw new NotSupportedException();
+            void ICollection<QuantityRevisionRow>.Clear() => throw new NotSupportedException();
+            bool ICollection<QuantityRevisionRow>.Contains(QuantityRevisionRow item) => throw new NotSupportedException();
+            void ICollection<QuantityRevisionRow>.CopyTo(QuantityRevisionRow[] array, int arrayIndex) => throw new NotSupportedException();
+            bool ICollection<QuantityRevisionRow>.Remove(QuantityRevisionRow item) => throw new NotSupportedException();
+            void ICollection.CopyTo(Array array, int index) => throw new NotSupportedException();
+
+            private sealed class Enumerator : IEnumerator<QuantityRevisionRow>
+            {
+                private readonly TransientCountRows _owner;
+                private int _index = -1;
+
+                internal Enumerator(TransientCountRows owner) => _owner = owner;
+
+                public QuantityRevisionRow Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        if (_owner._boundary == DriftBoundary.MoveNext)
+                            _owner._drifting = false;
+                        else
+                            _owner._drifting = true;
+                        return _owner._row;
+                    }
+                }
+                object IEnumerator.Current => Current;
+
+                public bool MoveNext()
+                {
+                    _owner.MoveNextCalls++;
+                    if (_owner._boundary == DriftBoundary.Current)
+                        _owner._drifting = false;
+                    if (_index >= 0) return false;
+                    _index = 0;
+                    if (_owner._boundary == DriftBoundary.MoveNext)
+                        _owner._drifting = true;
+                    return true;
+                }
+
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
+        }
+
         private sealed class MutableCountRows : ICollection<QuantityRevisionRow>, IReadOnlyCollection<QuantityRevisionRow>, ICollection
         {
             private readonly IReadOnlyList<QuantityRevisionRow?> _rows;
@@ -175,14 +271,8 @@ namespace QS3D.Core.SmokeTests
 
         private static TException Throws<TException>(Action action) where TException : Exception
         {
-            try
-            {
-                action();
-            }
-            catch (TException error)
-            {
-                return error;
-            }
+            try { action(); }
+            catch (TException error) { return error; }
             throw new Exception("Expected " + typeof(TException).Name + ".");
         }
 

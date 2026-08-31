@@ -17,7 +17,8 @@ smoke = smoke_path.read_text(encoding="utf-8") if smoke_path.is_file() else ""
 legacy = legacy_guard_path.read_text(encoding="utf-8") if legacy_guard_path.is_file() else ""
 
 for token in (
-    "using (var enumerator = sourceElementIds.GetEnumerator())",
+    "var enumerator = sourceElementIds.GetEnumerator();",
+    "using (enumerator)",
     "while (enumerator.MoveNext())",
     "RequireKnownCountStableDuringTraversal(sourceElementIds, knownCount, nameof(sourceElementIds));",
     "invalid negative known Count during traversal",
@@ -33,6 +34,10 @@ for token in (
     "TransientShrinkRejectsBeforeCurrent",
     "TransientNegativeRejectsBeforeCurrent",
     "TransientConflictRejectsBeforeCurrent",
+    "CurrentGrowthRejectsImmediatelyAfterCurrent",
+    "CurrentShrinkRejectsImmediatelyAfterCurrent",
+    "CurrentNegativeRejectsImmediatelyAfterCurrent",
+    "CountReadsAfterCurrent == 1",
     "StableCountedInputStillPlans",
     "StreamingInputStillPlans",
     "MoveNextCalls == 1 && source.CurrentReads == 0",
@@ -44,20 +49,32 @@ start = source.find("private static IReadOnlyList<string> CanonicalRoots")
 end = source.find("private static void RequireKnownCountStableAfterTraversal", start)
 method = source[start:end] if start >= 0 and end > start else ""
 ordered = (
+    "RequireKnownCountStableDuringTraversal(sourceElementIds, knownCount, nameof(sourceElementIds));",
+    "var enumerator = sourceElementIds.GetEnumerator();",
+    "RequireKnownCountStableDuringTraversal(sourceElementIds, knownCount, nameof(sourceElementIds));",
     "while (enumerator.MoveNext())",
     "RequireKnownCountStableDuringTraversal(sourceElementIds, knownCount, nameof(sourceElementIds));",
     "index >= knownCount.Value",
     "index >= maxRootCount",
     "var value = enumerator.Current;",
+    "RequireKnownCountStableDuringTraversal(sourceElementIds, knownCount, nameof(sourceElementIds));",
+    "var raw = value ?? string.Empty;",
+    "result.Add(raw);",
 )
-positions = [method.find(token) for token in ordered]
-if not method or any(pos < 0 for pos in positions) or positions != sorted(positions):
-    errors.append("Dependency-impact traversal must enforce MoveNext -> Count rebound -> cardinality gates -> Current.")
+search_from = 0
+positions = []
+for token in ordered:
+    pos = method.find(token, search_from)
+    positions.append(pos)
+    if pos >= 0:
+        search_from = pos + len(token)
+if not method or any(pos < 0 for pos in positions):
+    errors.append("Dependency-impact traversal must enforce Count rebound -> GetEnumerator -> Count rebound -> MoveNext -> Count rebound -> cardinality gates -> Current -> Count rebound -> semantic retention.")
 if "foreach (var value in sourceElementIds)" in method:
     errors.append("Dependency-impact caller-controlled roots must not use foreach before Count revalidation.")
 
-if "MoveNext -> traversal Count rebound -> advertised-count guard -> Current" not in legacy:
-    errors.append("Historical dependency-impact known-count guard must pin the stronger pre-Current ordering.")
+if "Count rebound -> GetEnumerator -> Count rebound -> MoveNext" not in legacy:
+    errors.append("Historical dependency-impact known-count guard must pin enumerator-acquisition Count rebounds.")
 
 print("QS3D dependency-impact transient known-count stability preflight")
 if errors:
@@ -65,4 +82,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: dependency-impact transient Count drift rejects after MoveNext and before semantic Current.")
+print("PASS: dependency-impact Count drift rejects around GetEnumerator/MoveNext/Current before semantic retention.")
