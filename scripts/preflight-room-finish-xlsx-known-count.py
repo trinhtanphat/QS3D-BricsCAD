@@ -37,9 +37,9 @@ def main() -> int:
         "known-count contract binder",
     )
     contract = require(exporter, "private sealed class KnownCountContract<T>", "known-count contract type")
-    read_only = require(exporter, "source is IReadOnlyCollection<T>", "IReadOnlyCollection channel admission")
-    generic = require(exporter, "source is ICollection<T>", "generic ICollection channel admission")
-    non_generic = require(exporter, "source is ICollection", "non-generic ICollection channel admission")
+    read_only = require(exporter, "source is IReadOnlyCollection<T>,", "IReadOnlyCollection channel admission")
+    generic = require(exporter, "source is ICollection<T>,", "generic ICollection channel admission")
+    non_generic = require(exporter, "source is ICollection,\n                maximum,", "non-generic ICollection channel admission")
     conflict = require(exporter, "exposes conflicting known collection counts", "conflicting-count rejection")
     negative = require(exporter, "count must be non-negative", "negative-count rejection")
     maximum = require(exporter, "count exceeds the supported maximum", "maximum-count rejection")
