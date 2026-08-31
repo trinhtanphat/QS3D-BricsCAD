@@ -10,8 +10,11 @@ BACKGROUND = SRC / "McpBackgroundHostRuntime.cs"
 SESSION = SRC / "McpDesktopControlSession.cs"
 PERSISTENCE_UI = SRC / "McpPersistentAgentCenterAugmenter.cs"
 SETTINGS = SRC / "McpPersistentUserSettings.cs"
+TUNNEL = SRC / "McpOpenAiSecureTunnel.cs"
+CONTROL_CENTER = SRC / "McpAgentControlCenter.cs"
 PLUGIN = SRC / "PluginEntry.cs"
 V26_PLUGIN = V26_SRC / "PluginEntry.cs"
+RUNBOOK = ROOT / "docs" / "FEATURE-RUNBOOKS" / "mcp-background-host-control.md"
 
 
 def fail(message: str) -> None:
@@ -24,8 +27,11 @@ background = BACKGROUND.read_text(encoding="utf-8")
 session = SESSION.read_text(encoding="utf-8")
 persistence_ui = PERSISTENCE_UI.read_text(encoding="utf-8")
 settings = SETTINGS.read_text(encoding="utf-8")
+tunnel = TUNNEL.read_text(encoding="utf-8")
+control_center = CONTROL_CENTER.read_text(encoding="utf-8")
 plugin = PLUGIN.read_text(encoding="utf-8")
 v26_plugin = V26_PLUGIN.read_text(encoding="utf-8")
+runbook = RUNBOOK.read_text(encoding="utf-8")
 
 for tool in (
     "bricscad_interaction_policy_get",
@@ -74,6 +80,39 @@ for label, (source, token) in requirements.items():
 for host, host_plugin in (("V25", plugin), ("V26", v26_plugin)):
     if host_plugin.index("McpPersistentUserSettings.ApplyStartupSecretsToProcessEnvironment()") > host_plugin.index("McpTransportCoordinator.TryAutoStartPreferred()"):
         fail(f"{host} saved Runtime API key must be restored before transport auto-start")
+
+# A newly supplied Runtime API key is not considered persisted until Credential Manager read-back
+# returns the exact normalized value. Only then may the process environment or tunnel launch use it.
+save_block = settings.split("public static void SaveOpenAiRuntimeApiKey", 1)[1].split("public static bool TrySaveOpenAiRuntimeApiKey", 1)[0]
+if "TryReadOpenAiRuntimeApiKey(out persisted)" not in save_block:
+    fail("Runtime API key save must read the Credential Manager value back before reporting success")
+if "string.Equals(persisted, secret, StringComparison.Ordinal)" not in save_block:
+    fail("Runtime API key save must verify the exact normalized value after Credential Manager write")
+if save_block.index("TryReadOpenAiRuntimeApiKey(out persisted)") > save_block.index('Environment.SetEnvironmentVariable("CONTROL_PLANE_API_KEY"'):
+    fail("Runtime API key must be read-back verified before it is projected into the process environment")
+
+start_block = tunnel.split("public static bool Start(string tunnelId, string runtimeApiKey, out string message)", 1)[1].split("public static void TryAutoStart()", 1)[0]
+if "McpPersistentUserSettings.SaveOpenAiRuntimeApiKey" not in start_block:
+    fail("direct OpenAI tunnel start must persist a newly supplied Runtime API key itself")
+if start_block.index("McpPersistentUserSettings.SaveOpenAiRuntimeApiKey") > start_block.index("new ProcessStartInfo"):
+    fail("direct OpenAI tunnel start must persist/verify the supplied Runtime API key before launching tunnel-client")
+
+# User-facing copy must match the restart-safe persistence contract; stale RAM-only/not-saved copy
+# is dangerous because it tells users the opposite of what the current security model does.
+for stale in (
+    "Runtime API key · chỉ giữ trong RAM",
+    "QS3D không lưu Runtime API key",
+    "secret chỉ được truyền qua child environment",
+):
+    if stale in control_center or stale in tunnel:
+        fail("stale Runtime API key persistence copy remains: " + stale)
+for phrase in (
+    "Windows Credential Manager",
+    "read-back verify",
+    "restart",
+):
+    if phrase not in runbook:
+        fail("background-host runbook missing Runtime API key persistence contract: " + phrase)
 
 # Turning desktop permission OFF must not invoke the historical agent-wide StopAutomation path.
 disable_block = session.split("public static void DisableForegroundAccessFromLocalUser", 1)[1].split("public static void RequireLocalConsent", 1)[0]

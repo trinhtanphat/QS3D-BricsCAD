@@ -463,7 +463,7 @@ namespace QS3D.BricsCAD.V25
             _openAiTunnelIdText = CreateTextInput(McpOpenAiSecureTunnelManager.SavedTunnelId);
             actions.Children.Add(_openAiTunnelIdText);
 
-            actions.Children.Add(CreateInputLabel("Runtime API key · chỉ giữ trong RAM; để trống nếu CONTROL_PLANE_API_KEY/OPENAI_API_KEY đã có"));
+            actions.Children.Add(CreateInputLabel("Runtime API key · lưu bảo mật trong Windows Credential Manager sau khi xác minh; để trống để dùng key đã lưu hoặc CONTROL_PLANE_API_KEY/OPENAI_API_KEY"));
             _openAiRuntimeKeyBox = new PasswordBox
             {
                 MinHeight = 34,
@@ -486,7 +486,7 @@ namespace QS3D.BricsCAD.V25
             actions.Children.Add(CreateActionButton("Đã thêm MCP trong ChatGPT", (_, __) => MarkChatGptRegistered(), ActionKind.Secondary));
             actions.Children.Add(new TextBlock
             {
-                Text = "Secure Tunnel: ChatGPT chọn Connection = Tunnel và Tunnel ID tương ứng. Không cấu hình QS3D public OAuth URL cho đường này. QS3D chỉ truyền local bearer và Runtime API key vào child environment; không ghi secret vào config/timeline.",
+                Text = "Secure Tunnel: ChatGPT chọn Connection = Tunnel và Tunnel ID tương ứng. Không cấu hình QS3D public OAuth URL cho đường này. Runtime API key được xác minh rồi lưu trong Windows Credential Manager; child process nhận key qua environment. Local bearer cũng chỉ truyền qua child environment; không ghi secret vào config/timeline.",
                 Foreground = _palette.TextSecondary,
                 TextWrapping = TextWrapping.Wrap,
                 FontSize = 11,
@@ -901,7 +901,6 @@ namespace QS3D.BricsCAD.V25
             style.Setters.Add(new Setter(Control.BorderBrushProperty, border));
             style.Setters.Add(new Setter(Control.TemplateProperty, CreateButtonTemplate()));
 
-            // Trigger precedence is intentional: focus -> hover -> pressed -> disabled.
             var focus = new Trigger { Property = Button.IsKeyboardFocusedProperty, Value = true };
             focus.Setters.Add(new Setter(Control.BackgroundProperty, background));
             focus.Setters.Add(new Setter(Control.ForegroundProperty, foreground));
@@ -1268,7 +1267,7 @@ namespace QS3D.BricsCAD.V25
                 var ok = McpOpenAiSecureTunnelManager.Start(tunnelId, runtimeKey, out message);
                 _openAiRuntimeKeyBox.Password = string.Empty;
                 if (ok)
-                    McpAgentExperience.Success("onboarding", "OpenAI Secure MCP Tunnel đang khởi động; secret chỉ được truyền qua child environment.", "Chờ tunnel-client READY rồi kết nối ChatGPT bằng Connection = Tunnel.");
+                    McpAgentExperience.Success("onboarding", "OpenAI Secure MCP Tunnel đang khởi động; Runtime API key đã được xác minh và lưu bảo mật cho các lần restart.", "Chờ tunnel-client READY rồi kết nối ChatGPT bằng Connection = Tunnel.");
                 else
                     McpAgentExperience.Error("onboarding", message, "Kiểm tra tunnel-client, Tunnel ID, Runtime API key và quyền Tunnels Read + Use.");
                 ShowToast(ok ? ToastKind.Success : ToastKind.Error, "OpenAI Secure MCP Tunnel", message);
