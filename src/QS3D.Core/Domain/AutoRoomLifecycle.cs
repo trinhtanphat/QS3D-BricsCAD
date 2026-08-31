@@ -70,13 +70,43 @@ namespace QS3D.Core.Domain
             return string.Join(";", normalized.OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
         }
 
+        private static IReadOnlyList<string> ParseSourceHandleText(string? raw)
+        {
+            var source = raw ?? string.Empty;
+            var handles = new List<string>();
+            var tokenStart = 0;
+
+            for (var index = 0; index <= source.Length; index++)
+            {
+                if (index < source.Length && source[index] != ';') continue;
+
+                var tokenLength = index - tokenStart;
+                if (tokenLength == 0)
+                {
+                    tokenStart = index + 1;
+                    continue;
+                }
+                if (handles.Count >= MaxSourceHandleInputCount)
+                    throw new InvalidOperationException(
+                        "Auto Room source handles cannot exceed " + MaxSourceHandleInputCount + " input entries.");
+
+                handles.Add(source.Substring(tokenStart, tokenLength));
+                tokenStart = index + 1;
+            }
+
+            return handles.AsReadOnly();
+        }
+
+        private static string NormalizeSourceHandleText(string? raw) =>
+            NormalizeSourceHandles(ParseSourceHandleText(raw));
+
         public static string SourceSignature(ProjectElement element)
         {
             if (element == null) throw new ArgumentNullException(nameof(element));
             if (element.Properties.TryGetValue(BoundarySourceSignatureKey, out var signature) && !string.IsNullOrWhiteSpace(signature))
-                return NormalizeSourceHandles(signature.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries));
+                return NormalizeSourceHandleText(signature);
             if (!element.Properties.TryGetValue(BoundarySourceHandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) return string.Empty;
-            return NormalizeSourceHandles(raw.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries));
+            return NormalizeSourceHandleText(raw);
         }
 
         public static string ResolveRoomReferenceId(ProjectState project, ProjectElement element)
@@ -110,7 +140,7 @@ namespace QS3D.Core.Domain
         public static ProjectElement? FindBySourceSignature(ProjectState project, string signature, string floorId, string zoneId)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            var normalized = NormalizeSourceHandles((signature ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries));
+            var normalized = NormalizeSourceHandleText(signature);
             if (normalized.Length == 0) return null;
             var matches = ResolveProjectElements(project)
                 .Where(IsAutoRoom)
@@ -183,8 +213,8 @@ namespace QS3D.Core.Domain
                 .Where(room => SameScopeId(room.ZoneId, zoneId))
                 .Where(room =>
                 {
-                    var handles = SourceSignature(room).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
-                    return handles.Length > 0 && handles.All(selected.Contains);
+                    var handles = ParseSourceHandleText(SourceSignature(room));
+                    return handles.Count > 0 && handles.All(selected.Contains);
                 })
                 .Where(room => !HasCanonicalTopologyStaleMetadata(room))
                 .OrderBy(room => room.Id, StringComparer.OrdinalIgnoreCase)
@@ -206,7 +236,7 @@ namespace QS3D.Core.Domain
         {
             if (room == null) throw new ArgumentNullException(nameof(room));
             room.Properties[BoundaryStateKey] = BoundaryStateActive;
-            room.Properties[BoundarySourceSignatureKey] = NormalizeSourceHandles((sourceSignature ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries));
+            room.Properties[BoundarySourceSignatureKey] = NormalizeSourceHandleText(sourceSignature);
             room.Properties.Remove("BoundaryStaleUtc");
             room.Properties.Remove("BoundaryStaleReason");
         }
