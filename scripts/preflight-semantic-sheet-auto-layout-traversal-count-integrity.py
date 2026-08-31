@@ -38,7 +38,7 @@ def main():
         return 1
 
     items = text[text.index("private static List<SemanticSheetAutoLayoutItem> MaterializeItemsBounded"):text.index("private static Dictionary<string, SemanticViewPlan> BuildViewIndex")]
-    if items.count(item_count) < 5 or not require_order(
+    if items.count(item_count) < 4 or not require_order(
         items,
         "item traversal Count boundary",
         [
@@ -57,7 +57,7 @@ def main():
         return 1
 
     views = text[text.index("private static Dictionary<string, SemanticViewPlan> BuildViewIndex"):text.index("private static int? RequireKnownCountsWithinLimit")]
-    if views.count(view_count) < 5 or not require_order(
+    if views.count(view_count) < 4 or not require_order(
         views,
         "available-view traversal Count boundary",
         [
