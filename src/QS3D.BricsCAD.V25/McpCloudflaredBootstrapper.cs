@@ -24,16 +24,17 @@ namespace QS3D.BricsCAD.V25
 
         public static bool IsInstalling { get { lock (Sync) return _installing; } }
 
-        public static void BeginInstall(Action<bool, string> completed)
+        /// <summary>
+        /// Starts one managed cloudflared download/install. Returns false when another install is
+        /// already active; that busy condition is informational and never invokes the completion
+        /// callback as a synthetic failure.
+        /// </summary>
+        public static bool BeginInstall(Action<bool, string> completed)
         {
             if (completed == null) throw new ArgumentNullException(nameof(completed));
             lock (Sync)
             {
-                if (_installing)
-                {
-                    completed(false, "Cloudflare Tunnel đang được tải/cài. Vui lòng chờ.");
-                    return;
-                }
+                if (_installing) return false;
                 _installing = true;
             }
 
@@ -46,6 +47,7 @@ namespace QS3D.BricsCAD.V25
                 finally { lock (Sync) _installing = false; }
                 try { completed(ok, message); } catch { }
             });
+            return true;
         }
 
         public static bool AdoptExistingManagedBinary(out string message)
