@@ -61,25 +61,24 @@ show_start = text.find("public void ShowRebarHub()")
 cleanup_start = text.find("private static void CloseOwnerBeforeReplacement", show_start + 1)
 show = text[show_start:cleanup_start] if show_start >= 0 and cleanup_start > show_start else ""
 
-positions = [
-    show.find("Rebar3DHubWindow? candidate = null;"),
-    show.find("var pending = _pending;"),
-    show.find('CloseOwnerBeforeReplacement(pending, "pending");'),
-    show.find("var published = _published;"),
-    show.find("var window = new Rebar3DHubWindow();"),
-    show.find("candidate = window;"),
-    show.find("_pending = window;"),
-    show.find("Application.ShowModelessWindow(IntPtr.Zero, window, true);"),
-    show.find("if (!window.IsLoaded)"),
-    show.find("if (!ReferenceEquals(_pending, window))"),
-    show.find("_pending = null;"),
-    show.find("_published = window;"),
-    show.find("candidate = null;"),
-]
-if min(positions) < 0:
-    errors.append("unable to prove Rebar 3D Hub pending/publication ordering")
-elif positions != sorted(positions):
-    errors.append("Rebar 3D Hub must drain pending before construction, own pending through show/load/exact proof, then transfer to published")
+try:
+    candidate = show.index("Rebar3DHubWindow? candidate = null;")
+    pending_read = show.index("var pending = _pending;", candidate)
+    pending_drain = show.index('CloseOwnerBeforeReplacement(pending, "pending");', pending_read)
+    published_read = show.index("var published = _published;", pending_drain)
+    construct = show.index("var window = new Rebar3DHubWindow();", published_read)
+    candidate_assign = show.index("candidate = window;", construct)
+    pending_assign = show.index("_pending = window;", candidate_assign)
+    host_show = show.index("Application.ShowModelessWindow(IntPtr.Zero, window, true);", pending_assign)
+    loaded = show.index("if (!window.IsLoaded)", host_show)
+    exact = show.index("if (!ReferenceEquals(_pending, window))", loaded)
+    clear = show.index("_pending = null;", exact)
+    publish = show.index("_published = window;", clear)
+    transfer = show.index("candidate = null;", publish)
+    if not (candidate < pending_read < pending_drain < published_read < construct < candidate_assign < pending_assign < host_show < loaded < exact < clear < publish < transfer):
+        errors.append("Rebar 3D Hub must drain pending before construction, own pending through show/load/exact proof, then transfer to published")
+except ValueError as exc:
+    errors.append("unable to prove Rebar 3D Hub pending/publication ordering: " + str(exc))
 
 cleanup = text[cleanup_start:] if cleanup_start >= 0 else ""
 close_pos = cleanup.find("window.Close();")
