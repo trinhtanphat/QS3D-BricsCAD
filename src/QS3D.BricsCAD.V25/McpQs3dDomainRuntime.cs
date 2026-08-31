@@ -19,7 +19,7 @@ namespace QS3D.BricsCAD.V25
         private static string _lastErrorCode = string.Empty;
         private static string _lastErrorMessage = string.Empty;
 
-        internal static bool IsTool(string tool)
+        internal static bool IsTool(string? tool)
         {
             return string.Equals(tool, "qs3d_status", StringComparison.Ordinal)
                 || string.Equals(tool, "qs3d_domain_status", StringComparison.Ordinal)
@@ -27,7 +27,7 @@ namespace QS3D.BricsCAD.V25
                 || string.Equals(tool, "qs3d_place_single_footing", StringComparison.Ordinal);
         }
 
-        internal static bool RequiresMutation(string tool)
+        internal static bool RequiresMutation(string? tool)
         {
             return string.Equals(tool, "qs3d_run_command", StringComparison.Ordinal)
                 || string.Equals(tool, "qs3d_place_single_footing", StringComparison.Ordinal);
