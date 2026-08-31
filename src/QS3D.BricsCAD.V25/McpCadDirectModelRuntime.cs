@@ -123,17 +123,20 @@ namespace QS3D.BricsCAD.V25
             RequireConfirmedMutation(body, "cad_command_sequence");
             var command = NormalizeCommandToken(McpTopLevelJson.ExtractString(body, "command"));
             EnsureAutomationRunning();
-            if (string.Equals(command, "QSAVE", StringComparison.Ordinal))
-            {
-                Save();
-                return "{\"accepted\":true,\"completed\":true,\"saved\":true,\"command\":\"QSAVE\",\"inputChars\":0}";
-            }
-            if (!string.Equals(command, "EXTRUDE", StringComparison.Ordinal))
+            if (!string.Equals(command, "QSAVE", StringComparison.Ordinal)
+                && !string.Equals(command, "EXTRUDE", StringComparison.Ordinal))
                 throw new InvalidOperationException("Direct multi-stage command grammar currently supports EXTRUDE and synchronous QSAVE only.");
-            var inputs = NormalizeExtrudeInputs(McpTopLevelJson.ExtractString(body, "inputs"));
+            var inputs = string.Equals(command, "EXTRUDE", StringComparison.Ordinal)
+                ? NormalizeExtrudeInputs(McpTopLevelJson.ExtractString(body, "inputs"))
+                : string.Empty;
             return McpDiagnosticHub.InvokeInCadContext(() =>
             {
                 EnsureAutomationRunning();
+                if (string.Equals(command, "QSAVE", StringComparison.Ordinal))
+                {
+                    Save();
+                    return "{\"accepted\":true,\"completed\":true,\"saved\":true,\"command\":\"QSAVE\",\"inputChars\":0}";
+                }
                 var document = RequireDocument();
                 var script = "_.EXTRUDE\n" + inputs;
                 if (!script.EndsWith("\n", StringComparison.Ordinal)) script += "\n";
