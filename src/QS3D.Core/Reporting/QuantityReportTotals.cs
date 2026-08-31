@@ -6,6 +6,8 @@ namespace QS3D.Core.Reporting
 {
     public sealed class QuantityReportTotals
     {
+        internal const int MaxRows = 10000;
+
         public int Count { get; private set; }
         public double GrossConcreteM3 { get; private set; }
         public double DeductionM3 { get; private set; }
@@ -18,6 +20,9 @@ namespace QS3D.Core.Reporting
         {
             if (rows == null) throw new ArgumentNullException(nameof(rows));
             var knownCount = SnapshotKnownRowCount(rows, out var knownCountSources);
+            if (knownCount.HasValue && knownCount.Value > MaxRows)
+                ThrowTooManyRows();
+
             var totals = new QuantityReportTotals();
             var grossConcreteCompensation = 0d;
             var deductionCompensation = 0d;
@@ -41,6 +46,8 @@ namespace QS3D.Core.Reporting
                     RequireKnownRowCountStable(rows, knownCount, knownCountSources);
                     if (knownCount.HasValue && rowIndex >= knownCount.Value)
                         throw RowCountMismatch(knownCount.Value, rowIndex + 1);
+                    if (rowIndex >= MaxRows)
+                        ThrowTooManyRows();
 
                     var row = enumerator.Current;
                     RequireKnownRowCountStable(rows, knownCount, knownCountSources);
@@ -119,6 +126,12 @@ namespace QS3D.Core.Reporting
             return new InvalidOperationException(
                 "Quantity report row input changed during enumeration; Count reported " + reportedCount +
                 " rows but enumeration produced " + observedCount + ".");
+        }
+
+        private static void ThrowTooManyRows()
+        {
+            throw new InvalidOperationException(
+                "Quantity report totals support at most " + MaxRows + " rows.");
         }
 
         private static double Add(double current, ref double compensation, double value, int rowIndex, string quantity)

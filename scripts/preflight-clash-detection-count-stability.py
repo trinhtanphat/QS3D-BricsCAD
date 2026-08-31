@@ -38,20 +38,35 @@ pre_move = contract.index("RequireStableKnownCount(elements, expectedCount);", e
 move = contract.index("if (!enumerator.MoveNext()) break;", pre_move)
 pre_current = contract.index("RequireStableKnownCount(elements, expectedCount);", pre_move + 1)
 current = contract.index("var element = enumerator.Current;", pre_current)
+post_current = contract.index("RequireStableKnownCount(elements, expectedCount);", current)
+null_validation = contract.index("if (element == null)", post_current)
+duplicate_validation = contract.index("if (!ids.Add(element.ElementId))", null_validation)
+snapshot_acceptance = contract.index("snapshot.Add(element);", duplicate_validation)
 final_rebound = contract.rindex("RequireStableKnownCount(elements, expectedCount);")
 cardinality = contract.index("if (expectedCount.HasValue && snapshot.Count != expectedCount.Value)", final_rebound)
-if not (admission < enumerator < pre_move < move < pre_current < current < final_rebound < cardinality):
+if not (
+    admission < enumerator < pre_move < move < pre_current < current < post_current <
+    null_validation < duplicate_validation < snapshot_acceptance < final_rebound < cardinality
+):
     raise SystemExit("Clash detection Count-stability ordering changed.")
+
+if contract.count("var element = enumerator.Current;") != 1:
+    raise SystemExit("Clash detection must read accepted Current exactly once per traversal body.")
 
 required_smoke = (
     "GrowthRejectsBeforeSecondAdvance",
     "ShrinkRejectsBeforeFirstCurrentRead",
+    "CurrentCountDriftWinsBeforeNullValidation",
+    "CurrentCountDriftEnumerable",
+    "_owner._count = 2;",
     "FinalReboundRejectsAfterEnumerationEnds",
     "StableKnownCountProducesExpectedClash",
     "PureStreamingEnumerableRemainsSupported",
     "Equal(1, source.MoveNextCalls",
     "Equal(0, source.CurrentReads",
-    "Equal(7, source.CountReads",
+    "Equal(1, source.CurrentReads, \"Current-induced drift Current reads\")",
+    "Equal(4, source.CountReads, \"Current-induced drift Count reads\")",
+    "Equal(9, source.CountReads, \"stable Count reads\")",
 )
 missing_smoke = [token for token in required_smoke if token not in smoke]
 if missing_smoke:
