@@ -12,6 +12,8 @@ Background Control is the default route for work that can be completed without t
 
 Background Control must not move the global mouse cursor, inject global keyboard input, or steal foreground focus. The `bricscad_ui_*` helpers are deliberately bounded to HWNDs owned by the current BricsCAD process and use bounded window messages. Unsupported controls fail; they do **not** silently fall back to desktop automation.
 
+Window-scoped observation is also compatible with this model: the existing `desktop_screenshot` window path uses target-window capture rather than foreground mouse/keyboard injection, so observing a BricsCAD window does not by itself require Foreground Control.
+
 ### Foreground Control — explicit/local-consent gated
 
 Foreground Control covers `desktop_*` operations that can use the user's mouse, keyboard, clipboard, focus, or visible desktop. It is available only when both conditions are true:
@@ -63,6 +65,8 @@ Enabling Foreground Control does not disable Background Control. Background rema
 ## Agent Center behavior
 
 The local Agent Center shows separate **Thao tác nền · Background Control** and **Thao tác trực tiếp · Foreground Control** status text. The existing Resume/Pause/Emergency controls are synchronized by `McpPersistentAgentCenterAugmenter` so local Resume enables the foreground policy only after consent is granted, while Pause/Emergency disarm the foreground policy. The dedicated foreground toggle performs the same synchronization directly and fails closed on error.
+
+The dedicated Foreground Control toggle is the independent foreground on/off switch: turning it OFF uses the desktop session's foreground-only disable path and leaves Background Control/CAD API automation available. The legacy **Pause desktop** and **Emergency Stop** buttons intentionally remain stronger safety controls and may stop agent automation in addition to disarming foreground access.
 
 If consent disappears independently (for example Esc×2), the augmenter detects the stale foreground policy and disarms it back to background-only.
 
