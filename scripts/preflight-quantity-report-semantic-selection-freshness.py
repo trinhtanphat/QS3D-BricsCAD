@@ -13,7 +13,9 @@ for token in (
     "var selectionVersion = project.ChangeVersion;",
     "var knownCount = SnapshotKnownSelectionCount(elementIds);",
     "Project changed while quantity report element-id Count contracts were being inspected",
-    "foreach (var raw in elementIds)",
+    "using var enumerator = elementIds.GetEnumerator();",
+    "var moved = enumerator.MoveNext();",
+    "var raw = enumerator.Current;",
     "if (project.ChangeVersion != selectionVersion)",
     "Project changed while quantity report element ids were being enumerated",
     'ReportingProjectIdentityGuard.RequireUniqueElementIds(project, "Quantity report selection")',
@@ -22,14 +24,20 @@ for token in (
 ):
     assert token in method, f"missing quantity report semantic-freshness contract: {token}"
 
+assert "foreach (var raw in elementIds)" not in method, (
+    "quantity report semantic-freshness guard must follow the explicit enumerator traversal used for Count-boundary validation"
+)
+
 capture = method.index("var selectionVersion = project.ChangeVersion;")
 count_snapshot = method.index("var knownCount = SnapshotKnownSelectionCount(elementIds);", capture)
 count_version_check = method.index("if (project.ChangeVersion != selectionVersion)", count_snapshot)
-enumeration = method.index("foreach (var raw in elementIds)", count_version_check)
-version_check = method.index("if (project.ChangeVersion != selectionVersion)", enumeration)
+enumerator = method.index("using var enumerator = elementIds.GetEnumerator();", count_version_check)
+move = method.index("var moved = enumerator.MoveNext();", enumerator)
+current = method.index("var raw = enumerator.Current;", move)
+version_check = method.index("if (project.ChangeVersion != selectionVersion)", current)
 structural_guard = method.index('ReportingProjectIdentityGuard.RequireUniqueElementIds(project, "Quantity report selection")')
-assert capture < count_snapshot < count_version_check < enumeration < version_check < structural_guard, (
-    "quantity report selection freshness ordering drifted: expected capture -> Count snapshot/check -> enumerate -> semantic check -> structural guard"
+assert capture < count_snapshot < count_version_check < enumerator < move < current < version_check < structural_guard, (
+    "quantity report selection freshness ordering drifted: expected capture -> Count snapshot/check -> explicit enumerate -> semantic check -> structural guard"
 )
 
 for token in (

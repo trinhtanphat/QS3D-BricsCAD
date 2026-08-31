@@ -786,7 +786,7 @@ namespace QS3D.Core.Cost
             for (var i = 0; i < bidList.Count; i++)
             {
                 var bid = bidList[i];
-                decimal total = 0m;
+                var evaluatedContributions = new List<decimal>(requirementList.Count);
                 var missing = new List<string>();
                 for (var j = 0; j < requirementList.Count; j++)
                 {
@@ -800,11 +800,10 @@ namespace QS3D.Core.Cost
                         requirement.Quantity,
                         quote.UnitRate,
                         "tender evaluated line cost");
-                    total = CostDecimalMath.AddPreservingNonZeroContribution(
-                        total,
-                        lineCost,
-                        "tender evaluated total");
+                    evaluatedContributions.Add(lineCost);
                 }
+                if (!CostDecimalMath.TrySumNonNegativeExactly(evaluatedContributions, out var total))
+                    throw new OverflowException("Tender evaluated total exact aggregate cannot be represented as decimal.");
                 missing.Sort(StringComparer.OrdinalIgnoreCase);
                 working.Add(new EvaluationBuilder(bid, total, missing));
             }
@@ -1138,7 +1137,7 @@ namespace QS3D.Core.Cost
             var itemCodes = new List<string>(contracts.Keys);
             itemCodes.Sort(StringComparer.OrdinalIgnoreCase);
             var results = new List<ProgressClaimLineResult>(itemCodes.Count);
-            decimal gross = 0m;
+            var grossContributions = new decimal[itemCodes.Count];
             checked
             {
                 for (var i = 0; i < itemCodes.Count; i++)
@@ -1163,10 +1162,7 @@ namespace QS3D.Core.Cost
                         certified,
                         "progress remaining quantity");
                     var value = CostDecimalMath.MultiplyPreservingNonZero(certified, item.UnitRate, "progress certified line value");
-                    gross = CostDecimalMath.AddPreservingNonZeroContribution(
-                        gross,
-                        value,
-                        "progress gross certified this period");
+                    grossContributions[i] = value;
                     results.Add(new ProgressClaimLineResult(
                         item.ItemCode,
                         previous,
@@ -1176,6 +1172,8 @@ namespace QS3D.Core.Cost
                         remaining,
                         value));
                 }
+                if (!CostDecimalMath.TrySumNonNegativeExactly(grossContributions, out var gross))
+                    throw new OverflowException("Progress gross certified exact aggregate cannot be represented as decimal.");
                 var retention = CostDecimalMath.ApplyPercentagePreservingPrecision(gross, retentionPercent, "progress retention value");
                 var net = gross - retention;
                 return new ProgressClaimResult(

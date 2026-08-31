@@ -17,14 +17,23 @@ require("availableViews.ToArray()" not in text, "unbounded availableViews.ToArra
 require("Semantic sheet planner supports at most \" + MaxAvailableViews + \" available views." in text, "missing explicit overflow failure")
 
 helper_start = text.index("private static List<SemanticViewPlan> MaterializeAvailableViewsBounded(")
-index_start = text.index("private static Dictionary<string, SemanticViewPlan> BuildUniqueViewIndex(", helper_start)
+index_start = text.index("private static void RevalidateKnownCount", helper_start)
 helper = text[helper_start:index_start]
 check_pos = helper.find("if (result.Count >= MaxAvailableViews)")
-add_pos = helper.find("result.Add(enumerator.Current);")
+current_pos = helper.find("var view = enumerator.Current;")
+rebound_pos = helper.find("RevalidateKnownCount(availableViews, knownCount.Value, MaxAvailableViews, \"Semantic sheet planner\", \"available views\");", current_pos)
+add_pos = helper.find("result.Add(view);", rebound_pos)
 require(check_pos >= 0, "bounded helper must test the ceiling")
+require(current_pos >= 0, "bounded helper must read each accepted view exactly once")
+require(rebound_pos >= 0, "bounded helper must revalidate known Count immediately after Current")
 require(add_pos >= 0, "bounded helper must materialize accepted views")
-require(check_pos < add_pos, "overflow must fail before buffering the 10,001st view")
-require("while (enumerator.MoveNext())" in helper, "bounded helper must enumerate incrementally")
+require(check_pos < current_pos < rebound_pos < add_pos, "overflow must fail before Current and post-Current Count rebound must execute before retention")
+require("while (true)" in helper, "bounded helper must expose the pre-MoveNext Count boundary explicitly")
+move_pos = helper.find("var moved = enumerator.MoveNext();")
+post_move_rebound = helper.find("RevalidateKnownCount(availableViews, knownCount.Value, MaxAvailableViews, \"Semantic sheet planner\", \"available views\");", move_pos)
+not_moved = helper.find("if (!moved)", post_move_rebound)
+require(move_pos >= 0 and post_move_rebound >= 0 and not_moved >= 0 and move_pos < post_move_rebound < not_moved,
+        "known Count must be rebound immediately after MoveNext before its result is trusted")
 require("throw new InvalidOperationException(" in helper, "overflow must fail closed")
 
 build_start = text.index("public static SemanticSheetPlan Build(")
