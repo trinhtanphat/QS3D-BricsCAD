@@ -20,38 +20,37 @@ def main() -> int:
 
     row_count = require(
         exporter,
-        'var rowCount = RequireConsistentKnownCount(rows, MaxDataRows, "export rows");',
-        "top-level consistent known-count binding",
+        'var rowCount = BindKnownCount(rows, MaxDataRows, "export rows");',
+        "top-level consistent known-count contract binding",
     )
-    row_loop = require(exporter, "for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)", "indexed row traversal")
-    row_bind = require(exporter, "if (rows.Count != rowCount)", "legacy post-snapshot drift check")
-    row_failure = require(
-        exporter,
-        'throw new InvalidOperationException("Room-finish XLSX export row count changed during snapshot.");',
-        "legacy drift failure classification",
-    )
+    row_loop = require(exporter, "for (var rowIndex = 0; rowIndex < rowCount.Value; rowIndex++)", "indexed row traversal")
+    pre_indexer = require(exporter, 'rowCount.Revalidate(rows, "before row indexer");', "pre-indexer known-count revalidation")
+    post_indexer = require(exporter, 'rowCount.Revalidate(rows, "after row indexer");', "post-indexer known-count revalidation")
+    post_snapshot = require(exporter, 'rowCount.Revalidate(rows, "after row snapshot");', "post-row-snapshot known-count revalidation")
+    post_traversal = require(exporter, 'rowCount.Revalidate(rows, "after snapshot traversal");', "post-traversal known-count revalidation")
+    post_stability = require(exporter, 'rowCount.Revalidate(rows, "after row stability validation");', "pre-filesystem known-count revalidation")
     path_resolution = require(exporter, "var fullPath = Path.GetFullPath(path);", "filesystem boundary")
 
     helper = require(
         exporter,
-        "private static int RequireConsistentKnownCount<T>(IEnumerable<T> source, int maximum, string label)",
-        "known-count helper",
+        "private static KnownCountContract<T> BindKnownCount<T>(IEnumerable<T> source, int maximum, string label)",
+        "known-count contract binder",
     )
-    read_only = require(exporter, "var readOnly = source as IReadOnlyCollection<T>;", "IReadOnlyCollection count")
-    generic = require(exporter, "var generic = source as ICollection<T>;", "generic ICollection count")
-    non_generic = require(exporter, "var nonGeneric = source as ICollection;", "non-generic ICollection count")
+    contract = require(exporter, "private sealed class KnownCountContract<T>", "known-count contract type")
+    read_only = require(exporter, "source is IReadOnlyCollection<T>", "IReadOnlyCollection channel admission")
+    generic = require(exporter, "source is ICollection<T>", "generic ICollection channel admission")
+    non_generic = require(exporter, "source is ICollection", "non-generic ICollection channel admission")
     conflict = require(exporter, "exposes conflicting known collection counts", "conflicting-count rejection")
     negative = require(exporter, "count must be non-negative", "negative-count rejection")
     maximum = require(exporter, "count exceeds the supported maximum", "maximum-count rejection")
     deterministic_required = require(exporter, "must expose a deterministic collection count", "deterministic-count requirement")
+    drift = require(exporter, 'count changed " + phase + ". Expected " + Value + " but observed " + observed', "admitted count drift rejection")
 
-    if not (row_count < row_loop < row_bind < row_failure < path_resolution):
-        raise SystemExit("FAIL: Room-finish top-level count contract must bind before traversal and retain drift checking before filesystem mutation")
-    if not (helper < read_only < generic < non_generic < deterministic_required):
-        raise SystemExit("FAIL: Room-finish known-count helper must inspect all deterministic collection interfaces")
-    if min(conflict, negative, maximum) < helper:
-        raise SystemExit("FAIL: Room-finish count rejection contract must live inside RequireConsistentKnownCount")
-    if "var count = RequireConsistentKnownCount(source" in exporter:
+    if not (row_count < row_loop and pre_indexer < post_indexer < post_snapshot < post_traversal < post_stability < path_resolution):
+        raise SystemExit("FAIL: Room-finish top-level count contract must bind before traversal and revalidate admitted channels before filesystem mutation")
+    if not (helper < contract and min(read_only, generic, non_generic, conflict, negative, maximum, deterministic_required, drift) > contract):
+        raise SystemExit("FAIL: Room-finish known-count contract must preserve all deterministic collection interface/range/conflict/drift semantics")
+    if "var count = BindKnownCount(source" in exporter or "var count = RequireConsistentKnownCount(source" in exporter:
         raise SystemExit("FAIL: issue-4215 must not broaden into nested concrete-list count semantics")
     require(exporter, "var count = source.Count;", "existing nested concrete-list snapshot behavior")
     require(exporter, "if (source.Count != count)", "existing nested post-snapshot drift check")
@@ -72,7 +71,7 @@ def main() -> int:
 
     print(
         "PASS: Room-finish XLSX binds top-level deterministic Count interfaces before traversal, "
-        "rejects invalid/conflicting counts before filesystem mutation, preserves legacy drift classification, "
+        "rejects invalid/conflicting counts before filesystem mutation, revalidates admitted channels through caller traversal, "
         "and leaves nested concrete-list semantics unchanged."
     )
     return 0
