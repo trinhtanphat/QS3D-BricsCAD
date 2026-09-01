@@ -13,6 +13,9 @@ namespace QS3D.Core.SmokeTests
         {
             KnownCountOverrunRejectsBeforeCurrentRead();
             ExactTraversalCountDriftFailsClosed();
+            AcquisitionCountDriftRejectsBeforeMoveNext();
+            MoveNextCountDriftRejectsBeforeCurrentRead();
+            CurrentCountDriftRejectsBeforeMutation();
             StableCountedInputAssigns();
             StreamingInputRemainsAccepted();
             StreamingHardCapRejectsBeforeCurrentRead();
@@ -21,7 +24,7 @@ namespace QS3D.Core.SmokeTests
         private static void KnownCountOverrunRejectsBeforeCurrentRead()
         {
             var project = CreateProject(out var zone, out var element);
-            var source = new InstrumentedCountedTargets(new[] { element, element }, 1, 1);
+            var source = new InstrumentedCountedTargets(new[] { element, element }, 1, 1, int.MaxValue);
 
             ThrowsContaining<InvalidOperationException>(
                 () => ProjectZoneService.Assign(project, zone.Id, source),
@@ -35,26 +38,71 @@ namespace QS3D.Core.SmokeTests
         private static void ExactTraversalCountDriftFailsClosed()
         {
             var project = CreateProject(out var zone, out var element);
-            var source = new InstrumentedCountedTargets(new[] { element }, 1, 2);
+            var source = new InstrumentedCountedTargets(new[] { element }, 1, 2, 8);
 
             ThrowsContaining<InvalidOperationException>(
                 () => ProjectZoneService.Assign(project, zone.Id, source),
                 "known count changed during enumeration");
 
-            Equal(2, source.CountReads);
+            Require(source.CountReads >= 8, "Zone assignment must repeatedly rebound known Count through traversal.");
             Equal(2, source.MoveNextReads);
             Equal(1, source.CurrentReads);
+            Equal(string.Empty, element.ZoneId);
+        }
+
+        private static void AcquisitionCountDriftRejectsBeforeMoveNext()
+        {
+            var project = CreateProject(out var zone, out var element);
+            var source = new TransientCountTargets(element, DriftPoint.Acquisition);
+
+            ThrowsContaining<InvalidOperationException>(
+                () => ProjectZoneService.Assign(project, zone.Id, source),
+                "known count changed during enumeration");
+
+            Equal(1, source.GetEnumeratorReads);
+            Equal(0, source.MoveNextReads);
+            Equal(0, source.CurrentReads);
+            Equal(string.Empty, element.ZoneId);
+        }
+
+        private static void MoveNextCountDriftRejectsBeforeCurrentRead()
+        {
+            var project = CreateProject(out var zone, out var element);
+            var source = new TransientCountTargets(element, DriftPoint.MoveNext);
+
+            ThrowsContaining<InvalidOperationException>(
+                () => ProjectZoneService.Assign(project, zone.Id, source),
+                "known count changed during enumeration");
+
+            Equal(1, source.MoveNextReads);
+            Equal(0, source.CurrentReads);
+            Equal(string.Empty, element.ZoneId);
+        }
+
+        private static void CurrentCountDriftRejectsBeforeMutation()
+        {
+            var project = CreateProject(out var zone, out var element);
+            var beforeVersion = project.ChangeVersion;
+            var source = new TransientCountTargets(element, DriftPoint.Current);
+
+            ThrowsContaining<InvalidOperationException>(
+                () => ProjectZoneService.Assign(project, zone.Id, source),
+                "known count changed during enumeration");
+
+            Equal(1, source.MoveNextReads);
+            Equal(1, source.CurrentReads);
+            Equal(beforeVersion, project.ChangeVersion);
             Equal(string.Empty, element.ZoneId);
         }
 
         private static void StableCountedInputAssigns()
         {
             var project = CreateProject(out var zone, out var element);
-            var source = new InstrumentedCountedTargets(new[] { element }, 1, 1);
+            var source = new InstrumentedCountedTargets(new[] { element }, 1, 1, int.MaxValue);
 
             Equal(1, ProjectZoneService.Assign(project, zone.Id, source));
             Equal(zone.Id, element.ZoneId);
-            Equal(2, source.CountReads);
+            Require(source.CountReads >= 6, "Stable counted Zone assignment must be rebound throughout traversal.");
             Equal(2, source.MoveNextReads);
             Equal(1, source.CurrentReads);
         }
@@ -101,6 +149,11 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Expected '" + expected + "', got '" + actual + "'.");
         }
 
+        private static void Require(bool condition, string message)
+        {
+            if (!condition) throw new Exception(message);
+        }
+
         private static void ThrowsContaining<T>(Action action, string expectedText) where T : Exception
         {
             try
@@ -120,12 +173,14 @@ namespace QS3D.Core.SmokeTests
             private readonly ProjectElement[] _items;
             private readonly int _initialCount;
             private readonly int _reboundCount;
+            private readonly int _firstReboundRead;
 
-            public InstrumentedCountedTargets(ProjectElement[] items, int initialCount, int reboundCount)
+            public InstrumentedCountedTargets(ProjectElement[] items, int initialCount, int reboundCount, int firstReboundRead)
             {
                 _items = items;
                 _initialCount = initialCount;
                 _reboundCount = reboundCount;
+                _firstReboundRead = firstReboundRead;
             }
 
             public int CountReads { get; private set; }
@@ -137,16 +192,12 @@ namespace QS3D.Core.SmokeTests
                 get
                 {
                     CountReads++;
-                    return CountReads == 1 ? _initialCount : _reboundCount;
+                    return CountReads < _firstReboundRead ? _initialCount : _reboundCount;
                 }
             }
 
-            public IEnumerator<ProjectElement> GetEnumerator()
-            {
-                return new Enumerator(this);
-            }
-
-            IEnumerator IEnumerable.GetEnumerator() { return GetEnumerator(); }
+            public IEnumerator<ProjectElement> GetEnumerator() => new Enumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
             private sealed class Enumerator : IEnumerator<ProjectElement>
             {
@@ -172,7 +223,74 @@ namespace QS3D.Core.SmokeTests
                 }
 
                 object IEnumerator.Current => Current;
-                public void Reset() { throw new NotSupportedException(); }
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
+        }
+
+        private enum DriftPoint
+        {
+            Acquisition,
+            MoveNext,
+            Current
+        }
+
+        private sealed class TransientCountTargets : IReadOnlyCollection<ProjectElement>
+        {
+            private readonly ProjectElement _element;
+            private readonly DriftPoint _point;
+            private bool _drift;
+
+            public TransientCountTargets(ProjectElement element, DriftPoint point)
+            {
+                _element = element;
+                _point = point;
+            }
+
+            public int Count => _drift ? 2 : 1;
+            public int GetEnumeratorReads { get; private set; }
+            public int MoveNextReads { get; private set; }
+            public int CurrentReads { get; private set; }
+
+            public IEnumerator<ProjectElement> GetEnumerator()
+            {
+                GetEnumeratorReads++;
+                if (_point == DriftPoint.Acquisition) _drift = true;
+                return new Enumerator(this);
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private sealed class Enumerator : IEnumerator<ProjectElement>
+            {
+                private readonly TransientCountTargets _owner;
+                private int _index = -1;
+
+                public Enumerator(TransientCountTargets owner) { _owner = owner; }
+
+                public bool MoveNext()
+                {
+                    _owner.MoveNextReads++;
+                    if (_owner._point == DriftPoint.Acquisition) _owner._drift = false;
+                    if (_owner._point == DriftPoint.MoveNext && _index < 0) _owner._drift = true;
+                    if (_owner._point == DriftPoint.Current && _index >= 0) _owner._drift = false;
+                    _index++;
+                    return _index == 0;
+                }
+
+                public ProjectElement Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        if (_owner._point == DriftPoint.MoveNext) _owner._drift = false;
+                        if (_owner._point == DriftPoint.Current) _owner._drift = true;
+                        return _owner._element;
+                    }
+                }
+
+                object IEnumerator.Current => Current;
+                public void Reset() => throw new NotSupportedException();
                 public void Dispose() { }
             }
         }
@@ -191,8 +309,8 @@ namespace QS3D.Core.SmokeTests
             public int MoveNextReads { get; private set; }
             public int CurrentReads { get; private set; }
 
-            public IEnumerator<ProjectElement> GetEnumerator() { return new Enumerator(this); }
-            IEnumerator IEnumerable.GetEnumerator() { return GetEnumerator(); }
+            public IEnumerator<ProjectElement> GetEnumerator() => new Enumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
             private sealed class Enumerator : IEnumerator<ProjectElement>
             {
@@ -218,7 +336,7 @@ namespace QS3D.Core.SmokeTests
                 }
 
                 object IEnumerator.Current => Current;
-                public void Reset() { throw new NotSupportedException(); }
+                public void Reset() => throw new NotSupportedException();
                 public void Dispose() { }
             }
         }
