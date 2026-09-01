@@ -14,15 +14,15 @@ Save-side validation is insufficient for an import boundary because not every pe
 
 ## Contract
 
-Primary persisted identity/key attributes use `RequiredCanonical(...)`: the attribute must exist, must contain non-whitespace content, and must already equal its trimmed representation ordinally. Malformed padding fails closed with `InvalidDataException`; no canonical alias is synthesized during hydration.
+`ProjectSchemaMigrator.MigrateToCurrent` now validates these raw XML primary identity/key attributes before `QsdbProjectStore` hydrates domain objects. Each covered attribute must exist, contain non-whitespace content, and already equal its trimmed representation ordinally. Malformed padding fails closed with `InvalidDataException`; no canonical alias is synthesized during hydration. The same validation is applied to already-current documents and to the migrated working tree before it replaces the caller document.
 
-Free-text remains separate. Project/zone/floor/family names, property values, metadata values and audit detail/text are not reclassified as primary identity keys by this package.
+Free-text remains separate. Project/zone/floor/family names, property values, metadata values and audit detail/text are not reclassified as primary identity keys by this package. Optional relationship/reference attributes keep their existing validation path.
 
 ## Regression
 
 `QsdbPrimaryIdentityCanonicalitySmoke` starts from a writer-produced canonical QSDB, tampers exactly one primary identity at a time with leading/trailing whitespace, and requires `Load` to fail for zone/floor/family/element/rule IDs, rule output and quantity name. A canonical control package must still round-trip unchanged.
 
-`scripts/preflight-qsdb-primary-identity-canonicality.py` pins the exact read-site helpers and forbids regression back to trim-normalizing `Required(...)` calls for the covered identities.
+`scripts/preflight-qsdb-primary-identity-canonicality.py` pins both current-schema and migration-path calls to the raw XML canonicality validator, every covered identity attribute, the fail-closed whitespace check, and deterministic smoke registration.
 
 ## Validation
 
