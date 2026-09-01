@@ -63,11 +63,6 @@ namespace QS3D.Core.Export
         }
     }
 
-    /// <summary>
-    /// Plans an import-as-new identity/name remap without mutating target or source state.
-    /// First-class references and explicitly registered property-carried semantic references are mapped.
-    /// Other ID/ref-looking properties remain fail-closed and are surfaced for policy.
-    /// </summary>
     public static class ProjectInterchangeRemapPlanner
     {
         private const int ZoneMaxIdLength = 64;
@@ -84,24 +79,15 @@ namespace QS3D.Core.Export
             var source = ProjectInterchangeValidatedSnapshotReader.Read(json);
 
             var items = new List<ProjectInterchangeRemapItem>();
-            items.AddRange(PlanNamedIdentities(
-                InterchangeRemapIdentityKind.Zone,
+            items.AddRange(PlanNamedIdentities(InterchangeRemapIdentityKind.Zone,
                 source.Zones.Select(x => new NamedIdentity(x.Id, x.Name)),
-                target.Zones.Select(x => new NamedIdentity(x.Id, x.Name)),
-                ZoneMaxIdLength,
-                ZoneMaxNameLength));
-            items.AddRange(PlanNamedIdentities(
-                InterchangeRemapIdentityKind.Floor,
+                target.Zones.Select(x => new NamedIdentity(x.Id, x.Name)), ZoneMaxIdLength, ZoneMaxNameLength));
+            items.AddRange(PlanNamedIdentities(InterchangeRemapIdentityKind.Floor,
                 source.Floors.Select(x => new NamedIdentity(x.Id, x.Name)),
-                target.Floors.Select(x => new NamedIdentity(x.Id, x.Name)),
-                FloorMaxIdLength,
-                FloorMaxNameLength));
-            items.AddRange(PlanNamedIdentities(
-                InterchangeRemapIdentityKind.Family,
+                target.Floors.Select(x => new NamedIdentity(x.Id, x.Name)), FloorMaxIdLength, FloorMaxNameLength));
+            items.AddRange(PlanNamedIdentities(InterchangeRemapIdentityKind.Family,
                 source.Families.Select(x => new NamedIdentity(x.Id, x.Name, x.Category.ToString())),
-                target.Families.Select(x => new NamedIdentity(x.Id, x.Name, x.Category.ToString())),
-                FamilyMaxIdLength,
-                FamilyMaxNameLength));
+                target.Families.Select(x => new NamedIdentity(x.Id, x.Name, x.Category.ToString())), FamilyMaxIdLength, FamilyMaxNameLength));
             items.AddRange(PlanElements(source, target));
 
             var zoneMap = BuildMap(items, InterchangeRemapIdentityKind.Zone);
@@ -138,7 +124,6 @@ namespace QS3D.Core.Export
                 foreach (var property in element.Properties.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
                 {
                     if (IsImportedOwnershipMetadata(property.Key)) continue;
-
                     if (ProjectInterchangeSemanticReferencePolicy.TryGetPropertyReference(property.Key, out var reference))
                     {
                         var sourceReference = (property.Value ?? string.Empty).Trim();
@@ -151,22 +136,13 @@ namespace QS3D.Core.Export
                                 OwnerElementSourceId = element.Id,
                                 PropertyKey = property.Key,
                                 PropertyValue = property.Value ?? string.Empty,
-                                Reason = reference.PropertyKey + " is a registered " + reference.Label +
-                                         " reference but does not resolve inside the source snapshot; import-as-new must not guess a target identity."
+                                Reason = reference.PropertyKey + " is a registered " + reference.Label + " reference but does not resolve inside the source snapshot; import-as-new must not guess a target identity."
                             });
                             continue;
                         }
-
-                        AddTypedRewrite(
-                            rewrites,
-                            element.Id,
-                            "Property" + reference.Kind + "Id",
-                            reference.PropertyKey,
-                            sourceReference,
-                            referenceMap);
+                        AddTypedRewrite(rewrites, element.Id, "Property" + reference.Kind + "Id", reference.PropertyKey, sourceReference, referenceMap);
                         continue;
                     }
-
                     if (!string.IsNullOrWhiteSpace(property.Value) && ProjectInterchangeSemanticReferencePolicy.LooksLikeSemanticReferenceKey(property.Key))
                     {
                         opaque.Add(new ProjectInterchangeOpaqueReferenceWarning
@@ -184,42 +160,24 @@ namespace QS3D.Core.Export
             {
                 SourceProjectId = source.Project.Id,
                 ValidationWarnings = source.Validation.WarningCount,
-                Items = items
-                    .OrderBy(x => x.Kind)
-                    .ThenBy(x => x.SourceId, StringComparer.OrdinalIgnoreCase)
-                    .ToList()
-                    .AsReadOnly(),
-                ReferenceRewrites = rewrites
-                    .OrderBy(x => x.OwnerElementSourceId, StringComparer.OrdinalIgnoreCase)
-                    .ThenBy(x => x.ReferenceKind, StringComparer.OrdinalIgnoreCase)
-                    .ThenBy(x => x.PropertyKey, StringComparer.OrdinalIgnoreCase)
-                    .ThenBy(x => x.SourceReferenceId, StringComparer.OrdinalIgnoreCase)
-                    .ToList()
-                    .AsReadOnly(),
-                OpaqueReferenceWarnings = opaque
-                    .OrderBy(x => x.OwnerElementSourceId, StringComparer.OrdinalIgnoreCase)
-                    .ThenBy(x => x.PropertyKey, StringComparer.OrdinalIgnoreCase)
-                    .ToList()
-                    .AsReadOnly()
+                Items = items.OrderBy(x => x.Kind).ThenBy(x => x.SourceId, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly(),
+                ReferenceRewrites = rewrites.OrderBy(x => x.OwnerElementSourceId, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(x => x.ReferenceKind, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.PropertyKey, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(x => x.SourceReferenceId, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly(),
+                OpaqueReferenceWarnings = opaque.OrderBy(x => x.OwnerElementSourceId, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(x => x.PropertyKey, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly()
             };
         }
 
-        private static IEnumerable<ProjectInterchangeRemapItem> PlanNamedIdentities(
-            InterchangeRemapIdentityKind kind,
-            IEnumerable<NamedIdentity> source,
-            IEnumerable<NamedIdentity> target,
-            int maxIdLength,
-            int maxNameLength)
+        private static IEnumerable<ProjectInterchangeRemapItem> PlanNamedIdentities(InterchangeRemapIdentityKind kind,
+            IEnumerable<NamedIdentity> source, IEnumerable<NamedIdentity> target, int maxIdLength, int maxNameLength)
         {
             var incoming = source.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ToList();
             var existing = target.ToList();
             var occupiedIds = new HashSet<string>(existing.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
-            foreach (var item in incoming)
-                if (item.Id.Trim().Length <= maxIdLength) occupiedIds.Add(item.Id.Trim());
+            foreach (var item in incoming) if (item.Id.Trim().Length <= maxIdLength) occupiedIds.Add(item.Id.Trim());
             var occupiedNames = new HashSet<string>(existing.Select(x => NameKey(x.NameScope, x.Name)), StringComparer.OrdinalIgnoreCase);
-            foreach (var item in incoming)
-                if (item.Name.Trim().Length <= maxNameLength) occupiedNames.Add(NameKey(item.NameScope, item.Name));
-
+            foreach (var item in incoming) if (item.Name.Trim().Length <= maxNameLength) occupiedNames.Add(NameKey(item.NameScope, item.Name));
             var assignedIds = new HashSet<string>(existing.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
             var assignedNames = new HashSet<string>(existing.Select(x => NameKey(x.NameScope, x.Name)), StringComparer.OrdinalIgnoreCase);
 
@@ -232,26 +190,16 @@ namespace QS3D.Core.Export
                 var nameCollision = assignedNames.Contains(sourceNameKey);
                 var idOverLimit = sourceId.Length > maxIdLength;
                 var nameOverLimit = sourceName.Length > maxNameLength;
-                var targetId = idCollision || idOverLimit
-                    ? NextId(sourceId, occupiedIds, maxIdLength)
-                    : sourceId;
-                var targetName = nameCollision || nameOverLimit
-                    ? NextName(sourceName, sourceItem.NameScope, occupiedNames, maxNameLength)
-                    : sourceName;
-
+                var targetId = idCollision || idOverLimit ? NextId(sourceId, occupiedIds, maxIdLength) : sourceId;
+                var targetName = nameCollision || nameOverLimit ? NextName(sourceName, sourceItem.NameScope, occupiedNames, maxNameLength) : sourceName;
                 occupiedIds.Add(targetId);
                 assignedIds.Add(targetId);
                 var targetNameKey = NameKey(sourceItem.NameScope, targetName);
                 occupiedNames.Add(targetNameKey);
                 assignedNames.Add(targetNameKey);
-
                 yield return new ProjectInterchangeRemapItem
                 {
-                    Kind = kind,
-                    SourceId = sourceItem.Id,
-                    TargetId = targetId,
-                    SourceName = sourceItem.Name,
-                    TargetName = targetName,
+                    Kind = kind, SourceId = sourceItem.Id, TargetId = targetId, SourceName = sourceItem.Name, TargetName = targetName,
                     IdChanged = !string.Equals(sourceId, targetId, StringComparison.Ordinal),
                     NameChanged = !string.Equals(sourceName, targetName, StringComparison.Ordinal),
                     Reason = Reason(idCollision, nameCollision, idOverLimit, nameOverLimit, maxIdLength, maxNameLength)
@@ -263,7 +211,6 @@ namespace QS3D.Core.Export
         {
             var occupiedIds = new HashSet<string>(target.Elements.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
             foreach (var element in source.Elements) occupiedIds.Add(element.Id);
-
             foreach (var element in source.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
                 var collision = target.FindElement(element.Id) != null;
@@ -271,26 +218,19 @@ namespace QS3D.Core.Export
                 occupiedIds.Add(targetId);
                 yield return new ProjectInterchangeRemapItem
                 {
-                    Kind = InterchangeRemapIdentityKind.Element,
-                    SourceId = element.Id,
-                    TargetId = targetId,
-                    IdChanged = !string.Equals(element.Id, targetId, StringComparison.Ordinal),
-                    NameChanged = false,
+                    Kind = InterchangeRemapIdentityKind.Element, SourceId = element.Id, TargetId = targetId,
+                    IdChanged = !string.Equals(element.Id, targetId, StringComparison.Ordinal), NameChanged = false,
                     Reason = collision ? "ID collision with target Element; import-as-new requires a new semantic Element ID." : "No target Element ID collision."
                 };
             }
         }
 
         private static Dictionary<string, string> BuildMap(IEnumerable<ProjectInterchangeRemapItem> items, InterchangeRemapIdentityKind kind) =>
-            items.Where(x => x.Kind == kind)
-                .ToDictionary(x => x.SourceId, x => x.TargetId, StringComparer.OrdinalIgnoreCase);
+            items.Where(x => x.Kind == kind).ToDictionary(x => x.SourceId, x => x.TargetId, StringComparer.OrdinalIgnoreCase);
 
-        private static IReadOnlyDictionary<string, string> MapFor(
-            InterchangeRemapIdentityKind kind,
-            IReadOnlyDictionary<string, string> zoneMap,
-            IReadOnlyDictionary<string, string> floorMap,
-            IReadOnlyDictionary<string, string> familyMap,
-            IReadOnlyDictionary<string, string> elementMap)
+        private static IReadOnlyDictionary<string, string> MapFor(InterchangeRemapIdentityKind kind,
+            IReadOnlyDictionary<string, string> zoneMap, IReadOnlyDictionary<string, string> floorMap,
+            IReadOnlyDictionary<string, string> familyMap, IReadOnlyDictionary<string, string> elementMap)
         {
             switch (kind)
             {
@@ -302,13 +242,8 @@ namespace QS3D.Core.Export
             }
         }
 
-        private static void AddTypedRewrite(
-            ICollection<ProjectInterchangeReferenceRewrite> output,
-            string owner,
-            string referenceKind,
-            string propertyKey,
-            string sourceReference,
-            IReadOnlyDictionary<string, string> map)
+        private static void AddTypedRewrite(ICollection<ProjectInterchangeReferenceRewrite> output, string owner,
+            string referenceKind, string propertyKey, string sourceReference, IReadOnlyDictionary<string, string> map)
         {
             if (string.IsNullOrWhiteSpace(sourceReference)) return;
             var sourceId = sourceReference.Trim();
@@ -317,11 +252,8 @@ namespace QS3D.Core.Export
             if (string.Equals(sourceId, targetId, StringComparison.Ordinal)) return;
             output.Add(new ProjectInterchangeReferenceRewrite
             {
-                OwnerElementSourceId = owner,
-                ReferenceKind = referenceKind,
-                PropertyKey = propertyKey ?? string.Empty,
-                SourceReferenceId = sourceId,
-                TargetReferenceId = targetId
+                OwnerElementSourceId = owner, ReferenceKind = referenceKind, PropertyKey = propertyKey ?? string.Empty,
+                SourceReferenceId = sourceId, TargetReferenceId = targetId
             });
         }
 
@@ -363,18 +295,32 @@ namespace QS3D.Core.Export
         private static string AppendBounded(string value, string suffix, int maxLength)
         {
             var source = (value ?? string.Empty).Trim();
+            if (!HasWellFormedUtf16(source) || !HasWellFormedUtf16(suffix))
+                throw new InvalidOperationException("Remap identity/name contains malformed UTF-16.");
             if (suffix.Length >= maxLength) throw new InvalidOperationException("Remap suffix exceeds semantic identity/name limit.");
             var keep = Math.Min(source.Length, maxLength - suffix.Length);
+            if (keep > 0 && keep < source.Length && char.IsHighSurrogate(source[keep - 1]) && char.IsLowSurrogate(source[keep]))
+                keep--;
             return source.Substring(0, keep).TrimEnd() + suffix;
         }
 
-        private static string Reason(
-            bool idCollision,
-            bool nameCollision,
-            bool idOverLimit,
-            bool nameOverLimit,
-            int maxIdLength,
-            int maxNameLength)
+        private static bool HasWellFormedUtf16(string value)
+        {
+            for (var i = 0; i < value.Length; i++)
+            {
+                var current = value[i];
+                if (char.IsHighSurrogate(current))
+                {
+                    if (i + 1 >= value.Length || !char.IsLowSurrogate(value[i + 1])) return false;
+                    i++;
+                    continue;
+                }
+                if (char.IsLowSurrogate(current)) return false;
+            }
+            return true;
+        }
+
+        private static string Reason(bool idCollision, bool nameCollision, bool idOverLimit, bool nameOverLimit, int maxIdLength, int maxNameLength)
         {
             var reasons = new List<string>();
             if (idCollision) reasons.Add("semantic ID collides with target/earlier incoming identity");
@@ -393,7 +339,6 @@ namespace QS3D.Core.Export
                 Name = name ?? string.Empty;
                 NameScope = nameScope ?? string.Empty;
             }
-
             public string Id { get; }
             public string Name { get; }
             public string NameScope { get; }
