@@ -178,6 +178,7 @@ namespace QS3D.Core.SmokeTests
             BcfIssueExchangeSmoke.Run();
             BcfSemanticOutputBoundSmoke.Run();
             BcfZipPackageSmoke.Run();
+            BcfZipWriteBoundSmoke.Run();
             BcfZipNestedCardinalitySmoke.Run();
             RegenerationSubsetSmoke.Run();
             PhysicalOpeningCutTargetKnownCountSmoke.Run();

@@ -35,7 +35,8 @@ namespace QS3D.Core.Export
             }
 
             using var stream = new MemoryStream();
-            using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, true))
+            using var boundedStream = new BoundedArchiveWriteStream(stream, MaxArchiveBytes);
+            using (var archive = new ZipArchive(boundedStream, ZipArchiveMode.Create, true))
             {
                 WriteTextEntry(archive, VersionFileName, BuildVersion());
                 foreach (var topic in exchange.Topics)
@@ -475,6 +476,59 @@ namespace QS3D.Core.Export
             var attribute = element.Attribute(name);
             if (attribute == null) throw new InvalidDataException("Missing required BCF XML attribute: " + name);
             return attribute.Value;
+        }
+
+        private sealed class BoundedArchiveWriteStream : Stream
+        {
+            private readonly Stream _inner;
+            private readonly long _maxLength;
+
+            internal BoundedArchiveWriteStream(Stream inner, long maxLength)
+            {
+                _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+                if (maxLength < 0) throw new ArgumentOutOfRangeException(nameof(maxLength));
+                _maxLength = maxLength;
+            }
+
+            public override bool CanRead => _inner.CanRead;
+            public override bool CanSeek => _inner.CanSeek;
+            public override bool CanWrite => _inner.CanWrite;
+            public override long Length => _inner.Length;
+            public override long Position
+            {
+                get => _inner.Position;
+                set
+                {
+                    if (value > _maxLength) throw ArchiveSizeExceeded();
+                    _inner.Position = value;
+                }
+            }
+
+            public override void Flush() => _inner.Flush();
+            public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+            public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
+
+            public override void SetLength(long value)
+            {
+                if (value > _maxLength) throw ArchiveSizeExceeded();
+                _inner.SetLength(value);
+            }
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                var projectedLength = Math.Max(_inner.Length, checked(_inner.Position + count));
+                if (projectedLength > _maxLength) throw ArchiveSizeExceeded();
+                _inner.Write(buffer, offset, count);
+            }
+
+            public override void WriteByte(byte value)
+            {
+                var projectedLength = Math.Max(_inner.Length, checked(_inner.Position + 1));
+                if (projectedLength > _maxLength) throw ArchiveSizeExceeded();
+                _inner.WriteByte(value);
+            }
+
+            private static InvalidDataException ArchiveSizeExceeded() => new InvalidDataException("BCF package exceeds the bounded archive size.");
         }
 
         private sealed class ExtensionVocabularies
