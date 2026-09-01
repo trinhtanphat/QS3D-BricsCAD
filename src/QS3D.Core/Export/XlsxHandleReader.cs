@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -12,6 +13,8 @@ namespace QS3D.Core.Export
 {
     public sealed class XlsxHandleLookupResult
     {
+        private const int MaximumIdentityValues = 16384;
+
         public XlsxHandleLookupResult(IEnumerable<string> handles, string drawingFingerprint, bool usesLegacyDecimalHandles)
             : this(handles, Array.Empty<string>(), drawingFingerprint, usesLegacyDecimalHandles, string.Empty, false, false)
         {
@@ -33,8 +36,8 @@ namespace QS3D.Core.Export
         {
             if (handles == null) throw new ArgumentNullException(nameof(handles));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
-            Handles = handles.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
-            ElementIds = elementIds.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+            Handles = MaterializeIdentityValues(handles, nameof(handles));
+            ElementIds = MaterializeIdentityValues(elementIds, nameof(elementIds));
             DrawingFingerprint = (drawingFingerprint ?? string.Empty).Trim();
             UsesLegacyDecimalHandles = usesLegacyDecimalHandles;
             WorksheetName = (worksheetName ?? string.Empty).Trim();
@@ -49,6 +52,65 @@ namespace QS3D.Core.Export
         public string WorksheetName { get; }
         public bool IsModernSchema { get; }
         public bool IsEd2Detail { get; }
+
+        private static IReadOnlyList<string> MaterializeIdentityValues(IEnumerable<string> values, string label)
+        {
+            var admittedCount = ReadKnownCount(values, label);
+            var result = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var observed = 0;
+            using (var enumerator = values.GetEnumerator())
+            {
+                RequireKnownCountStable(values, admittedCount, label);
+                while (true)
+                {
+                    RequireKnownCountStable(values, admittedCount, label);
+                    var moved = enumerator.MoveNext();
+                    RequireKnownCountStable(values, admittedCount, label);
+                    if (!moved) break;
+                    if (admittedCount.HasValue && observed >= admittedCount.Value)
+                        throw new InvalidOperationException(
+                            "Xlsx handle lookup " + label + " enumerated more identity values than its reported Count " + admittedCount.Value + ".");
+                    if (observed >= MaximumIdentityValues)
+                        throw new InvalidOperationException(
+                            "Xlsx handle lookup " + label + " exceeds the supported bound of " + MaximumIdentityValues + " identity values.");
+                    var value = enumerator.Current;
+                    RequireKnownCountStable(values, admittedCount, label);
+                    observed++;
+                    if (string.IsNullOrWhiteSpace(value)) continue;
+                    var canonical = value.Trim();
+                    if (seen.Add(canonical)) result.Add(canonical);
+                }
+            }
+            RequireKnownCountStable(values, admittedCount, label);
+            if (admittedCount.HasValue && observed != admittedCount.Value)
+                throw new InvalidOperationException(
+                    "Xlsx handle lookup " + label + " reported Count " + admittedCount.Value + " but enumerated " + observed + " identity values.");
+            return result.AsReadOnly();
+        }
+
+        private static void RequireKnownCountStable(IEnumerable<string> values, int? admittedCount, string label)
+        {
+            var currentCount = ReadKnownCount(values, label);
+            if (currentCount != admittedCount)
+                throw new InvalidOperationException("Xlsx handle lookup " + label + " Count changed during materialization.");
+        }
+
+        private static int? ReadKnownCount(IEnumerable<string> values, string label)
+        {
+            var counts = new List<int>(3);
+            if (values is ICollection<string> collection) counts.Add(collection.Count);
+            if (values is IReadOnlyCollection<string> readOnlyCollection) counts.Add(readOnlyCollection.Count);
+            if (values is ICollection nonGenericCollection) counts.Add(nonGenericCollection.Count);
+            if (counts.Any(count => count < 0))
+                throw new InvalidOperationException("Xlsx handle lookup " + label + " reported a negative identity Count.");
+            if (counts.Any(count => count > MaximumIdentityValues))
+                throw new InvalidOperationException(
+                    "Xlsx handle lookup " + label + " exceeds the supported bound of " + MaximumIdentityValues + " identity values.");
+            if (counts.Count > 1 && counts.Any(count => count != counts[0]))
+                throw new InvalidOperationException("Xlsx handle lookup " + label + " reported conflicting identity Count values.");
+            return counts.Count == 0 ? (int?)null : counts[0];
+        }
     }
 
     public static class XlsxHandleReader
@@ -57,6 +119,7 @@ namespace QS3D.Core.Export
         private const long MaxXmlCharacters = 64L * 1024L * 1024L;
         private const int MaxColumns = 16384;
         private const int MaxRows = 1048576;
+        private const int MaxHeaderRows = 10;
         private const string UnsupportedCellSentinel = "#QS3D_XLSX_UNSUPPORTED!";
         private const string WorksheetRelationshipTypeHttp = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
         private const string WorksheetRelationshipTypeHttps = "https://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
@@ -81,18 +144,28 @@ namespace QS3D.Core.Export
                 var sharedStrings = ReadSharedStrings(archive);
                 var sheet = LoadXml(sheetEntry);
                 XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-                var rows = sheet.Descendants(ns + "row").ToList();
-                foreach (var row in rows)
+                var headerRows = new List<XElement>(MaxHeaderRows);
+                XElement? target = null;
+                var targetMatches = 0;
+                foreach (var row in sheet.Descendants(ns + "row"))
                 {
                     var declaredRowText = (string?)row.Attribute("r");
                     if (declaredRowText == null) continue;
                     var declaredRow = ParsePositiveInt(declaredRowText);
                     if (declaredRow == int.MaxValue || declaredRow > MaxRows)
                         throw new InvalidDataException("Excel worksheet row number is invalid or exceeds the XLSX row limit.");
+                    if (declaredRow == rowNumber)
+                    {
+                        targetMatches++;
+                        if (target == null) target = row;
+                    }
+                    else if (declaredRow < rowNumber && headerRows.Count < MaxHeaderRows)
+                    {
+                        headerRows.Add(row);
+                    }
                 }
-                var targets = rows.Where(x => ParsePositiveInt((string?)x.Attribute("r")) == rowNumber).ToList();
-                if (targets.Count > 1) throw new InvalidDataException("Excel worksheet contains duplicate row number " + rowNumber + ".");
-                var target = targets.SingleOrDefault();
+                if (targetMatches > 1)
+                    throw new InvalidDataException("Excel worksheet contains duplicate row number " + rowNumber + ".");
                 if (target == null)
                     return new XlsxHandleLookupResult(Array.Empty<string>(), Array.Empty<string>(), string.Empty, false, worksheet.Name, false, worksheet.IsEd2Detail);
 
@@ -102,7 +175,7 @@ namespace QS3D.Core.Export
                 var elementIdColumns = new HashSet<int>();
                 var fingerprintColumns = new HashSet<int>();
                 var formulaIdentityHeaderColumns = new HashSet<int>();
-                foreach (var headerRow in rows.Where(x => ParsePositiveInt((string?)x.Attribute("r")) < rowNumber).Take(10))
+                foreach (var headerRow in headerRows)
                 {
                     var headerCells = ReadCells(headerRow, ns, sharedStrings, out var headerFormulaColumns);
                     foreach (var cell in headerCells)
@@ -199,11 +272,11 @@ namespace QS3D.Core.Export
                     throw new InvalidDataException("Excel workbook sheet relationship is not a worksheet relationship.");
                 if (string.Equals((string?)matches[0].Attribute("TargetMode"), "External", StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("External Excel worksheet relationships are not supported.");
-                var target = ((string?)matches[0].Attribute("Target") ?? string.Empty).Replace('\\', '/').TrimStart('/');
-                if (target.StartsWith("xl/", StringComparison.OrdinalIgnoreCase)) target = target.Substring(3);
-                if (target.IndexOf("..", StringComparison.Ordinal) >= 0) throw new InvalidDataException("Excel worksheet relationship target is invalid.");
-                var entry = GetUniqueEntry(archive, "xl/" + target);
-                if (entry == null) throw new InvalidDataException("Excel worksheet part is missing: " + target + ".");
+                var targetPath = ((string?)matches[0].Attribute("Target") ?? string.Empty).Replace('\\', '/').TrimStart('/');
+                if (targetPath.StartsWith("xl/", StringComparison.OrdinalIgnoreCase)) targetPath = targetPath.Substring(3);
+                if (targetPath.IndexOf("..", StringComparison.Ordinal) >= 0) throw new InvalidDataException("Excel worksheet relationship target is invalid.");
+                var entry = GetUniqueEntry(archive, "xl/" + targetPath);
+                if (entry == null) throw new InvalidDataException("Excel worksheet part is missing: " + targetPath + ".");
                 var name = ((string?)selected.Attribute("name") ?? string.Empty).Trim();
                 return new WorksheetReference(entry, name, string.Equals(name, "CHI_TIET", StringComparison.OrdinalIgnoreCase));
             }

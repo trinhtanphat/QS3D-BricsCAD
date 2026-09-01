@@ -128,16 +128,14 @@ namespace QS3D.Core.Cost
         {
             get
             {
-                decimal total = 0m;
+                var contributions = new decimal[BillItems.Count];
                 try
                 {
                     for (var i = 0; i < BillItems.Count; i++)
-                    {
-                        total = CostDecimalMath.AddPreservingNonZeroContribution(
-                            total,
-                            BillItems[i].TotalCost,
-                            "TBQ workspace base total");
-                    }
+                        contributions[i] = BillItems[i].TotalCost;
+
+                    if (!CostDecimalMath.TrySumNonNegativeExactly(contributions, out var total))
+                        throw new OverflowException("TBQ workspace base total is not representable as decimal.");
                     return total;
                 }
                 catch (OverflowException ex)
@@ -190,16 +188,25 @@ namespace QS3D.Core.Cost
             var snapshot = new List<TbqBillItem>();
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            foreach (var item in items)
+            using (var enumerator = items.GetEnumerator())
             {
-                if (index == MaxBillItems)
-                    throw new InvalidOperationException("TBQ workspace supports at most " + MaxBillItems + " bill items.");
-                if (knownCount.HasValue && index == knownCount.Value)
-                    ThrowKnownCountMismatch("bill items", knownCount.Value, index + 1);
-                if (item == null) throw new ArgumentException("TBQ workspace contains a null bill item at index " + index + ".", nameof(items));
-                if (!ids.Add(item.ItemCode)) throw new ArgumentException("Duplicate TBQ bill item code: " + item.ItemCode + ".", nameof(items));
-                snapshot.Add(item);
-                index++;
+                while (true)
+                {
+                    RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);
+                    var moved = enumerator.MoveNext();
+                    if (!moved) break;
+                    RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);
+                    if (index == MaxBillItems)
+                        throw new InvalidOperationException("TBQ workspace supports at most " + MaxBillItems + " bill items.");
+                    if (knownCount.HasValue && index == knownCount.Value)
+                        ThrowKnownCountMismatch("bill items", knownCount.Value, index + 1);
+                    var item = enumerator.Current;
+                    RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);
+                    if (item == null) throw new ArgumentException("TBQ workspace contains a null bill item at index " + index + ".", nameof(items));
+                    if (!ids.Add(item.ItemCode)) throw new ArgumentException("Duplicate TBQ bill item code: " + item.ItemCode + ".", nameof(items));
+                    snapshot.Add(item);
+                    index++;
+                }
             }
             RequireKnownCountMatchesTraversal("bill items", knownCount, index);
             RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);
@@ -213,16 +220,25 @@ namespace QS3D.Core.Cost
             var snapshot = new List<BuildUpRateSnapshot>();
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var index = 0;
-            foreach (var rate in rates)
+            using (var enumerator = rates.GetEnumerator())
             {
-                if (index == MaxBuildUpRates)
-                    throw new InvalidOperationException("TBQ workspace supports at most " + MaxBuildUpRates + " build-up rates.");
-                if (knownCount.HasValue && index == knownCount.Value)
-                    ThrowKnownCountMismatch("build-up rates", knownCount.Value, index + 1);
-                if (rate == null) throw new ArgumentException("TBQ workspace contains a null build-up rate at index " + index + ".", nameof(rates));
-                if (!ids.Add(rate.RateCode)) throw new ArgumentException("Duplicate TBQ build-up rate code: " + rate.RateCode + ".", nameof(rates));
-                snapshot.Add(rate);
-                index++;
+                while (true)
+                {
+                    RequireKnownCountStable(rates, MaxBuildUpRates, "build-up rates", knownCount);
+                    var moved = enumerator.MoveNext();
+                    if (!moved) break;
+                    RequireKnownCountStable(rates, MaxBuildUpRates, "build-up rates", knownCount);
+                    if (index == MaxBuildUpRates)
+                        throw new InvalidOperationException("TBQ workspace supports at most " + MaxBuildUpRates + " build-up rates.");
+                    if (knownCount.HasValue && index == knownCount.Value)
+                        ThrowKnownCountMismatch("build-up rates", knownCount.Value, index + 1);
+                    var item = enumerator.Current;
+                    RequireKnownCountStable(rates, MaxBuildUpRates, "build-up rates", knownCount);
+                    if (item == null) throw new ArgumentException("TBQ workspace contains a null build-up rate at index " + index + ".", nameof(rates));
+                    if (!ids.Add(item.RateCode)) throw new ArgumentException("Duplicate TBQ build-up rate code: " + item.RateCode + ".", nameof(rates));
+                    snapshot.Add(item);
+                    index++;
+                }
             }
             RequireKnownCountMatchesTraversal("build-up rates", knownCount, index);
             RequireKnownCountStable(rates, MaxBuildUpRates, "build-up rates", knownCount);
@@ -266,14 +282,23 @@ namespace QS3D.Core.Cost
         private static IEnumerable<T> Bounded<T>(IEnumerable<T> source, int maximum, string label, int? knownCount)
         {
             var count = 0;
-            foreach (var item in source)
+            using (var enumerator = source.GetEnumerator())
             {
-                if (count == maximum)
-                    throw new InvalidOperationException("TBQ workspace supports at most " + maximum + " " + label + ".");
-                if (knownCount.HasValue && count == knownCount.Value)
-                    ThrowKnownCountMismatch(label, knownCount.Value, count + 1);
-                count++;
-                yield return item;
+                while (true)
+                {
+                    RequireKnownCountStable(source, maximum, label, knownCount);
+                    var moved = enumerator.MoveNext();
+                    if (!moved) break;
+                    RequireKnownCountStable(source, maximum, label, knownCount);
+                    if (count == maximum)
+                        throw new InvalidOperationException("TBQ workspace supports at most " + maximum + " " + label + ".");
+                    if (knownCount.HasValue && count == knownCount.Value)
+                        ThrowKnownCountMismatch(label, knownCount.Value, count + 1);
+                    var item = enumerator.Current;
+                    RequireKnownCountStable(source, maximum, label, knownCount);
+                    count++;
+                    yield return item;
+                }
             }
             RequireKnownCountMatchesTraversal(label, knownCount, count);
             RequireKnownCountStable(source, maximum, label, knownCount);

@@ -100,10 +100,18 @@ if CORE_UI.is_file():
         "XrefService.SelectInstances(doc, item.Name)",
         "XrefService.Reload(doc, item.Name)",
         "XrefService.Detach(doc, item.Name)",
+        "XrefSelectionFailureStatus",
+        "XrefReloadFailureStatus",
+        "XrefMoveFailureStatus",
+        "XrefDetachFailureStatus",
+        "RefreshWarningSuffix",
     )
     for needle in required:
         if needle not in text:
-            errors.append("existing RightPanel Xref safety/action contract disappeared: " + needle)
+            errors.append("existing RightPanel Xref safety/action/redaction contract disappeared: " + needle)
+    for forbidden in ("ex.Message", "catch (Exception ex)"):
+        if forbidden in text:
+            errors.append("RightPanel Xref-facing core UI must not expose raw host exception detail: " + forbidden)
 
 print("QS3D Xref instance-layer lock preflight")
 if errors:
@@ -112,4 +120,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: selected Xref lock/unlock is scoped to deduplicated current-space instance layers, refreshes drawing/layer state, rejects the main DWG through SelectedXref, and preserves existing Xref actions.")
+print("PASS: selected Xref lock/unlock is scoped to deduplicated current-space instance layers, refreshes drawing/layer state, rejects the main DWG through SelectedXref, preserves existing Xref actions, and keeps Xref-facing failure statuses redacted.")

@@ -15,28 +15,95 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class MepReviewWorkspaceCommands
     {
-        private static MepReviewWorkspaceWindow? _window;
+        private static MepReviewWorkspaceWindow? _published;
+        private static MepReviewWorkspaceWindow? _pending;
 
         [CommandMethod("QS3DMEPREVIEW")]
         public void ShowReviewWorkspace()
         {
-            if (_window != null)
+            MepReviewWorkspaceWindow? candidate = null;
+            try
             {
-                if (_window.IsVisible)
+                var pending = _pending;
+                if (pending != null && !TryClosePendingWindow(pending))
                 {
-                    _window.Activate();
+                    var blockedDocument = BricsApplication.DocumentManager.MdiActiveDocument;
+                    blockedDocument?.Editor.WriteMessage("\nQS3DMEPREVIEW chưa thể mở lại vì cửa sổ lỗi trước đó chưa đóng hoàn toàn.");
                     return;
                 }
-                _window = null;
+
+                var published = _published;
+                if (published != null)
+                {
+                    if (published.IsLoaded)
+                    {
+                        try { published.Activate(); } catch (System.Exception) { }
+                        return;
+                    }
+
+                    ReleasePublishedWindow(published);
+                }
+
+                candidate = new MepReviewWorkspaceWindow();
+                var window = candidate;
+                _pending = window;
+                window.Closed += (_, __) => ReleaseWindow(window);
+
+                BricsApplication.ShowModelessWindow(window);
+                if (!window.IsLoaded)
+                    throw new InvalidOperationException("MEP Review host publication did not remain loaded.");
+
+                _published = window;
+                ReleasePendingWindow(window);
+                candidate = null;
+            }
+            catch (System.Exception ex)
+            {
+                var document = BricsApplication.DocumentManager.MdiActiveDocument;
+                document?.Editor.WriteMessage("\nQS3DMEPREVIEW failed (" + ex.GetType().Name + ").");
+            }
+            finally
+            {
+                if (candidate != null)
+                    TryClosePendingWindow(candidate);
+            }
+        }
+
+        private static void ReleaseWindow(MepReviewWorkspaceWindow window)
+        {
+            ReleasePublishedWindow(window);
+            ReleasePendingWindow(window);
+        }
+
+        private static void ReleasePublishedWindow(MepReviewWorkspaceWindow window)
+        {
+            if (!ReferenceEquals(_published, window)) return;
+            _published = null;
+        }
+
+        private static void ReleasePendingWindow(MepReviewWorkspaceWindow window)
+        {
+            if (!ReferenceEquals(_pending, window)) return;
+            _pending = null;
+        }
+
+        private static bool TryClosePendingWindow(MepReviewWorkspaceWindow window)
+        {
+            if (!ReferenceEquals(_pending, window)) return true;
+            if (ReferenceEquals(_published, window))
+            {
+                ReleasePendingWindow(window);
+                return true;
             }
 
-            var window = new MepReviewWorkspaceWindow();
-            window.Closed += (_, __) =>
+            if (window.IsLoaded)
             {
-                if (ReferenceEquals(_window, window)) _window = null;
-            };
-            _window = window;
-            BricsApplication.ShowModelessWindow(window);
+                try { window.Close(); } catch (System.Exception) { }
+            }
+
+            if (window.IsLoaded) return false;
+            ReleasePendingWindow(window);
+            return true;
         }
     }
 
@@ -190,7 +257,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (System.Exception ex)
             {
-                _hostStatus.Text = "Không queue được " + command + ": " + ex.Message;
+                _hostStatus.Text = "Không queue được " + command + " (" + ex.GetType().Name + ").";
             }
         }
 

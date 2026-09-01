@@ -19,6 +19,7 @@ namespace QS3D.Core.SmokeTests
             TransientShrinkRejectsBeforeCurrent();
             TransientNegativeRejectsBeforeCurrent();
             TransientConflictRejectsBeforeCurrent();
+            CurrentInducedCountDriftRejectsBeforeNullAcceptance();
             StableCountedAndStreamingRemainAccepted();
         }
 
@@ -49,6 +50,29 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => RebarProcurementReportBuilder.Build(source));
             Equal(1, source.MoveNextCalls);
             Equal(0, source.CurrentReads);
+        }
+
+        private static void CurrentInducedCountDriftRejectsBeforeNullAcceptance()
+        {
+            var source = new CurrentMutatingCountCollection();
+            try
+            {
+                RebarProcurementReportBuilder.Build(source);
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (!ex.Message.Contains("known Count changed during traversal", StringComparison.Ordinal))
+                    throw new Exception("Current-induced procurement Count drift returned the wrong integrity diagnostic: " + ex.Message, ex);
+                Equal(1, source.MoveNextCalls);
+                Equal(1, source.CurrentReads);
+                return;
+            }
+            catch (ArgumentException ex)
+            {
+                throw new Exception("Current-induced procurement Count drift must be rejected before null-result acceptance.", ex);
+            }
+
+            throw new Exception("Current-induced procurement Count drift expected InvalidOperationException.");
         }
 
         private static void StableCountedAndStreamingRemainAccepted()
@@ -87,6 +111,47 @@ namespace QS3D.Core.SmokeTests
             Shrink,
             Negative,
             Conflict
+        }
+
+        private sealed class CurrentMutatingCountCollection : IReadOnlyCollection<RebarCuttingOptimizationResult>
+        {
+            private bool _currentObserved;
+
+            public int Count => _currentObserved ? 2 : 1;
+            internal int MoveNextCalls { get; private set; }
+            internal int CurrentReads { get; private set; }
+
+            public IEnumerator<RebarCuttingOptimizationResult> GetEnumerator() => new Enumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private sealed class Enumerator : IEnumerator<RebarCuttingOptimizationResult>
+            {
+                private readonly CurrentMutatingCountCollection _owner;
+                private int _index = -1;
+
+                internal Enumerator(CurrentMutatingCountCollection owner) => _owner = owner;
+
+                public bool MoveNext()
+                {
+                    _owner.MoveNextCalls++;
+                    _index++;
+                    return _index == 0;
+                }
+
+                public RebarCuttingOptimizationResult Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        _owner._currentObserved = true;
+                        return null!;
+                    }
+                }
+
+                object IEnumerator.Current => Current;
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
         }
 
         private sealed class HostileCountCollection :

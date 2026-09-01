@@ -16,7 +16,9 @@ required_source = [
     "private static IReadOnlyList<SemanticSheetPlacementDefinition> SnapshotPlacements",
     "SemanticSheetPlanner.MaxPlacements",
     "if (result.Count >= SemanticSheetPlanner.MaxPlacements)",
-    "result.Add(enumerator.Current);",
+    "var placement = enumerator.Current;",
+    "RevalidatePlacementKnownCount(placements, knownCount.Value);",
+    "result.Add(placement);",
     "return result.AsReadOnly();",
 ]
 for marker in required_source:
@@ -29,9 +31,11 @@ if legacy in source:
 
 helper_start = source.index("private static IReadOnlyList<SemanticSheetPlacementDefinition> SnapshotPlacements")
 guard = source.index("if (result.Count >= SemanticSheetPlanner.MaxPlacements)", helper_start)
-add = source.index("result.Add(enumerator.Current);", helper_start)
-if guard >= add:
-    raise SystemExit("Semantic Sheet placement guard must execute before adding the over-bound placement")
+current = source.index("var placement = enumerator.Current;", helper_start)
+rebound = source.index("RevalidatePlacementKnownCount(placements, knownCount.Value);", current)
+add = source.index("result.Add(placement);", rebound)
+if not (guard < current < rebound < add):
+    raise SystemExit("Semantic Sheet placement guard must execute before Current and post-Current Count rebound must execute before retention")
 
 required_smoke = [
     "PlacementsStopAtFirstOverBoundItem();",

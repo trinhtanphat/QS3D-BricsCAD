@@ -72,7 +72,7 @@ namespace QS3D.Core.Export
         {
             var document = LoadXml(entry);
             XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-            var rows = document.Descendants(ns + "row").ToList();
+            var rows = MaterializeWorksheetRowsBounded(document.Descendants(ns + "row"), MaxRows);
             var header = FindUniqueRow(rows, 1);
             var target = FindUniqueRow(rows, rowNumber);
             var headerCells = ReadCells(header, ns, sharedStrings, out var headerFormulaColumns);
@@ -95,7 +95,7 @@ namespace QS3D.Core.Export
         {
             var document = LoadXml(entry);
             XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-            var rows = document.Descendants(ns + "row").ToList();
+            var rows = MaterializeWorksheetRowsBounded(document.Descendants(ns + "row"), MaxRows);
             var header = FindUniqueRow(rows, 1);
             var headers = ReadCells(header, ns, sharedStrings, out var headerFormulaColumns);
             var required = new[]
@@ -147,6 +147,28 @@ namespace QS3D.Core.Export
             if (!string.Equals(traceKey, expectedTraceKey, StringComparison.Ordinal))
                 throw new InvalidDataException("Customer workbook TRACE_KEY does not match canonical TRACE_MODEL identity provenance.");
             return new QsCustomerWorkbookTrace(worksheetName, rowNumber, traceKey, elementIds, handles, fingerprint);
+        }
+
+        private static IReadOnlyList<XElement> MaterializeWorksheetRowsBounded(IEnumerable<XElement> source, int maximum)
+        {
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            if (maximum < 0 || maximum > MaxRows)
+                throw new ArgumentOutOfRangeException(nameof(maximum), "Customer workbook worksheet row limit is invalid.");
+
+            var result = new List<XElement>();
+            using (var enumerator = source.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (result.Count == maximum)
+                        throw new InvalidDataException("Customer workbook worksheet row count exceeds the supported limit of " + maximum.ToString(CultureInfo.InvariantCulture) + ".");
+                    var row = enumerator.Current;
+                    if (row == null)
+                        throw new InvalidDataException("Customer workbook worksheet contains a null row element.");
+                    result.Add(row);
+                }
+            }
+            return result.AsReadOnly();
         }
 
         private static IReadOnlyList<string>? ReadSharedStrings(ZipArchive archive)
@@ -278,7 +300,7 @@ namespace QS3D.Core.Export
 
         private static XElement FindUniqueRow(IEnumerable<XElement> rows, int rowNumber)
         {
-            var matches = rows.Where(row => ParseRow(row) == rowNumber).ToList();
+            var matches = rows.Where(row => ParseRow(row) == rowNumber).Take(2).ToList();
             if (matches.Count != 1) throw new InvalidDataException("Customer workbook row " + rowNumber + " is missing or duplicated.");
             return matches[0];
         }

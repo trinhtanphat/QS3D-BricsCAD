@@ -93,8 +93,6 @@ if not errors:
     if text["native"].count("BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;") != 1:
         errors.append("shared native lifecycle coordinator must expose one global DocumentToBeDestroyed subscription site")
 
-    # Most legacy modeless windows still keep their explicit source wrapper. Revision is hardened:
-    # constructor binding remains explicit, while callbacks resolve a fresh wrapper by native DB identity.
     for key in ("recognition", "health", "bq", "bbs", "door_schedule", "room_schedule"):
         if "DocumentBoundWindowLifetime.Attach(this, _document);" not in text[key]:
             errors.append(key + " window must auto-close when its source DWG is destroyed")
@@ -144,17 +142,72 @@ if not errors:
         "schedule_hub": ("new ScheduleHubWindow(document)", "schedule_hub_window"),
         "curtain_hub": ("new CurtainWallWindow(document)", "curtain_hub_window"),
     }
-    publication_tracked_managers = {"families", "levels", "zones"}
+    pending_publication_managers = {"families", "levels", "zones"}
     for key, (constructor, window_key) in manager_contracts.items():
         source = text[key]
         window_source = text[window_key]
         if constructor not in source:
             errors.append(key + " launcher lost its explicit source Document constructor")
-        if key in publication_tracked_managers:
-            if "var publishedWindow = candidate;" not in source:
-                errors.append(key + " launcher must alias the exact candidate before attaching publication lifecycle")
-            if "Application.ShowModelessWindow(IntPtr.Zero, publishedWindow, true);" not in source:
-                errors.append(key + " launcher must show the exact publication-tracked candidate instance")
+        if key in pending_publication_managers:
+            for needle in (
+                "private static PublishedManager? _pending;",
+                "private static PublishedManager? _published;",
+                "var owner = new PublishedManager(window, document);",
+                "_pending = owner;",
+                "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
+                "if (!window.IsLoaded)",
+                "if (!ReferenceEquals(_pending, owner))",
+                "_pending = null;",
+                "_published = owner;",
+                "if (ReferenceEquals(_pending, owner)) _pending = null;",
+                "if (ReferenceEquals(_published, owner)) _published = null;",
+            ):
+                if needle not in source:
+                    errors.append(key + " launcher missing pending-first exact publication lifecycle token: " + needle)
+            try:
+                construct = source.index(constructor)
+                owner = source.index("var owner = new PublishedManager(window, document);", construct)
+                pending = source.index("_pending = owner;", owner)
+                show = source.index("Application.ShowModelessWindow(IntPtr.Zero, window, true);", pending)
+                loaded = source.index("if (!window.IsLoaded)", show)
+                exact = source.index("if (!ReferenceEquals(_pending, owner))", loaded)
+                clear = source.index("_pending = null;", exact)
+                publish = source.index("_published = owner;", clear)
+                if not (construct < owner < pending < show < loaded < exact < clear < publish):
+                    errors.append(key + " launcher must own pending before host show and publish only after loaded/exact-owner proof")
+            except ValueError as exc:
+                errors.append(key + " launcher publication ordering marker missing: " + str(exc))
+        elif key == "curtain_hub":
+            for needle in (
+                "private static CurtainWallWindow? _pendingWindow;",
+                "private static Document? _pendingDocument;",
+                "private static IntPtr _pendingNativeDatabaseIdentity;",
+                "candidate = new CurtainWallWindow(document);",
+                "var ownedCandidate = candidate;",
+                "candidate.Closed += (_, __) => ReleaseOwnedWindow(ownedCandidate);",
+                "if (!ReservePendingWindow(candidate, document, nativeDatabaseIdentity))",
+                "Application.ShowModelessWindow(IntPtr.Zero, candidate, true);",
+                "if (!candidate.IsLoaded)",
+                "if (!PromotePendingWindow(candidate, document, nativeDatabaseIdentity))",
+                "if (ReferenceEquals(_pendingWindow, window))",
+                "if (!ReferenceEquals(_window, window)) return;",
+            ):
+                if needle not in source:
+                    errors.append(key + " launcher missing pending-first exact publication lifecycle token: " + needle)
+            try:
+                construct = source.index("candidate = new CurtainWallWindow(document);")
+                owner = source.index("var ownedCandidate = candidate;", construct)
+                closed = source.index("candidate.Closed += (_, __) => ReleaseOwnedWindow(ownedCandidate);", owner)
+                reserve = source.index("if (!ReservePendingWindow(candidate, document, nativeDatabaseIdentity))", closed)
+                show = source.index("Application.ShowModelessWindow(IntPtr.Zero, candidate, true);", reserve)
+                loaded = source.index("if (!candidate.IsLoaded)", show)
+                promote = source.index("if (!PromotePendingWindow(candidate, document, nativeDatabaseIdentity))", loaded)
+                release = source.index("ReleaseOwnedWindow(candidate);", promote)
+                clear_local = source.index("candidate = null;", promote)
+                if not (construct < owner < closed < reserve < show < loaded < promote < release < clear_local):
+                    errors.append("curtain_hub launcher must reserve exact pending owner before host show and publish only after loaded/exact-owner proof")
+            except ValueError as exc:
+                errors.append("curtain_hub launcher publication ordering marker missing: " + str(exc))
         elif "Application.ShowModelessWindow(IntPtr.Zero, window, true);" not in source:
             errors.append(key + " launcher must show the same registered window instance")
         if "DocumentBoundWindowLifetime.Attach(window, document);" in source:
@@ -182,4 +235,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
 
-print("PASS: document-bound review/health/BQ/BBS/schedule/manager windows keep one source-DWG registration; publication-tracked Family/Level/Zone managers show their exact lifecycle-owned candidate; Revision retains only stable native database identity for callbacks, native reactors stay centralized, and dynamic hubs remain active-document based.")
+print("PASS: document-bound review/health/BQ/BBS/schedule/manager windows keep one source-DWG registration; Family/Level/Zone managers and Curtain Wall Hub are pending-first and loaded/exact-owner proven before publication; Revision retains only stable native database identity for callbacks, native reactors stay centralized, and dynamic hubs remain active-document based.")

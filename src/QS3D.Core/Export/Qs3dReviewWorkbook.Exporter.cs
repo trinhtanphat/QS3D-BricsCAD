@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -77,21 +78,56 @@ namespace QS3D.Core.Export
             if (expectedCount < 0)
                 throw new InvalidDataException("QS3D Review " + label + " collection advertised a negative Count.");
 
+            var genericCollection = source as ICollection<T>;
+            var nonGenericCollection = source as ICollection;
+            var genericExpectedCount = genericCollection == null ? (int?)null : genericCollection.Count;
+            var nonGenericExpectedCount = nonGenericCollection == null ? (int?)null : nonGenericCollection.Count;
+
+            static void RequireAdmittedCount(int observed, int expected, string channel, string labelValue)
+            {
+                if (observed < 0)
+                    throw new InvalidDataException("QS3D Review " + labelValue + " collection advertised a negative " + channel + " Count.");
+                if (observed != expected)
+                    throw new InvalidDataException("QS3D Review " + labelValue + " collection Count channels disagree at admission.");
+            }
+
+            if (genericExpectedCount.HasValue)
+                RequireAdmittedCount(genericExpectedCount.Value, expectedCount, "ICollection<T>", label);
+            if (nonGenericExpectedCount.HasValue)
+                RequireAdmittedCount(nonGenericExpectedCount.Value, expectedCount, "ICollection", label);
+
+            void RequireStableCount()
+            {
+                if (source.Count != expectedCount)
+                    throw new InvalidDataException("QS3D Review " + label + " collection Count changed during traversal.");
+                if (genericCollection != null && genericCollection.Count != expectedCount)
+                    throw new InvalidDataException("QS3D Review " + label + " ICollection<T> Count changed during traversal.");
+                if (nonGenericCollection != null && nonGenericCollection.Count != expectedCount)
+                    throw new InvalidDataException("QS3D Review " + label + " ICollection Count changed during traversal.");
+            }
+
             var result = new List<T>();
             using (var enumerator = source.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableCount();
+                    var moved = enumerator.MoveNext();
+                    RequireStableCount();
+                    if (!moved)
+                        break;
+
                     if (result.Count >= expectedCount)
                         throw new InvalidDataException("QS3D Review " + label + " collection Count does not match completed traversal.");
-                    result.Add(enumerator.Current);
+                    var value = enumerator.Current;
+                    RequireStableCount();
+                    result.Add(value);
                 }
             }
 
             if (result.Count != expectedCount)
                 throw new InvalidDataException("QS3D Review " + label + " collection Count does not match completed traversal.");
-            if (source.Count != expectedCount)
-                throw new InvalidDataException("QS3D Review " + label + " collection Count changed after traversal.");
+            RequireStableCount();
             return result;
         }
 

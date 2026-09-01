@@ -23,6 +23,10 @@ namespace QS3D.BricsCAD.V25
         private const long MaxDiagnosticBytes = 4L * 1024L * 1024L;
         private const int MaxMessageCharacters = 1800;
         private const int MaxProjectAuditSnapshotEvents = 25;
+        private const int CadReadTimeoutMilliseconds = 8000;
+        private const int CadReadQueued = 0;
+        private const int CadReadRunning = 1;
+        private const int CadReadCancelledBeforeStart = 2;
         private static readonly object Gate = new object();
         private static readonly object WriteGate = new object();
         private static readonly Dictionary<Document, DocumentSubscription> Subscriptions =
@@ -32,6 +36,9 @@ namespace QS3D.BricsCAD.V25
             RegexOptions.CultureInvariant | RegexOptions.Compiled);
         private static readonly Regex SecretRegex = new Regex(
             "(?i)((?:access[_-]?token|refresh[_-]?token|bearer|token|secret|password|client[_-]?secret)\\s*[:=]\\s*)[^\\s;,\\\"]+",
+            RegexOptions.CultureInvariant | RegexOptions.Compiled);
+        private static readonly Regex SequenceRegex = new Regex(
+            @"""sequence""\s*:\s*(?<value>[0-9]+)",
             RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         private static Timer? _pollTimer;
@@ -74,11 +81,22 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        private sealed class CadReadWorkItem
+        {
+            public Func<string> Action = null!;
+            public string Result = string.Empty;
+            public Exception? Error;
+            public readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
+            public int State = CadReadQueued;
+            public int Abandoned;
+        }
+
         internal static void Start()
         {
             lock (Gate)
             {
                 if (_started) return;
+                _sequence = Math.Max(_sequence, LoadLatestPersistedSequence());
                 _started = true;
                 _lastMcpError = string.Empty;
                 _lastOAuthActivityUtc = DateTime.MinValue;
@@ -110,6 +128,27 @@ namespace QS3D.BricsCAD.V25
             try { AppDomain.CurrentDomain.UnhandledException -= OnUnhandledException; } catch { }
             try { TaskScheduler.UnobservedTaskException -= OnUnobservedTaskException; } catch { }
             Record("qs3d", "info", "diagnostics-stop", "Unified diagnostics bridge stopped.");
+        }
+
+        internal static string InvokeInCadContext(Func<string> action)
+        {
+            if (action == null) throw new ArgumentNullException(nameof(action));
+            var item = new CadReadWorkItem { Action = action };
+            Application.DocumentManager.ExecuteInApplicationContext(ExecuteCadRead, item);
+            if (!item.Done.Wait(CadReadTimeoutMilliseconds))
+            {
+                Interlocked.Exchange(ref item.Abandoned, 1);
+                var cancelled = Interlocked.CompareExchange(ref item.State, CadReadCancelledBeforeStart, CadReadQueued) == CadReadQueued;
+                if (cancelled)
+                    throw new TimeoutException("Timed out waiting for BricsCAD application context; queued diagnostic read was cancelled before start.");
+                throw new TimeoutException("Timed out after diagnostic CAD-context work started; completion is uncertain.");
+            }
+            try
+            {
+                if (item.Error != null) throw new InvalidOperationException(item.Error.Message, item.Error);
+                return item.Result;
+            }
+            finally { item.Done.Dispose(); }
         }
 
         internal static void Record(string source, string severity, string eventName, string message, Document? document = null)
@@ -169,6 +208,28 @@ namespace QS3D.BricsCAD.V25
             }
 
             CaptureProjectAudit(document);
+        }
+
+        private static void ExecuteCadRead(object state)
+        {
+            var item = (CadReadWorkItem)state;
+            try
+            {
+                if (Interlocked.CompareExchange(ref item.State, CadReadRunning, CadReadQueued) != CadReadQueued) return;
+                item.Result = item.Action();
+            }
+            catch (Exception ex) { item.Error = ex; }
+            finally
+            {
+                try { item.Done.Set(); }
+                finally
+                {
+                    if (Volatile.Read(ref item.Abandoned) != 0)
+                    {
+                        try { item.Done.Dispose(); } catch (ObjectDisposedException) { }
+                    }
+                }
+            }
         }
 
         private static void CaptureProjectAudit(Document document)
@@ -284,6 +345,42 @@ namespace QS3D.BricsCAD.V25
         private static void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
         {
             Record("qs3d", "error", "unobserved-task-exception", e.Exception == null ? "Unobserved task exception." : e.Exception.ToString());
+        }
+
+        private static long LoadLatestPersistedSequence()
+        {
+            var latest = 0L;
+            var path = McpCadAgentRuntime.AuditFilePath;
+            latest = Math.Max(latest, ReadLatestSequence(path + ".1"));
+            latest = Math.Max(latest, ReadLatestSequence(path));
+            return latest;
+        }
+
+        private static long ReadLatestSequence(string path)
+        {
+            if (!File.Exists(path)) return 0L;
+            var latest = 0L;
+            try
+            {
+                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                using (var reader = new StreamReader(stream, Encoding.UTF8, true, 4096, false))
+                {
+                    string? line;
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        if (line.Length == 0 || line.Length > 8192) continue;
+                        var match = SequenceRegex.Match(line);
+                        if (!match.Success) continue;
+                        long value;
+                        if (long.TryParse(match.Groups["value"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out value)
+                            && value > latest)
+                            latest = value;
+                    }
+                }
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            return latest;
         }
 
         private static void AppendLine(string line)

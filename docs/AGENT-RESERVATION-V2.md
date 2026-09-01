@@ -1,102 +1,101 @@
 # Agent reservation protocol v2
 
-Reservation v2 closes the pre-PR race where two agents can both create visible carriers, edit overlapping production paths, and only discover the collision when a PR already exists.
+Reservation v2 prevents concurrent agents from silently implementing overlapping work before a PR exists.
 
-## Activation and migration
+## Activation
 
-`docs/agent-reservation-v2.marker` is the activation marker. The first commit that adds that file defines the activation timestamp used by the machine gate.
+`docs/agent-reservation-v2.marker` defines the activation boundary used by the machine gate.
 
-- An Issue created before the marker is a legacy reservation unless it explicitly opts into `Reservation-Protocol: v2`.
-- An Issue created at or after the marker must satisfy reservation v2 before an `agent/**` branch can pass shared branch CI.
-- Existing active legacy carriers are grandfathered; do not rewrite, close, rename, or duplicate them merely for migration.
-- This repository protocol does not change external ChatGPT schedule cadence, enabled state, task IDs, or account-side orchestration.
+New post-activation `agent/**` lanes must satisfy Reservation v2. Legacy carriers remain grandfathered unless explicitly migrated.
 
-## Required visible reservation
+## Required reservation
 
-Before mutating repository files for a new agent lane, create one GitHub Issue and publish these fields:
+Before mutating repository files for a new current-protocol lane, create one GitHub Issue containing:
 
 ```text
 Lane-Key: issue-123
 Reservation-Protocol: v2
-Canonical owner/session: account:<github-login>|session:<globally-distinct-opaque-id>
-Canonical carrier: agent/<globally-distinct-branch-owner>/issue-123-<scope>
-Ownership-Key: <stable-semantic-ownership-key>
-Expected-Paths: path/to/file.cs; path/to/other.py; src/OwnedDirectory/
+Canonical owner/session: account:<github-login>|session:<globally-distinct-id>
+Canonical carrier: agent/<globally-distinct-session-token>/issue-123-<scope>
+Ownership-Key: <stable-semantic-key>
+Expected-Paths: path/file.cs; path/other.py; src/OwnedDirectory/
 ```
 
-The Issue must remain open while the carrier is active. The branch must contain the same Issue number and its canonical carrier must match exactly.
+The Issue remains open while the carrier is active. The branch must contain the same Issue number and match the declared canonical carrier.
 
-## Owner identity
+## Identity
 
-Repository ownership must be globally distinguishable from orchestration labels. Labels such as `C01`, `C02`, `C05`, `W1`, `worker`, `controller`, `ChatGPT`, `Codex`, or a model name may describe an external scheduler/role, but they are not valid reservation-v2 branch-owner tokens by themselves.
+Scheduler labels, model names and generic roles such as `worker`, `controller`, `ChatGPT`, `Codex`, `W1` or `C01` are not sufficient repository owner identities by themselves.
 
-Use a stable account/session identity in the Issue and a repository-safe branch token that visibly binds to that session identity. The recommended Issue form is:
-
-```text
-account:<github-login>|session:<opaque-id>
-```
+Use a stable account/session identity and a globally distinguishable repository-safe branch token.
 
 ## Ownership-Key
 
-`Ownership-Key` describes the semantic authority being changed, not the Issue number or worker identity. Good keys are stable across retries and carriers for the same behavior, for example:
+`Ownership-Key` describes the semantic authority being changed, not merely the Issue number or worker name.
 
-```text
-core.dependency.known-count-overrun
-v25.workspace.model-tree-lifecycle
-repo.agent-reservation-collision-enforcement
-```
+When multiple open v2 Issues claim the same semantic Ownership-Key, first visible valid ownership wins until released/reassigned/superseded.
 
-Keys such as `issue-123`, `task-123`, or `lane-123` are invalid because they do not identify semantic ownership.
-
-When multiple open v2 Issues claim the same Ownership-Key, the first visible reservation wins by GitHub `created_at`, with Issue number as a deterministic tie-break. Every later claimant must stop as:
-
-```text
-DUPLICATE_CARRIER / NO MUTATION
-```
+Do not evade a collision by renaming the same work into another semantic key.
 
 ## Expected-Paths
 
-`Expected-Paths` is a semicolon-separated list of repository-relative literal files or directory prefixes. A directory prefix ends with `/` and owns descendants. Globs and traversal segments are forbidden.
+`Expected-Paths` is a semicolon-separated set of repository-relative literal files or directory prefixes.
 
-Examples:
+Use the narrowest truthful claim. If required scope expands, update the same Issue and re-check collision ownership before mutating the new path.
 
-```text
-Expected-Paths: src/QS3D.Core/Services/DependencyGraph.cs; tests/QS3D.Core.SmokeTests/DependencyGraphKnownCountContractSmoke.cs
-Expected-Paths: src/QS3D.BricsCAD.V25/Workspace/; scripts/preflight-workspace-lifecycle.py
-```
+The current machine gate may fail closed when actual changed files fall outside the declared paths or overlap an earlier active reservation/PR.
 
-Before implementation, choose the narrowest truthful path claims. If another earlier v2 reservation already claims an overlapping file/prefix, the later reservation must stop before mutation. If scope must expand, update the same canonical Issue first, rerun the collision check, and only proceed if the expanded ownership remains canonical.
+## One active carrier
 
-Branch CI also compares actual changed paths to `Expected-Paths`; undeclared mutations fail closed. In addition, a v2 branch fails when its current changed files overlap an earlier open same-repository `agent/**` or `integration/**` PR.
+One Lane-Key has at most:
+
+- one active owner/session;
+- one canonical task branch;
+- one open canonical PR.
+
+Red, stale, queued, draft, behind-main or slow does not automatically release ownership.
+
+A replacement carrier requires explicit release/reassignment/supersession under current repository policy.
 
 ## Machine enforcement
 
-The required shared `preflight` job runs the authenticated read-only agent collision gate on both `push` and `pull_request` events.
+The shared preflight collision gate uses read-only Issue/PR metadata to enforce applicable current-protocol invariants for `agent/**` carriers, including:
 
-For same-repository `agent/**` carriers it enforces:
+- Issue binding from branch identity;
+- valid Reservation v2 metadata;
+- non-generic owner/session identity;
+- exact Lane-Key/canonical carrier;
+- semantic Ownership-Key uniqueness;
+- Expected-Paths ownership and actual changed-path containment;
+- overlap checks with earlier active carrier/PR metadata;
+- PR Lane-Key uniqueness.
 
-1. visible Issue binding from the branch `issue-<number>`;
-2. reservation-v2 metadata for post-activation Issues;
-3. non-generic branch/session identity;
-4. exact Lane-Key and canonical carrier;
-5. semantic Ownership-Key uniqueness with first-visible-wins ordering;
-6. first-visible-wins Expected-Paths ownership;
-7. actual branch changes restricted to Expected-Paths;
-8. no changed-file overlap with an earlier open agent/integration PR;
-9. the existing PR Lane-Key uniqueness rule.
+For same-repository `agent/**` carriers whose branch contains `issue-<N>`, the PR lane identity is derived from that issue-bound branch. A PR-body `Lane-Key` is optional for those carriers, but when present it must exactly match the branch-derived `issue-<N>` key. `integration/**` carriers still require an explicit PR-body `Lane-Key` because they have no issue-bound branch identity to derive from.
 
-For `integration/**`, the existing PR Lane-Key uniqueness rule remains active; v2 Issue binding is intentionally scoped to normal `agent/**` task carriers.
+This removes redundant manual PR metadata without weakening the canonical reservation, duplicate-carrier, ownership or path-overlap checks. The gate remains read-only: it validates metadata but does not edit the PR body.
 
-The gate uses read-only Issue/PR metadata and never mutates Issues, branches, PRs, schedules, or `main`.
+The gate never grants merge permission and never mutates repository state.
 
 ## Collision recovery
 
-When the gate reports another earlier owner:
+When an earlier valid owner exists:
 
-- do not rename the same fix into a new Issue or Ownership-Key;
-- do not create another branch/PR for the same outcome;
-- continue the earlier canonical carrier if it is yours;
-- otherwise stop the overlapping mutation and choose genuinely non-overlapping work;
-- reassignment/supersession still requires the normal repository ownership rules.
+- continue it only if it is your canonical carrier;
+- otherwise do not perform overlapping mutation;
+- choose genuinely non-overlapping work, or wait for explicit reassignment/supersession;
+- never create a duplicate carrier solely because the earlier one is red/stale/slow.
 
-A red, queued, stale, draft, behind-main, or slow canonical carrier remains owned until explicitly completed, released, or superseded. Green CI or cleaner history does not create a second ownership right.
+## Terminal cleanup — mandatory
+
+After the canonical PR merges and current `main` is verified:
+
+1. close/complete the task Issue if it is still open;
+2. change any task status that would otherwise still present the reservation as ACTIVE;
+3. treat the reservation as released;
+4. delete the merged task branch when practical.
+
+A merged task must not leave an open ACTIVE reservation indefinitely.
+
+If a task is abandoned without merging, ownership remains active until it is explicitly released, closed as not planned, reassigned or superseded. Do not infer an automatic timeout that the current machine gate does not implement.
+
+This explicit cleanup rule prevents ghost ownership while keeping active concurrent work fail-closed.

@@ -80,10 +80,16 @@ namespace QS3D.Core.Services
 
             var roots = new List<string>();
             var inputCount = 0;
+            RequireStableKnownCountDuringTraversal(elementIds, knownCount);
             using (var enumerator = elementIds.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                RequireStableKnownCountDuringTraversal(elementIds, knownCount);
+                while (true)
                 {
+                    RequireStableKnownCountDuringTraversal(elementIds, knownCount);
+                    if (!enumerator.MoveNext())
+                        break;
+
                     RequireStableKnownCountDuringTraversal(elementIds, knownCount);
                     if (knownCount.HasValue && inputCount >= knownCount.Value)
                         throw new InvalidOperationException("Locate root selection known Count does not match completed traversal cardinality.");
@@ -91,6 +97,7 @@ namespace QS3D.Core.Services
                         throw new InvalidOperationException("Locate root selection cannot exceed " + MaxRootElementIdInputCount + " input entries.");
 
                     var rawId = enumerator.Current;
+                    RequireStableKnownCountDuringTraversal(elementIds, knownCount);
                     inputCount++;
                     if (string.IsNullOrWhiteSpace(rawId)) continue;
                     if (!string.Equals(rawId, rawId.Trim(), StringComparison.Ordinal))

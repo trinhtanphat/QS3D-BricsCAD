@@ -12,52 +12,51 @@ registration = REGISTRATION.read_text(encoding="utf-8")
 
 required_source = [
     "internal const int MaxFilterIds = 100000;",
-    "Categories = SnapshotCategories(categories);",
-    'IncludeElementIds = SnapshotFilterIds(includeElementIds, "includeElementIds");',
-    'ExcludeElementIds = SnapshotFilterIds(excludeElementIds, "excludeElementIds");',
-    "private static IReadOnlyList<ElementCategory> SnapshotCategories",
-    "private static IReadOnlyList<string> SnapshotFilterIds",
-    "SemanticViewPlanner.MaxFilterIds",
-    "if (result.Count >= SemanticViewPlanner.MaxFilterIds)",
-    "result.Add(enumerator.Current);",
-    "return result.AsReadOnly();",
+    "internal static class SemanticViewEnumerableContract",
+    "SnapshotBounded<T>",
+    "TryGetKnownCount(values, countChangedMessage, out var knownCount)",
+    "RequireStableKnownCount(values, knownCount, countChangedMessage);",
+    "var moved = enumerator.MoveNext();",
+    "var item = enumerator.Current;",
+    "result.Add(item);",
+    "observedCount != knownCount",
+    "values is ICollection<T>",
+    "values is IReadOnlyCollection<T>",
+    "values is ICollection nonGenericCollection",
+    "Semantic view category source Count changed during snapshot.",
+    "Semantic view catalog source Count changed during snapshot.",
 ]
 for marker in required_source:
     if marker not in source:
         raise SystemExit(f"missing source contract: {marker}")
 
+current = source.index("var item = enumerator.Current;")
+post_current = source.index("RequireStableKnownCount(values, knownCount, countChangedMessage);", current)
+retain = source.index("result.Add(item);", current)
+if not current < post_current < retain:
+    raise SystemExit("Semantic View counted snapshot must rebind Count after Current before retaining the item")
+
+move = source.index("var moved = enumerator.MoveNext();")
+post_move = source.index("RequireStableKnownCount(values, knownCount, countChangedMessage);", move)
+if not move < post_move < current:
+    raise SystemExit("Semantic View counted snapshot must rebind Count after MoveNext before Current")
+
 legacy = [
-    "Categories = categories == null ? new List<ElementCategory>().AsReadOnly() : new List<ElementCategory>(categories).AsReadOnly();",
-    "IncludeElementIds = includeElementIds == null ? new List<string>().AsReadOnly() : new List<string>(includeElementIds).AsReadOnly();",
-    "ExcludeElementIds = excludeElementIds == null ? new List<string>().AsReadOnly() : new List<string>(excludeElementIds).AsReadOnly();",
+    "while (enumerator.MoveNext())",
+    "result.Add(enumerator.Current);",
 ]
 for marker in legacy:
     if marker in source:
-        raise SystemExit(f"legacy unbounded constructor materialization remains: {marker}")
-
-category_helper_start = source.index("private static IReadOnlyList<ElementCategory> SnapshotCategories")
-category_guard = source.index("if (result.Count >= SemanticViewPlanner.MaxFilterIds)", category_helper_start)
-category_add = source.index("result.Add(enumerator.Current);", category_helper_start)
-if category_guard >= category_add:
-    raise SystemExit("Semantic View category snapshot capacity guard must execute before adding the over-bound item")
-
-helper_start = source.index("private static IReadOnlyList<string> SnapshotFilterIds")
-guard = source.index("if (result.Count >= SemanticViewPlanner.MaxFilterIds)", helper_start)
-add = source.index("result.Add(enumerator.Current);", helper_start)
-if guard >= add:
-    raise SystemExit("Semantic View snapshot capacity guard must execute before adding the over-bound item")
+        raise SystemExit(f"legacy traversal without explicit Count rebound remains: {marker}")
 
 required_smoke = [
     "CategoriesStopAtFirstOverBoundItem();",
     "IncludeIdsStopAtFirstOverBoundItem();",
     "ExcludeIdsStopAtFirstOverBoundItem();",
-    "for (var i = 0; i <= 100000; i++) yield return \"E\";",
-    "Include source enumerated beyond the first over-bound id.",
-    "Exclude source enumerated beyond the first over-bound id.",
-    "Category source enumerated beyond the first over-bound item.",
-    "Semantic view supports at most 100000 categories.",
-    "Semantic view supports at most 100000 includeElementIds.",
-    "Semantic view supports at most 100000 excludeElementIds.",
+    "CurrentInducedKnownCountDriftFailsBeforeRetention();",
+    "CurrentCountDriftingCollection<string>",
+    "Semantic view includeElementIds source Count changed during snapshot.",
+    "Equal(1, source.CurrentReads);",
     "AcceptedCollectionsRemainDefensiveSnapshots();",
 ]
 for marker in required_smoke:

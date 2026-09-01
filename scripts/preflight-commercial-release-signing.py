@@ -51,11 +51,14 @@ required_workflow = (
     "QS3D-BricsCAD-V25.provenance.json",
     "Verify candidate after job boundary",
     "Create draft, verify uploaded bytes, then publish",
-    "'release', 'create'",
-    "--draft",
-    "gh release download",
-    "gh release edit",
-    "--draft=false",
+    '$tagRefUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/git/refs"',
+    "$tagCreatedByThisRun = $true",
+    "$releaseId = [long]$release.id",
+    "gh release upload $env:RELEASE_TAG $resolvedAsset --repo $env:GITHUB_REPOSITORY",
+    "gh release download $env:RELEASE_TAG",
+    "$published = Invoke-RestMethod -Method Patch -Uri $releaseUri",
+    "if ($published.draft -ne $false)",
+    "rollback-v25-draft-release.ps1",
 )
 for token in required_workflow:
     if token not in workflow:
@@ -67,9 +70,11 @@ for forbidden in (
     "unsigned prerelease",
     "if: ${{ inputs.sign_package",
     "!inputs.sign_package",
+    "& gh @createArgs",
+    "gh release edit $env:RELEASE_TAG",
 ):
     if forbidden in workflow:
-        errors.append(f"commercial release workflow still exposes an unsigned fallback: {forbidden}")
+        errors.append(f"commercial release workflow exposes obsolete/unsafe publication shape: {forbidden}")
 
 build_index = workflow.find("  build_sign:")
 publish_index = workflow.find("  release:")
@@ -88,6 +93,18 @@ if workflow.find("Remove ephemeral signing certificate and private key") > workf
     errors.append("private signing key must be removed before final package verification")
 if workflow.find("Verify candidate after job boundary") > workflow.find("Create draft, verify uploaded bytes, then publish"):
     errors.append("release job must verify transferred candidate before creating a draft release")
+
+publication = workflow.find("Create draft, verify uploaded bytes, then publish")
+tag_create = workflow.find("$createdTag = Invoke-RestMethod -Method Post -Uri $tagRefUri", publication)
+tag_owned = workflow.find("$tagCreatedByThisRun = $true", tag_create)
+draft_id = workflow.find("$releaseId = [long]$release.id", tag_owned)
+download = workflow.find("gh release download $env:RELEASE_TAG", draft_id)
+signature = workflow.find("verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT", download)
+publish = workflow.find("$published = Invoke-RestMethod -Method Patch -Uri $releaseUri", signature)
+rollback = workflow.find("rollback-v25-draft-release.ps1", publish)
+publication_order = (publication, tag_create, tag_owned, draft_id, download, signature, publish, rollback)
+if any(index < 0 for index in publication_order) or list(publication_order) != sorted(publication_order):
+    errors.append("commercial publication must positively own exact tag -> capture exact draft -> verify downloaded signed bytes -> publish exact release -> retain bounded rollback")
 
 required_signing = (
     "Get-SignTool",
@@ -154,4 +171,4 @@ if errors:
     print(f"FAILED with {len(errors)} commercial release signing hardening error(s).")
     sys.exit(1)
 
-print("PASS: commercial V25 release is signed-only, exact-version/source bound, RFC3161 PE timestamped, ephemeral-key cleaned, least-privilege published and draft-byte verified.")
+print("PASS: commercial V25 release remains signed-only, exact-version/source bound, RFC3161 PE timestamped, ephemeral-key cleaned, least-privilege published, exact-tag owned, draft-byte verified, and restart-safe under bounded rollback.")

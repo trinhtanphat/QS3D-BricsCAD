@@ -103,6 +103,9 @@ namespace QS3D.BricsCAD.V25
                 };
 
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
+                if (!window.IsLoaded)
+                    throw new InvalidOperationException("Material Catalog host show returned without a loaded window.");
+
                 _published = published;
                 window = null;
                 try { PaletteCoordinator.SetStatus("Material Catalog: built-in + custom + apply theo semantic selection • khóa theo bản vẽ đang mở."); } catch { }

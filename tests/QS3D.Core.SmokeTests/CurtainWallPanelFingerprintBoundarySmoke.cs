@@ -131,8 +131,8 @@ namespace QS3D.Core.SmokeTests
             var changingInput = Input();
             changingInput.Pieces = changing;
             Expect<InvalidOperationException>(() => CurtainWallPanelFingerprint.Compute(changingInput), "Pieces Count drift");
-            if (changing.IndexReads != 1)
-                throw new InvalidOperationException("Count-drift control must index exactly the advertised item once.");
+            if (changing.IndexReads != 0)
+                throw new InvalidOperationException("Count-drift control must fail before indexing once the admitted Count changes.");
         }
 
         private static CurtainWallPanelFingerprintInput Input(params CurtainWallPanelPiece[] pieces)

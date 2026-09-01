@@ -7,6 +7,7 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class ZoneManagerCommands
     {
+        private static PublishedManager? _pending;
         private static PublishedManager? _published;
 
         private sealed class PublishedManager
@@ -59,70 +60,88 @@ namespace QS3D.BricsCAD.V25
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
 
-            ZoneManagerWindow? candidate = null;
+            PublishedManager? candidate = null;
             try
             {
                 ExistingProjectMutationContext.TryGet(document, out _);
 
+                var pending = _pending;
+                if (pending != null)
+                    CloseOwnerBeforeReplacement(pending, "pending");
+
                 var previous = _published;
                 if (previous != null)
                 {
-                    if (previous.Window.IsLoaded)
+                    if (previous.Window.IsLoaded &&
+                        previous.Matches(document) &&
+                        previous.MatchesManagedWrapper(document))
                     {
-                        if (previous.Matches(document) && previous.MatchesManagedWrapper(document))
-                        {
-                            try { previous.Window.Activate(); } catch { }
-                            try { PaletteCoordinator.SetStatus("Zone Manager đã mở cho bản vẽ hiện hành."); } catch { }
-                            return;
-                        }
-
-                        try { previous.Window.Close(); }
-                        catch (Exception closeError)
-                        {
-                            throw new InvalidOperationException(
-                                "Không thể đóng Zone Manager trước; không mở instance thứ hai.",
-                                closeError);
-                        }
-
-                        // A native-database match with managed-wrapper drift must replace the
-                        // old wrapper-bound window. Close() can also be vetoed. In either case,
-                        // construction is forbidden until terminal Closed releases publication.
-                        if (ReferenceEquals(_published, previous))
-                            throw new InvalidOperationException(
-                                "Zone Manager trước vẫn đang mở; hãy hoàn tất cleanup/close trước khi mở manager hiện hành.");
+                        try { previous.Window.Activate(); } catch { }
+                        try { PaletteCoordinator.SetStatus("Zone Manager đã mở cho bản vẽ hiện hành."); } catch { }
+                        return;
                     }
-                    else if (ReferenceEquals(_published, previous))
-                    {
-                        // Defensive stale-reference repair. A normally closed manager clears
-                        // ownership synchronously in its instance-safe Closed handler below.
-                        _published = null;
-                    }
+
+                    CloseOwnerBeforeReplacement(previous, "published");
                 }
 
-                candidate = new ZoneManagerWindow(document);
-                var publishedWindow = candidate;
-                var published = new PublishedManager(publishedWindow, document);
-                publishedWindow.Closed += (_, __) =>
+                var window = new ZoneManagerWindow(document);
+                var owner = new PublishedManager(window, document);
+                candidate = owner;
+                window.Closed += (_, __) =>
                 {
-                    if (ReferenceEquals(_published, published)) _published = null;
+                    if (ReferenceEquals(_pending, owner)) _pending = null;
+                    if (ReferenceEquals(_published, owner)) _published = null;
                 };
 
-                Application.ShowModelessWindow(IntPtr.Zero, publishedWindow, true);
-                _published = published;
+                _pending = owner;
+                Application.ShowModelessWindow(IntPtr.Zero, window, true);
+                if (!window.IsLoaded)
+                    throw new InvalidOperationException("Zone Manager did not remain loaded after host publication.");
+                if (!ReferenceEquals(_pending, owner))
+                    throw new InvalidOperationException("Zone Manager publication ownership changed unexpectedly.");
+
+                _pending = null;
+                _published = owner;
                 candidate = null;
                 try { PaletteCoordinator.SetStatus("Đã mở Zone Manager cho bản vẽ hiện hành."); } catch { }
             }
             catch (Exception ex)
             {
-                if (candidate != null)
+                if (candidate != null && ReferenceEquals(_pending, candidate))
                 {
-                    try { candidate.Close(); } catch { }
+                    try { candidate.Window.Close(); } catch { }
                 }
 
-                var message = "QS3DZONES lỗi: " + ex.Message;
+                var message = "QS3DZONES không thể mở Zone Manager (" + ex.GetType().Name + ").";
                 try { PaletteCoordinator.SetStatus(message); } catch { }
                 try { document.Editor.WriteMessage("\n" + message); } catch { }
             }
+        }
+
+        private static void CloseOwnerBeforeReplacement(PublishedManager owner, string state)
+        {
+            if (owner == null) throw new ArgumentNullException(nameof(owner));
+
+            if (!owner.Window.IsLoaded && string.Equals(state, "published", StringComparison.Ordinal))
+            {
+                if (ReferenceEquals(_published, owner)) _published = null;
+                return;
+            }
+
+            try
+            {
+                owner.Window.Close();
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    "Zone Manager " + state + " cleanup failed; replacement was refused.",
+                    ex);
+            }
+
+            if (owner.Window.IsLoaded || ReferenceEquals(_pending, owner) || ReferenceEquals(_published, owner))
+                throw new InvalidOperationException(
+                    "Zone Manager " + state + " owner did not reach terminal close; replacement was refused.");
         }
     }
 }

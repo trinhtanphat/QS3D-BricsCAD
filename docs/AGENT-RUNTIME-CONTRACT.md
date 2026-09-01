@@ -1,183 +1,70 @@
 # Agent runtime contract
 
-This document is the compact operational contract for owner-facing AI/chat sessions working in this repository. Read it from the current `origin/main` on every prompt that asks to change, continue, fix, validate, integrate, merge, release, update docs, or otherwise advance repository work.
+This file is the short operational companion to `AGENTS.md`. It summarizes what an agent should do during one live execution.
 
-`docs/MAIN-WRITE-AUTHORIZATION.md` remains authoritative for direct-main prohibition, standing same-task merge authorization, and the normal owner-task completion endpoint. `CI_POLICY.md` remains authoritative for Actions behavior. `docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md` remains authoritative for collision handling.
+## Start
 
-## Per-prompt bootstrap
+1. Read current `AGENTS.md`.
+2. Resolve exact current `origin/main` SHA.
+3. Resolve the requested task's current Issue/Lane-Key/branch/PR.
+4. Continue the existing canonical carrier when it exists and this session owns it.
+5. Create a new carrier only when no equivalent active carrier exists.
 
-Before mutation:
+Do not rebuild repository policy from chat memory.
 
-1. Read current `AGENTS.md` and this file from current `origin/main`.
-2. Resolve current `origin/main` to an exact SHA; do not rely on chat memory.
-3. Check the concrete Issue/Lane-Key, owner/session, canonical branch, open PR, current CI and merge state.
-4. If an equivalent canonical carrier already exists, continue that carrier when authorized; do not create a competing branch/PR.
-5. Keep the task inside its registered scope and execution boundary.
-6. Treat direct writes/ref updates/force pushes to `main` as forbidden for ordinary task work.
+## Execute the owner's prompt
 
-## Default owner-task lifecycle
+Treat a change/fix/continue/review request as an instruction to perform the requested repository work, not merely to explain what someone else should do.
 
-For a normal repository-owner request, the successful endpoint is `MERGED_MAIN` unless the owner explicitly opts out of merge for that exact task or a real terminal blocker leaves no safe authorized action.
+Use current repository evidence to determine scope. Do not invent unrelated backlog.
+
+## Normal live loop
 
 ```text
-owner prompt
-  -> current main + collision check
-  -> continue/register one canonical lane
-  -> implement/fix/docs update
-  -> validate appropriately for changed paths
-  -> coherent commit(s)
-  -> push canonical branch
-  -> observe/remediate exact-head branch CI when applicable
-  -> refresh/reconcile current main when needed
-  -> open/update the one canonical PR
-  -> protected current-candidate preflight + core SUCCESS
-  -> current + mergeable + expected-head verified
-  -> merge the same task PR under MAIN-WRITE-AUTHORIZATION
-  -> fetch resulting main SHA
+understand requested outcome
+  -> implement/fix on canonical branch
+  -> run focused available validation
+  -> commit + push
+  -> observe automatic branch/PR CI
+  -> diagnose/fix current-lane red evidence
+  -> open/update canonical PR when ready
+  -> satisfy protected preflight + core + freshness + mergeability
+  -> merge same task PR when authorized/eligible
+  -> verify current main
+  -> close/release task Issue reservation
   -> MERGED_MAIN
 ```
 
-The following are intermediate states, not normal completion: edited, committed, pushed, branch CI green, PR open, PR green, or stale earlier-main evidence.
+A known red current-head run is agent work. Fix it on the same carrier rather than replacing the carrier or handing routine log inspection back to the owner.
 
-A failed current-carrier CI check is an automatic remediation trigger while a safe same-lane fix exists. Diagnose the exact failing SHA/job/step, fix the root cause on the same canonical branch, commit/push, and revalidate. Do not require the owner to repeat `fix CI`, `continue`, or `merge main` for the same task.
+## PR timing
 
-### Repository-owner standing requirements
+Branch CI is early evidence, not permanent PR identity. A correct PR may coexist with queued/running branch CI. Do not close/recreate a PR to repair timing order.
 
-Unless the owner's current prompt explicitly overrides one of these points for the exact task, every agent working in this repository must follow these standing requirements:
+Protected current-candidate checks are the hard merge gate.
 
-1. **Finish owned work instead of stopping at status-only.** Requests such as `continue all`, `done all`, `fix all`, `commit push`, or `merge main` authorize the agent to continue the same owned lane through safe fixes, docs, validation, PR maintenance and merge when repository gates allow. Do not ask the owner to repeat approval for already-authorized same-task steps.
-2. **Reuse the canonical carrier.** Remediate the existing Issue/Lane-Key/branch/PR instead of creating duplicate issues, branches or PRs for each retry or CI fix.
-3. **Scope before mutation.** Expand the reservation `Expected-Paths` before touching any newly required file. Do not edit unowned or colliding paths merely to make a gate green.
-4. **Preserve concurrent wins.** Re-read the current branch head and current `main` before reconciliation or merge. Perform a semantic reconcile that keeps unrelated/newer work from other agents; never overwrite or revert concurrent work just to make the carrier mergeable.
-5. **Keep evidence honest.** Never fabricate `LOCAL_PASS`, licensed BricsCAD execution, Windows desktop interaction, ChatGPT interaction, release evidence or any other test result that was not actually observed on the stated exact SHA. Use `PENDING_LOCAL`, `LOCAL_ONLY`, `NOT_RUN` or the repository's equivalent marker when appropriate.
-6. **Fix exact-head failures at their root cause.** Diagnose failures from the current carrier SHA and repair owned source/tests/guards on the same lane. Do not weaken a legitimate guard simply to obtain green CI. If the owner explicitly says they will handle manual CI reruns, do not click rerun/re-dispatch actions yourself; normal checks triggered by new commits may still run.
-7. **Merge only through protected policy.** Never force-merge, bypass branch protection, disable required checks or push task content directly to `main`. Merge the same task PR only when the exact candidate is current, conflict-free and satisfies the repository-required protected checks.
-8. **Verify the landing, not just the button click.** After merge, fetch current `main` and verify that the intended candidate actually landed before reporting `MERGED_MAIN`.
-9. **Separate source-ready from environment-only validation.** Complete all safe source/static/build/hosted-CI work even when a licensed/local tail remains, but leave that tail explicitly pending for a real compatible environment instead of simulating it remotely.
-10. **Keep durable product requirements in the canonical specialist runbook.** For MCP/ChatGPT/QS3D behavior and UX, `docs/MCP-CANONICAL-RUNBOOK.md` is the durable product contract. When an owner-approved MCP requirement changes, update that runbook on the authorized lane so future agents do not have to reconstruct requirements from chat history.
+## Main
 
-## Deferred LOCAL_ONLY validation
+Never direct-write or force-update `main`. All task content lands through a protected PR.
 
-When source-safe implementation, tests, guards, documentation, or adapter work can be completed without a licensed BricsCAD host, continue that work instead of waiting for a local agent. Complete the available source/static/build/CI validation, commit coherently, and push the canonical branch.
+Same-task standing merge authorization and opt-out rules are defined in `docs/MAIN-WRITE-AUTHORIZATION.md`.
 
-For the unavailable runtime tail:
+## Concurrency
 
-- record the exact intended source-ready SHA;
-- mark it `PENDING_LOCAL` / `PENDING_LOCAL_AGENT` and `DO_NOT_RETRY_REMOTE` where applicable;
-- register any new or materially changed local scenario in `docs/LOCAL-AGENT-INBOX.md`;
-- let a later local agent fetch/sync Git, check out the exact intended SHA in a clean workspace, run the linked licensed/runtime runbook, and record sanitized exact-SHA PASS/FAIL evidence;
-- never promote source review, hosted CI, managed-reference compile, mock execution, or `-SkipRuntime` output to `LOCAL_PASS`.
+Inspect only enough cross-agent metadata to avoid collision. Another active owner means no overlapping mutation unless reassigned/superseded.
 
-Local-agent unavailability is not by itself a blocker for source coding, source-safe fixes, docs, commit/push, branch CI, or PR preparation. It blocks merge/release only when the exact task acceptance contract, repository rule, or explicit owner instruction requires LOCAL_ONLY evidence before that step.
+## LOCAL_ONLY
 
-If local validation later exposes a normal source bug, the local agent records sanitized evidence and hands it back; the source lane fixes and pushes a new exact SHA, then the local agent syncs Git and resumes the affected local validation against that SHA.
+Finish every repository-safe change first. Park only genuinely unavailable licensed/private/machine execution in `docs/LOCAL-AGENT-INBOX.md` against the exact pushed SHA.
 
-If the owner explicitly says to `commit + push and leave the branch`, `stop before merge`, `PR only`, or clearly equivalent wording for the exact task, treat that as an opt-out of the default same-task merge endpoint for that task. Keep the canonical carrier available for later pickup instead of recreating the work.
+Never manufacture `LOCAL_PASS` from remote/static evidence.
 
-See `docs/DEFERRED-LOCAL-VALIDATION.md` for the full source-to-local handoff contract.
+## Reporting
 
-## Main write and merge authorization
+Prefer action over narration. Normal success reports at `MERGED_MAIN`. A blocker report is appropriate only when no safe authorized progress remains.
 
-- `origin/main` is read-only for direct task writes, including source, tests, scripts, workflows, docs, Markdown, claims, handoffs, status files and chores.
-- Requests such as `commit push git`, `update docs`, `update md`, `fix bug`, `continue all`, or `merge main` never authorize a direct contents write/ref update to `main`.
-- For a normal owner-requested task, `docs/MAIN-WRITE-AUTHORIZATION.md` supplies standing authorization to merge the **same task PR** once every current required gate is green, the candidate is current/mergeable, and the owner has not opted out.
-- That standing authorization never permits unrelated/bulk merges, branch-protection bypass, force push, direct-main writes, or weakening required checks.
+If you emit an intermediate progress update, make it concise and evidence-based.
 
-## Markdown/docs classification
+## Specialist loading
 
-`Markdown-only` does **not** mean `no CI`, and a commit prefix such as `docs:`, `md:` or `chore:` does not decide validation. Changed paths are authoritative.
-
-### ORDINARY_DOCS
-
-Examples are ordinary guidance, notes, handoffs or documentation outside the policy/source-guard watched set.
-
-- Keep the task Markdown-only unless the requested behavior genuinely requires another surface.
-- Dedicated branch + PR remain mandatory.
-- Automatic shared CI may classify the candidate as lightweight/non-build.
-- Heavy pre-PR source/build validation may be omitted when the path is intentionally outside the relevant watched set.
-- Core/BricsCAD V25 build and licensed runtime evidence are not required merely because a `.md` file changed.
-- Protected PR `preflight` + `core` must still succeed before merge.
-
-### GOVERNANCE_POLICY_MD
-
-Examples include policy files explicitly classified by `.github/workflows/ci.yml`, including `AGENTS.md`, `CI_POLICY.md`, `README.md`, `docs/MAIN-WRITE-AUTHORIZATION.md`, `docs/AGENT-WORK-REGISTRATION.md`, `docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md`, `docs/AGENT-STATUS-MARKER-SEMANTICS.md`, and `docs/AGENT-BRANCH-CI-ACTIONS-LOOKUP.md`.
-
-- Dedicated branch + PR remain mandatory.
-- Policy/source guards required by the shared CI classifier must run.
-- A policy-Markdown-only change does not require Core/V25 build unless another build-relevant path changed.
-- Do not add scripts/workflows/source solely to make a documentation clarification look more enforceable unless that executable enforcement is explicitly part of the task.
-
-## Branch CI and PR timing
-
-Preferred sequencing for watched work is to push the canonical branch and obtain exact-head branch-CI success before opening a new PR when the current admission gate requires it. However, CI completion time is **not** permanent PR identity.
-
-If the one canonical PR already exists while branch CI is queued/running, or branch CI completes after PR creation:
-
-- do not close/recreate the PR for timestamp cosmetics;
-- do not create a replacement branch;
-- keep the same canonical carrier;
-- remediate any real red exact-head result on that carrier;
-- require fresh protected current-candidate checks before merge.
-
-`docs/PR-CI-LIFECYCLE.md` controls when older wording treats timing alone as a reason to replace an otherwise valid carrier.
-
-## Release boundary for docs-only landings
-
-Ordinary docs/Markdown/chore-only changes outside the V25 dispatcher's watched integration-relevant paths must not trigger the automatic V25 cloud release path. Changed paths, not commit-message labels, determine release-dispatch eligibility.
-
-## Owner-facing reporting
-
-Repository lifecycle reporting is terminal-first. Continue same-lane safe work instead of emitting a full completion report at each intermediate state.
-
-A full owner-facing lifecycle report is required when either:
-
-1. the normal success terminal is reached (`MERGED_MAIN`, or a stricter terminal explicitly requested by the owner); or
-2. a legitimate terminal blocker exists and no further safe authorized action remains in the current execution.
-
-Brief execution-progress updates are allowed when the environment requires them, but they are not completion reports.
-
-Success form:
-
-```text
-✅ Prompt result: MERGED_MAIN
-✅ Issue / Lane-Key: #<number> / issue-<number>
-✅ Canonical branch: <branch>
-✅ Final task head: <sha>
-✅ Branch CI: SUCCESS — <run + tested sha, when applicable>
-✅ PR: #<number> — MERGED
-✅ Protected checks: SUCCESS — <candidate/run>
-✅ Merged to main: YES — main@<landed sha>
-```
-
-Omit genuinely not-applicable fields rather than inventing evidence.
-
-Blocker form:
-
-```text
-❌ Prompt result: BLOCKED
-✅ Issue / Lane-Key: #<number> / issue-<number>
-✅ Canonical branch/head: <branch>@<sha>
-<marker> Last verified CI/PR evidence: <exact evidence>
-❌ Exact blocker: <specific blocker>
-❌ Remediation attempted: <what was actually tried>
-➖ Further safe action: none in current execution — <why>
-```
-
-Queued/running CI, a red-but-fixable current carrier, a stale branch that can be reconciled, an open PR, or review feedback that can be fixed safely are lifecycle states, not terminal blockers by themselves.
-
-## Precedence and specialist runbooks
-
-Use specialist documents for details instead of duplicating them here:
-
-- main permission / same-task merge endpoint: `docs/MAIN-WRITE-AUTHORIZATION.md`;
-- CI execution and manual Actions authority: `CI_POLICY.md`;
-- CI evidence recovery: `docs/AGENT-BRANCH-CI-ACTIONS-LOOKUP.md`;
-- registration: `docs/AGENT-WORK-REGISTRATION.md`;
-- duplicate/race handling: `docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md`;
-- PR timing correction: `docs/PR-CI-LIFECYCLE.md`;
-- full terminal reporting contract: `docs/AGENT-PROMPT-TO-RELEASE-CONTRACT.md`;
-- deferred source-to-local validation: `docs/DEFERRED-LOCAL-VALIDATION.md`;
-- local-only work: `docs/LOCAL-AGENT-INBOX.md` and linked local runbooks;
-- product boundary: `docs/PRODUCT-BOUNDARY.md`.
-
-When older documents conflict on direct-main permission, standing same-task merge authorization, or the default `MERGED_MAIN` endpoint, follow `docs/MAIN-WRITE-AUTHORIZATION.md`. When older wording treats branch-CI/PR timestamp ordering alone as permanent carrier validity, follow `docs/PR-CI-LIFECYCLE.md`.
+Read additional rule/runbook files only when the current task needs them. The specialist map is in `AGENTS.md` and `docs/README.md`.

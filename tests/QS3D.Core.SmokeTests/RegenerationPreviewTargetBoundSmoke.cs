@@ -43,7 +43,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = Fixture();
             var service = new RegenerationPreviewService();
-            var error = Throws<ArgumentException>(() => service.PreviewSubset(project, new[] { "B1", "B2", "B1" }));
+            var error = Throws<ArgumentException>(() => service.PreviewSubset(project, new[] { "B1", "B1" }));
             Contains(error.Message, "Duplicate regeneration preview target: B1");
         }
 

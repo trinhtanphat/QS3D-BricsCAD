@@ -100,6 +100,9 @@ namespace QS3D.BricsCAD.V25
                 };
 
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
+                if (!window.IsLoaded)
+                    throw new InvalidOperationException("Project Tools host show returned without a loaded window.");
+
                 _published = published;
                 window = null;
                 try { PaletteCoordinator.SetStatus("Project Tools: tầng • vật liệu • template • module • health • khóa theo bản vẽ."); } catch { }

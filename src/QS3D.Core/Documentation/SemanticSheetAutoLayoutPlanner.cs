@@ -168,18 +168,24 @@ namespace QS3D.Core.Documentation
         private static List<SemanticSheetAutoLayoutItem> MaterializeItemsBounded(IEnumerable<SemanticSheetAutoLayoutItem> items)
         {
             var knownCount = RequireKnownCountsWithinLimit(items, "automatic sheet layout items");
-
             var result = new List<SemanticSheetAutoLayoutItem>(Math.Min(MaxItems, 256));
             using (var enumerator = items.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireKnownCountStillMatches(items, knownCount, "automatic sheet layout items");
+                    var moved = enumerator.MoveNext();
+                    RequireKnownCountStillMatches(items, knownCount, "automatic sheet layout items");
+                    if (!moved) break;
                     if (result.Count >= MaxItems)
                         throw new InvalidOperationException("Automatic sheet layout supports at most " + MaxItems + " views.");
-                    result.Add(enumerator.Current);
+                    var item = enumerator.Current;
+                    RequireKnownCountStillMatches(items, knownCount, "automatic sheet layout items");
+                    result.Add(item);
                 }
             }
 
+            RequireKnownCountStillMatches(items, knownCount, "automatic sheet layout items");
             RequireTraversalMatchesKnownCount(knownCount, result.Count, "automatic sheet layout items");
             return result;
         }
@@ -187,20 +193,29 @@ namespace QS3D.Core.Documentation
         private static Dictionary<string, SemanticViewPlan> BuildViewIndex(IEnumerable<SemanticViewPlan> availableViews)
         {
             var knownCount = RequireKnownCountsWithinLimit(availableViews, "automatic sheet layout available views");
-
             var result = new Dictionary<string, SemanticViewPlan>(StringComparer.OrdinalIgnoreCase);
             var count = 0;
-            foreach (var view in availableViews)
+            using (var enumerator = availableViews.GetEnumerator())
             {
-                count++;
-                if (count > MaxItems)
-                    throw new InvalidOperationException("Automatic sheet layout supports at most " + MaxItems + " available views.");
-                if (view == null) throw new ArgumentException("Available semantic view cannot be null.", nameof(availableViews));
-                var id = Required(view.Id, "availableViews.Id");
-                if (result.ContainsKey(id)) throw new InvalidOperationException("Available semantic views contain duplicate id: " + id + ".");
-                result.Add(id, view);
+                while (true)
+                {
+                    RequireKnownCountStillMatches(availableViews, knownCount, "automatic sheet layout available views");
+                    var moved = enumerator.MoveNext();
+                    RequireKnownCountStillMatches(availableViews, knownCount, "automatic sheet layout available views");
+                    if (!moved) break;
+                    if (count >= MaxItems)
+                        throw new InvalidOperationException("Automatic sheet layout supports at most " + MaxItems + " available views.");
+                    var view = enumerator.Current;
+                    RequireKnownCountStillMatches(availableViews, knownCount, "automatic sheet layout available views");
+                    count++;
+                    if (view == null) throw new ArgumentException("Available semantic view cannot be null.", nameof(availableViews));
+                    var id = Required(view.Id, "availableViews.Id");
+                    if (result.ContainsKey(id)) throw new InvalidOperationException("Available semantic views contain duplicate id: " + id + ".");
+                    result.Add(id, view);
+                }
             }
 
+            RequireKnownCountStillMatches(availableViews, knownCount, "automatic sheet layout available views");
             RequireTraversalMatchesKnownCount(knownCount, count, "automatic sheet layout available views");
             return result;
         }
@@ -232,6 +247,14 @@ namespace QS3D.Core.Documentation
             if (hasConflict)
                 throw new InvalidOperationException("Automatic sheet layout received conflicting known counts for " + label + ".");
             return expected;
+        }
+
+        private static void RequireKnownCountStillMatches<T>(IEnumerable<T> values, int? admittedCount, string label)
+        {
+            var currentCount = RequireKnownCountsWithinLimit(values, label);
+            if (admittedCount.HasValue != currentCount.HasValue ||
+                (admittedCount.HasValue && currentCount!.Value != admittedCount.Value))
+                throw new InvalidOperationException("Automatic sheet layout " + label + " known Count changed during traversal.");
         }
 
         private static void RequireTraversalMatchesKnownCount(int? knownCount, int observedCount, string label)

@@ -48,12 +48,20 @@ namespace QS3D.Core.Services
             var elementCount = 0;
             using (var enumerator = elements.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency graph rebuild");
+                    if (!enumerator.MoveNext())
+                    {
+                        RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency graph rebuild");
+                        break;
+                    }
+                    RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency graph rebuild");
                     RequireTraversalCapacity(knownCount, elementCount, "Dependency graph rebuild");
                     if (elementCount >= MaxElementInputCount)
                         throw new InvalidOperationException("Dependency graph rebuild exceeds the supported " + MaxElementInputCount + " element limit.");
                     var element = enumerator.Current;
+                    RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency graph rebuild");
                     elementCount++;
                     if (element == null) throw new InvalidOperationException("Dependency graph cannot contain a null semantic element.");
                     if (nextElements.ContainsKey(element.Id))
@@ -160,12 +168,20 @@ namespace QS3D.Core.Services
             var snapshots = new List<OrderingSnapshot>();
             using (var enumerator = elements.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency ordering");
+                    if (!enumerator.MoveNext())
+                    {
+                        RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency ordering");
+                        break;
+                    }
+                    RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency ordering");
                     RequireTraversalCapacity(knownCount, materialized.Count, "Dependency ordering");
                     if (materialized.Count >= MaxElementInputCount)
                         throw new InvalidOperationException("Dependency ordering exceeds the supported " + MaxElementInputCount + " element limit.");
                     var element = enumerator.Current;
+                    RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency ordering");
                     if (element == null) throw new InvalidOperationException("Dependency ordering cannot contain a null semantic element.");
                     ValidateDependencies(element);
                     materialized.Add(element);

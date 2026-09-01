@@ -254,6 +254,7 @@ namespace QS3D.Core.Services
                     if (inputCount >= MaxTargetInputCount)
                         throw new InvalidOperationException("Bulk edit target collection cannot exceed " + MaxTargetInputCount + " input entries.");
                     var element = enumerator.Current;
+                    RequireKnownCountStable(elements, knownCount, knownCountSources, "Bulk edit target collection");
                     inputCount++;
                     if (element == null)
                         throw new InvalidOperationException("Bulk edit target collection contains a null semantic element entry.");
@@ -401,6 +402,7 @@ namespace QS3D.Core.Services
                     if (inputCount >= MaxTargetInputCount)
                         throw new InvalidOperationException(label + " cannot exceed " + MaxTargetInputCount + " input entries.");
                     var value = enumerator.Current;
+                    RequireKnownCountStable(values, knownCount, knownCountSources, label);
                     inputCount++;
                     result.Add(value);
                 }
