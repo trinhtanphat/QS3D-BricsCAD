@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
         {
             GrowthRejectsBeforeUnexpectedCurrentRead();
             ShrinkRejectsBeforeSecondCurrentRead();
+            CurrentDriftWinsBeforeNullRowValidation();
             UnderYieldRejectsAgainstAdmittedCount();
             ConflictingInterfacesRejectBeforeEnumeration();
             OversizedKnownCountRejectsBeforeEnumeration();
@@ -36,6 +37,14 @@ namespace QS3D.Core.SmokeTests
             var source = new HostileCollection(new[] { row, row }, 2, 2, 2, mutateAfterCurrent: 1, mutatedCount: 1);
             ThrowsCountIntegrity(() => RebarProcurementCsvExporter.ToCsv(source));
             Equal(1, source.CurrentReads);
+        }
+
+        private static void CurrentDriftWinsBeforeNullRowValidation()
+        {
+            var source = new HostileCollection(new RebarProcurementSummary[] { null! }, 1, 1, 1, mutateAfterCurrent: 1, mutatedCount: 2);
+            ThrowsCountIntegrity(() => RebarProcurementCsvExporter.ToCsv(source));
+            Equal(1, source.CurrentReads);
+            Equal(1, source.MoveNextCalls);
         }
 
         private static void UnderYieldRejectsAgainstAdmittedCount()
