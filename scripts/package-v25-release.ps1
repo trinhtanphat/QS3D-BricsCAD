@@ -69,7 +69,7 @@ if ($null -eq $identity) {
     throw 'Canonical V25 package identity validator returned no admitted metadata identity.'
 }
 if (-not [string]::Equals([string]$identity.SourceCommit, $headBefore, [StringComparison]::Ordinal)) {
-    throw "Admitted V25 package source commit $($identity.SourceCommit) does not match exact clean package source HEAD $headBefore."
+    throw "PACKAGE-METADATA gitCommit $($identity.SourceCommit) does not match the exact clean package source HEAD $headBefore."
 }
 
 Write-Host "Release package provenance verified: $headBefore"
