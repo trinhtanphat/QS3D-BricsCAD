@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             InvalidPublicResultStateFailsClosed();
             TokenWhitespaceContractIsExplicit();
+            TokenUnicodeScalarContractIsExplicit();
             ZeroValueRemainsValid();
             QuantityEngineResultRemainsValid();
         }
@@ -36,6 +37,27 @@ namespace QS3D.Core.SmokeTests
             if (!string.Equals(result.Handle, "ABCD", StringComparison.Ordinal) ||
                 !string.Equals(result.Unit, "m", StringComparison.Ordinal))
                 throw new InvalidOperationException("Canonical takeoff handle and unit tokens must be preserved exactly.");
+        }
+
+        private static void TokenUnicodeScalarContractIsExplicit()
+        {
+            ThrowsMessage<ArgumentException>(
+                () => new TakeoffResult("H-\uD800-X", TakeoffKind.Count, 1d, "ea"),
+                "Takeoff handle must contain valid Unicode scalar text.");
+            ThrowsMessage<ArgumentException>(
+                () => new TakeoffResult("H-\uDC00-X", TakeoffKind.Count, 1d, "ea"),
+                "Takeoff handle must contain valid Unicode scalar text.");
+            ThrowsMessage<ArgumentException>(
+                () => new TakeoffResult("H1", TakeoffKind.Count, 1d, "m\uD800"),
+                "Takeoff unit must contain valid Unicode scalar text.");
+            ThrowsMessage<ArgumentException>(
+                () => new TakeoffResult("H1", TakeoffKind.Count, 1d, "m\uDC00"),
+                "Takeoff unit must contain valid Unicode scalar text.");
+
+            var validPair = new TakeoffResult("H-\U0001F680", TakeoffKind.Count, 1d, "m\U0001D41A");
+            if (!string.Equals(validPair.Handle, "H-\U0001F680", StringComparison.Ordinal) ||
+                !string.Equals(validPair.Unit, "m\U0001D41A", StringComparison.Ordinal))
+                throw new InvalidOperationException("Valid supplementary-plane Unicode must remain accepted and preserved exactly.");
         }
 
         private static void ZeroValueRemainsValid()
@@ -63,6 +85,25 @@ namespace QS3D.Core.SmokeTests
             }
             catch (TException)
             {
+                return;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Expected " + typeof(TException).Name + " but got " + ex.GetType().Name + ".", ex);
+            }
+            throw new InvalidOperationException("Expected " + typeof(TException).Name + ".");
+        }
+
+        private static void ThrowsMessage<TException>(Action action, string expectedMessage) where TException : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (TException ex)
+            {
+                if (!string.Equals(ex.Message.Split(new[] { Environment.NewLine }, StringSplitOptions.None)[0], expectedMessage, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Expected diagnostic '" + expectedMessage + "' but got '" + ex.Message + "'.", ex);
                 return;
             }
             catch (Exception ex)
