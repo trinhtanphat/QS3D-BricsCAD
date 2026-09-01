@@ -12,7 +12,7 @@ WORKFLOW = (ROOT / ".github/workflows/release-v25.yml").read_text(encoding="utf-
 def validate(validator: str, packager: str, workflow: str) -> list[str]:
     errors: list[str] = []
     for token in (
-        "[IO.FileShare]::Read",
+        "[IO.FileShare]::Read\n    )",
         "[IO.FileAttributes]::ReparsePoint",
         "$script:MaxMetadataBytes = 65536",
         "[Text.UTF8Encoding]::new($false, $true)",
@@ -27,6 +27,8 @@ def validate(validator: str, packager: str, workflow: str) -> list[str]:
         if token not in validator:
             errors.append(f"V25 identity validator missing held-provenance token: {token}")
 
+    if "[IO.FileShare]::ReadWrite" in validator or "[IO.FileShare]::Write" in validator:
+        errors.append("V25 package metadata held handle must not share write access")
     if "Get-Content -LiteralPath $MetadataPath" in validator:
         errors.append("V25 identity validator must not admit semantic metadata through a raw pathname Get-Content read")
 
@@ -59,7 +61,7 @@ if errors:
     raise SystemExit("V25 held metadata provenance preflight failed:\n - " + "\n - ".join(errors))
 
 mutations = {
-    "validator loses held read sharing": (VALIDATOR.replace("[IO.FileShare]::Read", "[IO.FileShare]::ReadWrite", 1), PACKAGER, WORKFLOW),
+    "validator loses held read sharing": (VALIDATOR.replace("[IO.FileShare]::Read\n    )", "[IO.FileShare]::ReadWrite\n    )", 1), PACKAGER, WORKFLOW),
     "validator loses strict UTF8": (VALIDATOR.replace("[Text.UTF8Encoding]::new($false, $true)", "[Text.UTF8Encoding]::new($false)", 1), PACKAGER, WORKFLOW),
     "validator ignores metadata source": (VALIDATOR.replace("([string]$metadata.gitCommit).Trim()", "([string]$ExpectedSourceCommit).Trim()", 1), PACKAGER, WORKFLOW),
     "packager bypasses validator": (VALIDATOR, PACKAGER.replace("assert-v25-release-package-identity.ps1", "legacy-v25-metadata-read.ps1", 1), WORKFLOW),
