@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             KnownCountOverrunFailsBeforeCurrentAndThrowingTail();
+            EnumeratorAcquisitionCountDriftFailsBeforeTraversal();
             GenericCountDriftFailsWithoutPublication();
             ReadOnlyCountDriftFailsWithoutPublication();
             NonGenericCountDriftFailsWithoutPublication();
@@ -30,6 +31,27 @@ namespace QS3D.Core.SmokeTests
 
             Equal(2, source.MoveNextCalls);
             Equal(1, source.CurrentReads);
+            Equal(0, changed());
+            SequenceEqual(new[] { "KEEP" }, state.ElementIds);
+        }
+
+        private static void EnumeratorAcquisitionCountDriftFailsBeforeTraversal()
+        {
+            AssertAcquisitionCountFailure(new AcquisitionCountDriftCollection(1, 2, 2), "known Count changed during traversal");
+            AssertAcquisitionCountFailure(new AcquisitionCountDriftCollection(1, 0, 0), "known Count changed during traversal");
+            AssertAcquisitionCountFailure(new AcquisitionCountDriftCollection(1, -1, -1), "known Count cannot be negative");
+            AssertAcquisitionCountFailure(new AcquisitionCountDriftCollection(1, 1, 2), "exposes conflicting known Counts");
+        }
+
+        private static void AssertAcquisitionCountFailure(AcquisitionCountDriftCollection source, string expectedText)
+        {
+            var state = SeededState(out var changed);
+
+            ThrowsContaining<InvalidOperationException>(() => state.Replace(source), expectedText);
+
+            Equal(1, source.GetEnumeratorCalls);
+            Equal(0, source.MoveNextCalls);
+            Equal(0, source.CurrentReads);
             Equal(0, changed());
             SequenceEqual(new[] { "KEEP" }, state.ElementIds);
         }
@@ -128,6 +150,72 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Expected exception message containing '" + expectedText + "', got '" + ex.Message + "'.");
             }
             throw new Exception("Expected exception " + typeof(T).Name + ".");
+        }
+
+        private sealed class AcquisitionCountDriftCollection : ICollection<string>, IReadOnlyCollection<string>
+        {
+            private readonly int _before;
+            private readonly int _genericAfter;
+            private readonly int _readOnlyAfter;
+            private bool _acquired;
+
+            public AcquisitionCountDriftCollection(int before, int genericAfter, int readOnlyAfter)
+            {
+                _before = before;
+                _genericAfter = genericAfter;
+                _readOnlyAfter = readOnlyAfter;
+            }
+
+            public int GetEnumeratorCalls { get; private set; }
+            public int MoveNextCalls { get; private set; }
+            public int CurrentReads { get; private set; }
+            public int Count => _acquired ? _genericAfter : _before;
+            int IReadOnlyCollection<string>.Count => _acquired ? _readOnlyAfter : _before;
+            public bool IsReadOnly => true;
+
+            public IEnumerator<string> GetEnumerator()
+            {
+                GetEnumeratorCalls++;
+                _acquired = true;
+                return new Enumerator(this);
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public bool Contains(string item) => false;
+            public void CopyTo(string[] array, int arrayIndex) => throw new NotSupportedException();
+            public void Add(string item) => throw new NotSupportedException();
+            public bool Remove(string item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+
+            private sealed class Enumerator : IEnumerator<string>
+            {
+                private readonly AcquisitionCountDriftCollection _owner;
+
+                public Enumerator(AcquisitionCountDriftCollection owner)
+                {
+                    _owner = owner;
+                }
+
+                public string Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        return "A";
+                    }
+                }
+
+                object IEnumerator.Current => Current;
+
+                public bool MoveNext()
+                {
+                    _owner.MoveNextCalls++;
+                    return false;
+                }
+
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
         }
 
         private sealed class OverrunThenThrowCollection : ICollection<string>
