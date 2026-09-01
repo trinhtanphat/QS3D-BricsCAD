@@ -176,7 +176,8 @@ jobs:
             -MetadataPath 'dist\QS3D-BricsCAD-V26\PACKAGE-METADATA.json' `
             -PluginPath 'dist\QS3D-BricsCAD-V26\QS3D.BricsCAD.V26.dll' `
             -CorePath 'dist\QS3D-BricsCAD-V26\QS3D.Core.dll' `
-            -ReleaseTag $env:RELEASE_TAG | Out-Null
+            -ReleaseTag $env:RELEASE_TAG `
+            -ExpectedSourceCommit $env:GITHUB_SHA | Out-Null
 
       - name: Authenticode-sign V26 executable payload
         if: ${{ inputs.sign_package }}
