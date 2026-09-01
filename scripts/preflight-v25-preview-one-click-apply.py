@@ -104,6 +104,25 @@ def main():
         '"Tải, xác minh SHA-256, đóng BricsCAD an toàn, cài đặt rồi tự mở lại BricsCAD."',
         "UpdateState.Error",
         "BorderStroke",
+        "Color.FromRgb(74, 222, 128)",
+        "private static readonly Brush Danger",
+        "Color.FromRgb(248, 113, 113)",
+        "private readonly Grid _progressHeader;",
+        "Visibility = Visibility.Collapsed",
+        "HideProgress();",
+        "_progressHeader.Visibility = Visibility.Visible;",
+        "_progressBar.Visibility = Visibility.Visible;",
+        "private void HideProgress()",
+        "Template = CreateCheckBoxTemplate()",
+        "private static ControlTemplate CreateCheckBoxTemplate()",
+        'new FrameworkElementFactory(typeof(Border), "Indicator")',
+        "CheckBox.IsCheckedProperty",
+        'checkGlyph.SetValue(TextBlock.TextProperty, "✓")',
+        "var latestComparable = string.IsNullOrWhiteSpace(latest)",
+        "var sameVersion = string.Equals(currentDisplay, latestComparable, StringComparison.OrdinalIgnoreCase);",
+        "var currentVersionBrush = sameVersion ? Success : Danger;",
+        "new Run(currentDisplay) { Foreground = currentVersionBrush",
+        "new Run(latest) { Foreground = Success",
     ):
         require(window, needle, window_rel)
 
@@ -118,15 +137,19 @@ def main():
         "File.Copy(_downloadedPackagePath, Assembly.GetExecutingAssembly().Location",
         "RevealDownloadedFile(",
         'Process.Start(new ProcessStartInfo("explorer.exe"',
+        'SetProgress("Sẵn sàng để tải và xác minh", 0, false)',
+        'SetProgress("Chờ package + checksum hợp lệ", 0, false)',
+        'SetProgress("Đang kiểm tra GitHub Releases…", 12, true)',
+        'SetProgress("Đang dùng phiên bản mới nhất", 100, false)',
     ):
         forbid(window, needle, window_rel)
 
     print(
         "PASS: verified V25 preview package is staged and re-hashed, adapter/Core replacement remains deferred until BricsCAD exits, "
-        "rollback is preserved, the exact BricsCAD executable is restarted after apply/recovery, downloader progress is surfaced, "
-        "preview capability copy stays coherent with the primary action, update-on-close defaults OFF unless persisted by the user, "
-        "GitHub 403/rate-limit responses are bounded and recover from a recent safe release snapshot when possible, "
-        "and Update Center presents highlighted version/progress state with valid shared V25/V26 WPF identifiers."
+        "rollback is preserved, the exact BricsCAD executable is restarted after apply/recovery, downloader progress is shown only during active apply/download states, "
+        "preview capability copy stays coherent with the primary action, update-on-close uses dark-theme checkbox chrome and defaults OFF unless persisted by the user, "
+        "current/latest versions use fresh green when equal and red-vs-green when different, GitHub 403/rate-limit responses remain bounded, "
+        "and Update Center keeps valid shared V25/V26 WPF identifiers."
     )
     return 0
 
