@@ -75,9 +75,9 @@ namespace QS3D.BricsCAD.V25
 
                 FinalizeSuccess(document, operation, reconcile);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                ReportFailure(document, "QS3DEDITSOURCE lỗi: " + ex.Message);
+                ReportFailure(document, "QS3DEDITSOURCE lỗi: không thể hoàn tất edit/reconcile source CAD đã chọn.");
             }
         }
 
@@ -273,23 +273,24 @@ namespace QS3D.BricsCAD.V25
             var status = "Edit Source " + operation.ToString().ToUpperInvariant() + ": đã edit + reconcile " + result.Elements +
                 " semantic source • regenerate " + result.Regenerated +
                 ". Generated dependents stale đã được invalidate/remove theo ownership; rebuild native output khi cần.";
-            try
-            {
-                PaletteCoordinator.RefreshProject();
-                document.Editor.Regen();
-                PaletteCoordinator.SetStatus(status);
-                document.Editor.WriteMessage("\nQS3D " + status);
-            }
-            catch (Exception uiError)
-            {
-                try { document.Editor.WriteMessage("\nQS3D " + status + " UI sync warning: " + uiError.Message); } catch { }
-            }
+            var uiSyncFailed = false;
+            try { PaletteCoordinator.RefreshProject(); } catch { uiSyncFailed = true; }
+            try { document.Editor.Regen(); } catch { uiSyncFailed = true; }
+            try { PaletteCoordinator.SetStatus(status); } catch { uiSyncFailed = true; }
+            try { document.Editor.WriteMessage("\nQS3D " + status); } catch { uiSyncFailed = true; }
+            if (uiSyncFailed)
+                TryWriteMessage(document, "\nQS3D Edit Source UI sync warning: edit + reconcile đã hoàn tất; một phần UI không thể đồng bộ.");
         }
 
         private static void ReportFailure(Document document, string message)
         {
             try { PaletteCoordinator.SetStatus(message); } catch { }
-            try { document.Editor.WriteMessage("\n" + message); } catch { }
+            TryWriteMessage(document, "\n" + message);
+        }
+
+        private static void TryWriteMessage(Document document, string message)
+        {
+            try { document.Editor.WriteMessage(message); } catch { }
         }
 
         private enum SourceEditOperation
