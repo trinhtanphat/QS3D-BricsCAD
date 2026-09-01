@@ -160,7 +160,10 @@ namespace QS3D.Core.Persistence
                     copy = preserved;
                     CopyZoneInto(zone, copy);
                 }
-                else copy = CloneZone(zone);
+                else
+                {
+                    copy = CloneZone(zone);
+                }
                 target.Zones.Add(copy);
             }
 
@@ -173,7 +176,10 @@ namespace QS3D.Core.Persistence
                     copy = preserved;
                     CopyFloorInto(floor, copy);
                 }
-                else copy = CloneFloor(floor);
+                else
+                {
+                    copy = CloneFloor(floor);
+                }
                 target.Floors.Add(copy);
             }
 
@@ -186,7 +192,10 @@ namespace QS3D.Core.Persistence
                     copy = preserved;
                     CopyFamilyInto(family, copy);
                 }
-                else copy = CloneFamily(family);
+                else
+                {
+                    copy = CloneFamily(family);
+                }
                 target.Families.Add(copy);
             }
 
@@ -199,7 +208,10 @@ namespace QS3D.Core.Persistence
                     copy = preserved;
                     CopyElementInto(element, copy);
                 }
-                else copy = CloneElement(element);
+                else
+                {
+                    copy = CloneElement(element);
+                }
                 target.Elements.Add(copy);
             }
 
@@ -386,7 +398,8 @@ namespace QS3D.Core.Persistence
         private static void RequireSupportedCount(int count, string label, int maximum)
         {
             if (count <= maximum) return;
-            throw new InvalidOperationException("Cannot snapshot a project whose " + label + " contains more than " + maximum + " entries.");
+            throw new InvalidOperationException(
+                "Cannot snapshot a project whose " + label + " contains more than " + maximum + " entries.");
         }
 
         private static void RequireNoNullEntries<T>(IEnumerable<T> values, string label) where T : class
@@ -413,7 +426,10 @@ namespace QS3D.Core.Persistence
             }
         }
 
-        private static ZoneDefinition CloneZone(ZoneDefinition source) => new ZoneDefinition(source.Id, source.Name);
+        private static ZoneDefinition CloneZone(ZoneDefinition source)
+        {
+            return new ZoneDefinition(source.Id, source.Name);
+        }
 
         private static void CopyZoneInto(ZoneDefinition source, ZoneDefinition target)
         {
@@ -422,7 +438,10 @@ namespace QS3D.Core.Persistence
             target.Name = source.Name;
         }
 
-        private static FloorDefinition CloneFloor(FloorDefinition source) => new FloorDefinition(source.Id, source.Name, source.ElevationM);
+        private static FloorDefinition CloneFloor(FloorDefinition source)
+        {
+            return new FloorDefinition(source.Id, source.Name, source.ElevationM);
+        }
 
         private static void CopyFloorInto(FloorDefinition source, FloorDefinition target)
         {
@@ -443,6 +462,7 @@ namespace QS3D.Core.Persistence
         {
             if (!string.Equals(source.Id, target.Id, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Cannot restore family state into a different family id.");
+
             _ = ProjectFamilyService.SnapshotProperties(source, "Snapshot", "snapshot materialization");
             target.Name = source.Name;
             target.Category = source.Category;
@@ -461,20 +481,26 @@ namespace QS3D.Core.Persistence
         {
             if (!string.Equals(source.Id, target.Id, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Cannot restore element state into a different element id.");
+
             target.Category = source.Category;
             target.FamilyId = source.FamilyId;
             target.FloorId = source.FloorId;
             target.ZoneId = source.ZoneId;
             target.DrawingFingerprint = source.DrawingFingerprint;
+
             target.SourceHandles.Clear();
             foreach (var handle in source.SourceHandles) target.SourceHandles.Add(handle);
+
             target.DependsOn.Clear();
             foreach (var dependency in source.DependsOn) target.DependsOn.Add(dependency);
+
             RequireCanonicalElementProperties(source);
             target.Properties.Clear();
             foreach (var property in source.Properties) target.Properties[property.Key] = property.Value;
+
             target.Quantities.Clear();
             foreach (var quantity in source.Quantities) target.SetQuantity(quantity.Key, quantity.Value);
+
             target.RestorePersistenceState(source.Dirty, source.UpdatedUtc);
         }
     }
