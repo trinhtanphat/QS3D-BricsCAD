@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace QS3D.BricsCAD.V25
 {
@@ -174,6 +175,10 @@ namespace QS3D.BricsCAD.V25
         private const string LocalBearerEnvironment = "QS3D_TUNNEL_MCP_AUTH";
         private const string ExpectedSha256Environment = "QS3D_OPENAI_TUNNEL_CLIENT_SHA256";
         private const int MaxDiagnosticLines = 80;
+        private const int WatchdogPeriodMilliseconds = 5000;
+        private const int UnreadyRestartThreshold = 3;
+        private const int RestartBackoffBaseSeconds = 5;
+        private const int RestartBackoffMaxSeconds = 120;
         private static readonly Regex TunnelIdRegex = new Regex(
             "^tunnel_[0-9a-f]{32}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex Sha256Regex = new Regex(
@@ -183,10 +188,17 @@ namespace QS3D.BricsCAD.V25
         private static readonly Regex AuthorizationRegex = new Regex(
             "(?i)(authorization\\s*[:=]\\s*)(bearer\\s+)?[^\\s,;]+", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly object Sync = new object();
+        private static readonly object WatchdogRecoverySync = new object();
         private static readonly List<string> DiagnosticLines = new List<string>();
 
         private static Process? _process;
+        private static Timer? _watchdogTimer;
         private static bool _stopping;
+        private static bool _watchdogEnabled;
+        private static int _watchdogBusy;
+        private static int _consecutiveUnready;
+        private static int _restartAttempt;
+        private static DateTime _nextRestartUtc = DateTime.MinValue;
         private static string _lastError = string.Empty;
         private static string _clientTrustSummary = string.Empty;
         private static int? _lastExitCode;
@@ -411,6 +423,8 @@ namespace QS3D.BricsCAD.V25
 
                 WriteTextVerified(AutoStartFile, "1");
                 McpTransportCoordinator.SetSelectedProvider(McpTransportProvider.OpenAiSecureTunnel);
+                ResetWatchdogFailures();
+                EnsureWatchdogStarted();
                 message = "OpenAI Secure MCP Tunnel đang khởi động. Runtime API key đã được xác minh và lưu bảo mật trong Windows Credential Manager; không ghi secret vào config/timeline. Chờ READY rồi kết nối ChatGPT bằng Connection = Tunnel.";
                 return true;
             }
@@ -438,23 +452,31 @@ namespace QS3D.BricsCAD.V25
         public static void Stop()
         {
             Exception? persistenceError = null;
-            try
+            lock (WatchdogRecoverySync)
             {
-                WriteTextVerified(AutoStartFile, "0");
+                StopWatchdog();
+                try
+                {
+                    WriteTextVerified(AutoStartFile, "0");
+                }
+                catch (Exception ex)
+                {
+                    persistenceError = ex;
+                    SetLastError("Không lưu/xác minh được trạng thái autostart=OFF: " + ex.Message);
+                }
+                StopProcessOnly();
             }
-            catch (Exception ex)
-            {
-                persistenceError = ex;
-                SetLastError("Không lưu/xác minh được trạng thái autostart=OFF: " + ex.Message);
-            }
-            StopProcessOnly();
             if (persistenceError != null)
                 throw new InvalidOperationException("OpenAI Secure MCP Tunnel đã dừng nhưng không lưu được trạng thái autostart=OFF.", persistenceError);
         }
 
         public static void StopForHostShutdown()
         {
-            StopProcessOnly();
+            lock (WatchdogRecoverySync)
+            {
+                StopWatchdog();
+                StopProcessOnly();
+            }
         }
 
         public static void OpenPlatformTunnels() => OpenUrl(PlatformTunnelsUrl);
@@ -551,6 +573,150 @@ namespace QS3D.BricsCAD.V25
             catch { return false; }
         }
 
+        private static void EnsureWatchdogStarted()
+        {
+            lock (Sync)
+            {
+                _watchdogEnabled = true;
+                if (_watchdogTimer != null) return;
+                _watchdogTimer = new Timer(WatchdogTick, null, WatchdogPeriodMilliseconds, WatchdogPeriodMilliseconds);
+            }
+        }
+
+        private static void StopWatchdog()
+        {
+            Timer? timer;
+            lock (Sync)
+            {
+                _watchdogEnabled = false;
+                timer = _watchdogTimer;
+                _watchdogTimer = null;
+                _consecutiveUnready = 0;
+                _restartAttempt = 0;
+                _nextRestartUtc = DateTime.MinValue;
+            }
+            if (timer != null)
+            {
+                try { timer.Dispose(); } catch { }
+            }
+        }
+
+        private static void ResetWatchdogFailures()
+        {
+            lock (Sync)
+            {
+                _consecutiveUnready = 0;
+                _restartAttempt = 0;
+                _nextRestartUtc = DateTime.MinValue;
+            }
+        }
+
+        private static void WatchdogTick(object? state)
+        {
+            if (Interlocked.CompareExchange(ref _watchdogBusy, 1, 0) != 0) return;
+            try
+            {
+                if (!ShouldWatchdogRun()) return;
+
+                if (IsRunning)
+                {
+                    if (IsReady)
+                    {
+                        ResetWatchdogFailures();
+                        return;
+                    }
+
+                    lock (Sync)
+                    {
+                        _consecutiveUnready++;
+                        if (_consecutiveUnready < UnreadyRestartThreshold) return;
+                        if (DateTime.UtcNow < _nextRestartUtc) return;
+                    }
+                    TryRecoverTunnel("persistent unready");
+                    return;
+                }
+
+                lock (Sync)
+                {
+                    _consecutiveUnready = UnreadyRestartThreshold;
+                    if (DateTime.UtcNow < _nextRestartUtc) return;
+                }
+                TryRecoverTunnel("unexpected process exit");
+            }
+            catch (Exception ex)
+            {
+                lock (Sync)
+                {
+                    _restartAttempt = Math.Min(_restartAttempt + 1, 30);
+                    _nextRestartUtc = DateTime.UtcNow + ComputeRestartBackoff(_restartAttempt);
+                }
+                SetLastError("OpenAI MCP tunnel watchdog error: " + ex.Message);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _watchdogBusy, 0);
+            }
+        }
+
+        private static bool ShouldWatchdogRun()
+        {
+            lock (Sync)
+            {
+                if (!_watchdogEnabled || _stopping) return false;
+            }
+            if (ReadText(AutoStartFile) != "1") return false;
+            if (McpTransportCoordinator.SelectedProvider != McpTransportProvider.OpenAiSecureTunnel) return false;
+            return IsConfigured;
+        }
+
+        private static void TryRecoverTunnel(string reason)
+        {
+            if (!ShouldWatchdogRun()) return;
+            lock (WatchdogRecoverySync)
+            {
+                if (!ShouldWatchdogRun()) return;
+                StopProcessOnly();
+                if (!ShouldWatchdogRun()) return;
+
+                string message;
+                bool restarted;
+                try
+                {
+                    restarted = Start(SavedTunnelId, string.Empty, out message);
+                }
+                catch (Exception ex)
+                {
+                    restarted = false;
+                    message = ex.Message;
+                }
+
+                if (restarted)
+                {
+                    ResetWatchdogFailures();
+                    return;
+                }
+
+                TimeSpan backoff;
+                lock (Sync)
+                {
+                    _consecutiveUnready = UnreadyRestartThreshold;
+                    _restartAttempt = Math.Min(_restartAttempt + 1, 30);
+                    backoff = ComputeRestartBackoff(_restartAttempt);
+                    _nextRestartUtc = DateTime.UtcNow + backoff;
+                }
+                SetLastError("OpenAI MCP tunnel self-heal failed after " + reason + "; retry in "
+                             + ((int)backoff.TotalSeconds).ToString() + "s: " + message);
+            }
+        }
+
+        private static TimeSpan ComputeRestartBackoff(int attempt)
+        {
+            var boundedAttempt = Math.Max(1, Math.Min(attempt, 16));
+            var exponent = Math.Min(boundedAttempt - 1, 10);
+            var seconds = RestartBackoffBaseSeconds * (1 << exponent);
+            return TimeSpan.FromSeconds(Math.Min(RestartBackoffMaxSeconds, seconds));
+        }
+
         private static void HandleDiagnosticLine(Process process, string stream, string? line)
         {
             if (string.IsNullOrWhiteSpace(line)) return;
@@ -578,6 +744,7 @@ namespace QS3D.BricsCAD.V25
                 try { _lastExitCode = process.ExitCode; } catch { _lastExitCode = null; }
                 if (!intentional)
                 {
+                    _consecutiveUnready = UnreadyRestartThreshold;
                     var exit = _lastExitCode.HasValue ? _lastExitCode.Value.ToString() : "unknown";
                     var tail = DiagnosticTailUnsafe(4);
                     _lastError = "OpenAI tunnel-client đã dừng (exit=" + exit + ")."
