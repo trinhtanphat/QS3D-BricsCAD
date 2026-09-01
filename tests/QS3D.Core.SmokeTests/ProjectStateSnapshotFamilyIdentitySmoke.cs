@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             DetachedCopyNeverAliasesCanonicalFamilies();
             ForeignTargetRestoreNeverAliasesCapturedFamilies();
             RejectsNonCanonicalElementRelationIdentities();
+            PreservesRepairableDuplicateRelations();
             PreservesCanonicalUnicodeElementRelations();
         }
 
@@ -118,13 +119,11 @@ namespace QS3D.Core.SmokeTests
             ExpectRejectedRelation(true, "   ", "blank source handle");
             ExpectRejectedRelation(true, "A\t1", "control-bearing source handle");
             ExpectRejectedRelation(true, "A\uD8001", "malformed source handle");
-            ExpectRejectedDuplicate(true, "A1", "a1", "case-insensitive duplicate source handle");
 
             ExpectRejectedRelation(false, " HOST ", "padded dependency");
             ExpectRejectedRelation(false, "\t", "blank dependency");
             ExpectRejectedRelation(false, "HOST\n1", "control-bearing dependency");
             ExpectRejectedRelation(false, "HOST\uD800", "malformed dependency");
-            ExpectRejectedDuplicate(false, "HOST", "host", "case-insensitive duplicate dependency");
         }
 
         private static void ExpectRejectedRelation(bool sourceHandle, string value, string label)
@@ -146,15 +145,19 @@ namespace QS3D.Core.SmokeTests
             Require(project.ChangeVersion == originalChangeVersion && project.UpdatedUtc == originalProjectUpdatedUtc, label + " rejection changed project persistence state.");
         }
 
-        private static void ExpectRejectedDuplicate(bool sourceHandle, string first, string second, string label)
+        private static void PreservesRepairableDuplicateRelations()
         {
-            var project = NewRelationProject(label);
-            var values = sourceHandle ? project.Elements[0].SourceHandles : project.Elements[0].DependsOn;
-            values.Add(first);
-            values.Add(second);
-            ExpectInvalidOperation(() => ProjectStateSnapshot.Capture(project), label + " was accepted by snapshot capture.");
-            ExpectInvalidOperation(() => ProjectStateSnapshot.CreateDetachedCopy(project), label + " was accepted by detached copy.");
-            Require(values.Count == 2 && values[0] == first && values[1] == second, label + " rejection mutated relation source state.");
+            var project = NewRelationProject("repairable-duplicates");
+            var element = project.Elements[0];
+            element.SourceHandles.Add("A1");
+            element.SourceHandles.Add("a1");
+            element.DependsOn.Add("HOST");
+            element.DependsOn.Add("host");
+
+            var detached = ProjectStateSnapshot.CreateDetachedCopy(project);
+            var copy = detached.FindElement("E1") ?? throw new Exception("Detached snapshot lost the repairable duplicate fixture element.");
+            Require(copy.SourceHandles.Count == 2 && copy.SourceHandles[0] == "A1" && copy.SourceHandles[1] == "a1", "Detached snapshot changed repairable duplicate source handles.");
+            Require(copy.DependsOn.Count == 2 && copy.DependsOn[0] == "HOST" && copy.DependsOn[1] == "host", "Detached snapshot changed repairable duplicate dependencies.");
         }
 
         private static void PreservesCanonicalUnicodeElementRelations()
