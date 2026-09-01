@@ -27,8 +27,10 @@ namespace QS3D.Core.Services
             var enumerationVersion = _changeVersion;
             var next = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var inputCount = 0;
+            RequireStableKnownCount(ids, knownCount);
             using (var enumerator = ids.GetEnumerator())
             {
+                RequireStableKnownCount(ids, knownCount);
                 while (true)
                 {
                     RequireStableKnownCount(ids, knownCount);
