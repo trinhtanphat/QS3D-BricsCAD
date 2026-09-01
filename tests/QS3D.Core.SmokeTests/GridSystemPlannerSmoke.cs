@@ -12,6 +12,9 @@ namespace QS3D.Core.SmokeTests
             RadialSystemProducesRayRingIntersections();
             InvalidRectangularAxesFailClosed();
             DuplicateRadialAnglesFailClosed();
+            StationIdentityAdmissionFailsClosed();
+            StationIdentityControlsRemainCanonical();
+            DuplicateStationIdentityRemainsCaseInsensitive();
             PrecisionCollapsedStationOffsetFailsClosed();
             RepresentableLargeStationOffsetRemainsExact();
         }
@@ -105,6 +108,40 @@ namespace QS3D.Core.SmokeTests
                     new GridAngularStation("R2", Math.PI * 2d)
                 },
                 Rings = new[] { new GridRadialStation("C1", 2d) }
+            }));
+        }
+
+        private static void StationIdentityAdmissionFailsClosed()
+        {
+            Throws<ArgumentException>(() => new GridLinearStation(" U-1", 0d));
+            Throws<ArgumentException>(() => new GridAngularStation("RAY\t1", 0d));
+            Throws<ArgumentException>(() => new GridRadialStation("RING-\uD800", 1d));
+            Throws<ArgumentException>(() => new GridLinearStation("U-\uDC00", 0d));
+        }
+
+        private static void StationIdentityControlsRemainCanonical()
+        {
+            var linear = new GridLinearStation("U-\U0001F680", 0d);
+            var angular = new GridAngularStation("RAY-\U0001F680", 0d);
+            var radial = new GridRadialStation("RING-\U0001F680", 1d);
+            Require(linear.ElementId == "U-\U0001F680", "Linear Grid identity must preserve valid supplementary Unicode exactly.");
+            Require(angular.ElementId == "RAY-\U0001F680", "Angular Grid identity must preserve valid supplementary Unicode exactly.");
+            Require(radial.ElementId == "RING-\U0001F680", "Radial Grid identity must preserve valid supplementary Unicode exactly.");
+        }
+
+        private static void DuplicateStationIdentityRemainsCaseInsensitive()
+        {
+            Throws<InvalidOperationException>(() => GridSystemPlanner.PlanRectangular(new RectangularGridSystemInput
+            {
+                OriginM = new Point2(0d, 0d),
+                UAxis = new Point2(1d, 0d),
+                VAxis = new Point2(0d, 1d),
+                UMinM = 0d,
+                UMaxM = 5d,
+                VMinM = 0d,
+                VMaxM = 5d,
+                UStations = new[] { new GridLinearStation("GRID-A", 1d) },
+                VStations = new[] { new GridLinearStation("grid-a", 2d) }
             }));
         }
 
