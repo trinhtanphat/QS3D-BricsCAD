@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             OverYieldFailsAtFirstUnexpectedItem();
             UnderYieldFailsAfterTraversal();
             ExactKnownCountTraversalRemainsAccepted();
+            CurrentInducedCountDriftFailsBeforeItemSemantics();
             CountDriftAfterExactTraversalFailsClosed();
             PostTraversalInterfaceConflictFailsClosed();
             HonestMultiInterfaceCountRemainsAccepted();
@@ -61,6 +62,20 @@ namespace QS3D.Core.SmokeTests
 
             Equal(2, source.YieldedCount, "Exact counted input must enumerate every declared item once.");
             Equal(2, book.Items.Count, "Exact known Count/traversal agreement must remain accepted.");
+        }
+
+        private static void CurrentInducedCountDriftFailsBeforeItemSemantics()
+        {
+            var source = new CurrentCountDriftingCollection(initialCount: 1, countAfterCurrent: 2);
+            var error = Capture<InvalidOperationException>(
+                () => new RateBook("BOOK-KNOWN-COUNT-CURRENT-DRIFT", source));
+
+            Equal(1, source.CurrentReads, "RateBook must read the admitted Current exactly once before rejecting Count drift.");
+            Equal(2, source.Count, "Current probe must expose its mutated Count immediately after Current.");
+            Contains(
+                "known count changed during traversal",
+                error.Message,
+                "Current-induced Count drift must win before null or item publication semantics.");
         }
 
         private static void CountDriftAfterExactTraversalFailsClosed()
@@ -174,6 +189,54 @@ namespace QS3D.Core.SmokeTests
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class CurrentCountDriftingCollection : IReadOnlyCollection<RateItem>
+        {
+            private readonly int _countAfterCurrent;
+            private readonly RateItem _item = Item(0);
+
+            internal CurrentCountDriftingCollection(int initialCount, int countAfterCurrent)
+            {
+                Count = initialCount;
+                _countAfterCurrent = countAfterCurrent;
+            }
+
+            public int Count { get; private set; }
+            internal int CurrentReads { get; private set; }
+
+            public IEnumerator<RateItem> GetEnumerator() => new Enumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private sealed class Enumerator : IEnumerator<RateItem>
+            {
+                private readonly CurrentCountDriftingCollection _owner;
+                private bool _moved;
+
+                internal Enumerator(CurrentCountDriftingCollection owner) => _owner = owner;
+
+                public RateItem Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        _owner.Count = _owner._countAfterCurrent;
+                        return _owner._item;
+                    }
+                }
+
+                object IEnumerator.Current => Current;
+
+                public bool MoveNext()
+                {
+                    if (_moved) return false;
+                    _moved = true;
+                    return true;
+                }
+
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
         }
 
         private sealed class CountDriftingReadOnlyCollection : IReadOnlyCollection<RateItem>
