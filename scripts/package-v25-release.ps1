@@ -8,6 +8,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $packer = Join-Path $PSScriptRoot 'package-v25.ps1'
 $metadataPath = Join-Path $root 'dist\QS3D-BricsCAD-V25\PACKAGE-METADATA.json'
 $zipPath = Join-Path $root 'dist\QS3D-BricsCAD-V25.zip'
+$identityValidator = Join-Path $PSScriptRoot 'assert-v25-release-package-identity.ps1'
 
 function Invoke-GitChecked {
     param([Parameter(Mandatory = $true)][string[]]$Arguments)
@@ -42,6 +43,9 @@ Assert-CleanRepository -Phase 'before package creation'
 if (-not (Test-Path -LiteralPath $packer -PathType Leaf)) {
     throw "Missing canonical package helper: $packer"
 }
+if (-not (Test-Path -LiteralPath $identityValidator -PathType Leaf)) {
+    throw "Missing canonical V25 package identity validator: $identityValidator"
+}
 & $packer
 if ($LASTEXITCODE -ne 0) {
     throw "Canonical V25 package helper failed with exit code $LASTEXITCODE."
@@ -59,18 +63,13 @@ if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) {
 if (-not (Test-Path -LiteralPath $zipPath -PathType Leaf)) {
     throw "Canonical package ZIP was not created: $zipPath"
 }
-try {
-    $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+
+$identity = & $identityValidator -MetadataPath $metadataPath -ExpectedSourceCommit $headBefore
+if ($null -eq $identity) {
+    throw 'Canonical V25 package identity validator returned no admitted metadata identity.'
 }
-catch {
-    throw "Canonical package metadata is unreadable: $($_.Exception.Message)"
-}
-$metadataCommit = ([string]$metadata.gitCommit).Trim().ToLowerInvariant()
-if ($metadataCommit -notmatch '^[0-9a-f]{40}$') {
-    throw "PACKAGE-METADATA gitCommit is missing or invalid: '$metadataCommit'."
-}
-if (-not [string]::Equals($metadataCommit, $headBefore, [StringComparison]::OrdinalIgnoreCase)) {
-    throw "PACKAGE-METADATA gitCommit $metadataCommit does not match the exact clean package source HEAD $headBefore."
+if (-not [string]::Equals([string]$identity.SourceCommit, $headBefore, [StringComparison]::Ordinal)) {
+    throw "Admitted V25 package source commit $($identity.SourceCommit) does not match exact clean package source HEAD $headBefore."
 }
 
 Write-Host "Release package provenance verified: $headBefore"
