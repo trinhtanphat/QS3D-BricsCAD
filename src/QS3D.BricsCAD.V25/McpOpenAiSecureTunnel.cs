@@ -173,6 +173,7 @@ namespace QS3D.BricsCAD.V25
         private const string ControlPlaneApiKeyEnvironment = "CONTROL_PLANE_API_KEY";
         private const string OpenAiApiKeyEnvironment = "OPENAI_API_KEY";
         private const string LocalBearerEnvironment = "QS3D_TUNNEL_MCP_AUTH";
+        private const string LocalTunnelAuthorizationHeader = "X-QS3D-MCP-Local-Authorization";
         private const string ExpectedSha256Environment = "QS3D_OPENAI_TUNNEL_CLIENT_SHA256";
         private const int MaxDiagnosticLines = 80;
         private const int WatchdogPeriodMilliseconds = 5000;
@@ -548,10 +549,10 @@ namespace QS3D.BricsCAD.V25
             yaml.AppendLine("    - channel: main");
             yaml.AppendLine("      url: " + YamlQuote(localEndpoint.ToString()));
             yaml.AppendLine("  extra_headers:");
-            yaml.AppendLine("    Authorization: env:" + LocalBearerEnvironment);
+            yaml.AppendLine("    " + LocalTunnelAuthorizationHeader + ": env:" + LocalBearerEnvironment);
             yaml.AppendLine("    Content-Type: application/json");
             yaml.AppendLine("  discovery_extra_headers:");
-            yaml.AppendLine("    Authorization: env:" + LocalBearerEnvironment);
+            yaml.AppendLine("    " + LocalTunnelAuthorizationHeader + ": env:" + LocalBearerEnvironment);
             File.WriteAllText(ConfigPath, yaml.ToString(), new UTF8Encoding(false));
         }
 
