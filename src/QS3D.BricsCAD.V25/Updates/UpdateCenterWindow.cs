@@ -16,7 +16,8 @@ namespace QS3D.BricsCAD.V25.Updates
         private static readonly Brush TextMuted = new SolidColorBrush(Color.FromRgb(133, 148, 171));
         private static readonly Brush Accent = new SolidColorBrush(Color.FromRgb(75, 128, 238));
         private static readonly Brush AccentSoft = new SolidColorBrush(Color.FromRgb(125, 164, 248));
-        private static readonly Brush Success = new SolidColorBrush(Color.FromRgb(88, 201, 151));
+        private static readonly Brush Success = new SolidColorBrush(Color.FromRgb(74, 222, 128));
+        private static readonly Brush Danger = new SolidColorBrush(Color.FromRgb(248, 113, 113));
         private static readonly Brush Warning = new SolidColorBrush(Color.FromRgb(245, 184, 83));
         private static readonly Brush CardBackground = new SolidColorBrush(Color.FromRgb(31, 38, 49));
         private static readonly Brush PanelBackground = new SolidColorBrush(Color.FromRgb(19, 24, 32));
@@ -28,6 +29,7 @@ namespace QS3D.BricsCAD.V25.Updates
         private readonly TextBlock _runtimeIdentity;
         private readonly TextBlock _detail;
         private readonly TextBox _notes;
+        private readonly Grid _progressHeader;
         private readonly ProgressBar _progressBar;
         private readonly TextBlock _progressStage;
         private readonly TextBlock _progressPercent;
@@ -123,12 +125,16 @@ namespace QS3D.BricsCAD.V25.Updates
             stateStack.Children.Add(_status);
             stateStack.Children.Add(_detail);
 
-            var progressHeader = new Grid { Margin = new Thickness(0, 15, 0, 6) };
-            progressHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            progressHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            _progressHeader = new Grid
+            {
+                Margin = new Thickness(0, 15, 0, 6),
+                Visibility = Visibility.Collapsed
+            };
+            _progressHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            _progressHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             _progressStage = new TextBlock
             {
-                Text = "Sẵn sàng",
+                Text = "",
                 Foreground = TextSecondary,
                 FontSize = 12,
                 FontWeight = FontWeights.Medium,
@@ -136,7 +142,7 @@ namespace QS3D.BricsCAD.V25.Updates
             };
             _progressPercent = new TextBlock
             {
-                Text = "0%",
+                Text = "",
                 Foreground = AccentSoft,
                 FontSize = 12,
                 FontWeight = FontWeights.SemiBold,
@@ -144,9 +150,9 @@ namespace QS3D.BricsCAD.V25.Updates
             };
             Grid.SetColumn(_progressStage, 0);
             Grid.SetColumn(_progressPercent, 1);
-            progressHeader.Children.Add(_progressStage);
-            progressHeader.Children.Add(_progressPercent);
-            stateStack.Children.Add(progressHeader);
+            _progressHeader.Children.Add(_progressStage);
+            _progressHeader.Children.Add(_progressPercent);
+            stateStack.Children.Add(_progressHeader);
 
             _progressBar = new ProgressBar
             {
@@ -157,7 +163,8 @@ namespace QS3D.BricsCAD.V25.Updates
                 Background = new SolidColorBrush(Color.FromRgb(46, 55, 70)),
                 Foreground = Accent,
                 BorderThickness = new Thickness(0),
-                IsIndeterminate = false
+                IsIndeterminate = false,
+                Visibility = Visibility.Collapsed
             };
             stateStack.Children.Add(_progressBar);
 
@@ -167,8 +174,12 @@ namespace QS3D.BricsCAD.V25.Updates
                 IsChecked = UpdatePreferences.InstallOnExit,
                 Foreground = TextPrimary,
                 FontWeight = FontWeights.SemiBold,
+                FontSize = 12.5,
                 Margin = new Thickness(0, 15, 0, 0),
-                VerticalContentAlignment = VerticalAlignment.Center
+                Padding = new Thickness(0),
+                VerticalContentAlignment = VerticalAlignment.Center,
+                FocusVisualStyle = null,
+                Template = CreateCheckBoxTemplate()
             };
             _updateOnCloseCheckBox.Checked += (_, __) => PersistUpdateOnClose(true);
             _updateOnCloseCheckBox.Unchecked += (_, __) => PersistUpdateOnClose(false);
@@ -178,7 +189,7 @@ namespace QS3D.BricsCAD.V25.Updates
             {
                 Foreground = TextMuted,
                 FontSize = 11,
-                Margin = new Thickness(22, 4, 0, 0),
+                Margin = new Thickness(26, 5, 0, 0),
                 TextWrapping = TextWrapping.Wrap
             };
             RefreshUpdateOnCloseHelp();
@@ -292,6 +303,7 @@ namespace QS3D.BricsCAD.V25.Updates
 
             _status.Text = result.Message;
             _detail.Text = result.Detail;
+            HideProgress();
 
 #if !BRICSCAD_V26
             if (hasPreviewDownload && !_previewDownloading && !previewScheduled)
@@ -344,25 +356,16 @@ namespace QS3D.BricsCAD.V25.Updates
                 _updateButton.ToolTip = IsUpdateOnCloseEnabled()
                     ? "Tải và xác minh ngay; chỉ cài sau khi bạn tự đóng BricsCAD. BricsCAD sẽ tự mở lại."
                     : "Tải package preview, xác minh SHA-256, stage an toàn, đóng BricsCAD, cài rồi tự mở lại.";
-                SetProgress("Sẵn sàng để tải và xác minh", 0, false);
             }
             else if (hasManualRelease)
             {
                 _updateButton.Content = "Cài thủ công";
                 _updateButton.ToolTip = "Mở GitHub Release để tải bản mới. Release này chưa có package + checksum đủ điều kiện cho tải trực tiếp.";
-                SetProgress("Chờ package + checksum hợp lệ", 0, false);
             }
             else
             {
                 _updateButton.Content = "Cập nhật ngay";
                 _updateButton.ToolTip = result.CanAutoInstall ? "Xác minh và lên lịch cập nhật an toàn." : "Chưa có bản cập nhật tự động hợp lệ.";
-                if (!_previewDownloading)
-                {
-                    if (checking) SetProgress("Đang kiểm tra GitHub Releases…", 12, true);
-                    else if (result.State == UpdateState.UpToDate) SetProgress("Đang dùng phiên bản mới nhất", 100, false);
-                    else if (result.State == UpdateState.Error) SetProgress("Kiểm tra cập nhật gặp lỗi", 0, false);
-                    else SetProgress("Sẵn sàng", 0, false);
-                }
             }
         }
 
@@ -541,17 +544,33 @@ namespace QS3D.BricsCAD.V25.Updates
         private void SetProgress(string stage, int percent, bool indeterminate)
         {
             var bounded = Math.Max(0, Math.Min(100, percent));
+            _progressHeader.Visibility = Visibility.Visible;
+            _progressBar.Visibility = Visibility.Visible;
             _progressStage.Text = stage ?? string.Empty;
             _progressBar.IsIndeterminate = indeterminate;
             if (!indeterminate) _progressBar.Value = bounded;
             _progressPercent.Text = indeterminate ? "…" : bounded.ToString(System.Globalization.CultureInfo.InvariantCulture) + "%";
         }
 
+        private void HideProgress()
+        {
+            _progressHeader.Visibility = Visibility.Collapsed;
+            _progressBar.Visibility = Visibility.Collapsed;
+            _progressBar.IsIndeterminate = false;
+            _progressBar.Value = 0;
+            _progressStage.Text = string.Empty;
+            _progressPercent.Text = string.Empty;
+        }
+
         private void ApplyVersionHighlights(string currentDisplay, string latest)
         {
+            var latestComparable = string.IsNullOrWhiteSpace(latest) || latest == "—" ? latest : ToDisplayVersion(latest);
+            var sameVersion = string.Equals(currentDisplay, latestComparable, StringComparison.OrdinalIgnoreCase);
+            var currentVersionBrush = sameVersion ? Success : Danger;
+
             _versions.Inlines.Clear();
             _versions.Inlines.Add(new Run("Phiên bản hiện tại ") { Foreground = TextMuted });
-            _versions.Inlines.Add(new Run(currentDisplay) { Foreground = Warning, FontWeight = FontWeights.Bold });
+            _versions.Inlines.Add(new Run(currentDisplay) { Foreground = currentVersionBrush, FontWeight = FontWeights.Bold });
             _versions.Inlines.Add(new Run("   →   ") { Foreground = TextMuted });
             _versions.Inlines.Add(new Run("Phiên bản mới ") { Foreground = TextMuted });
             _versions.Inlines.Add(new Run(latest) { Foreground = Success, FontWeight = FontWeights.Bold });
@@ -620,6 +639,57 @@ namespace QS3D.BricsCAD.V25.Updates
                 FocusVisualStyle = null,
                 Template = CreateButtonTemplate(primary, normal)
             };
+        }
+
+        private static ControlTemplate CreateCheckBoxTemplate()
+        {
+            var root = new FrameworkElementFactory(typeof(StackPanel), "Root");
+            root.SetValue(StackPanel.OrientationProperty, Orientation.Horizontal);
+            root.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+
+            var indicator = new FrameworkElementFactory(typeof(Border), "Indicator");
+            indicator.SetValue(FrameworkElement.WidthProperty, 18d);
+            indicator.SetValue(FrameworkElement.HeightProperty, 18d);
+            indicator.SetValue(Border.BackgroundProperty, PanelBackground);
+            indicator.SetValue(Border.BorderBrushProperty, BorderStroke);
+            indicator.SetValue(Border.BorderThicknessProperty, new Thickness(1));
+            indicator.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
+            indicator.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+
+            var checkGlyph = new FrameworkElementFactory(typeof(TextBlock), "CheckGlyph");
+            checkGlyph.SetValue(TextBlock.TextProperty, "✓");
+            checkGlyph.SetValue(TextBlock.ForegroundProperty, PanelBackground);
+            checkGlyph.SetValue(TextBlock.FontFamilyProperty, new FontFamily("Segoe UI Symbol"));
+            checkGlyph.SetValue(TextBlock.FontSizeProperty, 12d);
+            checkGlyph.SetValue(TextBlock.FontWeightProperty, FontWeights.Bold);
+            checkGlyph.SetValue(TextBlock.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            checkGlyph.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
+            checkGlyph.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
+            indicator.AppendChild(checkGlyph);
+            root.AppendChild(indicator);
+
+            var contentPresenter = new FrameworkElementFactory(typeof(ContentPresenter));
+            contentPresenter.SetValue(ContentPresenter.ContentSourceProperty, "Content");
+            contentPresenter.SetValue(FrameworkElement.MarginProperty, new Thickness(8, 0, 0, 0));
+            contentPresenter.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            root.AppendChild(contentPresenter);
+
+            var template = new ControlTemplate(typeof(CheckBox)) { VisualTree = root };
+
+            var checkedTrigger = new Trigger { Property = CheckBox.IsCheckedProperty, Value = true };
+            checkedTrigger.Setters.Add(new Setter(Border.BackgroundProperty, Success, "Indicator"));
+            checkedTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, Success, "Indicator"));
+            checkedTrigger.Setters.Add(new Setter(UIElement.VisibilityProperty, Visibility.Visible, "CheckGlyph"));
+            template.Triggers.Add(checkedTrigger);
+
+            var hoverTrigger = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
+            hoverTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, AccentSoft, "Indicator"));
+            template.Triggers.Add(hoverTrigger);
+
+            var disabledTrigger = new Trigger { Property = UIElement.IsEnabledProperty, Value = false };
+            disabledTrigger.Setters.Add(new Setter(UIElement.OpacityProperty, 0.45, "Root"));
+            template.Triggers.Add(disabledTrigger);
+            return template;
         }
 
         private static ControlTemplate CreateButtonTemplate(bool primary, Brush normal)
