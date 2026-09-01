@@ -9,14 +9,12 @@ DIRECT = SRC / "McpCadDirectModelRuntime.cs"
 SERVER = SRC / "McpEmbeddedServerV2.cs"
 
 
-def between(text: str, start: str, end: str) -> str:
-    start_index = text.find(start)
-    if start_index < 0:
+def method_block(source: str, signature: str) -> str:
+    start = source.find(signature)
+    if start < 0:
         return ""
-    end_index = text.find(end, start_index + len(start))
-    if end_index < 0:
-        return text[start_index:]
-    return text[start_index:end_index]
+    next_method = source.find("\n        private static ", start + len(signature))
+    return source[start:] if next_method < 0 else source[start:next_method]
 
 
 def require(errors: list[str], text: str, tokens: tuple[str, ...], label: str) -> None:
@@ -37,35 +35,24 @@ def main() -> int:
     server = SERVER.read_text(encoding="utf-8")
     errors: list[str] = []
 
-    run_block = between(runtime, "private static string RunCadCommandSequence", "private static string RunQs3dCommand")
-    save_block = between(runtime, "private static string SaveActiveDocument", "private static string RunQs3dCommand")
-    active_document_block = between(runtime, "private static string BuildActiveDocumentJson", "private static string BuildSelectionJson")
-    call_block = between(runtime, "public static string Call", "private static string Mutation")
-    direct_command_block = between(direct, "internal static string CallCadCommandSequence", "private static string CreateBox")
-    extrude_block = between(direct, "private static string Extrude", "private static string Boolean")
-    boolean_block = between(direct, "private static string Boolean", "private static string PlaceSingleFooting")
-    direct_save_block = between(direct, "private static string Save()", "private static string NormalizeExtrudeInputs")
-    dbmod_block = between(direct, "private static void WaitForCleanDbmod", "private static void RequireConfirmedMutation")
+    run_block = method_block(runtime, "private static string RunCadCommandSequence")
+    active_document_block = method_block(runtime, "private static string BuildActiveDocumentJson")
+    call_block = method_block(runtime, "public static string Call")
+    direct_route_block = method_block(direct, "internal static bool CanHandleCadCommandSequence")
+    direct_command_block = method_block(direct, "internal static string CallCadCommandSequence")
+    extrude_block = method_block(direct, "private static string Extrude")
+    boolean_block = method_block(direct, "private static string Boolean")
+    direct_save_block = method_block(direct, "private static string Save()")
+    direct_save_as_block = method_block(direct, "private static string SaveAs")
+    dbmod_block = method_block(direct, "private static void WaitForCleanDbmod")
 
     require(errors, run_block, (
-        'if (command == "QSAVE") return SaveActiveDocument(document);',
+        'var command = NormalizeCadCommandToken(',
         'var inputs = NormalizeCommandInputs(',
-    ), "legacy QSAVE fallback")
-
-    require(errors, save_block, (
-        'Path.IsPathRooted(filename)',
-        'SafeSystemVariable("CMDACTIVE")',
-        'EnsureCurrentMutationRunning();',
-        'using (document.LockDocument())',
-        'document.Database.Save();',
-        'SafeSystemVariable("DBMOD")',
-        'dbmod != "0"',
-        '\\"completed\\":true',
-        '\\"saved\\":true',
-        'completed=true',
-    ), "legacy synchronous QSAVE fallback guard")
-    if "SendStringToExecute" in save_block:
-        errors.append("legacy QSAVE fallback must not queue a native command with SendStringToExecute")
+    ), "legacy generic command fallback")
+    if ('SaveActiveDocument(' in run_block
+            and 'McpCadDirectModelRuntime.CanHandleCadCommandSequence(args)' not in call_block):
+        errors.append("legacy generic command fallback must not own QSAVE unless canonical direct command routing intercepts it first")
 
     require(errors, active_document_block, (
         'var hasLocalPath = Path.IsPathRooted(filename);',
@@ -84,6 +71,11 @@ def main() -> int:
     ), "canonical mutation dispatch")
     if "internal static void EnsureCurrentMutationRunning()" not in runtime:
         errors.append("shared mutation epoch verifier is not exposed internally to the bounded direct runtime")
+
+    require(errors, direct_route_block, (
+        'string.Equals(command, "EXTRUDE", StringComparison.Ordinal)',
+        'string.Equals(command, "QSAVE", StringComparison.Ordinal)',
+    ), "direct command ownership")
 
     require(errors, direct, (
         '"cad_create_box"',
@@ -125,11 +117,20 @@ def main() -> int:
     require(errors, direct_save_block, (
         'document.Database.SaveAs(filename, DwgVersion.Current);',
         'WaitForCleanDbmod();',
-        'document.Database.SaveAs(fullPath, DwgVersion.Current);',
         'route=SaveAs-current-path',
     ), "save/reopen regression guard")
     if 'document.Database.Save();' in direct_save_block:
         errors.append("direct cad_save must not use Database.Save(), which regressed after close/reopen with eCantOpenFile")
+
+    require(errors, direct_save_as_block, (
+        'EnsureWritableDirectory(directory);',
+        'document.Database.SaveAs(fullPath, DwgVersion.Current);',
+        'WaitForCleanDbmod();',
+        'Path.GetFullPath(actual), fullPath',
+    ), "save-as publication guard")
+    if 'document.Database.Save();' in direct_save_as_block:
+        errors.append("direct cad_save_as must not use Database.Save()")
+
     require(errors, dbmod_block, (
         'DateTime.UtcNow.AddSeconds(2)',
         'Application.GetSystemVariable("DBMOD")',
@@ -151,7 +152,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: MCP direct 3D/save tools use database-resident curve inputs for Region creation, transient clones for boolean kernel operands, preserve bounded mutation routing, intercept QSAVE in CAD context, avoid Database.Save after reopen, and confirm save completion with a bounded DBMOD settle wait.")
+    print("PASS: MCP direct 3D/save tools keep QSAVE owned by the bounded direct CAD runtime, use database-resident curve inputs for Region creation, transient clones for boolean kernel operands, preserve bounded mutation routing, avoid Database.Save after reopen, and confirm save/save-as completion with a bounded DBMOD settle wait.")
     return 0
 
 
