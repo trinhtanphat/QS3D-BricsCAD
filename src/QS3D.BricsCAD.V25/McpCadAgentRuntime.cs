@@ -22,7 +22,7 @@ namespace QS3D.BricsCAD.V25
     /// </summary>
     internal static class McpCadAgentRuntime
     {
-        private const int CadDispatchTimeoutMilliseconds = 15000;
+        private const int CadDispatchTimeoutMilliseconds = 8000;
         private const long MaxAuditBytes = 4L * 1024L * 1024L;
         private const string AuditFileName = "mcp-agent-audit.jsonl";
         private const int CadWorkQueued = 0;
@@ -549,7 +549,7 @@ namespace QS3D.BricsCAD.V25
 
         private static string RunCadCommandSequence(string body)
         {
-            var command = NormalizeCadCommandToken(McpTopLevelJson.ExtractString(body, "command"));
+            var command = NormalizeCadCommandToken(McpTopLevelJson.ExtractString(body, "command").Trim());
             if (!AllowedCadCommands.Contains(command)) throw new InvalidOperationException("Command is not in the QS3D MCP CAD allowlist. Use cad_command_catalog.");
             var inputs = NormalizeCommandInputs(McpTopLevelJson.ExtractString(body, "inputs"), command);
             return InvokeCadMutation(() =>
