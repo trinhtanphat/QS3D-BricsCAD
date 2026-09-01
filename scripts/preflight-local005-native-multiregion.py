@@ -95,6 +95,15 @@ REQUIRED_FILES = {
         "SlabFoundationMultiRegionMeshSolidBuilder.BuildFoundation",
         "GeneratedMultiRegionRebarRuntimeHealthService",
         "TryGetReadOnly",
+        "ExistingProjectMutationContext.Require",
+        "EnsureSameProjectSnapshot",
+        "var uiSyncFailed = false;",
+        "catch { uiSyncFailed = true; }",
+        "native update đã hoàn tất; một phần UI không thể đồng bộ.",
+        "QS3DSLABREBAR3DMULTI không thể hoàn tất.",
+        "QS3DFOUNDATIONREBAR3DMULTI không thể hoàn tất.",
+        "QS3DMULTIREBARHEALTH không thể hoàn tất kiểm tra.",
+        "TryWriteMessage(document",
     ),
     "src/QS3D.BricsCAD.V25/Cad/SlabMeshSolidBuilder.cs": (
         'RectangleFootprintMode = "RectangleLocalXY"',
@@ -138,6 +147,18 @@ def main():
             if token not in text:
                 missing.append(relative + " (missing token: " + token + ")")
 
+        if relative == "src/QS3D.BricsCAD.V25/MultiRegionRebarCommands.cs":
+            for forbidden in (
+                "ex.Message",
+                "exception.Message",
+                "GetBaseException()",
+                "StackTrace",
+                "UI sync warning: ",
+                "document.Editor.WriteMessage(\"\\n  [\"",
+            ):
+                if forbidden in text:
+                    missing.append(relative + " (forbidden user-visible host detail token: " + forbidden + ")")
+
     v26_path = ROOT / V26_PROJECT
     if not v26_path.is_file():
         missing.append(V26_PROJECT + " (missing file)")
@@ -156,7 +177,7 @@ def main():
             print(" -", item)
         return 1
 
-    print("PASS: LOCAL-005 Core assembler, native loop reader, ownership/manifests, atomic materializer, read-only Health, commands, legacy rectangle/single-polygon compatibility, and V26 linked-source contract are present.")
+    print("PASS: LOCAL-005 Core assembler, native loop reader, ownership/manifests, atomic materializer, read-only Health, stable command failure redaction/post-commit UI isolation, legacy rectangle/single-polygon compatibility, and V26 linked-source contract are present.")
     return 0
 
 
