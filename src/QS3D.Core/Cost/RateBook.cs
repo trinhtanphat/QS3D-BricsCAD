@@ -141,6 +141,8 @@ namespace QS3D.Core.Cost
                         ThrowTooManyItems();
 
                     var item = enumerator.Current;
+                    if (hasKnownCount)
+                        RequireStableKnownCount(items, knownCount);
                     if (item == null)
                         throw new ArgumentException("Rate book contains a null item at index " + index + ".", nameof(items));
                     if (!itemIds.Add(item.RateItemId))

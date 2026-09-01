@@ -21,6 +21,7 @@ if SOURCE.is_file():
         "if (hasKnownCount && index >= knownCount)",
         "if (index >= MaxItems)",
         "var item = enumerator.Current;",
+        "if (item == null)",
         "if (hasKnownCount && index != knownCount)",
         "private static void RequireStableKnownCount(IEnumerable<RateItem> items, int knownCount)",
         "var hasCurrentKnownCount = TryGetKnownCount(items, out var currentKnownCount);",
@@ -42,14 +43,16 @@ if SOURCE.is_file():
     overrun = source.find("if (hasKnownCount && index >= knownCount)", post_rebind)
     ceiling = source.find("if (index >= MaxItems)", overrun)
     current = source.find("var item = enumerator.Current;", ceiling)
-    observed = source.find("if (hasKnownCount && index != knownCount)", current)
+    current_rebind = source.find("RequireStableKnownCount(items, knownCount);", current)
+    item_acceptance = source.find("if (item == null)", current)
+    observed = source.find("if (hasKnownCount && index != knownCount)", item_acceptance)
     final_rebind = source.find("RequireStableKnownCount(items, knownCount);", observed)
     sort = source.find("foreach (var pair in _byScope)", final_rebind)
-    if min(initial, traversal, pre_rebind, move_next, post_rebind, overrun, ceiling, current, observed, final_rebind, sort) < 0 or not (
-        initial < traversal < pre_rebind < move_next < post_rebind < overrun < ceiling < current < observed < final_rebind < sort
+    if min(initial, traversal, pre_rebind, move_next, post_rebind, overrun, ceiling, current, current_rebind, item_acceptance, observed, final_rebind, sort) < 0 or not (
+        initial < traversal < pre_rebind < move_next < post_rebind < overrun < ceiling < current < current_rebind < item_acceptance < observed < final_rebind < sort
     ):
         errors.append(
-            "RateBook must bind Count at admission, re-bind before MoveNext and after successful MoveNext before Current, "
+            "RateBook must bind Count at admission, re-bind before/after MoveNext, re-bind immediately after Current before item acceptance, "
             "enforce Count/ceiling overflow before Current, and perform a final re-bind before publication"
         )
 
@@ -57,6 +60,11 @@ if SMOKE.is_file():
     smoke = SMOKE.read_text(encoding="utf-8")
     for token in (
         "CountDriftAfterExactTraversalFailsClosed();",
+        "CountDriftFromCurrentFailsBeforeNullAcceptance();",
+        "CurrentDriftingReadOnlyCollection",
+        "CurrentReads",
+        "MoveNextCalls",
+        '"RateBook Current-induced Count drift must win before ordinary returned-item validation."',
         "PostTraversalInterfaceConflictFailsClosed();",
         "HonestMultiInterfaceCountRemainsAccepted();",
         "PureStreamingInputRemainsAccepted();",
@@ -75,4 +83,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: RateBook keeps historical no-overread/under-yield/final-rebind coverage while binding deterministic Count throughout traversal.")
+print("PASS: RateBook rebinds deterministic Count around MoveNext and immediately after Current before commercial item acceptance/publication.")
