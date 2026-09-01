@@ -444,6 +444,7 @@ namespace QS3D.BricsCAD.V25
                 SetLastError("OpenAI Secure MCP Tunnel chưa tự khởi động vì không có Runtime API key đã lưu hoặc biến môi trường CONTROL_PLANE_API_KEY/OPENAI_API_KEY.");
                 return;
             }
+            EnsureWatchdogStarted();
             string ignored;
             Start(SavedTunnelId, string.Empty, out ignored);
         }
