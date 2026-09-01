@@ -28,8 +28,7 @@ namespace QS3D.BricsCAD.V25
             "cad_boolean_subtract",
             "cad_boolean_intersect",
             "cad_save",
-            "cad_save_as",
-            "qs3d_place_single_footing"
+            "cad_save_as"
         };
 
         private static readonly HashSet<string> KnownCommandTokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -48,12 +47,12 @@ namespace QS3D.BricsCAD.V25
             "AUDIT", "OVERKILL"
         };
 
-        internal static bool IsTool(string tool)
+        internal static bool IsTool(string? tool)
         {
             return Tools.Contains(tool ?? string.Empty) || McpCadViewStatusRuntime.IsTool(tool);
         }
 
-        internal static bool RequiresMutation(string tool)
+        internal static bool RequiresMutation(string? tool)
         {
             if (McpCadViewStatusRuntime.IsTool(tool)) return McpCadViewStatusRuntime.RequiresMutation(tool);
             return Tools.Contains(tool ?? string.Empty);
@@ -91,11 +90,6 @@ namespace QS3D.BricsCAD.V25
                 "Safely save the active drawing to an absolute writable .dwg path after overwrite and protected-directory checks.",
                 "\"path\":{\"type\":\"string\",\"maxLength\":1024},\"overwrite\":{\"type\":\"boolean\"}," + ConfirmProperty(),
                 "\"path\",\"confirmMutation\"");
-            yield return Descriptor(
-                "qs3d_place_single_footing",
-                "Place the active QS3D Móng đơn Family at drawing x,y. Active Floor elevation is resolved by the shared Móng đơn authoring workflow.",
-                Numeric("x", "y") + "," + ConfirmProperty(),
-                "\"x\",\"y\",\"confirmMutation\"");
             foreach (var descriptor in McpCadViewStatusRuntime.ToolDescriptors()) yield return descriptor;
         }
 
@@ -133,7 +127,6 @@ namespace QS3D.BricsCAD.V25
                     case "cad_boolean_intersect": result = Boolean(body, BooleanOperationType.BoolIntersect, "intersect"); break;
                     case "cad_save": result = Save(); break;
                     case "cad_save_as": result = SaveAs(body); break;
-                    case "qs3d_place_single_footing": result = PlaceSingleFooting(body); break;
                     default: throw new InvalidOperationException("Unknown direct MCP CAD model tool: " + tool);
                 }
                 return result;
@@ -286,17 +279,6 @@ namespace QS3D.BricsCAD.V25
                     operandClone.Dispose();
                 }
             }
-        }
-
-        private static string PlaceSingleFooting(string body)
-        {
-            var x = NumberRequired(body, "x");
-            var y = NumberRequired(body, "y");
-            var document = RequireDocument();
-            EnsureAutomationRunning();
-            var handle = SingleFootingCommands.PlaceActiveSingleFootingAt(document, new Point3d(x, y, 0d));
-            RecordMutation(document, "qs3d-place-single-footing", "handle=" + handle);
-            return "{\"created\":true,\"handle\":\"" + Escape(handle) + "\",\"type\":\"SingleFooting\",\"elevationPolicy\":\"active-floor\"}";
         }
 
         private static string Save()
