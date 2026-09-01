@@ -70,9 +70,25 @@ for label, relative in commands.items():
         errors.append(label + ": missing command layer " + relative)
         continue
     text = path.read_text(encoding="utf-8")
-    for token in ("FinalizeUi", "Editor.Regen()", "UI sync warning: ", "TryWriteMessage"):
+    for token in ("FinalizeUi", "Editor.Regen()", "TryWriteMessage"):
         if token not in text:
             errors.append(label + ": command post-commit UI isolation missing: " + token)
+
+    if label == "slab mesh":
+        # Slab Mesh deliberately redacts caught host/UI exception detail. Preserve the
+        # stronger post-commit contract by requiring independent UI-failure tracking
+        # and a stable warning instead of the legacy raw-detail-era warning prefix.
+        for token in (
+            "var uiSyncFailed = false;",
+            "catch { uiSyncFailed = true; }",
+            "native update đã hoàn tất; một phần UI không thể đồng bộ.",
+        ):
+            if token not in text:
+                errors.append(label + ": stable post-commit UI isolation missing: " + token)
+        if "UI sync warning: " in text or "ex.Message" in text:
+            errors.append(label + ": post-commit UI reporting must not expose caught host exception detail")
+    elif "UI sync warning: " not in text:
+        errors.append(label + ": command post-commit UI isolation missing: UI sync warning: ")
 
 print("QS3D generated rebar atomicity preflight")
 if errors:
@@ -81,4 +97,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: all eight generated rebar families advance ownership and AuditTrail-owned revision while CAD is rollback-capable, pre-commit failures restore project state, native builders stay UI-free, and command-level UI synchronization cannot turn committed geometry into a false failure.")
+print("PASS: all eight generated rebar families advance ownership and AuditTrail-owned revision while CAD is rollback-capable, pre-commit failures restore project state, native builders stay UI-free, and command-level UI synchronization cannot turn committed geometry into a false failure; Slab Mesh additionally redacts caught host/UI detail behind a stable post-commit warning.")
