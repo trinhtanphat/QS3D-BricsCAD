@@ -51,9 +51,9 @@ namespace QS3D.Core.Export
         {
             var document = LoadXml(entry);
             XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-            var rows = document.Descendants(ns + "row").ToList();
-            var header = FindUniqueRow(rows, 1);
-            var target = FindUniqueRow(rows, rowNumber);
+            XElement header;
+            XElement target;
+            FindRequiredRows(document, ns, rowNumber, out header, out target);
             var headers = ReadCells(header, ns, sharedStrings, out var headerFormulaColumns);
             var cells = ReadCells(target, ns, sharedStrings, out var formulaColumns);
 
@@ -237,13 +237,40 @@ namespace QS3D.Core.Export
                 throw new InvalidDataException("QS3D Review identity cells must be literal values, not formulas.");
         }
 
-        private static XElement FindUniqueRow(IEnumerable<XElement> rows, int rowNumber)
+        private static void FindRequiredRows(
+            XDocument document,
+            XNamespace ns,
+            int rowNumber,
+            out XElement header,
+            out XElement target)
         {
-            var matches = rows.Where(row => ParseRow(row) == rowNumber).ToList();
-            if (matches.Count != 1)
+            XElement? headerCandidate = null;
+            XElement? targetCandidate = null;
+            var headerMatches = 0;
+            var targetMatches = 0;
+            foreach (var row in document.Descendants(ns + "row"))
+            {
+                var declaredRow = ParseRow(row);
+                if (declaredRow == int.MaxValue)
+                    throw new InvalidDataException("QS3D Review workbook contains an invalid row number.");
+                if (declaredRow == 1)
+                {
+                    headerMatches++;
+                    if (headerCandidate == null) headerCandidate = row;
+                }
+                if (declaredRow == rowNumber)
+                {
+                    targetMatches++;
+                    if (targetCandidate == null) targetCandidate = row;
+                }
+            }
+            if (headerMatches != 1)
+                throw new InvalidDataException("QS3D Review workbook row 1 is missing or duplicated.");
+            if (targetMatches != 1)
                 throw new InvalidDataException("QS3D Review workbook row " +
                     rowNumber.ToString(CultureInfo.InvariantCulture) + " is missing or duplicated.");
-            return matches[0];
+            header = headerCandidate!;
+            target = targetCandidate!;
         }
 
         private static int ParseRow(XElement row)
