@@ -66,7 +66,9 @@ namespace QS3D.Core.SmokeTests
 
         private static string BoundaryHandles(int count)
         {
-            return string.Join(";", Enumerable.Range(1, count).Select(index => index.ToString("X")));
+            return string.Join(";", Enumerable.Range(1, count)
+                .Select(index => index.ToString("X"))
+                .OrderBy(handle => handle, StringComparer.OrdinalIgnoreCase));
         }
 
         private static ProjectElement AutoRoom(string id, string boundaryHandles)
