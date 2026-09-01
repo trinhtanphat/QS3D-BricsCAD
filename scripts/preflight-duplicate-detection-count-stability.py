@@ -16,8 +16,9 @@ smoke = SMOKE.read_text(encoding="utf-8")
 current_smoke = CURRENT_SMOKE.read_text(encoding="utf-8")
 
 required_source = (
-    "return DetectSnapshot(MaterializeElements(elements), effective);",
-    "return DetectSnapshot(MaterializeCandidates(candidates), effective);",
+    "var policy = CapturePolicy(options);",
+    "return DetectSnapshot(MaterializeElements(elements), policy);",
+    "return DetectSnapshot(MaterializeCandidates(candidates), policy);",
     "private static List<DuplicateCandidate> MaterializeElements",
     "private static List<DuplicateCandidate> MaterializeCandidates",
     "RequireStableKnownCount(elements, expectedCount);",
