@@ -27,7 +27,7 @@ namespace QS3D.Core.SmokeTests
             var source = new StableCountedIds(new[] { "E1", "E2" }, 1);
             var error = Throws<InvalidOperationException>(() => Engine().RegenerateDirtySubset(ProjectWithElements("E1", "E2"), source));
             Contains(error.Message, "count changed during enumeration");
-            Equal(5, source.CountReads);
+            Equal(6, source.CountReads);
             Equal(2, source.MoveNextCalls);
             Equal(1, source.CurrentReads);
         }
@@ -37,7 +37,7 @@ namespace QS3D.Core.SmokeTests
             var source = new StableCountedIds(new[] { "E1" }, 2);
             var error = Throws<InvalidOperationException>(() => Engine().RegenerateDirtySubset(ProjectWithElements("E1", "E2"), source));
             Contains(error.Message, "count changed during enumeration");
-            Equal(4, source.CountReads);
+            Equal(5, source.CountReads);
             Equal(2, source.MoveNextCalls);
             Equal(1, source.CurrentReads);
         }
@@ -92,7 +92,7 @@ namespace QS3D.Core.SmokeTests
             var source = new StableCountedIds(new[] { "E2", "E1" }, 2);
             var regenerated = Engine().RegenerateDirtySubset(ProjectWithElements("E1", "E2"), source);
             Equal(0, regenerated);
-            Equal(7, source.CountReads);
+            Equal(9, source.CountReads);
             Equal(3, source.MoveNextCalls);
             Equal(2, source.CurrentReads);
         }

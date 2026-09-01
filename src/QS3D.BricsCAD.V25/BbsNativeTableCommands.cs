@@ -11,6 +11,7 @@ namespace QS3D.BricsCAD.V25
     public sealed class BbsNativeTableCommands
     {
         private const double UcsAxisTolerance = 1e-9d;
+        private const string PostCommitUiWarning = "BBS Table: thao tác CAD/project đã hoàn tất; viewport/UI chưa đồng bộ đầy đủ.";
 
         [CommandMethod("QS3DBBSTABLE", CommandFlags.Modal)]
         public void Build()
@@ -39,7 +40,7 @@ namespace QS3D.BricsCAD.V25
                 var handle = BbsNativeTableBuilder.Build(document, project, world);
                 FinalizeUi(document, "BBS Table: đã tạo/cập nhật native Table " + handle + " • regen " + regenerated + ".");
             }
-            catch (Exception ex) { Report(document, "QS3DBBSTABLE lỗi: " + ex.Message); }
+            catch (Exception) { ReportFailure(document, "QS3DBBSTABLE", "tạo/cập nhật BBS Table"); }
         }
 
         [CommandMethod("QS3DBBSTABLEREFRESH", CommandFlags.Modal)]
@@ -56,7 +57,7 @@ namespace QS3D.BricsCAD.V25
                 var handle = BbsNativeTableBuilder.Build(document, project, position);
                 FinalizeUi(document, "BBS Table: đã refresh native Table " + handle + " tại WCS position đã lưu • regen " + regenerated + ".");
             }
-            catch (Exception ex) { Report(document, "QS3DBBSTABLEREFRESH lỗi: " + ex.Message); }
+            catch (Exception) { ReportFailure(document, "QS3DBBSTABLEREFRESH", "refresh BBS Table"); }
         }
 
         [CommandMethod("QS3DBBSTABLEREMOVE", CommandFlags.Modal)]
@@ -70,7 +71,7 @@ namespace QS3D.BricsCAD.V25
                 BbsNativeTableBuilder.Remove(document, project);
                 FinalizeUi(document, "BBS Table: đã xóa owned native Table/metadata (nếu có).");
             }
-            catch (Exception ex) { Report(document, "QS3DBBSTABLEREMOVE lỗi: " + ex.Message); }
+            catch (Exception) { ReportFailure(document, "QS3DBBSTABLEREMOVE", "xóa BBS Table"); }
         }
 
         [CommandMethod("QS3DBBSTABLEHEALTH", CommandFlags.Modal)]
@@ -97,7 +98,7 @@ namespace QS3D.BricsCAD.V25
                 var suffix = issues.Count > visible.Length ? "\n- … +" + (issues.Count - visible.Length) + " issue(s)" : string.Empty;
                 Report(document, "BBS Table health: " + issues.Count + " issue(s).\n- " + string.Join("\n- ", visible) + suffix);
             }
-            catch (Exception ex) { Report(document, "QS3DBBSTABLEHEALTH lỗi: " + ex.Message); }
+            catch (Exception) { ReportFailure(document, "QS3DBBSTABLEHEALTH", "kiểm tra BBS Table health"); }
         }
 
         private static QS3D.Core.Domain.ProjectState RequireExistingProject(Document document, string operation)
@@ -132,14 +133,20 @@ namespace QS3D.BricsCAD.V25
 
         private static void FinalizeUi(Document document, string message)
         {
-            try
-            {
-                document.Editor.Regen();
-                PaletteCoordinator.RefreshProject();
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\nQS3D " + message);
-            }
-            catch (Exception ex) { TryWrite(document, "\nQS3D " + message + " UI sync warning: " + ex.Message); }
+            var uiSyncFailed = false;
+            try { document.Editor.Regen(); } catch { uiSyncFailed = true; }
+            try { PaletteCoordinator.RefreshProject(); } catch { uiSyncFailed = true; }
+            try { PaletteCoordinator.SetStatus(message); } catch { uiSyncFailed = true; }
+            if (!TryWrite(document, "\nQS3D " + message)) uiSyncFailed = true;
+            if (!uiSyncFailed) return;
+
+            try { PaletteCoordinator.SetStatus(message + " • " + PostCommitUiWarning); } catch { }
+            TryWrite(document, "\nQS3D " + PostCommitUiWarning);
+        }
+
+        private static void ReportFailure(Document document, string command, string operation)
+        {
+            Report(document, command + " lỗi: không thể " + operation + "; kiểm tra project/CAD state và thử lại.");
         }
 
         private static void Report(Document document, string message)
@@ -148,9 +155,14 @@ namespace QS3D.BricsCAD.V25
             TryWrite(document, "\nQS3D " + message);
         }
 
-        private static void TryWrite(Document document, string message)
+        private static bool TryWrite(Document document, string message)
         {
-            try { document.Editor.WriteMessage(message); } catch { }
+            try
+            {
+                document.Editor.WriteMessage(message);
+                return true;
+            }
+            catch { return false; }
         }
     }
 }

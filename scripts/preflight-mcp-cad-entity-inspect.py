@@ -5,21 +5,19 @@ ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCadAgentRuntime.cs"
 
 
-def between(text: str, start: str, end: str) -> str:
-    a = text.find(start)
-    if a < 0:
-        raise SystemExit(f"missing start marker: {start}")
-    b = text.find(end, a + len(start))
-    if b < 0:
-        raise SystemExit(f"missing end marker: {end}")
-    return text[a:b]
+def method_block(source: str, signature: str) -> str:
+    start = source.find(signature)
+    if start < 0:
+        raise SystemExit(f"missing method marker: {signature}")
+    next_method = source.find("\n        private static ", start + len(signature))
+    return source[start:] if next_method < 0 else source[start:next_method]
 
 
 def main() -> int:
     runtime = RUNTIME.read_text(encoding="utf-8")
-    inspect = between(runtime, "private static string InspectEntity", "private static string BuildStatusJson")
-    describe = between(runtime, "private static string DescribeEntity", "private static Entity OpenEntity")
-    snapshot = between(runtime, "private static string BuildDatabaseSnapshotJson", "private static string BuildViewStateJson")
+    inspect = method_block(runtime, "private static string InspectEntity")
+    describe = method_block(runtime, "private static string DescribeEntity")
+    snapshot = method_block(runtime, "private static string BuildDatabaseSnapshotJson")
 
     errors = []
     for token in (
@@ -35,7 +33,13 @@ def main() -> int:
     if "DescribeEntity(entity, true, false)" not in snapshot:
         errors.append("database snapshot must retain its extents=true/details=false call shape")
 
-    extents_block = between(describe, "if (extents)", "if (details)")
+    extents_start = describe.find("if (extents)")
+    details_start = describe.find("if (details)", extents_start)
+    if extents_start < 0 or details_start <= extents_start:
+        errors.append("cannot inspect entity extents/details boundary")
+        extents_block = ""
+    else:
+        extents_block = describe[extents_start:details_start]
     if "entity.GeometricExtents" not in extents_block:
         errors.append("lightweight/snapshot entity extents path was removed")
     if "boundedSolidInspect" not in extents_block:

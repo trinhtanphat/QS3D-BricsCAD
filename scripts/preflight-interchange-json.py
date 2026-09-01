@@ -53,7 +53,7 @@ for token in [
     'if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))',
     'if (!seen.Add(raw))',
     'items.Sort(StringComparer.OrdinalIgnoreCase);',
-    'AppendNumberMap(json, element.Quantities)',
+    'AppendNumberMap(json, element.Quantities, "element quantities")',
     "GeneratedHandleOwnershipPolicy.IsOwnerSlot(normalized)",
     'normalized.StartsWith("Generated"',
     'normalized.StartsWith("QS3D.Generated"',
