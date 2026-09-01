@@ -4,22 +4,43 @@ using System.Linq;
 
 namespace QS3D.Core.Geometry
 {
+    internal static class GridStationIdentity
+    {
+        public static string Normalize(string value, string parameterName, string requiredMessage)
+        {
+            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException(requiredMessage, parameterName);
+            var canonical = value.Trim();
+            if (!string.Equals(value, canonical, StringComparison.Ordinal))
+                throw new ArgumentException("Grid station element id must not contain surrounding whitespace.", parameterName);
+
+            for (var index = 0; index < canonical.Length; index++)
+            {
+                var current = canonical[index];
+                if (char.IsControl(current))
+                    throw new ArgumentException("Grid station element id must not contain control characters.", parameterName);
+                if (!char.IsSurrogate(current)) continue;
+                if (char.IsHighSurrogate(current) && index + 1 < canonical.Length && char.IsLowSurrogate(canonical[index + 1]))
+                {
+                    index++;
+                    continue;
+                }
+                throw new ArgumentException("Grid station element id must contain valid Unicode scalar text.", parameterName);
+            }
+
+            return canonical;
+        }
+    }
+
     public sealed class GridLinearStation
     {
         public GridLinearStation(string elementId, double coordinateM)
         {
-            ElementId = NormalizeId(elementId);
+            ElementId = GridStationIdentity.Normalize(elementId, nameof(elementId), "Grid station element id is required.");
             CoordinateM = coordinateM;
         }
 
         public string ElementId { get; }
         public double CoordinateM { get; }
-
-        private static string NormalizeId(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Grid station element id is required.", nameof(value));
-            return value.Trim();
-        }
     }
 
     public sealed class RectangularGridSystemInput
@@ -39,36 +60,24 @@ namespace QS3D.Core.Geometry
     {
         public GridAngularStation(string elementId, double angleRad)
         {
-            ElementId = NormalizeId(elementId);
+            ElementId = GridStationIdentity.Normalize(elementId, nameof(elementId), "Grid angular station element id is required.");
             AngleRad = angleRad;
         }
 
         public string ElementId { get; }
         public double AngleRad { get; }
-
-        private static string NormalizeId(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Grid angular station element id is required.", nameof(value));
-            return value.Trim();
-        }
     }
 
     public sealed class GridRadialStation
     {
         public GridRadialStation(string elementId, double radiusM)
         {
-            ElementId = NormalizeId(elementId);
+            ElementId = GridStationIdentity.Normalize(elementId, nameof(elementId), "Grid radial station element id is required.");
             RadiusM = radiusM;
         }
 
         public string ElementId { get; }
         public double RadiusM { get; }
-
-        private static string NormalizeId(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Grid radial station element id is required.", nameof(value));
-            return value.Trim();
-        }
     }
 
     public sealed class RadialGridSystemInput
@@ -230,8 +239,7 @@ namespace QS3D.Core.Geometry
             var unique = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var raw in ids)
             {
-                var id = (raw ?? string.Empty).Trim();
-                if (id.Length == 0) throw new ArgumentException("Grid system curve element id is required.", nameof(ids));
+                var id = GridStationIdentity.Normalize(raw, nameof(ids), "Grid system curve element id is required.");
                 if (!unique.Add(id)) throw new InvalidOperationException("Grid system contains duplicate element id: " + id + ".");
             }
         }
