@@ -15,6 +15,8 @@ namespace QS3D.Core.SmokeTests
             StableLookupRemainsAccepted();
             UnrelatedInvalidClashRowFailsClosed();
             UnrelatedInvalidTraceRowFailsClosed();
+            DuplicateClashTargetFailsClosed();
+            DuplicateTraceHeaderFailsClosed();
         }
 
         private static void StableLookupRemainsAccepted()
@@ -43,6 +45,24 @@ namespace QS3D.Core.SmokeTests
             {
                 AppendWorksheetRow(path, "xl/worksheets/sheet2.xml", 1048577);
                 Throws<InvalidDataException>(() => CoordinationWorkbookTraceReader.Read(path, 2), "out-of-range unrelated TRACE_MODEL row");
+            });
+        }
+
+        private static void DuplicateClashTargetFailsClosed()
+        {
+            WithWorkbook(path =>
+            {
+                AppendWorksheetRow(path, "xl/worksheets/sheet1.xml", 2);
+                Throws<InvalidDataException>(() => CoordinationWorkbookTraceReader.Read(path, 2), "duplicate selected CLASHES row");
+            });
+        }
+
+        private static void DuplicateTraceHeaderFailsClosed()
+        {
+            WithWorkbook(path =>
+            {
+                AppendWorksheetRow(path, "xl/worksheets/sheet2.xml", 1);
+                Throws<InvalidDataException>(() => CoordinationWorkbookTraceReader.Read(path, 2), "duplicate TRACE_MODEL header row");
             });
         }
 
