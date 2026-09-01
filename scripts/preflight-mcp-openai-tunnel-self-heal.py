@@ -53,6 +53,14 @@ def main() -> int:
     if "EnsureWatchdogStarted();" not in start:
         errors.append("successful Start must arm the watchdog")
 
+    autostart = block(source, "public static void TryAutoStart()", "public static void Stop()")
+    watchdog_index = autostart.find("EnsureWatchdogStarted();")
+    start_index = autostart.find("Start(SavedTunnelId, string.Empty, out ignored)")
+    if watchdog_index < 0:
+        errors.append("persisted autostart must arm watchdog before the first launch attempt")
+    elif start_index < 0 or watchdog_index > start_index:
+        errors.append("TryAutoStart must arm watchdog before Start so immediate launch failure remains recoverable")
+
     stop = block(source, "public static void Stop()", "public static void StopForHostShutdown()")
     if "StopWatchdog();" not in stop:
         errors.append("explicit Stop must disable watchdog before stopping the child process")
