@@ -70,9 +70,9 @@ namespace QS3D.BricsCAD.V25
                     : "Slab Mesh 3D: đã tạo/cập nhật " + result.Bars + " thanh trên " + result.Elements + " sàn.";
                 FinalizeUi(document, message);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Report(document, "QS3DSLABREBAR3D lỗi: " + ex.Message);
+                Report(document, "QS3DSLABREBAR3D không thể hoàn tất. Kiểm tra selection/project và thử lại.");
             }
         }
 
@@ -99,15 +99,14 @@ namespace QS3D.BricsCAD.V25
                 var issues = new GeneratedSlabMeshHealthService().Inspect(project, live);
                 var summary = new HealthSummary(issues);
                 var message = "Slab Mesh Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\nQS3D " + message);
+                Report(document, message);
                 foreach (var issue in issues.Take(50))
-                    document.Editor.WriteMessage("\n  [" + issue.Severity + "] " + issue.Code + " • " + issue.ElementId + " • " + issue.Message);
-                if (issues.Count > 50) document.Editor.WriteMessage("\n  … health output truncated.");
+                    TryWriteMessage(document, "\n  [" + issue.Severity + "] " + issue.Code + " • " + issue.ElementId + " • " + issue.Message);
+                if (issues.Count > 50) TryWriteMessage(document, "\n  … health output truncated.");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Report(document, "QS3DSLABREBARHEALTH lỗi: " + ex.Message);
+                Report(document, "QS3DSLABREBARHEALTH không thể hoàn tất kiểm tra. Project/native geometry không bị thay đổi.");
             }
         }
 
@@ -119,17 +118,13 @@ namespace QS3D.BricsCAD.V25
 
         private static void FinalizeUi(Document document, string message)
         {
-            try
-            {
-                PaletteCoordinator.RefreshProject();
-                document.Editor.Regen();
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\nQS3D " + message);
-            }
-            catch (Exception ex)
-            {
-                TryWriteMessage(document, "\nQS3D " + message + " UI sync warning: " + ex.Message);
-            }
+            var uiSyncFailed = false;
+            try { PaletteCoordinator.RefreshProject(); } catch { uiSyncFailed = true; }
+            try { document.Editor.Regen(); } catch { uiSyncFailed = true; }
+            try { PaletteCoordinator.SetStatus(message); } catch { uiSyncFailed = true; }
+            TryWriteMessage(document, "\nQS3D " + message);
+            if (uiSyncFailed)
+                TryWriteMessage(document, "\nQS3D Slab Mesh 3D: native update đã hoàn tất; một phần UI không thể đồng bộ.");
         }
 
         private static void Report(Document document, string message)

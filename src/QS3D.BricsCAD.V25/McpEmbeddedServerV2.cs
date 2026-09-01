@@ -33,6 +33,7 @@ namespace QS3D.BricsCAD.V25
         private const string ServerVersion = "embedded-7";
         private const string BearerEnvironment = "QS3D_MCP_BEARER_TOKEN";
         private const string TokenFileName = "mcp-bearer-token.txt";
+        private const string LocalTunnelAuthorizationHeader = "X-QS3D-MCP-Local-Authorization";
 
         private static readonly object Sync = new object();
         private static readonly object SessionSync = new object();
@@ -344,6 +345,7 @@ namespace QS3D.BricsCAD.V25
                    || string.Equals(name, "Content-Type", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "Transfer-Encoding", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "Authorization", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(name, LocalTunnelAuthorizationHeader, StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "Origin", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "Mcp-Session-Id", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "MCP-Protocol-Version", StringComparison.OrdinalIgnoreCase)
@@ -493,9 +495,12 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
+            var trustedOpenAiTunnelRequest = IsValidLocalTunnelAuthorization(request.Headers);
             string contentType;
-            if (!request.Headers.TryGetValue("Content-Type", out contentType)
-                || !IsJsonContentType(contentType))
+            var hasJsonContentType =
+                request.Headers.TryGetValue("Content-Type", out contentType)
+                && IsJsonContentType(contentType);
+            if (!hasJsonContentType && !trustedOpenAiTunnelRequest)
             {
                 WriteResponse(stream, 415, "Unsupported Media Type", "{\"error\":\"Content-Type application/json is required\"}", null);
                 return;
@@ -824,7 +829,7 @@ namespace QS3D.BricsCAD.V25
                 Tool("cad_database_snapshot", "Read bounded ModelSpace entity snapshot.", "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":1000}"),
                 Tool("cad_entity_inspect", "Inspect one entity by hexadecimal handle.", "\"handle\":{\"type\":\"string\",\"maxLength\":32}", "handle"),
                 Tool("cad_view_state", "Read command-active and current view/window state.", ""),
-                Tool("cad_wait_idle", "Wait until BricsCAD CMDACTIVE becomes zero.", "\"timeoutMs\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":30000}"),
+                Tool("cad_wait_idle", "Wait until BricsCAD CMDACTIVE becomes zero.", "\"timeoutMs\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":7000,\"default\":5000}"),
                 Tool("cad_sysvar", "Read one privacy-safe allowlisted BricsCAD system variable.", "\"name\":{\"type\":\"string\",\"enum\":[\"CMDACTIVE\",\"INSUNITS\",\"CLAYER\",\"CTAB\",\"TILEMODE\",\"DWGNAME\",\"CVPORT\",\"ORTHOMODE\",\"OSMODE\"]}", "name"),
                 Tool("cad_create_line", "Create native Line in ModelSpace.", Numeric("x1","y1","z1","x2","y2","z2") + CommonLayerConfirm(), "x1","y1","x2","y2","confirmMutation"),
                 Tool("cad_create_circle", "Create native Circle in ModelSpace.", Numeric("x","y","z","radius") + CommonLayerConfirm(), "x","y","radius","confirmMutation"),
@@ -1162,17 +1167,45 @@ namespace QS3D.BricsCAD.V25
             return McpTopLevelJson.TryFindPropertyValue(json, property, out raw, out found, out error);
         }
 
+        private static bool IsValidLocalTunnelAuthorization(IDictionary<string, string> headers)
+        {
+            if (McpTransportCoordinator.SelectedProvider != McpTransportProvider.OpenAiSecureTunnel) return false;
+            string authorization;
+            if (!headers.TryGetValue(LocalTunnelAuthorizationHeader, out authorization)) return false;
+            string token;
+            if (!TryExtractBearerToken(authorization, out token)) return false;
+            return ConstantTimeEquals(token, GetBearerToken());
+        }
+
         private static bool Authorize(IDictionary<string, string> headers, string publicMcpUrl, out bool oauthAccessToken)
         {
             oauthAccessToken = false;
+
+            if (McpTransportCoordinator.SelectedProvider == McpTransportProvider.OpenAiSecureTunnel
+                && headers.ContainsKey(LocalTunnelAuthorizationHeader))
+            {
+                return IsValidLocalTunnelAuthorization(headers);
+            }
+
             string authorization;
             if (!headers.TryGetValue("Authorization", out authorization)) return false;
-            const string prefix = "Bearer ";
-            if (!authorization.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
-            if (ConstantTimeEquals(authorization.Substring(prefix.Length).Trim(), GetBearerToken())) return true;
+            string bearerToken;
+            if (!TryExtractBearerToken(authorization, out bearerToken)) return false;
+            if (ConstantTimeEquals(bearerToken, GetBearerToken())) return true;
             if (!McpOAuthAuthorizationServer.TryValidateAccessToken(headers, publicMcpUrl, GetBearerToken())) return false;
             oauthAccessToken = true;
             return true;
+        }
+
+        private static bool TryExtractBearerToken(string authorization, out string token)
+        {
+            token = string.Empty;
+            const string prefix = "Bearer ";
+            if (string.IsNullOrWhiteSpace(authorization)
+                || !authorization.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return false;
+            token = authorization.Substring(prefix.Length).Trim();
+            return token.Length > 0;
         }
 
         private static void RecordOAuthMcpActivity(string method, string publicMcpUrl)

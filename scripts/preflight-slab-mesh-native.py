@@ -78,8 +78,18 @@ if command.is_file():
     for needle in (
         'CommandMethod("QS3DSLABREBAR3D"', "SlabMeshSolidBuilder.BuildSelected", "RebarSlabXNotation/RebarSlabYNotation",
         'CommandMethod("QS3DSLABREBARHEALTH"', "GeneratedSlabMeshHealthService", "GeneratedSlabMeshHandles",
+        'Report(document, "QS3DSLABREBAR3D không thể hoàn tất. Kiểm tra selection/project và thử lại.")',
+        'Report(document, "QS3DSLABREBARHEALTH không thể hoàn tất kiểm tra. Project/native geometry không bị thay đổi.")',
+        "var uiSyncFailed = false;", "PaletteCoordinator.RefreshProject()", "document.Editor.Regen()",
+        "native update đã hoàn tất; một phần UI không thể đồng bộ", "TryWriteMessage(document",
     ):
-        if needle not in text: errors.append("native slab-mesh command missing: " + needle)
+        if needle not in text: errors.append("native slab-mesh command missing lifecycle/redaction token: " + needle)
+    for forbidden in ("ex.Message", "Exception.Message", "GetBaseException()", "StackTrace", "UI sync warning:"):
+        if forbidden in text: errors.append("native slab-mesh command exposes raw host/UI exception detail: " + forbidden)
+    if "catch (Exception ex)" in text:
+        errors.append("native slab-mesh command must not retain caught exception solely for user-visible detail")
+    if 'PaletteCoordinator.SetStatus(message);\n                document.Editor.WriteMessage("\\nQS3D " + message);' in text:
+        errors.append("slab-mesh health reporting must not let Palette/Editor presentation failures redefine read-only health execution")
 
 planner = ROOT / "src/QS3D.Core/Rebar/RectangularSlabMeshPlanner.cs"
 if planner.is_file():
@@ -96,4 +106,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: rectangular-local and guarded simple-polygon Slab X/Y mesh planner-to-Solid3d wiring uses dedicated ownership, policy-driven cross-family health/erase protection, independent X/Y diameters, invalidation, finite CAD transforms and pre-allocation limits; runtime remains V25-gated.")
+print("PASS: Slab X/Y mesh planner-to-Solid3d wiring retains dedicated ownership and freshness semantics while command failures are redacted and health/post-commit UI reporting is fail-isolated; runtime remains V25-gated.")
