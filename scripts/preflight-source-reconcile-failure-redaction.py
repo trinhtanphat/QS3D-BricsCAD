@@ -14,7 +14,7 @@ required = (
     'try { document.Editor.Regen(); } catch { uiSyncFailed = true; }',
     'try { PaletteCoordinator.SetStatus(status); } catch { uiSyncFailed = true; }',
     'try { document.Editor.WriteMessage("\\nQS3D " + status); } catch { uiSyncFailed = true; }',
-    'Sync Source UI sync warning: reconcile đã commit; một phần UI không thể đồng bộ.',
+    'Sync Source UI sync warning: reconcile đã hoàn tất; một phần UI không thể đồng bộ.',
     'private static void ReportOperationFailure',
     'try { PaletteCoordinator.SetStatus(message); } catch { }',
     'private static void TryWriteMessage',
@@ -35,7 +35,7 @@ finalize_call = text.find("FinalizeUi(document, result);", catch)
 finalize = text.find("private static void FinalizeUi", finalize_call)
 report = text.find("private static void ReportOperationFailure", finalize)
 if min(sync, reconcile, catch, finalize_call, finalize, report) < 0 or not sync < reconcile < catch < finalize_call < finalize < report:
-    errors.append("reconcile must complete/return before best-effort post-commit UI synchronization")
+    errors.append("reconcile must complete/return before best-effort post-reconcile UI synchronization")
 else:
     body = text[finalize:report]
     if "SourceReconcileService.ReconcileSelection" in body:
@@ -48,7 +48,7 @@ else:
         body.find("if (uiSyncFailed)"),
     ]
     if min(ordered) < 0 or ordered != sorted(ordered):
-        errors.append("post-commit UI sync must preserve refresh -> regen -> status -> editor -> stable warning order")
+        errors.append("post-reconcile UI sync must preserve refresh -> regen -> status -> editor -> stable warning order")
     if body.count("catch") < 4:
         errors.append("Palette refresh, Regen, status and Editor write must fail independently")
 
