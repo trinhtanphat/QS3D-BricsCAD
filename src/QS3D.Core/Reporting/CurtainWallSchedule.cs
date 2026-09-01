@@ -53,6 +53,14 @@ namespace QS3D.Core.Reporting
                     throw new InvalidOperationException("Curtain wall schedule element " + element.Id + " category " + element.Category + " does not match Family " + familyDefinition.Id + " category " + familyDefinition.Category + ". Repair the Family relation before reporting.");
                 var family = familyDefinition?.Name ?? familyId;
                 var key = GroupKey(floorId, familyId);
+
+                RequireClearPanelEnvelope(
+                    element,
+                    out var minimumClearPanelWidthM,
+                    out var maximumClearPanelWidthM,
+                    out var minimumClearPanelHeightM,
+                    out var maximumClearPanelHeightM);
+
                 if (!rows.TryGetValue(key, out var row))
                 {
                     row = new CurtainWallScheduleRow
@@ -78,10 +86,10 @@ namespace QS3D.Core.Reporting
                 aggregate.NetGlassAreaM2.Add(Q(element, "CurtainNetGlassAreaM2"), element.Id + "/CurtainNetGlassAreaM2");
                 aggregate.FrameFaceAreaM2.Add(Q(element, "CurtainFrameFaceAreaM2"), element.Id + "/CurtainFrameFaceAreaM2");
                 aggregate.FrameLengthM.Add(Q(element, "CurtainFrameLengthM"), element.Id + "/CurtainFrameLengthM");
-                row.MinimumClearPanelWidthM = Math.Min(row.MinimumClearPanelWidthM, Q(element, "CurtainMinClearPanelWidthM"));
-                row.MaximumClearPanelWidthM = Math.Max(row.MaximumClearPanelWidthM, Q(element, "CurtainMaxClearPanelWidthM"));
-                row.MinimumClearPanelHeightM = Math.Min(row.MinimumClearPanelHeightM, Q(element, "CurtainMinClearPanelHeightM"));
-                row.MaximumClearPanelHeightM = Math.Max(row.MaximumClearPanelHeightM, Q(element, "CurtainMaxClearPanelHeightM"));
+                row.MinimumClearPanelWidthM = Math.Min(row.MinimumClearPanelWidthM, minimumClearPanelWidthM);
+                row.MaximumClearPanelWidthM = Math.Max(row.MaximumClearPanelWidthM, maximumClearPanelWidthM);
+                row.MinimumClearPanelHeightM = Math.Min(row.MinimumClearPanelHeightM, minimumClearPanelHeightM);
+                row.MaximumClearPanelHeightM = Math.Max(row.MaximumClearPanelHeightM, maximumClearPanelHeightM);
                 row.ElementIds.Add(element.Id);
                 ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
             }
@@ -100,6 +108,26 @@ namespace QS3D.Core.Reporting
                 if (row.MinimumClearPanelHeightM == double.MaxValue) row.MinimumClearPanelHeightM = 0d;
             }
             return order.Select(x => rows[x]).ToList().AsReadOnly();
+        }
+
+        private static void RequireClearPanelEnvelope(
+            ProjectElement element,
+            out double minimumWidthM,
+            out double maximumWidthM,
+            out double minimumHeightM,
+            out double maximumHeightM)
+        {
+            minimumWidthM = Q(element, "CurtainMinClearPanelWidthM");
+            maximumWidthM = Q(element, "CurtainMaxClearPanelWidthM");
+            minimumHeightM = Q(element, "CurtainMinClearPanelHeightM");
+            maximumHeightM = Q(element, "CurtainMaxClearPanelHeightM");
+
+            if (minimumWidthM > maximumWidthM)
+                throw new InvalidOperationException(
+                    element.Id + "/CurtainClearPanelWidthM minimum cannot exceed maximum.");
+            if (minimumHeightM > maximumHeightM)
+                throw new InvalidOperationException(
+                    element.Id + "/CurtainClearPanelHeightM minimum cannot exceed maximum.");
         }
 
         private static string GroupKey(string floorId, string familyId)
