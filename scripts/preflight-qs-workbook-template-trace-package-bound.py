@@ -35,9 +35,15 @@ if "private const long MaxTemplateWorkbookBytes" in source:
 
 for token in [
     "OversizedWorkbookFailsAtPackageAdmission();",
+    "CanonicalWorkbookStillReadsTrace();",
     "128L * 1024L * 1024L + 1L",
     '"XLSX template workbook is too large for bounded processing."',
     "QsWorkbookTemplateTraceReader.Read(path, definition, 2);",
+    'const string fingerprint = "DRAW-001";',
+    'const string elementId = "E-001";',
+    'const string handle = "1A";',
+    "CreateCanonicalWorkbook(path, fingerprint, elementId, handle, traceKey);",
+    "var trace = QsWorkbookTemplateTraceReader.Read(path, CreateDefinition(), 2);",
 ]:
     if token not in smoke:
         raise SystemExit("FAIL: missing deterministic trace package-bound smoke contract: " + token)
@@ -45,4 +51,4 @@ for token in [
 if "QsWorkbookTemplateTracePackageBoundSmoke.Run();" not in registration:
     raise SystemExit("FAIL: trace package-bound smoke is not registered")
 
-print("PASS: QS workbook template trace package admission is bounded before ZIP parsing")
+print("PASS: QS workbook template trace package admission is bounded and preserves canonical trace reads")
