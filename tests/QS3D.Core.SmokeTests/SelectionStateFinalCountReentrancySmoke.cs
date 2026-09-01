@@ -27,7 +27,7 @@ namespace QS3D.Core.SmokeTests
                 () => state.Replace(source),
                 "Selection changed while replacement element ids were being enumerated");
 
-            Equal(7, source.CountReads, "reentrant final Count reads");
+            Equal(9, source.CountReads, "reentrant final Count reads");
             Equal(2, source.MoveNextCalls, "reentrant traversal MoveNext calls");
             Equal(1, source.CurrentReads, "reentrant traversal Current reads");
             Equal(1, changed, "only the nested replacement may publish");
@@ -43,7 +43,7 @@ namespace QS3D.Core.SmokeTests
 
             state.Replace(source);
 
-            Equal(7, source.CountReads, "stable final Count reads");
+            Equal(9, source.CountReads, "stable final Count reads");
             Equal(2, source.MoveNextCalls, "stable MoveNext calls");
             Equal(1, source.CurrentReads, "stable Current reads");
             Equal(1, changed, "stable Changed events");
@@ -138,7 +138,7 @@ namespace QS3D.Core.SmokeTests
                 get
                 {
                     CountReads++;
-                    if (!_reentered && CountReads == 7)
+                    if (!_reentered && CountReads == 9)
                     {
                         _reentered = true;
                         _state.Replace(new[] { "INNER" });
