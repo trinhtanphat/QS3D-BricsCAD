@@ -29,13 +29,17 @@ if not (bounded_pos < archive_pos < array_pos):
 for token in [
     "AggregatePackageCrossingArchiveCeilingFailsClosed();",
     "OrdinaryPackageStillRoundTrips();",
-    "BcfIssueExchangeContract.MaxTopics",
+    "private const int MaxAdmittedTopics = 256;",
+    "index <= MaxAdmittedTopics",
     "BcfZipPackage.Write(BcfIssueExchange.Create(topics))",
     '"BCF package exceeds the bounded archive size."',
     "BcfZipPackage.Read(package)",
 ]:
     if token not in smoke:
         raise SystemExit("FAIL: missing deterministic BCF ZIP write-bound smoke contract: " + token)
+
+if "BcfIssueExchangeContract" in smoke:
+    raise SystemExit("FAIL: smoke must not depend on the Core-internal BCF contract type")
 
 if "BcfZipWriteBoundSmoke.Run();" not in registration:
     raise SystemExit("FAIL: BCF ZIP write-bound smoke is not registered")
