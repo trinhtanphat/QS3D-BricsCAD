@@ -79,11 +79,15 @@ namespace QS3D.BricsCAD.V25
                 errorMessage = _lastErrorMessage;
             }
 
+            var build = McpRuntimeBuildProvenance.Current;
             var errorJson = string.IsNullOrWhiteSpace(errorCode)
                 ? "null"
                 : "{\"code\":\"" + Escape(errorCode) + "\",\"message\":\"" + Escape(errorMessage) + "\"}";
             return "{\"lane\":\"qs3d_domain\",\"available\":" + JsonBool(available)
                 + ",\"context\":{\"available\":" + JsonBool(contextAvailable) + ",\"reason\":\"" + Escape(contextReason) + "\"}"
+                + ",\"buildSha\":\"" + Escape(build.BuildSha) + "\""
+                + ",\"buildId\":\"" + Escape(build.BuildId) + "\""
+                + ",\"buildUtc\":\"" + Escape(build.BuildUtc) + "\""
                 + ",\"lastError\":" + errorJson + ",\"deprecatedAlias\":" + JsonBool(deprecatedAlias) + "}";
         }
 
