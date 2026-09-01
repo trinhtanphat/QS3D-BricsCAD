@@ -6,6 +6,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "scripts/assert-v26-release-request.ps1"
 WORKFLOW = ROOT / ".github/workflows/release-v26.yml"
+PUBLISHER = ROOT / "scripts/publish-v26-release.ps1"
 PACKAGE = ROOT / "scripts/package-v26.ps1"
 errors = []
 
@@ -48,6 +49,7 @@ def strict_semver_tag(tag: str):
 
 helper = read(HELPER, "V26 release-request helper")
 workflow = read(WORKFLOW, "V26 release workflow")
+publisher = read(PUBLISHER, "V26 hosted publisher")
 package = read(PACKAGE, "V26 packager")
 
 for token in (
@@ -70,10 +72,18 @@ for token in (
     "-Prerelease:($env:RELEASE_PRERELEASE -eq 'true')",
     "-RunRuntime:($env:RELEASE_RUN_RUNTIME -eq 'true')",
     "-SignPackage:($env:RELEASE_SIGN_PACKAGE -eq 'true')",
-    "$isPrerelease = [bool]$releaseRequest.IsPrerelease",
-    "$signPackage = [bool]$releaseRequest.SignPackage",
+    "if ([bool]$releaseRequest.SignPackage)",
+    "needs: qualify",
+    "V26_RELEASE_REQUEST_PRERELEASE: ${{ inputs.prerelease }}",
+    "V26_RELEASE_REQUEST_SIGN_PACKAGE: ${{ inputs.sign_package }}",
 ):
     require(workflow, token, "V26 release workflow")
+
+for token in (
+    "$isPrerelease = $env:V26_RELEASE_REQUEST_PRERELEASE -eq 'true'",
+    "$signPackage = $env:V26_RELEASE_REQUEST_SIGN_PACKAGE -eq 'true'",
+):
+    require(publisher, token, "V26 hosted publisher")
 
 for token in (
     "^v[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$",
@@ -150,4 +160,4 @@ if errors:
         print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: manual V26 release admission is strict-SemVer, prerelease-state bound, stable-gate preserving, and package-provenance aligned.")
+print("PASS: manual V26 release admission is strict-SemVer, prerelease-state bound across the qualify/publish split, stable-gate preserving, and package-provenance aligned.")
