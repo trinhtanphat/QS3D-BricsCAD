@@ -41,7 +41,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void CurrentDriftWinsBeforeNullRowValidation()
         {
-            var source = new HostileCollection(new RebarProcurementSummary[] { null }, 1, 1, 1, mutateAfterCurrent: 1, mutatedCount: 2);
+            var source = new HostileCollection(new RebarProcurementSummary[] { null! }, 1, 1, 1, mutateAfterCurrent: 1, mutatedCount: 2);
             ThrowsCountIntegrity(() => RebarProcurementCsvExporter.ToCsv(source));
             Equal(1, source.CurrentReads);
             Equal(1, source.MoveNextCalls);
