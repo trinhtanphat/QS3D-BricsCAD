@@ -22,7 +22,7 @@ namespace QS3D.BricsCAD.V25
     /// </summary>
     internal static class McpCadAgentRuntime
     {
-        private const int CadDispatchTimeoutMilliseconds = 15000;
+        private const int CadDispatchTimeoutMilliseconds = 8000;
         private const long MaxAuditBytes = 4L * 1024L * 1024L;
         private const string AuditFileName = "mcp-agent-audit.jsonl";
         private const int CadWorkQueued = 0;
