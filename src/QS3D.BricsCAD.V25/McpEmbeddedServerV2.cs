@@ -33,6 +33,7 @@ namespace QS3D.BricsCAD.V25
         private const string ServerVersion = "embedded-7";
         private const string BearerEnvironment = "QS3D_MCP_BEARER_TOKEN";
         private const string TokenFileName = "mcp-bearer-token.txt";
+        private const string LocalTunnelAuthorizationHeader = "X-QS3D-MCP-Local-Authorization";
 
         private static readonly object Sync = new object();
         private static readonly object SessionSync = new object();
@@ -344,6 +345,7 @@ namespace QS3D.BricsCAD.V25
                    || string.Equals(name, "Content-Type", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "Transfer-Encoding", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "Authorization", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(name, LocalTunnelAuthorizationHeader, StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "Origin", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "Mcp-Session-Id", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "MCP-Protocol-Version", StringComparison.OrdinalIgnoreCase)
@@ -1165,14 +1167,35 @@ namespace QS3D.BricsCAD.V25
         private static bool Authorize(IDictionary<string, string> headers, string publicMcpUrl, out bool oauthAccessToken)
         {
             oauthAccessToken = false;
+
+            string localAuthorization;
+            if (headers.TryGetValue(LocalTunnelAuthorizationHeader, out localAuthorization)
+                && McpTransportCoordinator.SelectedProvider == McpTransportProvider.OpenAiSecureTunnel)
+            {
+                string localToken;
+                if (!TryExtractBearerToken(localAuthorization, out localToken)) return false;
+                return ConstantTimeEquals(localToken, GetBearerToken());
+            }
+
             string authorization;
             if (!headers.TryGetValue("Authorization", out authorization)) return false;
-            const string prefix = "Bearer ";
-            if (!authorization.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
-            if (ConstantTimeEquals(authorization.Substring(prefix.Length).Trim(), GetBearerToken())) return true;
+            string bearerToken;
+            if (!TryExtractBearerToken(authorization, out bearerToken)) return false;
+            if (ConstantTimeEquals(bearerToken, GetBearerToken())) return true;
             if (!McpOAuthAuthorizationServer.TryValidateAccessToken(headers, publicMcpUrl, GetBearerToken())) return false;
             oauthAccessToken = true;
             return true;
+        }
+
+        private static bool TryExtractBearerToken(string authorization, out string token)
+        {
+            token = string.Empty;
+            const string prefix = "Bearer ";
+            if (string.IsNullOrWhiteSpace(authorization)
+                || !authorization.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return false;
+            token = authorization.Substring(prefix.Length).Trim();
+            return token.Length > 0;
         }
 
         private static void RecordOAuthMcpActivity(string method, string publicMcpUrl)
