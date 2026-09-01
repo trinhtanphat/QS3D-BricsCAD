@@ -128,7 +128,7 @@ namespace QS3D.Core.Export
     {
         internal const int MaxExcelRows = 1048576;
         private const int MaxExcelColumns = 16384;
-        private const long MaxTemplateWorkbookBytes = 128L * 1024L * 1024L;
+        internal const long MaxTemplateWorkbookBytes = 128L * 1024L * 1024L;
         private const long MaxTemplateMetadataXmlCharacters = 4L * 1024L * 1024L;
         private const long MaxTemplateXmlCharacters = 64L * 1024L * 1024L;
         private static readonly XNamespace SpreadsheetNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -183,10 +183,10 @@ namespace QS3D.Core.Export
             }
         }
 
-        private static void ValidateTemplatePackageLength(long length)
+        internal static void ValidateTemplatePackageLength(long length)
         {
             if (length < 0 || length > MaxTemplateWorkbookBytes)
-                throw new InvalidDataException("XLSX template is too large for bounded template export.");
+                throw new InvalidDataException("XLSX template workbook is too large for bounded processing.");
         }
 
         internal static int ParseColumn(string column)
@@ -745,7 +745,10 @@ namespace QS3D.Core.Export
             foreach (var field in required)
                 if (!fields.ContainsKey(field)) throw new InvalidDataException("Template trace requires mapping for " + field + ".");
 
-            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            var fullPath = Path.GetFullPath(path);
+            if (!File.Exists(fullPath)) throw new FileNotFoundException("Template workbook was not found.", fullPath);
+            QsWorkbookTemplateExporter.ValidateTemplatePackageLength(new FileInfo(fullPath).Length);
+            using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             using (var archive = new ZipArchive(stream, ZipArchiveMode.Read, false, Encoding.UTF8))
             {
                 var part = QsWorkbookTemplateExporter.ResolveWorksheetPart(archive, definition.WorksheetName);
