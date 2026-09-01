@@ -365,6 +365,8 @@ namespace QS3D.Core.Persistence
                     throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a quantity name containing control characters.");
 
                 var canonicalName = quantity.Key.Trim();
+                if (!string.Equals(canonicalName, quantity.Key, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a non-canonical quantity name: '" + quantity.Key + "'.");
                 try
                 {
                     XmlConvert.VerifyXmlChars(canonicalName);
