@@ -46,8 +46,10 @@ namespace QS3D.Core.Services
             var processedDependencies = new List<KeyValuePair<ProjectElement, HashSet<string>>>();
             var enumerationVersion = _rebuildVersion;
             var elementCount = 0;
+            RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency graph rebuild");
             using (var enumerator = elements.GetEnumerator())
             {
+                RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency graph rebuild");
                 while (true)
                 {
                     RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency graph rebuild");
@@ -166,8 +168,10 @@ namespace QS3D.Core.Services
             var knownCount = RejectKnownOversizedInput(elements, "Dependency ordering", out var knownCountSources);
             var materialized = new List<ProjectElement>();
             var snapshots = new List<OrderingSnapshot>();
+            RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency ordering");
             using (var enumerator = elements.GetEnumerator())
             {
+                RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency ordering");
                 while (true)
                 {
                     RequireStableKnownCount(elements, knownCount, knownCountSources, "Dependency ordering");
