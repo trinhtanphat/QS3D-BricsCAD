@@ -530,6 +530,19 @@ def validate_pull_request_event(
     except (TypeError, ValueError) as exc:
         raise ValueError("pull request number is missing or invalid") from exc
 
+    current_open = False
+    for candidate in open_prs:
+        if not isinstance(candidate, dict):
+            continue
+        try:
+            if int(candidate.get("number") or 0) == number:
+                current_open = True
+                break
+        except (TypeError, ValueError):
+            continue
+    if not current_open:
+        return None, []
+
     explicit_lane_key = extract_lane_key(pr.get("body"))
     issue_number = branch_issue_number(head_ref) if head_ref.startswith("agent/") else None
     if issue_number is not None:
