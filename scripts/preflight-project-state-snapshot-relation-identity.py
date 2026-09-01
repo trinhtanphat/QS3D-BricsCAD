@@ -57,20 +57,24 @@ def main() -> int:
         raise AssertionError("relation validation helper must precede element property validation helper")
     helper = source[helper_start:helper_end]
     for token, label in (
-        ("new HashSet<string>(StringComparer.OrdinalIgnoreCase)", "case-insensitive duplicate set"),
         ("string.IsNullOrWhiteSpace(value)", "blank rejection"),
         ("string.Equals(value, value.Trim(), StringComparison.Ordinal)", "surrounding-whitespace canonicality"),
         ("HasControlCharacter(value)", "control-character rejection"),
         ("XmlConvert.VerifyXmlChars(value)", "XML text validation"),
-        ("seen.Add(value)", "duplicate rejection"),
     ):
         require(helper, token, label)
+
+    if "seen.Add(value)" in helper or "duplicate " + '" + role' in helper:
+        raise AssertionError("snapshot relation validation must preserve repairable duplicate identities for rollback/service repair")
 
     for token in (
         'ExpectRejectedRelation(true, " A1 ", "padded source handle")',
         'ExpectRejectedRelation(false, " HOST ", "padded dependency")',
-        'ExpectRejectedDuplicate(true, "A1", "a1", "case-insensitive duplicate source handle")',
-        'ExpectRejectedDuplicate(false, "HOST", "host", "case-insensitive duplicate dependency")',
+        'PreservesRepairableDuplicateRelations();',
+        'element.SourceHandles.Add("A1")',
+        'element.SourceHandles.Add("a1")',
+        'element.DependsOn.Add("HOST")',
+        'element.DependsOn.Add("host")',
         'const string handle = "HANDLE-\\U0001F680"',
         'const string dependency = "HOST-\\U0001F680"',
     ):
