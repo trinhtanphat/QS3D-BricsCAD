@@ -4,6 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.xaml.cs"
+XREF_LOCK_SOURCE = ROOT / "src/QS3D.BricsCAD.V25/UI/RightPanel.XrefLock.cs"
 errors = []
 
 
@@ -82,6 +83,44 @@ else:
     if text.count("catch (Exception)") < 12:
         errors.append("Right Panel redaction guard expected all CAD failure catches to use non-binding Exception catches")
 
+if not XREF_LOCK_SOURCE.is_file():
+    errors.append("missing RightPanel.XrefLock.cs")
+else:
+    xref_lock = XREF_LOCK_SOURCE.read_text(encoding="utf-8")
+    for forbidden in ("ex.Message", "+ ex.Message", "catch (Exception ex)", "GetBaseException()", "StackTrace"):
+        if forbidden in xref_lock:
+            errors.append("Right Panel Xref-lock failure surface must not retain host exception detail: " + forbidden)
+
+    for token in (
+        "private const string XrefInstanceLockFailureStatus",
+        "private const string XrefInstanceUnlockFailureStatus",
+        "XrefService.SetInstanceLayersLocked(document, item.Name, locked)",
+        "var failureStatus = locked ? XrefInstanceLockFailureStatus : XrefInstanceUnlockFailureStatus;",
+        "_viewModel.Status = failureStatus;",
+        "RefreshDrawingsOnly();",
+        "ReloadLayers();",
+        "_viewModel.Status = failureStatus + RefreshWarningSuffix;",
+    ):
+        if token not in xref_lock:
+            errors.append("Right Panel Xref-lock redaction/recovery contract missing: " + token)
+
+    method = bounded_method(xref_lock, "private void SetSelectedXrefInstanceLayerLocks(bool locked)")
+    if not method:
+        errors.append("Right Panel missing Xref-lock mutation method")
+    else:
+        ordered = (
+            "XrefService.SetInstanceLayersLocked(document, item.Name, locked)",
+            "RefreshAfterXrefMutation(status);",
+            "catch (Exception)",
+            "_viewModel.Status = failureStatus;",
+            "RefreshDrawingsOnly();",
+            "ReloadLayers();",
+            "_viewModel.Status = failureStatus + RefreshWarningSuffix;",
+        )
+        positions = [method.find(token) for token in ordered]
+        if min(positions) < 0 or positions != sorted(positions) or len(set(positions)) != len(positions):
+            errors.append("Right Panel Xref-lock path must preserve mutate -> success refresh / redacted failure -> best-effort recovery ordering")
+
 print("QS3D RightPanel error-redaction preflight")
 if errors:
     for error in errors:
@@ -89,4 +128,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Right Panel CAD/Xref/layer failure surfaces use stable redacted statuses, preserve action ordering, and keep post-failure refresh best-effort without exposing host exception text.")
+print("PASS: Right Panel CAD/Xref/layer failure surfaces, including split Xref lock/unlock handling, use stable redacted statuses and fail-isolated recovery without exposing host exception text.")

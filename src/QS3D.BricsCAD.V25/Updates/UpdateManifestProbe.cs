@@ -36,6 +36,7 @@ namespace QS3D.BricsCAD.V25.Updates
         private const string Product = "QS3D";
         private const string Target = "BricsCAD V25 x64";
         private const string RepositoryReleasePathPrefix = "/trinhtanphat/QS3D-BricsCAD/releases/download/";
+        private const string ManifestProbeFailure = "Không xác minh được update manifest trước khi đóng BricsCAD. Kiểm tra kết nối mạng và thử lại; auto-update vẫn bị chặn.";
         private static readonly Regex Sha256Pattern = new Regex("^[0-9A-Fa-f]{64}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex ThumbprintPattern = new Regex("^[0-9A-Fa-f]{40}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
@@ -45,9 +46,7 @@ namespace QS3D.BricsCAD.V25.Updates
             var manifestUri = release.ManifestUri;
             if (manifestUri == null) return UpdateManifestProbeResult.Rejected("Release không có update manifest.");
             if (!IsExpectedReleaseAssetUri(manifestUri, release.Tag, GitHubReleaseClient.UpdateManifestAssetName))
-            {
                 return UpdateManifestProbeResult.Rejected("Update manifest không thuộc đúng repository/tag/asset GitHub đã chọn.");
-            }
 
             var expectedSigner = NormalizeThumbprint(expectedSignerThumbprint);
             if (!ThumbprintPattern.IsMatch(expectedSigner))
@@ -85,9 +84,9 @@ namespace QS3D.BricsCAD.V25.Updates
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                return UpdateManifestProbeResult.Rejected("Không xác minh được update manifest trước khi đóng BricsCAD: " + ex.Message);
+                return UpdateManifestProbeResult.Rejected(ManifestProbeFailure);
             }
         }
 
@@ -100,9 +99,7 @@ namespace QS3D.BricsCAD.V25.Updates
             if (!string.Equals(manifest.Target, Target, StringComparison.Ordinal))
                 return UpdateManifestProbeResult.Rejected("Update manifest không dành cho BricsCAD V25 x64.");
 
-            var expectedProductVersion = release.Tag.StartsWith("v", StringComparison.Ordinal)
-                ? release.Tag.Substring(1)
-                : release.Tag;
+            var expectedProductVersion = release.Tag.StartsWith("v", StringComparison.Ordinal) ? release.Tag.Substring(1) : release.Tag;
             var productVersion = manifest.ProductVersion?.Trim();
             if (productVersion == null || productVersion.Length == 0 || productVersion.StartsWith("v", StringComparison.Ordinal))
                 return UpdateManifestProbeResult.Rejected("Update manifest productVersion không phải QS3D SemVer chuẩn.");
@@ -114,14 +111,8 @@ namespace QS3D.BricsCAD.V25.Updates
                 return UpdateManifestProbeResult.Rejected("Update manifest productVersion không khớp release SemVer đã chọn.");
 
             var assemblyVersionText = manifest.Version?.Trim();
-            if (string.IsNullOrEmpty(assemblyVersionText) ||
-                !Version.TryParse(assemblyVersionText, out var assemblyVersion) || assemblyVersion == null ||
-                assemblyVersion.Major != release.Version.Major ||
-                assemblyVersion.Minor != release.Version.Minor ||
-                assemblyVersion.Build != release.Version.Patch)
-            {
+            if (string.IsNullOrEmpty(assemblyVersionText) || !Version.TryParse(assemblyVersionText, out var assemblyVersion) || assemblyVersion == null || assemblyVersion.Major != release.Version.Major || assemblyVersion.Minor != release.Version.Minor || assemblyVersion.Build != release.Version.Patch)
                 return UpdateManifestProbeResult.Rejected("Update manifest assembly version không khớp release core version.");
-            }
 
             var signer = NormalizeThumbprint(manifest.SignerThumbprint);
             if (!ThumbprintPattern.IsMatch(signer) || !string.Equals(signer, expectedSigner, StringComparison.Ordinal))
@@ -132,12 +123,8 @@ namespace QS3D.BricsCAD.V25.Updates
                 return UpdateManifestProbeResult.Rejected("Update manifest SHA-256 không hợp lệ.");
 
             var packageUriText = manifest.PackageUri?.Trim();
-            if (string.IsNullOrEmpty(packageUriText) ||
-                !Uri.TryCreate(packageUriText, UriKind.Absolute, out var packageUri) || packageUri == null ||
-                !IsExpectedReleaseAssetUri(packageUri, release.Tag, "QS3D-BricsCAD-V25.zip"))
-            {
+            if (string.IsNullOrEmpty(packageUriText) || !Uri.TryCreate(packageUriText, UriKind.Absolute, out var packageUri) || packageUri == null || !IsExpectedReleaseAssetUri(packageUri, release.Tag, "QS3D-BricsCAD-V25.zip"))
                 return UpdateManifestProbeResult.Rejected("Update package URL không thuộc đúng repository/tag/asset GitHub đã chọn.");
-            }
 
             return UpdateManifestProbeResult.Eligible();
         }
@@ -168,8 +155,7 @@ namespace QS3D.BricsCAD.V25.Updates
                 return false;
             }
 
-            return string.Equals(decodedTag, tag, StringComparison.Ordinal) &&
-                   string.Equals(decodedAsset, assetName, StringComparison.Ordinal);
+            return string.Equals(decodedTag, tag, StringComparison.Ordinal) && string.Equals(decodedAsset, assetName, StringComparison.Ordinal);
         }
 
         private static string NormalizeThumbprint(string? value)
