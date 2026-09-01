@@ -31,12 +31,15 @@ namespace QS3D.Core.Persistence
 
         public void SavePreservingValidatedBackup(ProjectState project, string path)
         {
+            if (project == null) throw new ArgumentNullException(nameof(project));
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Project path is required.", nameof(path));
             var fullPath = Path.GetFullPath(path);
             var backupPath = fullPath + ".bak";
             if (!File.Exists(backupPath))
                 throw new FileNotFoundException("A validated QSDB backup is required for recovery-safe publication.", backupPath);
-            Load(backupPath);
+            var validatedBackup = Load(backupPath);
+            if (!string.Equals(validatedBackup.ProjectId, project.ProjectId, StringComparison.Ordinal))
+                throw new InvalidDataException("Validated QSDB backup project identity does not match the project being published.");
             SaveCore(project, fullPath, SaveMode.ReplacePrimaryOnly, MaxProjectFileBytes);
             Load(fullPath);
             Load(backupPath);

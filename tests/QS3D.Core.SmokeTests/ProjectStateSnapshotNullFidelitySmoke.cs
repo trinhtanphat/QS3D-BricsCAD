@@ -47,8 +47,8 @@ namespace QS3D.Core.SmokeTests
                 ZoneId = null!,
                 DrawingFingerprint = null!
             };
-            element.SourceHandles.Add(null!);
-            element.DependsOn.Add(null!);
+            element.SourceHandles.Add("AB12");
+            element.DependsOn.Add("E-BASE");
             element.Properties["NullProperty"] = null!;
             project.Elements.Add(element);
 
@@ -79,7 +79,7 @@ namespace QS3D.Core.SmokeTests
             element.FloorId = "changed-floor";
             element.ZoneId = "changed-zone";
             element.DrawingFingerprint = "changed-element-fingerprint";
-            element.SourceHandles[0] = "AB12";
+            element.SourceHandles[0] = "CD34";
             element.DependsOn[0] = "E-HOST";
             element.Properties["NullProperty"] = "changed-property";
 
@@ -105,8 +105,8 @@ namespace QS3D.Core.SmokeTests
             IsEmpty(element.FloorId, label + " element floor id");
             IsEmpty(element.ZoneId, label + " element zone id");
             IsEmpty(element.DrawingFingerprint, label + " element drawing fingerprint");
-            IsNull(element.SourceHandles[0], label + " source handle");
-            IsNull(element.DependsOn[0], label + " dependency");
+            IsEqual("AB12", element.SourceHandles[0], label + " source handle");
+            IsEqual("E-BASE", element.DependsOn[0], label + " dependency");
             IsNull(element.Properties["NullProperty"], label + " element property value");
 
             var audit = project.AuditEvents[0];
@@ -121,6 +121,12 @@ namespace QS3D.Core.SmokeTests
         {
             if (!string.Equals(value, string.Empty, StringComparison.Ordinal))
                 throw new InvalidOperationException(label + ": expected canonical empty-string backing state.");
+        }
+
+        private static void IsEqual(string expected, string? value, string label)
+        {
+            if (!string.Equals(value, expected, StringComparison.Ordinal))
+                throw new InvalidOperationException(label + ": expected canonical relation identity '" + expected + "'.");
         }
 
         private static void IsNull(object? value, string label)
