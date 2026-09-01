@@ -126,7 +126,8 @@ namespace QS3D.Core.Persistence
 
         private static void RequireCanonicalAttribute(XElement element, string attributeName, string owner)
         {
-            var value = element.Attribute(attributeName)?.Value;
+            var value = element.Attribute(attributeName)?.Value
+                ?? throw new InvalidDataException(owner + " is missing required " + attributeName + ".");
             if (string.IsNullOrWhiteSpace(value)) throw new InvalidDataException(owner + " is missing required " + attributeName + ".");
             if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
                 throw new InvalidDataException(owner + " must not contain leading/trailing whitespace.");
