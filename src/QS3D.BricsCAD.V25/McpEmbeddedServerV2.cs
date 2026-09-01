@@ -824,7 +824,7 @@ namespace QS3D.BricsCAD.V25
                 Tool("cad_database_snapshot", "Read bounded ModelSpace entity snapshot.", "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":1000}"),
                 Tool("cad_entity_inspect", "Inspect one entity by hexadecimal handle.", "\"handle\":{\"type\":\"string\",\"maxLength\":32}", "handle"),
                 Tool("cad_view_state", "Read command-active and current view/window state.", ""),
-                Tool("cad_wait_idle", "Wait until BricsCAD CMDACTIVE becomes zero.", "\"timeoutMs\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":30000}"),
+                Tool("cad_wait_idle", "Wait until BricsCAD CMDACTIVE becomes zero.", "\"timeoutMs\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":7000}"),
                 Tool("cad_sysvar", "Read one privacy-safe allowlisted BricsCAD system variable.", "\"name\":{\"type\":\"string\",\"enum\":[\"CMDACTIVE\",\"INSUNITS\",\"CLAYER\",\"CTAB\",\"TILEMODE\",\"DWGNAME\",\"CVPORT\",\"ORTHOMODE\",\"OSMODE\"]}", "name"),
                 Tool("cad_create_line", "Create native Line in ModelSpace.", Numeric("x1","y1","z1","x2","y2","z2") + CommonLayerConfirm(), "x1","y1","x2","y2","confirmMutation"),
                 Tool("cad_create_circle", "Create native Circle in ModelSpace.", Numeric("x","y","z","radius") + CommonLayerConfirm(), "x","y","radius","confirmMutation"),

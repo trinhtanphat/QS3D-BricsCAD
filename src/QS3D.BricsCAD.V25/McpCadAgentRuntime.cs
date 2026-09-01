@@ -97,7 +97,7 @@ namespace QS3D.BricsCAD.V25
                 case "cad_database_snapshot": return InvokeCad(() => BuildDatabaseSnapshotJson(Integer(args, "limit", 250, 1, 1000)));
                 case "cad_entity_inspect": return InspectEntity(args);
                 case "cad_view_state": return InvokeCad(BuildViewStateJson);
-                case "cad_wait_idle": return WaitUntilIdle(Integer(args, "timeoutMs", 10000, 100, 30000));
+                case "cad_wait_idle": return WaitUntilIdle(Integer(args, "timeoutMs", 5000, 100, 7000));
                 case "cad_sysvar": return ReadSystemVariable(args);
                 case "cad_create_line": return Mutation(args, tool, () => CreateLine(args));
                 case "cad_create_circle": return Mutation(args, tool, () => CreateCircle(args));
