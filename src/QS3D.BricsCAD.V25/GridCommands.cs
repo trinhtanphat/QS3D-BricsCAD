@@ -56,9 +56,9 @@ namespace QS3D.BricsCAD.V25
 
                 count = SemanticCaptureService.Capture(document, ElementCategory.Grid);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                ReportOperationFailure(document, "QS3DGRID lỗi: " + ex.Message);
+                ReportOperationFailure(document, "QS3DGRID lỗi: không thể hoàn tất Grid capture.");
                 return;
             }
 
@@ -96,9 +96,9 @@ namespace QS3D.BricsCAD.V25
                 try { PaletteCoordinator.SetStatus(status); } catch { }
                 TryWriteMessage(document, "\nQS3D " + status);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                ReportOperationFailure(document, "QS3DGRIDINTERSECTIONHEALTH lỗi: " + ex.Message);
+                ReportOperationFailure(document, "QS3DGRIDINTERSECTIONHEALTH lỗi: không thể kiểm tra Grid intersection markers.");
             }
         }
 
@@ -152,9 +152,13 @@ namespace QS3D.BricsCAD.V25
                 catch { }
                 TryWriteMessage(document, "\nQS3D " + status);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                ReportOperationFailure(document, (selectedOnly ? "QS3DGRIDINTERSECTIONSSEL" : "QS3DGRIDINTERSECTIONS") + " lỗi: " + ex.Message);
+                ReportOperationFailure(
+                    document,
+                    selectedOnly
+                        ? "QS3DGRIDINTERSECTIONSSEL lỗi: không thể refresh Grid intersection markers cho selection."
+                        : "QS3DGRIDINTERSECTIONS lỗi: không thể refresh Grid intersection markers.");
             }
         }
 
@@ -191,16 +195,12 @@ namespace QS3D.BricsCAD.V25
         {
             var label = subtype.Length > 0 ? subtype : "Grid/Trục";
             var status = label + ": đã capture " + count + " semantic reference(s). Grid hiện là reference/takeoff semantic, không sinh native 3D; chạy QS3DGRIDINTERSECTIONS để materialize giao điểm pair-owned.";
-            try
-            {
-                PaletteCoordinator.RefreshProject();
-                PaletteCoordinator.SetStatus(status);
-                document.Editor.WriteMessage("\nQS3D " + status);
-            }
-            catch (Exception ex)
-            {
-                TryWriteMessage(document, "\nQS3D " + status + " UI sync warning: " + ex.Message);
-            }
+            var uiSyncFailed = false;
+            try { PaletteCoordinator.RefreshProject(); } catch { uiSyncFailed = true; }
+            try { PaletteCoordinator.SetStatus(status); } catch { uiSyncFailed = true; }
+            TryWriteMessage(document, "\nQS3D " + status);
+            if (uiSyncFailed)
+                TryWriteMessage(document, "\nQS3D Grid: semantic capture đã hoàn tất; một phần UI không thể đồng bộ.");
         }
 
         private static void ReportOperationFailure(Document document, string message)
