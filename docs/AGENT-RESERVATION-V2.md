@@ -74,6 +74,8 @@ For same-repository `agent/**` carriers whose branch contains `issue-<N>`, the P
 
 This removes redundant manual PR metadata without weakening the canonical reservation, duplicate-carrier, ownership or path-overlap checks. The gate remains read-only: it validates metadata but does not edit the PR body.
 
+For a queued `pull_request` run, the current open-PR list is authoritative for whether the historical event snapshot is still mergeable. If the exact PR number is no longer open when validation starts, the PR-specific reservation check exits successfully before Issue validation because that queued carrier is terminal and cannot merge. Reopening the PR restores it to the open list and immediately restores normal fail-closed Reservation v2 validation. Push validation is unchanged and never receives this terminal-PR bypass.
+
 The gate never grants merge permission and never mutates repository state.
 
 ## Collision recovery
