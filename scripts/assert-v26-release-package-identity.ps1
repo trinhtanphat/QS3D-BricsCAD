@@ -10,7 +10,10 @@ param(
     [string]$CorePath,
 
     [Parameter(Mandatory = $true)]
-    [string]$ReleaseTag
+    [string]$ReleaseTag,
+
+    [Parameter(Mandatory = $true)]
+    [string]$ExpectedSourceCommit
 )
 
 Set-StrictMode -Version Latest
@@ -178,6 +181,11 @@ function Read-BoundedStrictUtf8Stream {
     }
 }
 
+if ($ExpectedSourceCommit -notmatch '^[0-9A-Fa-f]{40}$') {
+    throw 'ExpectedSourceCommit must be one exact 40-hex Git commit SHA.'
+}
+$expectedSourceCommitNormalized = $ExpectedSourceCommit.ToLowerInvariant()
+
 $heldFiles = New-Object 'System.Collections.Generic.List[object]'
 try {
     # Admit all release-identity inputs first and keep every generation locked
@@ -207,6 +215,15 @@ try {
     if (-not [string]::Equals(('v' + [string]$metadata.productVersion), $ReleaseTag, [StringComparison]::Ordinal)) {
         throw "Release tag $ReleaseTag does not exactly match V26 productVersion $($metadata.productVersion)."
     }
+
+    $metadataSourceCommit = ([string]$metadata.gitCommit).Trim()
+    if ($metadataSourceCommit -notmatch '^[0-9A-Fa-f]{40}$') {
+        throw 'V26 package metadata gitCommit must be one exact 40-hex Git commit SHA.'
+    }
+    if (-not [string]::Equals($metadataSourceCommit.ToLowerInvariant(), $expectedSourceCommitNormalized, [StringComparison]::Ordinal)) {
+        throw "V26 package source commit $metadataSourceCommit does not match expected workflow SHA $ExpectedSourceCommit."
+    }
+
     try {
         $packageVersion = [Version]::Parse([string]$metadata.version)
     }
@@ -230,6 +247,7 @@ try {
 
     [pscustomobject]@{
         ProductVersion = [string]$metadata.productVersion
+        SourceCommit = $metadataSourceCommit.ToLowerInvariant()
         AssemblyVersion = $packageVersion.ToString()
         MetadataBytes = $metadataHeld.Length
         MetadataSha256 = $metadataHeld.Sha256
