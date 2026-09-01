@@ -22,7 +22,7 @@ namespace QS3D.BricsCAD.V25
         private const int DefaultSnapshotEvents = 50;
         private const int MaxScannedEventsPerFile = 50000;
         private const int MaxEventCharacters = 8192;
-        private const int MaxWaitMilliseconds = 15000;
+        private const int MaxWaitMilliseconds = 7000;
         private const int MinPollMilliseconds = 100;
         private const int MaxPollMilliseconds = 1000;
         private static readonly string StreamEpoch = Guid.NewGuid().ToString("N");
@@ -53,7 +53,7 @@ namespace QS3D.BricsCAD.V25
                 Tool(
                     "diagnostics_wait",
                     "Bounded long-poll for unified diagnostic events after an epoch-bound sequence cursor. No unbounded server event stream is opened.",
-                    "\"afterSequence\":{\"type\":\"integer\",\"minimum\":0},\"afterStreamEpoch\":{\"type\":\"string\",\"minLength\":32,\"maxLength\":32,\"pattern\":\"^[0-9a-fA-F]{32}$\"},\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100},\"timeoutMs\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":15000},\"pollIntervalMs\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":1000}",
+                    "\"afterSequence\":{\"type\":\"integer\",\"minimum\":0},\"afterStreamEpoch\":{\"type\":\"string\",\"minLength\":32,\"maxLength\":32,\"pattern\":\"^[0-9a-fA-F]{32}$\"},\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100},\"timeoutMs\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":7000},\"pollIntervalMs\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":1000}",
                     true, false, true,
                     "afterSequence"),
                 Tool(

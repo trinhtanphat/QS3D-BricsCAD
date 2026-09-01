@@ -42,7 +42,7 @@ for tool in (
 
 requirements = {
     "bounded event count": (runtime, "private const int MaxEvents = 100;"),
-    "bounded wait": (runtime, "private const int MaxWaitMilliseconds = 15000;"),
+    "bounded wait": (runtime, "private const int MaxWaitMilliseconds = 7000;"),
     "bounded event line": (runtime, "private const int MaxEventCharacters = 8192;"),
     "canonical audit path": (runtime, "McpCadAgentRuntime.AuditFilePath"),
     "rotated canonical audit": (runtime, 'yield return path + ".1";'),

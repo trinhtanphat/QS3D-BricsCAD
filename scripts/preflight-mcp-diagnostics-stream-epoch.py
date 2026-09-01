@@ -30,8 +30,8 @@ if 'afterSequence > 0' not in runtime or 'afterStreamEpoch' not in runtime:
     fail("nonzero numeric cursors must be fail-closed unless bound to an epoch")
 if "StringComparison.OrdinalIgnoreCase" not in runtime:
     fail("cursor epoch comparison must be case-insensitive for canonical hex input")
-if "MaxWaitMilliseconds = 15000" not in runtime:
-    fail("existing bounded diagnostics wait contract must remain 15 seconds")
+if "MaxWaitMilliseconds = 7000" not in runtime:
+    fail("bounded diagnostics wait contract must remain below the edge deadline at 7000 ms")
 if "MaxScannedEventsPerFile = 50000" not in runtime:
     fail("existing bounded canonical diagnostics scan contract must remain")
 if "McpCadAgentRuntime.AuditFilePath" not in runtime or 'yield return path + ".1";' not in runtime:
