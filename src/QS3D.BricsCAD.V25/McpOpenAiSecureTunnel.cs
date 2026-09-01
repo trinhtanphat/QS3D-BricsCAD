@@ -423,7 +423,6 @@ namespace QS3D.BricsCAD.V25
 
                 WriteTextVerified(AutoStartFile, "1");
                 McpTransportCoordinator.SetSelectedProvider(McpTransportProvider.OpenAiSecureTunnel);
-                ResetWatchdogFailures();
                 EnsureWatchdogStarted();
                 message = "OpenAI Secure MCP Tunnel đang khởi động. Runtime API key đã được xác minh và lưu bảo mật trong Windows Credential Manager; không ghi secret vào config/timeline. Chờ READY rồi kết nối ChatGPT bằng Connection = Tunnel.";
                 return true;
@@ -690,20 +689,16 @@ namespace QS3D.BricsCAD.V25
                     message = ex.Message;
                 }
 
-                if (restarted)
-                {
-                    ResetWatchdogFailures();
-                    return;
-                }
-
                 TimeSpan backoff;
                 lock (Sync)
                 {
-                    _consecutiveUnready = UnreadyRestartThreshold;
+                    _consecutiveUnready = restarted ? 0 : UnreadyRestartThreshold;
                     _restartAttempt = Math.Min(_restartAttempt + 1, 30);
                     backoff = ComputeRestartBackoff(_restartAttempt);
                     _nextRestartUtc = DateTime.UtcNow + backoff;
                 }
+                if (restarted) return;
+
                 SetLastError("OpenAI MCP tunnel self-heal failed after " + reason + "; retry in "
                              + ((int)backoff.TotalSeconds).ToString() + "s: " + message);
             }
