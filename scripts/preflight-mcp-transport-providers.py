@@ -95,9 +95,10 @@ def main() -> int:
     for token, label in {
         'private const string LocalTunnelAuthorizationHeader = "X-QS3D-MCP-Local-Authorization";': "embedded dedicated local-auth constant",
         'string.Equals(name, LocalTunnelAuthorizationHeader, StringComparison.OrdinalIgnoreCase)': "local-auth singleton header parsing",
-        'headers.TryGetValue(LocalTunnelAuthorizationHeader, out localAuthorization)': "dedicated local-origin credential read",
-        'McpTransportCoordinator.SelectedProvider == McpTransportProvider.OpenAiSecureTunnel': "provider-scoped local auth",
-        'return ConstantTimeEquals(localToken, GetBearerToken());': "constant-time local bearer comparison",
+        'private static bool IsValidLocalTunnelAuthorization(': "dedicated local-origin validation helper",
+        'headers.TryGetValue(LocalTunnelAuthorizationHeader, out authorization)': "dedicated local-origin credential read",
+        'McpTransportCoordinator.SelectedProvider != McpTransportProvider.OpenAiSecureTunnel': "provider-scoped local auth",
+        'return ConstantTimeEquals(token, GetBearerToken());': "constant-time local bearer comparison",
         'headers.TryGetValue("Authorization", out authorization)': "existing Authorization compatibility",
         'McpOAuthAuthorizationServer.TryValidateAccessToken(headers, publicMcpUrl, GetBearerToken())': "OAuth access-token validation preservation",
     }.items():

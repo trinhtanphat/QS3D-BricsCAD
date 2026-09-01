@@ -61,24 +61,32 @@ def main() -> None:
             "embedded MCP dedicated local-auth header constant is missing")
     require(server, 'string.Equals(name, LocalTunnelAuthorizationHeader, StringComparison.OrdinalIgnoreCase)',
             "dedicated local-auth header must be a security-sensitive singleton")
-    require(server, 'headers.TryGetValue(LocalTunnelAuthorizationHeader, out localAuthorization)',
+    require(server, 'private static bool IsValidLocalTunnelAuthorization(',
+            "provider-scoped local tunnel auth helper is missing")
+    require(server, 'McpTransportCoordinator.SelectedProvider != McpTransportProvider.OpenAiSecureTunnel',
+            "dedicated local-auth helper is not scoped fail-closed to OpenAI Secure Tunnel")
+    require(server, 'headers.TryGetValue(LocalTunnelAuthorizationHeader, out authorization)',
             "embedded MCP does not read the dedicated local-auth header")
-    require(server, 'McpTransportCoordinator.SelectedProvider == McpTransportProvider.OpenAiSecureTunnel',
-            "dedicated local-auth header is not scoped to OpenAI Secure Tunnel")
-    require(server, 'if (!TryExtractBearerToken(localAuthorization, out localToken)) return false;',
+    require(server, 'if (!TryExtractBearerToken(authorization, out token)) return false;',
             "malformed dedicated Bearer must fail closed")
-    require(server, 'return ConstantTimeEquals(localToken, GetBearerToken());',
+    require(server, 'return ConstantTimeEquals(token, GetBearerToken());',
             "dedicated local bearer is not compared in constant time")
-    require(server, 'if (!request.Headers.TryGetValue("Content-Type", out contentType)',
-            "embedded MCP must still require Content-Type on POST")
-    require(server, '|| !IsJsonContentType(contentType))',
-            "embedded MCP must still reject non-JSON Content-Type through exact media-type parsing")
+    require(server, 'var trustedOpenAiTunnelRequest = IsValidLocalTunnelAuthorization(request.Headers);',
+            "POST handling does not derive trusted tunnel state from validated local auth")
+    require(server, 'var hasJsonContentType =',
+            "embedded MCP no longer derives exact JSON Content-Type state")
+    require(server, 'request.Headers.TryGetValue("Content-Type", out contentType)',
+            "embedded MCP no longer reads Content-Type on POST")
+    require(server, '&& IsJsonContentType(contentType);',
+            "embedded MCP exact media-type parsing was removed")
+    require(server, 'if (!hasJsonContentType && !trustedOpenAiTunnelRequest)',
+            "Content-Type compatibility is not limited to authenticated OpenAI tunnel requests")
     require(server, 'private static bool IsJsonContentType(string contentType)',
             "embedded MCP exact JSON media-type parser is missing")
     require(server, 'WriteResponse(stream, 415, "Unsupported Media Type", "{\\"error\\":\\"Content-Type application/json is required\\"}", null);',
-            "embedded MCP must still return HTTP 415 for missing/wrong Content-Type")
+            "embedded MCP must still return HTTP 415 for missing/wrong Content-Type outside the trusted tunnel exception")
 
-    print("PASS: OpenAI Secure MCP Tunnel forwards application/json with collision-safe provider-scoped local auth.")
+    print("PASS: OpenAI Secure MCP Tunnel forwards application/json; authenticated local tunnel requests tolerate connector rewrites while non-tunnel media-type enforcement remains strict.")
 
 
 if __name__ == "__main__":
