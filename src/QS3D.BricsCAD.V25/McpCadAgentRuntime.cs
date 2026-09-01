@@ -138,9 +138,10 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static bool ToolRequiresMutation(string tool)
+        private static bool ToolRequiresMutation(string? tool)
         {
-            switch (tool ?? string.Empty)
+            var normalizedTool = tool ?? string.Empty;
+            switch (normalizedTool)
             {
                 case "cad_create_line":
                 case "cad_create_circle":
@@ -161,9 +162,9 @@ namespace QS3D.BricsCAD.V25
                 case "cad_cancel_command":
                     return true;
             }
-            if (McpQs3dDomainRuntime.IsTool(tool)) return McpQs3dDomainRuntime.RequiresMutation(tool);
-            if (McpCadDirectModelRuntime.IsTool(tool)) return McpCadDirectModelRuntime.RequiresMutation(tool);
-            if (McpDesktopAutomationRuntime.IsTool(tool)) return McpDesktopAutomationRuntime.RequiresMutation(tool);
+            if (McpQs3dDomainRuntime.IsTool(normalizedTool)) return McpQs3dDomainRuntime.RequiresMutation(normalizedTool);
+            if (McpCadDirectModelRuntime.IsTool(normalizedTool)) return McpCadDirectModelRuntime.RequiresMutation(normalizedTool);
+            if (McpDesktopAutomationRuntime.IsTool(normalizedTool)) return McpDesktopAutomationRuntime.RequiresMutation(normalizedTool);
             return false;
         }
 
@@ -597,7 +598,6 @@ namespace QS3D.BricsCAD.V25
             }
             return builder.Append("],\"guard\":\"one allowlisted command; bounded prompt lines; no known command chaining after terminators\"}").ToString();
         }
-
         private static string NormalizeCadCommandToken(string value)
         {
             var token = (value ?? string.Empty).Trim();
