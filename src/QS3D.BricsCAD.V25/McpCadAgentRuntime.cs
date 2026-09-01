@@ -549,7 +549,7 @@ namespace QS3D.BricsCAD.V25
 
         private static string RunCadCommandSequence(string body)
         {
-            var command = NormalizeCadCommandToken(McpTopLevelJson.ExtractString(body, "command").Trim());
+            var command = NormalizeCadCommandToken(McpTopLevelJson.ExtractString(body, "command"));
             if (!AllowedCadCommands.Contains(command)) throw new InvalidOperationException("Command is not in the QS3D MCP CAD allowlist. Use cad_command_catalog.");
             var inputs = NormalizeCommandInputs(McpTopLevelJson.ExtractString(body, "inputs"), command);
             return InvokeCadMutation(() =>
