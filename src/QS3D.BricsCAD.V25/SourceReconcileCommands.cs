@@ -39,7 +39,7 @@ namespace QS3D.BricsCAD.V25
             try { PaletteCoordinator.SetStatus(status); } catch { uiSyncFailed = true; }
             try { document.Editor.WriteMessage("\nQS3D " + status); } catch { uiSyncFailed = true; }
             if (uiSyncFailed)
-                TryWriteMessage(document, "\nQS3D Sync Source UI sync warning: reconcile đã commit; một phần UI không thể đồng bộ.");
+                TryWriteMessage(document, "\nQS3D Sync Source UI sync warning: reconcile đã hoàn tất; một phần UI không thể đồng bộ.");
         }
 
         private static void ReportOperationFailure(Document document, string message)
