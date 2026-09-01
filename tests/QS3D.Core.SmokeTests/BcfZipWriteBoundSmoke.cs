@@ -7,6 +7,8 @@ namespace QS3D.Core.SmokeTests
 {
     internal static class BcfZipWriteBoundSmoke
     {
+        private const int MaxAdmittedTopics = 256;
+
         internal static void Run()
         {
             AggregatePackageCrossingArchiveCeilingFailsClosed();
@@ -18,7 +20,7 @@ namespace QS3D.Core.SmokeTests
             var topics = new List<BcfTopic>();
             var title = new string('T', 40000);
             var description = new string('D', 40000);
-            for (var index = 1; index <= BcfIssueExchangeContract.MaxTopics; index++)
+            for (var index = 1; index <= MaxAdmittedTopics; index++)
             {
                 topics.Add(new BcfTopic(
                     "00000000-0000-0000-0000-" + index.ToString("D12"),
