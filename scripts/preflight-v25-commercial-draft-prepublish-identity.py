@@ -6,6 +6,26 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 VALIDATOR = (ROOT / "scripts/assert-v25-commercial-draft-identity.ps1").read_text(encoding="utf-8")
 WORKFLOW = (ROOT / ".github/workflows/release-v25.yml").read_text(encoding="utf-8")
+DOWNLOAD_TOKEN = "gh release download $env:RELEASE_TAG"
+PUBLISH_TOKEN = "$published = Invoke-RestMethod -Method Patch"
+
+
+def publish_window(workflow: str) -> str:
+    download_index = workflow.find(DOWNLOAD_TOKEN)
+    publish_index = workflow.find(PUBLISH_TOKEN, download_index + 1 if download_index >= 0 else 0)
+    if download_index < 0 or publish_index < 0 or publish_index <= download_index:
+        return ""
+    return workflow[download_index:publish_index]
+
+
+def replace_in_publish_window(workflow: str, old: str, new: str) -> str:
+    download_index = workflow.find(DOWNLOAD_TOKEN)
+    publish_index = workflow.find(PUBLISH_TOKEN, download_index + 1 if download_index >= 0 else 0)
+    if download_index < 0 or publish_index < 0 or publish_index <= download_index:
+        return workflow
+    window = workflow[download_index:publish_index]
+    mutated = window.replace(old, new, 1)
+    return workflow[:download_index] + mutated + workflow[publish_index:]
 
 
 def validate(validator: str, workflow: str) -> list[str]:
@@ -37,6 +57,11 @@ def validate(validator: str, workflow: str) -> list[str]:
     if "[IO.FileShare]::ReadWrite" in validator or "[IO.FileShare]::Write" in validator:
         errors.append("downloaded V25 draft semantic generations must not share write access")
 
+    window = publish_window(workflow)
+    if not window:
+        errors.append("V25 commercial release workflow must expose one draft-download to final-publish admission window")
+        return errors
+
     workflow_tokens = (
         "assert-v25-commercial-draft-identity.ps1",
         "-PackageZip (Join-Path $downloadRoot 'QS3D-BricsCAD-V25.zip')",
@@ -49,13 +74,11 @@ def validate(validator: str, workflow: str) -> list[str]:
         "Downloaded V25 draft semantic admission returned no identity",
     )
     for token in workflow_tokens:
-        if token not in workflow:
-            errors.append(f"V25 commercial release workflow missing downloaded-draft admission token: {token}")
+        if token not in window:
+            errors.append(f"V25 final publish window missing downloaded-draft admission token: {token}")
 
-    download_index = workflow.find("gh release download $env:RELEASE_TAG")
-    admission_index = workflow.find("assert-v25-commercial-draft-identity.ps1")
-    publish_index = workflow.find("$published = Invoke-RestMethod -Method Patch")
-    if download_index < 0 or admission_index < 0 or publish_index < 0 or not (download_index < admission_index < publish_index):
+    admission_index = window.find("assert-v25-commercial-draft-identity.ps1")
+    if admission_index < 0:
         errors.append("downloaded V25 draft semantic admission must occur after draft download and before final publish PATCH")
 
     return errors
@@ -66,8 +89,9 @@ if errors:
     raise SystemExit("V25 commercial draft prepublish identity preflight failed:\n - " + "\n - ".join(errors))
 
 mutations = {
-    "workflow omits downloaded draft validator": (VALIDATOR, WORKFLOW.replace("assert-v25-commercial-draft-identity.ps1", "legacy-draft-check.ps1", 1)),
-    "workflow omits exact source": (VALIDATOR, WORKFLOW.replace("-ExpectedSourceCommit $env:GITHUB_SHA", "-ExpectedSourceCommit $env:RELEASE_TAG", 1)),
+    "workflow omits downloaded draft validator": (VALIDATOR, replace_in_publish_window(WORKFLOW, "assert-v25-commercial-draft-identity.ps1", "legacy-draft-check.ps1")),
+    "workflow omits exact source": (VALIDATOR, replace_in_publish_window(WORKFLOW, "-ExpectedSourceCommit $env:GITHUB_SHA", "-ExpectedSourceCommit $env:RELEASE_TAG")),
+    "workflow omits exact tag": (VALIDATOR, replace_in_publish_window(WORKFLOW, "-ExpectedReleaseTag $env:RELEASE_TAG", "-ExpectedReleaseTag $env:GITHUB_SHA")),
     "validator loses provenance source": (VALIDATOR.replace("[string]$provenance.sourceCommit", "[string]$ExpectedSourceCommit", 1), WORKFLOW),
     "validator loses package digest": (VALIDATOR.replace("[string]$provenance.packageSha256", "[string]$zipHash", 1), WORKFLOW),
     "validator loses update digest": (VALIDATOR.replace("[string]$provenance.updateManifestSha256", "[string]$updateHash", 1), WORKFLOW),
