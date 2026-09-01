@@ -14,6 +14,8 @@ namespace QS3D.Core.SmokeTests
             RejectsNonCanonicalElementRelationIdentities();
             PreservesRepairableDuplicateRelations();
             PreservesCanonicalUnicodeElementRelations();
+            RejectsNonCanonicalQuantityIdentityWithoutMutation();
+            PreservesCanonicalUnicodeQuantityIdentity();
         }
 
         private static void RestorePreservesCapturedFamilyIdentity()
@@ -173,6 +175,41 @@ namespace QS3D.Core.SmokeTests
             var copy = detached.FindElement("E1") ?? throw new Exception("Detached snapshot lost the canonical relation fixture element.");
             Require(copy.SourceHandles.Count == 1 && string.Equals(copy.SourceHandles[0], handle, StringComparison.Ordinal), "Detached snapshot changed canonical source-handle text.");
             Require(copy.DependsOn.Count == 1 && string.Equals(copy.DependsOn[0], dependency, StringComparison.Ordinal), "Detached snapshot changed canonical dependency text.");
+        }
+
+        private static void RejectsNonCanonicalQuantityIdentityWithoutMutation()
+        {
+            var project = NewRelationProject("quantity-padded");
+            var element = project.Elements[0];
+            const string padded = " NetVolumeM3 ";
+            const double value = 12.5d;
+            element.Quantities[padded] = value;
+            var originalDirty = element.Dirty;
+            var originalUpdatedUtc = element.UpdatedUtc;
+            var originalChangeVersion = project.ChangeVersion;
+            var originalProjectUpdatedUtc = project.UpdatedUtc;
+
+            ExpectInvalidOperation(() => ProjectStateSnapshot.Capture(project), "Padded quantity identity was accepted by snapshot capture.");
+            ExpectInvalidOperation(() => ProjectStateSnapshot.CreateDetachedCopy(project), "Padded quantity identity was silently normalized by detached copy.");
+
+            Require(element.Quantities.Count == 1 && element.Quantities.ContainsKey(padded) && element.Quantities[padded] == value, "Padded quantity rejection mutated the original quantity identity/value.");
+            Require(!element.Quantities.ContainsKey("NetVolumeM3"), "Padded quantity rejection created a normalized source identity.");
+            Require(element.Dirty == originalDirty && element.UpdatedUtc == originalUpdatedUtc, "Padded quantity rejection changed element persistence state.");
+            Require(project.ChangeVersion == originalChangeVersion && project.UpdatedUtc == originalProjectUpdatedUtc, "Padded quantity rejection changed project persistence state.");
+        }
+
+        private static void PreservesCanonicalUnicodeQuantityIdentity()
+        {
+            var project = NewRelationProject("quantity-unicode");
+            var element = project.Elements[0];
+            const string quantityName = "KhốiLượng-\U0001F680";
+            const double quantityValue = 19.2d;
+            element.SetQuantity(quantityName, quantityValue);
+
+            var detached = ProjectStateSnapshot.CreateDetachedCopy(project);
+            var copy = detached.FindElement("E1") ?? throw new Exception("Detached snapshot lost the canonical Unicode quantity fixture element.");
+            Require(copy.Quantities.Count == 1 && copy.Quantities.ContainsKey(quantityName), "Detached snapshot changed canonical Unicode quantity identity.");
+            Require(copy.Quantities[quantityName].Equals(quantityValue), "Detached snapshot changed canonical Unicode quantity value.");
         }
 
         private static ProjectState NewRelationProject(string label)
