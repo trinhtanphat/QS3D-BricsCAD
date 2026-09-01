@@ -178,7 +178,7 @@ namespace QS3D.BricsCAD.V25
                     // A changed generated handle means a native builder may already have committed CAD +
                     // matching semantic ownership before a post-commit BricsCAD/UI operation failed.
                     // Rolling the project back here would create a worse CAD/semantic mismatch.
-                    Report(document, "QS3DBUILD3D: native ownership đã thay đổi trước lỗi post-commit; giữ trạng thái đã commit để tránh lệch CAD/semantic. Chi tiết: " + operationError.Message);
+                    Report(document, "QS3DBUILD3D: native ownership đã thay đổi trước lỗi post-commit; giữ trạng thái đã commit để tránh lệch CAD/semantic. Kiểm tra viewport/selection và chạy Health nếu cần.");
                     return;
                 }
 
@@ -189,9 +189,9 @@ namespace QS3D.BricsCAD.V25
                 // into a false QS3DBUILD3D failure report or replace the user's current viewport.
                 FinalizeUi(document, elementIds, sourceHandles, built, regenerated, category, project);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Report(document, "QS3DBUILD3D lỗi: " + ex.Message);
+                Report(document, "QS3DBUILD3D lỗi: không thể hoàn tất native rebuild cho selection hiện tại.");
             }
         }
 
@@ -353,11 +353,12 @@ namespace QS3D.BricsCAD.V25
             ProjectState project)
         {
             var status = "Vẽ/Cập nhật 3D: " + built + " solid • " + elementIds.Count + " semantic • " + category + " • regenerate " + regenerated + ".";
+            var uiSyncFailed = false;
+            try { PaletteCoordinator.RefreshProject(); } catch { uiSyncFailed = true; }
+            try { document.Editor.Regen(); } catch { uiSyncFailed = true; }
+
             try
             {
-                PaletteCoordinator.RefreshProject();
-                document.Editor.Regen();
-
                 // Resolve current project elements by id instead of retaining pre-build object references.
                 // Builder rollback restores ProjectState from clones, so stale references must never be reused.
                 var generatedHandles = elementIds
@@ -369,14 +370,13 @@ namespace QS3D.BricsCAD.V25
                     .ToList();
                 if (generatedHandles.Count > 0) CadHandleService.Select(document, generatedHandles);
                 else CadHandleService.Select(document, sourceHandles);
+            }
+            catch { uiSyncFailed = true; }
 
-                PaletteCoordinator.SetStatus(status);
-                document.Editor.WriteMessage("\nQS3D " + status);
-            }
-            catch (Exception ex)
-            {
-                TryWriteMessage(document, "\nQS3D " + status + " UI sync warning: " + ex.Message);
-            }
+            try { PaletteCoordinator.SetStatus(status); } catch { uiSyncFailed = true; }
+            try { document.Editor.WriteMessage("\nQS3D " + status); } catch { uiSyncFailed = true; }
+            if (uiSyncFailed)
+                TryWriteMessage(document, "\nQS3D Build 3D UI sync warning: native rebuild đã commit; một phần viewport/selection/UI không thể đồng bộ.");
         }
 
         private static void Write(Document document, string message) => Report(document, message);
