@@ -49,7 +49,7 @@ required_smoke = [
     "GrowthRejectsBeforeUnexpectedCurrentRead",
     "ShrinkRejectsBeforeSecondCurrentRead",
     "CurrentDriftWinsBeforeNullRowValidation",
-    "new RebarProcurementSummary[] { null }",
+    "new RebarProcurementSummary[] { null! }",
     "UnderYieldRejectsAgainstAdmittedCount",
     "ConflictingInterfacesRejectBeforeEnumeration",
     "OversizedKnownCountRejectsBeforeEnumeration",
