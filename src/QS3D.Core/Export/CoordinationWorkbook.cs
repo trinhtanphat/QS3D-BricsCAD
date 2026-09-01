@@ -444,9 +444,11 @@ namespace QS3D.Core.Export
         {
             var document = LoadXml(entry);
             XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-            var rows = document.Descendants(ns + "row").ToList();
-            var header = ReadCells(FindUniqueRow(rows, 1), ns, sharedStrings, out var headerFormulas);
-            var target = ReadCells(FindUniqueRow(rows, rowNumber), ns, sharedStrings, out var targetFormulas);
+            var selected = SelectCoordinationRowsBounded(document, ns, rowNumber);
+            if (ParseRow(selected.Header) != 1 || selected.Target == null || ParseRow(selected.Target) != rowNumber)
+                throw new InvalidDataException("Coordination workbook selected row metadata changed during lookup.");
+            var header = ReadCells(selected.Header, ns, sharedStrings, out var headerFormulas);
+            var target = ReadCells(selected.Target, ns, sharedStrings, out var targetFormulas);
             var columns = RequiredColumns(header, headerFormulas, new[] { "CLASH_ID", "ELEMENT_A_HANDLE", "ELEMENT_B_HANDLE", "RULE_ID", "DRAWING_FINGERPRINT", CoordinationWorkbookExporter.TraceHeader });
             foreach (var column in columns.Values)
                 if (targetFormulas.Contains(column)) throw new InvalidDataException("Coordination workbook identity cells must be literal values.");
@@ -463,34 +465,68 @@ namespace QS3D.Core.Export
         {
             var document = LoadXml(entry);
             XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-            var rows = document.Descendants(ns + "row").ToList();
-            var header = ReadCells(FindUniqueRow(rows, 1), ns, sharedStrings, out var headerFormulas);
+            var selected = SelectCoordinationRowsBounded(document, ns, null);
+            if (ParseRow(selected.Header) != 1)
+                throw new InvalidDataException("Coordination workbook TRACE_MODEL header metadata changed during lookup.");
+            var header = ReadCells(selected.Header, ns, sharedStrings, out var headerFormulas);
             var columns = RequiredColumns(header, headerFormulas, new[] { CoordinationWorkbookExporter.TraceHeader, "SHEET", "ROW", "CLASH_ID", "LEFT_HANDLE", "RIGHT_HANDLE", "DRAWING_FINGERPRINT", "RULE_ID" });
-            var matches = new List<Tuple<Dictionary<int, string>, HashSet<int>>>();
-            foreach (var row in rows.Where(item => ParseRow(item) >= 2))
+
+            Dictionary<int, string>? matchedCells = null;
+            HashSet<int>? matchedFormulas = null;
+            foreach (var row in document.Descendants(ns + "row"))
             {
+                var declaredRow = ParseRow(row);
+                if (declaredRow < 2) continue;
                 var cells = ReadCells(row, ns, sharedStrings, out var formulas);
                 string value;
-                if (cells.TryGetValue(columns[CoordinationWorkbookExporter.TraceHeader], out value) && string.Equals(value, traceKey, StringComparison.Ordinal))
-                    matches.Add(Tuple.Create(cells, formulas));
+                if (!cells.TryGetValue(columns[CoordinationWorkbookExporter.TraceHeader], out value) || !string.Equals(value, traceKey, StringComparison.Ordinal))
+                    continue;
+                if (matchedCells != null)
+                    throw new InvalidDataException("TRACE_MODEL lookup is missing or ambiguous for TRACE_KEY " + traceKey + ".");
+                matchedCells = cells;
+                matchedFormulas = formulas;
             }
-            if (matches.Count != 1) throw new InvalidDataException("TRACE_MODEL lookup is missing or ambiguous for TRACE_KEY " + traceKey + ".");
+            if (matchedCells == null || matchedFormulas == null)
+                throw new InvalidDataException("TRACE_MODEL lookup is missing or ambiguous for TRACE_KEY " + traceKey + ".");
             foreach (var column in columns.Values)
-                if (matches[0].Item2.Contains(column)) throw new InvalidDataException("TRACE_MODEL identity cells must be literal values.");
-            var cellsByColumn = matches[0].Item1;
-            var sourceSheet = RequiredCell(cellsByColumn, columns["SHEET"], "TRACE_MODEL SHEET");
+                if (matchedFormulas.Contains(column)) throw new InvalidDataException("TRACE_MODEL identity cells must be literal values.");
+            var sourceSheet = RequiredCell(matchedCells, columns["SHEET"], "TRACE_MODEL SHEET");
             if (!string.Equals(sourceSheet, CoordinationWorkbookExporter.ClashSheet, StringComparison.Ordinal))
                 throw new InvalidDataException("TRACE_MODEL SHEET does not reference CLASHES.");
             int sourceRow;
-            if (!int.TryParse(RequiredCell(cellsByColumn, columns["ROW"], "TRACE_MODEL ROW"), NumberStyles.Integer, CultureInfo.InvariantCulture, out sourceRow) || sourceRow != rowNumber)
+            if (!int.TryParse(RequiredCell(matchedCells, columns["ROW"], "TRACE_MODEL ROW"), NumberStyles.Integer, CultureInfo.InvariantCulture, out sourceRow) || sourceRow != rowNumber)
                 throw new InvalidDataException("TRACE_MODEL ROW does not match the selected CLASHES row.");
             return new ClashProjection(
-                RequiredCell(cellsByColumn, columns["CLASH_ID"], "TRACE_MODEL CLASH_ID"),
-                CoordinationWorkbookIdentity.CanonicalHandle(RequiredCell(cellsByColumn, columns["LEFT_HANDLE"], "TRACE_MODEL LEFT_HANDLE")),
-                CoordinationWorkbookIdentity.CanonicalHandle(RequiredCell(cellsByColumn, columns["RIGHT_HANDLE"], "TRACE_MODEL RIGHT_HANDLE")),
-                RequiredCell(cellsByColumn, columns["DRAWING_FINGERPRINT"], "TRACE_MODEL DRAWING_FINGERPRINT"),
-                RequiredCell(cellsByColumn, columns["RULE_ID"], "TRACE_MODEL RULE_ID"),
+                RequiredCell(matchedCells, columns["CLASH_ID"], "TRACE_MODEL CLASH_ID"),
+                CoordinationWorkbookIdentity.CanonicalHandle(RequiredCell(matchedCells, columns["LEFT_HANDLE"], "TRACE_MODEL LEFT_HANDLE")),
+                CoordinationWorkbookIdentity.CanonicalHandle(RequiredCell(matchedCells, columns["RIGHT_HANDLE"], "TRACE_MODEL RIGHT_HANDLE")),
+                RequiredCell(matchedCells, columns["DRAWING_FINGERPRINT"], "TRACE_MODEL DRAWING_FINGERPRINT"),
+                RequiredCell(matchedCells, columns["RULE_ID"], "TRACE_MODEL RULE_ID"),
                 traceKey);
+        }
+
+        private static SelectedCoordinationRows SelectCoordinationRowsBounded(XDocument document, XNamespace ns, int? rowNumber)
+        {
+            XElement? header = null;
+            XElement? target = null;
+            foreach (var row in document.Descendants(ns + "row"))
+            {
+                var declaredRow = ParseRow(row);
+                if (declaredRow == 1)
+                {
+                    if (header != null) throw new InvalidDataException("Coordination workbook row 1 is duplicated.");
+                    header = row;
+                }
+                if (rowNumber.HasValue && declaredRow == rowNumber.Value)
+                {
+                    if (target != null) throw new InvalidDataException("Coordination workbook target row is duplicated.");
+                    target = row;
+                }
+            }
+            if (header == null) throw new InvalidDataException("Coordination workbook row 1 is missing.");
+            if (rowNumber.HasValue && target == null)
+                throw new InvalidDataException("Coordination workbook row " + rowNumber.Value + " is missing.");
+            return new SelectedCoordinationRows(header, target);
         }
 
         private static Dictionary<string, int> RequiredColumns(Dictionary<int, string> headers, HashSet<int> formulas, IEnumerable<string> names)
@@ -525,10 +561,10 @@ namespace QS3D.Core.Export
                 if (rel.Count != 1 || !string.Equals(((string)rel[0].Attribute("Type") ?? string.Empty).Trim(), WorksheetRelationshipType, StringComparison.Ordinal))
                     throw new InvalidDataException("Coordination workbook worksheet relationship is invalid.");
                 if (string.Equals((string)rel[0].Attribute("TargetMode"), "External", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("External worksheet relationships are not supported.");
-                var target = ((string)rel[0].Attribute("Target") ?? string.Empty).Replace('\\', '/').Trim().TrimStart('/');
-                if (target.StartsWith("xl/", StringComparison.OrdinalIgnoreCase)) target = target.Substring(3);
-                if (target.Length == 0 || target.Contains("..")) throw new InvalidDataException("Coordination workbook worksheet target is invalid.");
-                var entry = UniqueEntry(archive, "xl/" + target) ?? throw new InvalidDataException("Coordination workbook worksheet part is missing: " + target + ".");
+                var targetPath = ((string)rel[0].Attribute("Target") ?? string.Empty).Replace('\\', '/').Trim().TrimStart('/');
+                if (targetPath.StartsWith("xl/", StringComparison.OrdinalIgnoreCase)) targetPath = targetPath.Substring(3);
+                if (targetPath.Length == 0 || targetPath.Contains("..")) throw new InvalidDataException("Coordination workbook worksheet target is invalid.");
+                var entry = UniqueEntry(archive, "xl/" + targetPath) ?? throw new InvalidDataException("Coordination workbook worksheet part is missing: " + targetPath + ".");
                 result.Add(name, entry);
             }
             return result;
@@ -583,13 +619,6 @@ namespace QS3D.Core.Export
             return result;
         }
 
-        private static XElement FindUniqueRow(IEnumerable<XElement> rows, int rowNumber)
-        {
-            var matches = rows.Where(row => ParseRow(row) == rowNumber).ToList();
-            if (matches.Count != 1) throw new InvalidDataException("Coordination workbook row " + rowNumber + " is missing or duplicated.");
-            return matches[0];
-        }
-
         private static int ParseRow(XElement row)
         {
             int value;
@@ -633,6 +662,17 @@ namespace QS3D.Core.Export
             var settings = new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = MaxXmlCharacters };
             using (var stream = entry.Open())
             using (var reader = XmlReader.Create(stream, settings)) return XDocument.Load(reader, LoadOptions.None);
+        }
+
+        private sealed class SelectedCoordinationRows
+        {
+            public SelectedCoordinationRows(XElement header, XElement? target)
+            {
+                Header = header;
+                Target = target;
+            }
+            public XElement Header { get; }
+            public XElement? Target { get; }
         }
 
         private sealed class ClashProjection
