@@ -48,8 +48,10 @@ def main() -> None:
 
     require(server, 'if (!request.Headers.TryGetValue("Content-Type", out contentType)',
             "embedded MCP must still require Content-Type on POST")
-    require(server, '!contentType.StartsWith("application/json", StringComparison.OrdinalIgnoreCase)',
-            "embedded MCP must still reject non-JSON Content-Type")
+    require(server, '|| !IsJsonContentType(contentType))',
+            "embedded MCP must still reject non-JSON Content-Type through exact media-type parsing")
+    require(server, 'private static bool IsJsonContentType(string contentType)',
+            "embedded MCP exact JSON media-type parser is missing")
     require(server, 'WriteResponse(stream, 415, "Unsupported Media Type", "{\\"error\\":\\"Content-Type application/json is required\\"}", null);',
             "embedded MCP must still return HTTP 415 for missing/wrong Content-Type")
 
