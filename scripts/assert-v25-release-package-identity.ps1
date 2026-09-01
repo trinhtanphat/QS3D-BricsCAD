@@ -114,7 +114,8 @@ if ($ExpectedSourceCommit -notmatch '^[0-9A-Fa-f]{40}$') {
     throw 'ExpectedSourceCommit must be one exact 40-hex Git commit SHA.'
 }
 $expectedSource = $ExpectedSourceCommit.ToLowerInvariant()
-if (-not [string]::IsNullOrWhiteSpace($ExpectedReleaseTag) -and $ExpectedReleaseTag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$') {
+$strictReleaseTagPattern = '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$'
+if (-not [string]::IsNullOrWhiteSpace($ExpectedReleaseTag) -and $ExpectedReleaseTag -notmatch $strictReleaseTagPattern) {
     throw "ExpectedReleaseTag is not a supported exact release tag: $ExpectedReleaseTag"
 }
 
