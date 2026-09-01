@@ -295,7 +295,6 @@ namespace QS3D.Core.Persistence
 
         private static void RequireCanonicalRelationIdentities(IEnumerable<string> values, string elementId, string role)
         {
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var value in values)
             {
                 if (string.IsNullOrWhiteSpace(value))
@@ -316,8 +315,6 @@ namespace QS3D.Core.Persistence
                 {
                     throw new InvalidOperationException("Cannot snapshot element " + elementId + " with a " + role + " containing malformed XML text.", ex);
                 }
-                if (!seen.Add(value))
-                    throw new InvalidOperationException("Cannot snapshot element " + elementId + " with duplicate " + role + ": " + value + ".");
             }
         }
 
