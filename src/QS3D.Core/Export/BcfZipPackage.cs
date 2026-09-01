@@ -22,6 +22,7 @@ namespace QS3D.Core.Export
         private const string MarkupFileName = "markup.bcf";
         private const string OriginatingSystem = "QS3D";
         private static readonly DateTimeOffset DeterministicEntryTime = new DateTimeOffset(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         public static byte[] Write(BcfIssueExchange exchange)
         {
@@ -150,14 +151,14 @@ namespace QS3D.Core.Export
         private static string ReadText(ZipArchiveEntry entry)
         {
             using var stream = entry.Open();
-            using var reader = new StreamReader(stream, new UTF8Encoding(false, true), true);
+            using var reader = new StreamReader(stream, StrictUtf8, false);
             return reader.ReadToEnd();
         }
 
         private static void WriteTextEntry(ZipArchive archive, string path, string text)
         {
             ValidateSafeEntryPath(path);
-            var bytes = new UTF8Encoding(false, true).GetBytes(text);
+            var bytes = StrictUtf8.GetBytes(text);
             if (bytes.Length > MaxEntryBytes) throw new InvalidDataException("BCF package entry exceeds the bounded size: " + path);
             var entry = archive.CreateEntry(path, CompressionLevel.NoCompression);
             entry.LastWriteTime = DeterministicEntryTime;
