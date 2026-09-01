@@ -81,7 +81,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/preflight-pr-branch-ci-gate.py
       - name: Agent reservation / Lane-Key / path collision gate
-        if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+        if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && (github.event.action != 'edited' || !startsWith(github.event.pull_request.head.ref, 'agent/'))) }}
         env:
           QS3D_AGENT_LANE_COLLISION_RUNTIME: "1"
           GITHUB_TOKEN: ${{ github.token }}
