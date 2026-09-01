@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             FailedDurableReplaceRestoresPersistenceState();
             SuccessfulSaveRoundTripsChangeVersion();
+            MissingPrimaryReplacementRetiresStaleBackup();
             MissingCurrentChangeVersionIsRejected();
             InvalidPersistedChangeVersionIsRejected();
         }
@@ -76,6 +77,42 @@ namespace QS3D.Core.SmokeTests
                 var loaded = store.Load(path);
                 Require(loaded.ChangeVersion == project.ChangeVersion, "QSDB load did not restore the persisted change version.");
                 Require(loaded.UpdatedUtc == project.UpdatedUtc, "QSDB load did not restore the persisted UpdatedUtc timestamp.");
+            }
+            finally
+            {
+                Cleanup(path);
+            }
+        }
+
+        private static void MissingPrimaryReplacementRetiresStaleBackup()
+        {
+            var path = TempProjectPath("missing-primary-stale-backup");
+            try
+            {
+                var store = new QsdbProjectStore();
+                store.Save(new ProjectState("generation", "First"), path);
+                store.Save(new ProjectState("generation", "Second"), path);
+                Require(File.Exists(path + ".bak"), "Replacement setup did not create the prior-generation backup.");
+                Require(store.Load(path + ".bak").Name == "First", "Replacement setup did not preserve the expected first generation in backup.");
+
+                File.Delete(path);
+                Require(!File.Exists(path) && File.Exists(path + ".bak"), "Missing-primary setup did not leave only the stale backup generation.");
+
+                store.Save(new ProjectState("generation", "Third"), path);
+                Require(store.Load(path).Name == "Third", "Missing-primary replacement did not publish the new primary generation.");
+                Require(!File.Exists(path + ".bak"), "Missing-primary replacement left the stale prior-generation backup eligible for fallback.");
+
+                File.WriteAllText(path, "<broken");
+                var rejected = false;
+                try
+                {
+                    store.LoadWithBackupFallback(path);
+                }
+                catch (Exception ex) when (ex is InvalidDataException || ex is System.Xml.XmlException)
+                {
+                    rejected = true;
+                }
+                Require(rejected, "Corrupt recreated primary resurrected a stale backup generation through fallback.");
             }
             finally
             {

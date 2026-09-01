@@ -56,7 +56,7 @@ Inspect these first:
 9. `src/QS3D.BricsCAD.V25/McpDirectDiagnosticsThemeRuntime.cs` — direct diagnostics tail/since/snapshot/wait and theme tools.
 10. `src/QS3D.BricsCAD.V25/McpTopLevelJson.cs` — security-sensitive top-level JSON parsing and mutation confirmation.
 11. `src/QS3D.BricsCAD.V25/McpAgentControlCenter.cs` — guided four-tab `QS3DMCPAGENTCENTER` UX and transport selector.
-12. `src/QS3D.BricsCAD.V25/McpOpenAiSecureTunnel.cs` — transport coordinator plus OpenAI `tunnel-client` supervisor, binary trust verification, memory-only Runtime API key handling, readiness probing and bounded diagnostics.
+12. `src/QS3D.BricsCAD.V25/McpOpenAiSecureTunnel.cs` — transport coordinator plus OpenAI `tunnel-client` supervisor, binary trust verification, Credential Manager-backed Runtime API key handling, readiness probing and bounded diagnostics.
 13. `src/QS3D.BricsCAD.V25/McpLocalAgentClient.cs` — local loopback protocol/self-test/emergency-control client.
 14. `src/QS3D.BricsCAD.V25/McpAgentExperience.cs` — bounded local onboarding/action/error timeline; operational metadata only.
 15. `src/QS3D.BricsCAD.V25/McpProjectRecoveryService.cs` — autosave/BAK policy and bounded versioned DWG recovery-to-copy.
@@ -79,7 +79,7 @@ Use this when the user wants ChatGPT/OpenAI products to reach a local/private QS
 1. In OpenAI Platform, open **Tunnels** and create/reuse a tunnel. The runtime principal needs Tunnels **Read + Use**; operators that create/edit tunnels additionally need **Manage**.
 2. Obtain the official `tunnel-client` from OpenAI Platform Tunnels or the official `openai/tunnel-client` release.
 3. In Agent Center choose **OpenAI Secure Tunnel**, select `tunnel-client.exe`, and enter the `tunnel_...` ID. QS3D verifies `--version` and verifies the executable again immediately before launch.
-4. Enter a **Runtime API key** for the current session, or supply `CONTROL_PLANE_API_KEY`/`OPENAI_API_KEY` in the Windows environment. QS3D does **not** persist the Runtime API key.
+4. Enter a **Runtime API key** or supply `CONTROL_PLANE_API_KEY`/`OPENAI_API_KEY` in the Windows environment. A key entered through QS3D is stored only through the existing Windows Credential Manager contract after exact read-back verification; it is never written to YAML or the command line.
 5. Start the Secure Tunnel and wait until the local `tunnel-client` readiness endpoint reports **READY**.
 6. In ChatGPT connector/app settings choose **Connection = Tunnel** and select/paste the same Tunnel ID. This path does not require the QS3D public URL/OAuth screen.
 7. Keep `tunnel-client` running while ChatGPT needs the MCP.
@@ -94,12 +94,17 @@ QS3D computes SHA-256 itself and requires an exact match. A locally invented che
 
 QS3D writes a non-secret `tunnel-client.yaml` that points to the exact local `McpEmbeddedServer.Endpoint`. The config stores only environment references for secrets. The child process receives:
 
-- `CONTROL_PLANE_API_KEY` — Runtime API key;
+- `CONTROL_PLANE_API_KEY` — verified Runtime API key;
 - `QS3D_TUNNEL_MCP_AUTH` — `Bearer <local QS3D bearer>`;
-- YAML `Authorization: env:QS3D_TUNNEL_MCP_AUTH` for MCP runtime/discovery requests;
+- YAML `X-QS3D-MCP-Local-Authorization: env:QS3D_TUNNEL_MCP_AUTH` for MCP runtime/discovery requests;
+- YAML `Content-Type: application/json` for MCP runtime requests;
 - loopback-only health/admin binding.
 
-The Runtime API key and local bearer are not written to QS3D config, status timeline or audit. On process restart, a user-entered Runtime API key is gone; automatic restart is possible only when a suitable runtime key already exists in the process environment.
+OpenAI/ChatGPT `Authorization` and QS3D local tunnel-origin authentication are **two separate authentication layers** and must never share the same HTTP header. Connector-forwarded `Authorization` is left independent. The supervised local hop uses `X-QS3D-MCP-Local-Authorization`; this avoids the tunnel-client header-order collision where a connector `Authorization` applied after static headers can otherwise replace the local bearer and make the embedded MCP return 401.
+
+The dedicated header is accepted as local-origin authentication only when the selected provider is OpenAI Secure Tunnel. It is a security-sensitive singleton, malformed/wrong Bearer values fail closed without falling back to connector `Authorization`, and non-OpenAI/public requests cannot use it to bypass the existing OAuth/bearer policy. Existing direct local `Authorization: Bearer <local bearer>` compatibility remains supported.
+
+The Runtime API key and local bearer are not written as literal values to QS3D tunnel config, status timeline or audit. A verified Runtime API key can be re-projected from Windows Credential Manager across restart/update; the local MCP bearer keeps its existing persisted-token contract. Neither secret belongs on the tunnel-client command line.
 
 The supervisor captures a bounded tail of `tunnel-client` stdout/stderr for troubleshooting, records the process exit code and exposes a sanitized diagnostic bundle. API-key-like values and Authorization values are redacted before being retained. Diagnostic capture is bounded and must never be promoted into a secret-bearing persistent log.
 
@@ -157,13 +162,15 @@ Required invariants include public-client DCR, exact ChatGPT callback allowlisti
 
 ### OpenAI Secure Tunnel path
 
-Secure Tunnel does not require a QS3D public HTTPS resource. Transport identity/authorization is handled by the OpenAI tunnel control plane and workspace permissions. The local embedded QS3D MCP remains bearer-protected against unrelated local callers; the supervised local `tunnel-client` receives that bearer through a child environment reference and forwards it only to the loopback MCP target.
+Secure Tunnel does not require a QS3D public HTTPS resource. Transport identity/authorization is handled by the OpenAI tunnel control plane and workspace permissions. The connector/OpenAI `Authorization` header and the QS3D local-origin bearer are separate credentials. The supervised `tunnel-client` sends the local bearer to the loopback MCP only as `X-QS3D-MCP-Local-Authorization`, sourced from child environment `QS3D_TUNNEL_MCP_AUTH`.
 
-Do not persist the OpenAI Runtime API key or local QS3D bearer. Do not put either secret on the process command line. Do not write them into YAML, timeline, logs, screenshots or committed evidence.
+When OpenAI Secure Tunnel is selected, the active embedded server may authenticate that dedicated local header with constant-time comparison. A malformed or wrong dedicated credential is authoritative failure and cannot fall through to a connector OAuth `Authorization`. Outside the selected OpenAI tunnel provider, the dedicated header is not an alternate public bearer and cannot bypass OAuth. Direct local/engineering `Authorization: Bearer <local bearer>` and existing public OAuth `Authorization` continue under their existing contracts.
+
+Do not expose the OpenAI Runtime API key or local QS3D bearer. Do not put either secret on the process command line. Do not write literal secret values into YAML, timeline, logs, screenshots or committed evidence.
 
 ## 5. MCP transport, background-host boundary, desktop fallback and safety
 
-`/mcp` accepts a validated OAuth access token for the current public resource or the existing static bearer path used by bounded local/engineering integrations such as the supervised Secure Tunnel target. The active server remains loopback-only and keeps the existing request/session/admission defenses.
+`/mcp` accepts a validated OAuth access token for the current public resource, the existing static bearer path used by bounded local/engineering integrations, or the provider-scoped dedicated local-origin header used by the supervised OpenAI Secure Tunnel target. The active server remains loopback-only and keeps the existing request/session/admission defenses.
 
 Transport choice does **not** broaden the CAD/desktop authority model. The direct decision order remains:
 
@@ -173,7 +180,7 @@ The current safety invariants remain authoritative:
 
 - exact `application/json` admission for MCP POST;
 - bounded headers/body/sessions/concurrent clients;
-- duplicate security-sensitive-header rejection;
+- duplicate security-sensitive-header rejection, including `X-QS3D-MCP-Local-Authorization`;
 - Streamable-HTTP Origin/DNS-rebinding defense;
 - negotiated MCP protocol/session lifecycle;
 - `tools/list`, `tools/call`, ping, notification and session DELETE behavior;
@@ -223,6 +230,8 @@ Recovery remains two-layered: native BricsCAD autosave/BAK plus bounded versione
 
 For the current MCP surface, run/inspect at minimum:
 
+- `scripts/preflight-mcp-openai-tunnel-local-auth.py`
+- `scripts/preflight-mcp-openai-tunnel-content-type.py`
 - `scripts/preflight-mcp-transport-providers.py`
 - `scripts/preflight-mcp-oauth.py`
 - `scripts/preflight-mcp-tools-list-json.py`
@@ -238,7 +247,7 @@ For the current MCP surface, run/inspect at minimum:
 - `scripts/preflight-mcp-loopback-readonly.py`
 - deterministic Core smoke and trusted V25/V26 compilation where selected by repository CI.
 
-`preflight-mcp-transport-providers.py` must keep the three-provider selector, memory-only Runtime API key/local-bearer boundary, dynamic loopback endpoint, OpenAI readiness + binary-trust + bounded stdout/stderr diagnostic contracts, V25/V26 startup/teardown wiring, trusted cloudflared reuse, WinGet recovery, bounded timeout/retry/progress/cancel, and Cloudflare busy-state UX source-guarded.
+`preflight-mcp-transport-providers.py` must keep the three-provider selector, Credential Manager-backed Runtime API key/local-bearer boundary, collision-safe dedicated OpenAI local-origin header, dynamic loopback endpoint, OpenAI readiness + binary-trust + bounded stdout/stderr diagnostic contracts, V25/V26 startup/teardown wiring, trusted cloudflared reuse, WinGet recovery, bounded timeout/retry/progress/cancel, and Cloudflare busy-state UX source-guarded.
 
 Hosted/source evidence does not replace real OpenAI/Cloudflare/ChatGPT/licensed-BricsCAD runtime qualification.
 
@@ -254,11 +263,11 @@ The local matrix must cover at least:
 4. official Windows `tunnel-client` selection/version check plus Authenticode signer validation or official SHA-256 pin via `QS3D_OPENAI_TUNNEL_CLIENT_SHA256` for an unsigned release;
 5. replacement/tampering after tunnel-client selection is rejected by the pre-launch trust re-check;
 6. valid/invalid `tunnel_...` validation;
-7. Runtime API key used only in memory/child environment and absent from QS3D config/timeline/audit;
-8. local QS3D bearer used through the environment reference and absent from YAML/logs;
+7. Runtime API key persistence/reuse only through verified Windows Credential Manager or supported environment projection and absence of literal key values from QS3D YAML/timeline/audit;
+8. local QS3D bearer projected through `QS3D_TUNNEL_MCP_AUTH`, forwarded as `X-QS3D-MCP-Local-Authorization`, and absent as a literal value from YAML/logs;
 9. Secure Tunnel starts against the exact local fallback/preferred MCP port and reaches `/readyz`;
 10. ChatGPT **Connection = Tunnel** using the same Tunnel ID, with representative `tools/list` and read-only MCP call;
-11. restart behavior: user-entered Runtime API key is not persisted; environment-provided runtime key may auto-start the preferred Secure Tunnel;
+11. restart behavior: verified saved/environment Runtime API key can restart the preferred Secure Tunnel without placing the key on the command line or into YAML;
 12. Secure Tunnel process stdout/stderr capture is bounded/sanitized; forced failure records useful exit/error diagnostics without exposing Runtime API key/local bearer;
 13. Secure Tunnel process exit/restart/host-teardown behavior;
 14. Cloudflare installer disables repeat-install action, visibly advances progress and permits Cancel without reporting a synthetic red busy failure;
@@ -291,19 +300,20 @@ For future MCP work:
 4. edit active V2/runtime/provider source, not the legacy monolith;
 5. preserve one repo/runtime and loopback-only embedded MCP;
 6. preserve all three intentional provider semantics: OpenAI Secure Tunnel = private/no-domain, Cloudflare Named = stable public URL + OAuth, Cloudflare Quick = test only;
-7. never persist OpenAI Runtime API keys or the local bearer; use environment references for the supervised tunnel-client;
-8. preserve fail-closed binary trust: Cloudflare Authenticode signer verification and OpenAI Authenticode-or-official-SHA-256 verification before launch;
-9. preserve bounded cloudflared install timeout/retry/progress/cancel and trusted WinGet/system reuse;
-10. preserve bounded/sanitized OpenAI stdout/stderr diagnostics; do not put secrets into copied diagnostics;
-11. do not silently convert Secure Tunnel readiness into proof of actual ChatGPT tool traffic;
-12. preserve `background_only` as the process-start default and keep global desktop input locally consented;
-13. preserve Approach A explicit primitives and Approach B bounded single-target `desktop_sequence`; do not add `desktop_macro` or arbitrary scripting;
-14. do not expose generic shell/process execution through MCP merely to manage transports;
-15. update this runbook and LOCAL-024 whenever provider/runtime behavior changes;
-16. never promote hosted CI to `LOCAL_PASS`.
+7. never serialize OpenAI Runtime API keys or the local bearer into tunnel YAML/source/logs; persist Runtime API keys only through the verified Windows Credential Manager contract and project secrets into the supervised tunnel-client child environment;
+8. preserve the split-auth invariant: connector/OAuth `Authorization` and QS3D local `X-QS3D-MCP-Local-Authorization` are distinct; never depend on tunnel-client header precedence;
+9. preserve fail-closed binary trust: Cloudflare Authenticode signer verification and OpenAI Authenticode-or-official-SHA-256 verification before launch;
+10. preserve bounded cloudflared install timeout/retry/progress/cancel and trusted WinGet/system reuse;
+11. preserve bounded/sanitized OpenAI stdout/stderr diagnostics; do not put secrets into copied diagnostics;
+12. do not silently convert Secure Tunnel readiness into proof of actual ChatGPT tool traffic;
+13. preserve `background_only` as the process-start default and keep global desktop input locally consented;
+14. preserve Approach A explicit primitives and Approach B bounded single-target `desktop_sequence`; do not add `desktop_macro` or arbitrary scripting;
+15. do not expose generic shell/process execution through MCP merely to manage transports;
+16. update this runbook and LOCAL-024 whenever provider/runtime behavior changes;
+17. never promote hosted CI to `LOCAL_PASS`.
 
 ## 11. Definition of done
 
-For #4916, source completion requires the provider-aware Agent Center, OpenAI tunnel-client supervisor with trust + bounded diagnostics, Cloudflare trusted binary reuse plus bounded timeout/progress/Cancel/WinGet recovery, V25/V26 lifecycle wiring, canonical source guard and docs to pass fresh protected-PR CI on current `main`.
+For #4916, source completion requires the provider-aware Agent Center, OpenAI tunnel-client supervisor with trust + bounded diagnostics + collision-safe local-origin auth, Cloudflare trusted binary reuse plus bounded timeout/progress/Cancel/WinGet recovery, V25/V26 lifecycle wiring, canonical source guard and docs to pass fresh protected-PR CI on current `main`.
 
 Full runtime completion is separate. The exact intended merged/release descendant must pass LOCAL-024 with real Windows + licensed BricsCAD V25/V26 + OpenAI Secure MCP Tunnel + Cloudflare fallback + ChatGPT. Until that evidence exists, the runtime state remains `PENDING_LOCAL` and no hosted check may be cited as `LOCAL_PASS`.
