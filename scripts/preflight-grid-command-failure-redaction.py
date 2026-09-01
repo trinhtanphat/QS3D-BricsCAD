@@ -14,7 +14,7 @@ required = [
     'var uiSyncFailed = false;',
     'try { PaletteCoordinator.RefreshProject(); } catch { uiSyncFailed = true; }',
     'try { PaletteCoordinator.SetStatus(status); } catch { uiSyncFailed = true; }',
-    '"QS3D Grid: semantic capture đã hoàn tất; một phần UI không thể đồng bộ."',
+    'TryWriteMessage(document, "\\nQS3D Grid: semantic capture đã hoàn tất; một phần UI không thể đồng bộ.");',
     'try { PaletteCoordinator.SetStatus(message); } catch { }',
     'try { document.Editor.WriteMessage(message); } catch { }',
 ]
