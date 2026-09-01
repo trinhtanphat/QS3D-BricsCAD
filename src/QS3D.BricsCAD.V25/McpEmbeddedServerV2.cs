@@ -24,6 +24,7 @@ namespace QS3D.BricsCAD.V25
         private const int MaxHeaderBytes = 64 * 1024;
         private const int MaxBodyBytes = 1024 * 1024;
         private const int MaxConcurrentClients = 16;
+        private const int AdmissionRejectWriteTimeoutMilliseconds = 1000;
         private const int MaxSessions = 128;
         private const string ModernProtocolVersion = "2026-07-28";
         private const string ProtocolVersion = "2025-11-25";
@@ -177,7 +178,7 @@ namespace QS3D.BricsCAD.V25
                     client.NoDelay = true;
                     if (!ClientSlots.Wait(0))
                     {
-                        try { client.Close(); } catch { }
+                        TryWriteOverloadResponse(client);
                         client = null;
                         continue;
                     }
@@ -227,6 +228,22 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex) { SetLastError("request: " + ex.Message); }
             finally { ClientSlots.Release(); }
+        }
+
+        private static void TryWriteOverloadResponse(TcpClient client)
+        {
+            if (client == null) return;
+            try
+            {
+                using (var stream = client.GetStream())
+                {
+                    stream.WriteTimeout = AdmissionRejectWriteTimeoutMilliseconds;
+                    TryWriteResponse(stream, 503, "Service Unavailable",
+                        "{\"error\":\"MCP server is at concurrent-client capacity; retry later.\"}", null);
+                }
+            }
+            catch { }
+            finally { try { client.Close(); } catch { } }
         }
 
         private static HttpRequest? ReadRequest(NetworkStream stream)
