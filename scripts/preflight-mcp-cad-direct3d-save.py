@@ -3,79 +3,156 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-RUNTIME = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCadAgentRuntime.cs"
+SRC = ROOT / "src" / "QS3D.BricsCAD.V25"
+RUNTIME = SRC / "McpCadAgentRuntime.cs"
+DIRECT = SRC / "McpCadDirectModelRuntime.cs"
+SERVER = SRC / "McpEmbeddedServerV2.cs"
 
 
-def between(text: str, start: str, end: str) -> str:
-    start_index = text.find(start)
-    if start_index < 0:
+def method_block(source: str, signature: str) -> str:
+    start = source.find(signature)
+    if start < 0:
         return ""
-    end_index = text.find(end, start_index + len(start))
-    if end_index < 0:
-        return text[start_index:]
-    return text[start_index:end_index]
+    next_method = source.find("\n        private static ", start + len(signature))
+    return source[start:] if next_method < 0 else source[start:next_method]
+
+
+def require(errors: list[str], text: str, tokens: tuple[str, ...], label: str) -> None:
+    for token in tokens:
+        if token not in text:
+            errors.append(f"{label} missing token: {token}")
 
 
 def main() -> int:
-    if not RUNTIME.is_file():
-        print("ERROR: missing", RUNTIME.relative_to(ROOT))
+    missing = [path for path in (RUNTIME, DIRECT, SERVER) if not path.is_file()]
+    if missing:
+        for path in missing:
+            print("ERROR: missing", path.relative_to(ROOT))
         return 1
 
     runtime = RUNTIME.read_text(encoding="utf-8")
+    direct = DIRECT.read_text(encoding="utf-8")
+    server = SERVER.read_text(encoding="utf-8")
     errors: list[str] = []
 
-    run_block = between(runtime, "private static string RunCadCommandSequence", "private static string RunQs3dCommand")
-    save_block = between(runtime, "private static string SaveActiveDocument", "private static string RunQs3dCommand")
-    active_document_block = between(runtime, "private static string BuildActiveDocumentJson", "private static string BuildSelectionJson")
+    run_block = method_block(runtime, "private static string RunCadCommandSequence")
+    active_document_block = method_block(runtime, "private static string BuildActiveDocumentJson")
+    call_block = method_block(runtime, "public static string Call")
+    direct_route_block = method_block(direct, "internal static bool CanHandleCadCommandSequence")
+    direct_command_block = method_block(direct, "internal static string CallCadCommandSequence")
+    extrude_block = method_block(direct, "private static string Extrude")
+    boolean_block = method_block(direct, "private static string Boolean")
+    direct_save_block = method_block(direct, "private static string Save()")
+    direct_save_as_block = method_block(direct, "private static string SaveAs")
+    dbmod_block = method_block(direct, "private static void WaitForCleanDbmod")
 
-    required_run_tokens = (
-        'if (command == "QSAVE") return SaveActiveDocument(document);',
+    require(errors, run_block, (
+        'var command = NormalizeCadCommandToken(',
         'var inputs = NormalizeCommandInputs(',
-    )
-    for token in required_run_tokens:
-        if token not in run_block:
-            errors.append(f"QSAVE command route missing token: {token}")
+    ), "legacy generic command fallback")
+    if ('SaveActiveDocument(' in run_block
+            and 'McpCadDirectModelRuntime.CanHandleCadCommandSequence(args)' not in call_block):
+        errors.append("legacy generic command fallback must not own QSAVE unless canonical direct command routing intercepts it first")
 
-    required_save_tokens = (
-        'Path.IsPathRooted(filename)',
-        'SafeSystemVariable("CMDACTIVE")',
-        'EnsureCurrentMutationRunning();',
-        'using (document.LockDocument())',
-        'document.Database.Save();',
-        'SafeSystemVariable("DBMOD")',
-        'dbmod != "0"',
-        '\\"completed\\":true',
-        '\\"saved\\":true',
-        'completed=true',
-    )
-    for token in required_save_tokens:
-        if token not in save_block:
-            errors.append(f"synchronous QSAVE completion guard missing token: {token}")
-
-    if "SendStringToExecute" in save_block:
-        errors.append("QSAVE completion path must not queue a native command with SendStringToExecute")
-
-    required_status_tokens = (
+    require(errors, active_document_block, (
         'var hasLocalPath = Path.IsPathRooted(filename);',
         'var modified = SafeInteger(SafeSystemVariable("DBMOD")) != "0";',
         'hasLocalPath && !modified',
         '\\"modified\\"',
-    )
-    for token in required_status_tokens:
-        if token not in active_document_block:
-            errors.append(f"active-document saved/dirty truth missing token: {token}")
-
-    stale_saved_heuristic = 'string.IsNullOrWhiteSpace(filename) ? "false" : "true"'
-    if stale_saved_heuristic in active_document_block:
+    ), "active-document saved/dirty truth")
+    if 'string.IsNullOrWhiteSpace(filename) ? "false" : "true"' in active_document_block:
         errors.append("cad_active_document.saved still aliases filename presence instead of DBMOD dirty state")
 
+    require(errors, call_block, (
+        'McpCadDirectModelRuntime.CanHandleCadCommandSequence(args)',
+        'McpCadDirectModelRuntime.CallCadCommandSequence(args)',
+        'if (McpCadDirectModelRuntime.IsTool(tool))',
+        'return Mutation(args, tool, () => McpCadDirectModelRuntime.Call(tool, args));',
+    ), "canonical mutation dispatch")
+    if "internal static void EnsureCurrentMutationRunning()" not in runtime:
+        errors.append("shared mutation epoch verifier is not exposed internally to the bounded direct runtime")
+
+    require(errors, direct_route_block, (
+        'string.Equals(command, "EXTRUDE", StringComparison.Ordinal)',
+        'string.Equals(command, "QSAVE", StringComparison.Ordinal)',
+    ), "direct command ownership")
+
+    require(errors, direct, (
+        '"cad_create_box"',
+        '"cad_extrude"',
+        '"cad_boolean_union"',
+        '"cad_boolean_subtract"',
+        '"cad_boolean_intersect"',
+        '"cad_save"',
+        '"cad_save_as"',
+        'NormalizeExtrudeInputs',
+        'EnsureWritableDirectory',
+        'McpCadAgentRuntime.EnsureCurrentMutationRunning();',
+        'string.Equals(command, "QSAVE", StringComparison.Ordinal)',
+    ), "direct CAD runtime")
+    require(errors, direct_command_block, (
+        'McpDiagnosticHub.InvokeInCadContext(() =>',
+        'Save();',
+        '\\"command\\":\\"QSAVE\\"',
+    ), "direct QSAVE route")
+
+    require(errors, extrude_block, (
+        'OpenEntity(transaction, document.Database, handle, OpenMode.ForRead) as Curve',
+        'Region.CreateFromCurves(new DBObjectCollection { source })',
+        'regionSource=database-resident',
+    ), "database-resident closed-curve extrusion")
+    if 'source.Clone()' in extrude_block or 'new DBObjectCollection { clone }' in extrude_block:
+        errors.append("cad_extrude must not feed a transient Curve clone to Region.CreateFromCurves")
+
+    require(errors, boolean_block, (
+        'var operandClone = operand.Clone() as Solid3d;',
+        'target.BooleanOperation(operation, operandClone);',
+        'if (!operand.IsErased) operand.Erase();',
+        'operandClone.Dispose();',
+        'operand=transient-clone',
+    ), "transient boolean kernel operand")
+    if 'target.BooleanOperation(operation, operand);' in boolean_block:
+        errors.append("direct boolean must not pass the database-resident tool Solid3d directly to BooleanOperation")
+
+    require(errors, direct_save_block, (
+        'document.Database.SaveAs(filename, DwgVersion.Current);',
+        'WaitForCleanDbmod();',
+        'route=SaveAs-current-path',
+    ), "save/reopen regression guard")
+    if 'document.Database.Save();' in direct_save_block:
+        errors.append("direct cad_save must not use Database.Save(), which regressed after close/reopen with eCantOpenFile")
+
+    require(errors, direct_save_as_block, (
+        'EnsureWritableDirectory(directory);',
+        'document.Database.SaveAs(fullPath, DwgVersion.Current);',
+        'WaitForCleanDbmod();',
+        'Path.GetFullPath(actual), fullPath',
+    ), "save-as publication guard")
+    if 'document.Database.Save();' in direct_save_as_block:
+        errors.append("direct cad_save_as must not use Database.Save()")
+
+    require(errors, dbmod_block, (
+        'DateTime.UtcNow.AddSeconds(2)',
+        'Application.GetSystemVariable("DBMOD")',
+        'Thread.Sleep(25)',
+        'dbmod == 0',
+    ), "bounded DBMOD completion wait")
+    if "Process.Start" in direct or "cmd.exe" in direct or "powershell" in direct.lower():
+        errors.append("direct CAD runtime must not introduce process/shell execution")
+
+    require(errors, server, (
+        'foreach (var descriptor in McpCadDirectModelRuntime.ToolDescriptors())',
+        'tools.Add(WithToolAnnotations(descriptor));',
+        'var runtimeResult = McpCadAgentRuntime.Call(tool, arguments);',
+    ), "embedded server direct-tool exposure")
+
     if errors:
-        print("ERROR: MCP CAD save preflight failed:")
+        print("ERROR: MCP CAD direct 3D/save preflight failed:")
         for error in errors:
             print(" -", error)
         return 1
 
-    print("PASS: MCP QSAVE uses synchronous Database.Save with idle/path/DBMOD completion checks, and active-document saved state is DBMOD-aware.")
+    print("PASS: MCP direct 3D/save tools keep QSAVE owned by the bounded direct CAD runtime, use database-resident curve inputs for Region creation, transient clones for boolean kernel operands, preserve bounded mutation routing, avoid Database.Save after reopen, and confirm save/save-as completion with a bounded DBMOD settle wait.")
     return 0
 
 

@@ -74,7 +74,7 @@ namespace QS3D.Core.SmokeTests
             var events = trail.Events;
 
             Equal(1, events.Count, "stable-count snapshot count");
-            Equal(6, history.CountReads, "stable-count snapshot Count reads");
+            Equal(7, history.CountReads, "stable-count snapshot Count reads");
         }
 
         private static void RejectsRecordAtCapacityWithoutMutation()

@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using QS3D.Core.Cost;
@@ -14,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             PublicMetadataTracksChangeVersion();
             ProjectBoundMutationAndAnalysis();
             BaseTotalRejectsPrecisionLostContribution();
+            CurrentCountDriftFailsBeforeItemAcceptance();
             SnapshotRollback();
             QsdbRoundTrip();
             ReservedMetadataFailsClosed();
@@ -47,7 +49,7 @@ namespace QS3D.Core.SmokeTests
             Equal(false, collection.Remove(new KeyValuePair<string, string>("Discipline", "Structure")), "non-matching key/value removal");
             Equal(5L, project.ChangeVersion, "non-matching key/value removal must not touch project");
             Equal(true, collection.Remove(new KeyValuePair<string, string>("Discipline", "MEP")), "matching key/value removal");
-            Equal(6L, project.ChangeVersion, "matching key/value removal change version");
+            Equal(6L, project.ChangeVersion, "metadata key/value removal change version");
 
             project.Metadata.Clear();
             Equal(7L, project.ChangeVersion, "metadata clear change version");
@@ -122,6 +124,68 @@ namespace QS3D.Core.SmokeTests
             Equal(0.0000000000000000000000000001m, state.BillItems[1].TotalCost, "TBQ tiny line total must remain representable");
             Equal(0m, state.BillItems[2].TotalCost, "TBQ explicit zero line total");
             Throws<OverflowException>(() => { _ = state.BaseTotal; }, "TBQ base total must reject a swallowed non-zero contribution");
+        }
+
+        private static void CurrentCountDriftFailsBeforeItemAcceptance()
+        {
+            ThrowsWithMessage<InvalidOperationException>(
+                () => new TbqProjectWorkspaceState(
+                    "VND",
+                    0m,
+                    new CurrentCountDriftCollection<TbqBillItem>(null),
+                    Array.Empty<BuildUpRateSnapshot>(),
+                    Array.Empty<RateReferenceEdge>(),
+                    "PROJECT",
+                    Array.Empty<BqLibraryEntry>()),
+                "bill items known count changed during traversal",
+                "TBQ bill-item Current-induced Count drift must preempt null acceptance");
+
+            ThrowsWithMessage<InvalidOperationException>(
+                () => new TbqProjectWorkspaceState(
+                    "VND",
+                    0m,
+                    Array.Empty<TbqBillItem>(),
+                    new CurrentCountDriftCollection<BuildUpRateSnapshot>(null),
+                    Array.Empty<RateReferenceEdge>(),
+                    "PROJECT",
+                    Array.Empty<BqLibraryEntry>()),
+                "build-up rates known count changed during traversal",
+                "TBQ build-up Current-induced Count drift must preempt null acceptance");
+
+            ThrowsWithMessage<InvalidOperationException>(
+                () => new TbqProjectWorkspaceState(
+                    "VND",
+                    0m,
+                    Array.Empty<TbqBillItem>(),
+                    Array.Empty<BuildUpRateSnapshot>(),
+                    new CurrentCountDriftCollection<RateReferenceEdge>(null),
+                    "PROJECT",
+                    Array.Empty<BqLibraryEntry>()),
+                "rate references known count changed during traversal",
+                "TBQ rate-reference Current-induced Count drift must preempt downstream graph acceptance");
+
+            ThrowsWithMessage<InvalidOperationException>(
+                () => new TbqProjectWorkspaceState(
+                    "VND",
+                    0m,
+                    Array.Empty<TbqBillItem>(),
+                    Array.Empty<BuildUpRateSnapshot>(),
+                    Array.Empty<RateReferenceEdge>(),
+                    "PROJECT",
+                    new CurrentCountDriftCollection<BqLibraryEntry>(null)),
+                "BQ library entries known count changed during traversal",
+                "TBQ library Current-induced Count drift must preempt downstream catalog acceptance");
+
+            var honest = new TbqProjectWorkspaceState(
+                "VND",
+                0m,
+                new CurrentCountDriftCollection<TbqBillItem>(
+                    new TbqBillItem("HONEST", "Honest", "ea", "Trade", 1m, 2m), driftOnCurrent: false),
+                Array.Empty<BuildUpRateSnapshot>(),
+                Array.Empty<RateReferenceEdge>(),
+                "PROJECT",
+                Array.Empty<BqLibraryEntry>());
+            Equal(1, honest.BillItems.Count, "honest counted TBQ source remains accepted");
         }
 
         private static void SnapshotRollback()
@@ -230,11 +294,88 @@ namespace QS3D.Core.SmokeTests
             throw new InvalidOperationException(label + ": expected " + typeof(T).Name + ".");
         }
 
+        private static void ThrowsWithMessage<T>(Action action, string messageFragment, string label) where T : Exception
+        {
+            try { action(); }
+            catch (T ex)
+            {
+                if (ex.Message.IndexOf(messageFragment, StringComparison.OrdinalIgnoreCase) >= 0) return;
+                throw new InvalidOperationException(label + ": unexpected message '" + ex.Message + "'.");
+            }
+            throw new InvalidOperationException(label + ": expected " + typeof(T).Name + ".");
+        }
+
         private static void TryDelete(string path)
         {
             try { if (File.Exists(path)) File.Delete(path); }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
+        }
+
+        private sealed class CurrentCountDriftCollection<T> : ICollection<T>, IReadOnlyCollection<T>, ICollection where T : class
+        {
+            private readonly T? _item;
+            private readonly bool _driftOnCurrent;
+            private bool _drifted;
+
+            internal CurrentCountDriftCollection(T? item, bool driftOnCurrent = true)
+            {
+                _item = item;
+                _driftOnCurrent = driftOnCurrent;
+            }
+
+            public int Count => _drifted ? 2 : 1;
+            public bool IsReadOnly => true;
+            bool ICollection.IsSynchronized => false;
+            object ICollection.SyncRoot => this;
+
+            public IEnumerator<T> GetEnumerator() => new Enumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            public bool Contains(T item) => EqualityComparer<T>.Default.Equals(_item!, item);
+            public void CopyTo(T[] array, int arrayIndex) => array[arrayIndex] = _item!;
+            void ICollection.CopyTo(Array array, int index) => array.SetValue(_item, index);
+
+            public void Add(T item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Remove(T item) => throw new NotSupportedException();
+
+            private sealed class Enumerator : IEnumerator<T>
+            {
+                private readonly CurrentCountDriftCollection<T> _owner;
+                private int _state;
+
+                internal Enumerator(CurrentCountDriftCollection<T> owner)
+                {
+                    _owner = owner;
+                }
+
+                public T Current
+                {
+                    get
+                    {
+                        if (_state != 1) throw new InvalidOperationException();
+                        if (_owner._driftOnCurrent) _owner._drifted = true;
+                        return _owner._item!;
+                    }
+                }
+
+                object IEnumerator.Current => Current;
+
+                public bool MoveNext()
+                {
+                    if (_state != 0)
+                    {
+                        _state = 2;
+                        return false;
+                    }
+                    _state = 1;
+                    return true;
+                }
+
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
         }
     }
 }

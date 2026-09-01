@@ -30,7 +30,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 McpEmbeddedServer.EnsureStarted();
-                new McpAgentControlCenterWindow().ShowDialog();
+                new McpAgentControlCenterWindow().Show();
             }
             catch (Exception ex)
             {
@@ -122,6 +122,9 @@ namespace QS3D.BricsCAD.V25
         private ContentControl _pageHost = new ContentControl();
         private TextBlock _desktopConsentText = new TextBlock();
         private TextBlock _desktopActivityText = new TextBlock();
+        private TextBox _openAiTunnelIdText = new TextBox();
+        private PasswordBox _openAiRuntimeKeyBox = new PasswordBox();
+        private TextBlock _openAiClientPathText = new TextBlock();
         private int _localOperationActive;
         private DispatcherTimer? _quickUrlTimer;
         private DispatcherTimer? _liveRefreshTimer;
@@ -297,7 +300,7 @@ namespace QS3D.BricsCAD.V25
             });
             left.Children.Add(new TextBlock
             {
-                Text = "ChatGPT ↔ OAuth MCP ↔ QS3D ↔ BricsCAD",
+                Text = "ChatGPT ↔ MCP transport ↔ QS3D ↔ BricsCAD",
                 FontSize = 13,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = _palette.Accent,
@@ -305,7 +308,7 @@ namespace QS3D.BricsCAD.V25
             });
             left.Children.Add(new TextBlock
             {
-                Text = "Kết nối, Agent desktop, backup/recovery và chẩn đoán từ một nơi. Login/password ở browser hệ thống; QS3D không scrape cookie hoặc nội dung hội thoại ChatGPT.",
+                Text = "Kết nối, Agent desktop, backup/recovery và chẩn đoán từ một nơi. Login/password/API key ở provider flow; QS3D không scrape cookie hoặc nội dung hội thoại ChatGPT.",
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = _palette.TextSecondary,
                 FontSize = 12.5,
@@ -393,34 +396,257 @@ namespace QS3D.BricsCAD.V25
         private UIElement CreateConnectionPage()
         {
             var grid = CreateTwoColumnGrid();
-            var onboarding = McpAgentExperience.DetermineOnboarding();
+            var provider = McpTransportCoordinator.SelectedProvider;
             var actions = new StackPanel();
+            actions.Children.Add(CreateTransportProviderSelector(provider));
+
+            string title, detail, nextStep;
+            GetTransportOnboarding(provider, out title, out detail, out nextStep);
             actions.Children.Add(new TextBlock
             {
-                Text = onboarding.Title,
+                Text = title,
                 Foreground = _palette.TextPrimary,
                 FontSize = 15,
                 FontWeight = FontWeights.SemiBold,
                 TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 0, 0, 5)
+                Margin = new Thickness(0, 10, 0, 5)
             });
             actions.Children.Add(new TextBlock
             {
-                Text = onboarding.Detail + Environment.NewLine + "Tiếp theo: " + onboarding.NextStep,
+                Text = detail + Environment.NewLine + "Tiếp theo: " + nextStep,
                 Foreground = _palette.TextSecondary,
                 FontSize = 12,
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 0, 12)
             });
+
+            if (provider == McpTransportProvider.OpenAiSecureTunnel)
+                PopulateOpenAiSecureTunnelActions(actions);
+            else if (provider == McpTransportProvider.CloudflareQuickTunnel)
+                PopulateCloudflareQuickActions(actions);
+            else
+                PopulateCloudflareNamedActions(actions);
+
+            AddGridCard(grid, CreateSectionCard(
+                "Kết nối",
+                "Chọn một transport. OpenAI Secure MCP Tunnel là đường không cần domain/public MCP; Cloudflare Named Tunnel giữ đường public URL + OAuth ổn định; Quick Tunnel chỉ test.",
+                actions), 0);
+            AddGridCard(grid, CreateSectionCard(
+                "Trạng thái kết nối",
+                "Transport READY và việc user xác nhận đã thêm ChatGPT là trạng thái riêng. Cloudflare còn có bằng chứng OAuth traffic; Secure Tunnel không suy đoán tool traffic chỉ từ tiến trình tunnel.",
+                _statusRows), 1);
+            return grid;
+        }
+
+        private UIElement CreateTransportProviderSelector(McpTransportProvider provider)
+        {
+            var panel = new WrapPanel { Margin = new Thickness(0, 0, 0, 2) };
+            panel.Children.Add(CreateActionButton("OpenAI Secure Tunnel", (_, __) => SelectTransportProvider(McpTransportProvider.OpenAiSecureTunnel), ActionKind.ThemeChoice, provider == McpTransportProvider.OpenAiSecureTunnel));
+            panel.Children.Add(CreateActionButton("Cloudflare Named", (_, __) => SelectTransportProvider(McpTransportProvider.CloudflareNamedTunnel), ActionKind.ThemeChoice, provider == McpTransportProvider.CloudflareNamedTunnel));
+            panel.Children.Add(CreateActionButton("Cloudflare Quick · test", (_, __) => SelectTransportProvider(McpTransportProvider.CloudflareQuickTunnel), ActionKind.ThemeChoice, provider == McpTransportProvider.CloudflareQuickTunnel));
+            return panel;
+        }
+
+        private void PopulateOpenAiSecureTunnelActions(StackPanel actions)
+        {
+            _openAiClientPathText = new TextBlock
+            {
+                Text = "tunnel-client: " + (string.IsNullOrWhiteSpace(McpOpenAiSecureTunnelManager.SavedClientPath) ? "chưa chọn" : McpOpenAiSecureTunnelManager.SavedClientPath),
+                Foreground = _palette.TextMuted,
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 11,
+                Margin = new Thickness(0, 0, 0, 6)
+            };
+            actions.Children.Add(_openAiClientPathText);
+
+            actions.Children.Add(CreateInputLabel("OpenAI Tunnel ID"));
+            _openAiTunnelIdText = CreateTextInput(McpOpenAiSecureTunnelManager.SavedTunnelId);
+            actions.Children.Add(_openAiTunnelIdText);
+
+            actions.Children.Add(CreateInputLabel("Runtime API key · lưu bảo mật trong Windows Credential Manager sau khi xác minh; để trống để dùng key đã lưu hoặc CONTROL_PLANE_API_KEY/OPENAI_API_KEY"));
+            _openAiRuntimeKeyBox = new PasswordBox
+            {
+                MinHeight = 34,
+                Padding = new Thickness(8, 5, 8, 5),
+                Margin = new Thickness(0, 0, 0, 9),
+                Background = _palette.SubtleBackground,
+                Foreground = _palette.TextPrimary,
+                BorderBrush = _palette.Border,
+                BorderThickness = new Thickness(1)
+            };
+            actions.Children.Add(_openAiRuntimeKeyBox);
+
+            actions.Children.Add(CreateActionButton("Mở OpenAI Tunnels", (_, __) => OpenOpenAiPlatformTunnels(), ActionKind.Secondary));
+            actions.Children.Add(CreateActionButton("Mở Runtime API keys", (_, __) => OpenOpenAiRuntimeKeys(), ActionKind.Secondary));
+            actions.Children.Add(CreateActionButton("Tải tunnel-client chính thức", (_, __) => OpenOpenAiTunnelClientDownload(), ActionKind.Secondary));
+            actions.Children.Add(CreateActionButton("Chọn tunnel-client.exe", (_, __) => SelectOpenAiTunnelClient(), ActionKind.Secondary));
+            actions.Children.Add(CreateActionButton("Khởi động OpenAI Secure MCP Tunnel", (_, __) => StartOpenAiSecureTunnel(), ActionKind.Primary));
+            actions.Children.Add(CreateActionButton("Mở tunnel-client UI", (_, __) => OpenOpenAiAdminUi(), ActionKind.Secondary));
+            actions.Children.Add(CreateActionButton("Mở ChatGPT · Connection = Tunnel", (_, __) => OpenChatGpt(), ActionKind.Secondary));
+            actions.Children.Add(CreateActionButton("Đã thêm MCP trong ChatGPT", (_, __) => MarkChatGptRegistered(), ActionKind.Secondary));
+            actions.Children.Add(new TextBlock
+            {
+                Text = "Secure Tunnel: ChatGPT chọn Connection = Tunnel và Tunnel ID tương ứng. Không cấu hình QS3D public OAuth URL cho đường này. Runtime API key được xác minh rồi lưu trong Windows Credential Manager; child process nhận key qua environment. Local bearer cũng chỉ truyền qua child environment; không ghi secret vào config/timeline.",
+                Foreground = _palette.TextSecondary,
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 11,
+                Margin = new Thickness(0, 2, 0, 0)
+            });
+        }
+
+        private void PopulateCloudflareNamedActions(StackPanel actions)
+        {
             actions.Children.Add(CreateActionButton("Cài / cập nhật Cloudflare Tunnel", InstallCloudflared, ActionKind.Primary));
             actions.Children.Add(CreateActionButton("Đăng nhập Cloudflare + tạo Named Tunnel", (_, __) => OpenAccountSetup(), ActionKind.Secondary));
             actions.Children.Add(CreateActionButton("Khởi động Named Tunnel đã lưu", (_, __) => StartNamedTunnel(), ActionKind.Secondary));
             actions.Children.Add(CreateActionButton("Mở ChatGPT", (_, __) => OpenChatGpt(), ActionKind.Secondary));
             actions.Children.Add(CreateActionButton("Copy MCP URL", (_, __) => CopyUrl(), ActionKind.Secondary));
             actions.Children.Add(CreateActionButton("Đã thêm MCP trong ChatGPT", (_, __) => MarkChatGptRegistered(), ActionKind.Secondary));
-            AddGridCard(grid, CreateSectionCard("Kết nối", "Luồng production: embedded MCP → cloudflared → Cloudflare browser login → Named Tunnel → ChatGPT URL/OAuth.", actions), 0);
-            AddGridCard(grid, CreateSectionCard("Trạng thái kết nối", "Transport sẵn sàng, đăng ký ChatGPT và OAuth MCP traffic là ba trạng thái riêng; QS3D không suy đoán kết nối chỉ từ public URL.", _statusRows), 1);
-            return grid;
+        }
+
+        private void PopulateCloudflareQuickActions(StackPanel actions)
+        {
+            actions.Children.Add(CreateActionButton("Cài / cập nhật Cloudflare Tunnel", InstallCloudflared, ActionKind.Primary));
+            actions.Children.Add(CreateActionButton("Khởi động Quick Tunnel · test only", (_, __) => StartQuickTunnel(), ActionKind.Secondary));
+            actions.Children.Add(CreateActionButton("Mở ChatGPT", (_, __) => OpenChatGpt(), ActionKind.Secondary));
+            actions.Children.Add(CreateActionButton("Copy MCP URL", (_, __) => CopyUrl(), ActionKind.Secondary));
+            actions.Children.Add(CreateActionButton("Đã thêm MCP trong ChatGPT", (_, __) => MarkChatGptRegistered(), ActionKind.Secondary));
+            actions.Children.Add(new TextBlock
+            {
+                Text = "Quick Tunnel có hostname thay đổi; khi URL đổi phải reconnect ChatGPT. Không dùng làm transport production ổn định.",
+                Foreground = _palette.Warning,
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 11,
+                Margin = new Thickness(0, 2, 0, 0)
+            });
+        }
+
+        private TextBlock CreateInputLabel(string text)
+        {
+            return new TextBlock
+            {
+                Text = text,
+                Foreground = _palette.TextSecondary,
+                FontSize = 11.5,
+                Margin = new Thickness(0, 1, 0, 4),
+                TextWrapping = TextWrapping.Wrap
+            };
+        }
+
+        private TextBox CreateTextInput(string value)
+        {
+            return new TextBox
+            {
+                Text = value ?? string.Empty,
+                MinHeight = 34,
+                Padding = new Thickness(8, 5, 8, 5),
+                Margin = new Thickness(0, 0, 0, 9),
+                Background = _palette.SubtleBackground,
+                Foreground = _palette.TextPrimary,
+                BorderBrush = _palette.Border,
+                BorderThickness = new Thickness(1)
+            };
+        }
+
+        private void GetTransportOnboarding(McpTransportProvider provider, out string title, out string detail, out string nextStep)
+        {
+            if (!McpEmbeddedServer.IsRunning)
+            {
+                title = "MCP local chưa chạy";
+                detail = "QS3D sẽ khởi động embedded MCP trên loopback; không cần cài MCP server riêng.";
+                nextStep = "Khởi động embedded MCP rồi Refresh.";
+                return;
+            }
+
+            if (provider == McpTransportProvider.OpenAiSecureTunnel)
+            {
+                if (string.IsNullOrWhiteSpace(McpOpenAiSecureTunnelManager.SavedClientPath))
+                {
+                    title = "Cần OpenAI tunnel-client";
+                    detail = "Tải tunnel-client chính thức, chọn tunnel-client.exe, sau đó nhập Tunnel ID. Không cần domain hoặc Cloudflare account riêng.";
+                    nextStep = "Mở OpenAI Tunnels/tải tunnel-client rồi chọn file executable.";
+                    return;
+                }
+                var tunnelId = string.IsNullOrWhiteSpace(_openAiTunnelIdText.Text) ? McpOpenAiSecureTunnelManager.SavedTunnelId : _openAiTunnelIdText.Text;
+                if (!McpOpenAiSecureTunnelManager.IsValidTunnelId(tunnelId))
+                {
+                    title = "Cần OpenAI Tunnel ID";
+                    detail = "Tunnel ID được tạo/tra cứu trong OpenAI Platform Tunnels; Runtime API key cần quyền Tunnels Read + Use.";
+                    nextStep = "Nhập tunnel_... và Runtime API key rồi khởi động Secure Tunnel.";
+                    return;
+                }
+                if (!McpOpenAiSecureTunnelManager.IsRunning)
+                {
+                    title = "Secure Tunnel đã cấu hình";
+                    detail = "QS3D sẽ kết nối outbound qua OpenAI tunnel-client đến embedded MCP local; local MCP không cần public URL.";
+                    nextStep = "Bấm “Khởi động OpenAI Secure MCP Tunnel”.";
+                    return;
+                }
+                if (!McpOpenAiSecureTunnelManager.IsReady)
+                {
+                    title = "Secure Tunnel đang khởi động";
+                    detail = "tunnel-client đang chạy nhưng /readyz chưa READY.";
+                    nextStep = "Chờ vài giây, Refresh hoặc mở tunnel-client UI nếu trạng thái không chuyển.";
+                    return;
+                }
+                if (!McpTransportCoordinator.IsChatGptRegistrationAcknowledged())
+                {
+                    title = "Secure Tunnel READY · kết nối ChatGPT";
+                    detail = "Trong ChatGPT tạo MCP/App với Connection = Tunnel và chọn/paste Tunnel ID hiện tại.";
+                    nextStep = "Mở ChatGPT, thêm tunnel connector rồi bấm “Đã thêm MCP trong ChatGPT”.";
+                    return;
+                }
+                title = "Secure Tunnel sẵn sàng";
+                detail = "Embedded MCP + OpenAI tunnel-client READY + user đã xác nhận cấu hình ChatGPT. Đây chưa phải bằng chứng một tools/call cụ thể đã chạy.";
+                nextStep = "Prompt trong ChatGPT; bật desktop consent local chỉ khi cần thao tác ngoài BricsCAD.";
+                return;
+            }
+
+            if (provider == McpTransportProvider.CloudflareQuickTunnel)
+            {
+                var cloudflaredInstalled = !string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.CloudflaredPath);
+                if (!cloudflaredInstalled)
+                {
+                    title = "Cần Cloudflare Tunnel";
+                    detail = "Quick Tunnel dùng cloudflared nhưng không cần domain/login Cloudflare.";
+                    nextStep = "Bấm “Cài / cập nhật Cloudflare Tunnel”.";
+                    return;
+                }
+                var publicUrl = McpPublicEndpointResolver.Resolve();
+                if (!McpCloudflareTunnelManager.IsRunning || string.IsNullOrWhiteSpace(publicUrl))
+                {
+                    title = "Quick Tunnel chưa chạy";
+                    detail = "Quick Tunnel chỉ dành cho test và URL có thể đổi sau mỗi lần chạy.";
+                    nextStep = "Bấm “Khởi động Quick Tunnel · test only”.";
+                    return;
+                }
+                if (!McpTransportCoordinator.IsChatGptRegistrationAcknowledged())
+                {
+                    title = "Quick Tunnel có public URL";
+                    detail = "Thêm URL hiện tại vào ChatGPT bằng OAuth/DCR; nếu URL đổi phải reconnect.";
+                    nextStep = "Copy MCP URL, thêm vào ChatGPT rồi xác nhận.";
+                    return;
+                }
+                title = "Quick Tunnel đã cấu hình";
+                detail = "Transport test đã có URL và user đã xác nhận ChatGPT; chờ authenticated OAuth MCP traffic để có bằng chứng live.";
+                nextStep = "Giữ ChatGPT connector mở và chờ tools/list hoặc tools/call.";
+                return;
+            }
+
+            var onboarding = McpAgentExperience.DetermineOnboarding();
+            title = onboarding.Title;
+            detail = onboarding.Detail;
+            nextStep = onboarding.NextStep;
+        }
+
+        private void SelectTransportProvider(McpTransportProvider provider)
+        {
+            if (McpTransportCoordinator.SelectedProvider == provider) return;
+            McpTransportCoordinator.SetSelectedProvider(provider);
+            StopQuickUrlPolling();
+            _pageHost.Content = CreateActivePage();
+            RefreshStatus();
+            ShowToast(ToastKind.Info, "MCP transport", "Đã chọn " + McpTransportCoordinator.SelectedProviderLabel + ". Transport đang chạy khác không tự bị coi là selected/ready.");
         }
 
         private UIElement CreateAgentPage()
@@ -437,7 +663,7 @@ namespace QS3D.BricsCAD.V25
             controls.Children.Add(_desktopConsentText);
             controls.Children.Add(new TextBlock
             {
-                Text = "Desktop-wide input mặc định OFF sau mỗi lần mở BricsCAD. Consent tự hết hạn sau 10 phút không có desktop action mới. ChatGPT không có tool để Resume quyền này; chỉ user tại máy local mới bật lại được. Khi thao tác sẽ có viền xanh; Esc ×2 trong 1.2 giây dừng ngay.",
+                Text = "Desktop-wide input mặc định OFF sau mỗi lần mở BricsCAD. Sau khi user Resume, consent tự giữ ON và auto-renew trong suốt phiên BricsCAD; không còn giới hạn idle 10 phút. ChatGPT không có tool để Resume quyền này; chỉ user tại máy local mới bật lại được. Khi thao tác sẽ có viền xanh; Esc ×2 trong 1.2 giây dừng ngay.",
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = _palette.TextSecondary,
                 FontSize = 11.5,
@@ -468,7 +694,7 @@ namespace QS3D.BricsCAD.V25
                 Margin = new Thickness(0, 10, 0, 8),
                 Child = new TextBlock
                 {
-                    Text = "Sau PAUSED / EXPIRED / failed: Kiểm tra drawing/backup trước. Nếu trạng thái CAD đúng, user có thể Resume desktop local để ChatGPT tiếp tục.",
+                    Text = "Sau PAUSED / Emergency Stop / failed: Kiểm tra drawing/backup trước. Nếu trạng thái CAD đúng, user có thể Resume desktop local để ChatGPT tiếp tục.",
                     Foreground = _palette.TextPrimary,
                     TextWrapping = TextWrapping.Wrap,
                     FontSize = 11.5
@@ -527,7 +753,7 @@ namespace QS3D.BricsCAD.V25
             advanced.Children.Add(CreateActionButton("Mở thư mục audit MCP", (_, __) => OpenAuditFolder(), ActionKind.Secondary));
             advanced.Children.Add(new TextBlock
             {
-                Text = "Nâng cao: static bearer + Quick Tunnel chỉ dùng debug/backward compatibility. Production ChatGPT dùng Named Tunnel + OAuth/DCR. Completion Pack A dùng explicit desktop tools; Approach B expose một desktop_sequence bounded single-target; desktop_macro không được expose.",
+                Text = "Nâng cao: static bearer + Quick Tunnel chỉ dùng debug/backward compatibility. OpenAI Secure Tunnel giữ MCP local khỏi public Internet; Cloudflare Named Tunnel giữ lựa chọn public URL + OAuth/DCR. Completion Pack A dùng explicit desktop tools; Approach B expose một desktop_sequence bounded single-target; desktop_macro không được expose.",
                 Foreground = _palette.TextSecondary,
                 TextWrapping = TextWrapping.Wrap,
                 FontSize = 11.5,
@@ -675,7 +901,6 @@ namespace QS3D.BricsCAD.V25
             style.Setters.Add(new Setter(Control.BorderBrushProperty, border));
             style.Setters.Add(new Setter(Control.TemplateProperty, CreateButtonTemplate()));
 
-            // Trigger precedence is intentional: focus -> hover -> pressed -> disabled.
             var focus = new Trigger { Property = Button.IsKeyboardFocusedProperty, Value = true };
             focus.Setters.Add(new Setter(Control.BackgroundProperty, background));
             focus.Setters.Add(new Setter(Control.ForegroundProperty, foreground));
@@ -963,21 +1188,112 @@ namespace QS3D.BricsCAD.V25
 
         private void InstallCloudflared(object? sender, RoutedEventArgs args)
         {
+            if (McpCloudflaredBootstrapper.IsInstalling)
+            {
+                McpAgentExperience.Info("onboarding", "Cloudflare Tunnel đang được tải/cài; bỏ qua click lặp.", string.Empty,
+                    "Chờ download + Authenticode hoàn tất rồi Refresh.");
+                ShowToast(ToastKind.Info, "Cloudflare Tunnel", "Cloudflare Tunnel đang được tải/cài. Vui lòng chờ; đây không phải lỗi.");
+                return;
+            }
+
             McpAgentExperience.ActionStarted("onboarding", "Đang cài/cập nhật cloudflared...", "Chờ kiểm tra Authenticode hoàn tất.");
             ShowToast(ToastKind.Info, "Cloudflare Tunnel", "Đang tải cloudflared chính thức và kiểm tra Authenticode...");
-            McpCloudflaredBootstrapper.BeginInstall((ok, message) => Dispatcher.BeginInvoke(new Action(() =>
+            var started = McpCloudflaredBootstrapper.BeginInstall((ok, message) => Dispatcher.BeginInvoke(new Action(() =>
             {
                 if (ok) McpAgentExperience.Success("onboarding", message, "Đăng nhập Cloudflare bằng browser.");
                 else McpAgentExperience.Error("onboarding", message, "Kiểm tra mạng/chứng thư rồi thử lại.");
                 ShowToast(ok ? ToastKind.Success : ToastKind.Error, ok ? "Cloudflare Tunnel" : "Cài Cloudflare thất bại", message);
                 RefreshStatus();
             })));
+            if (!started)
+            {
+                McpAgentExperience.Info("onboarding", "Cloudflare Tunnel đã có install đang chạy; không tạo request cài thứ hai.", string.Empty,
+                    "Chờ download + Authenticode hoàn tất rồi Refresh.");
+                ShowToast(ToastKind.Info, "Cloudflare Tunnel", "Cloudflare Tunnel đang được tải/cài. Vui lòng chờ; đây không phải lỗi.");
+            }
+        }
+
+        private void OpenOpenAiPlatformTunnels()
+        {
+            try { McpOpenAiSecureTunnelManager.OpenPlatformTunnels(); }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "OpenAI Tunnels", ex.Message); }
+        }
+
+        private void OpenOpenAiRuntimeKeys()
+        {
+            try { McpOpenAiSecureTunnelManager.OpenRuntimeKeys(); }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "OpenAI Runtime API key", ex.Message); }
+        }
+
+        private void OpenOpenAiTunnelClientDownload()
+        {
+            try { McpOpenAiSecureTunnelManager.OpenTunnelClientDownload(); }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "OpenAI tunnel-client", ex.Message); }
+        }
+
+        private void SelectOpenAiTunnelClient()
+        {
+            try
+            {
+                var dialog = new OpenFileDialog
+                {
+                    Title = "Chọn tunnel-client.exe chính thức của OpenAI",
+                    Filter = "OpenAI tunnel-client (tunnel-client*.exe)|tunnel-client*.exe|Executable (*.exe)|*.exe",
+                    CheckFileExists = true,
+                    Multiselect = false
+                };
+                if (dialog.ShowDialog(this) != true) return;
+                string message;
+                var ok = McpOpenAiSecureTunnelManager.SaveClientPath(dialog.FileName, out message);
+                ShowToast(ok ? ToastKind.Success : ToastKind.Error, "OpenAI tunnel-client", message);
+                if (ok)
+                {
+                    _openAiClientPathText.Text = "tunnel-client: " + McpOpenAiSecureTunnelManager.SavedClientPath;
+                    McpTransportCoordinator.SetSelectedProvider(McpTransportProvider.OpenAiSecureTunnel);
+                }
+            }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "OpenAI tunnel-client", ex.Message); }
+            RefreshStatus();
+        }
+
+        private void StartOpenAiSecureTunnel()
+        {
+            try
+            {
+                McpTransportCoordinator.SetSelectedProvider(McpTransportProvider.OpenAiSecureTunnel);
+                var tunnelId = (_openAiTunnelIdText.Text ?? string.Empty).Trim();
+                var runtimeKey = _openAiRuntimeKeyBox.Password;
+                string message;
+                var ok = McpOpenAiSecureTunnelManager.Start(tunnelId, runtimeKey, out message);
+                _openAiRuntimeKeyBox.Password = string.Empty;
+                if (ok)
+                    McpAgentExperience.Success("onboarding", "OpenAI Secure MCP Tunnel đang khởi động; Runtime API key đã được xác minh và lưu bảo mật cho các lần restart.", "Chờ tunnel-client READY rồi kết nối ChatGPT bằng Connection = Tunnel.");
+                else
+                    McpAgentExperience.Error("onboarding", message, "Kiểm tra tunnel-client, Tunnel ID, Runtime API key và quyền Tunnels Read + Use.");
+                ShowToast(ok ? ToastKind.Success : ToastKind.Error, "OpenAI Secure MCP Tunnel", message);
+            }
+            catch (Exception ex)
+            {
+                try { _openAiRuntimeKeyBox.Password = string.Empty; } catch { }
+                ShowToast(ToastKind.Error, "OpenAI Secure MCP Tunnel", ex.Message);
+            }
+            RefreshStatus();
+        }
+
+        private void OpenOpenAiAdminUi()
+        {
+            string error;
+            if (!McpOpenAiSecureTunnelManager.OpenAdminUi(out error))
+                ShowToast(ToastKind.Warning, "tunnel-client UI", error);
+            else
+                ShowToast(ToastKind.Success, "tunnel-client UI", "Đã mở UI local của tunnel-client.");
         }
 
         private void OpenAccountSetup()
         {
             try
             {
+                McpTransportCoordinator.SetSelectedProvider(McpTransportProvider.CloudflareNamedTunnel);
                 if (string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.CloudflaredPath))
                 {
                     string adopted;
@@ -999,6 +1315,8 @@ namespace QS3D.BricsCAD.V25
         private void StartNamedTunnel()
         {
             StopQuickUrlPolling();
+            McpTransportCoordinator.SetSelectedProvider(McpTransportProvider.CloudflareNamedTunnel);
+            McpOpenAiSecureTunnelManager.StopForHostShutdown();
             string error;
             if (!McpCloudflareAccountTunnelManager.StartSaved(out error))
             {
@@ -1015,6 +1333,8 @@ namespace QS3D.BricsCAD.V25
 
         private void StartQuickTunnel()
         {
+            McpTransportCoordinator.SetSelectedProvider(McpTransportProvider.CloudflareQuickTunnel);
+            McpOpenAiSecureTunnelManager.StopForHostShutdown();
             string error;
             if (!McpCloudflareAccountTunnelManager.StartQuickTunnel(out error))
             {
@@ -1023,7 +1343,7 @@ namespace QS3D.BricsCAD.V25
                 RefreshStatus();
                 return;
             }
-            McpAgentExperience.Warning("onboarding", "Quick Tunnel đang chạy để test.", "Dùng Named Tunnel ổn định cho production.");
+            McpAgentExperience.Warning("onboarding", "Quick Tunnel đang chạy để test.", "Dùng OpenAI Secure Tunnel hoặc Named Tunnel ổn định cho production.");
             ShowToast(ToastKind.Info, "Quick Tunnel", "Đang khởi động và chờ public URL...");
             StartQuickUrlPolling();
             RefreshStatus();
@@ -1072,10 +1392,11 @@ namespace QS3D.BricsCAD.V25
         private void StopTunnels()
         {
             StopQuickUrlPolling();
+            McpOpenAiSecureTunnelManager.StopForHostShutdown();
             McpCloudflareAccountTunnelManager.StopForHostShutdown();
             McpCloudflareTunnelManager.StopForHostShutdown();
-            McpAgentExperience.Warning("onboarding", "Đã dừng tunnel trong phiên này.", "Khởi động Named Tunnel khi cần kết nối lại.");
-            ShowToast(ToastKind.Success, "Cloudflare", "Đã dừng tunnel của QS3D trong phiên BricsCAD này.");
+            McpAgentExperience.Warning("onboarding", "Đã dừng mọi tunnel trong phiên này.", "Khởi động lại transport đã chọn khi cần kết nối.");
+            ShowToast(ToastKind.Success, "MCP transport", "Đã dừng OpenAI Secure Tunnel và các Cloudflare tunnel trong phiên BricsCAD này.");
             RefreshStatus();
         }
 
@@ -1083,10 +1404,20 @@ namespace QS3D.BricsCAD.V25
         {
             try
             {
-                McpCloudflareAccountTunnelManager.OpenChatGpt();
-                McpAgentExperience.Info("onboarding", "Đã mở ChatGPT trong browser hệ thống.", string.Empty,
-                    "Thêm public MCP URL bằng OAuth/DCR rồi đánh dấu đã thêm MCP.");
-                ShowToast(ToastKind.Success, "ChatGPT", "Đã mở ChatGPT trong browser. Dùng URL + OAuth trên basic connector screen.");
+                if (McpTransportCoordinator.SelectedProvider == McpTransportProvider.OpenAiSecureTunnel)
+                {
+                    McpOpenAiSecureTunnelManager.OpenChatGptConnectors();
+                    McpAgentExperience.Info("onboarding", "Đã mở ChatGPT connector settings.", string.Empty,
+                        "Tạo MCP/App với Connection = Tunnel và chọn Tunnel ID hiện tại.");
+                    ShowToast(ToastKind.Success, "ChatGPT", "Đã mở ChatGPT. Với Secure Tunnel hãy chọn Connection = Tunnel, không dùng public URL/OAuth QS3D.");
+                }
+                else
+                {
+                    McpCloudflareAccountTunnelManager.OpenChatGpt();
+                    McpAgentExperience.Info("onboarding", "Đã mở ChatGPT trong browser hệ thống.", string.Empty,
+                        "Thêm public MCP URL bằng OAuth/DCR rồi đánh dấu đã thêm MCP.");
+                    ShowToast(ToastKind.Success, "ChatGPT", "Đã mở ChatGPT trong browser. Dùng URL + OAuth trên basic connector screen.");
+                }
             }
             catch (Exception ex) { ShowToast(ToastKind.Error, "ChatGPT", ex.Message); }
         }
@@ -1095,9 +1426,19 @@ namespace QS3D.BricsCAD.V25
         {
             try
             {
-                McpAgentExperience.MarkChatGptRegistrationAcknowledged();
-                ShowToast(ToastKind.Success, "ChatGPT Connector",
-                    "Đã ghi nhận bạn đã thêm MCP URL hiện tại. Đây là xác nhận cài đặt, chưa phải bằng chứng traffic; OAuth MCP traffic sẽ tự hiện khi ChatGPT gọi server.");
+                McpTransportCoordinator.MarkChatGptRegistrationAcknowledged();
+                if (McpTransportCoordinator.SelectedProvider == McpTransportProvider.OpenAiSecureTunnel)
+                {
+                    McpAgentExperience.Success("onboarding", "Đã ghi nhận user cấu hình ChatGPT cho OpenAI Tunnel ID hiện tại.", "Giữ tunnel-client READY và thử tools/list/tool call từ ChatGPT.");
+                    ShowToast(ToastKind.Success, "ChatGPT Connector",
+                        "Đã ghi nhận Tunnel connector hiện tại. Đây là xác nhận cài đặt của user, chưa phải bằng chứng một tools/call đã chạy.");
+                }
+                else
+                {
+                    McpAgentExperience.MarkChatGptRegistrationAcknowledged();
+                    ShowToast(ToastKind.Success, "ChatGPT Connector",
+                        "Đã ghi nhận bạn đã thêm MCP URL hiện tại. Đây là xác nhận cài đặt, chưa phải bằng chứng traffic; OAuth MCP traffic sẽ tự hiện khi ChatGPT gọi server.");
+                }
             }
             catch (Exception ex) { ShowToast(ToastKind.Error, "ChatGPT Connector", ex.Message); }
             RefreshStatus();
@@ -1105,10 +1446,15 @@ namespace QS3D.BricsCAD.V25
 
         private void CopyUrl()
         {
+            if (McpTransportCoordinator.SelectedProvider == McpTransportProvider.OpenAiSecureTunnel)
+            {
+                ShowToast(ToastKind.Info, "MCP URL", "OpenAI Secure Tunnel không cần public MCP URL. Trong ChatGPT chọn Connection = Tunnel và Tunnel ID hiện tại.");
+                return;
+            }
             var url = McpPublicEndpointResolver.Resolve();
             if (string.IsNullOrWhiteSpace(url))
             {
-                ShowToast(ToastKind.Warning, "MCP URL", "Chưa có public MCP URL. Hãy tạo Named Tunnel trước.");
+                ShowToast(ToastKind.Warning, "MCP URL", "Chưa có public MCP URL. Hãy khởi động Cloudflare transport đã chọn trước.");
                 return;
             }
             try { Clipboard.SetText(url); ShowToast(ToastKind.Success, "MCP URL", "Đã copy public MCP URL."); }
@@ -1121,7 +1467,7 @@ namespace QS3D.BricsCAD.V25
             {
                 McpEmbeddedServer.EnsureStarted();
                 Clipboard.SetText(McpEmbeddedServer.GetBearerToken());
-                ShowToast(ToastKind.Warning, "Bearer Token", "Đã copy engineering bearer. Không chia sẻ token công khai; ChatGPT production dùng OAuth.");
+                ShowToast(ToastKind.Warning, "Bearer Token", "Đã copy engineering bearer. Không chia sẻ token công khai; Secure Tunnel tự inject local bearer, Cloudflare production dùng OAuth.");
             }
             catch (Exception ex) { ShowToast(ToastKind.Error, "Bearer Token", ex.Message); }
         }
@@ -1131,7 +1477,7 @@ namespace QS3D.BricsCAD.V25
             var url = McpPublicEndpointResolver.Resolve();
             if (string.IsNullOrWhiteSpace(url))
             {
-                ShowToast(ToastKind.Warning, "Engineering config", "Chưa có public MCP URL.");
+                ShowToast(ToastKind.Warning, "Engineering config", "Chưa có public MCP URL. Secure Tunnel không dùng clipboard config này.");
                 return;
             }
             try
@@ -1147,7 +1493,7 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 McpDesktopControlSession.ResumeFromLocalUser();
-                ShowToast(ToastKind.Success, "Resume desktop", "Desktop consent ON. Idle timeout 10 phút; Esc ×2 hoặc Pause desktop để dừng ngay.");
+                ShowToast(ToastKind.Success, "Resume desktop", "Desktop consent ON · auto-renew trong phiên, không còn timeout 10 phút; Esc ×2 hoặc Pause desktop để dừng ngay.");
             }
             catch (Exception ex) { ShowToast(ToastKind.Error, "Resume desktop", ex.Message); }
             RefreshStatus();
@@ -1297,47 +1643,69 @@ namespace QS3D.BricsCAD.V25
         private void RefreshStatus()
         {
             McpDesktopControlSession.ExpireConsentIfIdle();
+            var provider = McpTransportCoordinator.SelectedProvider;
             var publicUrl = McpPublicEndpointResolver.Resolve();
             var mcpRunning = McpEmbeddedServer.IsRunning;
+            var openAiRunning = McpOpenAiSecureTunnelManager.IsRunning;
+            var openAiReady = openAiRunning && McpOpenAiSecureTunnelManager.IsReady;
             var namedTunnelRunning = McpCloudflareAccountTunnelManager.IsRunning;
             var quickTunnelRunning = McpCloudflareTunnelManager.IsRunning;
-            var tunnelRunning = namedTunnelRunning || quickTunnelRunning;
+            var selectedTunnelRunning = provider == McpTransportProvider.OpenAiSecureTunnel
+                ? openAiRunning
+                : provider == McpTransportProvider.CloudflareQuickTunnel ? quickTunnelRunning : namedTunnelRunning;
             var cloudflaredInstalled = !string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.CloudflaredPath);
             var authenticated = McpCloudflareAccountTunnelManager.IsAuthenticated;
             var desktopConsent = McpDesktopControlSession.IsEnabled;
             var desktopState = McpDesktopControlSession.ConsentState;
-            var idleRemaining = McpDesktopControlSession.IdleRemaining;
-            var idleText = desktopConsent ? FormatIdle(idleRemaining) : "—";
-            var onboarding = McpAgentExperience.DetermineOnboarding();
-            var transportReady = mcpRunning && tunnelRunning && !string.IsNullOrWhiteSpace(publicUrl);
-            var chatGptRegistered = onboarding.ChatGptRegistrationAcknowledged;
-            var recentOAuthMcpActivity = mcpRunning && HasRecentOAuthMcpActivity(publicUrl);
-            var oauthMcpActivityText = FormatOAuthMcpActivity(publicUrl);
+            var idleText = desktopConsent ? "AUTO-RENEW" : "—";
+            var transportReady = provider == McpTransportProvider.OpenAiSecureTunnel
+                ? mcpRunning && openAiReady
+                : mcpRunning && selectedTunnelRunning && !string.IsNullOrWhiteSpace(publicUrl);
+            var chatGptRegistered = McpTransportCoordinator.IsChatGptRegistrationAcknowledged();
+            var recentOAuthMcpActivity = provider != McpTransportProvider.OpenAiSecureTunnel && mcpRunning && HasRecentOAuthMcpActivity(publicUrl);
+            var connectionEvidenceText = provider == McpTransportProvider.OpenAiSecureTunnel
+                ? (openAiReady
+                    ? "tunnel-client READY; QS3D không suy đoán tools/call chỉ từ readiness."
+                    : openAiRunning ? "tunnel-client RUNNING · chờ /readyz." : "Secure Tunnel chưa chạy.")
+                : FormatOAuthMcpActivity(publicUrl);
+            string onboardingTitle, onboardingDetail, onboardingNext;
+            GetTransportOnboarding(provider, out onboardingTitle, out onboardingDetail, out onboardingNext);
 
             _statusChips.Children.Clear();
             _statusChips.Children.Add(CreateStatusChip(mcpRunning ? "MCP online" : "MCP offline", mcpRunning));
-            _statusChips.Children.Add(CreateStatusChip(tunnelRunning ? "Tunnel online" : "Tunnel offline", tunnelRunning));
+            _statusChips.Children.Add(CreateStatusChip(selectedTunnelRunning ? "Tunnel online" : "Tunnel offline", selectedTunnelRunning));
             _statusChips.Children.Add(CreateStatusChip(transportReady ? "Transport sẵn sàng" : "Transport chưa sẵn sàng", transportReady));
             _statusChips.Children.Add(CreateStatusChip(
-                recentOAuthMcpActivity ? "ChatGPT OAuth traffic gần đây"
+                provider == McpTransportProvider.OpenAiSecureTunnel
+                    ? (chatGptRegistered ? "ChatGPT Tunnel đã xác nhận" : "ChatGPT Tunnel chưa xác nhận")
+                    : recentOAuthMcpActivity ? "ChatGPT OAuth traffic gần đây"
                     : chatGptRegistered ? "ChatGPT đã đăng ký · chờ traffic" : "ChatGPT chưa xác nhận",
-                recentOAuthMcpActivity));
+                provider == McpTransportProvider.OpenAiSecureTunnel ? chatGptRegistered && transportReady : recentOAuthMcpActivity));
             _statusChips.Children.Add(CreateStatusChip("Desktop " + desktopState, desktopConsent));
 
             _statusRows.Children.Clear();
+            _statusRows.Children.Add(CreateStatusRow("Transport", McpTransportCoordinator.SelectedProviderLabel, _palette.Accent));
             _statusRows.Children.Add(CreateStatusRow("MCP embedded", mcpRunning ? "RUNNING" : "STOPPED", mcpRunning ? _palette.Success : _palette.TextMuted));
             _statusRows.Children.Add(CreateStatusRow("Local endpoint", McpEmbeddedServer.Endpoint.ToString()));
+            _statusRows.Children.Add(CreateStatusRow("OpenAI client", string.IsNullOrWhiteSpace(McpOpenAiSecureTunnelManager.SavedClientPath) ? "Chưa chọn" : McpOpenAiSecureTunnelManager.SavedClientPath));
+            _statusRows.Children.Add(CreateStatusRow("OpenAI Tunnel", openAiRunning ? (openAiReady ? "READY" : "RUNNING / chờ READY") : "STOPPED", openAiReady ? _palette.Success : (openAiRunning ? _palette.Warning : _palette.TextMuted)));
+            _statusRows.Children.Add(CreateStatusRow("Tunnel ID", McpOpenAiSecureTunnelManager.IsValidTunnelId(McpOpenAiSecureTunnelManager.SavedTunnelId) ? McpOpenAiSecureTunnelManager.SavedTunnelId : "Chưa cấu hình"));
             _statusRows.Children.Add(CreateStatusRow("Cloudflare", cloudflaredInstalled ? "Đã cài" : "Chưa cài", cloudflaredInstalled ? _palette.Success : _palette.TextMuted));
             _statusRows.Children.Add(CreateStatusRow("Browser login", authenticated ? "Đã đăng nhập" : "Chưa đăng nhập", authenticated ? _palette.Success : _palette.TextMuted));
             _statusRows.Children.Add(CreateStatusRow("Named Tunnel", namedTunnelRunning ? "RUNNING" : "STOPPED", namedTunnelRunning ? _palette.Success : _palette.TextMuted));
             _statusRows.Children.Add(CreateStatusRow("Quick Tunnel", quickTunnelRunning ? "RUNNING / test only" : "STOPPED", quickTunnelRunning ? _palette.Warning : _palette.TextMuted));
-            _statusRows.Children.Add(CreateStatusRow("Public MCP", string.IsNullOrWhiteSpace(publicUrl) ? "Chưa có public URL" : publicUrl));
-            _statusRows.Children.Add(CreateStatusRow("Transport sẵn sàng", transportReady ? "CÓ · MCP + tunnel + public URL" : "CHƯA", transportReady ? _palette.Success : _palette.Warning));
-            _statusRows.Children.Add(CreateStatusRow("ChatGPT đăng ký", chatGptRegistered ? "Đã xác nhận URL hiện tại" : "Chưa xác nhận", chatGptRegistered ? _palette.Success : _palette.TextMuted));
-            _statusRows.Children.Add(CreateStatusRow("OAuth MCP traffic", oauthMcpActivityText, recentOAuthMcpActivity ? _palette.Success : _palette.TextMuted));
-            _statusRows.Children.Add(CreateStatusRow("Onboarding", onboarding.Title));
+            _statusRows.Children.Add(CreateStatusRow("Public MCP", provider == McpTransportProvider.OpenAiSecureTunnel ? "Không cần public URL" : string.IsNullOrWhiteSpace(publicUrl) ? "Chưa có public URL" : publicUrl));
+            _statusRows.Children.Add(CreateStatusRow("Transport sẵn sàng", transportReady
+                ? provider == McpTransportProvider.OpenAiSecureTunnel ? "CÓ · MCP + Secure Tunnel READY" : "CÓ · MCP + tunnel + public URL"
+                : "CHƯA", transportReady ? _palette.Success : _palette.Warning));
+            _statusRows.Children.Add(CreateStatusRow("ChatGPT đăng ký", chatGptRegistered
+                ? provider == McpTransportProvider.OpenAiSecureTunnel ? "Đã xác nhận Tunnel ID hiện tại" : "Đã xác nhận URL hiện tại"
+                : "Chưa xác nhận", chatGptRegistered ? _palette.Success : _palette.TextMuted));
+            _statusRows.Children.Add(CreateStatusRow(provider == McpTransportProvider.OpenAiSecureTunnel ? "Tunnel evidence" : "OAuth MCP traffic", connectionEvidenceText,
+                provider == McpTransportProvider.OpenAiSecureTunnel ? (openAiReady ? _palette.Success : _palette.TextMuted) : (recentOAuthMcpActivity ? _palette.Success : _palette.TextMuted)));
+            _statusRows.Children.Add(CreateStatusRow("Onboarding", onboardingTitle));
             _statusRows.Children.Add(CreateStatusRow("Desktop consent", desktopState, desktopConsent ? _palette.Success : _palette.Warning));
-            _statusRows.Children.Add(CreateStatusRow("Idle còn", idleText));
+            _statusRows.Children.Add(CreateStatusRow("Gia hạn", idleText));
             _statusRows.Children.Add(CreateStatusRow("Action ID", string.IsNullOrWhiteSpace(McpAgentExperience.LastActionId) ? "—" : McpAgentExperience.LastActionId));
             _statusRows.Children.Add(CreateStatusRow("Action state", string.IsNullOrWhiteSpace(McpAgentExperience.LastTerminalState)
                 ? "—" : McpAgentExperience.LastTerminalState + " · " + McpAgentExperience.LastDurationMilliseconds + " ms"));
@@ -1345,8 +1713,8 @@ namespace QS3D.BricsCAD.V25
 
             if (_desktopConsentText != null)
             {
-                _desktopConsentText.Text = "Desktop control: " + desktopState + (desktopConsent ? " · Idle còn " + idleText : " · local Resume required");
-                _desktopConsentText.Foreground = desktopConsent ? _palette.Success : (desktopState == "EXPIRED" || desktopState == "PAUSED" ? _palette.Warning : _palette.TextMuted);
+                _desktopConsentText.Text = "Desktop control: " + desktopState + (desktopConsent ? " · " + idleText : " · local Resume required");
+                _desktopConsentText.Foreground = desktopConsent ? _palette.Success : (desktopState == "PAUSED" ? _palette.Warning : _palette.TextMuted);
             }
             if (_desktopActivityText != null)
             {
@@ -1355,7 +1723,7 @@ namespace QS3D.BricsCAD.V25
                     + Environment.NewLine + "Action ID: " + (string.IsNullOrWhiteSpace(McpAgentExperience.LastActionId) ? "—" : McpAgentExperience.LastActionId)
                     + Environment.NewLine + "Trạng thái cuối: " + (string.IsNullOrWhiteSpace(McpAgentExperience.LastTerminalState) ? "—" : McpAgentExperience.LastTerminalState)
                     + Environment.NewLine + "Duration: " + McpAgentExperience.LastDurationMilliseconds + " ms"
-                    + Environment.NewLine + "Bước tiếp: " + (string.IsNullOrWhiteSpace(McpAgentExperience.NextStep) ? "theo trạng thái onboarding hiện tại" : McpAgentExperience.NextStep);
+                    + Environment.NewLine + "Bước tiếp: " + (string.IsNullOrWhiteSpace(McpAgentExperience.NextStep) ? onboardingNext : McpAgentExperience.NextStep);
             }
             if (_selectedTab == 3 && _logsHost != null) RenderActivityHistory();
         }

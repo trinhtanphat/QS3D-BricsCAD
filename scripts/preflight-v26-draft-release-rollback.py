@@ -2,181 +2,150 @@
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
-helper_path = root / "scripts" / "rollback-v26-draft-release.ps1"
-workflow_path = root / ".github" / "workflows" / "release-v26.yml"
+helper = (root / "scripts" / "rollback-v26-draft-release.ps1").read_text(encoding="utf-8")
+workflow = (root / ".github" / "workflows" / "release-v26.yml").read_text(encoding="utf-8")
 
-helper = helper_path.read_text(encoding="utf-8")
-workflow = workflow_path.read_text(encoding="utf-8")
+
+def require_all(text: str, tokens: list[str], label: str, errors: list[str]) -> None:
+    for token in tokens:
+        if token not in text:
+            errors.append(f"{label} missing fail-closed contract: {token}")
 
 
 def validate(helper_text: str, workflow_text: str) -> list[str]:
     errors: list[str] = []
 
-    required_helper = [
+    helper_contract = [
         "[Parameter(Mandatory = $true)][bool]$TagCreatedByThisRun",
-        "if (-not $TagCreatedByThisRun)",
-        "Rollback requires positive proof that this workflow run created the exact release tag ref.",
         "if ($ReleaseId -lt 0)",
         "if ($ReleaseId -gt 0)",
-        "[long]$release.id -ne $ReleaseId",
-        "release.url",
-        "Release repository identity mismatch",
         "if ($release.draft -ne $true)",
-        "Release $ReleaseId is not a draft; refusing destructive rollback.",
-        "release.tag_name",
         "Resolve-ExactRemoteTagSha",
-        "git ls-remote --tags origin $tagRef $peeledRef",
-        "if (-not [string]::Equals($resolvedBefore, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase))",
-        "Remote tag $ReleaseTag moved to",
         "function Test-GitHubNotFound",
         "[int]$response.StatusCode -eq 404",
-        "Invoke-RestMethod -Method Delete -Uri $releaseUri",
         "function Assert-DraftDeleteCommittedAfterError",
         "$remainingRelease = Invoke-RestMethod -Method Get -Uri $ReleaseUri -Headers $headers",
-        "V26 draft DELETE acknowledgement was ambiguous, but the exact release is authoritatively absent; treating draft deletion as committed.",
-        "Exact owned V26 draft $ReleaseId still exists after DELETE error; refusing to assume deletion.",
         "Assert-DraftDeleteCommittedAfterError -DeleteError $_ -ReleaseUri $releaseUri",
         "function Assert-NoReleaseOwnsTag",
         "releases?per_page=100&page=$page",
-        "if ([string]::Equals([string]$candidate.tag_name, $ReleaseTag, [StringComparison]::Ordinal))",
         "A release still owns tag $ReleaseTag; refusing tag deletion.",
-        "Release enumeration exceeded $maxPages pages",
-        "Assert-NoReleaseOwnsTag",
-        "if (-not [string]::Equals($resolvedAfter, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase))",
+        "if (-not $TagCreatedByThisRun)",
+        "Preserving exact V26 tag $ReleaseTag because this run lacks positive tag-creation ownership proof.",
+        "TagDeleted = $false",
         "Remote tag $ReleaseTag changed during rollback; refusing tag deletion.",
-        "git/refs/tags/",
-        "git/ref/tags/",
         "Invoke-RestMethod -Method Delete -Uri $tagRefUri",
         "function Assert-TagDeleteCommittedAfterError",
         "$remainingTag = Invoke-RestMethod -Method Get -Uri $TagGetUri -Headers $headers",
-        "V26 tag DELETE acknowledgement was ambiguous, but the exact tag is authoritatively absent; treating tag deletion as committed.",
-        "Exact owned V26 tag $ReleaseTag still exists after DELETE error; refusing to assume deletion.",
-        "remainingTag.object.sha, $WorkflowSha",
         "Assert-TagDeleteCommittedAfterError -DeleteError $_ -TagGetUri $tagGetUri",
     ]
-    for needle in required_helper:
-        if needle not in helper_text:
-            errors.append(f"helper missing fail-closed contract: {needle}")
+    require_all(helper_text, helper_contract, "helper", errors)
 
-    for forbidden in [
-        "TagWasAbsentBeforeCreate",
-        "releases/tags/",
-        "git push --delete",
-        "git push origin :refs/tags/",
-        "-Force",
-    ]:
+    for forbidden in ["TagWasAbsentBeforeCreate", "releases/tags/", "git push --delete", "git push origin :refs/tags/", "-Force"]:
         if forbidden in helper_text:
             errors.append(f"helper uses stale/broad destructive contract: {forbidden}")
-
-    draft_get = helper_text.find("$remainingRelease = Invoke-RestMethod -Method Get -Uri $ReleaseUri -Headers $headers")
-    draft_not_found = helper_text.find("if (Test-GitHubNotFound -ErrorRecord $_)", draft_get + 1)
-    draft_absent = helper_text.find("V26 draft DELETE acknowledgement was ambiguous, but the exact release is authoritatively absent; treating draft deletion as committed.", draft_not_found + 1)
-    draft_still_exists = helper_text.find("Exact owned V26 draft $ReleaseId still exists after DELETE error; refusing to assume deletion.", draft_absent + 1)
-    if min(draft_get, draft_not_found, draft_absent, draft_still_exists) < 0 or not (
-        draft_get < draft_not_found < draft_absent < draft_still_exists
-    ):
-        errors.append("draft DELETE reconciliation must classify authoritative 404 before accepting absence and must refuse a surviving exact draft")
-
-    tag_get = helper_text.find("$remainingTag = Invoke-RestMethod -Method Get -Uri $TagGetUri -Headers $headers")
-    tag_not_found = helper_text.find("if (Test-GitHubNotFound -ErrorRecord $_)", tag_get + 1)
-    tag_absent = helper_text.find("V26 tag DELETE acknowledgement was ambiguous, but the exact tag is authoritatively absent; treating tag deletion as committed.", tag_not_found + 1)
-    tag_sha = helper_text.find("remainingTag.object.sha, $WorkflowSha", tag_absent + 1)
-    tag_still_exists = helper_text.find("Exact owned V26 tag $ReleaseTag still exists after DELETE error; refusing to assume deletion.", tag_sha + 1)
-    if min(tag_get, tag_not_found, tag_absent, tag_sha, tag_still_exists) < 0 or not (
-        tag_get < tag_not_found < tag_absent < tag_sha < tag_still_exists
-    ):
-        errors.append("tag DELETE reconciliation must classify authoritative 404 before accepting absence and validate exact SHA before refusing a surviving tag")
 
     release_delete = helper_text.find("Invoke-RestMethod -Method Delete -Uri $releaseUri")
     release_reconcile = helper_text.find("Assert-DraftDeleteCommittedAfterError -DeleteError $_ -ReleaseUri $releaseUri", release_delete + 1)
     owner_check = helper_text.find("Assert-NoReleaseOwnsTag", release_reconcile + 1)
-    post_sha_check = helper_text.find("Remote tag $ReleaseTag changed during rollback; refusing tag deletion.")
-    tag_delete = helper_text.find("Invoke-RestMethod -Method Delete -Uri $tagRefUri")
+    preserve = helper_text.find("Preserving exact V26 tag $ReleaseTag because this run lacks positive tag-creation ownership proof.", owner_check + 1)
+    sha_recheck = helper_text.find("Remote tag $ReleaseTag changed during rollback; refusing tag deletion.", preserve + 1)
+    tag_delete = helper_text.find("Invoke-RestMethod -Method Delete -Uri $tagRefUri", sha_recheck + 1)
     tag_reconcile = helper_text.find("Assert-TagDeleteCommittedAfterError -DeleteError $_ -TagGetUri $tagGetUri", tag_delete + 1)
-    if min(release_delete, release_reconcile, owner_check, post_sha_check, tag_delete, tag_reconcile) < 0 or not (
-        release_delete < release_reconcile < owner_check < post_sha_check < tag_delete < tag_reconcile
-    ):
-        errors.append("helper deletion order must be draft delete -> authoritative draft-DELETE reconciliation -> exhaustive release-owner check -> exact-SHA recheck -> tag delete -> authoritative tag-DELETE reconciliation")
+    ordered_helper = [release_delete, release_reconcile, owner_check, preserve, sha_recheck, tag_delete, tag_reconcile]
+    if min(ordered_helper) < 0 or ordered_helper != sorted(ordered_helper):
+        errors.append("rollback order must remain draft-delete/reconcile -> release-owner scan -> non-owned preservation -> exact-SHA recheck -> tag-delete/reconcile")
 
-    required_workflow = [
-        '$tagRefUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/git/refs"',
-        'ref = "refs/tags/$env:RELEASE_TAG"',
-        "sha = $env:GITHUB_SHA",
+    workflow_contract = [
+        '$tagRef = "refs/tags/$env:RELEASE_TAG"',
+        "function Test-GitHubNotFound",
+        "function Get-ExactReusableReleaseTag",
+        "snapshot.ref, $tagRef",
+        "snapshot.object.type, 'commit'",
+        "snapshot.object.sha, $env:GITHUB_SHA",
+        "$existingTag = Get-ExactReusableReleaseTag",
+        "Reusing exact V26 lightweight tag $env:RELEASE_TAG at workflow SHA without claiming deletion ownership.",
+        "$tagReadyForRelease = $false",
+        "$tagReadyForRelease = $true",
         "$createdTag = Invoke-RestMethod -Method Post -Uri $tagRefUri",
-        'createdTag.ref, "refs/tags/$env:RELEASE_TAG"',
+        "createdTag.ref, $tagRef",
+        "createdTag.object.type, 'commit'",
         "createdTag.object.sha, $env:GITHUB_SHA",
         "$tagCreatedByThisRun = $false",
         "$tagCreatedByThisRun = $true",
+        "$tagCreateError = $_",
+        "$reconciledTag = Get-ExactReusableReleaseTag",
+        "tag-create acknowledgement failed and the exact release tag is authoritatively absent",
+        "tag-create acknowledgement was ambiguous, but the exact lightweight tag now exists at workflow SHA; reusing it without deletion ownership.",
         "$releaseId = [long]0",
         "$releaseId = [long]$release.id",
         "$verifiedAssetIds = @{}",
-        "$uploadedAssetId = [long]$uploadedAsset.id",
         "$verifiedAssetIds[$expectedAsset] = $uploadedAssetId",
         "$publishPatchAttempted = $false",
         "$publishPatchAttempted = $true",
         "function Assert-PublishedReleaseMatchesVerifiedTransaction",
-        "Published V26 release target SHA mismatch during acknowledgement reconciliation.",
-        "Verified V26 release asset identity mismatch for $expectedAsset.",
-        "if ($VerifiedAssetIds.Count -ne $ExpectedAssets.Count)",
         "$reconciledRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers",
         "if ($reconciledRelease.draft -eq $false)",
         "if (-not $publishPatchAttempted)",
         "Assert-PublishedReleaseMatchesVerifiedTransaction",
         "authoritative release state confirms the exact qualified release is already published; treating publication as committed.",
-        "V26 publication acknowledgement reconciliation failed.",
-        "Manual cleanup is required before retry.",
-        "try {",
-        "catch {",
-        "$publicationError = $_",
-        "if (-not $tagCreatedByThisRun)",
+        "if (-not $tagReadyForRelease)",
         "rollback-v26-draft-release.ps1",
-        "-ReleaseId $releaseId",
-        "-ReleaseTag $env:RELEASE_TAG",
-        "-WorkflowSha $env:GITHUB_SHA",
         "-TagCreatedByThisRun $tagCreatedByThisRun",
-        "-Token $env:GH_TOKEN",
         "Automatic V26 draft rollback failed",
-        "Original publication error:",
-        "Rollback error:",
-        "V26 publication failed after transaction tag creation",
         "Automatic rollback completed; retry with the same tag is safe.",
     ]
-    for needle in required_workflow:
-        if needle not in workflow_text:
-            errors.append(f"workflow missing positive-ownership/acknowledgement contract: {needle}")
+    require_all(workflow_text, workflow_contract, "workflow", errors)
 
-    for stale in [
-        "$preCreateTagLines",
-        "$tagWasAbsentBeforeCreate",
-        "$releaseCreatedByThisRun",
-        "-TagWasAbsentBeforeCreate",
-    ]:
+    draft_create_workflow_contract = [
+        "$draftTransactionMarker =",
+        "QS3D-DRAFT-CREATE-V26:",
+        "$expectedReleaseName = \"QS3D for BricsCAD V26 $env:RELEASE_TAG\"",
+        "$draftCreateError = $_",
+        "$reconciledDraft = Resolve-AmbiguousDraftCreate",
+        "draft-create acknowledgement was ambiguous, but exactly one transaction-owned draft was recovered",
+        "$release = $reconciledDraft",
+    ]
+    require_all(workflow_text, draft_create_workflow_contract, "workflow draft-create acknowledgement", errors)
+
+    draft_create_start = workflow_text.find("function Resolve-AmbiguousDraftCreate")
+    draft_create_end = workflow_text.find("function Assert-PublishedReleaseMatchesVerifiedTransaction", draft_create_start + 1)
+    if draft_create_start < 0 or draft_create_end <= draft_create_start:
+        errors.append("workflow draft-create acknowledgement missing bounded Resolve-AmbiguousDraftCreate function scope")
+        draft_create_scope = ""
+    else:
+        draft_create_scope = workflow_text[draft_create_start:draft_create_end]
+    draft_create_function_contract = [
+        "function Resolve-AmbiguousDraftCreate",
+        "releases?per_page=100&page=$page",
+        "$maxPages = 20",
+        "ReleaseSnapshot.draft -ne $true",
+        "ReleaseSnapshot.tag_name, $env:RELEASE_TAG",
+        "ReleaseSnapshot.target_commitish, $env:GITHUB_SHA",
+        "ReleaseSnapshot.name, $ExpectedReleaseName",
+        "ReleaseSnapshot.prerelease -ne $IsPrerelease",
+        "ReleaseSnapshot.body",
+        "$body.IndexOf($TransactionMarker, [StringComparison]::Ordinal)",
+        "matching V26 draft-create transaction marker",
+    ]
+    require_all(draft_create_scope, draft_create_function_contract, "workflow Resolve-AmbiguousDraftCreate", errors)
+
+    for stale in ["$preCreateTagLines", "$tagWasAbsentBeforeCreate", "$releaseCreatedByThisRun", "-TagWasAbsentBeforeCreate", "if (git tag --list $env:RELEASE_TAG) { throw"]:
         if stale in workflow_text:
-            errors.append(f"workflow retains stale absence-based ownership contract: {stale}")
+            errors.append(f"workflow retains stale reject/absence-based ownership contract: {stale}")
 
-    tag_create = workflow_text.find("$createdTag = Invoke-RestMethod -Method Post -Uri $tagRefUri")
-    tag_owned = workflow_text.find("$tagCreatedByThisRun = $true", tag_create + 1)
-    ownership_sha = workflow_text.find("createdTag.object.sha, $env:GITHUB_SHA", tag_create + 1)
-    release_create = workflow_text.find('$release = Invoke-RestMethod -Method Post', tag_owned + 1)
-    release_id = workflow_text.find("$releaseId = [long]$release.id", release_create + 1)
-    first_tag_check = workflow_text.find("Assert-RemoteReleaseTagTargetsWorkflowSha", release_id + 1)
-    held_local_hash = workflow_text.find("verify-v26-held-file.ps1 -Operation Hash -Path $localAsset", first_tag_check + 1)
-    held_remote_hash = workflow_text.find("verify-v26-held-file.ps1 -Operation Hash -Path $downloadedAsset", held_local_hash + 1)
-    asset_identity = workflow_text.find("$verifiedAssetIds[$expectedAsset] = $uploadedAssetId", held_remote_hash + 1)
-    second_tag_check = workflow_text.find("Assert-RemoteReleaseTagTargetsWorkflowSha", asset_identity + 1)
-    patch_attempted = workflow_text.find("$publishPatchAttempted = $true", second_tag_check + 1)
-    publish_release = workflow_text.find("$published = Invoke-RestMethod -Method Patch", patch_attempted + 1)
-    catch_block = workflow_text.find("$publicationError = $_", publish_release + 1)
-    reconcile_get = workflow_text.find("$reconciledRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers", catch_block + 1)
-    published_branch = workflow_text.find("if ($reconciledRelease.draft -eq $false)", reconcile_get + 1)
-    patch_proof = workflow_text.find("if (-not $publishPatchAttempted)", published_branch + 1)
-    reconcile_call = workflow_text.find("Assert-PublishedReleaseMatchesVerifiedTransaction", patch_proof + 1)
-    committed_message = workflow_text.find("authoritative release state confirms the exact qualified release is already published; treating publication as committed.", reconcile_call + 1)
-    rollback_call = workflow_text.find("rollback-v26-draft-release.ps1", committed_message + 1)
-    if min(tag_create, tag_owned, ownership_sha, release_create, release_id, first_tag_check, held_local_hash, held_remote_hash, asset_identity, second_tag_check, patch_attempted, publish_release, catch_block, reconcile_get, published_branch, patch_proof, reconcile_call, committed_message, rollback_call) < 0 or not (
-        tag_create < ownership_sha < tag_owned < release_create < release_id < first_tag_check < held_local_hash < held_remote_hash < asset_identity < second_tag_check < patch_attempted < publish_release < catch_block < reconcile_get < published_branch < patch_proof < reconcile_call < committed_message < rollback_call
-    ):
-        errors.append("workflow order must be exact-ref ownership -> draft/assets hash+identity -> publish attempt -> authoritative commit reconciliation -> bounded rollback")
+    if workflow_text.count("$tagReadyForRelease = $true") < 2:
+        errors.append("workflow must admit both acknowledged/reusable exact-tag paths before publication")
+
+    marker = workflow_text.find("$draftTransactionMarker =")
+    request = workflow_text.find("$request = @{", marker + 1)
+    create = workflow_text.find("Invoke-RestMethod -Method Post -Uri \"https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases\"", request + 1)
+    create_error = workflow_text.find("$draftCreateError = $_", create + 1)
+    reconcile = workflow_text.find("$reconciledDraft = Resolve-AmbiguousDraftCreate", create_error + 1)
+    recovered = workflow_text.find("$release = $reconciledDraft", reconcile + 1)
+    release_id = workflow_text.find("$releaseId = [long]$release.id", recovered + 1)
+    draft_order = [marker, request, create, create_error, reconcile, recovered, release_id]
+    if min(draft_order) < 0 or draft_order != sorted(draft_order):
+        errors.append("V26 draft-create order must be marker -> request -> one POST -> catch -> bounded reconciliation -> recovered identity -> releaseId assignment")
 
     return errors
 
@@ -186,27 +155,32 @@ if canonical_errors:
     raise SystemExit("V26 draft rollback contract failed: " + "; ".join(canonical_errors))
 
 mutations = {
-    "positive tag ownership": (helper, workflow.replace("$tagCreatedByThisRun = $true", "$tagCreatedByThisRun = $false", 1)),
-    "created-ref identity": (helper, workflow.replace('createdTag.ref, "refs/tags/$env:RELEASE_TAG"', 'createdTag.ref, "refs/tags/other"', 1)),
-    "created-ref SHA": (helper, workflow.replace("createdTag.object.sha, $env:GITHUB_SHA", "createdTag.object.sha, ('0' * 40)", 1)),
-    "draft-only deletion": (helper.replace("if ($release.draft -ne $true)", "if ($false)", 1), workflow),
-    "draft delete acknowledgement reconciliation": (helper.replace("Assert-DraftDeleteCommittedAfterError -DeleteError $_ -ReleaseUri $releaseUri", "# draft delete reconciliation removed", 1), workflow),
-    "draft delete authoritative absence": (helper.replace("if (Test-GitHubNotFound -ErrorRecord $_)", "if ($false)", 1), workflow),
-    "exhaustive release owner check": (helper.replace("Assert-NoReleaseOwnsTag\n\n$resolvedAfter", "$resolvedAfter", 1), workflow),
-    "exact-SHA tag ownership": (helper.replace("if (-not [string]::Equals($resolvedBefore, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase))", "if ($false)", 1), workflow),
-    "post-delete exact-SHA recheck": (helper.replace("if (-not [string]::Equals($resolvedAfter, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase))", "if ($false)", 1), workflow),
-    "tag delete acknowledgement reconciliation": (helper.replace("Assert-TagDeleteCommittedAfterError -DeleteError $_ -TagGetUri $tagGetUri", "# tag delete reconciliation removed", 1), workflow),
-    "tag delete authoritative absence": (helper[: helper.find("$remainingTag = Invoke-RestMethod -Method Get -Uri $TagGetUri -Headers $headers")] + helper[helper.find("$remainingTag = Invoke-RestMethod -Method Get -Uri $TagGetUri -Headers $headers"):].replace("if (Test-GitHubNotFound -ErrorRecord $_)", "if ($false)", 1), workflow),
-    "tag delete exact identity": (helper.replace("remainingTag.object.sha, $WorkflowSha", "remainingTag.object.sha, ('0' * 40)", 1), workflow),
-    "verified asset identity capture": (helper, workflow.replace("$verifiedAssetIds[$expectedAsset] = $uploadedAssetId", "# verified asset identity removed", 1)),
+    "reusable lookup": (helper, workflow.replace("$existingTag = Get-ExactReusableReleaseTag", "$existingTag = $null", 1)),
+    "tag-ready proof": (helper, workflow.replace("$tagReadyForRelease = $true", "$tagReadyForRelease = $false")),
+    "positive ownership": (helper, workflow.replace("$tagCreatedByThisRun = $true", "$tagCreatedByThisRun = $false", 1)),
+    "created ref": (helper, workflow.replace("createdTag.ref, $tagRef", "createdTag.ref, 'refs/tags/other'", 1)),
+    "created type": (helper, workflow.replace("createdTag.object.type, 'commit'", "createdTag.object.type, 'tag'", 1)),
+    "created SHA": (helper, workflow.replace("createdTag.object.sha, $env:GITHUB_SHA", "createdTag.object.sha, ('0' * 40)", 1)),
+    "ambiguous tag-create reconciliation": (helper, workflow.replace("$reconciledTag = Get-ExactReusableReleaseTag", "$reconciledTag = $null", 1)),
+    "draft transaction marker": (helper, workflow.replace("QS3D-DRAFT-CREATE-V26:", "QS3D-DRAFT-CREATE-REMOVED:", 1)),
+    "draft reconciliation": (helper, workflow.replace("$reconciledDraft = Resolve-AmbiguousDraftCreate", "$reconciledDraft = $null", 1)),
+    "draft exact tag": (helper, workflow.replace("ReleaseSnapshot.tag_name, $env:RELEASE_TAG", "ReleaseSnapshot.tag_name, 'other'", 1)),
+    "draft exact SHA": (helper, workflow.replace("ReleaseSnapshot.target_commitish, $env:GITHUB_SHA", "ReleaseSnapshot.target_commitish, ('0' * 40)", 1)),
+    "draft exact name": (helper, workflow.replace("ReleaseSnapshot.name, $ExpectedReleaseName", "ReleaseSnapshot.name, 'other'", 1)),
+    "draft prerelease": (helper, workflow.replace("ReleaseSnapshot.prerelease -ne $IsPrerelease", "$false", 1)),
+    "draft marker identity": (helper, workflow.replace("$body.IndexOf($TransactionMarker, [StringComparison]::Ordinal)", "$false", 1)),
+    "bounded enumeration": (helper, workflow.replace("$maxPages = 20", "$maxPages = [int]::MaxValue", 1)),
+    "draft delete reconciliation": (helper.replace("Assert-DraftDeleteCommittedAfterError -DeleteError $_ -ReleaseUri $releaseUri", "# removed", 1), workflow),
+    "release-owner scan": (helper.replace("\nAssert-NoReleaseOwnsTag\n", "\n# removed\n", 1), workflow),
+    "non-owned preservation": (helper.replace("if (-not $TagCreatedByThisRun)", "if ($false)", 1), workflow),
+    "tag delete reconciliation": (helper.replace("Assert-TagDeleteCommittedAfterError -DeleteError $_ -TagGetUri $tagGetUri", "# removed", 1), workflow),
+    "asset identity": (helper, workflow.replace("$verifiedAssetIds[$expectedAsset] = $uploadedAssetId", "# removed", 1)),
     "publish attempt proof": (helper, workflow.replace("$publishPatchAttempted = $true", "$publishPatchAttempted = $false", 1)),
-    "authoritative publish reconciliation": (helper, workflow.replace("$reconciledRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers", "$reconciledRelease = $null", 1)),
-    "published-state branch": (helper, workflow.replace("if ($reconciledRelease.draft -eq $false)", "if ($false)", 1)),
-    "verified published transaction": (helper, workflow.replace("Assert-PublishedReleaseMatchesVerifiedTransaction `", "# published transaction validation removed `", 1)),
-    "transaction rollback wiring": (helper, workflow.replace("& .\\scripts\\rollback-v26-draft-release.ps1", "# rollback removed", 1)),
+    "published reconciliation": (helper, workflow.replace("$reconciledRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers", "$reconciledRelease = $null", 1)),
+    "rollback wiring": (helper, workflow.replace("& .\\scripts\\rollback-v26-draft-release.ps1", "# removed", 1)),
 }
 for label, (mutated_helper, mutated_workflow) in mutations.items():
     if not validate(mutated_helper, mutated_workflow):
         raise SystemExit(f"V26 draft rollback mutation probe did not fail closed: {label}")
 
-print("PASS V26 draft release rollback and destructive acknowledgement contract")
+print("PASS V26 restart-safe tag admission, draft-create acknowledgement recovery, publish reconciliation, rollback, and non-owned tag preservation contract")

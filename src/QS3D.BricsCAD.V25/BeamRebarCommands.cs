@@ -10,6 +10,10 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class BeamRebarCommands
     {
+        private const string SelectionGuidance = "Cốt thép 3D Dầm: chọn LINE đã capture thành Beam và khai báo RebarNotation; top/bottom có thể đặt bằng RebarBeamTopCount/RebarBeamBottomCount.";
+        private const string OperationFailure = "QS3DBEAMREBAR3D lỗi: không thể tạo/cập nhật thép dọc dầm. Kiểm tra selection, project semantic và dữ liệu rebar rồi thử lại.";
+        private const string UiSyncWarning = "UI sync warning: đã cập nhật thép dọc dầm nhưng đồng bộ giao diện chưa hoàn tất. Dữ liệu CAD/project đã được giữ nguyên; hãy refresh giao diện.";
+
         [CommandMethod("QS3DBEAMREBAR3D", CommandFlags.UsePickSet)]
         public void BuildBeamRebar3D()
         {
@@ -20,7 +24,7 @@ namespace QS3D.BricsCAD.V25
                 var selectedIds = CadSelectionGuard.AcquireCurrentSelection(document);
                 if (selectedIds.Length == 0)
                 {
-                    Report(document, "Cốt thép 3D Dầm: chọn LINE đã capture thành Beam và khai báo RebarNotation; top/bottom có thể đặt bằng RebarBeamTopCount/RebarBeamBottomCount.");
+                    Report(document, SelectionGuidance);
                     return;
                 }
 
@@ -45,7 +49,7 @@ namespace QS3D.BricsCAD.V25
                 var previewTargets = ResolveBeamTargets(previewProject, selectedHandles);
                 if (previewTargets.Count == 0)
                 {
-                    Report(document, "Cốt thép 3D Dầm: chọn LINE đã capture thành Beam và khai báo RebarNotation; top/bottom có thể đặt bằng RebarBeamTopCount/RebarBeamBottomCount.");
+                    Report(document, SelectionGuidance);
                     return;
                 }
 
@@ -62,15 +66,15 @@ namespace QS3D.BricsCAD.V25
                 if (!expectedTargetIds.SetEquals(targets.Select(x => x.Id)))
                     throw new InvalidOperationException("Beam Rebar 3D: semantic Beam target set đã thay đổi sau khi đọc selection; hãy chọn lại target.");
 
-                var count = BeamRebarSolidBuilder.BuildSelected(document, project);
+                var count = BeamRebarSolidBuilder.BuildSelected(document, project, selectedIds);
                 var message = count == 0
-                    ? "Cốt thép 3D Dầm: chọn LINE đã capture thành Beam và khai báo RebarNotation; top/bottom có thể đặt bằng RebarBeamTopCount/RebarBeamBottomCount."
+                    ? SelectionGuidance
                     : "Cốt thép 3D Dầm: đã tạo/cập nhật " + count + " thanh dọc.";
                 FinalizeUi(document, message);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Report(document, "QS3DBEAMREBAR3D lỗi: " + ex.Message);
+                Report(document, OperationFailure);
             }
         }
 
@@ -89,9 +93,9 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                TryWriteMessage(document, "\nQS3D " + message + " UI sync warning: " + ex.Message);
+                TryWriteMessage(document, "\nQS3D " + message + " " + UiSyncWarning);
             }
         }
 

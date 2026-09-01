@@ -48,31 +48,30 @@ if COMMANDS.is_file():
         'new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project)',
         'BqNativeTableBuilder.StoredPosition(project)', 'BqNativeTableBuilder.Inspect(document, project)',
         'RequireModelSpace(document)', 'RequireSupportedUcs(document)',
+        'native Table đã commit nhưng viewport/palette không refresh đầy đủ.',
     ):
-        if token not in text: errors.append("BqNativeTableCommands.cs missing lifecycle/regen token: " + token)
+        if token not in text: errors.append("BqNativeTableCommands.cs missing lifecycle/regen/redaction token: " + token)
+    if 'ex.Message' in text:
+        errors.append("BqNativeTableCommands.cs must not expose raw caught exception messages")
 
 if REPORT.is_file():
     text = REPORT.read_text(encoding="utf-8")
-    for token in (
-        'RoomFinishIdentityService.ValidateProject(project)',
-        'AutoRoomLifecycle.IsExcludedFromQuantity(project, element)',
-        'QuantityReportMath.Add', 'SourceHandleResolver.Resolve',
-    ):
+    for token in ('RoomFinishIdentityService.ValidateProject(project)','AutoRoomLifecycle.IsExcludedFromQuantity(project, element)','QuantityReportMath.Add','SourceHandleResolver.Resolve'):
         if token not in text: errors.append("ProjectQuantityReportBuilder.cs lost authoritative BQ token: " + token)
 
 if ROW.is_file():
     text = ROW.read_text(encoding="utf-8")
-    for token in ('GrossConcreteM3', 'DeductionM3', 'NetConcreteM3', 'FormworkM2', 'OtherAreaM2', 'ElementIdText', 'SourceHandleText', 'DrawingFingerprint'):
+    for token in ('GrossConcreteM3','DeductionM3','NetConcreteM3','FormworkM2','OtherAreaM2','ElementIdText','SourceHandleText','DrawingFingerprint'):
         if token not in text: errors.append("QuantityReportRow.cs lost BQ field: " + token)
 
 if XLSX.is_file():
     text = XLSX.read_text(encoding="utf-8")
-    for token in metric_tokens + trace_tokens + ('"Zone"', 'row.Zone', '"QS3D Element ID"', '"CAD Handle (hex)"', '"QS3D Drawing Fingerprint"', 'var range = "A1:T"'):
+    for token in metric_tokens + trace_tokens + ('"Zone"','row.Zone','"QS3D Element ID"','"CAD Handle (hex)"','"QS3D Drawing Fingerprint"','var range = "A1:T"'):
         if token not in text: errors.append("XlsxQuantityExporter.cs lost BQ parity token: " + token)
 
 if SHARED.is_file():
     text = SHARED.read_text(encoding="utf-8")
-    for token in ('QS3DDOC', 'ProjectStateSnapshot.Capture(project)', 'table.TextString(row, column)', 'MaxDetailedCellIssues = 32'):
+    for token in ('QS3DDOC','ProjectStateSnapshot.Capture(project)','table.TextString(row, column)','MaxDetailedCellIssues = 32'):
         if token not in text: errors.append("shared native Table service lost ownership/rollback/live-health token: " + token)
 
 if AGGREGATOR.is_file():
@@ -85,7 +84,7 @@ if RELEASE.is_file() and 'GeneratedSolidRuntimeHealthService.Inspect(document, p
 
 if DOC.is_file():
     text = DOC.read_text(encoding="utf-8")
-    for token in ('QS3DBQTABLE', 'ProjectQuantityReportBuilder', 'XlsxQuantityExporter', '20 columns', 'QS3DDOC', 'ModelSpace', 'licensed BricsCAD V25'):
+    for token in ('QS3DBQTABLE','ProjectQuantityReportBuilder','XlsxQuantityExporter','20 columns','QS3DDOC','ModelSpace','licensed BricsCAD V25'):
         if token not in text: errors.append("NATIVE-BQ-TABLE-P0.md missing parity/product/runtime boundary: " + token)
 
 if errors:
@@ -93,4 +92,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: BQ native Table consumes authoritative ProjectQuantityReportBuilder rows with all 20 XlsxQuantityExporter zone/quantity/traceability columns, regenerates semantic quantities before build/refresh, uses reusable project-level QS3DDOC ownership/rollback/live drift health, reports dirty state read-only, and is wired into Release Check without claiming licensed V25 qualification.")
+print("PASS: BQ native Table preserves authoritative quantity/lifecycle semantics and redacts raw command/post-commit UI exception detail.")

@@ -70,6 +70,12 @@ The shared preflight collision gate uses read-only Issue/PR metadata to enforce 
 - overlap checks with earlier active carrier/PR metadata;
 - PR Lane-Key uniqueness.
 
+For same-repository `agent/**` carriers whose branch contains `issue-<N>`, the PR lane identity is derived from that issue-bound branch. A PR-body `Lane-Key` is optional for those carriers, but when present it must exactly match the branch-derived `issue-<N>` key. `integration/**` carriers still require an explicit PR-body `Lane-Key` because they have no issue-bound branch identity to derive from.
+
+This removes redundant manual PR metadata without weakening the canonical reservation, duplicate-carrier, ownership or path-overlap checks. The gate remains read-only: it validates metadata but does not edit the PR body.
+
+For a queued `pull_request` run, the current open-PR list is authoritative for whether the historical event snapshot is still mergeable. If the exact PR number is no longer open when validation starts, the PR-specific reservation check exits successfully before Issue validation because that queued carrier is terminal and cannot merge. Reopening the PR restores it to the open list and immediately restores normal fail-closed Reservation v2 validation. Push validation is unchanged and never receives this terminal-PR bypass.
+
 The gate never grants merge permission and never mutates repository state.
 
 ## Collision recovery

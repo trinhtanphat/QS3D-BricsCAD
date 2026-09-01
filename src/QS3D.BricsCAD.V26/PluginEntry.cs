@@ -24,6 +24,9 @@ namespace QS3D.BricsCAD.V25
                 throw;
             }
 
+            try { McpPersistentUserSettings.ApplyStartupSecretsToProcessEnvironment(); }
+            catch (Exception ex) { ReportOptionalStartupFailure("MCP secure settings", ex); }
+
             try
             {
                 McpEmbeddedServer.Start();
@@ -35,12 +38,14 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
-                McpCloudflareAccountTunnelManager.TryAutoStart();
+                McpTransportAgentCenterAugmenter.Start();
+                McpPersistentAgentCenterAugmenter.Start();
+                McpTransportCoordinator.TryAutoStartPreferred();
                 McpPublicEndpointResolver.Resolve();
             }
             catch (Exception ex)
             {
-                ReportOptionalStartupFailure("MCP Cloudflare tunnel", ex);
+                ReportOptionalStartupFailure("MCP transport", ex);
             }
 
             try
@@ -90,8 +95,9 @@ namespace QS3D.BricsCAD.V25
             TryCleanup(McpDesktopControlSession.Shutdown);
             TryCleanup(McpFirstRunExperience.Stop);
             TryCleanup(McpProjectRecoveryService.Stop);
-            TryCleanup(McpCloudflareAccountTunnelManager.StopForHostShutdown);
-            TryCleanup(McpCloudflareTunnelManager.StopForHostShutdown);
+            TryCleanup(McpPersistentAgentCenterAugmenter.Stop);
+            TryCleanup(McpTransportAgentCenterAugmenter.Stop);
+            TryCleanup(McpTransportCoordinator.StopAllForHostShutdown);
             TryCleanup(McpEmbeddedServer.Stop);
             TryCleanup(UpdateBootstrapper.Stop);
             TryCleanup(QuantityContextMenuCoordinator.Stop);

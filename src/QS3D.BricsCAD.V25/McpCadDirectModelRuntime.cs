@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Bricscad.ApplicationServices;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
@@ -11,9 +12,11 @@ namespace QS3D.BricsCAD.V25
 {
     /// <summary>
     /// Deterministic MCP mutations that use native BricsCAD/Teigha APIs. This runtime is
-    /// deliberately narrow: it owns direct solids/saves plus one command-specific EXTRUDE
-    /// fallback grammar. Every entry point confirmation-gates, re-checks the shared emergency
-    /// stop before CAD dispatch and immediately before mutation, and writes bounded diagnostics.
+    /// deliberately narrow: it owns direct solids/saves plus bounded QS3D authoring bridges and
+    /// one command-specific EXTRUDE fallback grammar. It is also the published extension point
+    /// for bounded direct CAD view/status tools. Mutation entries confirmation-gate, re-check the
+    /// shared emergency stop before CAD dispatch and immediately before mutation, and write
+    /// bounded diagnostics.
     /// </summary>
     internal static class McpCadDirectModelRuntime
     {
@@ -44,17 +47,22 @@ namespace QS3D.BricsCAD.V25
             "AUDIT", "OVERKILL"
         };
 
-        internal static bool IsTool(string tool)
+        internal static bool IsTool(string? tool)
         {
+            return Tools.Contains(tool ?? string.Empty) || McpCadViewStatusRuntime.IsTool(tool);
+        }
+
+        internal static bool RequiresMutation(string? tool)
+        {
+            if (McpCadViewStatusRuntime.IsTool(tool)) return McpCadViewStatusRuntime.RequiresMutation(tool);
             return Tools.Contains(tool ?? string.Empty);
         }
 
         internal static bool CanHandleCadCommandSequence(string arguments)
         {
-            return string.Equals(
-                NormalizeCommandToken(McpTopLevelJson.ExtractString(arguments ?? "{}", "command")),
-                "EXTRUDE",
-                StringComparison.Ordinal);
+            var command = NormalizeCommandToken(McpTopLevelJson.ExtractString(arguments ?? "{}", "command"));
+            return string.Equals(command, "EXTRUDE", StringComparison.Ordinal)
+                   || string.Equals(command, "QSAVE", StringComparison.Ordinal);
         }
 
         internal static IEnumerable<string> ToolDescriptors()
@@ -82,12 +90,28 @@ namespace QS3D.BricsCAD.V25
                 "Safely save the active drawing to an absolute writable .dwg path after overwrite and protected-directory checks.",
                 "\"path\":{\"type\":\"string\",\"maxLength\":1024},\"overwrite\":{\"type\":\"boolean\"}," + ConfirmProperty(),
                 "\"path\",\"confirmMutation\"");
+            foreach (var descriptor in McpCadViewStatusRuntime.ToolDescriptors()) yield return descriptor;
         }
 
         internal static string Call(string tool, string arguments)
         {
             if (!IsTool(tool)) throw new InvalidOperationException("Unknown direct MCP CAD model tool: " + tool);
             var body = string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments;
+            if (McpCadViewStatusRuntime.IsTool(tool))
+            {
+                var mutation = McpCadViewStatusRuntime.RequiresMutation(tool);
+                if (mutation)
+                {
+                    RequireConfirmedMutation(body, tool);
+                    EnsureAutomationRunning();
+                }
+                return McpDiagnosticHub.InvokeInCadContext(() =>
+                {
+                    if (mutation) EnsureAutomationRunning();
+                    return McpCadViewStatusRuntime.CallInCadContext(tool, body);
+                });
+            }
+
             RequireConfirmedMutation(body, tool);
             EnsureAutomationRunning();
             return McpDiagnosticHub.InvokeInCadContext(() =>
@@ -114,13 +138,21 @@ namespace QS3D.BricsCAD.V25
             var body = string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments;
             RequireConfirmedMutation(body, "cad_command_sequence");
             var command = NormalizeCommandToken(McpTopLevelJson.ExtractString(body, "command"));
-            if (!string.Equals(command, "EXTRUDE", StringComparison.Ordinal))
-                throw new InvalidOperationException("Direct multi-stage command grammar currently supports EXTRUDE only.");
-            var inputs = NormalizeExtrudeInputs(McpTopLevelJson.ExtractString(body, "inputs"));
             EnsureAutomationRunning();
+            if (!string.Equals(command, "QSAVE", StringComparison.Ordinal)
+                && !string.Equals(command, "EXTRUDE", StringComparison.Ordinal))
+                throw new InvalidOperationException("Direct multi-stage command grammar currently supports EXTRUDE and synchronous QSAVE only.");
+            var inputs = string.Equals(command, "EXTRUDE", StringComparison.Ordinal)
+                ? NormalizeExtrudeInputs(McpTopLevelJson.ExtractString(body, "inputs"))
+                : string.Empty;
             return McpDiagnosticHub.InvokeInCadContext(() =>
             {
                 EnsureAutomationRunning();
+                if (string.Equals(command, "QSAVE", StringComparison.Ordinal))
+                {
+                    Save();
+                    return "{\"accepted\":true,\"completed\":true,\"saved\":true,\"command\":\"QSAVE\",\"inputChars\":0}";
+                }
                 var document = RequireDocument();
                 var script = "_.EXTRUDE\n" + inputs;
                 if (!script.EndsWith("\n", StringComparison.Ordinal)) script += "\n";
@@ -180,14 +212,11 @@ namespace QS3D.BricsCAD.V25
             {
                 var source = OpenEntity(transaction, document.Database, handle, OpenMode.ForRead) as Curve;
                 if (source == null) throw new InvalidOperationException("cad_extrude requires a curve entity handle.");
-                Curve? clone = null;
                 Region? region = null;
                 var solid = new Solid3d();
                 try
                 {
-                    clone = source.Clone() as Curve;
-                    if (clone == null) throw new InvalidOperationException("Could not clone the source curve for safe region construction.");
-                    var regions = Region.CreateFromCurves(new DBObjectCollection { clone });
+                    var regions = Region.CreateFromCurves(new DBObjectCollection { source });
                     if (regions == null || regions.Count != 1 || !(regions[0] is Region generatedRegion))
                     {
                         if (regions != null)
@@ -203,7 +232,7 @@ namespace QS3D.BricsCAD.V25
                     transaction.AddNewlyCreatedDBObject(solid, true);
                     transaction.Commit();
                     var resultHandle = id.Handle.ToString();
-                    RecordMutation(document, "cad-extrude", "handle=" + resultHandle + "; sourceHandle=" + handle);
+                    RecordMutation(document, "cad-extrude", "handle=" + resultHandle + "; sourceHandle=" + handle + "; regionSource=database-resident");
                     return "{\"created\":true,\"handle\":\"" + Escape(resultHandle) + "\",\"type\":\"Solid3d\",\"sourceHandle\":\"" + Escape(handle) + "\"}";
                 }
                 catch
@@ -214,7 +243,6 @@ namespace QS3D.BricsCAD.V25
                 finally
                 {
                     region?.Dispose();
-                    clone?.Dispose();
                 }
             }
         }
@@ -234,12 +262,22 @@ namespace QS3D.BricsCAD.V25
                 var operand = OpenEntity(transaction, document.Database, toolHandle, OpenMode.ForWrite) as Solid3d;
                 if (target == null || operand == null)
                     throw new InvalidOperationException("Boolean operations require two live Solid3d entity handles.");
-                EnsureAutomationRunning();
-                target.BooleanOperation(operation, operand);
-                if (!operand.IsErased) operand.Erase();
-                transaction.Commit();
-                RecordMutation(document, "cad-boolean", "targetHandle=" + targetHandle + "; consumedHandle=" + toolHandle + "; operation=" + operationName);
-                return "{\"updated\":true,\"resultHandle\":\"" + Escape(targetHandle) + "\",\"consumedHandle\":\"" + Escape(toolHandle) + "\",\"operation\":\"" + operationName + "\"}";
+                var operandClone = operand.Clone() as Solid3d;
+                if (operandClone == null)
+                    throw new InvalidOperationException("Could not clone the boolean tool Solid3d for transient kernel evaluation.");
+                try
+                {
+                    EnsureAutomationRunning();
+                    target.BooleanOperation(operation, operandClone);
+                    if (!operand.IsErased) operand.Erase();
+                    transaction.Commit();
+                    RecordMutation(document, "cad-boolean", "targetHandle=" + targetHandle + "; consumedHandle=" + toolHandle + "; operation=" + operationName + "; operand=transient-clone");
+                    return "{\"updated\":true,\"resultHandle\":\"" + Escape(targetHandle) + "\",\"consumedHandle\":\"" + Escape(toolHandle) + "\",\"operation\":\"" + operationName + "\"}";
+                }
+                finally
+                {
+                    operandClone.Dispose();
+                }
             }
         }
 
@@ -251,9 +289,9 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("Active drawing has no existing local path. Use cad_save_as first.");
             RequireIdle();
             EnsureAutomationRunning();
-            using (document.LockDocument()) document.Database.Save();
-            RequireCleanDbmod();
-            RecordMutation(document, "cad-save", "completed=true; fileName=" + SafeLeaf(filename));
+            using (document.LockDocument()) document.Database.SaveAs(filename, DwgVersion.Current);
+            WaitForCleanDbmod();
+            RecordMutation(document, "cad-save", "completed=true; fileName=" + SafeLeaf(filename) + "; route=SaveAs-current-path");
             return "{\"saved\":true,\"completed\":true,\"fileName\":\"" + Escape(SafeLeaf(filename)) + "\"}";
         }
 
@@ -275,11 +313,11 @@ namespace QS3D.BricsCAD.V25
             RequireIdle();
             EnsureAutomationRunning();
             using (document.LockDocument()) document.Database.SaveAs(fullPath, DwgVersion.Current);
-            RequireCleanDbmod();
             var actual = document.Database.Filename ?? string.Empty;
             if (!Path.IsPathRooted(actual)
                 || !string.Equals(Path.GetFullPath(actual), fullPath, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("BricsCAD SaveAs returned but the active database path did not match the requested target.");
+            WaitForCleanDbmod();
             var leaf = SafeLeaf(fullPath);
             RecordMutation(document, "cad-save-as", "completed=true; fileName=" + leaf + "; overwrite=" + overwrite);
             return "{\"saved\":true,\"completed\":true,\"saveAs\":true,\"fileName\":\"" + Escape(leaf)
@@ -390,12 +428,20 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("Cannot save while a BricsCAD command is active. Wait for idle or cancel the active command before retrying.");
         }
 
-        private static void RequireCleanDbmod()
+        private static void WaitForCleanDbmod()
         {
-            var raw = Convert.ToString(Application.GetSystemVariable("DBMOD"), CultureInfo.InvariantCulture) ?? string.Empty;
+            var deadline = DateTime.UtcNow.AddSeconds(2);
+            string raw;
             int dbmod;
-            if (!int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out dbmod) || dbmod != 0)
-                throw new InvalidOperationException("BricsCAD save returned but DBMOD is still non-zero; save completion was not confirmed.");
+            do
+            {
+                raw = Convert.ToString(Application.GetSystemVariable("DBMOD"), CultureInfo.InvariantCulture) ?? string.Empty;
+                if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out dbmod) && dbmod == 0)
+                    return;
+                Thread.Sleep(25);
+            }
+            while (DateTime.UtcNow < deadline);
+            throw new InvalidOperationException("BricsCAD save returned but DBMOD did not settle to zero within 2 seconds; save completion was not confirmed.");
         }
 
         private static void RequireConfirmedMutation(string body, string tool)
@@ -408,6 +454,7 @@ namespace QS3D.BricsCAD.V25
         {
             if (McpCadAgentRuntime.AutomationStopped)
                 throw new InvalidOperationException("Automation is emergency-stopped. Resume the MCP CAD agent before mutating the drawing.");
+            McpCadAgentRuntime.EnsureCurrentMutationRunning();
         }
 
         private static void RecordMutation(Document document, string eventName, string detail)

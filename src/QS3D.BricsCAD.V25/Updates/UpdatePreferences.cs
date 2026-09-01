@@ -11,6 +11,7 @@ namespace QS3D.BricsCAD.V25.Updates
         private const string RegistryPath = @"Software\QS3D\BricsCAD-V25\Updates";
 #endif
         private const string InstallOnExitValue = "InstallOnExit";
+        private const string SavePreferenceFailure = "Không lưu được tùy chọn cập nhật trong Windows Registry. Tùy chọn hiện tại vẫn được giữ nguyên.";
 
         internal static bool InstallOnExit => ReadBoolean(InstallOnExitValue, false);
 
@@ -31,9 +32,9 @@ namespace QS3D.BricsCAD.V25.Updates
                     return true;
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                error = "Không lưu được tùy chọn cập nhật: " + ex.Message;
+                error = SavePreferenceFailure;
                 return false;
             }
         }

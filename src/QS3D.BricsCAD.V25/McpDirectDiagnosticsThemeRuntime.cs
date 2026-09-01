@@ -22,9 +22,10 @@ namespace QS3D.BricsCAD.V25
         private const int DefaultSnapshotEvents = 50;
         private const int MaxScannedEventsPerFile = 50000;
         private const int MaxEventCharacters = 8192;
-        private const int MaxWaitMilliseconds = 15000;
+        private const int MaxWaitMilliseconds = 7000;
         private const int MinPollMilliseconds = 100;
         private const int MaxPollMilliseconds = 1000;
+        private static readonly string StreamEpoch = Guid.NewGuid().ToString("N");
         private static readonly Regex SequenceRegex = new Regex(
             @"""sequence""\s*:\s*(?<value>[0-9]+)",
             RegexOptions.CultureInvariant | RegexOptions.Compiled);
@@ -40,8 +41,8 @@ namespace QS3D.BricsCAD.V25
                     true, false, true),
                 Tool(
                     "diagnostics_since",
-                    "Read bounded unified diagnostic events with sequence greater than afterSequence.",
-                    "\"afterSequence\":{\"type\":\"integer\",\"minimum\":0},\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}",
+                    "Read bounded unified diagnostic events with sequence greater than afterSequence. Nonzero cursors must include the streamEpoch returned with the prior batch.",
+                    "\"afterSequence\":{\"type\":\"integer\",\"minimum\":0},\"afterStreamEpoch\":{\"type\":\"string\",\"minLength\":32,\"maxLength\":32,\"pattern\":\"^[0-9a-fA-F]{32}$\"},\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}",
                     true, false, true,
                     "afterSequence"),
                 Tool(
@@ -51,8 +52,8 @@ namespace QS3D.BricsCAD.V25
                     true, false, true),
                 Tool(
                     "diagnostics_wait",
-                    "Bounded long-poll for unified diagnostic events after a sequence cursor. No unbounded server event stream is opened.",
-                    "\"afterSequence\":{\"type\":\"integer\",\"minimum\":0},\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100},\"timeoutMs\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":15000},\"pollIntervalMs\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":1000}",
+                    "Bounded long-poll for unified diagnostic events after an epoch-bound sequence cursor. No unbounded server event stream is opened.",
+                    "\"afterSequence\":{\"type\":\"integer\",\"minimum\":0},\"afterStreamEpoch\":{\"type\":\"string\",\"minLength\":32,\"maxLength\":32,\"pattern\":\"^[0-9a-fA-F]{32}$\"},\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100},\"timeoutMs\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":7000},\"pollIntervalMs\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":1000}",
                     true, false, true,
                     "afterSequence"),
                 Tool(
@@ -76,9 +77,9 @@ namespace QS3D.BricsCAD.V25
             switch (tool)
             {
                 case "diagnostics_log_tail":
-                    return ReadEvents(0, Integer(args, "limit", DefaultTailEvents, 1, MaxEvents), true);
+                    return ReadEvents(0, string.Empty, Integer(args, "limit", DefaultTailEvents, 1, MaxEvents), true, false);
                 case "diagnostics_since":
-                    return ReadEvents(RequiredNonNegativeInteger(args, "afterSequence"), Integer(args, "limit", DefaultTailEvents, 1, MaxEvents), false);
+                    return Since(args);
                 case "diagnostics_snapshot":
                     return Snapshot(Integer(args, "limit", DefaultSnapshotEvents, 1, MaxEvents));
                 case "diagnostics_wait":
@@ -92,6 +93,15 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        private static string Since(string body)
+        {
+            var afterSequence = RequiredNonNegativeInteger(body, "afterSequence");
+            var afterStreamEpoch = RequireCursorEpoch(body, afterSequence);
+            var limit = Integer(body, "limit", DefaultTailEvents, 1, MaxEvents);
+            var cursorReset = IsCursorReset(afterStreamEpoch);
+            return ReadEvents(afterSequence, afterStreamEpoch, limit, cursorReset, cursorReset);
+        }
+
         private static string Snapshot(int limit)
         {
             McpDiagnosticHub.InvokeInCadContext(() =>
@@ -99,19 +109,27 @@ namespace QS3D.BricsCAD.V25
                 McpDiagnosticHub.CaptureSnapshot("mcp-direct");
                 return "{}";
             });
-            return ReadEvents(0, limit, true);
+            return ReadEvents(0, string.Empty, limit, true, false);
         }
 
         private static string Wait(string body)
         {
             var afterSequence = RequiredNonNegativeInteger(body, "afterSequence");
+            var afterStreamEpoch = RequireCursorEpoch(body, afterSequence);
             var limit = Integer(body, "limit", DefaultTailEvents, 1, MaxEvents);
             var timeout = Integer(body, "timeoutMs", 5000, 0, MaxWaitMilliseconds);
             var poll = Integer(body, "pollIntervalMs", 250, MinPollMilliseconds, MaxPollMilliseconds);
             var timer = Stopwatch.StartNew();
+            var cursorReset = IsCursorReset(afterStreamEpoch);
+            if (cursorReset)
+            {
+                var resetBatch = ReadEventBatch(0, limit, true);
+                return EventBatchJson(resetBatch, afterSequence, afterStreamEpoch, true, timer.ElapsedMilliseconds, false, true);
+            }
+
             var result = ReadEventBatch(afterSequence, limit, false);
             if (result.Events.Count > 0)
-                return EventBatchJson(result, afterSequence, false, timer.ElapsedMilliseconds, false);
+                return EventBatchJson(result, afterSequence, afterStreamEpoch, false, timer.ElapsedMilliseconds, false, false);
 
             var stamp = DiagnosticStamp();
             while (timer.ElapsedMilliseconds < timeout)
@@ -123,15 +141,15 @@ namespace QS3D.BricsCAD.V25
                 stamp = nextStamp;
                 result = ReadEventBatch(afterSequence, limit, false);
                 if (result.Events.Count > 0)
-                    return EventBatchJson(result, afterSequence, false, timer.ElapsedMilliseconds, false);
+                    return EventBatchJson(result, afterSequence, afterStreamEpoch, false, timer.ElapsedMilliseconds, false, false);
             }
-            return EventBatchJson(result, afterSequence, false, timer.ElapsedMilliseconds, true);
+            return EventBatchJson(result, afterSequence, afterStreamEpoch, false, timer.ElapsedMilliseconds, true, false);
         }
 
-        private static string ReadEvents(long afterSequence, int limit, bool tail)
+        private static string ReadEvents(long afterSequence, string afterStreamEpoch, int limit, bool tail, bool cursorReset)
         {
-            var result = ReadEventBatch(afterSequence, limit, tail);
-            return EventBatchJson(result, afterSequence, tail, 0, false);
+            var result = ReadEventBatch(cursorReset ? 0 : afterSequence, limit, tail);
+            return EventBatchJson(result, afterSequence, afterStreamEpoch, tail, 0, false, cursorReset);
         }
 
         private static EventBatch ReadEventBatch(long afterSequence, int limit, bool tail)
@@ -217,7 +235,38 @@ namespace QS3D.BricsCAD.V25
                    && sequence >= 0;
         }
 
-        private static string EventBatchJson(EventBatch batch, long afterSequence, bool tail, long elapsedMilliseconds, bool timedOut)
+        private static string RequireCursorEpoch(string body, long afterSequence)
+        {
+            var afterStreamEpoch = McpTopLevelJson.ExtractString(body, "afterStreamEpoch").Trim();
+            if (afterSequence > 0 && afterStreamEpoch.Length == 0)
+                throw new InvalidOperationException(
+                    "afterStreamEpoch is required when afterSequence > 0. Call diagnostics_log_tail or diagnostics_snapshot to reacquire the current cursor.");
+            if (afterStreamEpoch.Length == 0) return string.Empty;
+            if (afterStreamEpoch.Length != 32)
+                throw new InvalidOperationException("afterStreamEpoch must be a 32-character hexadecimal stream epoch.");
+            for (var i = 0; i < afterStreamEpoch.Length; i++)
+            {
+                var ch = afterStreamEpoch[i];
+                if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')))
+                    throw new InvalidOperationException("afterStreamEpoch must be a 32-character hexadecimal stream epoch.");
+            }
+            return afterStreamEpoch.ToLowerInvariant();
+        }
+
+        private static bool IsCursorReset(string afterStreamEpoch)
+        {
+            return afterStreamEpoch.Length > 0
+                   && !string.Equals(afterStreamEpoch, StreamEpoch, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string EventBatchJson(
+            EventBatch batch,
+            long afterSequence,
+            string afterStreamEpoch,
+            bool tail,
+            long elapsedMilliseconds,
+            bool timedOut,
+            bool cursorReset)
         {
             var builder = new StringBuilder(1024).Append("{\"events\":[");
             for (var i = 0; i < batch.Events.Count; i++)
@@ -225,10 +274,15 @@ namespace QS3D.BricsCAD.V25
                 if (i > 0) builder.Append(',');
                 builder.Append(batch.Events[i].Json);
             }
-            var latest = batch.Events.Count == 0 ? afterSequence : batch.Events[batch.Events.Count - 1].Sequence;
+            var latest = batch.Events.Count == 0 ? (cursorReset ? 0 : afterSequence) : batch.Events[batch.Events.Count - 1].Sequence;
             builder.Append("],\"count\":").Append(batch.Events.Count.ToString(CultureInfo.InvariantCulture))
                 .Append(",\"latestSequence\":").Append(latest.ToString(CultureInfo.InvariantCulture))
+                .Append(",\"streamEpoch\":\"").Append(StreamEpoch).Append('"')
+                .Append(",\"cursor\":{\"streamEpoch\":\"").Append(StreamEpoch)
+                .Append("\",\"sequence\":").Append(latest.ToString(CultureInfo.InvariantCulture)).Append('}')
                 .Append(",\"afterSequence\":").Append(afterSequence.ToString(CultureInfo.InvariantCulture))
+                .Append(",\"afterStreamEpoch\":\"").Append(Escape(afterStreamEpoch)).Append('"')
+                .Append(",\"cursorReset\":").Append(cursorReset ? "true" : "false")
                 .Append(",\"tail\":").Append(tail ? "true" : "false")
                 .Append(",\"truncated\":").Append(batch.Truncated ? "true" : "false");
             if (elapsedMilliseconds > 0 || timedOut)
@@ -269,7 +323,17 @@ namespace QS3D.BricsCAD.V25
             Qs3dThemeCoordinator.SetMode(mode, "mcp-theme-set");
             ensureMutationRunning();
             if (audit != null) audit("mode=" + modeText + "; host-wide=true");
-            return ThemeStateJson();
+            return ThemeMutationAckJson(mode);
+        }
+
+        private static string ThemeMutationAckJson(Qs3dThemeMode requestedMode)
+        {
+            var appliedMode = Qs3dThemeCoordinator.CurrentMode;
+            var effectiveDark = Qs3dThemeCoordinator.EffectiveDark;
+            return "{\"applied\":true,\"requested\":\"" + ModeText(requestedMode)
+                   + "\",\"mode\":\"" + ModeText(appliedMode)
+                   + "\",\"effective\":\"" + (effectiveDark ? "dark" : "light")
+                   + "\",\"verification\":\"theme_get\"}";
         }
 
         private static int Integer(string body, string property, int fallback, int minimum, int maximum)

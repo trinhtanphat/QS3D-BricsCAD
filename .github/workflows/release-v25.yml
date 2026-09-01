@@ -76,8 +76,13 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $head -ne $env:GITHUB_SHA.ToLowerInvariant()) {
             throw 'Checked-out release HEAD does not match the workflow SHA.'
           }
-          if (git tag --list $env:RELEASE_TAG) {
-            throw "Tag already exists locally: $env:RELEASE_TAG"
+          $localTag = @(git tag --list --format='%(objecttype) %(objectname)' $env:RELEASE_TAG)
+          if ($LASTEXITCODE -ne 0 -or $localTag.Count -gt 1) { throw "Unable to classify local tag identity for $env:RELEASE_TAG." }
+          if ($localTag.Count -eq 1) {
+            $expectedLocal = "commit $($env:GITHUB_SHA.ToLowerInvariant())"
+            if (-not [string]::Equals(([string]$localTag[0]).Trim().ToLowerInvariant(), $expectedLocal, [StringComparison]::Ordinal)) {
+              throw "Existing local release tag $env:RELEASE_TAG is not an exact lightweight tag at workflow SHA $env:GITHUB_SHA."
+            }
           }
           $isPrerelease = $env:RELEASE_PRERELEASE -eq 'true'
           $hasPrereleaseSuffix = $env:RELEASE_TAG -match '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)-'
@@ -368,51 +373,232 @@ jobs:
             'X-GitHub-Api-Version' = '2022-11-28'
             'User-Agent' = 'QS3D-V25-Commercial-Release'
           }
+
+          function Test-GitHubNotFound {
+            param([Parameter(Mandatory = $true)]$ErrorRecord)
+            $response = $ErrorRecord.Exception.Response
+            if ($null -eq $response) { return $false }
+            try { return ([int]$response.StatusCode -eq 404) }
+            catch { return $false }
+          }
+
+          function Get-ExactReusableReleaseTag {
+            $escapedTag = [Uri]::EscapeDataString($env:RELEASE_TAG)
+            $uri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/git/ref/tags/$escapedTag"
+            try { $snapshot = Invoke-RestMethod -Method Get -Uri $uri -Headers $headers }
+            catch {
+              if (Test-GitHubNotFound -ErrorRecord $_) { return $null }
+              throw
+            }
+            if ($null -eq $snapshot -or -not [string]::Equals([string]$snapshot.ref, $tagRef, [StringComparison]::Ordinal)) {
+              throw 'V25 reusable release tag lookup returned a mismatched ref.'
+            }
+            if ($null -eq $snapshot.object -or -not [string]::Equals([string]$snapshot.object.type, 'commit', [StringComparison]::Ordinal) -or -not [string]::Equals([string]$snapshot.object.sha, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+              throw 'Existing V25 release tag is annotated, moved, or not bound to the exact qualified workflow SHA.'
+            }
+            return $snapshot
+          }
+
+          function Assert-RemoteReleaseTagTargetsWorkflowSha {
+            $peeledRef = $tagRef + '^{}'
+            $lines = @(git ls-remote --tags origin $tagRef $peeledRef)
+            if ($LASTEXITCODE -ne 0) { throw "Failed to resolve remote V25 release tag $env:RELEASE_TAG from origin. Release remains a draft." }
+            $exact = New-Object System.Collections.Generic.List[string]
+            $peeled = New-Object System.Collections.Generic.List[string]
+            foreach ($line in $lines) {
+              if ($line -notmatch '^([0-9a-fA-F]{40})\s+(.+)$') { throw "Malformed git ls-remote output while resolving V25 release tag $env:RELEASE_TAG. Release remains a draft." }
+              $sha = $Matches[1]
+              $refName = $Matches[2]
+              if ([string]::Equals($refName, $tagRef, [StringComparison]::Ordinal)) { $exact.Add($sha) }
+              elseif ([string]::Equals($refName, $peeledRef, [StringComparison]::Ordinal)) { $peeled.Add($sha) }
+              else { throw "Unexpected remote ref while resolving V25 release tag: $refName. Release remains a draft." }
+            }
+            if ($exact.Count -ne 1 -or $peeled.Count -ne 0) { throw "V25 release tag $env:RELEASE_TAG must resolve to exactly one lightweight remote tag identity. Release remains a draft." }
+            if (-not [string]::Equals($exact[0], $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) { throw "V25 release tag $env:RELEASE_TAG targets $($exact[0]) instead of qualified workflow SHA $env:GITHUB_SHA. Release remains a draft." }
+          }
+
+          function Resolve-AmbiguousDraftCreate {
+            param(
+              [Parameter(Mandatory = $true)][string]$TransactionMarker,
+              [Parameter(Mandatory = $true)][string]$ExpectedReleaseName,
+              [Parameter(Mandatory = $true)][bool]$IsPrerelease
+            )
+            $maxPages = 20
+            $matches = New-Object System.Collections.Generic.List[object]
+            $repositoryReleasePrefix = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/"
+            for ($page = 1; $page -le $maxPages; $page++) {
+              $pageUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases?per_page=100&page=$page"
+              $releasePage = @(Invoke-RestMethod -Method Get -Uri $pageUri -Headers $headers)
+              foreach ($ReleaseSnapshot in $releasePage) {
+                $body = [string]$ReleaseSnapshot.body
+                if ($body.IndexOf($TransactionMarker, [StringComparison]::Ordinal) -lt 0) { continue }
+                if ($ReleaseSnapshot.draft -ne $true -or
+                    -not [string]::Equals([string]$ReleaseSnapshot.tag_name, $env:RELEASE_TAG, [StringComparison]::Ordinal) -or
+                    -not [string]::Equals([string]$ReleaseSnapshot.target_commitish, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase) -or
+                    -not [string]::Equals([string]$ReleaseSnapshot.name, $ExpectedReleaseName, [StringComparison]::Ordinal) -or
+                    [bool]$ReleaseSnapshot.prerelease -ne $IsPrerelease -or
+                    [long]$ReleaseSnapshot.id -le 0 -or
+                    -not [string]::Equals([string]$ReleaseSnapshot.url, ($repositoryReleasePrefix + [long]$ReleaseSnapshot.id), [StringComparison]::Ordinal)) {
+                  throw 'A matching V25 draft-create transaction marker exists on a moved, published, or identity-mismatched release; refusing acknowledgement recovery.'
+                }
+                $matches.Add($ReleaseSnapshot)
+              }
+              if ($releasePage.Count -lt 100) { break }
+              if ($page -eq $maxPages) { throw "V25 draft-create acknowledgement release enumeration exceeded $maxPages pages." }
+            }
+            if ($matches.Count -eq 0) { throw 'No matching V25 draft-create transaction marker was found after ambiguous creation.' }
+            if ($matches.Count -ne 1) { throw "Expected exactly one matching V25 draft-create transaction marker; found $($matches.Count)." }
+            return $matches[0]
+          }
+
+          function Assert-PublishedReleaseMatchesVerifiedTransaction {
+            param(
+              [Parameter(Mandatory = $true)]$ReleaseSnapshot,
+              [Parameter(Mandatory = $true)][string]$ReleaseUri,
+              [Parameter(Mandatory = $true)][long]$ReleaseId,
+              [Parameter(Mandatory = $true)][string]$ExpectedReleaseName,
+              [Parameter(Mandatory = $true)][string[]]$ExpectedAssets,
+              [Parameter(Mandatory = $true)][hashtable]$VerifiedAssetIds,
+              [Parameter(Mandatory = $true)][hashtable]$LocalAssets,
+              [Parameter(Mandatory = $true)][bool]$IsPrerelease,
+              [Parameter(Mandatory = $true)][string]$TransactionMarker
+            )
+            if ($null -eq $ReleaseSnapshot -or [long]$ReleaseSnapshot.id -ne $ReleaseId) { throw 'Published V25 release identity mismatch during acknowledgement reconciliation.' }
+            if (-not [string]::Equals([string]$ReleaseSnapshot.url, $ReleaseUri, [StringComparison]::Ordinal)) { throw 'Published V25 release repository identity mismatch during acknowledgement reconciliation.' }
+            if ($ReleaseSnapshot.draft -ne $false) { throw 'Published V25 release reconciliation expected draft=false.' }
+            if (-not [string]::Equals([string]$ReleaseSnapshot.tag_name, $env:RELEASE_TAG, [StringComparison]::Ordinal)) { throw 'Published V25 release tag mismatch during acknowledgement reconciliation.' }
+            if (-not [string]::Equals([string]$ReleaseSnapshot.target_commitish, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) { throw 'Published V25 release target SHA mismatch during acknowledgement reconciliation.' }
+            if (-not [string]::Equals([string]$ReleaseSnapshot.name, $ExpectedReleaseName, [StringComparison]::Ordinal)) { throw 'Published V25 release name mismatch during acknowledgement reconciliation.' }
+            if ([bool]$ReleaseSnapshot.prerelease -ne $IsPrerelease) { throw 'Published V25 release prerelease-state mismatch during acknowledgement reconciliation.' }
+            if (([string]$ReleaseSnapshot.body).IndexOf($TransactionMarker, [StringComparison]::Ordinal) -lt 0) { throw 'Published V25 release transaction marker mismatch during acknowledgement reconciliation.' }
+            Assert-RemoteReleaseTagTargetsWorkflowSha
+            if (@($ReleaseSnapshot.assets).Count -ne $ExpectedAssets.Count) { throw 'Published V25 release asset count mismatch during acknowledgement reconciliation.' }
+            if ($VerifiedAssetIds.Count -ne $ExpectedAssets.Count) { throw 'Verified V25 release asset identity set is incomplete; refusing acknowledgement recovery.' }
+            foreach ($expectedAsset in $ExpectedAssets) {
+              $matches = @($ReleaseSnapshot.assets | Where-Object { [string]$_.name -ceq $expectedAsset })
+              if ($matches.Count -ne 1) { throw "Published V25 release asset identity is ambiguous for $expectedAsset." }
+              if (-not $VerifiedAssetIds.ContainsKey($expectedAsset) -or -not $LocalAssets.ContainsKey($expectedAsset)) { throw "Verified V25 release asset identity mapping is missing for $expectedAsset." }
+              $publishedAsset = $matches[0]
+              $expectedAssetId = [long]$VerifiedAssetIds[$expectedAsset]
+              if ($expectedAssetId -le 0 -or [long]$publishedAsset.id -ne $expectedAssetId) { throw "Verified V25 release asset identity mismatch for $expectedAsset." }
+              $localLength = [int64](Get-Item -LiteralPath ([string]$LocalAssets[$expectedAsset])).Length
+              if ([int64]$publishedAsset.size -ne $localLength) { throw "Published V25 release asset size mismatch for $expectedAsset during acknowledgement reconciliation." }
+            }
+          }
+
           $notes = 'Commercial QS3D V25 release. Exact source/product/tag binding, Authenticode signer and trusted timestamp verification, licensed runtime policy, SHA-256 provenance, and downloaded draft-byte verification are enforced before publication.'
+          $expectedReleaseName = "QS3D for BricsCAD V25 $env:RELEASE_TAG"
+          $draftTransactionMarker = "QS3D-DRAFT-CREATE-V25:$env:GITHUB_RUN_ID:$env:GITHUB_RUN_ATTEMPT:$([Guid]::NewGuid().ToString('N'))"
+          $releaseBody = $notes + "`n`nTransaction-Marker: $draftTransactionMarker"
           $tagCreatedByThisRun = $false
+          $tagReadyForRelease = $false
           $releaseId = [long]0
+          $releaseUri = $null
+          $verifiedAssetIds = @{}
+          $localAssets = @{}
+          $publishPatchAttempted = $false
           try {
             $tagRefUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/git/refs"
-            $tagCreateRequest = @{ ref = $tagRef; sha = $env:GITHUB_SHA } | ConvertTo-Json
-            $createdTag = Invoke-RestMethod -Method Post -Uri $tagRefUri -Headers $headers -ContentType 'application/json' -Body $tagCreateRequest
-            if ($null -eq $createdTag -or -not [string]::Equals([string]$createdTag.ref, "refs/tags/$env:RELEASE_TAG", [StringComparison]::Ordinal)) {
-              throw 'V25 release tag creation returned a mismatched ref; refusing transaction ownership.'
+            $existingTag = Get-ExactReusableReleaseTag
+            if ($null -ne $existingTag) {
+              Write-Host "Reusing exact V25 lightweight tag $env:RELEASE_TAG at workflow SHA without claiming deletion ownership."
+              $tagReadyForRelease = $true
             }
-            if ($null -eq $createdTag.object -or -not [string]::Equals([string]$createdTag.object.type, 'commit', [StringComparison]::Ordinal) -or -not [string]::Equals([string]$createdTag.object.sha, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) {
-              throw 'V25 release tag creation returned a non-commit or mismatched SHA; refusing transaction ownership.'
+            else {
+              $tagCreateRequest = @{ ref = $tagRef; sha = $env:GITHUB_SHA } | ConvertTo-Json
+              try {
+                $createdTag = Invoke-RestMethod -Method Post -Uri $tagRefUri -Headers $headers -ContentType 'application/json' -Body $tagCreateRequest
+                if ($null -eq $createdTag -or -not [string]::Equals([string]$createdTag.ref, $tagRef, [StringComparison]::Ordinal)) {
+                  throw 'V25 release tag creation returned a mismatched ref; refusing transaction ownership.'
+                }
+                if ($null -eq $createdTag.object -or -not [string]::Equals([string]$createdTag.object.type, 'commit', [StringComparison]::Ordinal) -or -not [string]::Equals([string]$createdTag.object.sha, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+                  throw 'V25 release tag creation returned a non-commit or mismatched SHA; refusing transaction ownership.'
+                }
+                $tagCreatedByThisRun = $true
+                $tagReadyForRelease = $true
+              }
+              catch {
+                $tagCreateError = $_
+                $reconciledTag = Get-ExactReusableReleaseTag
+                if ($null -eq $reconciledTag) {
+                  throw "V25 tag-create acknowledgement failed and the exact release tag is authoritatively absent. Original error: $($tagCreateError.Exception.Message)"
+                }
+                Write-Host "V25 tag-create acknowledgement was ambiguous, but the exact lightweight tag now exists at workflow SHA; reusing it without deletion ownership."
+                $tagCreatedByThisRun = $false
+                $tagReadyForRelease = $true
+              }
             }
-            $tagCreatedByThisRun = $true
+            Assert-RemoteReleaseTagTargetsWorkflowSha
 
             $releaseRequest = @{
               tag_name = $env:RELEASE_TAG
               target_commitish = $env:GITHUB_SHA
-              name = "QS3D for BricsCAD V25 $env:RELEASE_TAG"
-              body = $notes
+              name = $expectedReleaseName
+              body = $releaseBody
               draft = $true
               prerelease = ($env:RELEASE_PRERELEASE -eq 'true')
               generate_release_notes = $false
             } | ConvertTo-Json
-            $release = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases" -Headers $headers -ContentType 'application/json' -Body $releaseRequest
-            if ($null -eq $release -or [long]$release.id -le 0) { throw 'V25 draft creation returned no usable release identity.' }
-            $releaseId = [long]$release.id
-            if ($release.draft -ne $true -or -not [string]::Equals([string]$release.tag_name, $env:RELEASE_TAG, [StringComparison]::Ordinal)) {
-              throw 'Newly-created V25 release identity/draft state mismatch.'
+            try {
+              $release = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases" -Headers $headers -ContentType 'application/json' -Body $releaseRequest
             }
+            catch {
+              $draftCreateError = $_
+              try {
+                $reconciledDraft = Resolve-AmbiguousDraftCreate -TransactionMarker $draftTransactionMarker -ExpectedReleaseName $expectedReleaseName -IsPrerelease:($env:RELEASE_PRERELEASE -eq 'true')
+              }
+              catch {
+                throw "V25 draft-create acknowledgement reconciliation failed. Original create error: $($draftCreateError.Exception.Message) Reconciliation error: $($_.Exception.Message)"
+              }
+              Write-Host 'V25 draft-create acknowledgement was ambiguous, but exactly one transaction-owned draft was recovered.'
+              $release = $reconciledDraft
+            }
+            if ($null -eq $release -or [long]$release.id -le 0) { throw 'V25 draft creation returned no usable release identity.' }
+            $expectedReleaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$([long]$release.id)"
+            if ($release.draft -ne $true -or
+                -not [string]::Equals([string]$release.url, $expectedReleaseUri, [StringComparison]::Ordinal) -or
+                -not [string]::Equals([string]$release.tag_name, $env:RELEASE_TAG, [StringComparison]::Ordinal) -or
+                -not [string]::Equals([string]$release.target_commitish, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase) -or
+                -not [string]::Equals([string]$release.name, $expectedReleaseName, [StringComparison]::Ordinal) -or
+                [bool]$release.prerelease -ne ($env:RELEASE_PRERELEASE -eq 'true') -or
+                ([string]$release.body).IndexOf($draftTransactionMarker, [StringComparison]::Ordinal) -lt 0) {
+              throw 'Newly-created/reconciled V25 release identity, draft state, or transaction marker mismatch.'
+            }
+            $releaseId = [long]$release.id
+            $releaseUri = $expectedReleaseUri
+            Assert-RemoteReleaseTagTargetsWorkflowSha
 
             foreach ($asset in $assets) {
-              & gh release upload $env:RELEASE_TAG $asset --repo $env:GITHUB_REPOSITORY
-              if ($LASTEXITCODE -ne 0) { throw "Failed to upload V25 draft asset: $asset" }
+              $resolvedAsset = (Resolve-Path -LiteralPath $asset).Path
+              $name = [IO.Path]::GetFileName($resolvedAsset)
+              if ($localAssets.ContainsKey($name)) { throw "Duplicate local V25 release asset name: $name" }
+              $localAssets[$name] = $resolvedAsset
+              & gh release upload $env:RELEASE_TAG $resolvedAsset --repo $env:GITHUB_REPOSITORY
+              if ($LASTEXITCODE -ne 0) { throw "Failed to upload V25 draft asset: $resolvedAsset" }
             }
 
-            $remoteLines = @(git ls-remote --tags origin $tagRef ($tagRef + '^{}'))
-            if ($LASTEXITCODE -ne 0) { throw 'Failed to resolve newly created release tag; release remains a draft.' }
-            $resolved = @()
-            foreach ($line in $remoteLines) {
-              if ($line -notmatch '^([0-9a-fA-F]{40})\s+(.+)$') { throw 'Malformed remote tag response; release remains a draft.' }
-              if ($Matches[2] -eq ($tagRef + '^{}')) { $resolved = @($Matches[1]); break }
-              if ($Matches[2] -eq $tagRef) { $resolved += $Matches[1] }
+            $draftRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
+            if ([long]$draftRelease.id -ne $releaseId -or $draftRelease.draft -ne $true -or
+                -not [string]::Equals([string]$draftRelease.url, $releaseUri, [StringComparison]::Ordinal) -or
+                -not [string]::Equals([string]$draftRelease.tag_name, $env:RELEASE_TAG, [StringComparison]::Ordinal) -or
+                -not [string]::Equals([string]$draftRelease.target_commitish, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase) -or
+                -not [string]::Equals([string]$draftRelease.name, $expectedReleaseName, [StringComparison]::Ordinal) -or
+                [bool]$draftRelease.prerelease -ne ($env:RELEASE_PRERELEASE -eq 'true') -or
+                ([string]$draftRelease.body).IndexOf($draftTransactionMarker, [StringComparison]::Ordinal) -lt 0) {
+              throw 'V25 draft release identity changed after asset upload; refusing publication.'
             }
-            if ($resolved.Count -ne 1 -or -not [string]::Equals($resolved[0], $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) { throw 'Release tag does not target exact qualified workflow SHA; release remains a draft.' }
+            if (@($draftRelease.assets).Count -ne $assetNames.Count) { throw 'V25 draft release contains an unexpected asset count; refusing publication.' }
+            foreach ($name in $assetNames) {
+              $matches = @($draftRelease.assets | Where-Object { [string]$_.name -ceq $name })
+              if ($matches.Count -ne 1) { throw "V25 draft release asset identity is ambiguous for $name." }
+              $uploadedAsset = $matches[0]
+              $uploadedAssetId = [long]$uploadedAsset.id
+              if ($uploadedAssetId -le 0) { throw "V25 draft release asset has no usable identity: $name" }
+              $localLength = [int64](Get-Item -LiteralPath ([string]$localAssets[$name])).Length
+              if ([int64]$uploadedAsset.size -ne $localLength) { throw "V25 draft release asset size mismatch before byte verification: $name" }
+              $verifiedAssetIds[$name] = $uploadedAssetId
+            }
+            Assert-RemoteReleaseTagTargetsWorkflowSha
 
             $downloadRoot = Join-Path $env:RUNNER_TEMP ('qs3d-commercial-draft-' + [Guid]::NewGuid().ToString('N'))
             New-Item -ItemType Directory -Path $downloadRoot -Force | Out-Null
@@ -450,13 +636,50 @@ jobs:
             }
             finally { Remove-Item -LiteralPath $downloadRoot -Recurse -Force -ErrorAction SilentlyContinue }
 
-            $releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$releaseId"
+            Assert-RemoteReleaseTagTargetsWorkflowSha
+            $publishPatchAttempted = $true
             $published = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body (@{ draft = $false } | ConvertTo-Json)
-            if ($published.draft -ne $false) { throw 'GitHub release remained a draft after publication request.' }
+            Assert-PublishedReleaseMatchesVerifiedTransaction `
+              -ReleaseSnapshot $published `
+              -ReleaseUri $releaseUri `
+              -ReleaseId $releaseId `
+              -ExpectedReleaseName $expectedReleaseName `
+              -ExpectedAssets $assetNames `
+              -VerifiedAssetIds $verifiedAssetIds `
+              -LocalAssets $localAssets `
+              -IsPrerelease:($env:RELEASE_PRERELEASE -eq 'true') `
+              -TransactionMarker $draftTransactionMarker
           }
           catch {
             $publicationError = $_
-            if (-not $tagCreatedByThisRun) { throw }
+            if (-not $tagReadyForRelease) { throw }
+
+            if ($releaseId -gt 0) {
+              try {
+                $reconciledRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
+                if ($reconciledRelease.draft -eq $false) {
+                  if (-not $publishPatchAttempted) { throw 'V25 release became published before this workflow attempted the final publish PATCH.' }
+                  Assert-PublishedReleaseMatchesVerifiedTransaction `
+                    -ReleaseSnapshot $reconciledRelease `
+                    -ReleaseUri $releaseUri `
+                    -ReleaseId $releaseId `
+                    -ExpectedReleaseName $expectedReleaseName `
+                    -ExpectedAssets $assetNames `
+                    -VerifiedAssetIds $verifiedAssetIds `
+                    -LocalAssets $localAssets `
+                    -IsPrerelease:($env:RELEASE_PRERELEASE -eq 'true') `
+                    -TransactionMarker $draftTransactionMarker
+                  Write-Host 'V25 publish acknowledgement was ambiguous, but authoritative release state confirms the exact qualified release is already published; treating publication as committed.'
+                  return
+                }
+                if ($reconciledRelease.draft -ne $true) { throw 'V25 release draft state is ambiguous during acknowledgement reconciliation.' }
+              }
+              catch {
+                $reconciliationError = $_
+                throw "V25 publication acknowledgement reconciliation failed. Original publication error: $($publicationError.Exception.Message) Reconciliation error: $($reconciliationError.Exception.Message) Manual cleanup is required before retry."
+              }
+            }
+
             try {
               & .\scripts\rollback-v25-draft-release.ps1 `
                 -Repository $env:GITHUB_REPOSITORY `
@@ -470,5 +693,5 @@ jobs:
               $rollbackError = $_
               throw "Automatic V25 draft rollback failed. Original publication error: $($publicationError.Exception.Message) Rollback error: $($rollbackError.Exception.Message) Manual cleanup is required before retry."
             }
-            throw "V25 publication failed after transaction tag creation: $($publicationError.Exception.Message) Automatic rollback completed; retry with the same tag is safe."
+            throw "V25 publication failed after exact release-tag admission: $($publicationError.Exception.Message) Automatic rollback completed; retry with the same tag is safe."
           }

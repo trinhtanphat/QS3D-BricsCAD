@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Xml;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Services
@@ -10,6 +11,33 @@ namespace QS3D.Core.Services
     {
         Project,
         Subset
+    }
+
+    internal static class RegenerationWorkIdentityContract
+    {
+        internal static string Require(string value, string parameterName, string label)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException(label + " is required.", parameterName);
+
+            var trimmed = value.Trim();
+            for (var i = 0; i < trimmed.Length; i++)
+            {
+                if (char.IsControl(trimmed[i]))
+                    throw new ArgumentException(label + " must not contain control characters.", parameterName);
+            }
+
+            try
+            {
+                XmlConvert.VerifyXmlChars(trimmed);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException(label + " contains malformed UTF-16 or XML-invalid characters.", parameterName, ex);
+            }
+
+            return trimmed;
+        }
     }
 
     public sealed class RegenerationWorkItem
@@ -30,9 +58,10 @@ namespace QS3D.Core.Services
             if (directPlannedDependencyCount < 0) throw new ArgumentOutOfRangeException(nameof(directPlannedDependencyCount));
             if (directPlannedDependentCount < 0) throw new ArgumentOutOfRangeException(nameof(directPlannedDependentCount));
             OrderIndex = orderIndex;
-            ElementId = string.IsNullOrWhiteSpace(elementId)
-                ? throw new ArgumentException("Regeneration work item element id is required.", nameof(elementId))
-                : elementId;
+            ElementId = RegenerationWorkIdentityContract.Require(
+                elementId,
+                nameof(elementId),
+                "Regeneration work item element id");
             Category = category;
             DirtyFlags = dirtyFlags;
             DependencyDepth = dependencyDepth;
@@ -83,9 +112,7 @@ namespace QS3D.Core.Services
             int internalDependencyEdgeCount,
             int maxDependencyDepth)
         {
-            ProjectId = string.IsNullOrWhiteSpace(projectId)
-                ? throw new ArgumentException("Project id is required.", nameof(projectId))
-                : projectId;
+            ProjectId = RegenerationWorkIdentityContract.Require(projectId, nameof(projectId), "Project id");
             if (sourceChangeVersion < 0L) throw new ArgumentOutOfRangeException(nameof(sourceChangeVersion));
             if (!Enum.IsDefined(typeof(RegenerationWorkScope), scope)) throw new ArgumentOutOfRangeException(nameof(scope));
             if (projectElementCount < 0) throw new ArgumentOutOfRangeException(nameof(projectElementCount));
@@ -94,7 +121,6 @@ namespace QS3D.Core.Services
             if (internalDependencyEdgeCount < 0) throw new ArgumentOutOfRangeException(nameof(internalDependencyEdgeCount));
             if (maxDependencyDepth < 0) throw new ArgumentOutOfRangeException(nameof(maxDependencyDepth));
 
-            ProjectId = projectId;
             SourceChangeVersion = sourceChangeVersion;
             Scope = scope;
             TargetElementIds = MaterializeBounded(targetElementIds, projectElementCount, nameof(targetElementIds), "target element");
@@ -128,9 +154,9 @@ namespace QS3D.Core.Services
             var result = new List<T>();
             using (var enumerator = values.GetEnumerator())
             {
+                RequireStableKnownCountContract(values, knownCount, maxCount, parameterName, label);
                 while (true)
                 {
-                    RequireStableKnownCountContract(values, knownCount, maxCount, parameterName, label);
                     if (!enumerator.MoveNext()) break;
                     RequireStableKnownCountContract(values, knownCount, maxCount, parameterName, label);
 
@@ -140,6 +166,7 @@ namespace QS3D.Core.Services
                         throw CollectionTooLarge(maxCount, parameterName, label);
 
                     var value = enumerator.Current;
+                    RequireStableKnownCountContract(values, knownCount, maxCount, parameterName, label);
                     if (ReferenceEquals(value, null))
                         throw new ArgumentException("Regeneration work profile " + label + " collection cannot contain null entries.", parameterName);
                     result.Add(value);

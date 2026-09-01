@@ -34,6 +34,9 @@ namespace QS3D.BricsCAD.V25
             try { Qs3dThemeCoordinator.Start(); }
             catch (Exception ex) { ReportOptionalStartupFailure("host-wide theme coordinator", ex); }
 
+            try { McpPersistentUserSettings.ApplyStartupSecretsToProcessEnvironment(); }
+            catch (Exception ex) { ReportOptionalStartupFailure("MCP secure settings", ex); }
+
             try
             {
                 McpEmbeddedServer.Start();
@@ -43,10 +46,12 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
-                McpCloudflareAccountTunnelManager.TryAutoStart();
+                McpTransportAgentCenterAugmenter.Start();
+                McpPersistentAgentCenterAugmenter.Start();
+                McpTransportCoordinator.TryAutoStartPreferred();
                 McpPublicEndpointResolver.Resolve();
             }
-            catch (Exception ex) { ReportOptionalStartupFailure("MCP Cloudflare tunnel", ex); }
+            catch (Exception ex) { ReportOptionalStartupFailure("MCP transport", ex); }
 
             try { McpProjectRecoveryService.Start(); }
             catch (Exception ex) { ReportOptionalStartupFailure("MCP recovery service", ex); }
@@ -75,8 +80,9 @@ namespace QS3D.BricsCAD.V25
             TryCleanup(McpPopupObserver.Stop);
             TryCleanup(McpFirstRunExperience.Stop);
             TryCleanup(McpProjectRecoveryService.Stop);
-            TryCleanup(McpCloudflareAccountTunnelManager.StopForHostShutdown);
-            TryCleanup(McpCloudflareTunnelManager.StopForHostShutdown);
+            TryCleanup(McpPersistentAgentCenterAugmenter.Stop);
+            TryCleanup(McpTransportAgentCenterAugmenter.Stop);
+            TryCleanup(McpTransportCoordinator.StopAllForHostShutdown);
             TryCleanup(McpEmbeddedServerWatchdog.Stop);
             TryCleanup(McpEmbeddedServer.Stop);
             TryCleanup(UpdateBootstrapper.Stop);

@@ -23,7 +23,7 @@ namespace QS3D.BricsCAD.V25
         private const long MaxDiagnosticBytes = 4L * 1024L * 1024L;
         private const int MaxMessageCharacters = 1800;
         private const int MaxProjectAuditSnapshotEvents = 25;
-        private const int CadReadTimeoutMilliseconds = 10000;
+        private const int CadReadTimeoutMilliseconds = 8000;
         private const int CadReadQueued = 0;
         private const int CadReadRunning = 1;
         private const int CadReadCancelledBeforeStart = 2;

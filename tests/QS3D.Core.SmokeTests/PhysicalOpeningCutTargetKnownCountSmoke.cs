@@ -14,10 +14,12 @@ namespace QS3D.Core.SmokeTests
         {
             InvalidKnownCountsFailBeforeEnumeration();
             KnownCountTraversalMismatchFailsClosed();
+            TransientCountDriftFailsAtCallerBoundaries();
             WriteMismatchDoesNotMutateHost();
             HonestCountedAndStreamingInputsRemainAccepted();
             ExactBoundRemainsAccepted();
-            DishonestKnownCountStillStopsAtStreamingBoundary();
+            KnownOverYieldStopsBeforeUnexpectedCurrent();
+            PureStreamingStillStopsAtBoundary();
         }
 
         private static void InvalidKnownCountsFailBeforeEnumeration()
@@ -60,10 +62,29 @@ namespace QS3D.Core.SmokeTests
             var over = new MultiCountCollection(new[] { "OVER-A", "OVER-B" }, 1, 1, 1, throwOnEnumeration: false);
             ExpectInvalidOperation(
                 () => PhysicalOpeningCutTargetStateCodec.Normalize(over),
-                "count changed during enumeration",
-                "Physical-opening target over-enumeration must fail closed.");
+                "exceeds its advertised opening id Count",
+                "Physical-opening target over-enumeration must fail before consuming unexpected Current.");
             if (over.EnumerationRequestCount != 1)
                 throw new Exception("Over-enumeration must inspect the physical-opening target source exactly once.");
+        }
+
+        private static void TransientCountDriftFailsAtCallerBoundaries()
+        {
+            var moveNextDrift = new TransientCountDriftCollection("MOVE", driftAfterMoveNext: true, driftAfterCurrent: false);
+            ExpectInvalidOperation(
+                () => PhysicalOpeningCutTargetStateCodec.Normalize(moveNextDrift),
+                "count changed during enumeration at after MoveNext",
+                "Transient Count drift triggered by MoveNext must fail immediately.");
+            if (moveNextDrift.CurrentReads != 0)
+                throw new Exception("MoveNext-time Count drift must fail before caller Current is observed.");
+
+            var currentDrift = new TransientCountDriftCollection("CURRENT", driftAfterMoveNext: false, driftAfterCurrent: true);
+            ExpectInvalidOperation(
+                () => PhysicalOpeningCutTargetStateCodec.Normalize(currentDrift),
+                "count changed during enumeration at after Current",
+                "Transient Count drift triggered by Current must fail before retention.");
+            if (currentDrift.CurrentReads != 1)
+                throw new Exception("Current-time Count drift must inspect caller Current exactly once before rejection.");
         }
 
         private static void WriteMismatchDoesNotMutateHost()
@@ -105,15 +126,26 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("The exact 4,096 physical-opening target boundary must remain accepted.");
         }
 
-        private static void DishonestKnownCountStillStopsAtStreamingBoundary()
+        private static void KnownOverYieldStopsBeforeUnexpectedCurrent()
         {
-            var source = new DishonestReadOnlyCollection(MaxOpeningIds + 1, reportedCount: 1);
+            var source = new DishonestReadOnlyCollection(actualCount: 2, reportedCount: 1);
+            ExpectInvalidOperation(
+                () => PhysicalOpeningCutTargetStateCodec.Normalize(source),
+                "exceeds its advertised opening id Count",
+                "Known physical-opening target over-yield must fail before unexpected Current.");
+            if (source.MoveNextCalls != 2 || source.CurrentReads != 1)
+                throw new Exception("Known over-yield must stop on the second MoveNext before reading the second Current.");
+        }
+
+        private static void PureStreamingStillStopsAtBoundary()
+        {
+            var source = new StreamingEnumerable(MaxOpeningIds + 1);
             ExpectInvalidOperation(
                 () => PhysicalOpeningCutTargetStateCodec.Normalize(source),
                 "exceeds the 4096 opening id limit",
-                "Dishonest physical-opening target Count must still be bounded by observed traversal.");
-            if (source.MoveNextCalls != MaxOpeningIds + 1)
-                throw new Exception("Physical-opening target traversal must stop immediately after observing item 4,097.");
+                "Pure-streaming physical-opening targets must remain bounded at item 4,097.");
+            if (source.MoveNextCalls != MaxOpeningIds + 1 || source.CurrentReads != MaxOpeningIds)
+                throw new Exception("Streaming bound must reject item 4,097 before reading its Current value.");
         }
 
         private static IEnumerable<string> Stream(params string[] values)
@@ -201,6 +233,64 @@ namespace QS3D.Core.SmokeTests
             public void CopyTo(Array array, int index) => throw new NotSupportedException();
         }
 
+        private sealed class TransientCountDriftCollection : IReadOnlyCollection<string>
+        {
+            private readonly string _value;
+            private readonly bool _driftAfterMoveNext;
+            private readonly bool _driftAfterCurrent;
+            private bool _driftArmed;
+
+            public TransientCountDriftCollection(string value, bool driftAfterMoveNext, bool driftAfterCurrent)
+            {
+                _value = value;
+                _driftAfterMoveNext = driftAfterMoveNext;
+                _driftAfterCurrent = driftAfterCurrent;
+            }
+
+            public int Count
+            {
+                get
+                {
+                    if (!_driftArmed) return 1;
+                    _driftArmed = false;
+                    return 2;
+                }
+            }
+
+            public int CurrentReads { get; private set; }
+            public IEnumerator<string> GetEnumerator() => new Enumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private sealed class Enumerator : IEnumerator<string>
+            {
+                private readonly TransientCountDriftCollection _owner;
+                private int _state;
+
+                public Enumerator(TransientCountDriftCollection owner) { _owner = owner; }
+                public string Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        if (_owner._driftAfterCurrent) _owner._driftArmed = true;
+                        return _owner._value;
+                    }
+                }
+                object IEnumerator.Current => Current;
+
+                public bool MoveNext()
+                {
+                    if (_state != 0) return false;
+                    _state = 1;
+                    if (_owner._driftAfterMoveNext) _owner._driftArmed = true;
+                    return true;
+                }
+
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
+        }
+
         private sealed class DishonestReadOnlyCollection : IReadOnlyCollection<string>
         {
             private readonly int _actualCount;
@@ -214,7 +304,7 @@ namespace QS3D.Core.SmokeTests
 
             public int Count => _reportedCount;
             public int MoveNextCalls { get; private set; }
-
+            public int CurrentReads { get; private set; }
             public IEnumerator<string> GetEnumerator() => new Enumerator(this);
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
@@ -224,16 +314,58 @@ namespace QS3D.Core.SmokeTests
                 private int _index = -1;
 
                 public Enumerator(DishonestReadOnlyCollection owner) { _owner = owner; }
-                public string Current { get; private set; } = string.Empty;
+                public string Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        return "COUNTED-" + _index;
+                    }
+                }
                 object IEnumerator.Current => Current;
 
                 public bool MoveNext()
                 {
                     _owner.MoveNextCalls++;
                     _index++;
-                    if (_index >= _owner._actualCount) return false;
-                    Current = "STREAM-" + _index;
-                    return true;
+                    return _index < _owner._actualCount;
+                }
+
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
+        }
+
+        private sealed class StreamingEnumerable : IEnumerable<string>
+        {
+            private readonly int _actualCount;
+            public StreamingEnumerable(int actualCount) { _actualCount = actualCount; }
+            public int MoveNextCalls { get; private set; }
+            public int CurrentReads { get; private set; }
+            public IEnumerator<string> GetEnumerator() => new Enumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private sealed class Enumerator : IEnumerator<string>
+            {
+                private readonly StreamingEnumerable _owner;
+                private int _index = -1;
+
+                public Enumerator(StreamingEnumerable owner) { _owner = owner; }
+                public string Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        return "STREAM-" + _index.ToString("D4");
+                    }
+                }
+                object IEnumerator.Current => Current;
+
+                public bool MoveNext()
+                {
+                    _owner.MoveNextCalls++;
+                    _index++;
+                    return _index < _owner._actualCount;
                 }
 
                 public void Reset() => throw new NotSupportedException();

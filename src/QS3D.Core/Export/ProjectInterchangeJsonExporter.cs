@@ -14,6 +14,8 @@ namespace QS3D.Core.Export
     {
         public const string FormatName = "QS3D.SemanticSnapshot";
         public const int FormatVersion = 1;
+        public const int MaxElementStringArrayItems = 4096;
+        public const int MaxInterchangeMapItems = 4096;
 
         public static string Build(ProjectState project)
         {
@@ -67,7 +69,7 @@ namespace QS3D.Core.Export
                 var family = families[i];
                 json.Append("    {\"id\":\"").Append(Escape(family.Id)).Append("\",\"name\":\"").Append(Escape(family.Name))
                     .Append("\",\"category\":\"").Append(Escape(family.Category.ToString())).Append("\",\"properties\":");
-                AppendStringMap(json, family.Properties.Where(x => IsInterchangeProperty(x.Key)), 2);
+                AppendStringMap(json, family.Properties, IsInterchangeProperty, 2, "family properties");
                 json.Append('}');
                 json.Append(i + 1 < families.Count ? ",\n" : "\n");
             }
@@ -147,10 +149,10 @@ namespace QS3D.Core.Export
             AppendStringArray(json, element.DependsOn, "dependencies");
             json.Append(",\n");
             json.Append("      \"properties\": ");
-            AppendStringMap(json, element.Properties.Where(x => ProjectInterchangeElementPropertyPolicy.IsPortable(x.Key)), 3);
+            AppendStringMap(json, element.Properties, ProjectInterchangeElementPropertyPolicy.IsPortable, 3, "element properties");
             json.Append(",\n");
             json.Append("      \"quantities\": ");
-            AppendNumberMap(json, element.Quantities);
+            AppendNumberMap(json, element.Quantities, "element quantities");
             json.Append("\n    }");
         }
 
@@ -166,9 +168,26 @@ namespace QS3D.Core.Export
             return true;
         }
 
-        private static void AppendStringMap(StringBuilder json, IEnumerable<KeyValuePair<string, string>> source, int indent)
+        private static void AppendStringMap(
+            StringBuilder json,
+            IEnumerable<KeyValuePair<string, string>> source,
+            Func<string, bool> include,
+            int indent,
+            string label)
         {
-            var items = source.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase).ToList();
+            if (source == null) throw new InvalidDataException("Interchange export requires " + label + ".");
+            if (include == null) throw new ArgumentNullException(nameof(include));
+
+            var items = new List<KeyValuePair<string, string>>();
+            foreach (var item in source)
+            {
+                if (!include(item.Key)) continue;
+                if (items.Count >= MaxInterchangeMapItems)
+                    throw MapLimit(label);
+                items.Add(item);
+            }
+            items.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.Key, right.Key));
+
             if (items.Count == 0) { json.Append("{}"); return; }
             json.Append("{\n");
             for (var i = 0; i < items.Count; i++)
@@ -181,8 +200,12 @@ namespace QS3D.Core.Export
             json.Append(new string(' ', indent * 2)).Append('}');
         }
 
-        private static void AppendNumberMap(StringBuilder json, IDictionary<string, double> source)
+        private static void AppendNumberMap(StringBuilder json, IDictionary<string, double> source, string label)
         {
+            if (source == null) throw new InvalidDataException("Interchange export requires " + label + ".");
+            if (source.Count > MaxInterchangeMapItems)
+                throw MapLimit(label);
+
             var items = source.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase).ToList();
             json.Append('{');
             for (var i = 0; i < items.Count; i++)
@@ -193,6 +216,13 @@ namespace QS3D.Core.Export
             json.Append('}');
         }
 
+        private static InvalidDataException MapLimit(string label)
+        {
+            return new InvalidDataException(
+                "Interchange export " + label + " exceeds the guarded " +
+                MaxInterchangeMapItems.ToString(CultureInfo.InvariantCulture) + "-member map limit.");
+        }
+
         private static void AppendStringArray(StringBuilder json, IEnumerable<string> values, string label)
         {
             if (values == null) throw new InvalidDataException("Interchange export requires " + label + ".");
@@ -201,6 +231,11 @@ namespace QS3D.Core.Export
             var index = 0;
             foreach (var value in values)
             {
+                if (items.Count >= MaxElementStringArrayItems)
+                    throw new InvalidDataException(
+                        "Interchange export " + label + " exceeds the guarded " +
+                        MaxElementStringArrayItems.ToString(CultureInfo.InvariantCulture) + "-item per-element limit.");
+
                 var raw = value ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(raw))
                     throw new InvalidDataException("Interchange export " + label + " contains an empty value at index " + index.ToString(CultureInfo.InvariantCulture) + ".");

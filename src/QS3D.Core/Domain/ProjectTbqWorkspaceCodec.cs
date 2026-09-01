@@ -95,7 +95,7 @@ namespace QS3D.Core.Domain
             for (var i = 0; i < fields.Count; i++) AppendField(builder, fields[i]);
             var payload = builder.ToString();
             if (payload.Length > MaxPayloadChars)
-                throw new InvalidOperationException("TBQ project workspace exceeds the maximum supported metadata payload of 1 MiB characters.");
+                throw PayloadTooLargeError();
             PersistedTextXml.Verify(payload, nameof(state), "TBQ project workspace metadata");
             Decode(payload);
             return payload;
@@ -188,11 +188,19 @@ namespace QS3D.Core.Domain
 
         private static void AppendField(StringBuilder builder, string value)
         {
+            if (builder == null) throw new ArgumentNullException(nameof(builder));
             value = value ?? string.Empty;
-            builder.Append(value.Length.ToString(CultureInfo.InvariantCulture));
+            var lengthToken = value.Length.ToString(CultureInfo.InvariantCulture);
+            var prospectiveLength = (long)builder.Length + lengthToken.Length + 1L + value.Length;
+            if (prospectiveLength > MaxPayloadChars)
+                throw PayloadTooLargeError();
+            builder.Append(lengthToken);
             builder.Append(':');
             builder.Append(value);
         }
+
+        private static InvalidOperationException PayloadTooLargeError() =>
+            new InvalidOperationException("TBQ project workspace exceeds the maximum supported metadata payload of 1 MiB characters.");
 
         private static string ReadField(string payload, ref int offset)
         {

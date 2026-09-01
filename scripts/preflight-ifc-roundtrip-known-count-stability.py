@@ -9,6 +9,7 @@ EVIDENCE = ROOT / "src/QS3D.Core/Export/IfcRoundTripQuantityEvidence.cs"
 RESULT = ROOT / "src/QS3D.Core/Export/IfcRoundTripExchangeResult.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/IfcRoundTripKnownCountStabilitySmoke.cs"
 TRANSIENT_SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/IfcRoundTripTransientKnownCountStabilitySmoke.cs"
+CURRENT_SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/IfcRoundTripProjectionCurrentCountIntegritySmoke.cs"
 RUNBOOK = ROOT / "docs/FEATURE-RUNBOOKS/ifc-roundtrip-known-count-stability.md"
 errors = []
 
@@ -19,6 +20,7 @@ for path, label in (
     (RESULT, "IFC exchange-result source"),
     (SMOKE, "IFC Count-stability smoke"),
     (TRANSIENT_SMOKE, "IFC transient Count-stability smoke"),
+    (CURRENT_SMOKE, "IFC Current-induced Count-integrity smoke"),
     (RUNBOOK, "IFC Count-stability runbook"),
 ):
     if not path.is_file():
@@ -30,6 +32,7 @@ evidence = EVIDENCE.read_text(encoding="utf-8") if EVIDENCE.is_file() else ""
 result = RESULT.read_text(encoding="utf-8") if RESULT.is_file() else ""
 smoke = SMOKE.read_text(encoding="utf-8") if SMOKE.is_file() else ""
 transient_smoke = TRANSIENT_SMOKE.read_text(encoding="utf-8") if TRANSIENT_SMOKE.is_file() else ""
+current_smoke = CURRENT_SMOKE.read_text(encoding="utf-8") if CURRENT_SMOKE.is_file() else ""
 runbook = RUNBOOK.read_text(encoding="utf-8") if RUNBOOK.is_file() else ""
 
 for token in (
@@ -49,8 +52,8 @@ traversal_token = "IfcRoundTripKnownCountContract.RequireStableDuringTraversal("
 post_traversal_token = "IfcRoundTripKnownCountContract.RequireStableAfterTraversal("
 count_guard_token = "IfcRoundTripProjectionContract.RequireCanProcessNextKnownCount("
 
-if projection.count(traversal_token) != 6:
-    errors.append("expected exactly six traversal Count rebound checks in projection source")
+if projection.count(traversal_token) != 9:
+    errors.append("expected exactly nine traversal Count rebound checks in projection source")
 if projection.count(post_traversal_token) != 3:
     errors.append("expected exactly three post-traversal Count checks in projection source")
 if evidence.count(post_traversal_token) != 1:
@@ -95,16 +98,17 @@ for region, label in (
 ):
     if not region:
         continue
-    if region.count(traversal_token) != 2:
-        errors.append(label + " traversal must contain exactly two Count rebound checks")
+    if region.count(traversal_token) != 3:
+        errors.append(label + " traversal must contain exactly three Count rebound checks")
         continue
     first = region.find(traversal_token)
     move = region.find("enumerator.MoveNext()", first)
     second = region.find(traversal_token, first + len(traversal_token))
     count_guard = region.find(count_guard_token, second)
     current = region.find("enumerator.Current", count_guard)
-    if not (0 <= first < move < second < count_guard < current):
-        errors.append(label + " must rebind Count before MoveNext and after successful MoveNext before overrun guard and Current")
+    third = region.find(traversal_token, current)
+    if not (0 <= first < move < second < count_guard < current < third):
+        errors.append(label + " must rebind Count before MoveNext, after successful MoveNext before Current, and immediately after Current before staging")
 
 ordering_checks = (
     (projection, "IFC round-trip dimension source Count does not match enumerated dimension count.", '"IFC round-trip dimension");', "items.Sort(IfcRoundTripNumericPropertyComparer.Instance)", "dimension"),
@@ -166,9 +170,26 @@ for token in (
         errors.append("IFC transient Count smoke missing regression/control: " + token)
 
 for token in (
+    "DimensionCurrentDriftWinsOverNullSemanticFailure();",
+    "ProvenanceCurrentDriftWinsOverTokenSemanticFailure();",
+    "ProjectionCurrentDriftWinsOverNullSemanticFailure();",
+    "StableCountedInputsRemainAccepted();",
+    "Equal(4, dimensions.CountReads",
+    "Equal(4, provenance.CountReads",
+    "Equal(4, projections.CountReads",
+    "Equal(6, dimensions.CountReads",
+    "CurrentCountCollection<T>",
+    "[ModuleInitializer]",
+):
+    if token not in current_smoke:
+        errors.append("IFC Current-induced Count smoke missing regression/control: " + token)
+
+for token in (
     "transient",
     "before each `MoveNext`",
     "before any `Current` read",
+    "post-`Current` rebound",
+    "caller-controlled `Current` getter",
     "five established IFC boundaries",
     "pure streaming",
     "10,000",
@@ -184,4 +205,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: IFC projection Count evidence is rebound around traversal before Current and after traversal before publication while historical early-overrun, under-yield and streaming caps remain enforced.")
+print("PASS: IFC projection Count evidence is rebound before MoveNext, before Current, immediately after Current before semantic staging, and after traversal before publication while historical early-overrun, under-yield and streaming caps remain enforced.")

@@ -92,6 +92,8 @@ namespace QS3D.Core.Mep
                             "Recognition rule may contain at most " + MepRecognitionLimits.MaxTokensPerRule + " tokens.",
                             nameof(tokens));
                     var token = enumerator.Current;
+                    MepRecognitionCollectionContract.RequireKnownCountStable(
+                        tokens, knownCount, MepRecognitionLimits.MaxTokensPerRule, nameof(tokens), "Recognition rule tokens");
                     tokenIndex++;
                     var value = RequireText(token, nameof(tokens));
                     if (seen.Add(value)) normalized.Add(value);
@@ -211,6 +213,8 @@ namespace QS3D.Core.Mep
                             "Recognition profile may contain at most " + MepRecognitionLimits.MaxRules + " rules.",
                             nameof(rules));
                     var rule = enumerator.Current;
+                    MepRecognitionCollectionContract.RequireKnownCountStable(
+                        rules, knownCount, MepRecognitionLimits.MaxRules, nameof(rules), "Recognition profile rules");
                     if (rule == null)
                         throw new ArgumentException("Recognition profile contains a null rule at index " + index + ".", nameof(rules));
                     if (!ids.Add(rule.Id))

@@ -11,12 +11,36 @@ namespace QS3D.Core.Geometry
         {
             Start = start;
             End = end;
-            SourceId = sourceId?.Trim() ?? string.Empty;
+            SourceId = NormalizeSourceId(sourceId);
         }
 
         public Point2 Start { get; }
         public Point2 End { get; }
         public string SourceId { get; }
+
+        private static string NormalizeSourceId(string? sourceId)
+        {
+            var normalized = sourceId?.Trim() ?? string.Empty;
+            for (var index = 0; index < normalized.Length; index++)
+            {
+                var character = normalized[index];
+                if (char.IsControl(character))
+                    throw new ArgumentException("Room boundary source provenance must not contain control characters.", nameof(sourceId));
+
+                if (char.IsHighSurrogate(character))
+                {
+                    if (index + 1 >= normalized.Length || !char.IsLowSurrogate(normalized[index + 1]))
+                        throw new ArgumentException("Room boundary source provenance must contain well-formed UTF-16.", nameof(sourceId));
+                    index++;
+                    continue;
+                }
+
+                if (char.IsLowSurrogate(character))
+                    throw new ArgumentException("Room boundary source provenance must contain well-formed UTF-16.", nameof(sourceId));
+            }
+
+            return normalized;
+        }
     }
 
     public sealed class RoomBoundary

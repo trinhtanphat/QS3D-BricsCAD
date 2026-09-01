@@ -28,7 +28,7 @@ namespace QS3D.BricsCAD.V25
         private const int MaxScreenshotWidth = 1280;
         private const int MaxScreenshotHeight = 900;
         private const int MaxScreenshotBytes = 3 * 1024 * 1024;
-        private const int MaxWaitMilliseconds = 15000;
+        private const int MaxWaitMilliseconds = 7000;
         private const int MinWaitPollMilliseconds = 50;
         private const int MaxWaitPollMilliseconds = 1000;
         private const int MinDragMilliseconds = 50;
@@ -36,7 +36,7 @@ namespace QS3D.BricsCAD.V25
         private const int DragStepMilliseconds = 25;
         private const int ClipboardTimeoutMilliseconds = 5000;
         private const int MaxSequenceSteps = 12;
-        private const int MaxSequenceMilliseconds = 30000;
+        private const int MaxSequenceMilliseconds = 7000;
         private const int MaxSequenceDelayMilliseconds = 2000;
         private const int MaxSequenceJsonCharacters = 32768;
         private const int MaxSequenceStepArgumentsCharacters = 8192;
@@ -79,6 +79,9 @@ namespace QS3D.BricsCAD.V25
             "desktop_foreground_window",
             "desktop_wait_for_window",
             "desktop_window_focus",
+            "desktop_window_set_state",
+            "desktop_window_move_resize",
+            "desktop_ui_tree",
             "desktop_mouse_move",
             "desktop_mouse_click",
             "desktop_mouse_scroll",
@@ -98,6 +101,8 @@ namespace QS3D.BricsCAD.V25
             "bricscad_ui_invoke",
             "bricscad_ui_set_text",
             "desktop_window_focus",
+            "desktop_window_set_state",
+            "desktop_window_move_resize",
             "desktop_mouse_move",
             "desktop_mouse_click",
             "desktop_mouse_scroll",
@@ -111,7 +116,8 @@ namespace QS3D.BricsCAD.V25
         private static readonly HashSet<string> SensitiveTools = new HashSet<string>(StringComparer.Ordinal)
         {
             "desktop_clipboard_read",
-            "desktop_screenshot"
+            "desktop_screenshot",
+            "desktop_ui_tree"
         };
 
         private static readonly HashSet<string> SequenceAllowedTools = new HashSet<string>(StringComparer.Ordinal)
@@ -146,8 +152,8 @@ namespace QS3D.BricsCAD.V25
                 Tool("desktop_window_list", "List a bounded set of visible top-level windows in the current interactive Windows session.",
                     "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}"),
                 Tool("desktop_foreground_window", "Read metadata for the current foreground window when it belongs to this interactive Windows session.", ""),
-                Tool("desktop_wait_for_window", "Wait up to 15 seconds for a visible current-session top-level window matching an exact handle and/or bounded title substring. Read-only; never focuses or clicks.",
-                    WindowHandleProperty() + ",\"titleContains\":{\"type\":\"string\",\"maxLength\":160},\"timeoutMs\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":15000},\"pollIntervalMs\":{\"type\":\"integer\",\"minimum\":50,\"maximum\":1000}"),
+                Tool("desktop_wait_for_window", "Wait up to 7 seconds for a visible current-session top-level window matching an exact handle and/or bounded title substring. Read-only; never focuses or clicks.",
+                    WindowHandleProperty() + ",\"titleContains\":{\"type\":\"string\",\"maxLength\":160},\"timeoutMs\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":7000},\"pollIntervalMs\":{\"type\":\"integer\",\"minimum\":50,\"maximum\":1000}"),
                 Tool("desktop_window_focus", "Restore and focus one visible current-session window. Requires local QS3D desktop consent and confirmMutation=true.",
                     WindowHandleProperty() + "," + ConfirmMutationProperty(), "windowHandle", "confirmMutation"),
                 Tool("desktop_mouse_move", "Move the Windows cursor to absolute virtual-desktop coordinates. Requires local QS3D desktop consent and confirmMutation=true.",
@@ -176,13 +182,14 @@ namespace QS3D.BricsCAD.V25
                     + ",\"cropX\":{\"type\":\"integer\"},\"cropY\":{\"type\":\"integer\"},\"cropWidth\":{\"type\":\"integer\",\"minimum\":1},\"cropHeight\":{\"type\":\"integer\",\"minimum\":1}"
                     + ",\"maxWidth\":{\"type\":\"integer\",\"minimum\":160,\"maximum\":1280},\"maxHeight\":{\"type\":\"integer\",\"minimum\":120,\"maximum\":900},"
                     + ConfirmSensitiveReadProperty(), "scope", "confirmSensitiveRead"),
-                Tool("desktop_sequence", "Execute up to 12 fail-fast desktop UI steps against one exact visible current-session window for at most 30 seconds. Requires local consent and confirmMutation=true; target-window screenshots additionally require confirmSensitiveRead=true.",
+                Tool("desktop_sequence", "Execute up to 12 fail-fast desktop UI steps against one exact visible current-session window for at most 7 seconds. Requires local consent and confirmMutation=true; target-window screenshots additionally require confirmSensitiveRead=true.",
                     WindowHandleProperty()
                     + ",\"stepsJson\":{\"type\":\"string\",\"maxLength\":32768}"
-                    + ",\"maxDurationMs\":{\"type\":\"integer\",\"minimum\":1000,\"maximum\":30000},"
+                    + ",\"maxDurationMs\":{\"type\":\"integer\",\"minimum\":1000,\"maximum\":7000},"
                     + ConfirmMutationProperty() + "," + ConfirmSensitiveReadProperty(),
                     "windowHandle", "stepsJson", "confirmMutation")
             };
+            descriptors.AddRange(McpDesktopUiAutomationRuntime.ToolDescriptors());
             descriptors.AddRange(McpDirectDiagnosticsThemeRuntime.ToolDescriptors());
             descriptors.AddRange(McpBackgroundHostRuntime.ToolDescriptors());
             return descriptors;
@@ -222,6 +229,10 @@ namespace QS3D.BricsCAD.V25
                     case "bricscad_ui_invoke":
                     case "bricscad_ui_set_text":
                         result = McpBackgroundHostRuntime.Call(tool, args, ensureMutationRunning, audit); break;
+                    case "desktop_window_set_state":
+                    case "desktop_window_move_resize":
+                    case "desktop_ui_tree":
+                        result = McpDesktopUiAutomationRuntime.Call(tool, args, ensureMutationRunning, audit); break;
                     case "desktop_cursor_position": result = CursorPositionJson(); break;
                     case "desktop_window_list": result = WindowListJson(Integer(args, "limit", 30, 1, MaxWindows)); break;
                     case "desktop_foreground_window": result = ForegroundWindowJson(); break;
@@ -351,7 +362,7 @@ namespace QS3D.BricsCAD.V25
             var hwnd = RequiredWindow(body);
             var steps = ParseSequenceSteps(body);
             if (steps.Count == 0) throw new InvalidOperationException("desktop_sequence requires at least one step.");
-            var maxDuration = StrictOptionalInteger(body, "maxDurationMs", 15000, 1000, MaxSequenceMilliseconds);
+            var maxDuration = StrictOptionalInteger(body, "maxDurationMs", 5000, 1000, MaxSequenceMilliseconds);
             var sensitiveConfirmed = McpTopLevelJson.ExtractBoolean(body, "confirmSensitiveRead");
             var screenshotCount = 0;
             foreach (var step in steps)
@@ -684,7 +695,7 @@ namespace QS3D.BricsCAD.V25
                 Thread.Sleep(slice);
                 remaining -= slice;
             }
-            EnsureSequenceRunning(hwnd, ensureMutationRunning, sequenceStarted, maxDuration);
+            EnsureSequenceRunning(hwnd, ensureMutationRunning, started: sequenceStarted, maxDuration: maxDuration);
         }
 
         private static void EnsureSequenceRunning(IntPtr hwnd, Action ensureMutationRunning, Stopwatch started, int maxDuration)

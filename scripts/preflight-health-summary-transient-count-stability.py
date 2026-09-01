@@ -8,13 +8,19 @@ SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "HealthSummaryTransientCountSt
 source = SOURCE.read_text(encoding="utf-8")
 smoke = SMOKE.read_text(encoding="utf-8")
 
+rebound = "RequireKnownCountStable(issues, expectedKnownCount, expectedKnownCountSources);"
+current_capture = "var issue = enumerator.Current;"
+retain = "result.Add(issue);"
+
 required_source = (
     "RequireKnownCountsWithinLimit(issues, out var expectedKnownCountSources)",
     "private static void RequireKnownCountStable(",
     "expectedKnownCountSources != currentKnownCountSources || expectedKnownCount != currentKnownCount",
     "while (true)",
     "if (!enumerator.MoveNext())",
-    "result.Add(enumerator.Current);",
+    current_capture,
+    rebound,
+    retain,
     "knownCountSources |= 1;",
     "knownCountSources |= 2;",
     "knownCountSources |= 4;",
@@ -23,13 +29,20 @@ for token in required_source:
     if token not in source:
         raise SystemExit("HealthSummary transient Count source guard missing token: " + token)
 
-pre_move = source.index("RequireKnownCountStable(issues, expectedKnownCount, expectedKnownCountSources);")
+pre_move = source.index(rebound)
 move = source.index("if (!enumerator.MoveNext())", pre_move)
-post_move = source.index("RequireKnownCountStable(issues, expectedKnownCount, expectedKnownCountSources);", move + 1)
+post_move = source.index(rebound, move + 1)
 overrun = source.index("if (expectedKnownCount.HasValue && result.Count >= expectedKnownCount.Value)", post_move)
-current = source.index("result.Add(enumerator.Current);", overrun)
-if not (pre_move < move < post_move < overrun < current):
-    raise SystemExit("HealthSummary must rebind Count before/after MoveNext and admit cardinality before Current")
+current = source.index(current_capture, overrun)
+post_current = source.index(rebound, current + len(current_capture))
+retention = source.index(retain, post_current + len(rebound))
+if not (pre_move < move < post_move < overrun < current < post_current < retention):
+    raise SystemExit(
+        "HealthSummary must rebind Count before/after MoveNext, admit cardinality before Current, "
+        "then rebind Count after Current before retention"
+    )
+if "result.Add(enumerator.Current);" in source:
+    raise SystemExit("HealthSummary must not retain caller-controlled Current before the post-Current Count rebound")
 if "while (enumerator.MoveNext())" in source:
     raise SystemExit("HealthSummary must not regress to while(enumerator.MoveNext()) for caller-controlled issues")
 

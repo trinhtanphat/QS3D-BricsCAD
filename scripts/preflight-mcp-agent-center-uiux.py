@@ -14,7 +14,14 @@ def main() -> int:
     text = CENTER.read_text(encoding="utf-8")
     errors: list[str] = []
 
+    command_start = text.find("public sealed class McpAgentControlCenterCommands")
+    command_end = text.find("internal sealed class McpAgentControlCenterWindow", command_start)
+    command_block = text[command_start:command_end] if command_start >= 0 and command_end > command_start else ""
+    if not command_block:
+        errors.append("Agent Center UI missing canonical QS3DMCPAGENTCENTER command block")
+
     required = {
+        "modeless Agent Center command": "new McpAgentControlCenterWindow().Show();",
         "layout rounding": "UseLayoutRounding = true",
         "dashboard shell": "CreateDashboardShell()",
         "section card component": "CreateSectionCard(",
@@ -65,7 +72,6 @@ def main() -> int:
         "focus owns foreground": "focus.Setters.Add(new Setter(Control.ForegroundProperty, foreground))",
         "focus owns border": "focus.Setters.Add(new Setter(Control.BorderBrushProperty, _palette.FocusBorder))",
         "focus owns thickness": "focus.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(2)))",
-        "button trigger precedence": "Trigger precedence is intentional: focus -> hover -> pressed -> disabled.",
         "responsive scrolling": "HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled",
         "compact footer": "CreateFooter()",
         "transport readiness state": '"Transport sẵn sàng"',
@@ -80,8 +86,30 @@ def main() -> int:
         "Quick Tunnel bounded poll cap": "_quickUrlPollTicks >= 20",
     }
     for label, token in required.items():
-        if token not in text:
+        haystack = command_block if label == "modeless Agent Center command" else text
+        if token not in haystack:
             errors.append(f"Agent Center UI missing {label}: {token}")
+
+    # Trigger precedence is behavioral, so verify the executable source order rather than pinning
+    # a prose comment. WPF evaluates later triggers with higher precedence for overlapping setters.
+    style_start = text.find("private Style CreateButtonStyle(")
+    style_end = text.find("private static ControlTemplate CreateButtonTemplate()", style_start)
+    style_block = text[style_start:style_end] if style_start >= 0 and style_end > style_start else ""
+    trigger_order = (
+        "style.Triggers.Add(focus);",
+        "style.Triggers.Add(hover);",
+        "style.Triggers.Add(pressed);",
+        "style.Triggers.Add(disabled);",
+    )
+    if not style_block:
+        errors.append("Agent Center UI missing CreateButtonStyle block for trigger-precedence verification")
+    else:
+        positions = [style_block.find(token) for token in trigger_order]
+        if any(position < 0 for position in positions) or positions != sorted(positions) or len(set(positions)) != len(positions):
+            errors.append("Agent Center button trigger precedence must remain focus -> hover -> pressed -> disabled")
+
+    if "ShowDialog()" in command_block:
+        errors.append("Agent Center command must return immediately after modeless Show(); ShowDialog() keeps BricsCAD CMDACTIVE non-idle")
 
     preserved = {
         "install flow": "McpCloudflaredBootstrapper.BeginInstall",
@@ -124,7 +152,7 @@ def main() -> int:
             print("ERROR:", error)
         return 1
 
-    print("PASS MCP Agent Center UIUX four-tab/toast/theme/local-consent/connectivity contract")
+    print("PASS MCP Agent Center UIUX four-tab/toast/theme/local-consent/connectivity/modeless-command contract")
     return 0
 
 

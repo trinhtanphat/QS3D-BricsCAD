@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 V25 = ROOT / "src" / "QS3D.BricsCAD.V25"
 SERVER = V25 / "McpEmbeddedServerV2.cs"
 RUNTIME = V25 / "McpCadAgentRuntime.cs"
+DOMAIN = V25 / "McpQs3dDomainRuntime.cs"
 LEGACY_SERVER = V25 / "McpEmbeddedServer.cs"
 COMMANDS = V25 / "McpConnectorRibbonCommands.cs"
 TOKEN_ONBOARDING = V25 / "McpCloudflareOnboarding.cs"
@@ -42,6 +43,7 @@ def main() -> int:
     errors: list[str] = []
     server = read(SERVER, errors)
     runtime = read(RUNTIME, errors)
+    domain = read(DOMAIN, errors)
     legacy_server = read(LEGACY_SERVER, errors)
     commands = read(COMMANDS, errors)
     token_onboarding = read(TOKEN_ONBOARDING, errors)
@@ -94,12 +96,16 @@ def main() -> int:
     ):
         require(server, f'"{tool}"', errors, f"MCP tool {tool}")
 
-    # CAD/editor behavior lives behind the transport in McpCadAgentRuntime.
+    # CAD/editor behavior remains behind McpCadAgentRuntime; QS3D business command
+    # validation/execution is owned by the dedicated domain runtime after capability split.
     require(runtime, "ExecuteInApplicationContext", errors, "BricsCAD application-context dispatch")
     require(runtime, "ManualResetEventSlim", errors, "bounded CAD dispatch wait")
     require(runtime, 'McpTopLevelJson.ExtractBoolean(body, "confirmMutation")', errors, "top-level mutation gate")
-    require(runtime, '"^QS3D[A-Za-z0-9_]*$"', errors, "QS3D-only command allowlist")
-    require(runtime, "SendStringToExecute(command + \"\\n\"", errors, "guarded QS3D command dispatch")
+    require(runtime, '"^QS3D[A-Za-z0-9_]*$"', errors, "QS3D-only command allowlist contract")
+    require(runtime, 'case "qs3d_run_command": return Mutation(args, tool, () => McpQs3dDomainRuntime.Call(tool, args));', errors, "QS3D domain delegation")
+    require(domain, "Regex.IsMatch(command, McpCadAgentRuntime.Qs3dCommandPattern", errors, "guarded QS3D command validation")
+    require(domain, "SendStringToExecute(command + \"\\n\"", errors, "guarded QS3D command dispatch")
+    require(domain, "McpCadAgentRuntime.EnsureCurrentMutationRunning();", errors, "QS3D mutation epoch recheck")
     require(runtime, "CadWorkQueued = 0", errors, "CAD dispatch queued state")
     require(runtime, "CadWorkRunning = 1", errors, "CAD dispatch running state")
     require(runtime, "CadWorkCancelledBeforeStart = 2", errors, "CAD dispatch cancelled-before-start state")
@@ -108,7 +114,7 @@ def main() -> int:
     require(runtime, "completion is uncertain", errors, "timeout completion uncertainty")
     require(runtime, "Do not retry automatically", errors, "timeout no-auto-retry contract")
 
-    for text, surface in ((server, "network MCP transport"), (runtime, "CAD runtime")):
+    for text, surface in ((server, "network MCP transport"), (runtime, "CAD runtime"), (domain, "QS3D domain runtime")):
         forbid(text, "Process.Start(", errors, f"arbitrary process launch from {surface}")
         forbid(text, "powershell.exe", errors, f"PowerShell surface in {surface}")
         forbid(text, "cmd.exe", errors, f"cmd surface in {surface}")
@@ -138,11 +144,11 @@ def main() -> int:
     require(coordinator, "McpRibbonCommandOverride.Reset()", errors, "ribbon override teardown")
 
     require(plugin, "McpEmbeddedServer.Start();", errors, "embedded MCP startup")
-    require(plugin, "McpCloudflareAccountTunnelManager.TryAutoStart();", errors, "browser-auth named-tunnel auto-start")
-    require(plugin, "TryCleanup(McpCloudflareAccountTunnelManager.StopForHostShutdown);", errors, "browser-auth tunnel teardown")
-    require(plugin, "TryCleanup(McpCloudflareTunnelManager.StopForHostShutdown);", errors, "quick/token tunnel teardown")
+    require(plugin, "McpTransportCoordinator.TryAutoStartPreferred();", errors, "preferred MCP transport auto-start")
+    require(plugin, "TryCleanup(McpTransportCoordinator.StopAllForHostShutdown);", errors, "provider-aware MCP transport teardown")
     require(plugin, "TryCleanup(McpEmbeddedServer.Stop);", errors, "embedded MCP teardown")
     require(plugin, 'ReportOptionalStartupFailure("MCP server", ex)', errors, "fail-soft MCP startup")
+    require(plugin, 'ReportOptionalStartupFailure("MCP transport", ex)', errors, "fail-soft MCP transport startup")
 
     for command in (
         "QS3DMCPSETTINGSHTTP", "QS3DMCPDOCSHTTP", "QS3DMCPCHECKHTTP", "QS3DAIDASHBOARDHTTP",
@@ -256,10 +262,11 @@ def main() -> int:
 
     print(
         "PASS: active modular MCP v2 provides bounded authenticated loopback transport with exact "
-        "JSON media-type handling; McpCadAgentRuntime owns atomic CAD dispatch/mutation and "
-        "BricsCAD-confined recovery. Click-first verified Cloudflare onboarding, canonical HTTPS "
-        "/mcp resolution, Ribbon routing and sanitized local protocol controls remain wired while "
-        "the legacy monolith is excluded from V25/V26 compilation."
+        "JSON media-type handling; McpCadAgentRuntime owns atomic CAD dispatch/mutation while "
+        "McpQs3dDomainRuntime owns bounded QS3D business command execution. Provider-aware MCP "
+        "transport startup/teardown, click-first onboarding, canonical HTTPS /mcp resolution, Ribbon "
+        "routing and sanitized local protocol controls remain wired while the legacy monolith is "
+        "excluded from V25/V26 compilation."
     )
     return 0
 
