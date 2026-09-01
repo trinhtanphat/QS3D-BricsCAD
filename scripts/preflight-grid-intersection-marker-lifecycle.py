@@ -41,7 +41,7 @@ required_commands = [
     'ReportOperationFailure(document, "QS3DGRIDINTERSECTIONHEALTH lỗi: không thể kiểm tra Grid intersection markers.")',
     '"QS3DGRIDINTERSECTIONSSEL lỗi: không thể refresh Grid intersection markers cho selection."',
     '"QS3DGRIDINTERSECTIONS lỗi: không thể refresh Grid intersection markers."',
-    '"QS3D Grid: semantic capture đã hoàn tất; một phần UI không thể đồng bộ."',
+    'TryWriteMessage(document, "\\nQS3D Grid: semantic capture đã hoàn tất; một phần UI không thể đồng bộ.");',
 ]
 required_identity = [
     'PairTokenPrefix = "GIP1:"',
