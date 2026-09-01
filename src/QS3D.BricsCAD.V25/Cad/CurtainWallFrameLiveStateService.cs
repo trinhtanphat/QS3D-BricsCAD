@@ -55,12 +55,13 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 return StampSelected(document, project);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // Frame/host geometry has already committed by the time command orchestration calls
                 // this health stamp. Missing fingerprint is a diagnosable health warning, not a
-                // reason to report an otherwise valid native geometry commit as failed.
-                warning = "Không stamp được live curtain fingerprint: " + ex.Message;
+                // reason to report an otherwise valid native geometry commit as failed. Keep the
+                // user-visible warning stable so host/native exception detail is not disclosed.
+                warning = "Live curtain fingerprint chưa được cập nhật; hãy chạy lại Curtain Frames 3D hoặc Health trước khi phát hành.";
                 return 0;
             }
         }
