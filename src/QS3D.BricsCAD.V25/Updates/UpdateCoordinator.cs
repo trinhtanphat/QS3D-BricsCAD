@@ -40,6 +40,7 @@ namespace QS3D.BricsCAD.V25.Updates
 
     internal sealed class UpdateCoordinator
     {
+        private const string CheckFailureDetail = "Không đọc được dữ liệu release từ GitHub. Kiểm tra kết nối mạng rồi thử lại; QS3D không thay đổi bản đang chạy.";
         private readonly object _sync = new object();
         private readonly GitHubReleaseClient _client = new GitHubReleaseClient();
         private readonly UpdateManifestProbe _manifestProbe = new UpdateManifestProbe();
@@ -222,9 +223,9 @@ namespace QS3D.BricsCAD.V25.Updates
                 TryPublishCurrent(generation, result, automatic && result.HasUpdate);
                 return result;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                var result = new UpdateCheckResult(UpdateState.Error, current, null, "Không kiểm tra được cập nhật. QS3D vẫn tiếp tục hoạt động bình thường.", ex.Message);
+                var result = new UpdateCheckResult(UpdateState.Error, current, null, "Không kiểm tra được cập nhật. QS3D vẫn tiếp tục hoạt động bình thường.", CheckFailureDetail);
                 TryPublishCurrent(generation, result, false);
                 return result;
             }
