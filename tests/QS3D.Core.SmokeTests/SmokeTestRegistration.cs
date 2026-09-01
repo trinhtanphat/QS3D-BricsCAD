@@ -48,6 +48,7 @@ namespace QS3D.Core.SmokeTests
             Qs3dReviewWorkbookQtoIdentitySmoke.Run();
             QsWorkbookTemplateEngineSmoke.Run();
             QsWorkbookTemplatePackageBoundSmoke.Run();
+            QsWorkbookTemplateTracePackageBoundSmoke.Run();
             P0UnifiedExportAcceptanceSmoke.Run();
             QuantityReportRevisionReviewSmoke.Run();
             QuantityRevisionProjectIdentitySmoke.Run();
