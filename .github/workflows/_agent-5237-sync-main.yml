@@ -1,0 +1,136 @@
+name: _agent-5237-sync-main
+
+on:
+  push:
+    branches:
+      - agent/chatgpt-openai-tunnel/issue-5237-local-auth-header
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Merge latest main and resolve the known MCP auth overlap
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+
+          set +e
+          git merge --no-commit --no-ff origin/main
+          merge_status=$?
+          set -e
+
+          if [ "$merge_status" -ne 0 ]; then
+            conflicts="$(git diff --name-only --diff-filter=U)"
+            expected="src/QS3D.BricsCAD.V25/McpEmbeddedServerV2.cs"
+            if [ "$conflicts" != "$expected" ]; then
+              echo "Unexpected merge conflicts:"
+              printf '%s\n' "$conflicts"
+              exit 1
+            fi
+
+            git checkout --theirs -- "$expected"
+
+            python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path("src/QS3D.BricsCAD.V25/McpEmbeddedServerV2.cs")
+          text = path.read_text(encoding="utf-8")
+
+          if "LocalTunnelAuthorizationHeader" in text:
+              raise SystemExit("Dedicated local auth header already present unexpectedly after taking main side")
+
+          anchor = '        private const string TokenFileName = "mcp-bearer-token.txt";\n'
+          replacement = anchor + '        private const string LocalTunnelAuthorizationHeader = "X-QS3D-MCP-Local-Authorization";\n'
+          if text.count(anchor) != 1:
+              raise SystemExit("TokenFileName anchor count != 1")
+          text = text.replace(anchor, replacement, 1)
+
+          singleton = '                   || string.Equals(name, "Authorization", StringComparison.OrdinalIgnoreCase)\n'
+          singleton_replacement = singleton + '                   || string.Equals(name, LocalTunnelAuthorizationHeader, StringComparison.OrdinalIgnoreCase)\n'
+          if text.count(singleton) != 1:
+              raise SystemExit("Authorization singleton anchor count != 1")
+          text = text.replace(singleton, singleton_replacement, 1)
+
+          pattern = re.compile(
+              r'        private static bool Authorize\(IDictionary<string, string> headers, string publicMcpUrl, out bool oauthAccessToken\)\n'
+              r'        \{.*?\n'
+              r'        \}\n\n'
+              r'        private static void RecordOAuthMcpActivity',
+              re.S,
+          )
+          new_authorize = '''        private static bool Authorize(IDictionary<string, string> headers, string publicMcpUrl, out bool oauthAccessToken)
+          {
+              oauthAccessToken = false;
+
+              string localAuthorization;
+              if (headers.TryGetValue(LocalTunnelAuthorizationHeader, out localAuthorization)
+                  && McpTransportCoordinator.SelectedProvider == McpTransportProvider.OpenAiSecureTunnel)
+              {
+                  string localToken;
+                  if (!TryExtractBearerToken(localAuthorization, out localToken)) return false;
+                  return ConstantTimeEquals(localToken, GetBearerToken());
+              }
+
+              string authorization;
+              if (!headers.TryGetValue("Authorization", out authorization)) return false;
+              string bearerToken;
+              if (!TryExtractBearerToken(authorization, out bearerToken)) return false;
+              if (ConstantTimeEquals(bearerToken, GetBearerToken())) return true;
+              if (!McpOAuthAuthorizationServer.TryValidateAccessToken(headers, publicMcpUrl, GetBearerToken())) return false;
+              oauthAccessToken = true;
+              return true;
+          }
+
+          private static bool TryExtractBearerToken(string authorization, out string token)
+          {
+              token = string.Empty;
+              const string prefix = "Bearer ";
+              if (string.IsNullOrWhiteSpace(authorization)
+                  || !authorization.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                  return false;
+              token = authorization.Substring(prefix.Length).Trim();
+              return token.Length > 0;
+          }
+
+          private static void RecordOAuthMcpActivity'''
+          text, count = pattern.subn(new_authorize, text, count=1)
+          if count != 1:
+              raise SystemExit("Authorize block replacement count != 1")
+
+          path.write_text(text, encoding="utf-8", newline="")
+          PY
+
+            git add "$expected"
+          fi
+
+          if git diff --cached --quiet; then
+            echo "No staged merge changes; branch is already synchronized."
+          else
+            git commit -m "merge main into issue-5237 auth carrier"
+          fi
+
+      - name: Verify auth and wait-idle regressions together
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/preflight-mcp-openai-tunnel-local-auth.py
+          python scripts/preflight-mcp-openai-tunnel-content-type.py
+          python scripts/preflight-mcp-cad-wait-idle-response-budget.py
+          grep -F 'case "cad_wait_idle": return WaitUntilIdle(Integer(args, "timeoutMs", 5000, 100, 7000));' src/QS3D.BricsCAD.V25/McpCadAgentRuntime.cs
+          grep -F 'X-QS3D-MCP-Local-Authorization' src/QS3D.BricsCAD.V25/McpEmbeddedServerV2.cs
+
+      - name: Push synchronized carrier
+        shell: bash
+        run: git push origin HEAD:${{ github.ref_name }}
