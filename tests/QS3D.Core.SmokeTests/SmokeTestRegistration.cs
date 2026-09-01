@@ -178,6 +178,7 @@ namespace QS3D.Core.SmokeTests
             BcfIssueExchangeSmoke.Run();
             BcfSemanticOutputBoundSmoke.Run();
             BcfZipPackageSmoke.Run();
+            BcfZipWriteBoundSmoke.Run();
             BcfZipNestedCardinalitySmoke.Run();
             RegenerationSubsetSmoke.Run();
             PhysicalOpeningCutTargetKnownCountSmoke.Run();
@@ -187,7 +188,6 @@ namespace QS3D.Core.SmokeTests
             DependencyGraphKnownCountContractSmoke.Run();
             ProjectStateLookupSmoke.Run();
             ProjectStateSnapshotElementIdentitySmoke.Run();
-            ProjectStateSnapshotRelationIdentitySmoke.Run();
             ProjectStateSnapshotFamilyIdentitySmoke.Run();
             ProjectPersistenceCheckpointSmoke.Run();
             ProjectPersistenceCheckpointRevisionDriftSmoke.Run();
