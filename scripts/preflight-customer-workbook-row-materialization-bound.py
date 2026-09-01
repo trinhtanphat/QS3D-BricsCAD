@@ -8,8 +8,12 @@ source = SOURCE_PATH.read_text(encoding="utf-8")
 smoke = SMOKE_PATH.read_text(encoding="utf-8")
 
 bounded_call = 'MaterializeWorksheetRowsBounded(document.Descendants(ns + "row"), MaxRows);'
-if source.count(bounded_call) != 2:
-    raise SystemExit("customer workbook row bound: business and TRACE_MODEL readers must share the bounded row materializer")
+if source.count(bounded_call) != 1:
+    raise SystemExit("customer workbook row bound: TRACE_MODEL reader must retain exactly one bounded full-row materializer")
+
+business_call = 'SelectBusinessRowsBounded(document.Descendants(ns + "row"), rowNumber, MaxRows);'
+if source.count(business_call) != 1:
+    raise SystemExit("customer workbook row bound: business reader must use exactly one bounded selective row scan")
 
 if 'document.Descendants(ns + "row").ToList();' in source:
     raise SystemExit("customer workbook row bound: raw worksheet-row ToList materialization must not return")
@@ -36,7 +40,7 @@ if "maximum < 0 || maximum > MaxRows" not in body:
     raise SystemExit("customer workbook row bound: helper test ceiling must remain constrained by the XLSX MaxRows contract")
 
 if "Where(row => ParseRow(row) == rowNumber).Take(2).ToList()" not in source:
-    raise SystemExit("customer workbook row bound: duplicate row lookup must retain at most two matches")
+    raise SystemExit("customer workbook row bound: TRACE_MODEL duplicate row lookup must retain at most two matches")
 
 required_smoke = [
     "ExactLimitIsRetainedWithoutOverread",
