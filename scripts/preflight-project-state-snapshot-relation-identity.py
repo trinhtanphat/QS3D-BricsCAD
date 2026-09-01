@@ -4,7 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.Core/Persistence/ProjectStateSnapshot.cs"
-SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/ProjectStateSnapshotRelationIdentitySmoke.cs"
+SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/ProjectStateSnapshotFamilyIdentitySmoke.cs"
 REGISTRATION = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 
 
@@ -76,9 +76,8 @@ def main() -> int:
     ):
         require(smoke, token, "deterministic relation-identity smoke coverage")
 
-    registration_token = "ProjectStateSnapshotRelationIdentitySmoke.Run();"
-    if registration.count(registration_token) != 1:
-        raise AssertionError("snapshot relation identity smoke must be registered exactly once")
+    if registration.count("ProjectStateSnapshotFamilyIdentitySmoke.Run();") != 1:
+        raise AssertionError("host snapshot smoke must remain registered exactly once")
 
     print("PASS: project state snapshot relation identity preflight")
     return 0
