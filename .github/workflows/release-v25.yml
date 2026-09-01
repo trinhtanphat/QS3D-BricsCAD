@@ -689,7 +689,7 @@ jobs:
               }
               catch {
                 $reconciliationError = $_
-                throw "V25 publication acknowledgement reconciliation failed. Original publication error: $($publicationError.Exception.Message) Reconciliation error: $($_.Exception.Message) Manual cleanup is required before retry."
+                throw "V25 publication acknowledgement reconciliation failed. Original publication error: $($publicationError.Exception.Message) Reconciliation error: $($reconciliationError.Exception.Message) Manual cleanup is required before retry."
               }
             }
 
