@@ -7,6 +7,9 @@ namespace QS3D.BricsCAD.V25.Updates
 {
     public sealed class UpdateCommands
     {
+        private const string UpdateCenterFailure = "Không thể mở QS3D Update Center. QS3D vẫn tiếp tục hoạt động bình thường.";
+        private const string VersionFailure = "Không thể đọc thông tin phiên bản QS3D đang chạy.";
+
         [CommandMethod("QS3DUPDATE", CommandFlags.Modal)]
         public void ShowUpdateCenter()
         {
@@ -37,10 +40,9 @@ namespace QS3D.BricsCAD.V25.Updates
             {
                 UpdateCenterWindowHost.Show();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                var document = Application.DocumentManager.MdiActiveDocument;
-                document?.Editor.WriteMessage("\n" + commandName + " error: " + ex.Message);
+                TryWriteFailure(commandName, UpdateCenterFailure);
             }
         }
 
@@ -68,10 +70,22 @@ namespace QS3D.BricsCAD.V25.Updates
                     "\nUpdate command: QS3DUPDATE (alias: QSUPDATE)." +
                     "\nRun QS3DUPDATE to check GitHub Releases.");
             }
-            catch (Exception ex)
+            catch (Exception)
+            {
+                TryWriteFailure(commandName, VersionFailure);
+            }
+        }
+
+        private static void TryWriteFailure(string commandName, string message)
+        {
+            try
             {
                 var document = Application.DocumentManager.MdiActiveDocument;
-                document?.Editor.WriteMessage("\n" + commandName + " error: " + ex.Message);
+                document?.Editor.WriteMessage("\n" + commandName + ": " + message);
+            }
+            catch (Exception)
+            {
+                // Failure reporting must not escape back into BricsCAD command processing.
             }
         }
 
