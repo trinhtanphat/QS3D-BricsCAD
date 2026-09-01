@@ -8,10 +8,11 @@ v26 = (root / ".github" / "workflows" / "release-v26.yml").read_text(encoding="u
 
 def publish_success_scope(workflow: str, version: str) -> tuple[int, int, str]:
     patch = workflow.find("$published = Invoke-RestMethod -Method Patch -Uri $releaseUri")
+    attempt = workflow.rfind("$publishPatchAttempted = $true", 0, patch)
     catch = workflow.find("$publicationError = $_", patch + 1)
-    if patch < 0 or catch <= patch:
-        raise ValueError(f"{version} final publish PATCH/catch scope is missing")
-    return patch, catch, workflow[patch:catch]
+    if patch < 0 or attempt < 0 or attempt >= patch or catch <= patch:
+        raise ValueError(f"{version} final publish attempt/PATCH/catch scope is missing or misordered")
+    return attempt, catch, workflow[attempt:catch]
 
 
 def validate_success_response(workflow: str, version: str) -> list[str]:
@@ -42,9 +43,13 @@ def validate_success_response(workflow: str, version: str) -> list[str]:
     for token in required:
         if token not in success_scope:
             errors.append(f"{version} successful publish verification missing: {token}")
-    if success_scope.find("$publishPatchAttempted = $true") < 0:
+    attempt = success_scope.find("$publishPatchAttempted = $true")
+    patch = success_scope.find("$published = Invoke-RestMethod -Method Patch")
+    if attempt < 0:
         errors.append(f"{version} successful publish verification lost final-PATCH attempt proof")
-    if success_scope.find("$published = Invoke-RestMethod -Method Patch") > assertion:
+    elif patch < 0 or attempt > patch:
+        errors.append(f"{version} final-PATCH attempt proof must precede the PATCH request")
+    if patch > assertion:
         errors.append(f"{version} exact transaction verification must follow the PATCH response")
     return errors
 
