@@ -54,6 +54,23 @@ def validate(validator: str, packager: str, workflow: str) -> list[str]:
     ):
         if token not in workflow:
             errors.append(f"V25 commercial release workflow missing final held identity token: {token}")
+
+    # The workflow intentionally performs two independent semantic admissions:
+    # once before signing and once when generating final commercial provenance.
+    # Presence-only checks are insufficient because mutating either one can be
+    # masked by the other surviving occurrence.
+    required_workflow_binding_counts = {
+        "-ExpectedSourceCommit $env:GITHUB_SHA": 2,
+        "-ExpectedReleaseTag $env:RELEASE_TAG": 2,
+    }
+    for token, expected_count in required_workflow_binding_counts.items():
+        actual_count = workflow.count(token)
+        if actual_count != expected_count:
+            errors.append(
+                "V25 commercial release workflow must preserve exact binding in both held identity admissions: "
+                f"expected {expected_count} occurrences of {token}, found {actual_count}"
+            )
+
     if "Get-Content -LiteralPath 'dist\\QS3D-BricsCAD-V25\\PACKAGE-METADATA.json' -Raw | ConvertFrom-Json" in workflow:
         errors.append("V25 commercial release workflow must not re-admit metadata through a raw pathname read")
 
