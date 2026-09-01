@@ -1,0 +1,66 @@
+name: _agent-5213-apply-patch
+
+on:
+  push:
+    branches:
+      - agent/chatgpt-web-gpt56sol-20260901-mcp-wait-idle-budget/issue-5213-mcp-wait-idle-budget
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+      - name: Apply bounded cad_wait_idle patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          runtime_path = Path("src/QS3D.BricsCAD.V25/McpCadAgentRuntime.cs")
+          runtime = runtime_path.read_text(encoding="utf-8")
+          runtime_old = 'case "cad_wait_idle": return WaitUntilIdle(Integer(args, "timeoutMs", 10000, 100, 30000));'
+          runtime_new = 'case "cad_wait_idle": return WaitUntilIdle(Integer(args, "timeoutMs", 5000, 100, 7000));'
+          if runtime_old in runtime:
+              if runtime.count(runtime_old) != 1:
+                  raise SystemExit(f"expected exactly one runtime legacy line, found {runtime.count(runtime_old)}")
+              runtime = runtime.replace(runtime_old, runtime_new)
+              runtime_path.write_text(runtime, encoding="utf-8")
+          elif runtime_new not in runtime:
+              raise SystemExit("runtime cad_wait_idle line is neither legacy nor expected patched form")
+
+          server_path = Path("src/QS3D.BricsCAD.V25/McpEmbeddedServerV2.cs")
+          server = server_path.read_text(encoding="utf-8")
+          server_old = 'Tool("cad_wait_idle", "Wait until BricsCAD CMDACTIVE becomes zero.", "\\\"timeoutMs\\\":{\\\"type\\\":\\\"integer\\\",\\\"minimum\\\":100,\\\"maximum\\\":30000}"),'
+          server_new = 'Tool("cad_wait_idle", "Wait until BricsCAD CMDACTIVE becomes zero.", "\\\"timeoutMs\\\":{\\\"type\\\":\\\"integer\\\",\\\"minimum\\\":100,\\\"maximum\\\":7000}"),'
+          if server_old in server:
+              if server.count(server_old) != 1:
+                  raise SystemExit(f"expected exactly one server legacy descriptor, found {server.count(server_old)}")
+              server = server.replace(server_old, server_new)
+              server_path.write_text(server, encoding="utf-8")
+          elif server_new not in server:
+              raise SystemExit("server cad_wait_idle descriptor is neither legacy nor expected patched form")
+
+          check_runtime = runtime_path.read_text(encoding="utf-8")
+          check_server = server_path.read_text(encoding="utf-8")
+          assert runtime_new in check_runtime
+          assert server_new in check_server
+      - name: Verify focused RED guard is now GREEN
+        run: python scripts/preflight-mcp-cad-wait-idle-response-budget.py
+      - name: Commit production patch
+        shell: bash
+        run: |
+          if git diff --quiet -- src/QS3D.BricsCAD.V25/McpCadAgentRuntime.cs src/QS3D.BricsCAD.V25/McpEmbeddedServerV2.cs; then
+            echo "Production patch already present."
+            exit 0
+          fi
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/QS3D.BricsCAD.V25/McpCadAgentRuntime.cs src/QS3D.BricsCAD.V25/McpEmbeddedServerV2.cs
+          git commit -m "fix(mcp): bound cad_wait_idle to 7s"
+          git push origin HEAD:${{ github.ref_name }}
