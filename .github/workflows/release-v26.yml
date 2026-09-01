@@ -508,7 +508,14 @@ jobs:
             Assert-RemoteReleaseTagTargetsWorkflowSha
             $publishPatchAttempted = $true
             $published = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body (@{ draft = $false } | ConvertTo-Json)
-            if ($published.draft -ne $false) { throw "V26 GitHub release remained a draft after publish request." }
+            Assert-PublishedReleaseMatchesVerifiedTransaction `
+              -ReleaseSnapshot $published `
+              -ReleaseUri $releaseUri `
+              -ReleaseId $releaseId `
+              -ExpectedAssets $expectedAssets `
+              -VerifiedAssetIds $verifiedAssetIds `
+              -LocalAssets $localAssets `
+              -IsPrerelease $isPrerelease
           }
           catch {
             $publicationError = $_
