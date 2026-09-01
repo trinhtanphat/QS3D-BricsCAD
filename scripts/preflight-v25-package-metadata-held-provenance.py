@@ -8,6 +8,8 @@ VALIDATOR = (ROOT / "scripts/assert-v25-release-package-identity.ps1").read_text
 PACKAGER = (ROOT / "scripts/package-v25-release.ps1").read_text(encoding="utf-8")
 WORKFLOW = (ROOT / ".github/workflows/release-v25.yml").read_text(encoding="utf-8")
 
+STRICT_RELEASE_TAG_PATTERN = "^v(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+
 
 def validate(validator: str, packager: str, workflow: str) -> list[str]:
     errors: list[str] = []
@@ -19,6 +21,7 @@ def validate(validator: str, packager: str, workflow: str) -> list[str]:
         "Read-HeldStrictUtf8Metadata",
         "Assert-HeldMetadataBinding -Held $held",
         "ExpectedSourceCommit -notmatch '^[0-9A-Fa-f]{40}$'",
+        f"$strictReleaseTagPattern = '{STRICT_RELEASE_TAG_PATTERN}'",
         "([string]$metadata.gitCommit).Trim()",
         "does not match expected source commit",
         "('v' + $productVersion)",
@@ -35,7 +38,8 @@ def validate(validator: str, packager: str, workflow: str) -> list[str]:
     for token in (
         "assert-v25-release-package-identity.ps1",
         "-MetadataPath $metadataPath -ExpectedSourceCommit $headBefore",
-        "Admitted V25 package source commit",
+        "PACKAGE-METADATA gitCommit",
+        "does not match the exact clean package source HEAD",
     ):
         if token not in packager:
             errors.append(f"V25 release packager missing canonical identity-validator token: {token}")
@@ -63,6 +67,7 @@ if errors:
 mutations = {
     "validator loses held read sharing": (VALIDATOR.replace("[IO.FileShare]::Read\n    )", "[IO.FileShare]::ReadWrite\n    )", 1), PACKAGER, WORKFLOW),
     "validator loses strict UTF8": (VALIDATOR.replace("[Text.UTF8Encoding]::new($false, $true)", "[Text.UTF8Encoding]::new($false)", 1), PACKAGER, WORKFLOW),
+    "validator loses strict tag grammar": (VALIDATOR.replace(STRICT_RELEASE_TAG_PATTERN, "^v.+$", 1), PACKAGER, WORKFLOW),
     "validator ignores metadata source": (VALIDATOR.replace("([string]$metadata.gitCommit).Trim()", "([string]$ExpectedSourceCommit).Trim()", 1), PACKAGER, WORKFLOW),
     "packager bypasses validator": (VALIDATOR, PACKAGER.replace("assert-v25-release-package-identity.ps1", "legacy-v25-metadata-read.ps1", 1), WORKFLOW),
     "workflow omits exact source binding": (VALIDATOR, PACKAGER, WORKFLOW.replace("-ExpectedSourceCommit $env:GITHUB_SHA", "-ExpectedSourceCommit $env:RELEASE_TAG", 1)),
