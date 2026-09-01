@@ -72,9 +72,9 @@ namespace QS3D.Core.Export
         {
             var document = LoadXml(entry);
             XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-            var rows = MaterializeWorksheetRowsBounded(document.Descendants(ns + "row"), MaxRows);
-            var header = FindUniqueRow(rows, 1);
-            var target = FindUniqueRow(rows, rowNumber);
+            var selectedRows = SelectBusinessRowsBounded(document.Descendants(ns + "row"), rowNumber, MaxRows);
+            var header = selectedRows.Item1;
+            var target = selectedRows.Item2;
             var headerCells = ReadCells(header, ns, sharedStrings, out var headerFormulaColumns);
             var traceColumns = headerCells.Where(pair => string.Equals(pair.Value, QsCustomerWorkbookExporter.TraceHeader, StringComparison.OrdinalIgnoreCase))
                                           .Select(pair => pair.Key).ToList();
@@ -147,6 +147,49 @@ namespace QS3D.Core.Export
             if (!string.Equals(traceKey, expectedTraceKey, StringComparison.Ordinal))
                 throw new InvalidDataException("Customer workbook TRACE_KEY does not match canonical TRACE_MODEL identity provenance.");
             return new QsCustomerWorkbookTrace(worksheetName, rowNumber, traceKey, elementIds, handles, fingerprint);
+        }
+
+        private static Tuple<XElement, XElement> SelectBusinessRowsBounded(IEnumerable<XElement> source, int targetRowNumber, int maximum)
+        {
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            if (targetRowNumber < 2 || targetRowNumber > MaxRows)
+                throw new ArgumentOutOfRangeException(nameof(targetRowNumber), "Customer workbook data row must be between 2 and " + MaxRows + ".");
+            if (maximum < 0 || maximum > MaxRows)
+                throw new ArgumentOutOfRangeException(nameof(maximum), "Customer workbook worksheet row limit is invalid.");
+
+            XElement? header = null;
+            XElement? target = null;
+            var retainedCount = 0;
+            using (var enumerator = source.GetEnumerator())
+            {
+                while (enumerator.MoveNext())
+                {
+                    if (retainedCount == maximum)
+                        throw new InvalidDataException("Customer workbook worksheet row count exceeds the supported limit of " + maximum.ToString(CultureInfo.InvariantCulture) + ".");
+                    var row = enumerator.Current;
+                    if (row == null)
+                        throw new InvalidDataException("Customer workbook worksheet contains a null row element.");
+                    retainedCount++;
+
+                    var parsedRow = ParseRow(row);
+                    if (parsedRow == int.MaxValue)
+                        throw new InvalidDataException("Customer workbook contains an invalid row number.");
+                    if (parsedRow == 1)
+                    {
+                        if (header != null) throw new InvalidDataException("Customer workbook row 1 is missing or duplicated.");
+                        header = row;
+                    }
+                    if (parsedRow == targetRowNumber)
+                    {
+                        if (target != null) throw new InvalidDataException("Customer workbook row " + targetRowNumber + " is missing or duplicated.");
+                        target = row;
+                    }
+                }
+            }
+
+            if (header == null) throw new InvalidDataException("Customer workbook row 1 is missing or duplicated.");
+            if (target == null) throw new InvalidDataException("Customer workbook row " + targetRowNumber + " is missing or duplicated.");
+            return Tuple.Create(header, target);
         }
 
         private static IReadOnlyList<XElement> MaterializeWorksheetRowsBounded(IEnumerable<XElement> source, int maximum)
