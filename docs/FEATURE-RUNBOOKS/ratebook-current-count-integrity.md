@@ -2,6 +2,7 @@
 
 Lane-Key: `issue-5187`
 Reservation-Protocol: `v2`
+Canonical carrier: `agent/longnguyentuan2107-maker-c02-20260901-10/issue-5187-ratebook-current-count`
 Ownership-Key: `core.cost.ratebook-current-count-integrity-v1`
 
 ## Scope
