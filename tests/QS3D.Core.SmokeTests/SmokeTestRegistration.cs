@@ -52,6 +52,7 @@ namespace QS3D.Core.SmokeTests
             QuantityRevisionProjectIdentitySmoke.Run();
             PersistenceHardeningSmoke.Run();
             QsdbStructuralCardinalitySmoke.Run();
+            QsdbPrimaryIdentityCanonicalitySmoke.Run();
             LicenseVerifierSmoke.Run();
             AdvancedDomainSmoke.Run();
             EstimatingPortfolioCountIntegritySmoke.Run();
