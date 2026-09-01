@@ -119,6 +119,7 @@ namespace QS3D.Core.Export
         private const long MaxXmlCharacters = 64L * 1024L * 1024L;
         private const int MaxColumns = 16384;
         private const int MaxRows = 1048576;
+        private const int MaxHeaderRows = 10;
         private const string UnsupportedCellSentinel = "#QS3D_XLSX_UNSUPPORTED!";
         private const string WorksheetRelationshipTypeHttp = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
         private const string WorksheetRelationshipTypeHttps = "https://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
@@ -143,18 +144,28 @@ namespace QS3D.Core.Export
                 var sharedStrings = ReadSharedStrings(archive);
                 var sheet = LoadXml(sheetEntry);
                 XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-                var rows = sheet.Descendants(ns + "row").ToList();
-                foreach (var row in rows)
+                var headerRows = new List<XElement>(MaxHeaderRows);
+                XElement? target = null;
+                var targetMatches = 0;
+                foreach (var row in sheet.Descendants(ns + "row"))
                 {
                     var declaredRowText = (string?)row.Attribute("r");
                     if (declaredRowText == null) continue;
                     var declaredRow = ParsePositiveInt(declaredRowText);
                     if (declaredRow == int.MaxValue || declaredRow > MaxRows)
                         throw new InvalidDataException("Excel worksheet row number is invalid or exceeds the XLSX row limit.");
+                    if (declaredRow == rowNumber)
+                    {
+                        targetMatches++;
+                        if (target == null) target = row;
+                    }
+                    else if (declaredRow < rowNumber && headerRows.Count < MaxHeaderRows)
+                    {
+                        headerRows.Add(row);
+                    }
                 }
-                var targets = rows.Where(x => ParsePositiveInt((string?)x.Attribute("r")) == rowNumber).ToList();
-                if (targets.Count > 1) throw new InvalidDataException("Excel worksheet contains duplicate row number " + rowNumber + ".");
-                var target = targets.SingleOrDefault();
+                if (targetMatches > 1)
+                    throw new InvalidDataException("Excel worksheet contains duplicate row number " + rowNumber + ".");
                 if (target == null)
                     return new XlsxHandleLookupResult(Array.Empty<string>(), Array.Empty<string>(), string.Empty, false, worksheet.Name, false, worksheet.IsEd2Detail);
 
@@ -164,7 +175,7 @@ namespace QS3D.Core.Export
                 var elementIdColumns = new HashSet<int>();
                 var fingerprintColumns = new HashSet<int>();
                 var formulaIdentityHeaderColumns = new HashSet<int>();
-                foreach (var headerRow in rows.Where(x => ParsePositiveInt((string?)x.Attribute("r")) < rowNumber).Take(10))
+                foreach (var headerRow in headerRows)
                 {
                     var headerCells = ReadCells(headerRow, ns, sharedStrings, out var headerFormulaColumns);
                     foreach (var cell in headerCells)
@@ -261,11 +272,11 @@ namespace QS3D.Core.Export
                     throw new InvalidDataException("Excel workbook sheet relationship is not a worksheet relationship.");
                 if (string.Equals((string?)matches[0].Attribute("TargetMode"), "External", StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("External Excel worksheet relationships are not supported.");
-                var target = ((string?)matches[0].Attribute("Target") ?? string.Empty).Replace('\\', '/').TrimStart('/');
-                if (target.StartsWith("xl/", StringComparison.OrdinalIgnoreCase)) target = target.Substring(3);
-                if (target.IndexOf("..", StringComparison.Ordinal) >= 0) throw new InvalidDataException("Excel worksheet relationship target is invalid.");
-                var entry = GetUniqueEntry(archive, "xl/" + target);
-                if (entry == null) throw new InvalidDataException("Excel worksheet part is missing: " + target + ".");
+                var targetPath = ((string?)matches[0].Attribute("Target") ?? string.Empty).Replace('\\', '/').TrimStart('/');
+                if (targetPath.StartsWith("xl/", StringComparison.OrdinalIgnoreCase)) targetPath = targetPath.Substring(3);
+                if (targetPath.IndexOf("..", StringComparison.Ordinal) >= 0) throw new InvalidDataException("Excel worksheet relationship target is invalid.");
+                var entry = GetUniqueEntry(archive, "xl/" + targetPath);
+                if (entry == null) throw new InvalidDataException("Excel worksheet part is missing: " + targetPath + ".");
                 var name = ((string?)selected.Attribute("name") ?? string.Empty).Trim();
                 return new WorksheetReference(entry, name, string.Equals(name, "CHI_TIET", StringComparison.OrdinalIgnoreCase));
             }
