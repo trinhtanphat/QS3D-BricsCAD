@@ -47,11 +47,13 @@ namespace QS3D.Core.SmokeTests
             CustomerWorkbookProvenanceIdentitySmoke.Run();
             Qs3dReviewWorkbookQtoIdentitySmoke.Run();
             QsWorkbookTemplateEngineSmoke.Run();
+            QsWorkbookTemplatePackageBoundSmoke.Run();
             P0UnifiedExportAcceptanceSmoke.Run();
             QuantityReportRevisionReviewSmoke.Run();
             QuantityRevisionProjectIdentitySmoke.Run();
             PersistenceHardeningSmoke.Run();
             QsdbStructuralCardinalitySmoke.Run();
+            QsdbPrimaryIdentityCanonicalitySmoke.Run();
             LicenseVerifierSmoke.Run();
             AdvancedDomainSmoke.Run();
             EstimatingPortfolioCountIntegritySmoke.Run();

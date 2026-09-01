@@ -9,6 +9,7 @@ namespace QS3D.Core.Services
     public static class SemanticHandleOwnershipResolver
     {
         private const int MaxSelectedHandleInputCount = 10000;
+        private const int MaxBoundarySourceHandleCount = 5000;
 
         public static ProjectElement? ResolveUniqueSourceOwner(ProjectState project, string sourceHandle)
         {
@@ -109,7 +110,7 @@ namespace QS3D.Core.Services
                     element.Properties.TryGetValue(AutoRoomLifecycle.BoundarySourceHandlesKey, out var boundaryHandles) &&
                     !string.IsNullOrWhiteSpace(boundaryHandles))
                 {
-                    foreach (var handle in boundaryHandles.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                    foreach (var handle in GetCanonicalBoundarySourceHandles(element, boundaryHandles))
                         Add(handle, element, AutoRoomLifecycle.BoundarySourceHandlesKey, selected, owners, channels);
                 }
             }
@@ -134,6 +135,24 @@ namespace QS3D.Core.Services
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList()
                 .AsReadOnly();
+        }
+
+        private static IReadOnlyList<string> GetCanonicalBoundarySourceHandles(ProjectElement element, string boundaryHandles)
+        {
+            var tokens = boundaryHandles.Split(
+                new[] { ';' },
+                MaxBoundarySourceHandleCount + 1,
+                StringSplitOptions.None);
+            if (tokens.Length > MaxBoundarySourceHandleCount)
+                throw new InvalidOperationException(
+                    "Semantic Auto Room boundary source handles cannot exceed " + MaxBoundarySourceHandleCount + " entries.");
+
+            var canonical = AutoRoomLifecycle.NormalizeSourceHandles(tokens);
+            if (!string.Equals(boundaryHandles, canonical, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "Semantic element " + element.Id + " contains non-canonical " + AutoRoomLifecycle.BoundarySourceHandlesKey +
+                    ". Repair Auto Room boundary ownership before semantic selection.");
+            return Array.AsReadOnly(tokens);
         }
 
         private static HashSet<string> MaterializeSelectedHandles(IEnumerable<string> selectedHandles)
