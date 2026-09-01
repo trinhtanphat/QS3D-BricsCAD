@@ -16,7 +16,7 @@ The command adapter now:
 - reports operation failure using stable text without caught exception detail;
 - enters `FinalizeUi` only after `SourceReconcileService.ReconcileSelection` has returned;
 - independently fail-isolates Palette refresh, editor Regen, Palette status and normal Editor output;
-- emits only a stable post-commit warning when any UI synchronization cell fails;
+- emits only a stable post-reconcile warning when any UI synchronization cell fails; the warning says the reconcile call completed rather than claiming a CAD commit, because the no-selection path is a valid no-op;
 - keeps Palette/Editor failure reporting best-effort and non-escaping.
 
 Deterministic remote acceptance includes `scripts/preflight-source-reconcile.py` and the auto-discovered `scripts/preflight-source-reconcile-failure-redaction.py`, followed by fresh exact-head protected `preflight` + `core`.
@@ -36,7 +36,7 @@ Execute only against the exact candidate authorized for local qualification; rec
 | SR07 | Change selected target identity between preview and bind | Target-set freshness rejection occurs before mutation |
 | SR08 | Reconcile source with generated host/rebar/curtain dependents | Owned generated output invalidates/removes according to existing source-reconcile contract; no implicit rebuild |
 | SR09 | Force controlled Palette refresh failure after successful reconcile | Reconcile remains committed; later UI cells still run best-effort; stable warning only |
-| SR10 | Force controlled Editor Regen/status/output failure cells independently | No UI failure escapes or exposes host exception detail; stable post-commit warning only |
+| SR10 | Force controlled Editor Regen/status/output failure cells independently, including the no-selection no-op | No UI failure escapes or exposes host exception detail; warning remains truthful and does not claim a commit for the no-op path |
 | SR11 | Run explicit rebuild workflow after successful reconcile | New native output is produced only by the explicit build workflow, not by sync itself |
 | SR12 | QSAVE, close, fresh-process reopen and inspect/reconcile again | Semantic/native ownership persists; cleanup leaves no owned BricsCAD process/residue |
 
