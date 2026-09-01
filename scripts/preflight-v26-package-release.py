@@ -53,6 +53,8 @@ verify = read("scripts/verify-v26-signatures.ps1")
 finalize = read("scripts/finalize-v26-signed-package.ps1")
 manifest = read("scripts/new-v26-update-manifest.ps1")
 workflow = read(".github/workflows/release-v26.yml")
+publisher = read("scripts/publish-v26-release.ps1")
+release_surface = workflow + "\n" + publisher
 release_asset_verifier = read("scripts/verify-v26-held-file.ps1")
 host_safety = read("scripts/assert-v26-host-reference-safety.ps1")
 v26_project = read("src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj")
@@ -237,12 +239,12 @@ for token in (
     "Uploaded V26 release asset SHA-256 mismatch",
     "Draft V26 release contains unexpected assets",
 ):
-    require(workflow, token, "V26 release workflow")
+    require(release_surface, token, "V26 release surface")
 for token in (
     "Get-FileHash -LiteralPath $localAsset",
     "Get-FileHash -LiteralPath $downloadedAsset",
 ):
-    forbid(workflow, token, "V26 release workflow")
+    forbid(release_surface, token, "V26 release surface")
 
 for token in (
     "Assert-NoReparseAncestor",
@@ -264,23 +266,23 @@ for token in (
 ):
     require(host_safety, token, "V26 host-reference safety helper")
 
-if workflow.count("Assert-RemoteReleaseTagTargetsWorkflowSha") < 3:
-    errors.append("V26 release workflow must define and invoke remote tag/SHA verification both before and after asset verification")
+if release_surface.count("Assert-RemoteReleaseTagTargetsWorkflowSha") < 3:
+    errors.append("V26 release surface must define and invoke remote tag/SHA verification both before and after asset verification")
 
-release_create = workflow.find('$release = Invoke-RestMethod -Method Post')
-first_tag_check = workflow.find('Assert-RemoteReleaseTagTargetsWorkflowSha', release_create + 1)
-held_local_hash = workflow.find('verify-v26-held-file.ps1 -Operation Hash -Path $localAsset', first_tag_check + 1)
-held_remote_hash = workflow.find('verify-v26-held-file.ps1 -Operation Hash -Path $downloadedAsset', held_local_hash + 1)
-asset_hash_check = workflow.find('Uploaded V26 release asset SHA-256 mismatch', held_remote_hash + 1)
-second_tag_check = workflow.find('Assert-RemoteReleaseTagTargetsWorkflowSha', asset_hash_check + 1)
-publish_release = workflow.find('$published = Invoke-RestMethod -Method Patch', second_tag_check + 1)
+release_create = release_surface.find('$release = Invoke-RestMethod -Method Post')
+first_tag_check = release_surface.find('Assert-RemoteReleaseTagTargetsWorkflowSha', release_create + 1)
+held_local_hash = release_surface.find('verify-v26-held-file.ps1 -Operation Hash -Path $localAsset', first_tag_check + 1)
+held_remote_hash = release_surface.find('verify-v26-held-file.ps1 -Operation Hash -Path $downloadedAsset', held_local_hash + 1)
+asset_hash_check = release_surface.find('Uploaded V26 release asset SHA-256 mismatch', held_remote_hash + 1)
+second_tag_check = release_surface.find('Assert-RemoteReleaseTagTargetsWorkflowSha', asset_hash_check + 1)
+publish_release = release_surface.find('$published = Invoke-RestMethod -Method Patch', second_tag_check + 1)
 if min(release_create, first_tag_check, held_local_hash, held_remote_hash, asset_hash_check, second_tag_check, publish_release) < 0 or not (
     release_create < first_tag_check < held_local_hash < held_remote_hash < asset_hash_check < second_tag_check < publish_release
 ):
     errors.append("V26 release publication order must be draft create -> tag/SHA check -> held local/remote asset SHA-256 -> tag/SHA recheck -> publish")
 
 for token in ("QS3D-BricsCAD-V25", "BRICSCAD_V25_DIR", "bricscad-v25", "QS3D.BricsCAD.V25.dll"):
-    forbid(workflow, token, "V26 release workflow")
+    forbid(release_surface, token, "V26 release surface")
 for trigger in ("\n  push:", "\n  pull_request:", "\n  schedule:", "\n  workflow_run:"):
     forbid(workflow, trigger, "V26 release workflow")
 
@@ -311,4 +313,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: V26 packaging preserves current hardened V25 transaction/security logic under guarded major transformation; .NET 8 update networking is HttpClient-only; discovery is manifest-channel isolated; publication revalidates remote tag identity and hashes one admitted held local/remote asset generation before publish.")
+print("PASS: V26 packaging preserves current hardened V25 transaction/security logic under guarded major transformation; .NET 8 update networking is HttpClient-only; discovery is manifest-channel isolated; split publication revalidates remote tag identity and hashes one admitted held local/remote asset generation before publish while self-hosted qualification remains read-only.")

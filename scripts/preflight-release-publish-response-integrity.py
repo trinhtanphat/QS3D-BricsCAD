@@ -3,7 +3,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 v25 = (root / ".github" / "workflows" / "release-v25.yml").read_text(encoding="utf-8")
-v26 = (root / ".github" / "workflows" / "release-v26.yml").read_text(encoding="utf-8")
+v26 = (root / "scripts" / "publish-v26-release.ps1").read_text(encoding="utf-8")
 
 
 def publish_success_scope(workflow: str, version: str) -> tuple[int, int, str]:
