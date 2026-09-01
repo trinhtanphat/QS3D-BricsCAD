@@ -67,6 +67,7 @@ namespace QS3D.Core.Export
                         throw new InvalidOperationException("Rebar procurement CSV row Count grew beyond the admitted Count during serialization.");
 
                     var row = enumerator.Current;
+                    ValidateKnownCount(rows, admittedCount);
                     rowCount++;
                     if (row == null) throw new ArgumentException("Rebar procurement CSV cannot contain a null row.", nameof(rows));
                     sb.Append(Q(row.AlgorithmId)).Append(',')

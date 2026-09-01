@@ -30,6 +30,8 @@ namespace QS3D.Core.Cost
             {
                 while (enumerator.MoveNext())
                 {
+                    if (hasKnownCount)
+                        RequireStableKnownCount(lines, knownCount);
                     if (hasKnownCount && index >= knownCount)
                         throw new InvalidOperationException("Frozen estimate projection source Count does not match source traversal.");
                     if (index >= MaxLines)
@@ -42,6 +44,8 @@ namespace QS3D.Core.Cost
 
                     rows.Add(FrozenEstimateProjectionRow.From(line));
                     index++;
+                    if (hasKnownCount)
+                        RequireStableKnownCount(lines, knownCount);
                 }
             }
 

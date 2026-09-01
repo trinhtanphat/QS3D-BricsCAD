@@ -13,6 +13,9 @@ namespace QS3D.Core.SmokeTests
             HoleClippingStaysWithinOwningIsland();
             InputOrderDoesNotChangeCanonicalRegionOrder();
             DuplicateIdsFailClosed();
+            MalformedUnicodeIdsFailClosed();
+            XmlInvalidIdsFailClosed();
+            SupplementaryUnicodeIdsRemainCanonical();
             TouchingIslandsFailClosed();
             OverlappingIslandsFailClosed();
             NestedOuterIslandsFailClosed();
@@ -81,6 +84,39 @@ namespace QS3D.Core.SmokeTests
                 new PolygonRegionSeed2("A", Square(0, 0, 10, 10)),
                 new PolygonRegionSeed2("a", Square(20, 0, 30, 10))
             }));
+        }
+
+        private static void MalformedUnicodeIdsFailClosed()
+        {
+            Throws<ArgumentException>(() => PolygonRegionSetTopology.NormalizeAndValidate(new[]
+            {
+                new PolygonRegionSeed2("region-\uD800", Square(0, 0, 10, 10))
+            }));
+            Throws<ArgumentException>(() => PolygonRegionSetTopology.NormalizeAndValidate(new[]
+            {
+                new PolygonRegionSeed2("region-\uDC00", Square(0, 0, 10, 10))
+            }));
+        }
+
+        private static void XmlInvalidIdsFailClosed()
+        {
+            Throws<ArgumentException>(() => PolygonRegionSetTopology.NormalizeAndValidate(new[]
+            {
+                new PolygonRegionSeed2("region-\uFFFE", Square(0, 0, 10, 10))
+            }));
+        }
+
+        private static void SupplementaryUnicodeIdsRemainCanonical()
+        {
+            const string expected = "region-\U0001F6E0";
+            var topology = PolygonRegionSetTopology.NormalizeAndValidate(new[]
+            {
+                new PolygonRegionSeed2("  " + expected + "  ", Square(0, 0, 10, 10))
+            });
+
+            Equal(expected, topology.Islands.Single().RegionId);
+            var segment = PolygonRegionSetTopology.Clip(topology, PolygonScanAxis.Horizontal, 5).Single();
+            Equal(expected, segment.RegionId);
         }
 
         private static void TouchingIslandsFailClosed()
