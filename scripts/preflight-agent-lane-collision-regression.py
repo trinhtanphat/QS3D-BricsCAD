@@ -197,7 +197,12 @@ def main():
         "dependabot[bot]",
     )
 
+    # Current-state fixtures are intentionally present in open_prs so the ordinary
+    # lane/duplicate tests exercise open carriers rather than the terminal-PR bypass.
     peers = [
+        {"number": 99, "body": "", "head": {"ref": "agent/opaque/task"}},
+        {"number": 100, "body": "", "head": {"ref": "agent/opaque-20260828/issue-2305-infer-lane"}},
+        {"number": 101, "body": "", "head": {"ref": "integration/batch-a"}},
         {"number": 10, "body": "Lane-Key: issue-2305", "head": {"ref": "agent/a/task"}},
         {"number": 11, "body": "Issue: #2306", "head": {"ref": "agent/b/task"}},
         {"number": 12, "body": "Fixes #2305", "head": {"ref": "agent/c/task"}},
