@@ -18,7 +18,7 @@ Recovery always goes back through `Start(SavedTunnelId, string.Empty, out messag
 
 ## Stop semantics
 
-An explicit Stop disables the watchdog before stopping the tunnel process and persists autostart OFF. Host shutdown also disables the in-process watchdog before terminating the child, while preserving the existing persisted autostart choice for the next normal launch. Recovery re-checks the selected provider/autostart/configuration before restart, so revocation or a provider switch fails closed instead of resurrecting the OpenAI tunnel.
+An explicit Stop disables the watchdog before stopping the tunnel process and persists autostart OFF. The host shutdown path also disables the in-process watchdog before terminating the child, while preserving the existing persisted autostart choice for the next normal launch. Recovery re-checks the selected provider/autostart/configuration before restart, so revocation or a provider switch fails closed instead of resurrecting the OpenAI tunnel.
 
 ## Validation
 
