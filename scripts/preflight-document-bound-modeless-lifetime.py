@@ -177,6 +177,39 @@ if not errors:
                     errors.append(key + " launcher must own pending before host show and publish only after loaded/exact-owner proof")
             except ValueError as exc:
                 errors.append(key + " launcher publication ordering marker missing: " + str(exc))
+        elif key == "materials":
+            for needle in (
+                "private static PublishedManager? _pending;",
+                "private static PublishedManager? _published;",
+                "candidate = new PublishedManager(window, document);",
+                "var reserved = candidate;",
+                "_pending = reserved;",
+                "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
+                "if (!window.IsLoaded)",
+                "if (!ReferenceEquals(_pending, reserved))",
+                "_pending = null;",
+                "_published = reserved;",
+                "if (candidate != null && ReferenceEquals(_pending, candidate))",
+                "if (ReferenceEquals(_pending, reserved)) _pending = null;",
+                "if (ReferenceEquals(_published, reserved)) _published = null;",
+            ):
+                if needle not in source:
+                    errors.append(key + " launcher missing pending-first exact publication lifecycle token: " + needle)
+            try:
+                construct = source.index(constructor)
+                candidate = source.index("candidate = new PublishedManager(window, document);", construct)
+                owner = source.index("var reserved = candidate;", candidate)
+                pending = source.index("_pending = reserved;", owner)
+                closed = source.index("window.Closed +=", pending)
+                show = source.index("Application.ShowModelessWindow(IntPtr.Zero, window, true);", closed)
+                loaded = source.index("if (!window.IsLoaded)", show)
+                exact = source.index("if (!ReferenceEquals(_pending, reserved))", loaded)
+                clear = source.index("_pending = null;", exact)
+                publish = source.index("_published = reserved;", clear)
+                if not (construct < candidate < owner < pending < closed < show < loaded < exact < clear < publish):
+                    errors.append("materials launcher must reserve exact pending owner before host show and publish only after loaded/exact-owner proof")
+            except ValueError as exc:
+                errors.append("materials launcher publication ordering marker missing: " + str(exc))
         elif key == "curtain_hub":
             for needle in (
                 "private static CurtainWallWindow? _pendingWindow;",
@@ -235,4 +268,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
 
-print("PASS: document-bound review/health/BQ/BBS/schedule/manager windows keep one source-DWG registration; Family/Level/Zone managers and Curtain Wall Hub are pending-first and loaded/exact-owner proven before publication; Revision retains only stable native database identity for callbacks, native reactors stay centralized, and dynamic hubs remain active-document based.")
+print("PASS: document-bound review/health/BQ/BBS/schedule/manager windows keep one source-DWG registration; Family/Level/Zone/Material managers and Curtain Wall Hub are pending-first and loaded/exact-owner proven before publication; Revision retains only stable native database identity for callbacks, native reactors stay centralized, and dynamic hubs remain active-document based.")
