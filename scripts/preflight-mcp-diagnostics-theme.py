@@ -10,6 +10,7 @@ DIAGNOSTICS = V25 / "McpDiagnosticHub.cs"
 THEME = V25 / "Qs3dThemeCoordinator.cs"
 ENTRY = V25 / "PluginEntry.cs"
 CAD = V25 / "McpCadAgentRuntime.cs"
+DOMAIN = V25 / "McpQs3dDomainRuntime.cs"
 
 
 def fail(message: str) -> None:
@@ -38,6 +39,7 @@ def main() -> int:
     theme = read(THEME)
     entry = read(ENTRY)
     cad = read(CAD)
+    domain = read(DOMAIN)
 
     for needle in (
         "McpCadAgentRuntime.AuditFilePath",
@@ -110,16 +112,22 @@ def main() -> int:
     ):
         require(entry, needle, "plugin lifecycle wiring")
 
-    # Preserve the existing MCP confirmation/retrieval boundary: ChatGPT requests a
-    # diagnostics snapshot or theme command via confirmed qs3d_run_command, then reads
-    # the unified JSONL through cad_audit_tail.
+    # Preserve the confirmation/retrieval boundary while following the capability split:
+    # the CAD runtime owns confirmation/audit dispatch and the QS3D-domain runtime owns
+    # QS3D command validation + SendStringToExecute business execution.
     for needle in (
-        'case "qs3d_run_command": return Mutation(args, tool, () => RunQs3dCommand(args));',
+        'case "qs3d_run_command": return Mutation(args, tool, () => McpQs3dDomainRuntime.Call(tool, args));',
         'case "cad_audit_tail": return ReadAuditTail(',
         'if (!McpTopLevelJson.ExtractBoolean(body, "confirmMutation"))',
-        'Regex.IsMatch(command, "^QS3D[A-Za-z0-9_]*$"',
     ):
-        require(cad, needle, "existing confirmed MCP bridge")
+        require(cad, needle, "confirmed MCP bridge")
+
+    for needle in (
+        "Regex.IsMatch(command, McpCadAgentRuntime.Qs3dCommandPattern",
+        'document.SendStringToExecute(command + "\\n", true, false, true);',
+        'McpCadAgentRuntime.AuditDomainMutation("qs3d_run_command"',
+    ):
+        require(domain, needle, "QS3D-domain command bridge")
 
     print("PASS unified MCP/QS3D/BricsCAD diagnostics + host-wide System/Dark/Light theme contract")
     return 0
