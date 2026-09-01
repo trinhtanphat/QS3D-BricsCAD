@@ -41,17 +41,21 @@ namespace QS3D.Core.SmokeTests
 
         private static void TokenUnicodeScalarContractIsExplicit()
         {
-            ThrowsMessage<ArgumentException>(
+            ThrowsArgument(
                 () => new TakeoffResult("H-\uD800-X", TakeoffKind.Count, 1d, "ea"),
+                "handle",
                 "Takeoff handle must contain valid Unicode scalar text.");
-            ThrowsMessage<ArgumentException>(
+            ThrowsArgument(
                 () => new TakeoffResult("H-\uDC00-X", TakeoffKind.Count, 1d, "ea"),
+                "handle",
                 "Takeoff handle must contain valid Unicode scalar text.");
-            ThrowsMessage<ArgumentException>(
+            ThrowsArgument(
                 () => new TakeoffResult("H1", TakeoffKind.Count, 1d, "m\uD800"),
+                "unit",
                 "Takeoff unit must contain valid Unicode scalar text.");
-            ThrowsMessage<ArgumentException>(
+            ThrowsArgument(
                 () => new TakeoffResult("H1", TakeoffKind.Count, 1d, "m\uDC00"),
+                "unit",
                 "Takeoff unit must contain valid Unicode scalar text.");
 
             var validPair = new TakeoffResult("H-\U0001F680", TakeoffKind.Count, 1d, "m\U0001D41A");
@@ -94,23 +98,25 @@ namespace QS3D.Core.SmokeTests
             throw new InvalidOperationException("Expected " + typeof(TException).Name + ".");
         }
 
-        private static void ThrowsMessage<TException>(Action action, string expectedMessage) where TException : Exception
+        private static void ThrowsArgument(Action action, string expectedParameterName, string expectedMessagePrefix)
         {
             try
             {
                 action();
             }
-            catch (TException ex)
+            catch (ArgumentException ex)
             {
-                if (!string.Equals(ex.Message.Split(new[] { Environment.NewLine }, StringSplitOptions.None)[0], expectedMessage, StringComparison.Ordinal))
-                    throw new InvalidOperationException("Expected diagnostic '" + expectedMessage + "' but got '" + ex.Message + "'.", ex);
+                if (!string.Equals(ex.ParamName, expectedParameterName, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Expected parameter '" + expectedParameterName + "' but got '" + ex.ParamName + "'.", ex);
+                if (!ex.Message.StartsWith(expectedMessagePrefix, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Expected diagnostic prefix '" + expectedMessagePrefix + "' but got '" + ex.Message + "'.", ex);
                 return;
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException("Expected " + typeof(TException).Name + " but got " + ex.GetType().Name + ".", ex);
+                throw new InvalidOperationException("Expected ArgumentException but got " + ex.GetType().Name + ".", ex);
             }
-            throw new InvalidOperationException("Expected " + typeof(TException).Name + ".");
+            throw new InvalidOperationException("Expected ArgumentException.");
         }
     }
 
