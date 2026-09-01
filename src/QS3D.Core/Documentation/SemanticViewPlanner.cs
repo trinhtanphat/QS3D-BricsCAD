@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using QS3D.Core.Domain;
@@ -10,6 +11,97 @@ namespace QS3D.Core.Documentation
         Model,
         Plan,
         Schedule
+    }
+
+    internal static class SemanticViewEnumerableContract
+    {
+        internal static IReadOnlyList<T> SnapshotBounded<T>(
+            IEnumerable<T> values,
+            int maximumCount,
+            string capacityMessage,
+            string countChangedMessage)
+        {
+            var hasKnownCount = TryGetKnownCount(values, countChangedMessage, out var knownCount);
+            if (hasKnownCount && knownCount > maximumCount)
+                throw new InvalidOperationException(capacityMessage);
+
+            var result = new List<T>(Math.Min(maximumCount, hasKnownCount ? knownCount : 256));
+            var observedCount = 0;
+            using (var enumerator = values.GetEnumerator())
+            {
+                while (true)
+                {
+                    if (hasKnownCount)
+                        RequireStableKnownCount(values, knownCount, countChangedMessage);
+
+                    var moved = enumerator.MoveNext();
+
+                    if (hasKnownCount)
+                        RequireStableKnownCount(values, knownCount, countChangedMessage);
+                    if (!moved)
+                        break;
+                    if (hasKnownCount && observedCount >= knownCount)
+                        throw new InvalidOperationException(countChangedMessage);
+                    if (observedCount >= maximumCount)
+                        throw new InvalidOperationException(capacityMessage);
+
+                    var item = enumerator.Current;
+
+                    if (hasKnownCount)
+                        RequireStableKnownCount(values, knownCount, countChangedMessage);
+
+                    result.Add(item);
+                    observedCount++;
+                }
+            }
+
+            if (hasKnownCount && observedCount != knownCount)
+                throw new InvalidOperationException(countChangedMessage);
+            if (hasKnownCount)
+                RequireStableKnownCount(values, knownCount, countChangedMessage);
+
+            return result.AsReadOnly();
+        }
+
+        private static void RequireStableKnownCount<T>(IEnumerable<T> values, int knownCount, string countChangedMessage)
+        {
+            if (!TryGetKnownCount(values, countChangedMessage, out var currentKnownCount) || currentKnownCount != knownCount)
+                throw new InvalidOperationException(countChangedMessage);
+        }
+
+        private static bool TryGetKnownCount<T>(IEnumerable<T> values, string countChangedMessage, out int count)
+        {
+            var hasKnownCount = false;
+            var firstKnownCount = 0;
+            var maximumKnownCount = 0;
+
+            void Observe(int candidate)
+            {
+                if (candidate < 0)
+                    throw new InvalidOperationException(countChangedMessage);
+                if (!hasKnownCount)
+                {
+                    hasKnownCount = true;
+                    firstKnownCount = candidate;
+                    maximumKnownCount = candidate;
+                    return;
+                }
+                if (candidate != firstKnownCount)
+                    throw new InvalidOperationException(countChangedMessage);
+                if (candidate > maximumKnownCount)
+                    maximumKnownCount = candidate;
+            }
+
+            if (values is ICollection<T> collection)
+                Observe(collection.Count);
+            if (values is IReadOnlyCollection<T> readOnlyCollection)
+                Observe(readOnlyCollection.Count);
+            if (values is ICollection nonGenericCollection)
+                Observe(nonGenericCollection.Count);
+
+            count = maximumKnownCount;
+            return hasKnownCount;
+        }
     }
 
     public sealed class SemanticViewDefinition
@@ -46,33 +138,21 @@ namespace QS3D.Core.Documentation
         private static IReadOnlyList<ElementCategory> SnapshotCategories(IEnumerable<ElementCategory>? values)
         {
             if (values == null) return Array.Empty<ElementCategory>();
-            var result = new List<ElementCategory>(Math.Min(SemanticViewPlanner.MaxFilterIds, 256));
-            using (var enumerator = values.GetEnumerator())
-            {
-                while (enumerator.MoveNext())
-                {
-                    if (result.Count >= SemanticViewPlanner.MaxFilterIds)
-                        throw new InvalidOperationException("Semantic view supports at most " + SemanticViewPlanner.MaxFilterIds + " categories.");
-                    result.Add(enumerator.Current);
-                }
-            }
-            return result.AsReadOnly();
+            return SemanticViewEnumerableContract.SnapshotBounded(
+                values,
+                SemanticViewPlanner.MaxFilterIds,
+                "Semantic view supports at most " + SemanticViewPlanner.MaxFilterIds + " categories.",
+                "Semantic view category source Count changed during snapshot.");
         }
 
         private static IReadOnlyList<string> SnapshotFilterIds(IEnumerable<string>? values, string label)
         {
             if (values == null) return Array.Empty<string>();
-            var result = new List<string>(Math.Min(SemanticViewPlanner.MaxFilterIds, 256));
-            using (var enumerator = values.GetEnumerator())
-            {
-                while (enumerator.MoveNext())
-                {
-                    if (result.Count >= SemanticViewPlanner.MaxFilterIds)
-                        throw new InvalidOperationException("Semantic view supports at most " + SemanticViewPlanner.MaxFilterIds + " " + label + ".");
-                    result.Add(enumerator.Current);
-                }
-            }
-            return result.AsReadOnly();
+            return SemanticViewEnumerableContract.SnapshotBounded(
+                values,
+                SemanticViewPlanner.MaxFilterIds,
+                "Semantic view supports at most " + SemanticViewPlanner.MaxFilterIds + " " + label + ".",
+                "Semantic view " + label + " source Count changed during snapshot.");
         }
     }
 
@@ -234,17 +314,12 @@ namespace QS3D.Core.Documentation
 
         private static List<SemanticViewDefinition> MaterializeCatalogBounded(IEnumerable<SemanticViewDefinition> definitions)
         {
-            var result = new List<SemanticViewDefinition>(Math.Min(MaxCatalogViews, 256));
-            using (var enumerator = definitions.GetEnumerator())
-            {
-                while (enumerator.MoveNext())
-                {
-                    if (result.Count >= MaxCatalogViews)
-                        throw new InvalidOperationException("Semantic view catalog supports at most " + MaxCatalogViews + " views.");
-                    result.Add(enumerator.Current);
-                }
-            }
-            return result;
+            var snapshot = SemanticViewEnumerableContract.SnapshotBounded(
+                definitions,
+                MaxCatalogViews,
+                "Semantic view catalog supports at most " + MaxCatalogViews + " views.",
+                "Semantic view catalog source Count changed during snapshot.");
+            return new List<SemanticViewDefinition>(snapshot);
         }
 
         private sealed class ProjectStructureSnapshot

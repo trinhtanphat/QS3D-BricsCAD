@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             InitialAndNoOpAreDeterministic();
             ChangedMoveInvalidatesOldAndQueuesNewPair();
+            SameBoundsRevisionChangeInvalidatesAndRequeuesPair();
             RemovalInvalidatesWithoutRequeue();
             CaseOnlyIdentityDriftInvalidatesOldAndQueuesCurrentPair();
             DuplicateDirtyNotificationsCoalesce();
@@ -58,6 +59,27 @@ namespace QS3D.Core.SmokeTests
             Equal("B", string.Join("|", changed.Delta.ChangedOrAddedIds), "changed element not detected");
             Equal("A\u001fB", string.Join("|", changed.InvalidatedPairKeys), "old impacted pair not invalidated");
             Equal("B\u001fC", JoinPairs(changed), "new impacted pair not queued");
+        }
+
+        private static void SameBoundsRevisionChangeInvalidatesAndRequeuesPair()
+        {
+            var controller = new CoordinationIncrementalScanController();
+            controller.ApplySnapshot(2d, new[]
+            {
+                Item("A", "LIVE:surface=24;volume=8", 0, 2),
+                Item("B", "LIVE:surface=24;volume=8", 1, 3)
+            });
+
+            var changed = controller.ApplySnapshot(2d, new[]
+            {
+                Item("A", "LIVE:surface=30;volume=7", 0, 2),
+                Item("B", "LIVE:surface=24;volume=8", 1, 3)
+            });
+
+            True(!changed.IsNoOp, "same-AABB geometry revision change was treated as a no-op");
+            Equal("A", string.Join("|", changed.Delta.ChangedOrAddedIds), "revision-only geometry change was not marked dirty");
+            Equal("A\u001fB", string.Join("|", changed.InvalidatedPairKeys), "revision-only geometry change did not invalidate old exact pair state");
+            Equal("A\u001fB", JoinPairs(changed), "revision-only geometry change did not queue current narrow-phase pair");
         }
 
         private static void RemovalInvalidatesWithoutRequeue()

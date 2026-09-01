@@ -19,7 +19,9 @@ if source.is_file():
     required = (
         "var knownCount = RequireSupportedKnownPersistenceCount(values);",
         "using (var enumerator = values.GetEnumerator())",
-        "while (enumerator.MoveNext())",
+        "while (true)",
+        "RequireStableKnownPersistenceCount(values, knownCount);",
+        "if (!enumerator.MoveNext()) break;",
         "if (knownCount.HasValue && observedCount >= knownCount.Value)",
         "throw MetadataTraversalCountMismatchError(knownCount.Value, observedCount + 1);",
         "if (observedCount >= MaximumEntries)",
@@ -32,9 +34,21 @@ if source.is_file():
     )
     positions = [method.find(token) for token in required]
     if not method or any(position < 0 for position in positions) or positions != sorted(positions):
-        errors.append("ReplacePersistenceState must use MoveNext -> Count/safety guards -> Current -> semantic processing, while retaining final under-traversal validation.")
-    if "foreach (var item in values)" in method:
-        errors.append("ReplacePersistenceState must not use foreach for caller-controlled persistence traversal because foreach observes Current before the loop-body Count guard.")
+        errors.append("ReplacePersistenceState must use stable-Count -> MoveNext -> Count/safety guards -> Current -> semantic processing, while retaining final under-traversal validation.")
+
+    first_stable = method.find("RequireStableKnownPersistenceCount(values, knownCount);")
+    move_next = method.find("if (!enumerator.MoveNext()) break;", first_stable)
+    second_stable = method.find("RequireStableKnownPersistenceCount(values, knownCount);", first_stable + 1)
+    overrun = method.find("if (knownCount.HasValue && observedCount >= knownCount.Value)", second_stable)
+    cap = method.find("if (observedCount >= MaximumEntries)", overrun)
+    current = method.find("var item = enumerator.Current;", cap)
+    if min(first_stable, move_next, second_stable, overrun, cap, current) < 0 or not (
+        first_stable < move_next < second_stable < overrun < cap < current
+    ):
+        errors.append("ReplacePersistenceState must revalidate admitted Count around MoveNext and keep known-count overrun/cap rejection before caller-controlled Current.")
+
+    if "while (enumerator.MoveNext())" in method or "foreach (var item in values)" in method:
+        errors.append("ReplacePersistenceState must not use implicit advancement because Count stability and known-count overrun must be enforced before caller-controlled Current.")
 
 if smoke.is_file():
     text = smoke.read_text(encoding="utf-8")
@@ -63,4 +77,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: project metadata persistence rejects known-Count overrun before caller-controlled Current and semantic processing.")
+print("PASS: project metadata persistence rejects known-Count overrun before caller-controlled Current and semantic processing under stable Count evidence.")

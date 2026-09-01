@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 
 namespace QS3D.Core.Rebar
@@ -63,20 +64,92 @@ namespace QS3D.Core.Rebar
         {
             if (results == null) throw new ArgumentNullException(nameof(results));
 
+            var expectedCount = RequireKnownCountWithinLimit(results);
+            var observedCount = 0;
             var rows = new List<RebarProcurementSummary>();
             var groupIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var result in results)
+            using (var enumerator = results.GetEnumerator())
             {
-                if (rows.Count >= MaxResultCount)
-                    throw new ArgumentOutOfRangeException(nameof(results), "Rebar procurement report exceeds the supported result bound of " + MaxResultCount + ".");
-                if (result == null) throw new ArgumentException("Rebar procurement report cannot contain a null cutting result.", nameof(results));
-                if (!groupIds.Add(result.Demand.GroupId))
-                    throw new InvalidOperationException("Duplicate rebar procurement group identity: " + result.Demand.GroupId + ".");
-                rows.Add(new RebarProcurementSummary(result));
+                while (true)
+                {
+                    RequireStableKnownCount(results, expectedCount);
+                    if (!enumerator.MoveNext())
+                    {
+                        RequireStableKnownCount(results, expectedCount);
+                        break;
+                    }
+                    RequireStableKnownCount(results, expectedCount);
+
+                    if (expectedCount.HasValue && observedCount >= expectedCount.Value)
+                        throw CountMismatch(expectedCount.Value, observedCount + 1);
+                    if (observedCount >= MaxResultCount)
+                        throw TooManyResults();
+
+                    var result = enumerator.Current;
+                    RequireStableKnownCount(results, expectedCount);
+                    if (result == null) throw new ArgumentException("Rebar procurement report cannot contain a null cutting result.", nameof(results));
+                    if (!groupIds.Add(result.Demand.GroupId))
+                        throw new InvalidOperationException("Duplicate rebar procurement group identity: " + result.Demand.GroupId + ".");
+                    rows.Add(new RebarProcurementSummary(result));
+                    observedCount++;
+                }
             }
+
+            RequireStableKnownCount(results, expectedCount);
+            if (expectedCount.HasValue && observedCount != expectedCount.Value)
+                throw CountMismatch(expectedCount.Value, observedCount);
 
             rows.Sort(CompareRows);
             return rows.AsReadOnly();
+        }
+
+        private static int? RequireKnownCountWithinLimit(IEnumerable<RebarCuttingOptimizationResult> results)
+        {
+            var counts = new List<int>(3);
+            if (results is ICollection<RebarCuttingOptimizationResult> genericCollection)
+                counts.Add(genericCollection.Count);
+            if (results is IReadOnlyCollection<RebarCuttingOptimizationResult> readOnlyCollection)
+                counts.Add(readOnlyCollection.Count);
+            if (results is ICollection nonGenericCollection)
+                counts.Add(nonGenericCollection.Count);
+
+            if (counts.Count == 0) return null;
+
+            var expected = counts[0];
+            for (var index = 0; index < counts.Count; index++)
+            {
+                var count = counts[index];
+                if (count < 0)
+                    throw new InvalidOperationException("Rebar procurement report input exposes an invalid negative known Count.");
+                if (count > MaxResultCount)
+                    throw TooManyResults();
+                if (count != expected)
+                    throw new InvalidOperationException("Rebar procurement report input exposes conflicting known Count values.");
+            }
+            return expected;
+        }
+
+        private static void RequireStableKnownCount(
+            IEnumerable<RebarCuttingOptimizationResult> results,
+            int? expectedCount)
+        {
+            if (!expectedCount.HasValue) return;
+            var currentCount = RequireKnownCountWithinLimit(results);
+            if (!currentCount.HasValue || currentCount.Value != expectedCount.Value)
+                throw new InvalidOperationException("Rebar procurement report input known Count changed during traversal.");
+        }
+
+        private static InvalidOperationException CountMismatch(int expected, int observed)
+        {
+            return new InvalidOperationException(
+                "Rebar procurement report input known Count does not match traversal (expected " + expected + ", observed " + observed + ").");
+        }
+
+        private static ArgumentOutOfRangeException TooManyResults()
+        {
+            return new ArgumentOutOfRangeException(
+                "results",
+                "Rebar procurement report exceeds the supported result bound of " + MaxResultCount + ".");
         }
 
         private static int CompareRows(RebarProcurementSummary left, RebarProcurementSummary right)

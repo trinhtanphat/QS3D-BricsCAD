@@ -45,7 +45,7 @@ namespace QS3D.Core.SmokeTests
             var source = new CountProbeCollection<EstimatingLine>(1, 2, Line("L-1"));
             var error = Capture<InvalidOperationException>(() => new EstimatingPortfolio(source));
             Contains("known line count changed during enumeration", error.Message, "portfolio Count drift diagnostic");
-            Equal(2, source.CountReads, "portfolio Count evidence must be rebound");
+            Equal(6, source.CountReads, "portfolio Count evidence must be rebound around traversal and after Current");
             Equal(1, source.CurrentReads, "portfolio Count rebind must not reread Current");
         }
 
@@ -103,15 +103,15 @@ namespace QS3D.Core.SmokeTests
             var portfolio = new EstimatingPortfolio(lines);
             Equal(2, portfolio.Lines.Count, "honest portfolio count");
             Equal("L-1", portfolio.Lines[0].LineId, "honest portfolio deterministic order");
-            Equal(2, lines.CountReads, "honest portfolio Count rebind");
+            Equal(9, lines.CountReads, "honest portfolio traversal-wide Count evidence including post-Current rebinds");
 
             var ids = new CountProbeCollection<string>(1, 1, "L-1");
             var rates = new CountProbeCollection<UnitRateAssignment>(1, 1, new UnitRateAssignment("m3", 10m));
             var request = Request(ids, rates);
             Equal(1, request.LineIds.Count, "honest selected-line count");
             Equal(1, request.UnitRates.Count, "honest unit-rate count");
-            Equal(2, ids.CountReads, "honest selected-line Count rebind");
-            Equal(2, rates.CountReads, "honest unit-rate Count rebind");
+            Equal(6, ids.CountReads, "honest selected-line traversal-wide Count evidence including post-Current rebound");
+            Equal(6, rates.CountReads, "honest unit-rate traversal-wide Count evidence including post-Current rebound");
         }
 
         private static EstimatingLine Line(string id)

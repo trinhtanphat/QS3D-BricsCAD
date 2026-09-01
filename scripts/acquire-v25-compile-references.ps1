@@ -156,6 +156,26 @@ function Open-PinnedMsiReadLock {
     }
 }
 
+function Test-PinnedMsiGeneration {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $state = $null
+    try {
+        $state = Open-PinnedMsiReadLock -Path $Path -ExpectedSha256 $expected
+        return $true
+    }
+    catch {
+        Write-Warning "$Label failed exact held-generation admission: $($_.Exception.Message)"
+        return $false
+    }
+    finally {
+        if ($null -ne $state) { $state.Stream.Dispose() }
+    }
+}
+
 function Assert-PinnedMsiStable {
     param(
         [Parameter(Mandatory = $true)]$State,
@@ -274,21 +294,8 @@ New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
 Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $extract -Force | Out-Null
 
-function Test-PinnedMsi {
-    $item = Get-OrdinaryFileOrNull -Path $msi -Label 'BricsCAD V25 MSI'
-    if ($null -eq $item) { return $false }
-    if ($item.Length -le 1048576) { return $false }
-    $actual = (Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash.ToUpperInvariant()
-    if (-not [string]::Equals($actual, $expected, [StringComparison]::Ordinal)) {
-        Write-Warning "Discarding BricsCAD V25 MSI with unexpected SHA256: $actual"
-        Remove-Item -LiteralPath $msi -Force -ErrorAction SilentlyContinue
-        return $false
-    }
-    return $true
-}
-
 $sourceName = $null
-if (Test-PinnedMsi) {
+if (Test-PinnedMsiGeneration -Path $msi -Label 'Cached BricsCAD V25 MSI') {
     $sourceName = 'actions-cache/local-cache'
 }
 else {
@@ -302,21 +309,40 @@ else {
 
     foreach ($candidate in $candidates) {
         if ([string]::IsNullOrWhiteSpace([string]$candidate.Url)) { continue }
-        Remove-Item -LiteralPath $msi -Force -ErrorAction SilentlyContinue
+        $staging = Join-Path $cacheDir ('.qs3d-v25-msi-' + [Guid]::NewGuid().ToString('N') + '.tmp')
         try {
-            Write-Host "Downloading BricsCAD V25 installer from $($candidate.Name)..."
-            Invoke-WebRequest -Uri $candidate.Url -OutFile $msi -MaximumRedirection 10 -TimeoutSec 1200 -UseBasicParsing
-            if (-not (Test-PinnedMsi)) { continue }
+            Assert-NoExistingReparseComponent -Path $staging -Label 'MSI download staging path'
+            Write-Host "Downloading BricsCAD V25 installer from $($candidate.Name) to isolated staging..."
+            Invoke-WebRequest -Uri $candidate.Url -OutFile $staging -MaximumRedirection 10 -TimeoutSec 1200 -UseBasicParsing
+            if (-not (Test-PinnedMsiGeneration -Path $staging -Label "Staged BricsCAD V25 MSI from $($candidate.Name)")) {
+                continue
+            }
+
+            Assert-NoExistingReparseComponent -Path $msi -Label 'MsiPath before atomic publication'
+            if (Test-Path -LiteralPath $msi) {
+                $existing = Get-Item -LiteralPath $msi -Force
+                if ($existing.PSIsContainer -or ($existing.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                    throw 'Canonical MSI destination became a non-ordinary or reparse-backed entry before publication.'
+                }
+                Remove-Item -LiteralPath $msi -Force
+            }
+            [IO.File]::Move($staging, $msi)
+            if (-not (Test-PinnedMsiGeneration -Path $msi -Label 'Published BricsCAD V25 MSI')) {
+                throw 'Canonical MSI generation failed held verification immediately after publication.'
+            }
             $sourceName = $candidate.Name
             break
         }
         catch {
             Write-Warning "BricsCAD V25 installer source failed: $($candidate.Name) • $($_.Exception.Message)"
         }
+        finally {
+            Remove-Item -LiteralPath $staging -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 
-if ([string]::IsNullOrWhiteSpace($sourceName) -or -not (Test-PinnedMsi)) {
+if ([string]::IsNullOrWhiteSpace($sourceName) -or -not (Test-PinnedMsiGeneration -Path $msi -Label 'Final BricsCAD V25 MSI')) {
     throw 'Unable to obtain the exact pinned BricsCAD V25.2.10 x64 installer.'
 }
 

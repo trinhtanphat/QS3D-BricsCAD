@@ -16,6 +16,9 @@ namespace QS3D.Core.SmokeTests
         {
             KnownCountOverrunStopsBeforeCurrentAndLaterTail();
             UnderYieldFailsClosed();
+            TransientCountGrowthFailsBeforeCurrent();
+            TransientCountShrinkFailsBeforeCurrent();
+            TransientNegativeCountFailsBeforeCurrent();
             PostTraversalUniformCountDriftFailsClosed();
             PostTraversalSingleSurfaceConflictFailsClosed();
             StableCountedSourceAndStreamingSourceRemainSupported();
@@ -35,13 +38,43 @@ namespace QS3D.Core.SmokeTests
             ArgumentContains(() => Snapshot(source), "reported known count", "under-yield mismatch");
         }
 
+        private static void TransientCountGrowthFailsBeforeCurrent()
+        {
+            var source = new TransientCountMeasurements(
+                new[] { Measurement("pm-a") },
+                countByRead: read => read >= 3 ? 2 : 1);
+            ArgumentContains(() => Snapshot(source), "known count changed during traversal", "transient Count growth");
+            Equal(1, source.MoveNextCalls, "transient growth must be observed after the successful MoveNext");
+            Equal(0, source.CurrentReads, "transient growth must fail before Current");
+        }
+
+        private static void TransientCountShrinkFailsBeforeCurrent()
+        {
+            var source = new TransientCountMeasurements(
+                new[] { Measurement("pm-a"), Measurement("pm-b") },
+                countByRead: read => read >= 3 ? 1 : 2);
+            ArgumentContains(() => Snapshot(source), "known count changed during traversal", "transient Count shrink");
+            Equal(1, source.MoveNextCalls, "transient shrink must be observed after the successful MoveNext");
+            Equal(0, source.CurrentReads, "transient shrink must fail before Current");
+        }
+
+        private static void TransientNegativeCountFailsBeforeCurrent()
+        {
+            var source = new TransientCountMeasurements(
+                new[] { Measurement("pm-a") },
+                countByRead: read => read >= 3 ? -1 : 1);
+            ArgumentContains(() => Snapshot(source), "negative known count", "transient negative Count");
+            Equal(1, source.MoveNextCalls, "transient invalid Count must be observed after the successful MoveNext");
+            Equal(0, source.CurrentReads, "transient invalid Count must fail before Current");
+        }
+
         private static void PostTraversalUniformCountDriftFailsClosed()
         {
             var source = new CountedMeasurements(1, 1, 1, new[] { Measurement("pm-a") }, 2, 2, 2);
             ArgumentContains(() => Snapshot(source), "known count changed during traversal", "uniform Count drift");
-            Equal(2, source.GenericCountReads, "generic Count must be rebound");
-            Equal(2, source.ReadOnlyCountReads, "read-only Count must be rebound");
-            Equal(2, source.NonGenericCountReads, "non-generic Count must be rebound");
+            Equal(6, source.GenericCountReads, "generic Count must be rebound at every traversal boundary and publication");
+            Equal(6, source.ReadOnlyCountReads, "read-only Count must be rebound at every traversal boundary and publication");
+            Equal(6, source.NonGenericCountReads, "non-generic Count must be rebound at every traversal boundary and publication");
         }
 
         private static void PostTraversalSingleSurfaceConflictFailsClosed()
@@ -158,6 +191,57 @@ namespace QS3D.Core.SmokeTests
             void ICollection<ProgressMeasurement>.CopyTo(ProgressMeasurement[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
             bool ICollection<ProgressMeasurement>.Remove(ProgressMeasurement item) => throw new NotSupportedException();
             void ICollection.CopyTo(Array array, int index) => _items.CopyTo(array, index);
+        }
+
+        private sealed class TransientCountMeasurements : IEnumerable<ProgressMeasurement>, IReadOnlyCollection<ProgressMeasurement>
+        {
+            private readonly ProgressMeasurement[] _items;
+            private readonly Func<int, int> _countByRead;
+
+            internal TransientCountMeasurements(ProgressMeasurement[] items, Func<int, int> countByRead)
+            {
+                _items = items;
+                _countByRead = countByRead;
+            }
+
+            public int CountReads { get; private set; }
+            public int MoveNextCalls { get; private set; }
+            public int CurrentReads { get; private set; }
+            public int Count
+            {
+                get
+                {
+                    CountReads++;
+                    return _countByRead(CountReads);
+                }
+            }
+
+            public IEnumerator<ProgressMeasurement> GetEnumerator() => new Enumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private sealed class Enumerator : IEnumerator<ProgressMeasurement>
+            {
+                private readonly TransientCountMeasurements _owner;
+                private int _index = -1;
+                internal Enumerator(TransientCountMeasurements owner) { _owner = owner; }
+                public bool MoveNext()
+                {
+                    _owner.MoveNextCalls++;
+                    _index++;
+                    return _index < _owner._items.Length;
+                }
+                public ProgressMeasurement Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        return _owner._items[_index];
+                    }
+                }
+                object IEnumerator.Current => Current;
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
         }
 
         private sealed class OverrunThenThrowMeasurements : IEnumerable<ProgressMeasurement>, IReadOnlyCollection<ProgressMeasurement>

@@ -24,6 +24,48 @@ namespace QS3D.BricsCAD.V25
                 throw;
             }
 
+            try { McpPersistentUserSettings.ApplyStartupSecretsToProcessEnvironment(); }
+            catch (Exception ex) { ReportOptionalStartupFailure("MCP secure settings", ex); }
+
+            try
+            {
+                McpEmbeddedServer.Start();
+            }
+            catch (Exception ex)
+            {
+                ReportOptionalStartupFailure("MCP server", ex);
+            }
+
+            try
+            {
+                McpTransportAgentCenterAugmenter.Start();
+                McpPersistentAgentCenterAugmenter.Start();
+                McpTransportCoordinator.TryAutoStartPreferred();
+                McpPublicEndpointResolver.Resolve();
+            }
+            catch (Exception ex)
+            {
+                ReportOptionalStartupFailure("MCP transport", ex);
+            }
+
+            try
+            {
+                McpProjectRecoveryService.Start();
+            }
+            catch (Exception ex)
+            {
+                ReportOptionalStartupFailure("MCP recovery service", ex);
+            }
+
+            try
+            {
+                McpFirstRunExperience.Start();
+            }
+            catch (Exception ex)
+            {
+                ReportOptionalStartupFailure("MCP onboarding experience", ex);
+            }
+
             try
             {
                 QuantityContextMenuCoordinator.Start();
@@ -50,6 +92,13 @@ namespace QS3D.BricsCAD.V25
 
         private static void TeardownHostServices()
         {
+            TryCleanup(McpDesktopControlSession.Shutdown);
+            TryCleanup(McpFirstRunExperience.Stop);
+            TryCleanup(McpProjectRecoveryService.Stop);
+            TryCleanup(McpPersistentAgentCenterAugmenter.Stop);
+            TryCleanup(McpTransportAgentCenterAugmenter.Stop);
+            TryCleanup(McpTransportCoordinator.StopAllForHostShutdown);
+            TryCleanup(McpEmbeddedServer.Stop);
             TryCleanup(UpdateBootstrapper.Stop);
             TryCleanup(QuantityContextMenuCoordinator.Stop);
             TryCleanup(RibbonInitializationCoordinator.Stop);

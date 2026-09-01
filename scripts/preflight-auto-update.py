@@ -43,7 +43,7 @@ def main() -> int:
     require(semantic, "_prerelease.Length == 0) return 1", "stable-over-prerelease precedence")
 
     require(client, 'Repository = "trinhtanphat/QS3D-BricsCAD"', "pinned GitHub repository")
-    require(client, 'ReleasesEndpoint = "https://api.github.com/repos/trinhtanphat/QS3D-BricsCAD/releases?per_page=20"', "HTTPS GitHub Releases endpoint")
+    require(client, 'ReleasesEndpoint = "https://api.github.com/repos/trinhtanphat/QS3D-BricsCAD/releases?per_page=100"', "HTTPS GitHub Releases endpoint")
     require(client, 'UpdateManifestAssetName = "QS3D-BricsCAD-V25.update.json"', "signed update manifest asset contract")
     require(client, "release.Prerelease != version.IsPrerelease", "GitHub/tag prerelease consistency gate")
     require(client, 'candidate.Host, "github.com"', "GitHub release/asset host allowlist")

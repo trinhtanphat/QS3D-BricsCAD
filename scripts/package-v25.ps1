@@ -7,6 +7,8 @@ $zip = Join-Path $distRoot 'QS3D-BricsCAD-V25.zip'
 $required = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')
 $forbidden = @('BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')
 $sampleSource = Join-Path $root 'samples/generated'
+$script:MaxPackageTextBytes = 8MB
+$script:StrictUtf8 = [Text.UTF8Encoding]::new($false, $true)
 
 function Get-CanonicalFullPath {
     param([string]$Path, [string]$Label)
@@ -80,6 +82,86 @@ function Assert-SafeInputFile {
     return $fullPath
 }
 
+function Open-HeldPackageInput {
+    param([string]$Path, [string]$RepositoryRoot, [string]$Label)
+    $fullPath = Assert-SafeInputFile -Path $Path -RepositoryRoot $RepositoryRoot -Label $Label
+    $initial = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop
+    $stream = [IO.File]::Open($fullPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        $reboundPath = Assert-SafeInputFile -Path $fullPath -RepositoryRoot $RepositoryRoot -Label $Label
+        $rebound = Get-Item -LiteralPath $reboundPath -Force -ErrorAction Stop
+        if (-not [string]::Equals($initial.FullName, $rebound.FullName, [StringComparison]::OrdinalIgnoreCase) -or
+            $initial.Length -ne $stream.Length -or $rebound.Length -ne $stream.Length -or
+            $initial.LastWriteTimeUtc.Ticks -ne $rebound.LastWriteTimeUtc.Ticks) {
+            throw "$Label changed while its held generation was being admitted."
+        }
+        return [pscustomobject]@{
+            Path = $rebound.FullName
+            Length = [int64]$stream.Length
+            LastWriteUtcTicks = [int64]$rebound.LastWriteTimeUtc.Ticks
+            Stream = $stream
+        }
+    }
+    catch {
+        $stream.Dispose()
+        throw
+    }
+}
+
+function Assert-HeldPathBinding {
+    param([pscustomobject]$Held, [string]$RepositoryRoot, [string]$Label)
+    $path = Assert-SafeInputFile -Path $Held.Path -RepositoryRoot $RepositoryRoot -Label $Label
+    $item = Get-Item -LiteralPath $path -Force -ErrorAction Stop
+    if (-not [string]::Equals($Held.Path, $item.FullName, [StringComparison]::OrdinalIgnoreCase) -or
+        $Held.Length -ne $item.Length -or $Held.Length -ne $Held.Stream.Length -or
+        $Held.LastWriteUtcTicks -ne $item.LastWriteTimeUtc.Ticks) {
+        throw "$Label pathname no longer resolves to the held admitted generation."
+    }
+}
+
+function Read-HeldPackageText {
+    param([pscustomobject]$Held, [string]$Label)
+    if ($Held.Stream.Length -gt $script:MaxPackageTextBytes) { throw "$Label exceeds the $($script:MaxPackageTextBytes)-byte package text limit." }
+    $Held.Stream.Position = 0
+    $reader = [IO.StreamReader]::new($Held.Stream, $script:StrictUtf8, $true, 4096, $true)
+    try { return $reader.ReadToEnd() }
+    catch [Text.DecoderFallbackException] { throw "$Label is not strict UTF-8." }
+    finally {
+        $reader.Dispose()
+        $Held.Stream.Position = 0
+    }
+}
+
+function Copy-HeldPackageInput {
+    param([string]$SourcePath, [string]$DestinationPath, [string]$Label)
+    $held = Open-HeldPackageInput -Path $SourcePath -RepositoryRoot $root -Label $Label
+    try {
+        $destination = Assert-SafeOutputFileTarget -Path $DestinationPath -RepositoryRoot $root -Label ("$Label destination")
+        Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label $Label
+        $output = [IO.File]::Open($destination, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
+        try {
+            $held.Stream.Position = 0
+            $held.Stream.CopyTo($output)
+            $output.Flush($true)
+        }
+        finally { $output.Dispose() }
+        Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label $Label
+    }
+    finally { $held.Stream.Dispose() }
+}
+
+function Read-HeldSourceText {
+    param([string]$Path, [string]$Label)
+    $held = Open-HeldPackageInput -Path $Path -RepositoryRoot $root -Label $Label
+    try {
+        Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label $Label
+        $text = Read-HeldPackageText -Held $held -Label $Label
+        Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label $Label
+        return $text
+    }
+    finally { $held.Stream.Dispose() }
+}
+
 function Get-SafeSourceFiles {
     param([string]$SourceRoot, [string]$RepositoryRoot, [string]$Extension)
     $sourceRootFull = Assert-SafeInputDirectory -Path $SourceRoot -RepositoryRoot $RepositoryRoot -Label 'command source root'
@@ -100,65 +182,45 @@ function Get-SafeSourceFiles {
 
 function Assert-SafeOutputDirectoryTarget {
     param([string]$Path, [string]$RepositoryRoot, [string]$Label, [switch]$MayBeMissing)
-
     $repo = Assert-OrdinaryDirectory -Path $RepositoryRoot -Label 'repository root'
     $fullPath = Get-CanonicalFullPath -Path $Path -Label $Label
     $pathRoot = [IO.Path]::GetPathRoot($fullPath)
-    if (-not [string]::IsNullOrWhiteSpace($pathRoot) -and [string]::Equals($fullPath, $pathRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw "$Label must not be a filesystem root: $fullPath"
-    }
-    if (-not (Test-PathEqualOrContained -Path $fullPath -Container $repo) -or [string]::Equals($fullPath, $repo, [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw "$Label must stay below the repository root: $fullPath"
-    }
-
+    if (-not [string]::IsNullOrWhiteSpace($pathRoot) -and [string]::Equals($fullPath, $pathRoot, [System.StringComparison]::OrdinalIgnoreCase)) { throw "$Label must not be a filesystem root: $fullPath" }
+    if (-not (Test-PathEqualOrContained -Path $fullPath -Container $repo) -or [string]::Equals($fullPath, $repo, [System.StringComparison]::OrdinalIgnoreCase)) { throw "$Label must stay below the repository root: $fullPath" }
     $current = [IO.Path]::GetDirectoryName($fullPath)
     while (-not [string]::IsNullOrWhiteSpace($current) -and (Test-PathEqualOrContained -Path $current -Container $repo)) {
         if (Test-Path -LiteralPath $current) {
             $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
-            if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-                throw "$Label traverses a non-directory or reparse-backed ancestor: $current"
-            }
+            if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "$Label traverses a non-directory or reparse-backed ancestor: $current" }
         }
         if ([string]::Equals($current, $repo, [System.StringComparison]::OrdinalIgnoreCase)) { break }
         $parent = [IO.Path]::GetDirectoryName($current)
         if ([string]::IsNullOrWhiteSpace($parent) -or [string]::Equals($parent, $current, [System.StringComparison]::OrdinalIgnoreCase)) { break }
         $current = $parent
     }
-
     if (Test-Path -LiteralPath $fullPath) {
         $item = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop
-        if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-            throw "$Label must be an ordinary non-reparse directory target: $fullPath"
-        }
-    } elseif (-not $MayBeMissing) {
-        throw "$Label directory was not found: $fullPath"
-    }
-
+        if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "$Label must be an ordinary non-reparse directory target: $fullPath" }
+    } elseif (-not $MayBeMissing) { throw "$Label directory was not found: $fullPath" }
     return $fullPath.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
 }
 
 function Assert-SafeOutputFileTarget {
     param([string]$Path, [string]$RepositoryRoot, [string]$Label)
-
     $repo = Assert-OrdinaryDirectory -Path $RepositoryRoot -Label 'repository root'
     $fullPath = Get-CanonicalFullPath -Path $Path -Label $Label
-    if (-not (Test-PathEqualOrContained -Path $fullPath -Container $repo) -or [string]::Equals($fullPath, $repo, [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw "$Label must stay below the repository root: $fullPath"
-    }
+    if (-not (Test-PathEqualOrContained -Path $fullPath -Container $repo) -or [string]::Equals($fullPath, $repo, [System.StringComparison]::OrdinalIgnoreCase)) { throw "$Label must stay below the repository root: $fullPath" }
     $parent = [IO.Path]::GetDirectoryName($fullPath)
     $null = Assert-SafeOutputDirectoryTarget -Path $parent -RepositoryRoot $repo -Label ("$Label parent") -MayBeMissing
     if (Test-Path -LiteralPath $fullPath) {
         $item = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop
-        if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-            throw "$Label must be an ordinary non-reparse file target: $fullPath"
-        }
+        if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "$Label must be an ordinary non-reparse file target: $fullPath" }
     }
     return $fullPath
 }
 
 function Get-SafePackageFiles {
     param([string]$PackageRoot)
-
     $package = Assert-OrdinaryDirectory -Path $PackageRoot -Label 'package staging root'
     $pending = New-Object 'System.Collections.Generic.Stack[string]'
     $files = New-Object 'System.Collections.Generic.List[System.IO.FileInfo]'
@@ -166,16 +228,9 @@ function Get-SafePackageFiles {
     while ($pending.Count -gt 0) {
         $directory = $pending.Pop()
         foreach ($item in Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop) {
-            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-                throw "Package staging contains a reparse-backed entry: $($item.FullName)"
-            }
-            if ($item.PSIsContainer) {
-                $pending.Push($item.FullName)
-                continue
-            }
-            if (-not ($item -is [IO.FileInfo])) {
-                throw "Package staging contains a non-regular filesystem entry: $($item.FullName)"
-            }
+            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "Package staging contains a reparse-backed entry: $($item.FullName)" }
+            if ($item.PSIsContainer) { $pending.Push($item.FullName); continue }
+            if (-not ($item -is [IO.FileInfo])) { throw "Package staging contains a non-regular filesystem entry: $($item.FullName)" }
             $files.Add($item)
         }
     }
@@ -184,36 +239,30 @@ function Get-SafePackageFiles {
 
 function Read-ProjectProductVersion {
     param([string]$ProjectPath)
-    $ProjectPath = Assert-SafeInputFile -Path $ProjectPath -RepositoryRoot $root -Label 'project file'
-    [xml]$project = Get-Content -LiteralPath $ProjectPath -Raw
-    $versions = @($project.Project.PropertyGroup | ForEach-Object { [string]$_.Version } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-    if ($versions.Count -ne 1) { throw "Project must declare exactly one Version value: $ProjectPath" }
-    $version = $versions[0]
-    if (-not [string]::Equals($version, $version.Trim(), [StringComparison]::Ordinal)) {
-        throw "Project Version must be canonical without surrounding whitespace: $ProjectPath"
+    $held = Open-HeldPackageInput -Path $ProjectPath -RepositoryRoot $root -Label 'project file'
+    try {
+        Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label 'project file'
+        [xml]$project = Read-HeldPackageText -Held $held -Label 'project file'
+        Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label 'project file'
+        $versions = @($project.Project.PropertyGroup | ForEach-Object { [string]$_.Version } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        if ($versions.Count -ne 1) { throw "Project must declare exactly one Version value: $ProjectPath" }
+        $version = $versions[0]
+        if (-not [string]::Equals($version, $version.Trim(), [StringComparison]::Ordinal)) { throw "Project Version must be canonical without surrounding whitespace: $ProjectPath" }
+        return $version
     }
-    return $version
+    finally { $held.Stream.Dispose() }
 }
 
 function Convert-ToStrictSemVerText {
     param([string]$Value, [string]$Label)
-
     if ([string]::IsNullOrWhiteSpace($Value)) { throw "$Label is missing." }
     $text = $Value
-    if (-not [string]::Equals($text, $text.Trim(), [StringComparison]::Ordinal)) {
-        throw "$Label must be canonical without surrounding whitespace."
-    }
-    $match = [regex]::Match(
-        $text,
-        '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$',
-        [Text.RegularExpressions.RegexOptions]::CultureInvariant)
+    if (-not [string]::Equals($text, $text.Trim(), [StringComparison]::Ordinal)) { throw "$Label must be canonical without surrounding whitespace." }
+    $match = [regex]::Match($text, '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$', [Text.RegularExpressions.RegexOptions]::CultureInvariant)
     if (-not $match.Success) { throw "$Label is not strict SemVer: $text" }
-
     if ($match.Groups[4].Success) {
         foreach ($identifier in $match.Groups[4].Value.Split('.')) {
-            if ($identifier -match '^[0-9]+$' -and $identifier.Length -gt 1 -and $identifier[0] -eq '0') {
-                throw "$Label has a numeric prerelease identifier with a leading zero: $text"
-            }
+            if ($identifier -match '^[0-9]+$' -and $identifier.Length -gt 1 -and $identifier[0] -eq '0') { throw "$Label has a numeric prerelease identifier with a leading zero: $text" }
         }
     }
     return $text
@@ -221,13 +270,9 @@ function Convert-ToStrictSemVerText {
 
 function Get-SourceGitCommit {
     $output = @(& git -C $root rev-parse --verify HEAD 2>&1)
-    if ($LASTEXITCODE -ne 0 -or $output.Count -ne 1) {
-        throw "Could not resolve the exact source Git HEAD for package provenance."
-    }
+    if ($LASTEXITCODE -ne 0 -or $output.Count -ne 1) { throw "Could not resolve the exact source Git HEAD for package provenance." }
     $commit = ([string]$output[0]).Trim().ToLowerInvariant()
-    if ($commit -notmatch '^[0-9a-f]{40}$') {
-        throw "Source Git HEAD is not one exact 40-hex commit: '$commit'."
-    }
+    if ($commit -notmatch '^[0-9a-f]{40}$') { throw "Source Git HEAD is not one exact 40-hex commit: '$commit'." }
     return $commit
 }
 
@@ -237,14 +282,10 @@ $coreProject = Assert-SafeInputFile -Path (Join-Path $root 'src/QS3D.Core/QS3D.C
 $productVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $pluginProject) -Label 'QS3D plugin product version'
 $coreProductVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $coreProject) -Label 'QS3D Core product version'
 $gitCommit = Get-SourceGitCommit
-if (-not [string]::Equals($productVersion, $coreProductVersion, [StringComparison]::Ordinal)) {
-    throw "QS3D plugin/Core product versions differ: plugin=$productVersion core=$coreProductVersion"
-}
+if (-not [string]::Equals($productVersion, $coreProductVersion, [StringComparison]::Ordinal)) { throw "QS3D plugin/Core product versions differ: plugin=$productVersion core=$coreProductVersion" }
 if (-not [string]::IsNullOrWhiteSpace($env:RELEASE_TAG)) {
     $expectedTag = 'v' + $productVersion
-    if (-not [string]::Equals($env:RELEASE_TAG, $expectedTag, [StringComparison]::Ordinal)) {
-        throw "RELEASE_TAG must exactly match the source product version. Expected $expectedTag, got $env:RELEASE_TAG."
-    }
+    if (-not [string]::Equals($env:RELEASE_TAG, $expectedTag, [StringComparison]::Ordinal)) { throw "RELEASE_TAG must exactly match the source product version. Expected $expectedTag, got $env:RELEASE_TAG." }
 }
 
 $source = Assert-SafeInputDirectory -Path $source -RepositoryRoot $root -Label 'V25 Release output'
@@ -262,34 +303,34 @@ $dist = Assert-SafeOutputDirectoryTarget -Path $dist -RepositoryRoot $root -Labe
 
 foreach ($name in $required) {
     $path = Assert-SafeInputFile -Path (Join-Path $source $name) -RepositoryRoot $root -Label ("V25 build artifact $name")
-    Copy-Item -LiteralPath $path -Destination (Join-Path $dist $name)
+    Copy-HeldPackageInput -SourcePath $path -DestinationPath (Join-Path $dist $name) -Label ("V25 build artifact $name")
 }
 
 foreach ($script in @('install-v25-autoload.ps1', 'uninstall-v25-autoload.ps1', 'update-v25.ps1', 'unblock-v25-netload.ps1')) {
     $scriptPath = Assert-SafeInputFile -Path (Join-Path $PSScriptRoot $script) -RepositoryRoot $root -Label ("release script $script")
-    Copy-Item -LiteralPath $scriptPath -Destination (Join-Path $dist $script)
+    Copy-HeldPackageInput -SourcePath $scriptPath -DestinationPath (Join-Path $dist $script) -Label ("release script $script")
 }
 
 foreach ($launcherName in @('INSTALL-QS3D.cmd', 'UNBLOCK-QS3D.cmd')) {
     $launcherPath = Assert-SafeInputFile -Path (Join-Path $PSScriptRoot $launcherName) -RepositoryRoot $root -Label ("package launcher $launcherName")
-    Copy-Item -LiteralPath $launcherPath -Destination (Join-Path $dist $launcherName)
+    Copy-HeldPackageInput -SourcePath $launcherPath -DestinationPath (Join-Path $dist $launcherName) -Label ("package launcher $launcherName")
 }
 
 $sampleDestination = Join-Path $dist 'Samples'
 New-Item -ItemType Directory -Path $sampleDestination -Force | Out-Null
 foreach ($sampleName in @('README.md', 'QS3D-Sample.dxf', 'QS3D-Sample.qsdb', 'QS3D-Quantity-Template.xlsx', 'QS3D-Architecture.qstemplate')) {
     $samplePath = Assert-SafeInputFile -Path (Join-Path $sampleSource $sampleName) -RepositoryRoot $root -Label ("synthetic sample $sampleName")
-    Copy-Item -LiteralPath $samplePath -Destination (Join-Path $sampleDestination $sampleName)
+    Copy-HeldPackageInput -SourcePath $samplePath -DestinationPath (Join-Path $sampleDestination $sampleName) -Label ("synthetic sample $sampleName")
 }
 $sampleDwg = Join-Path $sampleSource 'QS3D-Sample.dwg'
 if (Test-Path -LiteralPath $sampleDwg) {
     $sampleDwg = Assert-SafeInputFile -Path $sampleDwg -RepositoryRoot $root -Label 'synthetic sample QS3D-Sample.dwg'
-    Copy-Item -LiteralPath $sampleDwg -Destination (Join-Path $sampleDestination 'QS3D-Sample.dwg')
+    Copy-HeldPackageInput -SourcePath $sampleDwg -DestinationPath (Join-Path $sampleDestination 'QS3D-Sample.dwg') -Label 'synthetic sample QS3D-Sample.dwg'
 }
 
 $commands = @()
 Get-SafeSourceFiles -SourceRoot (Join-Path $root 'src/QS3D.BricsCAD.V25') -RepositoryRoot $root -Extension '.cs' | ForEach-Object {
-    $text = Get-Content -LiteralPath $_.FullName -Raw
+    $text = Read-HeldSourceText -Path $_.FullName -Label 'V25 command source'
     [regex]::Matches($text, '\[CommandMethod\("([^\"]+)"') | ForEach-Object { $commands += $_.Groups[1].Value.ToUpperInvariant() }
 }
 $commands = @($commands | Sort-Object -Unique)

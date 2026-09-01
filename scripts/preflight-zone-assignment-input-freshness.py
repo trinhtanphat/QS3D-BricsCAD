@@ -6,21 +6,25 @@ smoke = (root / "tests/QS3D.Core.SmokeTests/ZoneAssignmentInputFreshnessSmoke.cs
 registration = (root / "tests/QS3D.Core.SmokeTests/ZoneAssignmentInputFreshnessSmokeRegistration.cs").read_text(encoding="utf-8")
 
 capture = "var targetEnumerationVersion = project.ChangeVersion;"
-enumeration = "foreach (var element in elements)"
+enumerator = "using (var enumerator = elements.GetEnumerator())"
+loop = "while (true)"
+move_next = "var moved = enumerator.MoveNext();"
 freshness = "if (project.ChangeVersion != targetEnumerationVersion)"
 changed = "var changed = unique.Values"
 message = 'throw new InvalidOperationException("Project changed while Zone assignment targets were being enumerated. Retry assignment against the current project state.");'
 
-for token in (capture, enumeration, freshness, changed, message):
+for token in (capture, enumerator, loop, move_next, freshness, changed, message):
     assert token in source, f"missing Zone assignment input-freshness contract: {token}"
 
 capture_pos = source.index(capture)
-enumeration_pos = source.index(enumeration, capture_pos)
-freshness_pos = source.index(freshness, enumeration_pos)
+enumerator_pos = source.index(enumerator, capture_pos)
+loop_pos = source.index(loop, enumerator_pos)
+move_next_pos = source.index(move_next, loop_pos)
+freshness_pos = source.index(freshness, move_next_pos)
 changed_pos = source.index(changed, freshness_pos)
-assert capture_pos < enumeration_pos < freshness_pos < changed_pos, (
-    "Zone assignment freshness ordering changed: version capture must precede target enumeration, "
-    "and freshness rejection must precede changed-target calculation"
+assert capture_pos < enumerator_pos < loop_pos < move_next_pos < freshness_pos < changed_pos, (
+    "Zone assignment freshness ordering changed: version capture must precede explicit target traversal, "
+    "and freshness rejection must follow traversal and precede changed-target calculation"
 )
 
 for token in (
@@ -36,4 +40,4 @@ for token in (
 assert "[ModuleInitializer]" in registration, "Zone assignment input freshness smoke is not registered"
 assert "ZoneAssignmentInputFreshnessSmoke.Run();" in registration, "Zone assignment input freshness smoke registration drifted"
 
-print("PASS: Zone assignment input freshness contract is locked")
+print("PASS: Zone assignment input freshness contract is locked across explicit target traversal")

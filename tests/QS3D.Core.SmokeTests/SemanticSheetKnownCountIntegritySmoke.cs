@@ -41,13 +41,13 @@ namespace QS3D.Core.SmokeTests
         private static void PlacementPostTraversalCountDriftRejects()
         {
             var source = new CurrentTrackingCollection<SemanticSheetPlacementDefinition>(
-                read => read == 1 ? 1 : 2,
+                read => read <= 6 ? 1 : 2,
                 NewPlacement("VIEW-P1"));
 
             ThrowsCountIntegrity(
                 () => new SemanticSheetDefinition("S-PD", "PD-001", "Placement drift", 1000d, 1000d, source),
                 "placement post-traversal Count drift");
-            Require(source.CountReads >= 2,
+            Require(source.CountReads >= 7,
                 "Semantic Sheet placement Count evidence was not rebound after traversal.");
             Require(source.CurrentReads == 1,
                 "Semantic Sheet placement Count drift test must traverse exactly one admitted placement.");
@@ -72,13 +72,13 @@ namespace QS3D.Core.SmokeTests
         private static void CatalogPostTraversalCountDriftRejects()
         {
             var source = new CurrentTrackingCollection<SemanticSheetDefinition>(
-                read => read == 1 ? 1 : 2,
+                read => read <= 6 ? 1 : 2,
                 NewSheet("S-CD", "CD-001"));
 
             ThrowsCountIntegrity(
                 () => SemanticSheetPlanner.BuildCatalog(source, Array.Empty<SemanticViewPlan>()),
                 "catalog post-traversal Count drift");
-            Require(source.CountReads >= 2,
+            Require(source.CountReads >= 7,
                 "Semantic Sheet catalog Count evidence was not rebound after traversal.");
             Require(source.CurrentReads == 1,
                 "Semantic Sheet catalog Count drift test must traverse exactly one admitted sheet.");
@@ -103,13 +103,13 @@ namespace QS3D.Core.SmokeTests
         private static void AvailableViewPostTraversalCountDriftRejects()
         {
             var source = new CurrentTrackingCollection<SemanticViewPlan>(
-                read => read == 1 ? 1 : 2,
+                read => read <= 6 ? 1 : 2,
                 NewView("VIEW-VD"));
 
             ThrowsCountIntegrity(
                 () => SemanticSheetPlanner.BuildCatalog(Array.Empty<SemanticSheetDefinition>(), source),
                 "available-view post-traversal Count drift");
-            Require(source.CountReads >= 2,
+            Require(source.CountReads >= 7,
                 "Semantic Sheet available-view Count evidence was not rebound after traversal.");
             Require(source.CurrentReads == 1,
                 "Semantic Sheet available-view Count drift test must traverse exactly one admitted view.");

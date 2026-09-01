@@ -58,8 +58,22 @@ if COMMANDS.is_file():
         'BbsNativeTableBuilder.StoredPosition(project)', 'BbsNativeTableBuilder.Inspect(document, project)',
         'ProjectContextCoordinator.TryGetReadOnly(document, out var project)',
         'RequireModelSpace(document)', 'RequireSupportedUcs(document)',
+        'catch (Exception) { ReportFailure(document, "QS3DBBSTABLE", "tạo/cập nhật BBS Table"); }',
+        'catch (Exception) { ReportFailure(document, "QS3DBBSTABLEREFRESH", "refresh BBS Table"); }',
+        'catch (Exception) { ReportFailure(document, "QS3DBBSTABLEREMOVE", "xóa BBS Table"); }',
+        'catch (Exception) { ReportFailure(document, "QS3DBBSTABLEHEALTH", "kiểm tra BBS Table health"); }',
+        'private const string PostCommitUiWarning = "BBS Table: thao tác CAD/project đã hoàn tất; viewport/UI chưa đồng bộ đầy đủ.";',
+        'try { document.Editor.Regen(); } catch { uiSyncFailed = true; }',
+        'try { PaletteCoordinator.RefreshProject(); } catch { uiSyncFailed = true; }',
+        'try { PaletteCoordinator.SetStatus(message); } catch { uiSyncFailed = true; }',
+        'if (!TryWrite(document, "\\nQS3D " + message)) uiSyncFailed = true;',
+        'try { PaletteCoordinator.SetStatus(message + " • " + PostCommitUiWarning); } catch { }',
+        'private static bool TryWrite(Document document, string message)',
     ):
-        if token not in text: errors.append("BbsNativeTableCommands.cs missing lifecycle/regen/read-only-health token: " + token)
+        if token not in text: errors.append("BbsNativeTableCommands.cs missing lifecycle/redaction/post-commit token: " + token)
+    for forbidden in ('catch (Exception ex)', 'ex.Message', 'UI sync warning:'):
+        if forbidden in text:
+            errors.append("BBS native Table command surface must not expose raw caught exception detail: " + forbidden)
 
 if BBS.is_file():
     text = BBS.read_text(encoding="utf-8")
@@ -144,4 +158,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: BBS native Table consumes authoritative ProjectRebarScheduleBuilder rows across all 15 schedule/provenance fields, rejects corrupt project semantic identities before extraction, forbids native rebar calculation/parsing duplication, keeps CSV authority on a detached read-only snapshot, regenerates semantic state before native build/refresh, uses shared project-level QS3DDOC ownership/rollback/live drift health, remains read-only in health, is fail-isolated in Release Check runtime health and is discoverable from Schedule Hub without claiming licensed V25 qualification.")
+print("PASS: BBS native Table consumes authoritative schedule rows, preserves project/native lifecycle safety, redacts caught host exceptions, independently fail-isolates post-commit viewport/palette/editor synchronization, remains read-only in health, and does not claim licensed V25 qualification.")

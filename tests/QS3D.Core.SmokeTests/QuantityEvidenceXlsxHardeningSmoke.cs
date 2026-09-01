@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -15,6 +16,8 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             ProjectedRowCapacityAcceptsExactBoundaryAndRejectsOverflow();
+            ExplanationSnapshotReadsEachCallerEntryOnce();
+            ExplanationCountDriftFailsClosedBeforePublication();
             MalformedUtf16FailsClosedAndValidSupplementaryTextSurvives();
             WorkbookPreservesDeterministicEvidenceOrderAndProvenance();
             PublicationFailurePreservesExistingDestination();
@@ -63,6 +66,71 @@ namespace QS3D.Core.SmokeTests
             }
 
             Require(rejected, "Quantity evidence XLSX accepted a projected row count above Excel's data-row ceiling.");
+        }
+
+        private static void ExplanationSnapshotReadsEachCallerEntryOnce()
+        {
+            var root = TempDirectory("quantity-evidence-xlsx-snapshot-single-read");
+            try
+            {
+                var path = Path.Combine(root, "single-read.xlsx");
+                var source = new SingleReadExplanationList(CreateExplanation("ELEMENT-SINGLE-READ"));
+
+                XlsxQuantityEvidenceExporter.Export(path, source);
+
+                Require(source.IndexerReads == 1,
+                    "Quantity evidence XLSX re-read a caller-owned explanation after snapshot materialization.");
+                var sheet = ReadEntry(path, "xl/worksheets/sheet1.xml");
+                Require(sheet.IndexOf("ELEMENT-SINGLE-READ", StringComparison.Ordinal) >= 0,
+                    "Quantity evidence XLSX detached snapshot lost the caller explanation.");
+            }
+            finally
+            {
+                DeleteDirectory(root);
+            }
+        }
+
+        private static void ExplanationCountDriftFailsClosedBeforePublication()
+        {
+            RequireCountDriftRejected(0, "shrink");
+            RequireCountDriftRejected(2, "growth");
+        }
+
+        private static void RequireCountDriftRejected(int driftedCount, string label)
+        {
+            var root = TempDirectory("quantity-evidence-xlsx-snapshot-" + label);
+            try
+            {
+                var path = Path.Combine(root, "existing.xlsx");
+                const string sentinel = "existing-quantity-evidence-workbook";
+                File.WriteAllText(path, sentinel, new UTF8Encoding(false));
+                var source = new CountDriftingExplanationList(
+                    CreateExplanation("ELEMENT-COUNT-" + label.ToUpperInvariant()),
+                    driftedCount);
+
+                var rejected = false;
+                try
+                {
+                    XlsxQuantityEvidenceExporter.Export(path, source);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    rejected = ex.Message.IndexOf("count changed during snapshot", StringComparison.Ordinal) >= 0;
+                }
+
+                Require(rejected,
+                    "Quantity evidence XLSX did not fail closed on explanation-count " + label + " during snapshot.");
+                Require(source.IndexerReads == 1,
+                    "Quantity evidence XLSX observed extra caller-owned explanations after count drift.");
+                Require(File.ReadAllText(path, Encoding.UTF8) == sentinel,
+                    "Quantity evidence XLSX count-drift rejection changed the existing destination.");
+                Require(Directory.GetFiles(root).Length == 1,
+                    "Quantity evidence XLSX count-drift rejection left a temporary package behind.");
+            }
+            finally
+            {
+                DeleteDirectory(root);
+            }
         }
 
         private static void MalformedUtf16FailsClosedAndValidSupplementaryTextSurvives()
@@ -230,6 +298,72 @@ namespace QS3D.Core.SmokeTests
             {
                 DeleteDirectory(root);
             }
+        }
+
+        private sealed class SingleReadExplanationList : IReadOnlyList<QuantityExplanation>
+        {
+            private readonly QuantityExplanation _explanation;
+
+            public SingleReadExplanationList(QuantityExplanation explanation)
+            {
+                _explanation = explanation;
+            }
+
+            public int Count => 1;
+            public int IndexerReads { get; private set; }
+
+            public QuantityExplanation this[int index]
+            {
+                get
+                {
+                    if (index != 0) throw new ArgumentOutOfRangeException(nameof(index));
+                    IndexerReads++;
+                    if (IndexerReads > 1)
+                        throw new InvalidOperationException("Caller-owned explanation was read more than once.");
+                    return _explanation;
+                }
+            }
+
+            public IEnumerator<QuantityExplanation> GetEnumerator()
+            {
+                throw new InvalidOperationException("Quantity evidence XLSX must use the detached index snapshot, not caller enumeration.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class CountDriftingExplanationList : IReadOnlyList<QuantityExplanation>
+        {
+            private readonly QuantityExplanation _explanation;
+            private readonly int _driftedCount;
+            private int _count = 1;
+
+            public CountDriftingExplanationList(QuantityExplanation explanation, int driftedCount)
+            {
+                _explanation = explanation;
+                _driftedCount = driftedCount;
+            }
+
+            public int Count => _count;
+            public int IndexerReads { get; private set; }
+
+            public QuantityExplanation this[int index]
+            {
+                get
+                {
+                    if (index != 0) throw new InvalidOperationException("Exporter traversed beyond the admitted explanation count.");
+                    IndexerReads++;
+                    _count = _driftedCount;
+                    return _explanation;
+                }
+            }
+
+            public IEnumerator<QuantityExplanation> GetEnumerator()
+            {
+                throw new InvalidOperationException("Quantity evidence XLSX must not enumerate caller-owned explanations after snapshot admission.");
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private static string ReadEntry(string path, string entryName)

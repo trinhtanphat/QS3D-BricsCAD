@@ -35,10 +35,30 @@ for token in (
     if token not in policy:
         errors.append("portable element-property policy missing boundary token: " + token)
 
-if "element.Properties.Where(x => ProjectInterchangeElementPropertyPolicy.IsPortable(x.Key))" not in exporter:
-    errors.append("interchange exporter does not filter ProjectElement properties through the portability policy")
-if "family.Properties.Where(x => IsInterchangeProperty(x.Key))" not in exporter:
-    errors.append("interchange exporter unexpectedly changed Family property semantics")
+# Export portability filtering must remain explicit while executing inside the bounded
+# map helper so the first over-limit portable member fails before retain/sort.
+for token, label in (
+    (
+        'AppendStringMap(json, element.Properties, ProjectInterchangeElementPropertyPolicy.IsPortable, 3, "element properties");',
+        "ProjectElement portability predicate is not routed through bounded map export",
+    ),
+    (
+        'AppendStringMap(json, family.Properties, IsInterchangeProperty, 2, "family properties");',
+        "Family interchange predicate is not routed through bounded map export",
+    ),
+    ("Func<string, bool> include", "bounded string-map helper no longer accepts an explicit inclusion predicate"),
+    ("if (!include(item.Key)) continue;", "bounded string-map helper no longer filters before retention"),
+    ("if (items.Count >= MaxInterchangeMapItems)", "bounded string-map helper no longer guards retained portable members"),
+):
+    if token not in exporter:
+        errors.append(label + ": missing " + token)
+
+for stale in (
+    "element.Properties.Where(x => ProjectInterchangeElementPropertyPolicy.IsPortable(x.Key))",
+    "family.Properties.Where(x => IsInterchangeProperty(x.Key))",
+):
+    if stale in exporter:
+        errors.append("interchange exporter must filter inside the bounded helper rather than eagerly materializing the old LINQ shape: " + stale)
 
 for token in (
     "ElementStringMap(x.Properties, \"element properties\")",
@@ -72,4 +92,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: ProjectElement interchange properties are filtered at export/read boundaries; source handle metadata is never rebound and FieldMerge preserves target-local nonportable metadata outside the reviewed semantic plan.")
+print("PASS: ProjectElement interchange properties are filtered through the bounded export helper and at read boundaries; source handle metadata is never rebound and FieldMerge preserves target-local nonportable metadata outside the reviewed semantic plan.")

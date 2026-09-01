@@ -68,6 +68,7 @@ namespace QS3D.Core.SmokeTests
                 var row = ValidRow();
                 row.WallCount = 0;
                 row.ElementIds.Clear();
+                row.SourceHandles.Clear();
                 CurtainWallXlsxExporter.Export(path, new List<CurtainWallScheduleRow> { row });
                 if (!File.Exists(path)) throw new Exception("Zero-count Curtain XLSX row should remain valid.");
             }

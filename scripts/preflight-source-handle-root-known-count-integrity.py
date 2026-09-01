@@ -16,21 +16,52 @@ if source.is_file():
     start = text.find("private static IReadOnlyList<string> MaterializeRootElementIds(IEnumerable<string> elementIds)")
     end = text.find("private static IReadOnlyDictionary<string, ProjectElement> BuildElementIndex", start)
     materialize = text[start:end] if start >= 0 and end > start else ""
-    required_order = (
-        "var knownCount = TryGetKnownCount(elementIds",
-        "using (var enumerator = elementIds.GetEnumerator())",
-        "while (enumerator.MoveNext())",
-        "inputCount >= knownCount.Value",
-        "var rawId = enumerator.Current;",
-        "inputCount != knownCount.Value",
-        "RevalidateKnownCountAfterTraversal(elementIds, knownCount);",
-        "return roots.AsReadOnly();",
-    )
-    positions = [materialize.find(token) for token in required_order]
-    if not materialize or any(pos < 0 for pos in positions) or positions != sorted(positions):
-        errors.append("Locate root selection must enforce MoveNext -> known-Count guard -> Current and rebind Count before return.")
+
+    rebound = "RequireStableKnownCountDuringTraversal(elementIds, knownCount);"
+    move = "if (!enumerator.MoveNext())"
+    known_guard = "inputCount >= knownCount.Value"
+    current = "var rawId = enumerator.Current;"
+    final_count = "inputCount != knownCount.Value"
+    final_rebound = "RevalidateKnownCountAfterTraversal(elementIds, knownCount);"
+    return_roots = "return roots.AsReadOnly();"
+
+    positions = {
+        "known": materialize.find("var knownCount = TryGetKnownCount(elementIds"),
+        "enumerator": materialize.find("using (var enumerator = elementIds.GetEnumerator())"),
+        "loop": materialize.find("while (true)"),
+    }
+    first_rebound = materialize.find(rebound, positions["loop"] + len("while (true)"))
+    move_pos = materialize.find(move, first_rebound + len(rebound))
+    second_rebound = materialize.find(rebound, move_pos + len(move))
+    known_guard_pos = materialize.find(known_guard, second_rebound + len(rebound))
+    current_pos = materialize.find(current, known_guard_pos + len(known_guard))
+    third_rebound = materialize.find(rebound, current_pos + len(current))
+    final_count_pos = materialize.find(final_count, third_rebound + len(rebound))
+    final_rebound_pos = materialize.find(final_rebound, final_count_pos + len(final_count))
+    return_pos = materialize.find(return_roots, final_rebound_pos + len(final_rebound))
+
+    ordered = [
+        positions["known"],
+        positions["enumerator"],
+        positions["loop"],
+        first_rebound,
+        move_pos,
+        second_rebound,
+        known_guard_pos,
+        current_pos,
+        third_rebound,
+        final_count_pos,
+        final_rebound_pos,
+        return_pos,
+    ]
+    if not materialize or any(pos < 0 for pos in ordered) or ordered != sorted(ordered):
+        errors.append(
+            "Locate root selection must enforce Count rebound -> MoveNext -> Count rebound -> known-Count guard -> Current -> Count rebound and final Count revalidation before return.")
     if "foreach (var rawId in elementIds)" in materialize:
         errors.append("Locate root selection must not use outer foreach because it can observe Current before Count-overrun rejection.")
+    if "while (enumerator.MoveNext())" in materialize:
+        errors.append("Locate root selection must use explicit loop control so Count can be rebound before MoveNext.")
+
     for token in (
         "elementIds is ICollection<string>",
         "elementIds is IReadOnlyCollection<string>",
@@ -40,6 +71,8 @@ if source.is_file():
         "!reboundCount.HasValue || reboundCount.Value != admittedCount.Value",
         "MaxRootElementIdInputCount",
         "non-canonical semantic element id",
+        "invalid negative known Count value during traversal",
+        "conflicting known Count values during traversal",
     ):
         if token not in materialize:
             errors.append("Locate root Count-integrity implementation missing contract token: " + token)
@@ -72,4 +105,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Locate root materialization rejects Count overrun before Current and revalidates deterministic Count evidence.")
+print("PASS: Locate root selection must enforce Count rebound -> MoveNext -> Count rebound -> known-Count guard -> Current -> Count rebound and final deterministic Count evidence before return.")

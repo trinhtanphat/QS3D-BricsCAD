@@ -44,7 +44,7 @@ checks = {
     required[1]: [
         "MaterialUsageXlsxExporter", "AtomicFileCommit.CreateTempPath", "AtomicFileCommit.ReplaceWithoutBackup",
         "ZipArchive", "KL chính", "Diện tích (m²)", "Thể tích (m³)", "Khối lượng (kg)",
-        "PrimaryQuantity", "<autoFilter ref=", "Validate(tempPath)", "Vật liệu", "inlineStr",
+        "PrimaryQuantity", "source.PrimaryQuantity != snapshot.PrimaryQuantity", "<autoFilter ref=", "Validate(tempPath)", "Vật liệu", "inlineStr",
     ],
     required[2]: [
         'CommandMethod("QS3DMATERIALXLSX"', "RegenerationEngine", "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
@@ -61,7 +61,10 @@ checks = {
         "VolumeM3\"] = -99d", "SideAreaM2\"] = double.NaN", "14.4d", "33d", "22d",
     ],
     required[7]: ["MaterialUsageScheduleSmoke.Run();"],
-    required[8]: ["MaterialUsageXlsxExporter.Export", "xl/worksheets/sheet1.xml", "KL chính", "22.5", "Kính"],
+    required[8]: [
+        "MaterialUsageXlsxExporter.Export", "xl/worksheets/sheet1.xml", "KL chính", "22.5", "Kính",
+        "PrimaryQuantityMutatingRows", "PrimaryQuantity snapshot mutation", "ORIGINAL"
+    ],
     required[9]: ["MaterialUsageXlsxSmoke.Run();"],
 }
 checks[required[1]].append("XlsxPackageValidator.Validate")
@@ -73,6 +76,17 @@ for relative, needles in checks.items():
     text = path.read_text(encoding="utf-8")
     for needle in needles:
         if needle not in text: errors.append(relative + " missing material usage guard/token: " + needle)
+
+exporter = ROOT / required[1]
+if exporter.is_file():
+    text = exporter.read_text(encoding="utf-8")
+    snapshot_call_pos = text.find("var row = SnapshotRow(sourceRow, rowIndex);")
+    stability_call_pos = text.find("EnsureRowStable(sourceRows[rowIndex], snapshot[rowIndex], rowIndex);")
+    publication_pos = text.find("var fullPath = Path.GetFullPath(path);")
+    if snapshot_call_pos < 0 or stability_call_pos < 0 or publication_pos < 0:
+        errors.append("Material XLSX snapshot/stability/publication call markers must all exist")
+    elif not (snapshot_call_pos < stability_call_pos < publication_pos):
+        errors.append("Material XLSX must snapshot rows, verify row stability, then begin filesystem publication")
 
 commands_source = ROOT / required[2]
 if commands_source.is_file():
@@ -113,4 +127,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: material usage keeps lazy validation, checked aggregation, HT_Phòng quantity-priority parity, catalog units/provenance, detached read-only freshness, and atomic XLSX through bound UI/command entry points.")
+print("PASS: material usage keeps lazy validation, checked aggregation, HT_Phòng quantity-priority parity, catalog units/provenance, detached read-only freshness, PrimaryQuantity snapshot stability, and atomic XLSX through bound UI/command entry points.")

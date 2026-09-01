@@ -29,14 +29,19 @@ namespace QS3D.Core.Services
             var inputCount = 0;
             using (var enumerator = ids.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableKnownCount(ids, knownCount);
+                    if (!enumerator.MoveNext()) break;
+                    RequireStableKnownCount(ids, knownCount);
+
                     if (knownCount.HasValue && inputCount >= knownCount.Value)
                         throw new InvalidOperationException(
                             "Semantic selection traversal produced more entries than its known Count of " + knownCount.Value + ".");
                     if (inputCount >= MaxInputCount)
                         throw new InvalidOperationException("Semantic selection cannot exceed " + MaxInputCount + " input entries.");
                     var raw = enumerator.Current;
+                    RequireStableKnownCount(ids, knownCount);
                     inputCount++;
                     if (string.IsNullOrWhiteSpace(raw)) continue;
                     next.Add(raw.Trim());
@@ -45,18 +50,21 @@ namespace QS3D.Core.Services
 
             if (_changeVersion != enumerationVersion)
                 throw new InvalidOperationException("Selection changed while replacement element ids were being enumerated. Retry replacement against the current selection state.");
-            if (knownCount.HasValue && inputCount != knownCount.Value)
-                throw new InvalidOperationException(
-                    "Semantic selection known Count reported " + knownCount.Value +
-                    " entries but traversal produced " + inputCount + ".");
 
             var finalKnownCount = ResolveKnownCount(ids);
+            if (_changeVersion != enumerationVersion)
+                throw new InvalidOperationException("Selection changed while replacement element ids were being enumerated. Retry replacement against the current selection state.");
             if (knownCount.HasValue != finalKnownCount.HasValue ||
                 (knownCount.HasValue && knownCount.Value != finalKnownCount!.Value))
                 throw new InvalidOperationException(
                     "Semantic selection known Count changed during traversal from " +
                     (knownCount.HasValue ? knownCount.Value.ToString() : "<none>") + " to " +
                     (finalKnownCount.HasValue ? finalKnownCount.Value.ToString() : "<none>") + ".");
+
+            if (knownCount.HasValue && inputCount != knownCount.Value)
+                throw new InvalidOperationException(
+                    "Semantic selection known Count reported " + knownCount.Value +
+                    " entries but traversal produced " + inputCount + ".");
 
             if (_ids.SetEquals(next)) return;
 
@@ -86,6 +94,16 @@ namespace QS3D.Core.Services
             if (ids is System.Collections.ICollection nonGenericCollection)
                 knownCount = AcceptKnownCount(knownCount, nonGenericCollection.Count);
             return knownCount;
+        }
+
+        private static void RequireStableKnownCount(IEnumerable<string> ids, int? expectedCount)
+        {
+            if (!expectedCount.HasValue) return;
+            var observedCount = ResolveKnownCount(ids);
+            if (!observedCount.HasValue || observedCount.Value != expectedCount.Value)
+                throw new InvalidOperationException(
+                    "Semantic selection known Count changed during traversal from " + expectedCount.Value + " to " +
+                    (observedCount.HasValue ? observedCount.Value.ToString() : "<none>") + ".");
         }
 
         private static int AcceptKnownCount(int? knownCount, int candidate)

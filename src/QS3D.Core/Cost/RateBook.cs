@@ -125,12 +125,21 @@ namespace QS3D.Core.Cost
             var index = 0;
             using (var enumerator = items.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    if (hasKnownCount)
+                        RequireStableKnownCount(items, knownCount);
+
+                    if (!enumerator.MoveNext())
+                        break;
+
+                    if (hasKnownCount)
+                        RequireStableKnownCount(items, knownCount);
                     if (hasKnownCount && index >= knownCount)
                         ThrowKnownCountTraversalMismatch();
                     if (index >= MaxItems)
                         ThrowTooManyItems();
+
                     var item = enumerator.Current;
                     if (item == null)
                         throw new ArgumentException("Rate book contains a null item at index " + index + ".", nameof(items));
@@ -161,11 +170,7 @@ namespace QS3D.Core.Cost
             if (hasKnownCount && index != knownCount)
                 ThrowKnownCountTraversalMismatch();
             if (hasKnownCount)
-            {
-                var hasFinalKnownCount = TryGetKnownCount(items, out var finalKnownCount);
-                if (!hasFinalKnownCount || finalKnownCount != knownCount)
-                    ThrowKnownCountChangedDuringTraversal();
-            }
+                RequireStableKnownCount(items, knownCount);
 
             foreach (var pair in _byScope)
                 pair.Value.Sort(CompareEffectiveItems);
@@ -199,6 +204,13 @@ namespace QS3D.Core.Cost
             return match == null
                 ? RateBookResolution.Unmatched(costCode, canonicalUnit, canonicalCurrency, canonicalAsOf)
                 : RateBookResolution.Matched(match.CostCode, canonicalUnit, canonicalCurrency, canonicalAsOf, match);
+        }
+
+        private static void RequireStableKnownCount(IEnumerable<RateItem> items, int knownCount)
+        {
+            var hasCurrentKnownCount = TryGetKnownCount(items, out var currentKnownCount);
+            if (!hasCurrentKnownCount || currentKnownCount != knownCount)
+                ThrowKnownCountChangedDuringTraversal();
         }
 
         private static bool TryGetKnownCount(IEnumerable<RateItem> items, out int count)

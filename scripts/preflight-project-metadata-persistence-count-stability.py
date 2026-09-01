@@ -19,7 +19,9 @@ if source.is_file():
     required = (
         "var knownCount = RequireSupportedKnownPersistenceCount(values);",
         "using (var enumerator = values.GetEnumerator())",
-        "while (enumerator.MoveNext())",
+        "while (true)",
+        "RequireStableKnownPersistenceCount(values, knownCount);",
+        "if (!enumerator.MoveNext()) break;",
         "if (knownCount.HasValue && observedCount >= knownCount.Value)",
         "var item = enumerator.Current;",
         "if (knownCount.HasValue && observedCount != knownCount.Value)",
@@ -30,11 +32,13 @@ if source.is_file():
     )
     positions = [method.find(token) for token in required]
     if not method or any(position < 0 for position in positions) or positions != sorted(positions):
-        errors.append("ReplacePersistenceState must explicitly traverse the input, then rebind Count after exact traversal and reject drift before reserved validation/publication.")
+        errors.append("ReplacePersistenceState must explicitly traverse the input, guard stable admitted Count around caller advancement, then rebind Count after exact traversal before reserved validation/publication.")
     if method.count("RequireSupportedKnownPersistenceCount(values)") < 2:
         errors.append("ReplacePersistenceState must bind supported Count evidence both before and after caller-controlled traversal.")
-    if "foreach (var item in values)" in method:
-        errors.append("ReplacePersistenceState must not regress to foreach traversal because the Count guard must execute before caller-controlled Current.")
+    if method.count("RequireStableKnownPersistenceCount(values, knownCount)") < 3:
+        errors.append("ReplacePersistenceState must revalidate admitted Count before MoveNext, after successful MoveNext, and after traversal.")
+    if "while (enumerator.MoveNext())" in method or "foreach (var item in values)" in method:
+        errors.append("ReplacePersistenceState must not regress to implicit advancement because Count stability must be checked before caller-controlled MoveNext and Current.")
 
 if smoke.is_file():
     text = smoke.read_text(encoding="utf-8")
@@ -62,4 +66,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: metadata replacement explicitly traverses caller input and rebinds deterministic Count evidence before publication.")
+print("PASS: metadata replacement explicitly guards caller advancement and rebinds deterministic Count evidence before publication.")

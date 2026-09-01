@@ -19,14 +19,19 @@ namespace QS3D.Core.Export
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
-            var rowCount = RequireConsistentKnownCount(rows, MaxDataRows, "export rows");
-            var snapshot = new List<RoomFinishScheduleRow>(rowCount);
-            for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
+            var rowCount = BindKnownCount(rows, MaxDataRows, "export rows");
+            var snapshot = new List<RoomFinishScheduleRow>(rowCount.Value);
+            var sourceRows = new List<RoomFinishScheduleRow>(rowCount.Value);
+            for (var rowIndex = 0; rowIndex < rowCount.Value; rowIndex++)
             {
+                rowCount.Revalidate(rows, "before row indexer");
                 var sourceRow = rows[rowIndex];
+                rowCount.Revalidate(rows, "after row indexer");
                 if (sourceRow == null)
                     throw new ArgumentException("Export rows cannot contain null entries. Invalid row index: " + rowIndex + ".", nameof(rows));
+                sourceRows.Add(sourceRow);
                 var row = SnapshotRow(sourceRow, rowIndex);
+                rowCount.Revalidate(rows, "after row snapshot");
                 ValidateCellText(row.Floor, rowIndex, "Floor");
                 ValidateCellText(row.Room, rowIndex, "Room");
                 ValidateCellText(row.Category, rowIndex, "Category");
@@ -47,8 +52,10 @@ namespace QS3D.Core.Export
                 ValidateNonNegativeFinite(row.AreaM2, rowIndex, "AreaM2");
                 snapshot.Add(row);
             }
-            if (rows.Count != rowCount)
-                throw new InvalidOperationException("Room-finish XLSX export row count changed during snapshot.");
+            rowCount.Revalidate(rows, "after snapshot traversal");
+            for (var rowIndex = 0; rowIndex < rowCount.Value; rowIndex++)
+                EnsureRowStable(sourceRows[rowIndex], snapshot[rowIndex], rowIndex);
+            rowCount.Revalidate(rows, "after row stability validation");
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -71,29 +78,84 @@ namespace QS3D.Core.Export
             finally { AtomicFileCommit.TryDelete(tempPath); }
         }
 
+        private static KnownCountContract<T> BindKnownCount<T>(IEnumerable<T> source, int maximum, string label)
+        {
+            var contract = new KnownCountContract<T>(
+                source is IReadOnlyCollection<T>,
+                source is ICollection<T>,
+                source is ICollection,
+                maximum,
+                label);
+            contract.Bind(source);
+            return contract;
+        }
+
         private static int RequireConsistentKnownCount<T>(IEnumerable<T> source, int maximum, string label)
         {
-            int? expected = null;
-            Action<int> bind = count =>
-            {
-                if (count < 0)
-                    throw new ArgumentOutOfRangeException("rows", "Room-finish XLSX " + label + " count must be non-negative.");
-                if (count > maximum)
-                    throw new ArgumentOutOfRangeException("rows", "Room-finish XLSX " + label + " count exceeds the supported maximum of " + maximum + ".");
-                if (expected.HasValue && expected.Value != count)
-                    throw new InvalidOperationException("Room-finish XLSX " + label + " exposes conflicting known collection counts.");
-                expected = count;
-            };
+            return BindKnownCount(source, maximum, label).Value;
+        }
 
-            var readOnly = source as IReadOnlyCollection<T>;
-            if (readOnly != null) bind(readOnly.Count);
-            var generic = source as ICollection<T>;
-            if (generic != null) bind(generic.Count);
-            var nonGeneric = source as ICollection;
-            if (nonGeneric != null) bind(nonGeneric.Count);
-            if (!expected.HasValue)
-                throw new ArgumentException("Room-finish XLSX " + label + " must expose a deterministic collection count.", "rows");
-            return expected.Value;
+        private sealed class KnownCountContract<T>
+        {
+            private readonly bool _readOnlyCount;
+            private readonly bool _genericCount;
+            private readonly bool _nonGenericCount;
+            private readonly int _maximum;
+            private readonly string _label;
+            private bool _bound;
+
+            internal KnownCountContract(bool readOnlyCount, bool genericCount, bool nonGenericCount, int maximum, string label)
+            {
+                _readOnlyCount = readOnlyCount;
+                _genericCount = genericCount;
+                _nonGenericCount = nonGenericCount;
+                _maximum = maximum;
+                _label = label;
+            }
+
+            internal int Value { get; private set; }
+
+            internal void Bind(IEnumerable<T> source)
+            {
+                Value = Observe(source, "at admission");
+                _bound = true;
+            }
+
+            internal void Revalidate(IEnumerable<T> source, string phase)
+            {
+                if (!_bound)
+                    throw new InvalidOperationException("Room-finish XLSX " + _label + " count contract was not admitted.");
+                var observed = Observe(source, phase);
+                if (observed != Value)
+                    throw new InvalidOperationException("Room-finish XLSX " + _label + " count changed " + phase + ". Expected " + Value + " but observed " + observed + ".");
+            }
+
+            private int Observe(IEnumerable<T> source, string phase)
+            {
+                if ((source is IReadOnlyCollection<T>) != _readOnlyCount ||
+                    (source is ICollection<T>) != _genericCount ||
+                    (source is ICollection) != _nonGenericCount)
+                    throw new InvalidOperationException("Room-finish XLSX " + _label + " known count sources changed " + phase + ".");
+
+                int? expected = null;
+                Action<int> observe = count =>
+                {
+                    if (count < 0)
+                        throw new ArgumentOutOfRangeException("rows", "Room-finish XLSX " + _label + " count must be non-negative " + phase + ".");
+                    if (count > _maximum)
+                        throw new ArgumentOutOfRangeException("rows", "Room-finish XLSX " + _label + " count exceeds the supported maximum of " + _maximum + " " + phase + ".");
+                    if (expected.HasValue && expected.Value != count)
+                        throw new InvalidOperationException("Room-finish XLSX " + _label + " exposes conflicting known collection counts " + phase + ".");
+                    expected = count;
+                };
+
+                if (_readOnlyCount) observe(((IReadOnlyCollection<T>)source).Count);
+                if (_genericCount) observe(((ICollection<T>)source).Count);
+                if (_nonGenericCount) observe(((ICollection)source).Count);
+                if (!expected.HasValue)
+                    throw new ArgumentException("Room-finish XLSX " + _label + " must expose a deterministic collection count.", "rows");
+                return expected.Value;
+            }
         }
 
         private static RoomFinishScheduleRow SnapshotRow(RoomFinishScheduleRow source, int rowIndex)
@@ -139,6 +201,38 @@ namespace QS3D.Core.Export
             }
             if (source.Count != count)
                 throw new InvalidOperationException("Room-finish XLSX row " + rowIndex + " field " + fieldName + " count changed during snapshot.");
+        }
+
+        private static void EnsureRowStable(RoomFinishScheduleRow source, RoomFinishScheduleRow snapshot, int rowIndex)
+        {
+            if (!string.Equals(source.ProjectId ?? string.Empty, snapshot.ProjectId, StringComparison.Ordinal) ||
+                !string.Equals(source.DrawingFingerprint ?? string.Empty, snapshot.DrawingFingerprint, StringComparison.Ordinal) ||
+                !string.Equals(source.Floor ?? string.Empty, snapshot.Floor, StringComparison.Ordinal) ||
+                !string.Equals(source.Room ?? string.Empty, snapshot.Room, StringComparison.Ordinal) ||
+                !string.Equals(source.Category ?? string.Empty, snapshot.Category, StringComparison.Ordinal) ||
+                !string.Equals(source.FamilyName ?? string.Empty, snapshot.FamilyName, StringComparison.Ordinal) ||
+                !string.Equals(source.Material ?? string.Empty, snapshot.Material, StringComparison.Ordinal) ||
+                !string.Equals(source.UnitHint ?? string.Empty, snapshot.UnitHint, StringComparison.Ordinal) ||
+                source.Count != snapshot.Count ||
+                !source.LengthM.Equals(snapshot.LengthM) ||
+                !source.AreaM2.Equals(snapshot.AreaM2) ||
+                !source.PrimaryQuantity.Equals(snapshot.PrimaryQuantity))
+                throw new InvalidOperationException("Room-finish XLSX row " + rowIndex + " values changed during snapshot.");
+
+            EnsureJoinedCellValuesStable(source.ElementIds, snapshot.ElementIds, rowIndex, "ElementIds");
+            EnsureJoinedCellValuesStable(source.RoomIds, snapshot.RoomIds, rowIndex, "RoomIds");
+            EnsureJoinedCellValuesStable(source.SourceHandles, snapshot.SourceHandles, rowIndex, "SourceHandles");
+        }
+
+        private static void EnsureJoinedCellValuesStable(IList<string> source, IList<string> snapshot, int rowIndex, string fieldName)
+        {
+            if (source == null || source.Count != snapshot.Count)
+                throw new InvalidOperationException("Room-finish XLSX row " + rowIndex + " field " + fieldName + " changed during snapshot.");
+            for (var index = 0; index < snapshot.Count; index++)
+            {
+                if (!string.Equals(source[index] ?? string.Empty, snapshot[index] ?? string.Empty, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Room-finish XLSX row " + rowIndex + " field " + fieldName + " changed during snapshot.");
+            }
         }
 
         private static string BuildSheet(IReadOnlyList<RoomFinishScheduleRow> rows)

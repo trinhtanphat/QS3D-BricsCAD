@@ -101,12 +101,19 @@ namespace QS3D.Core.Diagnostics
 
             using (var enumerator = issues.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireKnownCountStable(issues, expectedKnownCount);
+                    var moved = enumerator.MoveNext();
+                    RequireKnownCountStable(issues, expectedKnownCount);
+                    if (!moved) break;
+                    if (expectedKnownCount.HasValue && result.Count >= expectedKnownCount.Value)
+                        throw new InvalidOperationException("Model health baseline known issue count does not match enumerated issue count.");
                     if (result.Count >= HealthSummary.MaxIssueCount)
                         throw new InvalidOperationException("Model health baseline supports at most " + HealthSummary.MaxIssueCount + " diagnostic issues.");
 
                     var issue = enumerator.Current;
+                    RequireKnownCountStable(issues, expectedKnownCount);
                     if (issue == null)
                         throw new InvalidOperationException("Model health baseline cannot contain a null diagnostic issue.");
                     if (!Enum.IsDefined(typeof(HealthSeverity), issue.Severity))
@@ -115,10 +122,18 @@ namespace QS3D.Core.Diagnostics
                 }
             }
 
+            RequireKnownCountStable(issues, expectedKnownCount);
             if (expectedKnownCount.HasValue && result.Count != expectedKnownCount.Value)
                 throw new InvalidOperationException("Model health baseline known issue count does not match enumerated issue count.");
 
             return result.AsReadOnly();
+        }
+
+        private static void RequireKnownCountStable(IEnumerable<ModelHealthIssue> issues, int? expectedKnownCount)
+        {
+            var currentKnownCount = RequireKnownCountsWithinLimit(issues);
+            if (currentKnownCount != expectedKnownCount)
+                throw new InvalidOperationException("Model health baseline known issue count changed during enumeration.");
         }
 
         private static int? RequireKnownCountsWithinLimit(IEnumerable<ModelHealthIssue> issues)

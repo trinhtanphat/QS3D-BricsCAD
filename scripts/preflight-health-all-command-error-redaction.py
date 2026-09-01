@@ -18,7 +18,7 @@ else:
         'new GeneratedRebarHealthService().InspectAll(project, liveLongitudinal, liveShape)',
         'new GeneratedHandleOwnershipHealthService().Inspect(project)',
         'new GeneratedRebarModeHealthService().Inspect(project)',
-        'Application.ShowModelessWindow(IntPtr.Zero, window, true)',
+        'ModelHealthWindowPresenter.Show(document, issues, issue =>',
         'LocateProjectArtifactHandles(currentProject, issue.Code).ToArray()',
         'LocateHandles(element, issue.Code).ToArray()',
         'SourceHandleResolver.Resolve(currentProject, new[] { element.Id }).ToArray()',
@@ -31,9 +31,9 @@ else:
         if token not in text:
             errors.append("Health All command contract missing token: " + token)
 
-    for token in ('catch (System.Exception ex)', 'ex.Message', 'QS3DHEALTHALL lỗi: " +'):
+    for token in ('Application.ShowModelessWindow(', 'new ModelHealthWindow(', 'catch (System.Exception ex)', 'ex.Message', 'QS3DHEALTHALL lỗi: " +'):
         if token in text:
-            errors.append("Health All command must not reflect exception detail: " + token)
+            errors.append("Health All command must not bypass presenter or reflect exception detail: " + token)
 
 if errors:
     for error in errors:
@@ -41,4 +41,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QS3DHEALTHALL preserves representative aggregation and artifact/element locate contracts while top-level exception details remain redacted.")
+print("PASS: QS3DHEALTHALL routes through transactional Model Health publication while preserving representative aggregation, locate and error redaction.")

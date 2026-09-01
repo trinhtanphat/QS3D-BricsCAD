@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -33,13 +34,11 @@ namespace QS3D.Core.Export
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (detailRows == null) throw new ArgumentNullException(nameof(detailRows));
             if (summaryRows == null) throw new ArgumentNullException(nameof(summaryRows));
-            if (detailRows.Count == 0) throw new InvalidDataException("Customer workbook CHI_TIET requires at least one row.");
-            if (summaryRows.Count == 0) throw new InvalidDataException("Customer workbook DGKL requires at least one row.");
-            if (detailRows.Count > MaxRows || summaryRows.Count > MaxRows)
-                throw new InvalidDataException("Customer workbook exceeds the Excel row limit.");
 
-            var details = Snapshot(detailRows, true);
-            var summaries = Snapshot(summaryRows, false);
+            var detailCount = BindSourceCount(detailRows, DetailSheet);
+            var summaryCount = BindSourceCount(summaryRows, DgklSheet);
+            var details = Snapshot(detailRows, detailCount, true, DetailSheet);
+            var summaries = Snapshot(summaryRows, summaryCount, false, DgklSheet);
             ValidateScope(details, summaries);
 
             var formwork = summaries.Where(HasAnyFormworkEvidence).ToList();
@@ -52,6 +51,8 @@ namespace QS3D.Core.Export
             var detailXml = BuildDetailSheet(details, traces);
             var traceXml = BuildTraceSheet(traces);
 
+            detailCount.Revalidate(detailRows, "before filesystem publication");
+            summaryCount.Revalidate(summaryRows, "before filesystem publication");
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -89,16 +90,113 @@ namespace QS3D.Core.Export
             }
         }
 
+        private static KnownCountContract BindSourceCount(IReadOnlyList<QuantityReportRow> source, string sheet)
+        {
+            return KnownCountContract.Bind(source, sheet);
+        }
+
+        private sealed class KnownCountContract
+        {
+            private readonly int _readOnlyCount;
+            private readonly bool _hasGenericCount;
+            private readonly int _genericCount;
+            private readonly bool _hasNonGenericCount;
+            private readonly int _nonGenericCount;
+            private readonly string _sheet;
+
+            private KnownCountContract(
+                int readOnlyCount,
+                bool hasGenericCount,
+                int genericCount,
+                bool hasNonGenericCount,
+                int nonGenericCount,
+                string sheet)
+            {
+                _readOnlyCount = readOnlyCount;
+                _hasGenericCount = hasGenericCount;
+                _genericCount = genericCount;
+                _hasNonGenericCount = hasNonGenericCount;
+                _nonGenericCount = nonGenericCount;
+                _sheet = sheet;
+            }
+
+            public int Value => _readOnlyCount;
+
+            public static KnownCountContract Bind(IReadOnlyList<QuantityReportRow> source, string sheet)
+            {
+                var readOnlyCount = source.Count;
+                var generic = source as ICollection<QuantityReportRow>;
+                var nonGeneric = source as ICollection;
+                var hasGenericCount = generic != null;
+                var genericCount = hasGenericCount ? generic!.Count : readOnlyCount;
+                var hasNonGenericCount = nonGeneric != null;
+                var nonGenericCount = hasNonGenericCount ? nonGeneric!.Count : readOnlyCount;
+
+                ValidateRange(readOnlyCount, sheet);
+                if ((hasGenericCount && genericCount != readOnlyCount) ||
+                    (hasNonGenericCount && nonGenericCount != readOnlyCount))
+                    throw new InvalidDataException("Customer workbook " + sheet + " Count channels disagree at admission.");
+
+                return new KnownCountContract(
+                    readOnlyCount,
+                    hasGenericCount,
+                    genericCount,
+                    hasNonGenericCount,
+                    nonGenericCount,
+                    sheet);
+            }
+
+            public void Revalidate(IReadOnlyList<QuantityReportRow> source, string boundary)
+            {
+                var readOnlyCount = source.Count;
+                if (readOnlyCount != _readOnlyCount)
+                    ThrowDrift(boundary);
+
+                if (_hasGenericCount)
+                {
+                    var generic = source as ICollection<QuantityReportRow>;
+                    if (generic == null || generic.Count != _genericCount)
+                        ThrowDrift(boundary);
+                }
+
+                if (_hasNonGenericCount)
+                {
+                    var nonGeneric = source as ICollection;
+                    if (nonGeneric == null || nonGeneric.Count != _nonGenericCount)
+                        ThrowDrift(boundary);
+                }
+            }
+
+            private static void ValidateRange(int count, string sheet)
+            {
+                if (count <= 0)
+                    throw new InvalidDataException("Customer workbook " + sheet + " requires at least one row.");
+                if (count > MaxRows)
+                    throw new InvalidDataException("Customer workbook " + sheet + " exceeds the Excel row limit.");
+            }
+
+            private void ThrowDrift(string boundary)
+            {
+                throw new InvalidDataException("Customer workbook " + _sheet + " row Count changed " + boundary + ".");
+            }
+        }
+
         private static bool HasAnyFormworkEvidence(QuantityReportRow row) =>
             row.HasGrossFormworkM2Evidence || row.HasConcreteContactDeductionM2Evidence || row.HasNetFormworkM2Evidence;
 
-        private static List<QuantityReportRow> Snapshot(IReadOnlyList<QuantityReportRow> source, bool requireSingle)
+        private static List<QuantityReportRow> Snapshot(
+            IReadOnlyList<QuantityReportRow> source,
+            KnownCountContract admittedCount,
+            bool requireSingle,
+            string sheet)
         {
-            var result = new List<QuantityReportRow>(source.Count);
+            var result = new List<QuantityReportRow>(admittedCount.Value);
             string? fingerprint = null;
-            for (var index = 0; index < source.Count; index++)
+            for (var index = 0; index < admittedCount.Value; index++)
             {
+                admittedCount.Revalidate(source, "before row indexer");
                 var row = source[index] ?? throw new InvalidDataException("Customer workbook contains a null quantity row.");
+                admittedCount.Revalidate(source, "after row indexer");
                 if (row.Count <= 0) throw new InvalidDataException("Customer workbook row Count must be positive.");
                 if (requireSingle && (row.Count != 1 || row.ElementIds.Count != 1))
                     throw new InvalidDataException("Customer workbook CHI_TIET must contain exactly one semantic element per row.");
@@ -182,6 +280,7 @@ namespace QS3D.Core.Export
                     throw new InvalidDataException("Customer workbook rows contain conflicting drawing fingerprints.");
                 result.Add(copy);
             }
+            admittedCount.Revalidate(source, "after snapshot traversal");
             return result;
         }
 

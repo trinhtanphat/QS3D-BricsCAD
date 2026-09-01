@@ -28,16 +28,21 @@ projection = PROJECTION.read_text(encoding="utf-8")
 smoke = SMOKE.read_text(encoding="utf-8")
 
 require_order(rate, [
-    "while (enumerator.MoveNext())",
+    "while (true)",
+    "RequireStableKnownCount(items, knownCount);",
+    "if (!enumerator.MoveNext())",
+    "RequireStableKnownCount(items, knownCount);",
     "if (hasKnownCount && index >= knownCount)",
     "if (index >= MaxItems)",
     "var item = enumerator.Current;",
 ], "RateBook traversal")
 require_order(rate, [
     "if (hasKnownCount && index != knownCount)",
-    "var hasFinalKnownCount = TryGetKnownCount(items, out var finalKnownCount);",
-    "finalKnownCount != knownCount",
+    "RequireStableKnownCount(items, knownCount);",
+    "foreach (var pair in _byScope)",
 ], "RateBook Count rebind")
+if "while (enumerator.MoveNext())" in rate:
+    fail("RateBook traversal regressed to the stale while(MoveNext) shape")
 
 require_order(projection, [
     "while (enumerator.MoveNext())",

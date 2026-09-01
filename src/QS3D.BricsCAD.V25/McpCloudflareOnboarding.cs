@@ -42,7 +42,8 @@ namespace QS3D.BricsCAD.V25
         private const string DownloadUrl = "https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/";
         private const string DashboardUrl = "https://dash.cloudflare.com/?to=/:account/networks/tunnels";
         private const string ChatGptUrl = "https://chatgpt.com/";
-        private const string OriginUrl = "http://127.0.0.1:8765";
+        private static string OriginUrl => McpEmbeddedServer.Endpoint.GetLeftPart(UriPartial.Authority);
+        private static string OriginHostHeader => McpEmbeddedServer.Endpoint.Authority;
         private const string QuickTunnelHostSuffix = ".trycloudflare.com";
         private static readonly object Sync = new object();
         private static readonly byte[] DpapiEntropy = Encoding.UTF8.GetBytes("QS3D-BricsCAD/MCP/CloudflareTunnel/v1");
@@ -88,8 +89,13 @@ namespace QS3D.BricsCAD.V25
         public static string Describe()
         {
             var mode = IsRunning ? (IsQuickMode ? "QUICK" : "TOKEN") : "STOPPED";
+            string path;
+            string source;
+            string discovery;
+            McpCloudflaredBootstrapper.TryResolveTrustedInstalledBinary(out path, out source, out discovery);
             return "tunnel=" + mode
-                   + "; cloudflared=" + (string.IsNullOrWhiteSpace(CloudflaredPath) ? "not-installed" : CloudflaredPath)
+                   + "; cloudflared=" + (string.IsNullOrWhiteSpace(path) ? "not-installed/trusted" : path)
+                   + (string.IsNullOrWhiteSpace(source) ? string.Empty : "; source=" + source)
                    + (string.IsNullOrWhiteSpace(PublicMcpUrl) ? string.Empty : "; public=" + PublicMcpUrl)
                    + (string.IsNullOrWhiteSpace(LastError) ? string.Empty : "; error=" + LastError);
         }
@@ -146,10 +152,16 @@ namespace QS3D.BricsCAD.V25
         {
             error = string.Empty;
             McpEmbeddedServer.EnsureStarted();
+            if (!McpEmbeddedServer.IsPreferredPort)
+            {
+                error = "Token tunnel đang được Cloudflare cấu hình cố định tới 127.0.0.1:8765, nhưng QS3D MCP phải dùng cổng dự phòng "
+                        + McpEmbeddedServer.Endpoint.Port.ToString() + ". Hãy dùng Kết nối ChatGPT/Quick Tunnel hoặc giải phóng cổng 8765 trước khi chạy token tunnel.";
+                return false;
+            }
             var executable = CloudflaredPath;
             if (string.IsNullOrWhiteSpace(executable))
             {
-                error = "Chưa cài Cloudflare Tunnel.";
+                error = "Chưa có Cloudflare Tunnel qua trust verification. Hãy dùng nút Cài/cập nhật hoặc cài bằng WinGet rồi Refresh.";
                 return false;
             }
             string token;
@@ -157,7 +169,6 @@ namespace QS3D.BricsCAD.V25
             catch (Exception ex) { error = "Không đọc được tunnel token: " + ex.Message; return false; }
             if (string.IsNullOrWhiteSpace(token)) { error = "Chưa lưu tunnel token."; return false; }
 
-            // Only one Cloudflare forwarding mode may own the embedded MCP endpoint at a time.
             McpCloudflareAccountTunnelManager.StopForHostShutdown();
             StopProcessOnly();
             var startInfo = CreateCloudflaredStartInfo(executable, "tunnel --no-autoupdate run");
@@ -173,7 +184,7 @@ namespace QS3D.BricsCAD.V25
             var executable = CloudflaredPath;
             if (string.IsNullOrWhiteSpace(executable))
             {
-                error = "Chưa cài Cloudflare Tunnel.";
+                error = "Chưa có Cloudflare Tunnel qua trust verification. Hãy dùng nút Cài/cập nhật hoặc cài bằng WinGet rồi Refresh.";
                 return false;
             }
             McpCloudflareAccountTunnelManager.StopForHostShutdown();
@@ -181,7 +192,7 @@ namespace QS3D.BricsCAD.V25
             WriteText(AutoStartPath, "0");
             lock (Sync) { _quickMode = true; _quickBaseUrl = string.Empty; _lastError = string.Empty; }
             return StartProcess(
-                CreateCloudflaredStartInfo(executable, "tunnel --no-autoupdate --url " + OriginUrl + " --http-host-header 127.0.0.1:8765"),
+                CreateCloudflaredStartInfo(executable, "tunnel --no-autoupdate --url " + OriginUrl + " --http-host-header " + OriginHostHeader),
                 true,
                 out error);
         }
@@ -301,8 +312,6 @@ namespace QS3D.BricsCAD.V25
             if (clean.Length > 1000) clean = clean.Substring(0, 1000);
             lock (Sync)
             {
-                // Async stdout/stderr callbacks may arrive after Exited or after another mode has
-                // taken ownership. Never let stale process output resurrect a dead Quick Tunnel URL.
                 if (!ReferenceEquals(_process, process)) return;
                 if (clean.IndexOf("ERR", StringComparison.OrdinalIgnoreCase) >= 0
                     || clean.IndexOf("error", StringComparison.OrdinalIgnoreCase) >= 0) _lastError = clean;
@@ -330,28 +339,12 @@ namespace QS3D.BricsCAD.V25
 
         private static string? FindCloudflared()
         {
-            var explicitPath = (Environment.GetEnvironmentVariable("QS3D_CLOUDFLARED_PATH") ?? string.Empty).Trim();
-            if (IsExecutableFile(explicitPath)) return explicitPath;
-            foreach (var candidate in new[]
-            {
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "cloudflared", "cloudflared.exe"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "cloudflared", "cloudflared.exe"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WinGet", "Links", "cloudflared.exe")
-            }) if (IsExecutableFile(candidate)) return candidate;
-
-            foreach (var segment in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(Path.PathSeparator))
-            {
-                var directory = segment.Trim().Trim('"');
-                if (directory.Length == 0) continue;
-                var candidate = Path.Combine(directory, "cloudflared.exe");
-                if (IsExecutableFile(candidate)) return candidate;
-            }
-            return null;
-        }
-
-        private static bool IsExecutableFile(string path)
-        {
-            try { return !string.IsNullOrWhiteSpace(path) && File.Exists(path); } catch { return false; }
+            string path;
+            string source;
+            string message;
+            return McpCloudflaredBootstrapper.TryResolveTrustedInstalledBinary(out path, out source, out message)
+                ? path
+                : null;
         }
 
         private static void OpenUrl(string url)
@@ -376,6 +369,9 @@ namespace QS3D.BricsCAD.V25
         private readonly TextBox _hostname = new TextBox { Margin = new Thickness(0, 4, 0, 8) };
         private readonly PasswordBox _token = new PasswordBox { Margin = new Thickness(0, 4, 0, 8) };
         private readonly TextBlock _status = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 8) };
+        private Button? _installButton;
+        private Button? _cancelInstallButton;
+        private DispatcherTimer? _installTimer;
         private DispatcherTimer? _quickUrlTimer;
         private int _quickUrlPollTicks;
 
@@ -383,12 +379,15 @@ namespace QS3D.BricsCAD.V25
         {
             Title = "QS3D MCP - Advanced / Quick Tunnel";
             Width = 620;
-            Height = 480;
+            Height = 500;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            Closed += (_, __) => StopQuickUrlPolling();
+            Closed += (_, __) => { StopQuickUrlPolling(); StopInstallPolling(); };
             var panel = new StackPanel { Margin = new Thickness(18) };
             panel.Children.Add(new TextBlock { Text = "Luồng mặc định nên dùng Cài đặt MCP -> Đăng nhập Cloudflare. Màn hình này chỉ dành cho Quick Tunnel hoặc token nâng cao.", TextWrapping = TextWrapping.Wrap });
-            panel.Children.Add(Button("Cài / cập nhật Cloudflare Tunnel tự động", (_, __) => InstallCloudflared()));
+            _installButton = Button("Cài / cập nhật Cloudflare Tunnel tự động", (_, __) => InstallCloudflared());
+            panel.Children.Add(_installButton);
+            _cancelInstallButton = Button("Hủy cài Cloudflare Tunnel", (_, __) => CancelCloudflaredInstall());
+            panel.Children.Add(_cancelInstallButton);
             panel.Children.Add(Button("Mở Cloudflare Dashboard", (_, __) => McpCloudflareTunnelManager.OpenCloudflareTunnelDashboard()));
             panel.Children.Add(new TextBlock { Text = "Hostname (token mode):" });
             panel.Children.Add(_hostname);
@@ -415,24 +414,73 @@ namespace QS3D.BricsCAD.V25
         {
             if (McpCloudflaredBootstrapper.IsInstalling)
             {
-                _status.Text = "Cloudflare Tunnel đang được tải/cài.";
+                Refresh();
                 return;
             }
-            _status.Text = "Đang tải cloudflared chính thức và kiểm tra Authenticode...";
-            McpCloudflaredBootstrapper.BeginInstall((ok, message) =>
+            _status.Text = "Đang kiểm tra/cài cloudflared...";
+            var started = McpCloudflaredBootstrapper.BeginInstall((ok, message) =>
             {
                 try
                 {
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        _status.Text = message;
+                        StopInstallPolling();
                         Refresh();
-                        if (!ok)
+                        if (!ok && !McpCloudflaredBootstrapper.WasLastInstallCancelled)
                             MessageBox.Show(message, "QS3D MCP", MessageBoxButton.OK, MessageBoxImage.Warning);
                     }));
                 }
                 catch { }
             });
+            if (started) StartInstallPolling();
+            Refresh();
+        }
+
+        private void CancelCloudflaredInstall()
+        {
+            string message;
+            McpCloudflaredBootstrapper.CancelInstall(out message);
+            _status.Text = message;
+            RefreshInstallButtons();
+        }
+
+        private void StartInstallPolling()
+        {
+            StopInstallPolling();
+            _installTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+            {
+                Interval = TimeSpan.FromMilliseconds(250)
+            };
+            _installTimer.Tick += InstallTimerOnTick;
+            _installTimer.Start();
+        }
+
+        private void InstallTimerOnTick(object? sender, EventArgs e)
+        {
+            Refresh();
+            if (!McpCloudflaredBootstrapper.IsInstalling) StopInstallPolling();
+        }
+
+        private void StopInstallPolling()
+        {
+            var timer = _installTimer;
+            _installTimer = null;
+            if (timer == null) return;
+            timer.Stop();
+            timer.Tick -= InstallTimerOnTick;
+        }
+
+        private void RefreshInstallButtons()
+        {
+            var busy = McpCloudflaredBootstrapper.IsInstalling;
+            if (_installButton != null)
+            {
+                _installButton.IsEnabled = !busy;
+                _installButton.Content = busy
+                    ? "Đang cài Cloudflare... " + McpCloudflaredBootstrapper.InstallProgressPercent + "%"
+                    : "Cài / cập nhật Cloudflare Tunnel tự động";
+            }
+            if (_cancelInstallButton != null) _cancelInstallButton.IsEnabled = busy;
         }
 
         private void SaveAndStart()
@@ -490,6 +538,13 @@ namespace QS3D.BricsCAD.V25
             timer.Tick -= QuickUrlTimerOnTick;
         }
 
-        private void Refresh() => _status.Text = McpCloudflareTunnelManager.Describe();
+        private void Refresh()
+        {
+            RefreshInstallButtons();
+            var installer = McpCloudflaredBootstrapper.IsInstalling
+                ? Environment.NewLine + "installer=" + McpCloudflaredBootstrapper.InstallProgressPercent + "% · " + McpCloudflaredBootstrapper.InstallStatus
+                : string.Empty;
+            _status.Text = McpCloudflareTunnelManager.Describe() + installer;
+        }
     }
 }

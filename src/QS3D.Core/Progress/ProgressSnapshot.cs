@@ -117,7 +117,6 @@ namespace QS3D.Core.Progress
             return builder.ToString();
         }
     }
-
     public sealed class ProgressSnapshot
     {
         public ProgressSnapshot(
@@ -436,14 +435,19 @@ namespace QS3D.Core.Progress
             var result = new List<T>();
             using (var enumerator = source.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireKnownCountStable(source, knownCount, parameterName, label);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireKnownCountStable(source, knownCount, parameterName, label);
                     if (knownCount.HasValue && result.Count >= knownCount.Value)
                         throw CountMismatch(knownCount.Value, result.Count + 1, parameterName, label);
                     if (result.Count == MaximumEntries)
                         throw TooMany(parameterName, label);
 
                     var item = enumerator.Current;
+                    RequireKnownCountStable(source, knownCount, parameterName, label);
                     if (item == null)
                         throw new ArgumentException(label + " cannot contain null entries.", parameterName);
                     result.Add(item);
@@ -452,10 +456,15 @@ namespace QS3D.Core.Progress
             if (knownCount.HasValue && knownCount.Value != result.Count)
                 throw CountMismatch(knownCount.Value, result.Count, parameterName, label);
 
-            var postTraversalKnownCount = SnapshotKnownCount(source, parameterName, label);
-            if (knownCount != postTraversalKnownCount)
-                throw new ArgumentException(label + " known count changed during traversal.", parameterName);
+            RequireKnownCountStable(source, knownCount, parameterName, label);
             return result;
+        }
+
+        private static void RequireKnownCountStable<T>(IEnumerable<T> source, int? expectedKnownCount, string parameterName, string label) where T : class
+        {
+            var observedKnownCount = SnapshotKnownCount(source, parameterName, label);
+            if (expectedKnownCount != observedKnownCount)
+                throw new ArgumentException(label + " known count changed during traversal.", parameterName);
         }
 
         private static int? SnapshotKnownCount<T>(IEnumerable<T> source, string parameterName, string label) where T : class

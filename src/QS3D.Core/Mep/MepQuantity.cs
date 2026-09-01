@@ -110,17 +110,29 @@ namespace QS3D.Core.Mep
             var builders = new Dictionary<string, AggregateBuilder>(StringComparer.Ordinal);
             var index = 0;
             // Compatibility marker for the older Count-stability source guard: foreach (var element in elements)
-            // Traversal is deliberately explicit so cardinality checks run before enumerator.Current is observed.
+            // Traversal is deliberately explicit so Count/cap guards run before enumerator.Current is observed.
             using (var enumerator = elements.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    if (hasKnownCount)
+                        EnsureKnownCountStable(elements, knownCount);
+
+                    if (!enumerator.MoveNext())
+                        break;
+
                     if (index == MaxElements)
                         ThrowTooManyElements();
-                    if (hasKnownCount && index >= knownCount)
-                        ThrowKnownCountTraversalMismatch();
+                    if (hasKnownCount)
+                    {
+                        EnsureKnownCountStable(elements, knownCount);
+                        if (index >= knownCount)
+                            ThrowKnownCountTraversalMismatch();
+                    }
 
                     var element = enumerator.Current;
+                    if (hasKnownCount)
+                        EnsureKnownCountStable(elements, knownCount);
                     if (element == null)
                         throw new ArgumentException("MEP takeoff contains a null element at index " + index + ".", nameof(elements));
                     if (!ids.Add(element.ElementId))
@@ -140,17 +152,20 @@ namespace QS3D.Core.Mep
             if (hasKnownCount && index != knownCount)
                 ThrowKnownCountTraversalMismatch();
             if (hasKnownCount)
-            {
-                var hasFinalKnownCount = TryGetKnownCount(elements, out var finalKnownCount);
-                if (!hasFinalKnownCount || finalKnownCount != knownCount)
-                    ThrowKnownCountChangedDuringTraversal();
-            }
+                EnsureKnownCountStable(elements, knownCount);
 
             var result = new List<MepQuantityGroup>(builders.Count);
             foreach (var builder in builders.Values)
                 result.Add(builder.Build());
             result.Sort(CompareGroups);
             return new ReadOnlyCollection<MepQuantityGroup>(result.ToArray());
+        }
+
+        private static void EnsureKnownCountStable(IEnumerable<MepElement> elements, int admittedCount)
+        {
+            var hasCurrentKnownCount = TryGetKnownCount(elements, out var currentKnownCount);
+            if (!hasCurrentKnownCount || currentKnownCount != admittedCount)
+                ThrowKnownCountChangedDuringTraversal();
         }
 
         private static bool TryGetKnownCount(IEnumerable<MepElement> elements, out int count)

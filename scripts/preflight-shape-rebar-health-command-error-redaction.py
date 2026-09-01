@@ -16,7 +16,7 @@ else:
         'project.Elements.SelectMany(ParseShapeHandles).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()',
         'CadHandleService.GetLiveSolidHandles(document, handles)',
         'new GeneratedRebarHealthService().InspectShape(project, live)',
-        'Application.ShowModelessWindow(IntPtr.Zero, new ModelHealthWindow(document, issues, issue =>',
+        'ModelHealthWindowPresenter.Show(document, issues, issue =>',
         'CadHandleService.Select(document, ParseShapeHandles(element))',
         'document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false)',
         'var message = "QS3DREBARSHAPEHEALTH lỗi: không thể hoàn tất health check.";',
@@ -28,9 +28,9 @@ else:
         if token not in text:
             errors.append("Shape Rebar Health command contract missing token: " + token)
 
-    for token in ('catch (System.Exception ex)', 'ex.Message', 'QS3DREBARSHAPEHEALTH lỗi: " +'):
+    for token in ('Application.ShowModelessWindow(', 'new ModelHealthWindow(', 'catch (System.Exception ex)', 'ex.Message', 'QS3DREBARSHAPEHEALTH lỗi: " +'):
         if token in text:
-            errors.append("Shape Rebar Health command must not reflect exception detail: " + token)
+            errors.append("Shape Rebar Health command must not bypass presenter or reflect exception detail: " + token)
 
 if errors:
     for error in errors:
@@ -38,4 +38,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QS3DREBARSHAPEHEALTH preserves shape-rebar live/modeless locate behavior while top-level exception details remain redacted.")
+print("PASS: QS3DREBARSHAPEHEALTH routes through transactional Model Health publication while preserving shape-rebar live locate and error redaction.")

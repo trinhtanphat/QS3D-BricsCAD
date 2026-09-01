@@ -19,7 +19,7 @@ else:
         "ExistingProjectMutationContext.Require(document, \"Rebar 3D\")",
         "ResolveColumnTargets(project, selectedHandles)",
         "expectedTargetIds.SetEquals(targets.Select(x => x.Id))",
-        "ColumnRebarSolidBuilder.BuildSelected(document, project)",
+        "ColumnRebarSolidBuilder.BuildSelected(document, project, selectedIds)",
         "x.Category == ElementCategory.Column",
         "x.SourceHandles.Any(selectedHandles.Contains)",
     )
@@ -33,11 +33,11 @@ else:
     zero_target = text.find("if (previewTargets.Count == 0)")
     bind = text.find("ExistingProjectMutationContext.Require(document, \"Rebar 3D\")")
     revalidate = text.find("expectedTargetIds.SetEquals(targets.Select(x => x.Id))")
-    build = text.find("ColumnRebarSolidBuilder.BuildSelected(document, project)")
+    build = text.find("ColumnRebarSolidBuilder.BuildSelected(document, project, selectedIds)")
     if min(selection, preview, preview_targets, zero_target, bind, revalidate, build) < 0:
         errors.append("Column Rebar lifecycle ordering tokens are incomplete")
     elif not selection < preview < preview_targets < zero_target < bind < revalidate < build:
-        errors.append("Column Rebar must resolve zero targets read-only before one canonical bind and revalidate before native build")
+        errors.append("Column Rebar must resolve zero targets read-only before one canonical bind and revalidate before same-snapshot native build")
 
     start = text.find("public void BuildRebar3D()")
     helper = text.find("private static List<ProjectElement> ResolveColumnTargets", start)
@@ -55,4 +55,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Column Rebar 3D preserves PICKFIRST-only selection, resolves semantic Column targets read-only, no-ops before mutation bind when empty, binds once, and revalidates freshness before native build.")
+print("PASS: Column Rebar 3D preserves PICKFIRST-only selection, resolves semantic Column targets read-only, no-ops before mutation bind when empty, binds once, revalidates freshness, and passes the admitted snapshot into native build.")

@@ -11,10 +11,12 @@ smoke = SMOKE.read_text(encoding="utf-8")
 required_source = [
     "var knownCount = SnapshotKnownCount(source, parameterName, label);",
     "using (var enumerator = source.GetEnumerator())",
-    "while (enumerator.MoveNext())",
+    "while (true)",
+    "RequireKnownCountStable(source, knownCount, parameterName, label);",
+    "if (!enumerator.MoveNext())",
     "knownCount.HasValue && result.Count >= knownCount.Value",
     "var item = enumerator.Current;",
-    "var postTraversalKnownCount = SnapshotKnownCount(source, parameterName, label);",
+    "private static void RequireKnownCountStable<T>",
     "known count changed during traversal",
     "private static int? SnapshotKnownCount<T>",
     "source is ICollection<T>",
@@ -24,6 +26,9 @@ required_source = [
 required_smoke = [
     "[ModuleInitializer]",
     "KnownCountOverrunStopsBeforeCurrentAndLaterTail",
+    "TransientCountGrowthFailsBeforeCurrent",
+    "TransientCountShrinkFailsBeforeCurrent",
+    "TransientNegativeCountFailsBeforeCurrent",
     "PostTraversalUniformCountDriftFailsClosed",
     "PostTraversalSingleSurfaceConflictFailsClosed",
     "CurrentReads",
@@ -35,20 +40,22 @@ missing += [token for token in required_smoke if token not in smoke]
 if missing:
     raise SystemExit("Progress snapshot Count-stability preflight missing contract tokens: " + ", ".join(missing))
 
-# Ordering matters: MoveNext may expose the existence of an unexpected item, but
-# admitted known Count must reject it before Current, null semantics or retention.
-loop = source.index("while (enumerator.MoveNext())")
-overrun = source.index("knownCount.HasValue && result.Count >= knownCount.Value", loop)
-limit = source.index("result.Count == MaximumEntries", loop)
-current = source.index("var item = enumerator.Current;", loop)
-null_check = source.index("item == null", loop)
-retain = source.index("result.Add(item)", loop)
-if not (loop < overrun < limit < current < null_check < retain):
-    raise SystemExit("Progress snapshot Count overrun guard must precede Current/streaming-null-retention semantics")
+loop = source.index("while (true)")
+pre_move = source.index("RequireKnownCountStable(source, knownCount, parameterName, label);", loop)
+move = source.index("if (!enumerator.MoveNext())", pre_move)
+post_move = source.index("RequireKnownCountStable(source, knownCount, parameterName, label);", move)
+overrun = source.index("knownCount.HasValue && result.Count >= knownCount.Value", post_move)
+limit = source.index("result.Count == MaximumEntries", overrun)
+current = source.index("var item = enumerator.Current;", limit)
+null_check = source.index("item == null", current)
+retain = source.index("result.Add(item)", null_check)
+if not (loop < pre_move < move < post_move < overrun < limit < current < null_check < retain):
+    raise SystemExit("Progress snapshot Count stability must bind before MoveNext and after successful MoveNext before Current/retention")
 
-post = source.index("var postTraversalKnownCount = SnapshotKnownCount(source, parameterName, label);")
-return_result = source.index("return result;", post)
-if not post < return_result:
-    raise SystemExit("Progress snapshot Count evidence must be rebound before publication")
+under_yield = source.index("knownCount.HasValue && knownCount.Value != result.Count", retain)
+final_rebind = source.index("RequireKnownCountStable(source, knownCount, parameterName, label);", under_yield)
+return_result = source.index("return result;", final_rebind)
+if not under_yield < final_rebind < return_result:
+    raise SystemExit("Progress snapshot Count evidence must be rebound after traversal before publication")
 
-print("PASS progress snapshot known Count early-overrun and traversal-stability source contract")
+print("PASS progress snapshot known Count early-overrun and transient traversal-stability source contract")

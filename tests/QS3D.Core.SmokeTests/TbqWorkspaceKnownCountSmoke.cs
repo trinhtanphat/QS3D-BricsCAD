@@ -128,44 +128,44 @@ namespace QS3D.Core.SmokeTests
         {
             var under = new CountedSequence<TbqBillItem>(2, Bill("B1"));
             var underError = Capture<InvalidOperationException>(() => Workspace(billItems: under));
-            AssertTraversalMismatch(under, "bill items", 2, 1, underError);
+            AssertTraversalMismatch(under, "bill items", 2, 1, 5, underError);
 
             var over = new CountedSequence<TbqBillItem>(1, Bill("B1"), Bill("B2"));
             var overError = Capture<InvalidOperationException>(() => Workspace(billItems: over));
-            AssertTraversalMismatch(over, "bill items", 1, 2, overError);
+            AssertTraversalMismatch(over, "bill items", 1, 2, 6, overError);
         }
 
         private static void BuildUpTraversalMustMatchKnownCount()
         {
             var under = new CountedSequence<BuildUpRateSnapshot>(2, BuildUp("R1"));
             var underError = Capture<InvalidOperationException>(() => Workspace(buildUpRates: under));
-            AssertTraversalMismatch(under, "build-up rates", 2, 1, underError);
+            AssertTraversalMismatch(under, "build-up rates", 2, 1, 5, underError);
 
             var over = new CountedSequence<BuildUpRateSnapshot>(1, BuildUp("R1"), BuildUp("R2"));
             var overError = Capture<InvalidOperationException>(() => Workspace(buildUpRates: over));
-            AssertTraversalMismatch(over, "build-up rates", 1, 2, overError);
+            AssertTraversalMismatch(over, "build-up rates", 1, 2, 6, overError);
         }
 
         private static void RateReferenceTraversalMustMatchKnownCount()
         {
             var under = new CountedSequence<RateReferenceEdge>(2, Reference("R1"));
             var underError = Capture<InvalidOperationException>(() => Workspace(rateReferences: under));
-            AssertTraversalMismatch(under, "rate references", 2, 1, underError);
+            AssertTraversalMismatch(under, "rate references", 2, 1, 5, underError);
 
             var over = new CountedSequence<RateReferenceEdge>(1, Reference("R1"), Reference("R2"));
             var overError = Capture<InvalidOperationException>(() => Workspace(rateReferences: over));
-            AssertTraversalMismatch(over, "rate references", 1, 2, overError);
+            AssertTraversalMismatch(over, "rate references", 1, 2, 6, overError);
         }
 
         private static void LibraryTraversalMustMatchKnownCount()
         {
             var under = new CountedSequence<BqLibraryEntry>(2, Library("L1"));
             var underError = Capture<InvalidOperationException>(() => Workspace(libraryEntries: under));
-            AssertTraversalMismatch(under, "BQ library entries", 2, 1, underError);
+            AssertTraversalMismatch(under, "BQ library entries", 2, 1, 5, underError);
 
             var over = new CountedSequence<BqLibraryEntry>(1, Library("L1"), Library("L2"));
             var overError = Capture<InvalidOperationException>(() => Workspace(libraryEntries: over));
-            AssertTraversalMismatch(over, "BQ library entries", 1, 2, overError);
+            AssertTraversalMismatch(over, "BQ library entries", 1, 2, 6, overError);
         }
 
         private static void BillItemCountDriftFailsAfterTraversal()
@@ -200,7 +200,7 @@ namespace QS3D.Core.SmokeTests
         {
             var source = new DriftingReadOnlyCollection<TbqBillItem>(1, -1, Bill("B1"));
             var error = Capture<InvalidOperationException>(() => Workspace(billItems: source));
-            Equal(2, source.CountReads, "Post-traversal negative TBQ Count must be rebound.");
+            Equal(6, source.CountReads, "Post-traversal negative TBQ Count must be rebound throughout traversal.");
             Equal(1, source.GetEnumeratorCalls, "Post-traversal negative TBQ source must traverse exactly once.");
             Contains("negative known count", error.Message, "Post-traversal negative TBQ Count must fail closed explicitly.");
         }
@@ -209,9 +209,9 @@ namespace QS3D.Core.SmokeTests
         {
             var source = new MultiCountSequence<TbqBillItem>(1, 1, 1, 1, 2, 1, Bill("B1"));
             var error = Capture<InvalidOperationException>(() => Workspace(billItems: source));
-            Equal(2, source.GenericCountReads, "Post-traversal conflict must rebind ICollection<T>.Count.");
-            Equal(2, source.ReadOnlyCountReads, "Post-traversal conflict must rebind IReadOnlyCollection<T>.Count.");
-            Equal(2, source.NonGenericCountReads, "Post-traversal conflict must rebind ICollection.Count.");
+            Equal(6, source.GenericCountReads, "Post-traversal conflict must rebind ICollection<T>.Count throughout traversal.");
+            Equal(6, source.ReadOnlyCountReads, "Post-traversal conflict must rebind IReadOnlyCollection<T>.Count throughout traversal.");
+            Equal(6, source.NonGenericCountReads, "Post-traversal conflict must rebind ICollection.Count throughout traversal.");
             Equal(1, source.GetEnumeratorCalls, "Post-traversal conflict source must traverse exactly once.");
             Contains("conflicting known counts", error.Message, "Post-traversal multi-interface Count conflict must fail closed.");
         }
@@ -221,9 +221,9 @@ namespace QS3D.Core.SmokeTests
             var source = new MultiCountSequence<TbqBillItem>(1, 1, 1, 1, 1, 1, Bill("B1"));
             var workspace = Workspace(billItems: source);
             Equal(1, workspace.BillItems.Count, "Stable multi-interface TBQ source must remain accepted.");
-            Equal(2, source.GenericCountReads, "Stable ICollection<T>.Count must be bound before and after traversal.");
-            Equal(2, source.ReadOnlyCountReads, "Stable IReadOnlyCollection<T>.Count must be bound before and after traversal.");
-            Equal(2, source.NonGenericCountReads, "Stable ICollection.Count must be bound before and after traversal.");
+            Equal(6, source.GenericCountReads, "Stable ICollection<T>.Count must be rebound throughout traversal.");
+            Equal(6, source.ReadOnlyCountReads, "Stable IReadOnlyCollection<T>.Count must be rebound throughout traversal.");
+            Equal(6, source.NonGenericCountReads, "Stable ICollection.Count must be rebound throughout traversal.");
             Equal(1, source.GetEnumeratorCalls, "Stable multi-interface TBQ source must traverse exactly once.");
         }
 
@@ -239,10 +239,10 @@ namespace QS3D.Core.SmokeTests
             Equal(1, workspace.BuildUpRates.Count, "Exact counted build-up traversal must remain accepted.");
             Equal(1, workspace.RateReferences.Edges.Count, "Exact counted rate-reference traversal must remain accepted.");
             Equal(1, workspace.Library.Entries.Count, "Exact counted library traversal must remain accepted.");
-            Equal(2, billItems.CountReads, "Exact bill-item Count must be bound before and after traversal.");
-            Equal(2, buildUps.CountReads, "Exact build-up Count must be bound before and after traversal.");
-            Equal(2, references.CountReads, "Exact rate-reference Count must be bound before and after traversal.");
-            Equal(2, library.CountReads, "Exact library Count must be bound before and after traversal.");
+            Equal(6, billItems.CountReads, "Exact bill-item Count must be rebound throughout traversal.");
+            Equal(6, buildUps.CountReads, "Exact build-up Count must be rebound throughout traversal.");
+            Equal(6, references.CountReads, "Exact rate-reference Count must be rebound throughout traversal.");
+            Equal(6, library.CountReads, "Exact library Count must be rebound throughout traversal.");
         }
 
         private static void PureStreamingSourcesRemainAccepted()
@@ -295,9 +295,10 @@ namespace QS3D.Core.SmokeTests
             string label,
             int expectedCount,
             int observedCount,
+            int expectedCountReads,
             InvalidOperationException error)
         {
-            Equal(1, source.CountReads, "TBQ " + label + " Count must be snapshotted exactly once before traversal mismatch.");
+            Equal(expectedCountReads, source.CountReads, "TBQ " + label + " Count must be rebound throughout traversal before mismatch.");
             Equal(1, source.GetEnumeratorCalls, "TBQ " + label + " mismatch source must be enumerated exactly once.");
             Contains(label + " traversal produced " + observedCount, error.Message, "TBQ " + label + " mismatch must report observed traversal count.");
             Contains("known count reported " + expectedCount, error.Message, "TBQ " + label + " mismatch must report snapshotted Count.");
@@ -305,7 +306,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void AssertPostTraversalDrift<T>(DriftingReadOnlyCollection<T> source, string label, InvalidOperationException error)
         {
-            Equal(2, source.CountReads, "TBQ " + label + " Count must be bound before and after exact traversal.");
+            Equal(6, source.CountReads, "TBQ " + label + " Count must be rebound throughout exact traversal.");
             Equal(1, source.GetEnumeratorCalls, "TBQ " + label + " drift source must traverse exactly once.");
             Contains(label + " known count changed during traversal", error.Message, "TBQ " + label + " Count drift must fail closed before publication.");
         }

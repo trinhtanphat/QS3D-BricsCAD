@@ -129,7 +129,7 @@ namespace QS3D.Core.SmokeTests
             var rates = new CountProbeCollection<RateItem>(1, Item("R-1"));
             var book = new RateBook("book", rates);
             Equal(1, book.Items.Count, "honest rate-book count");
-            Equal(2, rates.CountReads, "rate-book Count must be rebound");
+            Equal(5, rates.CountReads, "rate-book Count must be rebound at admission, around traversal, and before publication");
 
             var lines = new CountProbeCollection<EstimateLine>(1, Line("L-1"));
             var projection = FrozenEstimateProjection.Create(lines);

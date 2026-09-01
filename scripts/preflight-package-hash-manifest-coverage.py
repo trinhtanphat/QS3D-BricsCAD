@@ -22,6 +22,13 @@ def read(path):
     return path.read_text(encoding="utf-8")
 
 
+def executable_lines(source):
+    return "\n".join(
+        line for line in source.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    )
+
+
 def exact_coverage(manifest_names, actual_names):
     manifest = [name.casefold() for name in manifest_names]
     actual = [name.casefold() for name in actual_names if name.casefold() != "sha256sums.txt"]
@@ -46,14 +53,28 @@ package_source = read(PACKAGE)
 finalize_source = read(FINALIZE)
 install_source = read(INSTALL)
 update_source = read(UPDATE)
+package_active = executable_lines(package_source)
 
-# The package producer may use PowerShell's recursive regular-file enumeration because it
-# operates on the build-owned staging tree. The signed-package finalizer deliberately uses
-# Get-SafePackageFiles instead so reparse/non-regular entries are rejected while traversing.
-require("Get-ChildItem" in package_source and "-Recurse" in package_source and "-File" in package_source,
-        "package-v25.ps1 must enumerate regular package files recursively for hashing")
-require("SHA256SUMS.txt" in package_source and "Get-FileHash" in package_source and "-Algorithm SHA256" in package_source,
-        "package-v25.ps1 must produce the SHA256SUMS contract")
+# Both package construction and signed-package finalization must traverse the payload
+# fail-closed: reparse/non-regular entries are rejected before hashing. This preserves
+# complete manifest coverage without reopening the staging tree through an unchecked
+# recursive pathname enumeration.
+package_traversal_tokens = (
+    "function Get-SafePackageFiles",
+    "Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop",
+    "[IO.FileAttributes]::ReparsePoint",
+    "Package staging contains a reparse-backed entry",
+    "$files.Add($item)",
+    "return @($files | Sort-Object FullName)",
+    "$hashLines = Get-SafePackageFiles -PackageRoot $dist | ForEach-Object",
+    "SHA256SUMS.txt",
+    "Get-FileHash",
+    "-Algorithm SHA256",
+)
+for token in package_traversal_tokens:
+    require(token in package_source, f"package-v25.ps1 safe hash traversal missing token: {token}")
+require("Get-ChildItem $dist -Recurse -File" not in package_active,
+        "package-v25.ps1 must not bypass safe package traversal with recursive Get-ChildItem")
 
 finalizer_tokens = (
     "function Get-SafePackageFiles",
@@ -73,8 +94,6 @@ require("Get-ChildItem -LiteralPath $package -Recurse -File" not in finalize_sou
 
 require("install-v25-autoload.ps1" in package_source,
         "package-v25.ps1 must package the installer that enforces internal manifest coverage")
-require("Get-ChildItem $dist -Recurse -File | Sort-Object FullName | ForEach-Object" in package_source,
-        "package-v25.ps1 must hash every regular payload present before creating the root manifest")
 require("Where-Object { $_.Name -ne 'SHA256SUMS.txt' }" not in package_source,
         "package-v25.ps1 must not exclude nested payloads merely because their basename is SHA256SUMS.txt")
 
@@ -113,6 +132,29 @@ if update_source:
     installer_index = update_source.find("& $installer @arguments")
     require(hash_index >= 0 and extract_index >= 0 and installer_index >= 0 and hash_index < extract_index < installer_index,
             "updater must verify the whole ZIP before extraction and delegate installation only afterwards")
+
+# Deterministic regression probes: the guard must reject both traversal bypass and a
+# producer that silently drops the staging reparse rejection used by safe hashing.
+def producer_safe(source):
+    active = executable_lines(source)
+    return (
+        "function Get-SafePackageFiles" in source
+        and "$hashLines = Get-SafePackageFiles -PackageRoot $dist | ForEach-Object" in source
+        and "Package staging contains a reparse-backed entry" in source
+        and "Get-ChildItem $dist -Recurse -File" not in active
+    )
+
+require(producer_safe(package_source), "package producer safe-traversal model baseline must pass")
+require(not producer_safe(package_source.replace(
+    "$hashLines = Get-SafePackageFiles -PackageRoot $dist | ForEach-Object",
+    "$hashLines = Get-ChildItem $dist -Recurse -File | Sort-Object FullName | ForEach-Object",
+    1,
+)), "package producer safe-traversal model must reject recursive pathname enumeration")
+require(not producer_safe(package_source.replace(
+    "Package staging contains a reparse-backed entry",
+    "Package staging permits a reparse-backed entry",
+    1,
+)), "package producer safe-traversal model must reject removal of staging reparse rejection")
 
 if errors:
     print("Package hash-manifest coverage preflight FAILED")

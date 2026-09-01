@@ -46,7 +46,7 @@ namespace QS3D.Core.SmokeTests
             var error = Capture<InvalidOperationException>(() => SemanticSheetIndexBuilder.Build(source));
             Contains("known count changed during traversal", error.Message,
                 "Post-traversal known Count drift must fail closed.");
-            Equal(2, source.CountReads, "Count evidence must be rebound after traversal.");
+            Equal(5, source.CountReads, "Count evidence must be rebound at traversal boundaries and after traversal.");
             Equal(1, source.CurrentReads, "Count rebind must not cause an extra Current read.");
         }
 
@@ -99,7 +99,7 @@ namespace QS3D.Core.SmokeTests
             Equal(2, index.Rows.Count, "Honest counted input must remain accepted.");
             Equal("S-A", index.Rows[0].SheetId, "Sheet index must remain deterministically sorted by number.");
             Equal("S-B", index.Rows[1].SheetId, "Sheet index must preserve deterministic trailing order.");
-            Equal(2, source.CountReads, "Honest Count evidence must be read before and after traversal.");
+            Equal(7, source.CountReads, "Honest Count evidence must be rebound around each traversal boundary and after traversal.");
             Equal(2, source.CurrentReads, "Honest traversal must read each Current exactly once.");
         }
 

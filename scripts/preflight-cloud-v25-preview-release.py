@@ -151,15 +151,23 @@ else:
         "function Assert-NoExistingReparseComponent",
         "[IO.FileAttributes]::ReparsePoint",
         "function Get-OrdinaryFileOrNull",
+        "function Open-PinnedMsiReadLock",
+        "function Test-PinnedMsiGeneration",
+        "[IO.FileShare]::Read",
+        "$sha.ComputeHash($stream)",
         "Assert-NoExistingReparseComponent -Path $cacheDir",
         "Assert-NoExistingReparseComponent -Path $msi",
         "Assert-NoExistingReparseComponent -Path $extract",
-        "$item = Get-OrdinaryFileOrNull -Path $msi",
-        "Get-FileHash -LiteralPath $msi -Algorithm SHA256",
-        "Get-AuthenticodeSignature -FilePath $msi",
+        "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging",
+        "Test-PinnedMsiGeneration -Path $staging",
+        "[IO.File]::Move($staging, $msi)",
+        "Test-PinnedMsiGeneration -Path $msi -Label 'Published BricsCAD V25 MSI'",
+        "$msiState = Open-PinnedMsiReadLock -Path $msi",
+        "Get-AuthenticodeSignature -FilePath $msiState.Path",
         "[System.Management.Automation.SignatureStatus]::Valid",
         "CN|O)=Bricsys",
         "WindowsInstaller.Installer",
+        "$database = $installer.OpenDatabase($msiState.Path, 0)",
         "ProductVersion",
         "ProductName",
         "$process.WaitForExit(900000)",
@@ -167,7 +175,14 @@ else:
     )
     for token in helper_required:
         if token not in helper:
-            errors.append("shared V25 acquisition helper missing required integrity/identity/bounded-process/path-safety token: " + token)
+            errors.append("shared V25 acquisition helper missing required held-generation/integrity/identity/bounded-process/path-safety token: " + token)
+    for forbidden in (
+        "Get-FileHash",
+        "Invoke-WebRequest -Uri $candidate.Url -OutFile $msi",
+    ):
+        if forbidden in helper:
+            errors.append("shared V25 acquisition helper contains forbidden pathname/direct-publication token: " + forbidden)
+
     destructive = "Remove-Item -LiteralPath $extract -Recurse -Force"
     for guard in (
         "Assert-NoExistingReparseComponent -Path $cacheDir",
@@ -176,14 +191,18 @@ else:
     ):
         if helper.find(guard) < 0 or helper.find(destructive) < 0 or helper.find(guard) >= helper.find(destructive):
             errors.append("shared V25 acquisition helper must validate existing path components before recursive extraction cleanup: " + guard)
-    ordinary_index = helper.find("$item = Get-OrdinaryFileOrNull -Path $msi")
-    hash_index = helper.find("Get-FileHash -LiteralPath $msi -Algorithm SHA256", ordinary_index if ordinary_index >= 0 else 0)
-    signature_index = helper.find("Get-AuthenticodeSignature -FilePath $msi", hash_index if hash_index >= 0 else 0)
+
+    download_index = helper.find("Invoke-WebRequest -Uri $candidate.Url -OutFile $staging")
+    staged_index = helper.find("Test-PinnedMsiGeneration -Path $staging", download_index if download_index >= 0 else 0)
+    publish_index = helper.find("[IO.File]::Move($staging, $msi)", staged_index if staged_index >= 0 else 0)
+    published_index = helper.find("Test-PinnedMsiGeneration -Path $msi -Label 'Published BricsCAD V25 MSI'", publish_index if publish_index >= 0 else 0)
+    final_lock_index = helper.find("$msiState = Open-PinnedMsiReadLock -Path $msi", published_index if published_index >= 0 else 0)
+    signature_index = helper.find("Get-AuthenticodeSignature -FilePath $msiState.Path", final_lock_index if final_lock_index >= 0 else 0)
     product_index = helper.find("ProductVersion", signature_index if signature_index >= 0 else 0)
     extract_index = helper.find("Start-Process -FilePath msiexec.exe", product_index if product_index >= 0 else 0)
     timeout_index = helper.find("$process.WaitForExit(900000)", extract_index if extract_index >= 0 else 0)
-    if min(ordinary_index, hash_index, signature_index, product_index, extract_index, timeout_index) < 0 or not ordinary_index < hash_index < signature_index < product_index < extract_index < timeout_index:
-        errors.append("shared V25 acquisition helper must verify ordinary-file, digest, Authenticode and MSI identity before bounded extraction")
+    if min(download_index, staged_index, publish_index, published_index, final_lock_index, signature_index, product_index, extract_index, timeout_index) < 0 or not download_index < staged_index < publish_index < published_index < final_lock_index < signature_index < product_index < extract_index < timeout_index:
+        errors.append("shared V25 acquisition helper must stage, held-admit, publish/re-admit, then bind Authenticode/MSI identity before bounded extraction")
 
 if not DOC.is_file():
     errors.append("missing docs/CLOUD-V25-PREVIEW-RELEASE.md")
@@ -211,4 +230,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: cloud V25 preview remains manual-only; immutable Actions/cache pins, exact installer URI/digest provenance, shared hardened acquisition, Bricsys Authenticode + MSI identity, bounded extraction, and release/package binding remain fail-closed.")
+print("PASS: cloud V25 preview remains manual-only; immutable Actions/cache pins, exact installer URI/digest provenance, held-generation acquisition, Bricsys Authenticode + MSI identity, bounded extraction, and release/package binding remain fail-closed.")

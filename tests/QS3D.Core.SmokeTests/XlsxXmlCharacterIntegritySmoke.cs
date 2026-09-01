@@ -59,6 +59,7 @@ namespace QS3D.Core.SmokeTests
                 MinimumClearPanelHeightM = 0d
             };
             row.ElementIds.Add("CW-XML-1");
+            row.SourceHandles.Add("H-XML-1");
             CurtainWallXlsxExporter.Export(path, new List<CurtainWallScheduleRow> { row });
             VerifyWorksheet(path, "curtain");
         }

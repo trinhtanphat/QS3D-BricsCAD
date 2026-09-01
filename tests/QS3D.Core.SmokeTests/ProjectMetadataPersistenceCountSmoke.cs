@@ -148,7 +148,7 @@ namespace QS3D.Core.SmokeTests
             private readonly int _initialCount;
             private readonly int _finalCount;
             private readonly KeyValuePair<string, string> _item;
-            private int _countReads;
+            private bool _traversalCompleted;
 
             internal GenericDriftCollection(int initialCount, int finalCount, KeyValuePair<string, string> item)
             {
@@ -157,7 +157,7 @@ namespace QS3D.Core.SmokeTests
                 _item = item;
             }
 
-            public int Count => _countReads++ == 0 ? _initialCount : _finalCount;
+            public int Count => _traversalCompleted ? _finalCount : _initialCount;
             public bool IsReadOnly => true;
             public int YieldedCount { get; private set; }
 
@@ -165,6 +165,7 @@ namespace QS3D.Core.SmokeTests
             {
                 YieldedCount++;
                 yield return _item;
+                _traversalCompleted = true;
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
@@ -180,7 +181,7 @@ namespace QS3D.Core.SmokeTests
             private readonly int _initialCount;
             private readonly int _finalCount;
             private readonly KeyValuePair<string, string> _item;
-            private int _countReads;
+            private bool _traversalCompleted;
 
             internal ReadOnlyDriftCollection(int initialCount, int finalCount, KeyValuePair<string, string> item)
             {
@@ -189,13 +190,14 @@ namespace QS3D.Core.SmokeTests
                 _item = item;
             }
 
-            public int Count => _countReads++ == 0 ? _initialCount : _finalCount;
+            public int Count => _traversalCompleted ? _finalCount : _initialCount;
             public int YieldedCount { get; private set; }
 
             public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
             {
                 YieldedCount++;
                 yield return _item;
+                _traversalCompleted = true;
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
@@ -206,7 +208,7 @@ namespace QS3D.Core.SmokeTests
             private readonly int _initialCount;
             private readonly int _finalCount;
             private readonly KeyValuePair<string, string> _item;
-            private int _countReads;
+            private bool _traversalCompleted;
 
             internal NonGenericDriftCollection(int initialCount, int finalCount, KeyValuePair<string, string> item)
             {
@@ -215,7 +217,7 @@ namespace QS3D.Core.SmokeTests
                 _item = item;
             }
 
-            public int Count => _countReads++ == 0 ? _initialCount : _finalCount;
+            public int Count => _traversalCompleted ? _finalCount : _initialCount;
             public object SyncRoot => this;
             public bool IsSynchronized => false;
             public int YieldedCount { get; private set; }
@@ -224,6 +226,7 @@ namespace QS3D.Core.SmokeTests
             {
                 YieldedCount++;
                 yield return _item;
+                _traversalCompleted = true;
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
@@ -233,7 +236,7 @@ namespace QS3D.Core.SmokeTests
         private sealed class PostTraversalConflictCollection : ICollection<KeyValuePair<string, string>>, IReadOnlyCollection<KeyValuePair<string, string>>
         {
             private readonly KeyValuePair<string, string> _item;
-            private int _readOnlyCountReads;
+            private bool _traversalCompleted;
 
             internal PostTraversalConflictCollection(KeyValuePair<string, string> item)
             {
@@ -241,7 +244,7 @@ namespace QS3D.Core.SmokeTests
             }
 
             int ICollection<KeyValuePair<string, string>>.Count => 1;
-            int IReadOnlyCollection<KeyValuePair<string, string>>.Count => _readOnlyCountReads++ == 0 ? 1 : 2;
+            int IReadOnlyCollection<KeyValuePair<string, string>>.Count => _traversalCompleted ? 2 : 1;
             public bool IsReadOnly => true;
             public int YieldedCount { get; private set; }
 
@@ -249,6 +252,7 @@ namespace QS3D.Core.SmokeTests
             {
                 YieldedCount++;
                 yield return _item;
+                _traversalCompleted = true;
             }
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();

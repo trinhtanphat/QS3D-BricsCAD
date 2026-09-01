@@ -12,6 +12,15 @@ def fail(message: str) -> None:
     sys.exit(1)
 
 
+def require_order(segment: str, markers: tuple[str, ...], label: str) -> None:
+    cursor = -1
+    for marker in markers:
+        position = segment.find(marker, cursor + 1)
+        if position < 0:
+            fail(label + " missing ordered invariant: " + marker)
+        cursor = position
+
+
 source = SOURCE.read_text(encoding="utf-8")
 smoke = SMOKE.read_text(encoding="utf-8")
 
@@ -26,7 +35,9 @@ request = source[request_start:request_end]
 
 required_portfolio = [
     "using (var enumerator = lines.GetEnumerator())",
-    "while (enumerator.MoveNext())",
+    "while (true)",
+    "RequireKnownCountStable(lines, knownCount);",
+    "if (!enumerator.MoveNext())",
     "if (knownCount.HasValue && snapshot.Count >= knownCount.Value)",
     "if (snapshot.Count >= MaximumLines)",
     "var line = enumerator.Current;",
@@ -37,21 +48,27 @@ for token in required_portfolio:
     if token not in portfolio:
         fail("portfolio invariant is missing: " + token)
 
-for guard in [
+require_order(portfolio, (
+    "using (var enumerator = lines.GetEnumerator())",
+    "while (true)",
+    "RequireKnownCountStable(lines, knownCount);",
+    "if (!enumerator.MoveNext())",
+    "RequireKnownCountStable(lines, knownCount);",
     "if (knownCount.HasValue && snapshot.Count >= knownCount.Value)",
     "if (snapshot.Count >= MaximumLines)",
-]:
-    if portfolio.index(guard) > portfolio.index("var line = enumerator.Current;"):
-        fail("portfolio bounds must execute before Current")
+    "var line = enumerator.Current;",
+), "portfolio traversal")
 
 required_request = [
     "using (var enumerator = lineIds.GetEnumerator())",
+    "RequireKnownCountStable(lineIds, lineIdKnownCount, MaximumSelectedLines, \"selected-line\");",
     "if (lineIdKnownCount.HasValue && ids.Count >= lineIdKnownCount.Value)",
     "if (ids.Count >= MaximumSelectedLines)",
     "var raw = enumerator.Current;",
     "var postTraversalLineIdCount = SnapshotKnownCount(lineIds, MaximumSelectedLines, \"selected-line\");",
     "selected-line known count changed during enumeration",
     "using (var enumerator = unitRates.GetEnumerator())",
+    "RequireKnownCountStable(unitRates, unitRateKnownCount, MaximumUnitRates, \"unit-rate\");",
     "if (unitRateKnownCount.HasValue && rates.Count >= unitRateKnownCount.Value)",
     "if (rates.Count >= MaximumUnitRates)",
     "var assignment = enumerator.Current;",
@@ -62,15 +79,32 @@ for token in required_request:
     if token not in request:
         fail("bulk assignment invariant is missing: " + token)
 
-if request.index("if (lineIdKnownCount.HasValue && ids.Count >= lineIdKnownCount.Value)") > request.index("var raw = enumerator.Current;"):
-    fail("selected-line known-count guard must execute before Current")
-if request.index("if (ids.Count >= MaximumSelectedLines)") > request.index("var raw = enumerator.Current;"):
-    fail("selected-line streaming ceiling must execute before Current")
-unit_section = request[request.find("if (unitRates == null)"):]
-if unit_section.index("if (unitRateKnownCount.HasValue && rates.Count >= unitRateKnownCount.Value)") > unit_section.index("var assignment = enumerator.Current;"):
-    fail("unit-rate known-count guard must execute before Current")
-if unit_section.index("if (rates.Count >= MaximumUnitRates)") > unit_section.index("var assignment = enumerator.Current;"):
-    fail("unit-rate streaming ceiling must execute before Current")
+line_section_end = request.find("if (unitRates == null)")
+if line_section_end < 0:
+    fail("selected-line traversal boundary is missing")
+line_section = request[:line_section_end]
+require_order(line_section, (
+    "using (var enumerator = lineIds.GetEnumerator())",
+    "while (true)",
+    "RequireKnownCountStable(lineIds, lineIdKnownCount, MaximumSelectedLines, \"selected-line\");",
+    "if (!enumerator.MoveNext())",
+    "RequireKnownCountStable(lineIds, lineIdKnownCount, MaximumSelectedLines, \"selected-line\");",
+    "if (lineIdKnownCount.HasValue && ids.Count >= lineIdKnownCount.Value)",
+    "if (ids.Count >= MaximumSelectedLines)",
+    "var raw = enumerator.Current;",
+), "selected-line traversal")
+
+unit_section = request[line_section_end:]
+require_order(unit_section, (
+    "using (var enumerator = unitRates.GetEnumerator())",
+    "while (true)",
+    "RequireKnownCountStable(unitRates, unitRateKnownCount, MaximumUnitRates, \"unit-rate\");",
+    "if (!enumerator.MoveNext())",
+    "RequireKnownCountStable(unitRates, unitRateKnownCount, MaximumUnitRates, \"unit-rate\");",
+    "if (unitRateKnownCount.HasValue && rates.Count >= unitRateKnownCount.Value)",
+    "if (rates.Count >= MaximumUnitRates)",
+    "var assignment = enumerator.Current;",
+), "unit-rate traversal")
 
 required_smoke = [
     "PortfolioOverrunRejectsBeforeSecondCurrent",

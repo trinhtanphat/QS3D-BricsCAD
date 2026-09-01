@@ -36,6 +36,7 @@ namespace QS3D.Core.Reporting
             var floors = project.Floors.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
             var families = project.Families.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
             var rows = new Dictionary<string, DoorOpeningScheduleRow>(StringComparer.OrdinalIgnoreCase);
+            var areaAggregations = new Dictionary<string, CompensatedAreaTotal>(StringComparer.OrdinalIgnoreCase);
             var order = new List<string>();
 
             foreach (var element in project.Elements
@@ -86,17 +87,74 @@ namespace QS3D.Core.Reporting
                         ThicknessM = thicknessM
                     };
                     rows[key] = row;
+                    areaAggregations[key] = new CompensatedAreaTotal();
                     order.Add(key);
                 }
                 row.Count = checked(row.Count + 1);
-                row.OpeningAreaM2 = QuantityReportMath.Add(row.OpeningAreaM2, areaM2, element.Id + "/opening schedule area");
+                areaAggregations[key].Add(areaM2, element.Id + "/opening schedule area");
                 row.ElementIds.Add(element.Id);
                 ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
                 if (hostId.Length > 0 && !row.HostIds.Contains(hostId, StringComparer.OrdinalIgnoreCase)) row.HostIds.Add(hostId);
             }
 
-            foreach (var row in rows.Values) row.HostCount = row.HostIds.Count;
+            foreach (var key in order)
+            {
+                var row = rows[key];
+                row.OpeningAreaM2 = areaAggregations[key].Value("door/opening schedule/OpeningAreaM2");
+                row.HostCount = row.HostIds.Count;
+            }
             return order.Select(x => rows[x]).ToList().AsReadOnly();
+        }
+
+        private sealed class CompensatedAreaTotal
+        {
+            private double _sum;
+            private double _compensation;
+
+            internal void Add(double value, string label)
+            {
+                var incoming = QuantityReportMath.NonNegative(value, label);
+                QuantityReportMath.Finite(_sum, label + "/sum");
+                QuantityReportMath.Finite(_compensation, label + "/compensation");
+
+                var nextSum = _sum + incoming;
+                if (double.IsNaN(nextSum) || double.IsInfinity(nextSum))
+                    throw new OverflowException("Door/opening schedule area total overflow: " + label);
+
+                var correction = Math.Abs(_sum) >= Math.Abs(incoming)
+                    ? (_sum - nextSum) + incoming
+                    : (incoming - nextSum) + _sum;
+                var nextCompensation = _compensation + correction;
+                if (double.IsNaN(nextCompensation) || double.IsInfinity(nextCompensation))
+                    throw new OverflowException("Door/opening schedule area compensation overflow: " + label);
+
+                _sum = nextSum == 0d ? 0d : nextSum;
+                _compensation = nextCompensation == 0d ? 0d : nextCompensation;
+            }
+
+            internal double Value(string label)
+            {
+                QuantityReportMath.Finite(_sum, label + "/sum");
+                QuantityReportMath.Finite(_compensation, label + "/compensation");
+                var result = _sum + _compensation;
+                if (double.IsNaN(result) || double.IsInfinity(result))
+                    throw new OverflowException("Door/opening schedule area total overflow: " + label);
+                if (_compensation != 0d && result == _sum && !IsStrictlyBelowHalfUlp(_sum, _compensation))
+                    throw new OverflowException("Door/opening schedule area total lost a non-zero compensation at floating-point precision: " + label);
+                if (_sum != 0d && result == _compensation)
+                    throw new OverflowException("Door/opening schedule area total lost a non-zero accumulated value at floating-point precision: " + label);
+                return result == 0d ? 0d : result;
+            }
+
+            private static bool IsStrictlyBelowHalfUlp(double current, double compensation)
+            {
+                if (current <= 0d || compensation == 0d) return false;
+                var currentBits = BitConverter.DoubleToInt64Bits(current);
+                var adjacentBits = compensation > 0d ? currentBits + 1L : currentBits - 1L;
+                var adjacent = BitConverter.Int64BitsToDouble(adjacentBits);
+                var spacing = Math.Abs(adjacent - current);
+                return Math.Abs(compensation) < spacing / 2d;
+            }
         }
 
         private static string GroupKey(params string[] tokens)

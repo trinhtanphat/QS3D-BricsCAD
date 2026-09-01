@@ -80,8 +80,13 @@ namespace QS3D.Core.Documentation
             var result = new List<SemanticSheetPlan>(Math.Min(MaxSheets, 256));
             using (var enumerator = sheets.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableKnownCount(sheets, knownCount);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireStableKnownCount(sheets, knownCount);
+
                     if (knownCount.HasValue && result.Count >= knownCount.Value)
                         throw TraversalCountMismatch();
                     if (result.Count >= MaxSheets)
@@ -97,11 +102,15 @@ namespace QS3D.Core.Documentation
             if (knownCount.HasValue && result.Count != knownCount.Value)
                 throw TraversalCountMismatch();
 
-            var postTraversalKnownCount = RequireKnownCountsWithinLimit(sheets);
-            if (knownCount != postTraversalKnownCount)
-                throw new InvalidOperationException("Semantic sheet index source known count changed during traversal.");
-
+            RequireStableKnownCount(sheets, knownCount);
             return result;
+        }
+
+        private static void RequireStableKnownCount(IEnumerable<SemanticSheetPlan> sheets, int? knownCount)
+        {
+            var currentKnownCount = RequireKnownCountsWithinLimit(sheets);
+            if (knownCount != currentKnownCount)
+                throw new InvalidOperationException("Semantic sheet index source known count changed during traversal.");
         }
 
         private static int? RequireKnownCountsWithinLimit(IEnumerable<SemanticSheetPlan> sheets)

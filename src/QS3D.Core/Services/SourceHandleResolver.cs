@@ -80,16 +80,24 @@ namespace QS3D.Core.Services
 
             var roots = new List<string>();
             var inputCount = 0;
+            RequireStableKnownCountDuringTraversal(elementIds, knownCount);
             using (var enumerator = elementIds.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                RequireStableKnownCountDuringTraversal(elementIds, knownCount);
+                while (true)
                 {
+                    RequireStableKnownCountDuringTraversal(elementIds, knownCount);
+                    if (!enumerator.MoveNext())
+                        break;
+
+                    RequireStableKnownCountDuringTraversal(elementIds, knownCount);
                     if (knownCount.HasValue && inputCount >= knownCount.Value)
                         throw new InvalidOperationException("Locate root selection known Count does not match completed traversal cardinality.");
                     if (inputCount >= MaxRootElementIdInputCount)
                         throw new InvalidOperationException("Locate root selection cannot exceed " + MaxRootElementIdInputCount + " input entries.");
 
                     var rawId = enumerator.Current;
+                    RequireStableKnownCountDuringTraversal(elementIds, knownCount);
                     inputCount++;
                     if (string.IsNullOrWhiteSpace(rawId)) continue;
                     if (!string.Equals(rawId, rawId.Trim(), StringComparison.Ordinal))
@@ -103,6 +111,20 @@ namespace QS3D.Core.Services
 
             RevalidateKnownCountAfterTraversal(elementIds, knownCount);
             return roots.AsReadOnly();
+        }
+
+        private static void RequireStableKnownCountDuringTraversal(IEnumerable<string> elementIds, int? admittedCount)
+        {
+            if (!admittedCount.HasValue)
+                return;
+
+            var reboundCount = TryGetKnownCount(elementIds, out var conflictingKnownCounts, out var negativeKnownCount);
+            if (negativeKnownCount)
+                throw new InvalidOperationException("Locate root selection exposes an invalid negative known Count value during traversal.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("Locate root selection exposes conflicting known Count values during traversal.");
+            if (!reboundCount.HasValue || reboundCount.Value != admittedCount.Value)
+                throw new InvalidOperationException("Locate root selection known Count changed during traversal.");
         }
 
         private static void RevalidateKnownCountAfterTraversal(IEnumerable<string> elementIds, int? admittedCount)

@@ -31,6 +31,7 @@ namespace QS3D.Core.SmokeTests
                 "Bulk edit target collection input count changed during enumeration.");
 
             Equal(2, source.MoveNextCalls, "object overrun traversal stop");
+            Equal(1, source.CurrentReads, "object overrun Current reads");
             Equal(beforeVersion, project.ChangeVersion, "object overrun project version");
             False(element.Properties.ContainsKey("Note"), "object overrun mutation");
         }
@@ -46,6 +47,7 @@ namespace QS3D.Core.SmokeTests
                 "Bulk edit target list input count changed during enumeration.");
 
             Equal(2, source.MoveNextCalls, "id overrun traversal stop");
+            Equal(1, source.CurrentReads, "id overrun Current reads");
             Equal(beforeVersion, project.ChangeVersion, "id overrun project version");
             False(element.Properties.ContainsKey("Note"), "id overrun mutation");
         }
@@ -61,6 +63,7 @@ namespace QS3D.Core.SmokeTests
                 "Bulk edit target collection input count changed during enumeration.");
 
             Equal(2, source.MoveNextCalls, "object under-yield completed traversal");
+            Equal(1, source.CurrentReads, "object under-yield Current reads");
             Equal(beforeVersion, project.ChangeVersion, "object under-yield project version");
             False(element.Properties.ContainsKey("Note"), "object under-yield mutation");
         }
@@ -76,6 +79,7 @@ namespace QS3D.Core.SmokeTests
                 "Bulk edit target list input count changed during enumeration.");
 
             Equal(2, source.MoveNextCalls, "id under-yield completed traversal");
+            Equal(1, source.CurrentReads, "id under-yield Current reads");
             Equal(beforeVersion, project.ChangeVersion, "id under-yield project version");
             False(element.Properties.ContainsKey("Note"), "id under-yield mutation");
         }
@@ -88,6 +92,7 @@ namespace QS3D.Core.SmokeTests
             var changed = new BulkEditService().SetProperty(project, source, "Note", "object-ok");
 
             Equal(1, changed.Count, "honest object changed count");
+            Equal(1, source.CurrentReads, "honest object Current reads");
             Equal("object-ok", element.Properties["Note"], "honest object value");
         }
 
@@ -99,6 +104,7 @@ namespace QS3D.Core.SmokeTests
             var changed = new BulkEditService().SetProperty(project, source, "Note", "id-ok");
 
             Equal(1, changed, "honest id changed count");
+            Equal(1, source.CurrentReads, "honest id Current reads");
             Equal("id-ok", element.Properties["Note"], "honest id value");
         }
 
@@ -147,18 +153,40 @@ namespace QS3D.Core.SmokeTests
 
             public int Count { get; }
             public int MoveNextCalls { get; private set; }
+            public int CurrentReads { get; private set; }
 
-            public IEnumerator<T> GetEnumerator() => Enumerate().GetEnumerator();
+            public IEnumerator<T> GetEnumerator() => new ProbeEnumerator(this);
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
-            private IEnumerable<T> Enumerate()
+            private sealed class ProbeEnumerator : IEnumerator<T>
             {
-                for (var index = 0; index < _items.Count; index++)
+                private readonly DishonestCountCollection<T> _owner;
+                private int _index = -1;
+
+                public ProbeEnumerator(DishonestCountCollection<T> owner)
                 {
-                    MoveNextCalls++;
-                    yield return _items[index];
+                    _owner = owner;
                 }
-                MoveNextCalls++;
+
+                public bool MoveNext()
+                {
+                    _owner.MoveNextCalls++;
+                    _index++;
+                    return _index < _owner._items.Count;
+                }
+
+                public T Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        return _owner._items[_index];
+                    }
+                }
+
+                object IEnumerator.Current => Current!;
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
             }
         }
     }

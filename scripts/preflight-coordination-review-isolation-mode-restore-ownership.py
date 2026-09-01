@@ -21,7 +21,8 @@ session = text[session_start:]
 
 # A successful UNISOLATE queue and a failed OBJECTISOLATIONMODE restore are
 # independent cleanup outcomes. UI/session ownership must remain visible while
-# either native obligation is outstanding.
+# either native obligation is outstanding, including debt transferred from a
+# failed Isolate launch whose synchronous mode compensation was not confirmed.
 if "public bool HasIsolation => _isolationActive || _objectIsolationModeBefore != null;" not in session:
     raise SystemExit("HasIsolation must retain UI/session ownership while isolation-mode restore is still owed")
 
@@ -60,8 +61,6 @@ attempt = mode_restore.find("TryRestoreObjectIsolationModeBestEffort(value)")
 release = mode_restore.find("_objectIsolationModeBefore = null;")
 if attempt < 0 or release < attempt:
     raise SystemExit("OBJECTISOLATIONMODE retry ownership may clear only after a successful native restore attempt")
-if mode_restore.find("_objectIsolationModeBefore = null;") < mode_restore.find("TryRestoreObjectIsolationModeBestEffort(value)"):
-    raise SystemExit("OBJECTISOLATIONMODE retry ownership must not clear before native restore success")
 
 try_restore = method_body(
     "private bool TryRestoreObjectIsolationModeBestEffort(object? modeBefore)",
@@ -81,8 +80,27 @@ isolate = method_body(
     "public void Isolate(IReadOnlyList<ObjectId> ids)",
     "public void RestoreIsolation()",
 )
-if "TryRestoreObjectIsolationModeBestEffort(modeBefore);" not in isolate:
-    raise SystemExit("failed isolate launch must use attempt-local mode compensation without publishing persistent ownership")
+for token in (
+    "var modeBefore = Bricscad.ApplicationServices.Application.GetSystemVariable(\"OBJECTISOLATIONMODE\");",
+    "RestoreImpliedSelectionBestEffort(impliedSelectionBefore);",
+    "if (!TryRestoreObjectIsolationModeBestEffort(modeBefore))",
+    "_objectIsolationModeBefore = modeBefore;",
+    "throw;",
+):
+    if token not in isolate:
+        raise SystemExit(f"failed isolate launch rollback ownership missing: {token}")
+catch_at = isolate.find("catch")
+compensate_at = isolate.find("if (!TryRestoreObjectIsolationModeBestEffort(modeBefore))", catch_at)
+transfer_at = isolate.find("_objectIsolationModeBefore = modeBefore;", compensate_at)
+throw_at = isolate.find("throw;", transfer_at)
+success_publish_at = isolate.rfind("_objectIsolationModeBefore = modeBefore;")
+queue_at = isolate.find('SendStringToExecute("_.ISOLATEOBJECTS ", true, false, false);')
+if not (0 <= queue_at < catch_at < compensate_at < transfer_at < throw_at):
+    raise SystemExit("failed Isolate compensation must transfer exact prior mode before original exception rethrow")
+if success_publish_at <= queue_at:
+    raise SystemExit("successful Isolate mode ownership must still publish only after native queue success")
+if "TryRestoreObjectIsolationModeBestEffort(modeBefore);\n                    throw;" in isolate:
+    raise SystemExit("failed Isolate launch still discards the mode-compensation result")
 
 abandon = method_body(
     "public void AbandonDestroyedDocumentState()",
@@ -93,4 +111,4 @@ explicit_abandon = abandon.find("_objectIsolationModeBefore = null;", restore_at
 if restore_attempt < 0 or explicit_abandon < restore_attempt:
     raise SystemExit("destroyed-document path must attempt mode restore before explicitly abandoning remaining mode ownership")
 
-print("PASS coordination review isolation mode restore retry ownership")
+print("PASS coordination review isolation mode restore and failed-launch rollback retry ownership")

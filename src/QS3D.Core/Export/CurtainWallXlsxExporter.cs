@@ -267,6 +267,10 @@ namespace QS3D.Core.Export
                 throw new ArgumentException(
                     "Curtain XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " WallCount must match Element IDs count.",
                     "rows");
+            if (row.SourceHandles.Count != row.ElementIds.Count)
+                throw new ArgumentException(
+                    "Curtain XLSX worksheet row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) + " Source Handles count must match Element IDs count.",
+                    "rows");
         }
 
         private static void ValidateXmlProvenance(string value, int rowIndex, string fieldName)

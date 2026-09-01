@@ -24,14 +24,18 @@ body = source[start:end]
 
 required = [
     "using (var enumerator = values.GetEnumerator())",
-    "while (enumerator.MoveNext())",
+    "while (true)",
+    "RequireStableKnownCounts(",
+    "if (!enumerator.MoveNext())",
     "if (corroboratedKnownCount && knownCount.HasValue && observedCount >= knownCount.Value)",
     "if (!corroboratedKnownCount && values is ICollection<T> && knownCount.HasValue && observedCount >= knownCount.Value)",
     "if (observedCount >= maximumCount)",
     "var value = enumerator.Current;",
     "items.Add(value);",
     "if (knownCount.HasValue && observedCount != knownCount.Value)",
-    "var currentKnownCount = ValidateKnownCounts(",
+    "expectedKnownCountSources != currentKnownCountSources",
+    "expectedCorroboratedKnownCount != currentCorroboratedKnownCount",
+    "expectedKnownCount != currentKnownCount",
 ]
 for token in required:
     if token not in body:
@@ -40,24 +44,32 @@ for token in required:
 if "foreach (var value in values)" in body:
     raise SystemExit("BCF known-Count integrity guard found unsafe caller-controlled foreach traversal")
 
-move_next = body.index("while (enumerator.MoveNext())")
+loop = body.index("while (true)")
+pre_move_rebind = body.index("RequireStableKnownCounts(", loop)
+move_next = body.index("if (!enumerator.MoveNext())", pre_move_rebind)
+post_move_rebind = body.index("RequireStableKnownCounts(", move_next + len("if (!enumerator.MoveNext())"))
 corroborated_guard = body.index(
-    "if (corroboratedKnownCount && knownCount.HasValue && observedCount >= knownCount.Value)"
+    "if (corroboratedKnownCount && knownCount.HasValue && observedCount >= knownCount.Value)",
+    post_move_rebind,
 )
 mutable_single_guard = body.index(
-    "if (!corroboratedKnownCount && values is ICollection<T> && knownCount.HasValue && observedCount >= knownCount.Value)"
+    "if (!corroboratedKnownCount && values is ICollection<T> && knownCount.HasValue && observedCount >= knownCount.Value)",
+    corroborated_guard,
 )
-cap_guard = body.index("if (observedCount >= maximumCount)")
-current_read = body.index("var value = enumerator.Current;")
-append = body.index("items.Add(value);")
-rebind = body.index("var currentKnownCount = ValidateKnownCounts(")
+cap_guard = body.index("if (observedCount >= maximumCount)", mutable_single_guard)
+current_read = body.index("var value = enumerator.Current;", cap_guard)
+append = body.index("items.Add(value);", current_read)
+final_cardinality = body.index("if (knownCount.HasValue && observedCount != knownCount.Value)", append)
+final_rebind = body.index("RequireStableKnownCounts(", final_cardinality)
 
 if not (
-    move_next < corroborated_guard < mutable_single_guard < cap_guard <
-    current_read < append < rebind
+    loop < pre_move_rebind < move_next < post_move_rebind <
+    corroborated_guard < mutable_single_guard < cap_guard <
+    current_read < append < final_cardinality < final_rebind
 ):
     raise SystemExit(
-        "BCF known-Count integrity requires MoveNext -> corroborated/mutable admission -> cap -> Current -> append -> rebind ordering"
+        "BCF known-Count integrity requires rebound -> MoveNext -> rebound -> "
+        "known-count/cap admission -> Current -> append -> final cardinality -> final rebound ordering"
     )
 
 # New mutable single-interface contract: an ICollection<T> Count is authoritative

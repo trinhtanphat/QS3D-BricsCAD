@@ -31,7 +31,8 @@ namespace QS3D.BricsCAD.V25.UI
             }
             catch (System.Exception ex)
             {
-                StatusText.Text = normalizedCommand + " lỗi: " + ex.Message;
+                StatusText.Text = normalizedCommand + " không thể gửi sang BricsCAD.";
+                try { document.Editor.WriteMessage("\n" + normalizedCommand + " dispatch failed (" + ex.GetType().Name + ")."); } catch { }
             }
         }
     }

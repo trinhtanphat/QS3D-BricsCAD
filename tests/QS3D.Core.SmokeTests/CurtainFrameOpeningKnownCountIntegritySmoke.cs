@@ -15,6 +15,9 @@ namespace QS3D.Core.SmokeTests
             RejectOpeningOverrunBeforeCurrent();
             RejectFrameUnderYield();
             RejectOpeningUnderYield();
+            RejectFrameTransientGrowthAfterMoveNextBeforeCurrent();
+            RejectOpeningTransientNegativeAfterMoveNextBeforeCurrent();
+            RejectOpeningTransientShrinkBeforeNextMoveNext();
             RejectFramePostTraversalCountDrift();
             RejectOpeningPostTraversalNegativeCount();
             RejectOpeningPostTraversalCountConflict();
@@ -48,6 +51,45 @@ namespace QS3D.Core.SmokeTests
         {
             var openings = new MultiCountSource<CurtainOpeningRect>(new[] { Opening(0) }, 2, 2, 2);
             ExpectInvalid(() => CurtainFrameOpeningPlanner.Interrupt(new[] { Frame(0) }, openings), "opening collection count changed", "Curtain openings must reject Count=2 with one yielded opening.");
+        }
+
+        private static void RejectFrameTransientGrowthAfterMoveNextBeforeCurrent()
+        {
+            var frames = new TransientCountReadOnlySource<CurtainWallRect>(
+                new[] { Frame(0) },
+                read => read >= 3 ? 2 : 1);
+            ExpectInvalid(
+                () => CurtainFrameOpeningPlanner.Interrupt(frames, Array.Empty<CurtainOpeningRect>()),
+                "frame collection count changed",
+                "Curtain frames must reject transient Count growth after MoveNext before Current.");
+            if (frames.MoveNextCalls != 1 || frames.CurrentReads != 0)
+                throw new InvalidOperationException("Transient frame Count growth must fail after the successful MoveNext and before Current.");
+        }
+
+        private static void RejectOpeningTransientNegativeAfterMoveNextBeforeCurrent()
+        {
+            var openings = new TransientCountReadOnlySource<CurtainOpeningRect>(
+                new[] { Opening(0) },
+                read => read >= 3 ? -1 : 1);
+            ExpectInvalid(
+                () => CurtainFrameOpeningPlanner.Interrupt(new[] { Frame(0) }, openings),
+                "invalid negative count",
+                "Curtain openings must reject transient negative Count after MoveNext before Current.");
+            if (openings.MoveNextCalls != 1 || openings.CurrentReads != 0)
+                throw new InvalidOperationException("Transient negative opening Count must fail after the successful MoveNext and before Current.");
+        }
+
+        private static void RejectOpeningTransientShrinkBeforeNextMoveNext()
+        {
+            var openings = new TransientCountReadOnlySource<CurtainOpeningRect>(
+                new[] { Opening(0), Opening(1) },
+                read => read >= 4 ? 1 : 2);
+            ExpectInvalid(
+                () => CurtainFrameOpeningPlanner.Interrupt(new[] { Frame(0) }, openings),
+                "opening collection count changed",
+                "Curtain openings must reject transient Count shrink before advancing to the next item.");
+            if (openings.MoveNextCalls != 1 || openings.CurrentReads != 1)
+                throw new InvalidOperationException("Transient opening Count shrink must fail before the second caller-controlled MoveNext.");
         }
 
         private static void RejectFramePostTraversalCountDrift()
@@ -159,6 +201,57 @@ namespace QS3D.Core.SmokeTests
                     if (_index < _owner._items.Length) return true;
                     _owner.TraversalCompleted = true;
                     return false;
+                }
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
+        }
+
+        private sealed class TransientCountReadOnlySource<T> : IReadOnlyCollection<T>
+        {
+            private readonly T[] _items;
+            private readonly Func<int, int> _countByRead;
+
+            internal TransientCountReadOnlySource(T[] items, Func<int, int> countByRead)
+            {
+                _items = items;
+                _countByRead = countByRead;
+            }
+
+            internal int CountReads { get; private set; }
+            internal int MoveNextCalls { get; private set; }
+            internal int CurrentReads { get; private set; }
+            public int Count
+            {
+                get
+                {
+                    CountReads++;
+                    return _countByRead(CountReads);
+                }
+            }
+
+            public IEnumerator<T> GetEnumerator() => new Enumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private sealed class Enumerator : IEnumerator<T>
+            {
+                private readonly TransientCountReadOnlySource<T> _owner;
+                private int _index = -1;
+                internal Enumerator(TransientCountReadOnlySource<T> owner) { _owner = owner; }
+                public T Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        return _owner._items[_index];
+                    }
+                }
+                object IEnumerator.Current => Current!;
+                public bool MoveNext()
+                {
+                    _owner.MoveNextCalls++;
+                    _index++;
+                    return _index < _owner._items.Length;
                 }
                 public void Reset() => throw new NotSupportedException();
                 public void Dispose() { }

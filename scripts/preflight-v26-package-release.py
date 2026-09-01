@@ -53,6 +53,7 @@ verify = read("scripts/verify-v26-signatures.ps1")
 finalize = read("scripts/finalize-v26-signed-package.ps1")
 manifest = read("scripts/new-v26-update-manifest.ps1")
 workflow = read(".github/workflows/release-v26.yml")
+release_asset_verifier = read("scripts/verify-v26-held-file.ps1")
 host_safety = read("scripts/assert-v26-host-reference-safety.ps1")
 v26_project = read("src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj")
 v25_release_client = read("src/QS3D.BricsCAD.V25/Updates/GitHubReleaseClient.cs")
@@ -230,11 +231,28 @@ for token in (
     "git ls-remote --tags origin",
     "application/octet-stream",
     "uploadedAsset.url",
+    "verify-v26-held-file.ps1 -Operation Hash -Path $localAsset",
+    "verify-v26-held-file.ps1 -Operation Hash -Path $downloadedAsset",
     "Uploaded V26 release asset size mismatch",
     "Uploaded V26 release asset SHA-256 mismatch",
     "Draft V26 release contains unexpected assets",
 ):
     require(workflow, token, "V26 release workflow")
+for token in (
+    "Get-FileHash -LiteralPath $localAsset",
+    "Get-FileHash -LiteralPath $downloadedAsset",
+):
+    forbid(workflow, token, "V26 release workflow")
+
+for token in (
+    "Assert-NoReparseAncestor",
+    "[IO.FileAttributes]::ReparsePoint",
+    "$admittedLength = [int64]$admitted.Length",
+    "$admittedWriteTicks = [int64]$admitted.LastWriteTimeUtc.Ticks",
+    "[IO.FileShare]::Read",
+    "$sha.ComputeHash($held.Stream)",
+):
+    require(release_asset_verifier, token, "V26 release asset held verifier")
 
 # Host-file identity is centralized in the shared helper so workflow text cannot
 # drift from the exact ordinary/non-reparse files whose generations are captured.
@@ -251,13 +269,15 @@ if workflow.count("Assert-RemoteReleaseTagTargetsWorkflowSha") < 3:
 
 release_create = workflow.find('$release = Invoke-RestMethod -Method Post')
 first_tag_check = workflow.find('Assert-RemoteReleaseTagTargetsWorkflowSha', release_create + 1)
-asset_hash_check = workflow.find('Uploaded V26 release asset SHA-256 mismatch', first_tag_check + 1)
+held_local_hash = workflow.find('verify-v26-held-file.ps1 -Operation Hash -Path $localAsset', first_tag_check + 1)
+held_remote_hash = workflow.find('verify-v26-held-file.ps1 -Operation Hash -Path $downloadedAsset', held_local_hash + 1)
+asset_hash_check = workflow.find('Uploaded V26 release asset SHA-256 mismatch', held_remote_hash + 1)
 second_tag_check = workflow.find('Assert-RemoteReleaseTagTargetsWorkflowSha', asset_hash_check + 1)
 publish_release = workflow.find('$published = Invoke-RestMethod -Method Patch', second_tag_check + 1)
-if min(release_create, first_tag_check, asset_hash_check, second_tag_check, publish_release) < 0 or not (
-    release_create < first_tag_check < asset_hash_check < second_tag_check < publish_release
+if min(release_create, first_tag_check, held_local_hash, held_remote_hash, asset_hash_check, second_tag_check, publish_release) < 0 or not (
+    release_create < first_tag_check < held_local_hash < held_remote_hash < asset_hash_check < second_tag_check < publish_release
 ):
-    errors.append("V26 release publication order must be draft create -> tag/SHA check -> remote asset SHA-256 check -> tag/SHA recheck -> publish")
+    errors.append("V26 release publication order must be draft create -> tag/SHA check -> held local/remote asset SHA-256 -> tag/SHA recheck -> publish")
 
 for token in ("QS3D-BricsCAD-V25", "BRICSCAD_V25_DIR", "bricscad-v25", "QS3D.BricsCAD.V25.dll"):
     forbid(workflow, token, "V26 release workflow")
@@ -291,4 +311,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: V26 packaging preserves current hardened V25 transaction/security logic under guarded major transformation; .NET 8 update networking is HttpClient-only; discovery is manifest-channel isolated; publication revalidates remote tag identity and uploaded asset bytes before publish.")
+print("PASS: V26 packaging preserves current hardened V25 transaction/security logic under guarded major transformation; .NET 8 update networking is HttpClient-only; discovery is manifest-channel isolated; publication revalidates remote tag identity and hashes one admitted held local/remote asset generation before publish.")

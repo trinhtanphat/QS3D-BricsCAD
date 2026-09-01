@@ -117,11 +117,7 @@ namespace QS3D.Core.Geometry
             if (knownCount.HasValue && knownCount.Value > MaxInputSegments)
                 ThrowTooManySegments();
 
-            var segments = source.Take(MaxInputSegments + 1).ToList();
-            if (segments.Count > MaxInputSegments)
-                ThrowTooManySegments();
-            if (knownCount.HasValue && segments.Count != knownCount.Value)
-                throw new InvalidOperationException("Room boundary diagnostic source known count does not match traversal.");
+            var segments = MaterializeBoundedSegments(source, knownCount);
             ValidateSourceProvenance(segments);
 
             var candidates = new RoomBoundaryEngine().Discover(segments, tolerance, 0d)
@@ -159,6 +155,52 @@ namespace QS3D.Core.Geometry
                 accepted.Count,
                 faces.AsReadOnly());
             return new RoomBoundaryDiagnosticAnalysis(report, accepted.AsReadOnly());
+        }
+
+        private static List<BoundarySegment> MaterializeBoundedSegments(
+            IEnumerable<BoundarySegment> source,
+            int? knownCount)
+        {
+            var segments = new List<BoundarySegment>();
+            var observedCount = 0;
+            using (var enumerator = source.GetEnumerator())
+            {
+                while (true)
+                {
+                    RequireStableKnownInputCount(source, knownCount);
+                    if (!enumerator.MoveNext())
+                    {
+                        RequireStableKnownInputCount(source, knownCount);
+                        break;
+                    }
+                    RequireStableKnownInputCount(source, knownCount);
+
+                    if (knownCount.HasValue && observedCount >= knownCount.Value)
+                        throw new InvalidOperationException("Room boundary diagnostic source known count does not match traversal.");
+                    if (observedCount >= MaxInputSegments)
+                        ThrowTooManySegments();
+
+                    var segment = enumerator.Current;
+                    RequireStableKnownInputCount(source, knownCount);
+                    segments.Add(segment);
+                    observedCount++;
+                }
+            }
+
+            RequireStableKnownInputCount(source, knownCount);
+            if (knownCount.HasValue && observedCount != knownCount.Value)
+                throw new InvalidOperationException("Room boundary diagnostic source known count does not match traversal.");
+            return segments;
+        }
+
+        private static void RequireStableKnownInputCount(
+            IEnumerable<BoundarySegment> source,
+            int? knownCount)
+        {
+            if (!knownCount.HasValue) return;
+            var currentCount = GetKnownInputCount(source);
+            if (!currentCount.HasValue || currentCount.Value != knownCount.Value)
+                throw new InvalidOperationException("Room boundary diagnostic source known count changed during traversal.");
         }
 
         private static int? GetKnownInputCount(IEnumerable<BoundarySegment> source)

@@ -128,14 +128,19 @@ namespace QS3D.Core.Services
             var result = new List<T>();
             using (var enumerator = values.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                RequireStableKnownCountContract(values, knownCount, maxCount, parameterName, label);
+                while (true)
                 {
+                    if (!enumerator.MoveNext()) break;
+                    RequireStableKnownCountContract(values, knownCount, maxCount, parameterName, label);
+
                     if (knownCount.HasValue && result.Count >= knownCount.Value)
                         throw CountMismatch(knownCount.Value, result.Count + 1, parameterName, label);
                     if (result.Count >= maxCount)
                         throw CollectionTooLarge(maxCount, parameterName, label);
 
                     var value = enumerator.Current;
+                    RequireStableKnownCountContract(values, knownCount, maxCount, parameterName, label);
                     if (ReferenceEquals(value, null))
                         throw new ArgumentException("Regeneration work profile " + label + " collection cannot contain null entries.", parameterName);
                     result.Add(value);
@@ -144,13 +149,22 @@ namespace QS3D.Core.Services
             if (knownCount.HasValue && result.Count != knownCount.Value)
                 throw CountMismatch(knownCount.Value, result.Count, parameterName, label);
 
-            var postTraversalKnownCount = ValidateKnownCountContract(values, maxCount, parameterName, label);
-            if (knownCount != postTraversalKnownCount)
+            RequireStableKnownCountContract(values, knownCount, maxCount, parameterName, label);
+            return result.AsReadOnly();
+        }
+
+        private static void RequireStableKnownCountContract<T>(
+            IEnumerable<T> values,
+            int? knownCount,
+            int maxCount,
+            string parameterName,
+            string label)
+        {
+            var observedKnownCount = ValidateKnownCountContract(values, maxCount, parameterName, label);
+            if (observedKnownCount != knownCount)
                 throw new ArgumentException(
                     "Regeneration work profile " + label + " collection known Count changed during traversal.",
                     parameterName);
-
-            return result.AsReadOnly();
         }
 
         private static int? ValidateKnownCountContract<T>(IEnumerable<T> values, int maxCount, string parameterName, string label)
