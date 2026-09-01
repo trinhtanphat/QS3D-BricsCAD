@@ -15,6 +15,7 @@ namespace QS3D.Core.Takeoff
             var canonicalHandle = handle.Trim();
             if (!string.Equals(handle, canonicalHandle, StringComparison.Ordinal))
                 throw new ArgumentException("Takeoff handle must not contain surrounding whitespace.", nameof(handle));
+            EnsureValidUnicodeScalarText(canonicalHandle, nameof(handle), "Takeoff handle");
 
             for (var index = 0; index < canonicalHandle.Length; index++)
             {
@@ -27,6 +28,7 @@ namespace QS3D.Core.Takeoff
             var canonicalUnit = unit.Trim();
             if (!string.Equals(unit, canonicalUnit, StringComparison.Ordinal))
                 throw new ArgumentException("Takeoff unit must not contain surrounding whitespace.", nameof(unit));
+            EnsureValidUnicodeScalarText(canonicalUnit, nameof(unit), "Takeoff unit");
 
             for (var index = 0; index < canonicalUnit.Length; index++)
             {
@@ -47,5 +49,25 @@ namespace QS3D.Core.Takeoff
         public TakeoffKind Kind { get; }
         public double Value { get; }
         public string Unit { get; }
+
+        private static void EnsureValidUnicodeScalarText(string value, string parameterName, string label)
+        {
+            for (var index = 0; index < value.Length; index++)
+            {
+                var current = value[index];
+                if (!char.IsSurrogate(current))
+                    continue;
+
+                if (char.IsHighSurrogate(current) &&
+                    index + 1 < value.Length &&
+                    char.IsLowSurrogate(value[index + 1]))
+                {
+                    index++;
+                    continue;
+                }
+
+                throw new ArgumentException(label + " must contain valid Unicode scalar text.", parameterName);
+            }
+        }
     }
 }
