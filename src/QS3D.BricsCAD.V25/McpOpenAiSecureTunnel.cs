@@ -549,6 +549,7 @@ namespace QS3D.BricsCAD.V25
             yaml.AppendLine("      url: " + YamlQuote(localEndpoint.ToString()));
             yaml.AppendLine("  extra_headers:");
             yaml.AppendLine("    Authorization: env:" + LocalBearerEnvironment);
+            yaml.AppendLine("    Content-Type: application/json");
             yaml.AppendLine("  discovery_extra_headers:");
             yaml.AppendLine("    Authorization: env:" + LocalBearerEnvironment);
             File.WriteAllText(ConfigPath, yaml.ToString(), new UTF8Encoding(false));
