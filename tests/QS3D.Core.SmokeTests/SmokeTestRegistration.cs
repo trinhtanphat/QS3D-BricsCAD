@@ -38,6 +38,7 @@ namespace QS3D.Core.SmokeTests
             DoorOpeningXlsxCountIntegritySmoke.Run();
             XlsxQuantityNullRowSmoke.Run();
             XlsxHandleReaderCoordinateSmoke.Run();
+            XlsxHandleReaderRowScanSmoke.Run();
             XlsxExporterRowBoundSmoke.Run();
             QuantityExportEvidenceSmoke.Run();
             QuantityEvidenceCollectionBoundSmoke.Run();
