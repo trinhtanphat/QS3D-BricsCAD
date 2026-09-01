@@ -10,6 +10,8 @@ namespace QS3D.Core.SmokeTests
         {
             GroupsByStableFloorAndFamily();
             RejectsNonIntegerPanelCounts();
+            RejectsInvertedClearPanelWidth();
+            RejectsInvertedClearPanelHeight();
         }
 
         private static void GroupsByStableFloorAndFamily()
@@ -41,14 +43,38 @@ namespace QS3D.Core.SmokeTests
 
         private static void RejectsNonIntegerPanelCounts()
         {
-            var project = new ProjectState("p2", "Bad curtain schedule");
-            project.Floors.Add(new FloorDefinition("f1", "Floor", 0d));
-            project.Zones.Add(new ZoneDefinition("z", "Zone"));
-            project.Families.Add(new ProjectFamily("cw", "Curtain", ElementCategory.GlassWall));
+            var project = NewProject("p2", "Bad curtain schedule");
             var wall = new ProjectElement("g1", ElementCategory.GlassWall, "cw", "f1", "z");
             wall.Quantities["CurtainPanelCount"] = 2.5d;
             project.Elements.Add(wall);
             Throws<InvalidOperationException>(() => CurtainWallScheduleBuilder.Build(project));
+        }
+
+        private static void RejectsInvertedClearPanelWidth()
+        {
+            var project = NewProject("p-width", "Inverted curtain width");
+            Add(project, "g-width", 3d, 9d, 0d, 8d, 1d, 18d, 4, 3, 3, 2.0d, 1.0d, 1.2d, 1.4d);
+
+            var error = Capture<InvalidOperationException>(() => CurtainWallScheduleBuilder.Build(project));
+            Contains("g-width/CurtainClearPanelWidthM minimum cannot exceed maximum", error.Message);
+        }
+
+        private static void RejectsInvertedClearPanelHeight()
+        {
+            var project = NewProject("p-height", "Inverted curtain height");
+            Add(project, "g-height", 3d, 9d, 0d, 8d, 1d, 18d, 4, 3, 3, 1.0d, 2.0d, 2.5d, 1.5d);
+
+            var error = Capture<InvalidOperationException>(() => CurtainWallScheduleBuilder.Build(project));
+            Contains("g-height/CurtainClearPanelHeightM minimum cannot exceed maximum", error.Message);
+        }
+
+        private static ProjectState NewProject(string projectId, string name)
+        {
+            var project = new ProjectState(projectId, name);
+            project.Floors.Add(new FloorDefinition("f1", "Floor", 0d));
+            project.Zones.Add(new ZoneDefinition("z", "Zone"));
+            project.Families.Add(new ProjectFamily("cw", "Curtain", ElementCategory.GlassWall));
+            return project;
         }
 
         private static void Add(ProjectState project, string id, double length, double grossArea, double openingArea, double netGlass, double frameArea, double frameLength, int panels, int verticalFrames, int horizontalFrames, double minWidth, double maxWidth, double minHeight, double maxHeight)
@@ -73,6 +99,19 @@ namespace QS3D.Core.SmokeTests
         private static void Near(double expected, double actual, double tolerance = 1e-10d)
         {
             if (Math.Abs(expected - actual) > tolerance) throw new Exception("Expected " + expected + ", got " + actual + ".");
+        }
+
+        private static TException Capture<TException>(Action action) where TException : Exception
+        {
+            try { action(); }
+            catch (TException ex) { return ex; }
+            throw new Exception("Expected exception " + typeof(TException).Name + ".");
+        }
+
+        private static void Contains(string expected, string actual)
+        {
+            if (actual == null || actual.IndexOf(expected, StringComparison.Ordinal) < 0)
+                throw new Exception("Expected message to contain '" + expected + "', got '" + actual + "'.");
         }
 
         private static void Throws<T>(Action action) where T : Exception
