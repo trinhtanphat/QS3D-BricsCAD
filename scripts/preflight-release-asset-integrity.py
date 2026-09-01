@@ -56,7 +56,8 @@ def main() -> int:
         "Downloaded draft ZIP fails its SHA-256 checksum.",
         "verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT",
         "$published = Invoke-RestMethod -Method Patch -Uri $releaseUri",
-        "GitHub release remained a draft after publication request.",
+        "Assert-PublishedReleaseMatchesVerifiedTransaction",
+        "-ReleaseSnapshot $published",
     )
     for token in required_tokens:
         require(token in text, "V25 release publication integrity guard missing token: " + token)
@@ -112,10 +113,12 @@ def main() -> int:
     checksum_pos = text.find("Downloaded draft ZIP fails its SHA-256 checksum.", copy_pos)
     signature_pos = text.find("verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT", checksum_pos)
     publish_pos = text.find("$published = Invoke-RestMethod -Method Patch -Uri $releaseUri", signature_pos)
-    positions = (tag_create_pos, ownership_pos, release_create_pos, release_id_pos, upload_pos, tag_pos, download_pos, set_pos, hash_pos, copy_pos, checksum_pos, signature_pos, publish_pos)
-    require(min(positions) >= 0 and list(positions) == sorted(positions), "V25 release must create exact owned tag -> create exact draft -> upload resolved asset path -> assert exact tag SHA -> download exact asset set -> held hash -> stable ZIP copy/checksum -> signature verify -> publish exact release")
+    publish_assert_pos = text.find("Assert-PublishedReleaseMatchesVerifiedTransaction", publish_pos)
+    publish_snapshot_pos = text.find("-ReleaseSnapshot $published", publish_assert_pos)
+    positions = (tag_create_pos, ownership_pos, release_create_pos, release_id_pos, upload_pos, tag_pos, download_pos, set_pos, hash_pos, copy_pos, checksum_pos, signature_pos, publish_pos, publish_assert_pos, publish_snapshot_pos)
+    require(min(positions) >= 0 and list(positions) == sorted(positions), "V25 release must create exact owned tag -> create exact draft -> upload resolved asset path -> assert exact tag SHA -> download exact asset set -> held hash -> stable ZIP copy/checksum -> signature verify -> publish -> verify the successful response against the exact transaction")
 
-    print("PASS: V25 commercial publication uses positive exact-tag ownership, exact draft identity, resolved-path exact asset upload, exact asset set, reusable exact-tag assertion, held-generation hashes, stable ZIP checksum, Authenticode verification, and only then exact-release publication.")
+    print("PASS: V25 commercial publication uses positive exact-tag ownership, exact draft identity, resolved-path exact asset upload, exact asset set, reusable exact-tag assertion, held-generation hashes, stable ZIP checksum, Authenticode verification, and exact-transaction verification of the successful publication response.")
     return 0
 
 
