@@ -30,10 +30,19 @@ namespace QS3D.BricsCAD.V25
             Exception? exception,
             bool contractFailure)
         {
+            var callerOrPolicyFailure = contractFailure || IsCallerOrPolicyFailure(code, message);
+            var transientFailure = !callerOrPolicyFailure && IsTransientFailure(code, message);
+            var sourceRepairEligible = !callerOrPolicyFailure
+                                       && !transientFailure
+                                       && IsSourceRepairFailure(code, message);
+
             var exceptionType = exception == null
                 ? string.Empty
                 : exception.GetType().FullName ?? string.Empty;
-            var fingerprint = BuildFingerprint(tool, code, lane, exceptionType, message);
+            var fingerprintMessage = sourceRepairEligible
+                ? BuildSourceRepairIdentity(exception, message)
+                : message;
+            var fingerprint = BuildFingerprint(tool, code, lane, exceptionType, fingerprintMessage);
             var now = DateTime.UtcNow;
 
             int occurrenceCount;
@@ -75,11 +84,6 @@ namespace QS3D.BricsCAD.V25
                 lastSeenUtc = ticket.LastSeenUtc;
             }
 
-            var callerOrPolicyFailure = contractFailure || IsCallerOrPolicyFailure(code, message);
-            var transientFailure = !callerOrPolicyFailure && IsTransientFailure(code, message);
-            var sourceRepairEligible = !callerOrPolicyFailure
-                                       && !transientFailure
-                                       && IsSourceRepairFailure(code, message);
             var circuitOpen = sourceRepairEligible && occurrenceCount >= CircuitOpenOccurrence;
             var humanReviewRequired = circuitOpen;
 
@@ -135,6 +139,59 @@ namespace QS3D.BricsCAD.V25
                     " ",
                     RegexOptions.CultureInvariant)
                 .ToUpperInvariant();
+        }
+
+        private static string BuildSourceRepairIdentity(Exception? exception, string message)
+        {
+            var sourceSite = string.Empty;
+            try
+            {
+                var targetSite = exception == null ? null : exception.TargetSite;
+                if (targetSite != null)
+                {
+                    var declaringType = targetSite.DeclaringType;
+                    sourceSite = (declaringType == null ? string.Empty : declaringType.FullName ?? string.Empty)
+                                 + "." + targetSite.Name;
+                }
+            }
+            catch
+            {
+                // Failure metadata must never replace the original MCP tool failure.
+                sourceSite = string.Empty;
+            }
+
+            return Normalize(sourceSite) + "|" + CanonicalizeSourceRepairMessage(message);
+        }
+
+        private static string CanonicalizeSourceRepairMessage(string message)
+        {
+            var value = Normalize(message);
+            if (value.Length == 0) return value;
+
+            // Normalize high-entropy values that routinely change between manifestations of
+            // the same source defect. Keep surrounding semantic text so different failures at
+            // the same source site remain independently diagnosable.
+            value = Regex.Replace(
+                value,
+                "\\b[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\\b",
+                "<GUID>",
+                RegexOptions.CultureInvariant);
+            value = Regex.Replace(
+                value,
+                "(?:[A-Z]:\\\\|\\\\\\\\)[^ \\t\\r\\n,;]+",
+                "<PATH>",
+                RegexOptions.CultureInvariant);
+            value = Regex.Replace(
+                value,
+                "\\b0X[0-9A-F]+\\b|\\b[0-9A-F]{12,}\\b",
+                "<HEX>",
+                RegexOptions.CultureInvariant);
+            value = Regex.Replace(
+                value,
+                "\\b(?:REQUEST|ATTEMPT|SEQUENCE|SEQ|EPOCH|OBJECT|HANDLE|ID)\\s*(?:#|=|:)?\\s*-?\\d+\\b|\\b\\d{8,}\\b",
+                "<NUMBER>",
+                RegexOptions.CultureInvariant);
+            return Normalize(value);
         }
 
         private static bool IsCallerOrPolicyFailure(string code, string message)
