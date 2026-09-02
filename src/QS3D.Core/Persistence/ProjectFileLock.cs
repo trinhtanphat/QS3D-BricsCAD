@@ -34,13 +34,12 @@ namespace QS3D.Core.Persistence
             FileStream? stream = null;
             try
             {
-                // Keep one stable rendezvous path for every owner. Recreating/unlinking the
-                // path between owners can split lock ownership on POSIX filesystems.
+                // Keep one stable rendezvous path for every owner. The supported
+                // Windows product must bind the accepted pathname to the exact file
+                // generation held by this exclusive stream before any truncation.
                 PersistencePathSafety.RequireNonRedirected(lockPath, "project-lock");
                 stream = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-                // Recheck after opening but before truncation. This catches a redirect
-                // introduced between the pre-open observation and FileStream.Open.
-                PersistencePathSafety.RequireNonRedirected(lockPath, "project-lock");
+                PersistencePathSafety.RequireExclusiveOpenStillBound(stream, lockPath, "project-lock");
                 stream.SetLength(0);
                 stream.Position = 0;
                 var payload = Encoding.UTF8.GetBytes("pid=" + Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture) + "\nutc=" + DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
