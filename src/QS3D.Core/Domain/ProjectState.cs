@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -41,8 +42,16 @@ namespace QS3D.Core.Domain
         public string Name
         {
             get => _name;
-            set => _name = Require(value, nameof(value));
+            set
+            {
+                var next = Require(value, nameof(value));
+                if (string.Equals(_name, next, StringComparison.Ordinal)) return;
+                PersistenceMutationRequested?.Invoke();
+                _name = next;
+            }
         }
+
+        internal event Action? PersistenceMutationRequested;
 
         private static string Require(string value, string name)
         {
@@ -62,23 +71,40 @@ namespace QS3D.Core.Domain
         {
             Id = Require(id, nameof(id));
             _name = Require(name, nameof(name));
-            ElevationM = elevationM;
+            _elevationM = RequireElevation(elevationM);
         }
 
         public string Id { get; }
         public string Name
         {
             get => _name;
-            set => _name = Require(value, nameof(value));
+            set
+            {
+                var next = Require(value, nameof(value));
+                if (string.Equals(_name, next, StringComparison.Ordinal)) return;
+                PersistenceMutationRequested?.Invoke();
+                _name = next;
+            }
         }
         public double ElevationM
         {
             get => _elevationM;
             set
             {
-                if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value), "Floor elevation must be finite.");
-                _elevationM = value == 0d ? 0d : value;
+                var next = RequireElevation(value);
+                if (_elevationM.Equals(next)) return;
+                PersistenceMutationRequested?.Invoke();
+                _elevationM = next;
             }
+        }
+
+        internal event Action? PersistenceMutationRequested;
+
+        private static double RequireElevation(double value)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                throw new ArgumentOutOfRangeException(nameof(value), "Floor elevation must be finite.");
+            return value == 0d ? 0d : value;
         }
 
         private static string Require(string value, string name)
@@ -111,6 +137,7 @@ namespace QS3D.Core.Domain
             {
                 var next = RequireName(value);
                 if (string.Equals(_name, next, StringComparison.Ordinal)) return;
+                PersistenceMutationRequested?.Invoke();
                 _name = next;
                 OnPropertyChanged();
             }
@@ -123,6 +150,7 @@ namespace QS3D.Core.Domain
             {
                 var next = RequireCategory(value);
                 if (_category == next) return;
+                PersistenceMutationRequested?.Invoke();
                 _category = next;
                 OnPropertyChanged();
             }
@@ -131,6 +159,8 @@ namespace QS3D.Core.Domain
         public IDictionary<string, string> Properties { get; }
 
         public event PropertyChangedEventHandler? PropertyChanged;
+        internal event Action? PersistenceMutationRequested;
+
         private static string RequireId(string value)
         {
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Family id is required.", nameof(value));
@@ -154,6 +184,75 @@ namespace QS3D.Core.Domain
         private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
+    internal sealed class CatalogOwnershipList<T> : IList<T> where T : class
+    {
+        private readonly List<T> _items = new List<T>();
+        private readonly Action<T> _attach;
+        private readonly Action<T> _detach;
+
+        internal CatalogOwnershipList(Action<T> attach, Action<T> detach)
+        {
+            _attach = attach ?? throw new ArgumentNullException(nameof(attach));
+            _detach = detach ?? throw new ArgumentNullException(nameof(detach));
+        }
+
+        public T this[int index]
+        {
+            get => _items[index];
+            set
+            {
+                var previous = _items[index];
+                if (ReferenceEquals(previous, value)) return;
+                if (previous != null) _detach(previous);
+                _items[index] = value;
+                if (value != null) _attach(value);
+            }
+        }
+
+        public int Count => _items.Count;
+        public bool IsReadOnly => false;
+
+        public void Add(T item)
+        {
+            _items.Add(item);
+            if (item != null) _attach(item);
+        }
+
+        public void Clear()
+        {
+            foreach (var item in _items)
+                if (item != null) _detach(item);
+            _items.Clear();
+        }
+
+        public bool Contains(T item) => _items.Contains(item);
+        public void CopyTo(T[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
+        public IEnumerator<T> GetEnumerator() => _items.GetEnumerator();
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        public int IndexOf(T item) => _items.IndexOf(item);
+
+        public void Insert(int index, T item)
+        {
+            _items.Insert(index, item);
+            if (item != null) _attach(item);
+        }
+
+        public bool Remove(T item)
+        {
+            var index = _items.IndexOf(item);
+            if (index < 0) return false;
+            RemoveAt(index);
+            return true;
+        }
+
+        public void RemoveAt(int index)
+        {
+            var item = _items[index];
+            if (item != null) _detach(item);
+            _items.RemoveAt(index);
+        }
+    }
+
     public sealed class ProjectState
     {
         public const int CurrentSchemaVersion = 4;
@@ -168,9 +267,9 @@ namespace QS3D.Core.Domain
         {
             ProjectId = RequireProjectId(projectId);
             _name = string.IsNullOrWhiteSpace(name) ? "QS3D Project" : RequireProjectName(name);
-            Zones = new List<ZoneDefinition>();
-            Floors = new List<FloorDefinition>();
-            Families = new List<ProjectFamily>();
+            Zones = new CatalogOwnershipList<ZoneDefinition>(AttachZone, DetachZone);
+            Floors = new CatalogOwnershipList<FloorDefinition>(AttachFloor, DetachFloor);
+            Families = new CatalogOwnershipList<ProjectFamily>(AttachFamily, DetachFamily);
             Elements = new List<ProjectElement>();
             QuantityRules = new List<QuantityRule>();
             Metadata = new ProjectMetadataDictionary();
@@ -298,6 +397,13 @@ namespace QS3D.Core.Domain
             _activeZoneId = restoredActiveZoneId;
             _activeFloorId = restoredActiveFloorId;
         }
+
+        private void AttachZone(ZoneDefinition zone) => zone.PersistenceMutationRequested += Touch;
+        private void DetachZone(ZoneDefinition zone) => zone.PersistenceMutationRequested -= Touch;
+        private void AttachFloor(FloorDefinition floor) => floor.PersistenceMutationRequested += Touch;
+        private void DetachFloor(FloorDefinition floor) => floor.PersistenceMutationRequested -= Touch;
+        private void AttachFamily(ProjectFamily family) => family.PersistenceMutationRequested += Touch;
+        private void DetachFamily(ProjectFamily family) => family.PersistenceMutationRequested -= Touch;
 
         private void SetActiveContextId(ref string field, string? value)
         {
