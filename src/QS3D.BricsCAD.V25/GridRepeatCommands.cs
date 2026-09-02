@@ -14,6 +14,13 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
+            if (!Cad.GridAuthoringRepeatState.HasRectangularTemplate(document))
+            {
+                ReportOperationFailure(document,
+                    "QS3DGRIDRECTREPEAT: DWG hiện tại chưa có rectangular Grid template đã commit; chạy QS3DGRIDRECT trước.");
+                return;
+            }
+
             var editor = document.Editor;
             var key = editor.GetString(new PromptStringOptions("\nNew rectangular Grid system key (lowercase, no spaces): "));
             if (key.Status != PromptStatus.OK) return;
@@ -31,7 +38,7 @@ namespace QS3D.BricsCAD.V25
                     document, key.StringResult, origin.Value, direction.Value, out var request))
             {
                 ReportOperationFailure(document,
-                    "QS3DGRIDRECTREPEAT: DWG hiện tại chưa có rectangular Grid template đã commit; chạy QS3DGRIDRECT trước.");
+                    "QS3DGRIDRECTREPEAT: rectangular Grid repeat state đã thay đổi trước materialization; không có mutation nào được thực hiện.");
                 return;
             }
 
@@ -57,6 +64,13 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
+            if (!Cad.GridAuthoringRepeatState.HasRadialTemplate(document))
+            {
+                ReportOperationFailure(document,
+                    "QS3DGRIDRADIALREPEAT: DWG hiện tại chưa có radial Grid template đã commit; chạy QS3DGRIDRADIAL trước.");
+                return;
+            }
+
             var editor = document.Editor;
             var key = editor.GetString(new PromptStringOptions("\nNew radial Grid system key (lowercase, no spaces): "));
             if (key.Status != PromptStatus.OK) return;
@@ -74,7 +88,7 @@ namespace QS3D.BricsCAD.V25
                     document, key.StringResult, center.Value, direction.Value, out var request))
             {
                 ReportOperationFailure(document,
-                    "QS3DGRIDRADIALREPEAT: DWG hiện tại chưa có radial Grid template đã commit; chạy QS3DGRIDRADIAL trước.");
+                    "QS3DGRIDRADIALREPEAT: radial Grid repeat state đã thay đổi trước materialization; không có mutation nào được thực hiện.");
                 return;
             }
 
