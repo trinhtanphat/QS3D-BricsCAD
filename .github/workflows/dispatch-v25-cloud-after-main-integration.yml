@@ -2,6 +2,13 @@ name: Dispatch V25 cloud CI after main integration
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows:
+      - "QS3D Cloud V25 Preview Build & Release"
+    types:
+      - completed
+    branches:
+      - main
   # This quoted key is semantically the normal GitHub `push` event. It keeps the
   # legacy generic preflight compatible; scripts/preflight-ci-manual-only.py is
   # the strict guard that explicitly validates this owner-approved exception.
@@ -30,7 +37,7 @@ concurrency:
 
 jobs:
   dispatch:
-    if: ${{ github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]' }}
+    if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') || (github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]') }}
     runs-on: ubuntu-latest
     env:
       MINIMUM_RELEASE_CHANGES: "10"
@@ -51,13 +58,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          source_sha="${GITHUB_SHA,,}"
+          current_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_run" ]]; then
+            source_sha="${current_main,,}"
+            echo "Successful V25 cloud release completed; re-evaluating exact current main ${source_sha}."
+          else
+            source_sha="${GITHUB_SHA,,}"
+          fi
           if [[ ! "${source_sha}" =~ ^[0-9a-f]{40}$ ]]; then
             echo "Triggering source SHA is not one exact 40-hex commit: ${source_sha}" >&2
             exit 1
           fi
 
-          current_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
           echo "Triggering integration source: ${source_sha}"
           echo "Current main at dispatch time: ${current_main}"
           if [[ "${current_main}" != "${source_sha}" ]]; then
