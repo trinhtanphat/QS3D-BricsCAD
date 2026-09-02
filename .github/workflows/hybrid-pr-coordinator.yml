@@ -33,11 +33,16 @@ jobs:
       - name: Reconcile GitHub native auto-merge for current PR
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
+
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::error::QS3D_AUTOMERGE_TOKEN is required for native auto-merge coordination."
+            exit 1
+          fi
 
           event_head_sha="$EVENT_HEAD_SHA"
           pr_json="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
