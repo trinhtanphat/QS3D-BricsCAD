@@ -35,7 +35,10 @@ namespace QS3D.Core.Commercial
         {
             if (!_hasValue)
                 return 0m;
-            return Materialize(_coefficient, _scale, label + " exact aggregate cannot be represented as decimal without precision loss.");
+            return Materialize(
+                _coefficient,
+                _scale,
+                label + " exact aggregate cannot be represented as decimal without precision loss.");
         }
 
         internal static decimal AddExact(decimal left, decimal right, string label)
@@ -43,9 +46,10 @@ namespace QS3D.Core.Commercial
             Decode(left, out var leftCoefficient, out var leftScale);
             Decode(right, out var rightCoefficient, out var rightScale);
             AlignScales(ref leftCoefficient, ref leftScale, ref rightCoefficient, ref rightScale);
-            return Materialize(
+            return MaterializeArithmetic(
                 leftCoefficient + rightCoefficient,
                 leftScale,
+                label + " overflowed decimal arithmetic.",
                 "Commercial addition precision loss: " + label + ".");
         }
 
@@ -54,9 +58,10 @@ namespace QS3D.Core.Commercial
             Decode(left, out var leftCoefficient, out var leftScale);
             Decode(right, out var rightCoefficient, out var rightScale);
             AlignScales(ref leftCoefficient, ref leftScale, ref rightCoefficient, ref rightScale);
-            return Materialize(
+            return MaterializeArithmetic(
                 leftCoefficient - rightCoefficient,
                 leftScale,
+                label + " overflowed decimal arithmetic.",
                 "Commercial subtraction precision loss: " + label + ".");
         }
 
@@ -88,6 +93,36 @@ namespace QS3D.Core.Commercial
                 rightCoefficient *= BigInteger.Pow(10, leftScale - rightScale);
                 rightScale = leftScale;
             }
+        }
+
+        private static decimal MaterializeArithmetic(
+            BigInteger signedCoefficient,
+            int scale,
+            string overflowMessage,
+            string precisionLossMessage)
+        {
+            if (signedCoefficient.IsZero)
+                return 0m;
+
+            while (scale > 0 && signedCoefficient % 10 == 0)
+            {
+                signedCoefficient /= 10;
+                scale--;
+            }
+
+            var coefficient = BigInteger.Abs(signedCoefficient);
+            if (scale > 28)
+                throw new OverflowException(precisionLossMessage);
+
+            if (coefficient > MaximumDecimalCoefficient)
+            {
+                var maximumAtScale = MaximumDecimalCoefficient * BigInteger.Pow(10, scale);
+                if (coefficient > maximumAtScale)
+                    throw new OverflowException(overflowMessage);
+                throw new OverflowException(precisionLossMessage);
+            }
+
+            return Materialize(signedCoefficient, scale, precisionLossMessage);
         }
 
         private static decimal Materialize(BigInteger signedCoefficient, int scale, string precisionLossMessage)
