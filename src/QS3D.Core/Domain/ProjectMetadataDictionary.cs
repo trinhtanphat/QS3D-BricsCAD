@@ -96,6 +96,20 @@ namespace QS3D.Core.Domain
                 finalKeys.Add(key);
             }
         }
+
+        internal void EnsureCanSetPublicKeys(IEnumerable<string> keys)
+        {
+            if (keys == null) throw new ArgumentNullException(nameof(keys));
+            var finalKeys = new HashSet<string>(_items.Keys, StringComparer.OrdinalIgnoreCase);
+            foreach (var key in keys)
+            {
+                var canonicalKey = RequirePublicKey(key);
+                if (finalKeys.Contains(canonicalKey)) continue;
+                if (finalKeys.Count >= MaximumEntries) throw MetadataCountError();
+                finalKeys.Add(canonicalKey);
+            }
+        }
+
         internal void AddOwned(string key, string value) => Set(key, value, true, false);
         internal void SetOwned(string key, string value) => Set(key, value, false, false);
         internal bool RemoveOwned(string key) => Remove(key, false);
