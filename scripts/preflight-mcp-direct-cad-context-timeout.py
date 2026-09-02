@@ -37,11 +37,15 @@ def main() -> int:
     if "CadReadTimeoutMilliseconds = 10000" in hub:
         errors.append("direct CAD-context wait must leave response budget instead of consuming the full 10-second window")
 
-    structured_error_contract = (
-        "var failure = McpToolCapabilityContract.ClassifyFailure(tool, ex);",
-        "ToolError(failure.Code, McpToolCapabilityContract.LaneName(failure.Lane), failure.Message)",
+    classifies_failure = "var failure = McpToolCapabilityContract.ClassifyFailure(tool, ex);" in call_tool
+    direct_structured_error = (
+        "ToolError(failure.Code, McpToolCapabilityContract.LaneName(failure.Lane), failure.Message)" in call_tool
     )
-    if not all(token in call_tool for token in structured_error_contract):
+    lane_structured_error = (
+        "var lane = McpToolCapabilityContract.LaneName(failure.Lane);" in call_tool
+        and "ToolError(failure.Code, lane, failure.Message" in call_tool
+    )
+    if not classifies_failure or not (direct_structured_error or lane_structured_error):
         errors.append("embedded MCP server must keep converting runtime failures into structured MCP tool errors")
 
     if "Interlocked.CompareExchange(ref item.State, CadReadCancelledBeforeStart, CadReadQueued)" not in invoke:
