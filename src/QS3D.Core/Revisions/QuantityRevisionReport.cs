@@ -81,6 +81,8 @@ namespace QS3D.Core.Revisions
                     RequireStableKnownSummaryCount(rows, knownCount);
                     if (row == null)
                         throw new ArgumentException("Quantity revision summary contains a null row at index " + index + ".", nameof(rows));
+                    if (!string.IsNullOrEmpty(row.ElementId))
+                        ValidateCanonicalRequired(row.ElementId, "summary row " + index + " element id");
                     if (!string.IsNullOrEmpty(row.QuantityName) && row.QuantityName.Any(char.IsControl))
                         ValidateCanonicalRequired(row.QuantityName, "summary row " + index + " quantity key");
                     if (!string.IsNullOrWhiteSpace(row.QuantityName))
