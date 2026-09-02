@@ -1,4 +1,6 @@
 using System;
+using System.Reflection;
+using QS3D.Core.Commercial;
 using QS3D.Core.Cost;
 
 namespace QS3D.Core.SmokeTests
@@ -6,6 +8,7 @@ namespace QS3D.Core.SmokeTests
     internal static class CostBenchmarkMedianPrecisionSmoke
     {
         private const decimal HighMiddle = 79228162514264337593543950330m;
+        private const decimal CommercialBoundaryMagnitude = 8000000000000000000000000000m;
         private static readonly DateTime StartUtc = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
         internal static void Run()
@@ -16,6 +19,12 @@ namespace QS3D.Core.SmokeTests
             HighMagnitudeEvenMedianFailsClosed();
             OrdinaryEvenMedianRemainsStable();
             OddMedianRemainsStable();
+            RoundedHighMagnitudeCommercialAdditionFailsClosed();
+            RoundedHighMagnitudeCommercialSubtractionFailsClosed();
+            TrueCommercialAdditionOverflowKeepsOverflowContract();
+            TrueCommercialSubtractionOverflowKeepsOverflowContract();
+            RepresentableCommercialAdditionRemainsExact();
+            RepresentableCommercialSubtractionRemainsExact();
         }
 
         private static void RepresentableOverflowedAggregateAverageRemainsExact()
@@ -106,6 +115,58 @@ namespace QS3D.Core.SmokeTests
             Equal<decimal?>(0m, result.DeviationFromAveragePercent, "Odd benchmark deviation changed.");
         }
 
+        private static void RoundedHighMagnitudeCommercialAdditionFailsClosed()
+        {
+            var error = CaptureCommercialOverflow("Add", CommercialBoundaryMagnitude, 0.6m, "boundary addition");
+            Contains(
+                "Commercial addition precision loss: boundary addition.",
+                error.Message,
+                "High-magnitude commercial addition must reject scale-reduction rounding instead of accepting a different inexact result.");
+        }
+
+        private static void RoundedHighMagnitudeCommercialSubtractionFailsClosed()
+        {
+            var error = CaptureCommercialOverflow("Subtract", CommercialBoundaryMagnitude, 0.6m, "boundary subtraction");
+            Contains(
+                "Commercial subtraction precision loss: boundary subtraction.",
+                error.Message,
+                "High-magnitude commercial subtraction must reject scale-reduction rounding instead of accepting a different inexact result.");
+        }
+
+        private static void TrueCommercialAdditionOverflowKeepsOverflowContract()
+        {
+            var error = CaptureCommercialOverflow("Add", decimal.MaxValue, 1m, "true addition overflow");
+            Contains(
+                "true addition overflow overflowed decimal arithmetic.",
+                error.Message,
+                "True commercial addition overflow must keep the established overflow contract instead of being mislabeled as precision loss.");
+        }
+
+        private static void TrueCommercialSubtractionOverflowKeepsOverflowContract()
+        {
+            var error = CaptureCommercialOverflow("Subtract", decimal.MinValue, 1m, "true subtraction overflow");
+            Contains(
+                "true subtraction overflow overflowed decimal arithmetic.",
+                error.Message,
+                "True commercial subtraction overflow must keep the established overflow contract instead of being mislabeled as precision loss.");
+        }
+
+        private static void RepresentableCommercialAdditionRemainsExact()
+        {
+            Equal(
+                4.6m,
+                InvokeCommercialGuard("Add", 1.2m, 3.4m, "ordinary addition"),
+                "Representable commercial addition changed.");
+        }
+
+        private static void RepresentableCommercialSubtractionRemainsExact()
+        {
+            Equal(
+                -2.2m,
+                InvokeCommercialGuard("Subtract", 1.2m, 3.4m, "ordinary subtraction"),
+                "Representable signed commercial subtraction changed.");
+        }
+
         private static CostBenchmarkResult Analyze(decimal currentUnitCost, params decimal[] unitCosts)
         {
             var records = new HistoricalCostRecord[unitCosts.Length];
@@ -127,6 +188,39 @@ namespace QS3D.Core.SmokeTests
                 "OFFICE",
                 "VND",
                 currentUnitCost);
+        }
+
+        private static OverflowException CaptureCommercialOverflow(string methodName, decimal left, decimal right, string label)
+        {
+            try
+            {
+                InvokeCommercialGuard(methodName, left, right, label);
+            }
+            catch (OverflowException ex)
+            {
+                return ex;
+            }
+
+            throw new InvalidOperationException("Expected exact commercial arithmetic to fail closed with OverflowException.");
+        }
+
+        private static decimal InvokeCommercialGuard(string methodName, decimal left, decimal right, string label)
+        {
+            var guardType = typeof(CommercialAuditLog).Assembly.GetType(
+                "QS3D.Core.Commercial.CommercialGuard",
+                throwOnError: true);
+            var method = guardType.GetMethod(methodName, BindingFlags.Static | BindingFlags.NonPublic);
+            if (method == null)
+                throw new InvalidOperationException("CommercialGuard." + methodName + " was not found.");
+
+            try
+            {
+                return (decimal)method.Invoke(null, new object[] { left, right, label });
+            }
+            catch (TargetInvocationException ex) when (ex.InnerException != null)
+            {
+                throw ex.InnerException;
+            }
         }
 
         private static TException Capture<TException>(Action action)
