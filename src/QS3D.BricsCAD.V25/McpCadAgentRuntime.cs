@@ -28,6 +28,7 @@ namespace QS3D.BricsCAD.V25
         private const int CadWorkQueued = 0;
         private const int CadWorkRunning = 1;
         private const int CadWorkCancelledBeforeStart = 2;
+        private const int DbmodPersistentContentMask = 1 | 4 | 32;
         internal const string Qs3dCommandPattern = "^QS3D[A-Za-z0-9_]*$";
 
         private static readonly object AuditSync = new object();
@@ -215,21 +216,30 @@ namespace QS3D.BricsCAD.V25
 
         private static string CreateLine(string body)
         {
-            var entity = new Line(
-                new Point3d(NumberRequired(body, "x1"), NumberRequired(body, "y1"), NumberOptional(body, "z1", 0d)),
-                new Point3d(NumberRequired(body, "x2"), NumberRequired(body, "y2"), NumberOptional(body, "z2", 0d)));
-            return InvokeCadMutation(() => AddEntity(entity, LayerOptional(body), "cad_create_line"));
+            var x1 = NumberRequired(body, "x1");
+            var y1 = NumberRequired(body, "y1");
+            var z1 = NumberOptional(body, "z1", 0d);
+            var x2 = NumberRequired(body, "x2");
+            var y2 = NumberRequired(body, "y2");
+            var z2 = NumberOptional(body, "z2", 0d);
+            var layer = LayerOptional(body);
+            return AddEntity(() => new Line(
+                new Point3d(x1, y1, z1),
+                new Point3d(x2, y2, z2)), layer, "cad_create_line");
         }
 
         private static string CreateCircle(string body)
         {
             var radius = NumberRequired(body, "radius");
             if (!(radius > 0d)) throw new InvalidOperationException("radius must be > 0.");
-            var entity = new Circle(
-                new Point3d(NumberRequired(body, "x"), NumberRequired(body, "y"), NumberOptional(body, "z", 0d)),
+            var x = NumberRequired(body, "x");
+            var y = NumberRequired(body, "y");
+            var z = NumberOptional(body, "z", 0d);
+            var layer = LayerOptional(body);
+            return AddEntity(() => new Circle(
+                new Point3d(x, y, z),
                 Vector3d.ZAxis,
-                radius);
-            return InvokeCadMutation(() => AddEntity(entity, LayerOptional(body), "cad_create_circle"));
+                radius), layer, "cad_create_circle");
         }
 
         private static string CreateArc(string body)
@@ -239,12 +249,15 @@ namespace QS3D.BricsCAD.V25
             var start = NumberRequired(body, "startAngleDeg") * Math.PI / 180d;
             var end = NumberRequired(body, "endAngleDeg") * Math.PI / 180d;
             if (Math.Abs(end - start) < 1e-12) throw new InvalidOperationException("Arc start/end angles must define a non-zero sweep.");
-            var entity = new Arc(
-                new Point3d(NumberRequired(body, "x"), NumberRequired(body, "y"), NumberOptional(body, "z", 0d)),
+            var x = NumberRequired(body, "x");
+            var y = NumberRequired(body, "y");
+            var z = NumberOptional(body, "z", 0d);
+            var layer = LayerOptional(body);
+            return AddEntity(() => new Arc(
+                new Point3d(x, y, z),
                 radius,
                 start,
-                end);
-            return InvokeCadMutation(() => AddEntity(entity, LayerOptional(body), "cad_create_arc"));
+                end), layer, "cad_create_arc");
         }
 
         private static string CreatePolyline(string body)
@@ -256,14 +269,15 @@ namespace QS3D.BricsCAD.V25
             if (points.Count > 2048) throw new InvalidOperationException("Polyline exceeds 2048 vertices.");
             var closed = McpTopLevelJson.ExtractBoolean(body, "closed");
             var elevation = NumberOptional(body, "elevation", 0d);
-            return InvokeCadMutation(() =>
+            var layer = LayerOptional(body);
+            return AddEntity(() =>
             {
                 var entity = new Polyline(points.Count);
                 for (var i = 0; i < points.Count; i++) entity.AddVertexAt(i, points[i], 0d, 0d, 0d);
                 entity.Closed = closed;
                 entity.Elevation = elevation;
-                return AddEntity(entity, LayerOptional(body), "cad_create_polyline");
-            });
+                return entity;
+            }, layer, "cad_create_polyline");
         }
 
         private static string CreateText(string body)
@@ -271,14 +285,18 @@ namespace QS3D.BricsCAD.V25
             var text = RequiredText(body, "text", 4000, true);
             var height = NumberRequired(body, "height");
             if (!(height > 0d)) throw new InvalidOperationException("height must be > 0.");
-            var entity = new DBText
+            var x = NumberRequired(body, "x");
+            var y = NumberRequired(body, "y");
+            var z = NumberOptional(body, "z", 0d);
+            var rotation = NumberOptional(body, "rotationDeg", 0d) * Math.PI / 180d;
+            var layer = LayerOptional(body);
+            return AddEntity(() => new DBText
             {
                 TextString = text,
-                Position = new Point3d(NumberRequired(body, "x"), NumberRequired(body, "y"), NumberOptional(body, "z", 0d)),
+                Position = new Point3d(x, y, z),
                 Height = height,
-                Rotation = NumberOptional(body, "rotationDeg", 0d) * Math.PI / 180d
-            };
-            return InvokeCadMutation(() => AddEntity(entity, LayerOptional(body), "cad_create_text"));
+                Rotation = rotation
+            }, layer, "cad_create_text");
         }
 
         private static string CreateMText(string body)
@@ -288,38 +306,57 @@ namespace QS3D.BricsCAD.V25
             if (!(height > 0d)) throw new InvalidOperationException("height must be > 0.");
             var width = NumberOptional(body, "width", 0d);
             if (width < 0d) throw new InvalidOperationException("width must be >= 0.");
-            return InvokeCadMutation(() =>
+            var x = NumberRequired(body, "x");
+            var y = NumberRequired(body, "y");
+            var z = NumberOptional(body, "z", 0d);
+            var rotation = NumberOptional(body, "rotationDeg", 0d) * Math.PI / 180d;
+            var layer = LayerOptional(body);
+            return AddEntity(() =>
             {
                 var entity = new MText
                 {
-                    Location = new Point3d(NumberRequired(body, "x"), NumberRequired(body, "y"), NumberOptional(body, "z", 0d)),
+                    Location = new Point3d(x, y, z),
                     TextHeight = height,
                     Contents = text,
                     Normal = Vector3d.ZAxis,
-                    Rotation = NumberOptional(body, "rotationDeg", 0d) * Math.PI / 180d
+                    Rotation = rotation
                 };
                 if (width > 0d) entity.Width = width;
-                return AddEntity(entity, LayerOptional(body), "cad_create_mtext");
-            });
+                return entity;
+            }, layer, "cad_create_mtext");
         }
 
-        private static string AddEntity(Entity entity, string layer, string auditTool)
+        private static string AddEntity(Func<Entity> entityFactory, string layer, string auditTool)
         {
-            var document = RequireDocument();
-            using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartTransaction())
+            if (entityFactory == null) throw new ArgumentNullException(nameof(entityFactory));
+            return InvokeCadMutation(() =>
             {
-                entity.SetDatabaseDefaults(document.Database);
-                EnsureLayer(transaction, document.Database, layer, entity);
-                var table = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
-                var model = (BlockTableRecord)transaction.GetObject(table[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
-                var id = model.AppendEntity(entity);
-                transaction.AddNewlyCreatedDBObject(entity, true);
-                transaction.Commit();
-                var handle = id.Handle.ToString();
-                Audit(auditTool, "handle=" + handle);
-                return "{\"created\":true,\"handle\":\"" + Escape(handle) + "\",\"type\":\"" + Escape(entity.GetType().Name) + "\"}";
-            }
+                var document = RequireDocument();
+                using (document.LockDocument())
+                using (var transaction = document.Database.TransactionManager.StartTransaction())
+                {
+                    var entity = entityFactory();
+                    if (entity == null) throw new InvalidOperationException("Entity factory returned null.");
+                    try
+                    {
+                        entity.SetDatabaseDefaults(document.Database);
+                        EnsureLayer(transaction, document.Database, layer, entity);
+                        var table = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
+                        var model = (BlockTableRecord)transaction.GetObject(table[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                        var id = model.AppendEntity(entity);
+                        transaction.AddNewlyCreatedDBObject(entity, true);
+                        transaction.Commit();
+                        var handle = id.Handle.ToString();
+                        Audit(auditTool, "handle=" + handle);
+                        return "{\"created\":true,\"handle\":\"" + Escape(handle) + "\",\"type\":\"" + Escape(entity.GetType().Name) + "\"}";
+                    }
+                    catch
+                    {
+                        if (entity.ObjectId.IsNull) entity.Dispose();
+                        throw;
+                    }
+                }
+            });
         }
 
         private static string TransformEntity(string body)
@@ -452,7 +489,8 @@ namespace QS3D.BricsCAD.V25
             var document = RequireDocument();
             var filename = document.Database.Filename ?? string.Empty;
             var hasLocalPath = Path.IsPathRooted(filename);
-            var modified = SafeInteger(SafeSystemVariable("DBMOD")) != "0";
+            var dbmod = ReadDbmod();
+            var modified = (dbmod & DbmodPersistentContentMask) != 0;
             return "{\"name\":\"" + Escape(SafeDocumentName(document))
                    + "\",\"saved\":" + (hasLocalPath && !modified ? "true" : "false")
                    + ",\"hasLocalPath\":" + (hasLocalPath ? "true" : "false")
@@ -588,11 +626,13 @@ namespace QS3D.BricsCAD.V25
                 document.Database.Save();
             }
 
-            var dbmod = SafeInteger(SafeSystemVariable("DBMOD"));
-            if (dbmod != "0")
-                throw new InvalidOperationException("BricsCAD save returned but DBMOD is still non-zero; save completion was not confirmed.");
+            var dbmodAfterSave = ReadDbmod();
+            if ((dbmodAfterSave & DbmodPersistentContentMask) != 0)
+                throw new InvalidOperationException(
+                    "BricsCAD save returned but persistent DBMOD content bits remain; save completion was not confirmed. DBMOD="
+                    + dbmodAfterSave.ToString(CultureInfo.InvariantCulture) + ".");
 
-            Audit("cad_command_sequence", "command=QSAVE; inputChars=0; completed=true");
+            Audit("cad_command_sequence", "command=QSAVE; inputChars=0; completed=true; dbmod=" + dbmodAfterSave.ToString(CultureInfo.InvariantCulture));
             return "{\"accepted\":true,\"completed\":true,\"saved\":true,\"command\":\"QSAVE\",\"inputChars\":0}";
         }
 
@@ -896,8 +936,7 @@ namespace QS3D.BricsCAD.V25
         private static void EnsureLayer(Transaction transaction, Database database, string layer, Entity entity)
         {
             if (string.IsNullOrWhiteSpace(layer)) return;
-            EnsureLayerRecord(transaction, database, layer);
-            entity.Layer = layer;
+            entity.LayerId = EnsureLayerRecord(transaction, database, layer);
         }
 
         private static ObjectId EnsureLayerRecord(Transaction transaction, Database database, string layer)
@@ -1021,6 +1060,22 @@ namespace QS3D.BricsCAD.V25
         {
             try { return Convert.ToString(Application.GetSystemVariable(name), CultureInfo.InvariantCulture) ?? string.Empty; }
             catch { return string.Empty; }
+        }
+
+        private static int ReadDbmod()
+        {
+            object raw;
+            try { raw = Application.GetSystemVariable("DBMOD"); }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Could not read BricsCAD DBMOD; drawing save state cannot be confirmed.", ex);
+            }
+
+            var text = Convert.ToString(raw, CultureInfo.InvariantCulture) ?? string.Empty;
+            int parsed;
+            if (!int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out parsed) || parsed < 0)
+                throw new InvalidOperationException("BricsCAD DBMOD was not a non-negative integer; drawing save state cannot be confirmed.");
+            return parsed;
         }
 
         private static string SafeInteger(string value)

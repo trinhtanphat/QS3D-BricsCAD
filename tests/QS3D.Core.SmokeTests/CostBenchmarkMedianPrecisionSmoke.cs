@@ -10,9 +10,40 @@ namespace QS3D.Core.SmokeTests
 
         internal static void Run()
         {
+            RepresentableHighMagnitudeAverageRemainsAccepted();
+            UnrepresentableHighMagnitudeAverageFailsClosed();
             HighMagnitudeEvenMedianFailsClosed();
             OrdinaryEvenMedianRemainsStable();
             OddMedianRemainsStable();
+        }
+
+        private static void RepresentableHighMagnitudeAverageRemainsAccepted()
+        {
+            var expected = decimal.MaxValue - 1m;
+            var result = Analyze(
+                expected,
+                decimal.MaxValue - 2m,
+                decimal.MaxValue - 1m,
+                decimal.MaxValue - 1m,
+                decimal.MaxValue);
+
+            Equal(4, result.SampleCount, "High-magnitude benchmark sample count changed.");
+            Equal(decimal.MaxValue - 2m, result.MinimumUnitCost, "High-magnitude benchmark minimum changed.");
+            Equal(decimal.MaxValue, result.MaximumUnitCost, "High-magnitude benchmark maximum changed.");
+            Equal(expected, result.AverageUnitCost, "Representable high-magnitude benchmark average must survive an unrepresentable raw sum.");
+            Equal(expected, result.MedianUnitCost, "High-magnitude benchmark median changed.");
+            Equal<decimal?>(0m, result.DeviationFromAveragePercent, "High-magnitude benchmark deviation changed.");
+        }
+
+        private static void UnrepresentableHighMagnitudeAverageFailsClosed()
+        {
+            var error = Capture<OverflowException>(() =>
+                Analyze(decimal.MaxValue - 1m, decimal.MaxValue - 1m, decimal.MaxValue));
+
+            Contains(
+                "benchmark translated average",
+                error.ToString(),
+                "Benchmark average must fail closed when the mathematical mean cannot be represented as decimal.");
         }
 
         private static void HighMagnitudeEvenMedianFailsClosed()

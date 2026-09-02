@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Revisions
@@ -80,6 +81,8 @@ namespace QS3D.Core.Revisions
                     RequireStableKnownSummaryCount(rows, knownCount);
                     if (row == null)
                         throw new ArgumentException("Quantity revision summary contains a null row at index " + index + ".", nameof(rows));
+                    if (!string.IsNullOrEmpty(row.ElementId))
+                        ValidateCanonicalRequired(row.ElementId, "summary row " + index + " element id");
                     if (!string.IsNullOrEmpty(row.QuantityName) && row.QuantityName.Any(char.IsControl))
                         ValidateCanonicalRequired(row.QuantityName, "summary row " + index + " quantity key");
                     if (!string.IsNullOrWhiteSpace(row.QuantityName))
@@ -212,6 +215,16 @@ namespace QS3D.Core.Revisions
             {
                 throw new InvalidOperationException(
                     "Revision " + label + " must be non-empty and must not contain leading/trailing whitespace or control characters.");
+            }
+
+            try
+            {
+                XmlConvert.VerifyXmlChars(value);
+            }
+            catch (XmlException ex)
+            {
+                throw new InvalidOperationException(
+                    "Revision " + label + " contains characters that are invalid in XML.", ex);
             }
         }
 

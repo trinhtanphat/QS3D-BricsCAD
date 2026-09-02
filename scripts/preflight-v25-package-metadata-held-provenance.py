@@ -55,21 +55,38 @@ def validate(validator: str, packager: str, workflow: str) -> list[str]:
         if token not in workflow:
             errors.append(f"V25 commercial release workflow missing final held identity token: {token}")
 
-    # The workflow intentionally performs two independent semantic admissions:
-    # once before signing and once when generating final commercial provenance.
-    # Presence-only checks are insufficient because mutating either one can be
-    # masked by the other surviving occurrence.
-    required_workflow_binding_counts = {
-        "-ExpectedSourceCommit $env:GITHUB_SHA": 2,
-        "-ExpectedReleaseTag $env:RELEASE_TAG": 2,
-    }
-    for token, expected_count in required_workflow_binding_counts.items():
-        actual_count = workflow.count(token)
-        if actual_count != expected_count:
-            errors.append(
-                "V25 commercial release workflow must preserve exact binding in both held identity admissions: "
-                f"expected {expected_count} occurrences of {token}, found {actual_count}"
-            )
+    # Exactly two PACKAGE-METADATA admissions are intentional: before signing and
+    # when generating final commercial provenance. Count their binding inside each
+    # validator invocation instead of globally, because later independent validators
+    # may legitimately bind the same workflow SHA/tag for different byte generations.
+    metadata_token = "-MetadataPath 'dist\\QS3D-BricsCAD-V25\\PACKAGE-METADATA.json'"
+    source_token = "-ExpectedSourceCommit $env:GITHUB_SHA"
+    tag_token = "-ExpectedReleaseTag $env:RELEASE_TAG"
+    cursor = 0
+    package_admissions = 0
+    while True:
+        metadata_index = workflow.find(metadata_token, cursor)
+        if metadata_index < 0:
+            break
+        package_admissions += 1
+        call_start = workflow.rfind(
+            "assert-v25-release-package-identity.ps1",
+            max(0, metadata_index - 240),
+            metadata_index,
+        )
+        binding_window = workflow[metadata_index:metadata_index + 320]
+        if call_start < 0:
+            errors.append("V25 package metadata admission is not attached to the canonical held identity validator")
+        if source_token not in binding_window:
+            errors.append("V25 package metadata admission lost exact source binding")
+        if tag_token not in binding_window:
+            errors.append("V25 package metadata admission lost exact release tag binding")
+        cursor = metadata_index + len(metadata_token)
+    if package_admissions != 2:
+        errors.append(
+            "V25 commercial release workflow must preserve exactly two package-metadata held identity admissions: "
+            f"found {package_admissions}"
+        )
 
     if "Get-Content -LiteralPath 'dist\\QS3D-BricsCAD-V25\\PACKAGE-METADATA.json' -Raw | ConvertFrom-Json" in workflow:
         errors.append("V25 commercial release workflow must not re-admit metadata through a raw pathname read")

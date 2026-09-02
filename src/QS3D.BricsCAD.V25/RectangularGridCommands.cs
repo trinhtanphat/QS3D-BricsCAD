@@ -28,6 +28,10 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
+            var repeatStateSyncFailed = false;
+            try { Cad.GridAuthoringRepeatState.RememberRectangular(document, request); }
+            catch { repeatStateSyncFailed = true; }
+
             var status = "Rectangular Grid " + result.SystemKey + ": đã materialize " + result.Curves +
                          " canonical LINE source(s); replaced " + result.Replaced +
                          ". Chạy QS3DGRIDINTERSECTIONS để refresh pair-owned markers nếu cần.";
@@ -35,6 +39,8 @@ namespace QS3D.BricsCAD.V25
             try { PaletteCoordinator.RefreshProject(); } catch { uiSyncFailed = true; }
             try { PaletteCoordinator.SetStatus(status); } catch { uiSyncFailed = true; }
             TryWriteMessage(document, "\nQS3D " + status);
+            if (repeatStateSyncFailed)
+                TryWriteMessage(document, "\nQS3D Grid: native + semantic rectangular Grid đã commit; repeat template không thể cập nhật.");
             if (uiSyncFailed)
                 TryWriteMessage(document, "\nQS3D Grid: native + semantic rectangular Grid đã commit; một phần UI không thể đồng bộ.");
         }

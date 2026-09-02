@@ -241,6 +241,7 @@ namespace QS3D.Core.Persistence
 
         private static void ValidateCollectionEntries(ProjectState source)
         {
+            RequireSupportedSchemaVersion(source);
             RequireSupportedCount(source.Metadata.Count, "metadata", MaximumSnapshotNestedEntries);
             RequireSupportedCount(source.Zones.Count, "zones", MaximumSnapshotTopLevelEntries);
             RequireSupportedCount(source.Floors.Count, "floors", MaximumSnapshotTopLevelEntries);
@@ -255,12 +256,14 @@ namespace QS3D.Core.Persistence
             RequireNoNullEntries(source.Elements, "element");
             RequireNoNullEntries(source.QuantityRules, "quantity rule");
             RequireNoNullEntries(source.AuditEvents, "audit event");
+            AuditTrail.ValidateSnapshotHistory(source);
 
             RequireUniqueIds(source.Zones, x => x.Id, "zone");
             RequireUniqueIds(source.Floors, x => x.Id, "floor");
             RequireUniqueIds(source.Families, x => x.Id, "family");
             RequireUniqueIds(source.Elements, x => x.Id, "element");
             RequireUniqueIds(source.QuantityRules, x => x.Id, "quantity rule");
+            RequireResolvedActiveContext(source);
 
             foreach (var family in source.Families)
             {
@@ -279,6 +282,24 @@ namespace QS3D.Core.Persistence
                 RequireCanonicalElementProperties(element);
                 RequireCanonicalQuantities(element);
             }
+        }
+
+        private static void RequireSupportedSchemaVersion(ProjectState source)
+        {
+            if (source.SchemaVersion <= 0)
+                throw new InvalidOperationException("Cannot snapshot a project with a non-positive schema version: " + source.SchemaVersion + ".");
+            if (source.SchemaVersion > ProjectState.CurrentSchemaVersion)
+                throw new InvalidOperationException(
+                    "Cannot snapshot a project with schema version " + source.SchemaVersion
+                    + " newer than supported version " + ProjectState.CurrentSchemaVersion + ".");
+        }
+
+        private static void RequireResolvedActiveContext(ProjectState source)
+        {
+            if (source.ActiveZoneId.Length != 0 && source.FindZone(source.ActiveZoneId) == null)
+                throw new InvalidOperationException("Cannot snapshot a project whose active zone does not exist: " + source.ActiveZoneId + ".");
+            if (source.ActiveFloorId.Length != 0 && source.FindFloor(source.ActiveFloorId) == null)
+                throw new InvalidOperationException("Cannot snapshot a project whose active floor does not exist: " + source.ActiveFloorId + ".");
         }
 
         private static void RequireCanonicalFamilyProperties(ProjectFamily family)

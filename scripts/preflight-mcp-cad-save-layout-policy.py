@@ -38,6 +38,35 @@ if direct:
         if save.count("document.Database.Save();") != 1:
             errors.append("cad_save must perform exactly one current-document Save attempt")
         require(save, 'route=Database.Save-current-document', "cad_save")
+        require(save, "WaitForSavedContentDbmod()", "cad_save")
+        require(save, 'dbmodAfterSave=', "cad_save diagnostics")
+
+    # BricsCAD DBMOD is a bitmask. Persistent drawing state is represented by object
+    # database (1), database-variable (4), and field (32) bits. Window/view (8/16)
+    # state may change again after the native save and must not cause a false failure.
+    for token in (
+        "private const int DbmodPersistentContentMask = 1 | 4 | 32;",
+        "private static int WaitForSavedContentDbmod()",
+        "(dbmod & DbmodPersistentContentMask) == 0",
+        "window/view DBMOD bits may remain after save",
+    ):
+        require(direct, token, "content-aware DBMOD save confirmation")
+    if "dbmod == 0" in direct:
+        errors.append("save completion must not require the entire DBMOD bitmask to become zero")
+
+    def content_saved(dbmod):
+        return (dbmod & (1 | 4 | 32)) == 0
+
+    assert content_saved(0)
+    assert content_saved(8)
+    assert content_saved(16)
+    assert content_saved(8 | 16)
+    assert not content_saved(1)
+    assert not content_saved(4)
+    assert not content_saved(32)
+    assert not content_saved(1 | 8)
+    assert not content_saved(4 | 16)
+    assert not content_saved(32 | 8 | 16)
 
     for token in (
         'string.Equals(command, "-LAYOUT", StringComparison.Ordinal)',
@@ -77,4 +106,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: cad_save uses one current-document Save attempt, bounded layout operations are direct/deterministic, and foreground status preserves background_only startup while explaining consent vs policy.")
+print("PASS: cad_save uses one current-document Save attempt, accepts successful saves when only window/view DBMOD bits remain, bounded layout operations are direct/deterministic, and foreground status preserves background_only startup while explaining consent vs policy.")
