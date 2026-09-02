@@ -21,6 +21,7 @@ namespace QS3D.BricsCAD.V25
             {
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 result = Cad.RadialGridNativeSourceBuilder.Build(document, project, request);
+                Cad.GridAuthoringRepeatState.RememberRadial(document, request);
             }
             catch (Exception)
             {
