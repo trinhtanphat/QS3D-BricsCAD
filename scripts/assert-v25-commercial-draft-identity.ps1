@@ -30,6 +30,7 @@ $ErrorActionPreference = 'Stop'
 $MaxMetadataBytes = 65536
 $MaxProvenanceBytes = 65536
 $MaxChecksumBytes = 4096
+$MaxVerifierScriptBytes = 262144
 $MaxSignedPayloadEntryBytes = 268435456
 $MaxSignedPayloadTotalBytes = 536870912
 $StrictReleaseTagPattern = '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$'
@@ -197,8 +198,15 @@ function Test-HeldZipPayloadSignatures {
         finally { $archive.Dispose() }
 
         $verifyScript = Join-Path $PSScriptRoot 'verify-v25-signatures.ps1'
-        if (-not (Test-Path -LiteralPath $verifyScript -PathType Leaf)) { throw 'V25 Authenticode verifier is missing.' }
-        & $verifyScript -Path $extracted.ToArray() -ExpectedThumbprint $ExpectedThumbprint
+        $verifyHeld = Open-HeldGeneration -LiteralPath $verifyScript -Label 'V25 Authenticode verifier'
+        try {
+            $verifyScriptText = Read-HeldStrictUtf8 -Held $verifyHeld -MaxBytes $MaxVerifierScriptBytes -Label 'V25 Authenticode verifier'
+            $verifyScriptBlock = [ScriptBlock]::Create($verifyScriptText)
+            & $verifyScriptBlock -Path $extracted.ToArray() -ExpectedThumbprint $ExpectedThumbprint
+        }
+        finally {
+            $verifyHeld.Stream.Dispose()
+        }
     }
     finally {
         Remove-Item -LiteralPath $workspace -Recurse -Force -ErrorAction SilentlyContinue
