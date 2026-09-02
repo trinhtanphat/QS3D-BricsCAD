@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 VALIDATION_WORKFLOW = "ci.yml"
 AUTO_DISPATCHER = "dispatch-v25-cloud-after-main-integration.yml"
+HYBRID_COORDINATOR = "hybrid-pr-coordinator.yml"
 RELEASE_WORKFLOWS = {"release-v25.yml", "release-v25-cloud.yml", "release-v26.yml"}
 MAX_WORKFLOW_SOURCE_BYTES = 1024 * 1024
 MAX_OPEN_IDENTITY_ATTEMPTS = 2
@@ -56,9 +57,7 @@ def _read_validated_workflow_source(path, root):
         if type_error is not None:
             raise ValueError(f"{path.name}: workflow candidate {type_error}")
         if metadata.st_size > MAX_WORKFLOW_SOURCE_BYTES:
-            raise ValueError(
-                f"{path.name}: workflow source exceeds {MAX_WORKFLOW_SOURCE_BYTES} bytes"
-            )
+            raise ValueError(f"{path.name}: workflow source exceeds {MAX_WORKFLOW_SOURCE_BYTES} bytes")
 
         try:
             resolved = path.resolve(strict=True)
@@ -79,29 +78,20 @@ def _read_validated_workflow_source(path, root):
                 identity_changed = True
                 if attempt + 1 < MAX_OPEN_IDENTITY_ATTEMPTS:
                     continue
-                raise ValueError(
-                    f"{path.name}: changed identity between workflow validation and open after bounded retry"
-                )
+                raise ValueError(f"{path.name}: changed identity between workflow validation and open after bounded retry")
             if opened_metadata.st_size > MAX_WORKFLOW_SOURCE_BYTES:
-                raise ValueError(
-                    f"{path.name}: workflow source exceeds {MAX_WORKFLOW_SOURCE_BYTES} bytes"
-                )
+                raise ValueError(f"{path.name}: workflow source exceeds {MAX_WORKFLOW_SOURCE_BYTES} bytes")
 
             chunks = []
             total = 0
             while total <= MAX_WORKFLOW_SOURCE_BYTES:
-                chunk = os.read(
-                    fd,
-                    min(64 * 1024, MAX_WORKFLOW_SOURCE_BYTES + 1 - total),
-                )
+                chunk = os.read(fd, min(64 * 1024, MAX_WORKFLOW_SOURCE_BYTES + 1 - total))
                 if not chunk:
                     break
                 chunks.append(chunk)
                 total += len(chunk)
             if total > MAX_WORKFLOW_SOURCE_BYTES:
-                raise ValueError(
-                    f"{path.name}: workflow source exceeds {MAX_WORKFLOW_SOURCE_BYTES} bytes"
-                )
+                raise ValueError(f"{path.name}: workflow source exceeds {MAX_WORKFLOW_SOURCE_BYTES} bytes")
             payload = b"".join(chunks)
             identity_changed = False
             break
@@ -114,9 +104,7 @@ def _read_validated_workflow_source(path, root):
                 os.close(fd)
     else:
         if identity_changed:
-            raise ValueError(
-                f"{path.name}: changed identity between workflow validation and open after bounded retry"
-            )
+            raise ValueError(f"{path.name}: changed identity between workflow validation and open after bounded retry")
         raise ValueError(f"{path.name}: workflow source could not be read safely")
 
     try:
@@ -144,7 +132,6 @@ def discover_workflow_sources(workflows):
     if not root.is_dir():
         raise ValueError("missing .github/workflows directory")
 
-    discovered = []
     try:
         candidates = sorted(
             (path for path in workflows.iterdir() if path.suffix in (".yml", ".yaml")),
@@ -153,10 +140,10 @@ def discover_workflow_sources(workflows):
     except OSError as exc:
         raise ValueError(f"workflow directory cannot be enumerated: {exc}") from exc
 
+    discovered = []
     for path in candidates:
         text = _read_validated_workflow_source(path, root)
         discovered.append((path, text))
-
     return discovered
 
 
@@ -253,10 +240,7 @@ def normalize_expression(expression):
 def is_hard_manual_dispatch_guard(expression):
     if expression is None or "||" in expression:
         return False
-    return bool(re.fullmatch(
-        r"github\.event_name\s*==\s*'workflow_dispatch'(?:\s*&&\s*.+)?",
-        expression,
-    ))
+    return bool(re.fullmatch(r"github\.event_name\s*==\s*'workflow_dispatch'(?:\s*&&\s*.+)?", expression))
 
 
 def is_hard_release_confirmation_guard(expression):
@@ -288,10 +272,7 @@ def is_hard_validation_guard(expression):
 
 
 def parse_trigger_name(line):
-    match = re.match(
-        r"^\s{2}(?:\"([A-Za-z0-9_-]+)\"|'([A-Za-z0-9_-]+)'|([A-Za-z0-9_-]+))\s*:",
-        line,
-    )
+    match = re.match(r"^\s{2}(?:\"([A-Za-z0-9_-]+)\"|'([A-Za-z0-9_-]+)'|([A-Za-z0-9_-]+))\s*:", line)
     if not match:
         return None
     return next(value for value in match.groups() if value is not None)
@@ -320,19 +301,9 @@ def require_tokens(text, tokens, label):
 def validate_guard_parser():
     cases = (
         ("manual equality", ["    if: ${{ github.event_name == 'workflow_dispatch' }}"], True, False),
-        (
-            "release conjunction",
-            ["    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' }}"],
-            True,
-            True,
-        ),
+        ("release conjunction", ["    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' }}"], True, True),
         ("comment-only equality", ["    if: # github.event_name == 'workflow_dispatch'"], False, False),
-        (
-            "OR bypass",
-            ["    if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' }}"],
-            False,
-            False,
-        ),
+        ("OR bypass", ["    if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' }}"], False, False),
     )
     for name, lines, expected_manual, expected_release in cases:
         expression = extract_job_if_expression(lines)
@@ -363,26 +334,16 @@ def validate_guard_parser():
         errors.append("trigger parser must support quoted automatic validation keys")
 
     accepted_policy_keys = (
-        ("on:", 0, "on"),
-        ("'on':", 0, "on"),
-        ('"on": # approved triggers', 0, "on"),
-        ("  preflight:", 2, "preflight"),
-        ("  'release':", 2, "release"),
-        ('  "core": # comment', 2, "core"),
+        ("on:", 0, "on"), ("'on':", 0, "on"), ('"on": # approved triggers', 0, "on"),
+        ("  preflight:", 2, "preflight"), ("  'release':", 2, "release"), ('  "core": # comment', 2, "core"),
     )
     for line, indentation, expected in accepted_policy_keys:
         if parse_block_mapping_key(line, indentation) != expected:
             errors.append(f"quoted policy mapping-key parser regression: {line!r}")
 
     rejected_policy_keys = (
-        (" on:", 0),
-        ("\t'on':", 0),
-        ("'on\":", 0),
-        ('"on\':', 0),
-        ("   preflight:", 2),
-        ("  'bad.name':", 2),
-        ("  'bad name':", 2),
-        ("  'unterminated:", 2),
+        (" on:", 0), ("\t'on':", 0), ("'on\":", 0), ('"on\':', 0),
+        ("   preflight:", 2), ("  'bad.name':", 2), ("  'bad name':", 2), ("  'unterminated:", 2),
     )
     for line, indentation in rejected_policy_keys:
         if parse_block_mapping_key(line, indentation) is not None:
@@ -422,7 +383,7 @@ if not workflow_sources:
     errors.append("no GitHub Actions workflows found")
 
 workflow_names = {path.name for path, _ in workflow_sources}
-for required_workflow in (VALIDATION_WORKFLOW, AUTO_DISPATCHER):
+for required_workflow in (VALIDATION_WORKFLOW, AUTO_DISPATCHER, HYBRID_COORDINATOR):
     if required_workflow not in workflow_names:
         errors.append(f"missing owner-approved workflow: {required_workflow}")
 
@@ -453,18 +414,14 @@ for path, text in workflow_sources:
         push_block = "\n".join(trigger_blocks.get("push", []))
         require_tokens(push_block, ('branches:', '"agent/**"', '"integration/**"'), f"{path.name} push")
         if "paths:" in push_block or "paths-ignore:" in push_block:
-            errors.append(
-                f"{path.name}: branch-push validation must not use path filters because exact-head admission must survive docs-only and ancestry-only reconciliation commits"
-            )
+            errors.append(f"{path.name}: branch-push validation must not use path filters because exact-head admission must survive docs-only and ancestry-only reconciliation commits")
         if re.search(r"(?m)^\s*-\s*[\"']?main[\"']?\s*$", push_block):
             errors.append(f"{path.name}: direct main push must not trigger shared branch CI; main owns the release dispatcher")
 
         pr_block = "\n".join(trigger_blocks.get("pull_request", []))
         require_tokens(pr_block, ('branches:', '- main', '"integration/**"'), f"{path.name} pull_request")
         if "paths:" in pr_block or "paths-ignore:" in pr_block:
-            errors.append(
-                f"{path.name}: pull_request validation must not use path filters because protected main always requires stable preflight/core contexts"
-            )
+            errors.append(f"{path.name}: pull_request validation must not use path filters because protected main always requires stable preflight/core contexts")
 
         require_tokens(text, (
             "contents: read", "persist-credentials: false",
@@ -528,11 +485,54 @@ for path, text in workflow_sources:
             if job_name != "dispatch":
                 errors.append(f"{path.name}: unexpected automatic dispatcher job: {job_name}")
 
+    elif path.name == HYBRID_COORDINATOR:
+        expected = {"pull_request", "push"}
+        if trigger_names != expected:
+            errors.append(f"{path.name}: hybrid coordinator must expose exactly pull_request + push; got {sorted(trigger_names)}")
+
+        pr_block = "\n".join(trigger_blocks.get("pull_request", []))
+        require_tokens(
+            pr_block,
+            ("types:", "- opened", "- reopened", "- ready_for_review", "- synchronize", "- unlabeled", "branches:", "- main"),
+            f"{path.name} pull_request",
+        )
+        push_block = "\n".join(trigger_blocks.get("push", []))
+        require_tokens(push_block, ("branches:", "- main"), f"{path.name} push")
+        if "paths:" in pr_block or "paths-ignore:" in pr_block or "paths:" in push_block or "paths-ignore:" in push_block:
+            errors.append(f"{path.name}: coordinator triggers must not use path filters")
+
+        require_tokens(text, (
+            "name: QS3D Hybrid PR Coordinator",
+            "contents: read", "actions: read", "pull-requests: write",
+            "group: qs3d-hybrid-pr-coordinator", "cancel-in-progress: false",
+            "arm-native-automerge:", "refresh-branches:",
+            "github.event_name == 'pull_request'", "github.event_name == 'push'",
+            "GH_TOKEN: ${{ github.token }}", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}",
+            "enablePullRequestAutoMerge", "no-automerge", "head.repo.full_name", "base.ref", "draft",
+            "event_head_sha", "api_head_sha", "/update-branch", "expected_head_sha",
+        ), path.name)
+        for forbidden in (
+            "workflow_dispatch", "pull_request_target", "contents: write", "actions: write", "issues: write",
+            "gh pr merge", "git push", "git reset", "--force", "gh workflow run", "gh release",
+        ):
+            if forbidden in text:
+                errors.append(f"{path.name}: hybrid coordinator contains forbidden token: {forbidden}")
+        if re.search(r"repos/[^\s\"']+/pulls/[^\s\"']+/merge(?:[\s\"']|$)", text, re.IGNORECASE):
+            errors.append(f"{path.name}: direct pull-request merge endpoint remains forbidden")
+
+        expected_jobs = {"arm-native-automerge", "refresh-branches"}
+        if {name for name, _ in job_blocks} != expected_jobs:
+            errors.append(f"{path.name}: coordinator jobs must be exactly {sorted(expected_jobs)}")
+        arm_block = next(("\n".join(block) for name, block in job_blocks if name == "arm-native-automerge"), "")
+        refresh_block = next(("\n".join(block) for name, block in job_blocks if name == "refresh-branches"), "")
+        require_tokens(arm_block, ("github.event_name == 'pull_request'", "GH_TOKEN: ${{ github.token }}", "enablePullRequestAutoMerge"), f"{path.name}/arm-native-automerge")
+        require_tokens(refresh_block, ("github.event_name == 'push'", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "/update-branch", "expected_head_sha"), f"{path.name}/refresh-branches")
+        if "github.token" in refresh_block:
+            errors.append(f"{path.name}/refresh-branches: branch mutation must not fall back to github.token")
+
     else:
         if trigger_names != {"workflow_dispatch"}:
-            errors.append(
-                f"{path.name}: only {VALIDATION_WORKFLOW} and {AUTO_DISPATCHER} may use automatic triggers; got {sorted(trigger_names)}"
-            )
+            errors.append(f"{path.name}: only {VALIDATION_WORKFLOW}, {AUTO_DISPATCHER}, and {HYBRID_COORDINATOR} may use automatic triggers; got {sorted(trigger_names)}")
         for job_name, job_lines in job_blocks:
             if not is_hard_manual_dispatch_guard(extract_job_if_expression(job_lines)):
                 errors.append(f"{path.name}/{job_name}: job must hard-guard github.event_name == 'workflow_dispatch'")
@@ -556,7 +556,7 @@ policy_path = ROOT / "CI_POLICY.md"
 policy = policy_path.read_text(encoding="utf-8") if policy_path.is_file() else ""
 for token in (
     "automatic branch/PR validation", VALIDATION_WORKFLOW, "integration/<batch-id>", "exact-main release",
-    AUTO_DISPATCHER, "release-v25-cloud.yml", "ALL MERGED TO MAIN",
+    AUTO_DISPATCHER, HYBRID_COORDINATOR, "release-v25-cloud.yml", "ALL MERGED TO MAIN",
 ):
     if token not in policy:
         errors.append("CI_POLICY.md missing staged CI policy token: " + token)
@@ -568,6 +568,7 @@ for token in (
     "Only an agent/session explicitly authorized by the repository owner as an integration/merge coordinator may change `main`.",
     "shared branch/PR CI", "combined-tree CI", "exact-main release CI",
     "merge to `main` only within the owner's explicit authorization", "ALL MERGED TO MAIN", AUTO_DISPATCHER,
+    HYBRID_COORDINATOR,
 ):
     if token not in registration:
         errors.append("AGENT-WORK-REGISTRATION.md missing staged integration token: " + token)
@@ -581,5 +582,5 @@ if errors:
 
 print(
     "PASS: every agent/integration push produces exact-head branch CI, every PR emits stable required contexts, governance/docs-only candidates remain lightweight through internal scope classification, "
-    "build-relevant candidates run Core plus V25 compile, main alone owns exact-source V25 dispatch, and releases retain explicit confirmation."
+    "build-relevant candidates run Core plus V25 compile, main owns exact-source V25 dispatch, the named hybrid coordinator may arm protected native auto-merge/refresh, and releases retain explicit confirmation."
 )
