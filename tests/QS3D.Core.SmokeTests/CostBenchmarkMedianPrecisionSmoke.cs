@@ -25,6 +25,8 @@ namespace QS3D.Core.SmokeTests
             TrueCommercialSubtractionOverflowKeepsOverflowContract();
             RepresentableCommercialAdditionRemainsExact();
             RepresentableCommercialSubtractionRemainsExact();
+            CommercialAdditionCancellationCanonicalizesZeroScale();
+            CommercialSubtractionCancellationCanonicalizesZeroScale();
         }
 
         private static void RepresentableOverflowedAggregateAverageRemainsExact()
@@ -165,6 +167,27 @@ namespace QS3D.Core.SmokeTests
                 -2.2m,
                 InvokeCommercialGuard("Subtract", 1.2m, 3.4m, "ordinary subtraction"),
                 "Representable signed commercial subtraction changed.");
+        }
+
+        private static void CommercialAdditionCancellationCanonicalizesZeroScale()
+        {
+            var result = InvokeCommercialGuard("Add", -1.20m, 1.2m, "addition cancellation");
+            Equal(0m, result, "Commercial addition cancellation must remain numerically zero.");
+            Equal(0, DecimalScale(result),
+                "Commercial addition cancellation must canonicalize zero scale so formatting and serialization do not depend on operand scale.");
+        }
+
+        private static void CommercialSubtractionCancellationCanonicalizesZeroScale()
+        {
+            var result = InvokeCommercialGuard("Subtract", 1.20m, 1.2m, "subtraction cancellation");
+            Equal(0m, result, "Commercial subtraction cancellation must remain numerically zero.");
+            Equal(0, DecimalScale(result),
+                "Commercial subtraction cancellation must canonicalize zero scale so formatting and serialization do not depend on operand scale.");
+        }
+
+        private static int DecimalScale(decimal value)
+        {
+            return (decimal.GetBits(value)[3] >> 16) & 0x7F;
         }
 
         private static CostBenchmarkResult Analyze(decimal currentUnitCost, params decimal[] unitCosts)
