@@ -146,12 +146,12 @@ function Test-HeldZipPayloadSignatures {
     $workspace = Join-Path $runnerTemp ('qs3d-v25-held-signature-' + [Guid]::NewGuid().ToString('N'))
     if (Test-Path -LiteralPath $workspace) { throw 'Held V25 signature verification workspace unexpectedly already exists.' }
     $workspaceItem = New-Item -ItemType Directory -Path $workspace -ErrorAction Stop
-    if (($workspaceItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-        throw 'Held V25 signature verification workspace must not be a reparse point.'
-    }
-
-    $extracted = New-Object System.Collections.Generic.List[string]
     try {
+        if (($workspaceItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw 'Held V25 signature verification workspace must not be a reparse point.'
+        }
+
+        $extracted = New-Object System.Collections.Generic.List[string]
         $ZipHeld.Stream.Seek(0, [IO.SeekOrigin]::Begin) | Out-Null
         $archive = [IO.Compression.ZipArchive]::new($ZipHeld.Stream, [IO.Compression.ZipArchiveMode]::Read, $true)
         try {
@@ -167,7 +167,7 @@ function Test-HeldZipPayloadSignatures {
                 if ([int64]$entry.Length -lt 0 -or [int64]$entry.Length -gt $MaxSignedPayloadEntryBytes) {
                     throw "Downloaded V25 draft signed payload entry $requiredName exceeds the bounded extraction limit."
                 }
-                $totalBytes = [checked]($totalBytes + [int64]$entry.Length)
+                $totalBytes += [int64]$entry.Length
                 if ($totalBytes -gt $MaxSignedPayloadTotalBytes) {
                     throw 'Downloaded V25 draft signed payload exceeds the bounded total extraction limit.'
                 }
