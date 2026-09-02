@@ -33,6 +33,21 @@ The admission keeps every supplied ordinary non-reparse file generation open rea
 
 Existing V26 release request, runtime, signing, lightweight-tag, draft transaction, rollback, remote asset verification and publication acknowledgement contracts remain in force.
 
+## Publisher-generation hardening — Issue #5399
+
+Candidate admission is not sufficient if the code authorized to publish the candidate can be replaced after a pathname check. `-AdmittedScript` is therefore part of the held-generation transaction rather than a later pathname reopen.
+
+The validator must:
+
+- admit the publisher only as an ordinary non-reparse file whose parent path is also free of reparse points;
+- keep the publisher's read handle in the same held set as ZIP/checksum/provenance/update inputs;
+- read the publisher from that exact held stream with strict UTF-8 decoding and an explicit 262144-byte upper bound;
+- parse a PowerShell `ScriptBlock` from the exact admitted publisher-script bytes and execute that script block while all held handles remain open;
+- refuse the former `& $scriptItem.FullName` pathname-reopen topology;
+- assert after publication that every original pathname, including the publisher path, still resolves to the generation that was admitted.
+
+This closes the script-side TOCTOU boundary without weakening the existing candidate, release-tag, signature, runtime or publication-transaction checks.
+
 ## Deterministic source gate
 
 Run:
@@ -41,7 +56,7 @@ Run:
 python scripts/preflight-v26-candidate-identity.py
 ```
 
-The guard is auto-discovered by `scripts/preflight-all.py` and pins provenance production, artifact inclusion, exact release-job invocation ordering, expected source/tag arguments, signed/unsigned update-manifest handling, held-generation semantics, ZIP metadata admission and digest bindings.
+The guard is auto-discovered by `scripts/preflight-all.py` and pins provenance production, artifact inclusion, exact release-job invocation ordering, expected source/tag arguments, signed/unsigned update-manifest handling, held-generation semantics, exact admitted publisher-script bytes, bounded strict-UTF8 publisher parsing, ZIP metadata admission and digest bindings. It explicitly rejects regression to pathname-based publisher execution after admission.
 
 ## Qualification boundary
 

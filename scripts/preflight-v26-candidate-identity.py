@@ -32,12 +32,24 @@ for token, label in (
     ("BricsCAD V26 x64", "V26 target identity"),
     ("net8.0-windows", "V26 framework identity"),
     ("[string]$AdmittedScript", "held-generation admitted action parameter"),
-    ("& $scriptItem.FullName", "publication while candidate handles remain held"),
+    ("Open-Held -Path $AdmittedScript -Label 'V26 admitted publication script'", "publisher script held-generation admission"),
+    ("Read-HeldText -Held $scriptHeld -Label 'V26 admitted publication script' -MaxBytes $maxAdmittedScriptBytes", "bounded strict-UTF8 publisher read"),
+    ("[ScriptBlock]::Create($scriptText)", "publisher execution compiled from admitted bytes"),
+    ("& $admittedScriptBlock", "publication from admitted publisher bytes"),
     ("after publication", "post-publication generation continuity assertion"),
 ):
     require(ASSERT, token, label)
 
-require(RUNBOOK, "Lane-Key: `issue-5313`", "canonical lane key")
+if "& $scriptItem.FullName" in ASSERT:
+    raise SystemExit("FAIL v26 candidate identity: publisher must not be reopened by pathname after admission")
+if "$held.Add($scriptHeld)" not in ASSERT:
+    raise SystemExit("FAIL v26 candidate identity: publisher script generation must remain held through publication")
+if "$maxAdmittedScriptBytes = 262144" not in ASSERT:
+    raise SystemExit("FAIL v26 candidate identity: publisher script admission must retain an explicit size bound")
+
+require(RUNBOOK, "Lane-Key: `issue-5313`", "original candidate-identity lane provenance")
+require(RUNBOOK, "Issue #5399", "publisher-generation hardening provenance")
+require(RUNBOOK, "exact admitted publisher-script bytes", "publisher-generation execution contract")
 require(RUNBOOK, "exact workflow SHA", "source-boundary documentation")
 
 create_token = "new-v26-candidate-provenance.ps1"
@@ -62,4 +74,4 @@ if WORKFLOW.count(held_publish_token) != 2:
 if "- name: Publish V26 GitHub Release" in WORKFLOW:
     raise SystemExit("FAIL v26 candidate identity: publication must not be split into a later step after held-generation admission")
 
-print("PASS v26 post-job-boundary candidate semantic identity and publication continuity")
+print("PASS v26 candidate semantic identity, held publisher generation, and publication continuity")
