@@ -49,13 +49,13 @@ def main() -> int:
     )
     if add_entity:
         dispatch = add_entity.find("return InvokeCadMutation(() =>")
-        factory = add_entity.find("var entity = entityFactory();")
         lock = add_entity.find("using (document.LockDocument())")
         transaction = add_entity.find("StartTransaction()")
+        factory = add_entity.find("var entity = entityFactory();")
         require(dispatch >= 0, "AddEntity must own InvokeCadMutation dispatch", errors)
-        require(factory > dispatch, "Entity factory must execute inside InvokeCadMutation", errors)
-        require(lock > factory, "document lock must be acquired after CAD-context Entity construction begins", errors)
+        require(lock > dispatch, "AddEntity document lock must be inside InvokeCadMutation", errors)
         require(transaction > lock, "transaction must start under the document lock", errors)
+        require(factory > transaction, "Entity factory must execute inside CAD context and the active document transaction", errors)
 
     expected_factories = {
         "CreateLine": "return AddEntity(() => new Line(",
