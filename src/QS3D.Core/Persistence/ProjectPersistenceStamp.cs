@@ -89,14 +89,26 @@ namespace QS3D.Core.Persistence
         private static StableSnapshot CaptureStableSnapshot(ProjectState project)
         {
             var boundary = new PersistenceBoundary(project);
-            var metadata = SnapshotMetadata(project.Metadata);
-            var nestedPersistedContent = SnapshotNestedPersistedContent(project, boundary);
+            var firstMetadata = SnapshotMetadata(project.Metadata);
+            var firstNestedPersistedContent = SnapshotNestedPersistedContent(project, boundary);
 
             if (!boundary.Matches(project))
                 throw new InvalidOperationException(
                     "Project state changed while the persistence stamp was materializing persisted content.");
 
-            return new StableSnapshot(boundary, metadata, nestedPersistedContent);
+            // Nested Family/Element state can change without incrementing the parent
+            // ProjectState revision. Materialize a second complete pass and require the
+            // same content so a mixed-time first pass cannot be accepted as a saved state.
+            var secondMetadata = SnapshotMetadata(project.Metadata);
+            var secondNestedPersistedContent = SnapshotNestedPersistedContent(project, boundary);
+
+            if (!boundary.Matches(project) ||
+                !MetadataMatches(secondMetadata, firstMetadata) ||
+                !string.Equals(secondNestedPersistedContent, firstNestedPersistedContent, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "Nested persisted project state changed while the persistence stamp was materializing content.");
+
+            return new StableSnapshot(boundary, secondMetadata, secondNestedPersistedContent);
         }
 
         private static Dictionary<string, string> SnapshotMetadata(IDictionary<string, string> metadata)
