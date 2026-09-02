@@ -266,6 +266,7 @@ namespace QS3D.BricsCAD.V25.UI
                 }
                 catch (Exception ex)
                 {
+                    _cleanupBarrier = _session.HasTransientState;
                     SetStatus(actionName + " bị từ chối: " + ex.Message);
                 }
                 finally
