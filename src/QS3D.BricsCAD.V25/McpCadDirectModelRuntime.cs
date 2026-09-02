@@ -60,9 +60,14 @@ namespace QS3D.BricsCAD.V25
 
         internal static bool CanHandleCadCommandSequence(string arguments)
         {
-            var command = NormalizeCommandToken(McpTopLevelJson.ExtractString(arguments ?? "{}", "command"));
-            return string.Equals(command, "EXTRUDE", StringComparison.Ordinal)
-                   || string.Equals(command, "QSAVE", StringComparison.Ordinal);
+            var body = string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments;
+            var command = NormalizeCommandToken(McpTopLevelJson.ExtractString(body, "command"));
+            if (string.Equals(command, "EXTRUDE", StringComparison.Ordinal)
+                || string.Equals(command, "QSAVE", StringComparison.Ordinal))
+                return true;
+            string layoutAction;
+            string layoutName;
+            return TryParseDirectLayoutCommand(command, McpTopLevelJson.ExtractString(body, "inputs"), out layoutAction, out layoutName);
         }
 
         internal static IEnumerable<string> ToolDescriptors()
@@ -138,12 +143,17 @@ namespace QS3D.BricsCAD.V25
             var body = string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments;
             RequireConfirmedMutation(body, "cad_command_sequence");
             var command = NormalizeCommandToken(McpTopLevelJson.ExtractString(body, "command"));
+            var rawInputs = McpTopLevelJson.ExtractString(body, "inputs");
+            string layoutAction;
+            string layoutName;
+            var directLayout = TryParseDirectLayoutCommand(command, rawInputs, out layoutAction, out layoutName);
             EnsureAutomationRunning();
             if (!string.Equals(command, "QSAVE", StringComparison.Ordinal)
-                && !string.Equals(command, "EXTRUDE", StringComparison.Ordinal))
-                throw new InvalidOperationException("Direct multi-stage command grammar currently supports EXTRUDE and synchronous QSAVE only.");
+                && !string.Equals(command, "EXTRUDE", StringComparison.Ordinal)
+                && !directLayout)
+                throw new InvalidOperationException("Direct multi-stage command grammar currently supports EXTRUDE, synchronous QSAVE, and bounded LAYOUT/-LAYOUT NEW/SET/DELETE only.");
             var inputs = string.Equals(command, "EXTRUDE", StringComparison.Ordinal)
-                ? NormalizeExtrudeInputs(McpTopLevelJson.ExtractString(body, "inputs"))
+                ? NormalizeExtrudeInputs(rawInputs)
                 : string.Empty;
             return McpDiagnosticHub.InvokeInCadContext(() =>
             {
@@ -153,6 +163,8 @@ namespace QS3D.BricsCAD.V25
                     Save();
                     return "{\"accepted\":true,\"completed\":true,\"saved\":true,\"command\":\"QSAVE\",\"inputChars\":0}";
                 }
+                if (directLayout)
+                    return ExecuteDirectLayoutCommand(command, layoutAction, layoutName);
                 var document = RequireDocument();
                 var script = "_.EXTRUDE\n" + inputs;
                 if (!script.EndsWith("\n", StringComparison.Ordinal)) script += "\n";
@@ -289,9 +301,9 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("Active drawing has no existing local path. Use cad_save_as first.");
             RequireIdle();
             EnsureAutomationRunning();
-            using (document.LockDocument()) document.Database.SaveAs(filename, DwgVersion.Current);
+            using (document.LockDocument()) document.Database.Save();
             WaitForCleanDbmod();
-            RecordMutation(document, "cad-save", "completed=true; fileName=" + SafeLeaf(filename) + "; route=SaveAs-current-path");
+            RecordMutation(document, "cad-save", "completed=true; fileName=" + SafeLeaf(filename) + "; route=Database.Save-current-document");
             return "{\"saved\":true,\"completed\":true,\"fileName\":\"" + Escape(SafeLeaf(filename)) + "\"}";
         }
 
@@ -322,6 +334,85 @@ namespace QS3D.BricsCAD.V25
             RecordMutation(document, "cad-save-as", "completed=true; fileName=" + leaf + "; overwrite=" + overwrite);
             return "{\"saved\":true,\"completed\":true,\"saveAs\":true,\"fileName\":\"" + Escape(leaf)
                    + "\",\"overwroteExisting\":" + (existed ? "true" : "false") + "}";
+        }
+
+        private static bool TryParseDirectLayoutCommand(string command, string input, out string action, out string layoutName)
+        {
+            action = string.Empty;
+            layoutName = string.Empty;
+            if (!string.Equals(command, "-LAYOUT", StringComparison.Ordinal)
+                && !string.Equals(command, "LAYOUT", StringComparison.Ordinal))
+                return false;
+            var value = (input ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
+            if (value.Length == 0 || value.Length > 2048 || value.IndexOf('\0') >= 0 || value.IndexOf('\u001b') >= 0 || value.IndexOf('\u0003') >= 0)
+                return false;
+            var parts = new List<string>();
+            foreach (var raw in value.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var part = raw.Trim();
+                if (part.Length > 0) parts.Add(part);
+            }
+            if (parts.Count != 2) return false;
+            var option = NormalizeCommandToken(parts[0]);
+            if (option == "N" || option == "NEW") action = "NEW";
+            else if (option == "S" || option == "SET") action = "SET";
+            else if (option == "D" || option == "DELETE") action = "DELETE";
+            else return false;
+            layoutName = parts[1].Trim();
+            if (layoutName.Length == 0 || layoutName.Length > 255) return false;
+            foreach (var ch in layoutName) if (ch < 32) return false;
+            return true;
+        }
+
+        private static string ExecuteDirectLayoutCommand(string command, string action, string layoutName)
+        {
+            var document = RequireDocument();
+            RequireIdle();
+            EnsureAutomationRunning();
+            using (document.LockDocument())
+            {
+                EnsureAutomationRunning();
+                if (string.Equals(action, "NEW", StringComparison.Ordinal))
+                {
+                    if (LayoutExists(document.Database, layoutName))
+                        throw new InvalidOperationException("Layout already exists: " + layoutName + ".");
+                    LayoutManager.Current.CreateLayout(layoutName);
+                }
+                else if (string.Equals(action, "SET", StringComparison.Ordinal))
+                {
+                    if (!LayoutExists(document.Database, layoutName))
+                        throw new InvalidOperationException("Layout does not exist: " + layoutName + ".");
+                    LayoutManager.Current.CurrentLayout = layoutName;
+                }
+                else if (string.Equals(action, "DELETE", StringComparison.Ordinal))
+                {
+                    if (string.Equals(layoutName, "Model", StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("The Model layout cannot be deleted.");
+                    if (!LayoutExists(document.Database, layoutName))
+                        throw new InvalidOperationException("Layout does not exist: " + layoutName + ".");
+                    if (string.Equals(LayoutManager.Current.CurrentLayout, layoutName, StringComparison.OrdinalIgnoreCase))
+                        LayoutManager.Current.CurrentLayout = "Model";
+                    LayoutManager.Current.DeleteLayout(layoutName);
+                }
+                else
+                {
+                    throw new InvalidOperationException("Unsupported direct layout action.");
+                }
+            }
+            var currentLayout = LayoutManager.Current.CurrentLayout ?? string.Empty;
+            RecordMutation(document, "cad-layout", "completed=true; command=" + command + "; action=" + action + "; layout=" + layoutName + "; route=LayoutManager-direct");
+            return "{\"accepted\":true,\"completed\":true,\"command\":\"" + Escape(command)
+                   + "\",\"action\":\"" + Escape(action) + "\",\"layout\":\"" + Escape(layoutName)
+                   + "\",\"currentLayout\":\"" + Escape(currentLayout) + "\",\"route\":\"LayoutManager-direct\"}";
+        }
+
+        private static bool LayoutExists(Database database, string layoutName)
+        {
+            using (var transaction = database.TransactionManager.StartOpenCloseTransaction())
+            {
+                var dictionary = (DBDictionary)transaction.GetObject(database.LayoutDictionaryId, OpenMode.ForRead);
+                return dictionary.Contains(layoutName);
+            }
         }
 
         private static string NormalizeExtrudeInputs(string input)
