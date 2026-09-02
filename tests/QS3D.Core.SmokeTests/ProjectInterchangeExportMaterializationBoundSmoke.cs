@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
+using QS3D.Core.Persistence;
 
 namespace QS3D.Core.SmokeTests
 {
