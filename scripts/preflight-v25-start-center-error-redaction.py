@@ -9,8 +9,8 @@ SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "BltStartCenterWindow.cs"
 text = SOURCE.read_text(encoding="utf-8")
 
 failures = []
-if re.search(r"_statusText\.Text\s*=\s*[^;]*(?:ex|exception)\.Message", text, re.IGNORECASE):
-    failures.append("Start Center status text exposes raw Exception.Message")
+if re.search(r"\b(?:ex|exception)\.Message\b", text, re.IGNORECASE):
+    failures.append("Start Center source exposes raw Exception.Message")
 
 required = (
     'ShowSafeFailure("Không thể làm mới Khởi đầu.',
