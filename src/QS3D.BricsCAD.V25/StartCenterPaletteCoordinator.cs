@@ -35,7 +35,7 @@ namespace QS3D.BricsCAD.V25
             {
                 SubscribeToDocumentActivation();
                 palette.Visible = true;
-                panel.RefreshFromActiveDocument();
+                panel.RefreshFromDocument(Application.DocumentManager.MdiActiveDocument);
             }
             catch
             {
@@ -60,10 +60,20 @@ namespace QS3D.BricsCAD.V25
         {
             var palette = _palette;
             if (palette != null)
-                palette.Visible = false;
+            {
+                try
+                {
+                    palette.Visible = false;
+                }
+                finally
+                {
+                    // PaletteSet visibility crosses the native host boundary and can throw during
+                    // shutdown. Event ownership must still be released when hiding fails.
+                    UnsubscribeFromDocumentActivation();
+                }
+                return;
+            }
 
-            // A hidden Start Center does not need document callbacks. Releasing the host event
-            // here prevents a dormant PaletteSet from staying rooted for the rest of the session.
             UnsubscribeFromDocumentActivation();
         }
 
@@ -133,11 +143,14 @@ namespace QS3D.BricsCAD.V25
 
         private static void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)
         {
-            if (_palette == null || !_palette.Visible || _panel == null) return;
+            var panel = _panel;
+            if (_palette == null || !_palette.Visible || panel == null) return;
 
             try
             {
-                _panel.RefreshFromActiveDocument();
+                // Bind display state to the document carried by this activation event. Re-querying
+                // MdiActiveDocument here can observe a later host transition and render the wrong DWG.
+                panel.RefreshFromDocument(e.Document ?? Application.DocumentManager.MdiActiveDocument);
             }
             catch (Exception)
             {
