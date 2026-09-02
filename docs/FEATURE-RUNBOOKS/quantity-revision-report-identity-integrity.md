@@ -4,11 +4,13 @@
 
 `QuantityRevisionReport.Build` and `QuantityRevisionReport.Summarize` are public Core reporting boundaries over caller-constructible revision/report objects. Identity text admitted by these APIs must remain compatible with the revision domain's canonical persistence/comparison contract.
 
-The protected contract is limited to project IDs, element IDs, quantity keys and summary quantity names. Category validation and finite numeric behavior remain unchanged.
+The protected contract is limited to project IDs, element IDs, quantity keys, summary row element IDs and summary quantity names. Category validation and finite numeric behavior remain unchanged.
 
 ## Fail-closed identity admission
 
 Required identity text remains non-empty, exact-trim canonical and free of control characters. In addition, identity text must be well-formed XML character data: malformed UTF-16 surrogate sequences and other XML-invalid characters are rejected before report rows are published or summary groups are formed.
+
+`Summarize` preserves the historical behavior that an empty row `ElementId` is tolerated because summary grouping is quantity-key based, but any non-empty summary row element identity is canonical/XML-validated before grouping so malformed provenance cannot transit the public summary boundary.
 
 Validation is performed through `XmlConvert.VerifyXmlChars` from the canonical identity validator. This aligns quantity revision reporting with `RevisionService.Compare`, which already rejects XML-invalid revision payload identities before delta materialization.
 
@@ -21,6 +23,7 @@ Valid supplementary-plane Unicode remains supported and is preserved exactly. Th
 - malformed project identity rejected by `Build`;
 - malformed element identity rejected by `Build`;
 - malformed quantity identity rejected by `Build`;
+- malformed summary row element identity rejected by `Summarize`;
 - malformed summary quantity identity rejected by `Summarize`;
 - valid supplementary-plane Unicode preserved exactly through both Build and Summarize.
 
