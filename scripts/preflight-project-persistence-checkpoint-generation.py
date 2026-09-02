@@ -16,6 +16,7 @@ else:
         "public ProjectElement Owner { get; }",
         "new ElementPersistenceState(element, element.Dirty, element.UpdatedUtc)",
         "!ReferenceEquals(element, pair.Value.Owner)",
+        "!ReferenceEquals(element, captured.Owner)",
         "Cannot restore persistence checkpoint because captured element generation changed:",
     )
     for token in required:
@@ -24,7 +25,7 @@ else:
 
     restore = text.find("public void Restore(ProjectState project)")
     resolve = text.find("var targets = new Dictionary<string, ProjectElement>", restore)
-    affinity = text.find("!ReferenceEquals(element, pair.Value.Owner)", restore)
+    affinity = text.find("!ReferenceEquals(element, captured.Owner)", restore)
     first_restore = text.find("pair.Value.Restore(targets[pair.Key]);", restore)
     project_restore = text.find("project.RestorePersistenceState", restore)
     if min(restore, resolve, affinity, first_restore, project_restore) < 0 or not (
