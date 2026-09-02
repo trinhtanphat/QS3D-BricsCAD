@@ -44,7 +44,7 @@ def main() -> int:
     boolean_block = method_block(direct, "private static string Boolean")
     direct_save_block = method_block(direct, "private static string Save()")
     direct_save_as_block = method_block(direct, "private static string SaveAs")
-    dbmod_block = method_block(direct, "private static void WaitForCleanDbmod")
+    dbmod_block = method_block(direct, "private static int WaitForSavedContentDbmod")
 
     require(errors, run_block, (
         'var command = NormalizeCadCommandToken(',
@@ -116,7 +116,8 @@ def main() -> int:
 
     require(errors, direct_save_block, (
         'document.Database.Save();',
-        'WaitForCleanDbmod();',
+        'WaitForSavedContentDbmod();',
+        'dbmodAfterSave=',
         'route=Database.Save-current-document',
     ), "current-document save regression guard")
     if 'document.Database.SaveAs(filename, DwgVersion.Current);' in direct_save_block:
@@ -125,7 +126,8 @@ def main() -> int:
     require(errors, direct_save_as_block, (
         'EnsureWritableDirectory(directory);',
         'document.Database.SaveAs(fullPath, DwgVersion.Current);',
-        'WaitForCleanDbmod();',
+        'WaitForSavedContentDbmod();',
+        'dbmodAfterSave=',
         'Path.GetFullPath(actual), fullPath',
     ), "save-as publication guard")
     if 'document.Database.Save();' in direct_save_as_block:
@@ -134,9 +136,15 @@ def main() -> int:
     require(errors, dbmod_block, (
         'DateTime.UtcNow.AddSeconds(2)',
         'Application.GetSystemVariable("DBMOD")',
+        '(dbmod & DbmodPersistentContentMask) == 0',
         'Thread.Sleep(25)',
-        'dbmod == 0',
-    ), "bounded DBMOD completion wait")
+        'window/view DBMOD bits may remain after save',
+    ), "bounded persistent-content DBMOD completion wait")
+    require(errors, direct, (
+        'private const int DbmodPersistentContentMask = 1 | 4 | 32;',
+    ), "persistent-content DBMOD mask")
+    if 'dbmod == 0' in dbmod_block:
+        errors.append("save completion must not require the entire DBMOD bitmask to become zero")
     if "Process.Start" in direct or "cmd.exe" in direct or "powershell" in direct.lower():
         errors.append("direct CAD runtime must not introduce process/shell execution")
 
@@ -152,7 +160,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: MCP direct 3D/save tools keep QSAVE owned by the bounded direct CAD runtime, use database-resident curve inputs for Region creation, transient clones for boolean kernel operands, preserve bounded mutation routing, save the active drawing through Database.Save instead of SaveAs(current-path), and confirm save/save-as completion with a bounded DBMOD settle wait.")
+    print("PASS: MCP direct 3D/save tools keep QSAVE owned by the bounded direct CAD runtime, use database-resident curve inputs for Region creation, transient clones for boolean kernel operands, preserve bounded mutation routing, save the active drawing through Database.Save instead of SaveAs(current-path), and confirm save/save-as completion from persistent-content DBMOD bits while allowing residual window/view state.")
     return 0
 
 
