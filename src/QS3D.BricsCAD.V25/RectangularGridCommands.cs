@@ -21,6 +21,7 @@ namespace QS3D.BricsCAD.V25
             {
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 result = Cad.RectangularGridNativeSourceBuilder.Build(document, project, request);
+                Cad.GridAuthoringRepeatState.RememberRectangular(document, request);
             }
             catch (Exception)
             {
