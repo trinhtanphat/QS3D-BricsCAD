@@ -241,6 +241,7 @@ namespace QS3D.Core.Persistence
 
         private static void ValidateCollectionEntries(ProjectState source)
         {
+            RequireSupportedSchemaVersion(source);
             RequireSupportedCount(source.Metadata.Count, "metadata", MaximumSnapshotNestedEntries);
             RequireSupportedCount(source.Zones.Count, "zones", MaximumSnapshotTopLevelEntries);
             RequireSupportedCount(source.Floors.Count, "floors", MaximumSnapshotTopLevelEntries);
@@ -281,6 +282,16 @@ namespace QS3D.Core.Persistence
                 RequireCanonicalElementProperties(element);
                 RequireCanonicalQuantities(element);
             }
+        }
+
+        private static void RequireSupportedSchemaVersion(ProjectState source)
+        {
+            if (source.SchemaVersion <= 0)
+                throw new InvalidOperationException("Cannot snapshot a project with a non-positive schema version: " + source.SchemaVersion + ".");
+            if (source.SchemaVersion > ProjectState.CurrentSchemaVersion)
+                throw new InvalidOperationException(
+                    "Cannot snapshot a project with schema version " + source.SchemaVersion
+                    + " newer than supported version " + ProjectState.CurrentSchemaVersion + ".");
         }
 
         private static void RequireResolvedActiveContext(ProjectState source)
