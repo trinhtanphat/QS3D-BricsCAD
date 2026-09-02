@@ -255,6 +255,7 @@ namespace QS3D.Core.Persistence
             RequireNoNullEntries(source.Elements, "element");
             RequireNoNullEntries(source.QuantityRules, "quantity rule");
             RequireNoNullEntries(source.AuditEvents, "audit event");
+            AuditTrail.ValidateSnapshotHistory(source);
 
             RequireUniqueIds(source.Zones, x => x.Id, "zone");
             RequireUniqueIds(source.Floors, x => x.Id, "floor");
