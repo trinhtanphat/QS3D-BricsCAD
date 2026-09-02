@@ -123,6 +123,7 @@ jobs:
           fi
 
           mapfile -t pr_numbers < <(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls?state=open&base=main&per_page=100" --jq '.[].number')
+          automerge_failures=()
 
           for number in "${pr_numbers[@]}"; do
             pr_json="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${number}")"
@@ -165,4 +166,30 @@ jobs:
               echo "::error::Unexpected refresh failure for PR #${number} at expected_head_sha=${current_head_sha}: ${output}"
               exit 1
             fi
+
+            node_id="$(jq -r '.node_id' <<<"$pr_json")"
+            if existing="$(gh api graphql \
+              -f query='query($pullRequestId:ID!){node(id:$pullRequestId){... on PullRequest{autoMergeRequest{enabledAt}}}}' \
+              -f pullRequestId="$node_id" \
+              --jq '.data.node.autoMergeRequest.enabledAt // ""' 2>&1)"; then
+              if [[ -z "$existing" ]]; then
+                if gh api graphql \
+                  -f query='mutation($pullRequestId:ID!){enablePullRequestAutoMerge(input:{pullRequestId:$pullRequestId,mergeMethod:MERGE}){pullRequest{number autoMergeRequest{enabledAt}}}}' \
+                  -f pullRequestId="$node_id" \
+                  --silent; then
+                  echo "Armed native auto-merge for existing PR #${number}."
+                else
+                  echo "::error::Native auto-merge mutation failed for PR #${number}."
+                  automerge_failures+=("#${number}:mutation")
+                fi
+              fi
+            else
+              echo "::error::Native auto-merge lookup failed for PR #${number}: ${existing}"
+              automerge_failures+=("#${number}:lookup")
+            fi
           done
+
+          if (( ${#automerge_failures[@]} > 0 )); then
+            printf '::error::Native auto-merge reconciliation failed after branch refresh for %s\n' "${automerge_failures[*]}"
+            exit 1
+          fi
