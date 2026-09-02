@@ -28,6 +28,7 @@ namespace QS3D.BricsCAD.V25
         private const int CadWorkQueued = 0;
         private const int CadWorkRunning = 1;
         private const int CadWorkCancelledBeforeStart = 2;
+        private const int DbmodPersistentContentMask = 1 | 4 | 32;
         internal const string Qs3dCommandPattern = "^QS3D[A-Za-z0-9_]*$";
 
         private static readonly object AuditSync = new object();
@@ -488,7 +489,8 @@ namespace QS3D.BricsCAD.V25
             var document = RequireDocument();
             var filename = document.Database.Filename ?? string.Empty;
             var hasLocalPath = Path.IsPathRooted(filename);
-            var modified = SafeInteger(SafeSystemVariable("DBMOD")) != "0";
+            var dbmod = ReadDbmod();
+            var modified = (dbmod & DbmodPersistentContentMask) != 0;
             return "{\"name\":\"" + Escape(SafeDocumentName(document))
                    + "\",\"saved\":" + (hasLocalPath && !modified ? "true" : "false")
                    + ",\"hasLocalPath\":" + (hasLocalPath ? "true" : "false")
@@ -624,11 +626,13 @@ namespace QS3D.BricsCAD.V25
                 document.Database.Save();
             }
 
-            var dbmod = SafeInteger(SafeSystemVariable("DBMOD"));
-            if (dbmod != "0")
-                throw new InvalidOperationException("BricsCAD save returned but DBMOD is still non-zero; save completion was not confirmed.");
+            var dbmodAfterSave = ReadDbmod();
+            if ((dbmodAfterSave & DbmodPersistentContentMask) != 0)
+                throw new InvalidOperationException(
+                    "BricsCAD save returned but persistent DBMOD content bits remain; save completion was not confirmed. DBMOD="
+                    + dbmodAfterSave.ToString(CultureInfo.InvariantCulture) + ".");
 
-            Audit("cad_command_sequence", "command=QSAVE; inputChars=0; completed=true");
+            Audit("cad_command_sequence", "command=QSAVE; inputChars=0; completed=true; dbmod=" + dbmodAfterSave.ToString(CultureInfo.InvariantCulture));
             return "{\"accepted\":true,\"completed\":true,\"saved\":true,\"command\":\"QSAVE\",\"inputChars\":0}";
         }
 
@@ -1056,6 +1060,22 @@ namespace QS3D.BricsCAD.V25
         {
             try { return Convert.ToString(Application.GetSystemVariable(name), CultureInfo.InvariantCulture) ?? string.Empty; }
             catch { return string.Empty; }
+        }
+
+        private static int ReadDbmod()
+        {
+            object raw;
+            try { raw = Application.GetSystemVariable("DBMOD"); }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Could not read BricsCAD DBMOD; drawing save state cannot be confirmed.", ex);
+            }
+
+            var text = Convert.ToString(raw, CultureInfo.InvariantCulture) ?? string.Empty;
+            int parsed;
+            if (!int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out parsed) || parsed < 0)
+                throw new InvalidOperationException("BricsCAD DBMOD was not a non-negative integer; drawing save state cannot be confirmed.");
+            return parsed;
         }
 
         private static string SafeInteger(string value)
