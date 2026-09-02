@@ -307,7 +307,9 @@ jobs:
       - name: Verify V25 package integrity before upload
         shell: powershell
         run: |
-          .\scripts\verify-v25-package.ps1 -ZipPath 'dist\QS3D-BricsCAD-V25.zip' -ChecksumPath 'dist\QS3D-BricsCAD-V25.zip.sha256' -RequiredEntries @(
+          $zipPath = (Resolve-Path -LiteralPath 'dist\QS3D-BricsCAD-V25.zip').Path
+          $checksumPath = (Resolve-Path -LiteralPath 'dist\QS3D-BricsCAD-V25.zip.sha256').Path
+          .\scripts\verify-v25-package.ps1 -ZipPath $zipPath -ChecksumPath $checksumPath -RequiredEntries @(
             'QS3D.BricsCAD.V25.dll',
             'QS3D.Core.dll',
             'PACKAGE-METADATA.json',
@@ -317,6 +319,35 @@ jobs:
             'UNBLOCK-QS3D.cmd',
             'SHA256SUMS.txt'
           )
+          $zipInfo = Get-Item -LiteralPath $zipPath
+          $checksumInfo = Get-Item -LiteralPath $checksumPath
+          $zipHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          $checksumHash = (Get-FileHash -LiteralPath $checksumPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          "RELEASE_ZIP_SHA256=$zipHash" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RELEASE_CHECKSUM_SHA256=$checksumHash" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RELEASE_ZIP_SIZE=$($zipInfo.Length)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RELEASE_CHECKSUM_SIZE=$($checksumInfo.Length)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Hold verified V25 release assets
+        shell: powershell
+        run: |
+          $holdDir = Join-Path $env:RUNNER_TEMP ('qs3d-v25-release-held-' + [Guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $holdDir | Out-Null
+          $assets = @(
+            @{ Source = 'dist\QS3D-BricsCAD-V25.zip'; Name = 'QS3D-BricsCAD-V25.zip'; Hash = $env:RELEASE_ZIP_SHA256; Size = [int64]$env:RELEASE_ZIP_SIZE },
+            @{ Source = 'dist\QS3D-BricsCAD-V25.zip.sha256'; Name = 'QS3D-BricsCAD-V25.zip.sha256'; Hash = $env:RELEASE_CHECKSUM_SHA256; Size = [int64]$env:RELEASE_CHECKSUM_SIZE }
+          )
+          foreach ($spec in $assets) {
+            $sourcePath = (Resolve-Path -LiteralPath $spec.Source).Path
+            $heldPath = Join-Path $holdDir $spec.Name
+            Copy-Item -LiteralPath $sourcePath -Destination $heldPath
+            $heldInfo = Get-Item -LiteralPath $heldPath
+            $heldHash = (Get-FileHash -LiteralPath $heldPath -Algorithm SHA256).Hash
+            if ($heldInfo.Length -ne $spec.Size -or -not [string]::Equals($heldHash, $spec.Hash, [StringComparison]::OrdinalIgnoreCase)) {
+              throw "Held release asset identity mismatch for $($spec.Name)."
+            }
+          }
+          "RELEASE_ASSET_HOLD_DIR=$holdDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Upload cloud preview artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -324,8 +355,8 @@ jobs:
           name: QS3D-BricsCAD-V25-${{ inputs.release_tag }}-cloud-preview
           if-no-files-found: error
           path: |
-            dist/QS3D-BricsCAD-V25.zip
-            dist/QS3D-BricsCAD-V25.zip.sha256
+            ${{ env.RELEASE_ASSET_HOLD_DIR }}/QS3D-BricsCAD-V25.zip
+            ${{ env.RELEASE_ASSET_HOLD_DIR }}/QS3D-BricsCAD-V25.zip.sha256
 
       - name: Publish GitHub prerelease
         shell: powershell
@@ -338,6 +369,24 @@ jobs:
           $head = ([string](git rev-parse --verify HEAD)).Trim().ToLowerInvariant()
           if ($LASTEXITCODE -ne 0 -or $head -ne $env:RELEASE_COMMIT_SHA.ToLowerInvariant()) {
             throw "Publish source HEAD must equal RELEASE_COMMIT_SHA. Expected $env:RELEASE_COMMIT_SHA, got $head."
+          }
+          if ([string]::IsNullOrWhiteSpace($env:RELEASE_ASSET_HOLD_DIR)) {
+            throw 'Held release asset directory is missing.'
+          }
+          $holdDir = (Resolve-Path -LiteralPath $env:RELEASE_ASSET_HOLD_DIR).Path
+          $assetSpecs = @(
+            @{ Name = 'QS3D-BricsCAD-V25.zip'; Path = (Join-Path $holdDir 'QS3D-BricsCAD-V25.zip'); Hash = $env:RELEASE_ZIP_SHA256; Size = [int64]$env:RELEASE_ZIP_SIZE; ContentType = 'application/zip' },
+            @{ Name = 'QS3D-BricsCAD-V25.zip.sha256'; Path = (Join-Path $holdDir 'QS3D-BricsCAD-V25.zip.sha256'); Hash = $env:RELEASE_CHECKSUM_SHA256; Size = [int64]$env:RELEASE_CHECKSUM_SIZE; ContentType = 'text/plain' }
+          )
+          foreach ($spec in $assetSpecs) {
+            if (-not (Test-Path -LiteralPath $spec.Path -PathType Leaf)) {
+              throw "Held release asset is missing: $($spec.Name)"
+            }
+            $assetInfo = Get-Item -LiteralPath $spec.Path
+            $assetHash = (Get-FileHash -LiteralPath $spec.Path -Algorithm SHA256).Hash
+            if ($assetInfo.Length -ne $spec.Size -or -not [string]::Equals($assetHash, $spec.Hash, [StringComparison]::OrdinalIgnoreCase)) {
+              throw "Held release asset changed after verification: $($spec.Name)"
+            }
           }
           $headers = @{
             Authorization = "Bearer $env:GH_TOKEN"
@@ -359,49 +408,48 @@ jobs:
             throw "Draft prerelease target commit mismatch. Expected $env:RELEASE_COMMIT_SHA, got $($release.target_commitish)."
           }
           $uploadBase = $release.upload_url -replace '\{\?name,label\}$', ''
-          foreach ($assetPath in @('dist\QS3D-BricsCAD-V25.zip', 'dist\QS3D-BricsCAD-V25.zip.sha256')) {
-            $asset = (Resolve-Path $assetPath).Path
-            $name = [IO.Path]::GetFileName($asset)
-            $encodedName = [Uri]::EscapeDataString($name)
-            $contentType = if ($name.EndsWith('.zip')) { 'application/zip' } else { 'text/plain' }
-            Invoke-RestMethod -Method Post -Uri ($uploadBase + '?name=' + $encodedName) -Headers $headers -ContentType $contentType -InFile $asset | Out-Null
+          foreach ($spec in $assetSpecs) {
+            $asset = (Resolve-Path -LiteralPath $spec.Path).Path
+            $preUploadInfo = Get-Item -LiteralPath $asset
+            $preUploadHash = (Get-FileHash -LiteralPath $asset -Algorithm SHA256).Hash
+            if ($preUploadInfo.Length -ne $spec.Size -or -not [string]::Equals($preUploadHash, $spec.Hash, [StringComparison]::OrdinalIgnoreCase)) {
+              throw "Held release asset changed immediately before upload: $($spec.Name). Release remains a draft."
+            }
+            $encodedName = [Uri]::EscapeDataString($spec.Name)
+            Invoke-RestMethod -Method Post -Uri ($uploadBase + '?name=' + $encodedName) -Headers $headers -ContentType $spec.ContentType -InFile $asset | Out-Null
           }
           $releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$($release.id)"
           $draftRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
-          $expectedAssets = @('QS3D-BricsCAD-V25.zip', 'QS3D-BricsCAD-V25.zip.sha256')
-          foreach ($expectedAsset in $expectedAssets) {
-            $matches = @($draftRelease.assets | Where-Object { [string]::Equals([string]$_.name, $expectedAsset, [StringComparison]::Ordinal) })
+          foreach ($spec in $assetSpecs) {
+            $matches = @($draftRelease.assets | Where-Object { [string]::Equals([string]$_.name, $spec.Name, [StringComparison]::Ordinal) })
             if ($matches.Count -ne 1) {
-              throw "Expected exactly one release asset named $expectedAsset, found $($matches.Count). Release remains a draft."
+              throw "Expected exactly one release asset named $($spec.Name), found $($matches.Count). Release remains a draft."
             }
-            if ([int64]$matches[0].size -le 0) {
-              throw "Uploaded release asset is empty: $expectedAsset. Release remains a draft."
+            if ([int64]$matches[0].size -ne $spec.Size) {
+              throw "Uploaded release asset size mismatch for $($spec.Name). Expected=$($spec.Size), API=$($matches[0].size). Release remains a draft."
             }
           }
 
           $verifyDir = Join-Path $env:RUNNER_TEMP ('qs3d-release-asset-verify-' + [Guid]::NewGuid().ToString('N'))
-          Remove-Item -LiteralPath $verifyDir -Recurse -Force -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Path $verifyDir -Force | Out-Null
+          New-Item -ItemType Directory -Path $verifyDir | Out-Null
           $downloadHeaders = @{}
           foreach ($key in $headers.Keys) { $downloadHeaders[$key] = $headers[$key] }
           $downloadHeaders['Accept'] = 'application/octet-stream'
 
-          foreach ($expectedAsset in $expectedAssets) {
-            $assetInfo = @($draftRelease.assets | Where-Object { [string]::Equals([string]$_.name, $expectedAsset, [StringComparison]::Ordinal) })[0]
-            $downloadPath = Join-Path $verifyDir $expectedAsset
+          foreach ($spec in $assetSpecs) {
+            $assetInfo = @($draftRelease.assets | Where-Object { [string]::Equals([string]$_.name, $spec.Name, [StringComparison]::Ordinal) })[0]
+            $downloadPath = Join-Path $verifyDir $spec.Name
             Invoke-WebRequest -Method Get -Uri $assetInfo.url -Headers $downloadHeaders -OutFile $downloadPath -MaximumRedirection 10 -UseBasicParsing
             if (-not (Test-Path -LiteralPath $downloadPath -PathType Leaf)) {
-              throw "Downloaded release asset is missing: $expectedAsset. Release remains a draft."
+              throw "Downloaded release asset is missing: $($spec.Name). Release remains a draft."
             }
             $downloadInfo = Get-Item -LiteralPath $downloadPath
-            if ($downloadInfo.Length -ne [int64]$assetInfo.size) {
-              throw "Downloaded release asset size mismatch for $expectedAsset. API=$($assetInfo.size), downloaded=$($downloadInfo.Length). Release remains a draft."
+            if ($downloadInfo.Length -ne $spec.Size -or $downloadInfo.Length -ne [int64]$assetInfo.size) {
+              throw "Downloaded release asset size mismatch for $($spec.Name). Expected=$($spec.Size), API=$($assetInfo.size), downloaded=$($downloadInfo.Length). Release remains a draft."
             }
-            $localPath = (Resolve-Path (Join-Path 'dist' $expectedAsset)).Path
-            $localHash = (Get-FileHash -LiteralPath $localPath -Algorithm SHA256).Hash
             $downloadHash = (Get-FileHash -LiteralPath $downloadPath -Algorithm SHA256).Hash
-            if (-not [string]::Equals($localHash, $downloadHash, [StringComparison]::OrdinalIgnoreCase)) {
-              throw "Uploaded/downloaded release asset byte hash mismatch for $expectedAsset. Release remains a draft."
+            if (-not [string]::Equals($spec.Hash, $downloadHash, [StringComparison]::OrdinalIgnoreCase)) {
+              throw "Uploaded/downloaded release asset byte hash mismatch for $($spec.Name). Release remains a draft."
             }
           }
 
