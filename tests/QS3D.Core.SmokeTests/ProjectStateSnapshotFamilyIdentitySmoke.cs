@@ -1,4 +1,5 @@
 using System;
+using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
 
@@ -14,6 +15,8 @@ namespace QS3D.Core.SmokeTests
             RejectsNonCanonicalElementRelationIdentities();
             PreservesRepairableDuplicateRelations();
             PreservesCanonicalUnicodeElementRelations();
+            RejectsInvalidDirectAuditHistory();
+            PreservesCanonicalUnicodeAuditHistory();
         }
 
         private static void RestorePreservesCapturedFamilyIdentity()
@@ -173,6 +176,65 @@ namespace QS3D.Core.SmokeTests
             var copy = detached.FindElement("E1") ?? throw new Exception("Detached snapshot lost the canonical relation fixture element.");
             Require(copy.SourceHandles.Count == 1 && string.Equals(copy.SourceHandles[0], handle, StringComparison.Ordinal), "Detached snapshot changed canonical source-handle text.");
             Require(copy.DependsOn.Count == 1 && string.Equals(copy.DependsOn[0], dependency, StringComparison.Ordinal), "Detached snapshot changed canonical dependency text.");
+        }
+
+        private static void RejectsInvalidDirectAuditHistory()
+        {
+            ExpectRejectedAudit(
+                new AuditEvent { Utc = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Local), Action = "Changed" },
+                "non-UTC audit timestamp");
+            ExpectRejectedAudit(
+                new AuditEvent { Utc = DateTime.UtcNow, Action = " Changed " },
+                "padded audit action");
+            ExpectRejectedAudit(
+                new AuditEvent { Utc = DateTime.UtcNow, Action = "Changed", ElementId = " E1 " },
+                "padded audit element id");
+            ExpectRejectedAudit(
+                new AuditEvent { Utc = DateTime.UtcNow, Action = "Changed", Detail = "bad\uD800" },
+                "XML-invalid audit detail");
+            ExpectRejectedAudit(
+                new AuditEvent { Utc = DateTime.UtcNow, Action = "Changed", CorrelationId = " C1 " },
+                "padded audit correlation id");
+        }
+
+        private static void ExpectRejectedAudit(AuditEvent audit, string label)
+        {
+            var project = new ProjectState("snapshot-audit-invalid", "Snapshot audit invalid");
+            project.AuditEvents.Add(audit);
+            var originalUpdatedUtc = project.UpdatedUtc;
+            var originalChangeVersion = project.ChangeVersion;
+
+            ExpectInvalidOperation(() => ProjectStateSnapshot.Capture(project), label + " was accepted by snapshot capture.");
+            ExpectInvalidOperation(() => ProjectStateSnapshot.CreateDetachedCopy(project), label + " was accepted by detached copy.");
+
+            Require(project.AuditEvents.Count == 1 && ReferenceEquals(project.AuditEvents[0], audit), label + " rejection mutated source audit history.");
+            Require(project.UpdatedUtc == originalUpdatedUtc && project.ChangeVersion == originalChangeVersion, label + " rejection changed project persistence state.");
+        }
+
+        private static void PreservesCanonicalUnicodeAuditHistory()
+        {
+            var project = new ProjectState("snapshot-audit-unicode", "Snapshot audit unicode");
+            var audit = new AuditEvent
+            {
+                Utc = new DateTime(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc),
+                Action = "Review-\U0001F680",
+                ElementId = "E-\U0001F680",
+                Detail = "Chi tiết \U0001F680",
+                Actor = "QS-\U0001F680",
+                CorrelationId = "C-\U0001F680"
+            };
+            project.AuditEvents.Add(audit);
+
+            var detached = ProjectStateSnapshot.CreateDetachedCopy(project);
+            Require(detached.AuditEvents.Count == 1, "Detached snapshot lost canonical audit history.");
+            var copy = detached.AuditEvents[0];
+            Require(!ReferenceEquals(copy, audit), "Detached snapshot aliased the mutable source AuditEvent.");
+            Require(copy.Utc == audit.Utc, "Detached snapshot changed canonical audit UTC timestamp.");
+            Require(string.Equals(copy.Action, audit.Action, StringComparison.Ordinal), "Detached snapshot changed canonical audit action.");
+            Require(string.Equals(copy.ElementId, audit.ElementId, StringComparison.Ordinal), "Detached snapshot changed canonical audit element id.");
+            Require(string.Equals(copy.Detail, audit.Detail, StringComparison.Ordinal), "Detached snapshot changed canonical audit detail.");
+            Require(string.Equals(copy.Actor, audit.Actor, StringComparison.Ordinal), "Detached snapshot changed canonical audit actor.");
+            Require(string.Equals(copy.CorrelationId, audit.CorrelationId, StringComparison.Ordinal), "Detached snapshot changed canonical audit correlation id.");
         }
 
         private static ProjectState NewRelationProject(string label)
