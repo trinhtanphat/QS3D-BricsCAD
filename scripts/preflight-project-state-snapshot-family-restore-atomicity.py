@@ -25,6 +25,7 @@ for token in (
     "ThrowingFamilySubscriberCannotPublishPartialRestore",
     "PropertyChangedEventHandler throwingSubscriber",
     "Snapshot restore must preserve captured ProjectFamily object identity.",
+    "Snapshot restore must preserve the captured ProjectFamily property-store object identity.",
 ):
     if token not in smoke:
         errors.append("snapshot family restore regression missing: " + token)
@@ -36,12 +37,23 @@ for token in (
     "internal void RestoreSnapshotState(",
     "_name = nextName;",
     "_category = nextCategory;",
+    "Properties.Clear();",
 ):
     if token not in domain:
         errors.append("ProjectFamily snapshot restore atomicity contract missing: " + token)
 
-if "target.RestoreSnapshotState(source.Name, source.Category, source.Properties);" not in snapshot:
-    errors.append("ProjectStateSnapshot must restore preserved family state through the non-notifying atomic snapshot path")
+# SnapshotProperties returns one validated, detached, read-only materialization.
+# Restore must consume that exact materialization rather than validating the
+# source dictionary and then enumerating the mutable source a second time.
+for token in (
+    'var snapshotProperties = ProjectFamilyService.SnapshotProperties(source, "Snapshot", "snapshot materialization");',
+    "target.RestoreSnapshotState(source.Name, source.Category, snapshotProperties);",
+):
+    if token not in snapshot:
+        errors.append("ProjectStateSnapshot family materialization contract missing: " + token)
+
+if 'target.RestoreSnapshotState(source.Name, source.Category, source.Properties);' in snapshot:
+    errors.append("ProjectStateSnapshot must not re-enumerate mutable source family properties after validation")
 
 if errors:
     for error in errors:
@@ -49,4 +61,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: ProjectStateSnapshot restores preserved family state without exposing a partial rollback to throwing PropertyChanged subscribers.")
+print("PASS: ProjectStateSnapshot materializes family properties once and restores preserved family state without external callbacks or stale property-store identity.")
