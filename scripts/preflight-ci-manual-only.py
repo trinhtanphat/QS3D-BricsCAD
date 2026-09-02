@@ -254,13 +254,11 @@ def is_hard_release_confirmation_guard(expression):
 
 
 def is_hard_auto_dispatch_guard(expression):
-    if expression is None or "||" in expression:
-        return False
-    return bool(re.fullmatch(
-        r"github\.ref\s*==\s*'refs/heads/main'\s*&&\s*"
-        r"github\.actor\s*!=\s*'github-actions\[bot\]'",
-        expression,
-    ))
+    return normalize_expression(expression) == (
+        "(github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && "
+        "github.event.workflow_run.head_branch == 'main') || "
+        "(github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]')"
+    )
 
 
 def is_hard_validation_guard(expression):
@@ -322,10 +320,10 @@ def validate_guard_parser():
         errors.append("shared validation guard parser regression")
 
     auto_good = extract_job_if_expression([
-        "    if: ${{ github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]' }}"
+        "    if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') || (github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]') }}"
     ])
     auto_bad = extract_job_if_expression([
-        "    if: ${{ github.ref == 'refs/heads/main' || github.actor != 'github-actions[bot]' }}"
+        "    if: ${{ github.event_name == 'workflow_run' || github.ref == 'refs/heads/main' }}"
     ])
     if not is_hard_auto_dispatch_guard(auto_good) or is_hard_auto_dispatch_guard(auto_bad):
         errors.append("automatic dispatcher guard parser regression")
@@ -455,19 +453,27 @@ for path, text in workflow_sources:
             errors.append(f"{path.name}/core: Core/V25 validation must depend on preflight")
 
     elif path.name == AUTO_DISPATCHER:
-        expected = {"workflow_dispatch", "push"}
+        expected = {"workflow_dispatch", "workflow_run", "push"}
         if trigger_names != expected:
-            errors.append(f"{path.name}: approved dispatcher must expose exactly workflow_dispatch + push; got {sorted(trigger_names)}")
+            errors.append(f"{path.name}: approved dispatcher must expose exactly workflow_dispatch + workflow_run + push; got {sorted(trigger_names)}")
 
         push_block = "\n".join(trigger_blocks.get("push", []))
         require_tokens(push_block, ("branches:", "- main", "paths:"), f"{path.name} push")
         if "docs/**" in push_block or "README" in push_block or "AGENTS.md" in push_block:
             errors.append(f"{path.name}: docs/claim-only changes must not trigger automatic V25 cloud CI")
 
+        workflow_run_block = "\n".join(trigger_blocks.get("workflow_run", []))
+        require_tokens(
+            workflow_run_block,
+            ("workflows:", '"QS3D Cloud V25 Preview Build & Release"', "types:", "- completed"),
+            f"{path.name} workflow_run",
+        )
+
         require_tokens(text, (
             "contents: read", "actions: write", "cancel-in-progress: true",
-            "github.actor != 'github-actions[bot]'", "gh workflow run release-v25-cloud.yml", "--ref main",
-            'source_sha="${GITHUB_SHA,,}"', '-f source_sha="${source_sha}"', "confirm_release=RELEASE",
+            "github.actor != 'github-actions[bot]'", "github.event.workflow_run.conclusion == 'success'",
+            "github.event.workflow_run.head_branch == 'main'", "gh workflow run release-v25-cloud.yml", "--ref main",
+            'source_sha="${GITHUB_SHA,,}"', 'source_sha="${current_main,,}"', '-f source_sha="${source_sha}"', "confirm_release=RELEASE",
             "git fetch --force --tags origin", 'series_prefix="v0.1.0-preview."',
             'git tag --list "${series_prefix}*"', "ordinal > 65535", "max_preview >= 65535",
             "preview=$((max_preview + 1))",
@@ -480,7 +486,7 @@ for path, text in workflow_sources:
 
         dispatch_job = next((block for name, block in job_blocks if name == "dispatch"), None)
         if not is_hard_auto_dispatch_guard(extract_job_if_expression(dispatch_job) if dispatch_job is not None else None):
-            errors.append(f"{path.name}/dispatch: job must hard-require main and reject github-actions[bot] pushes")
+            errors.append(f"{path.name}/dispatch: job must require either a successful main-branch V25 release completion or a non-bot main push/manual dispatch")
         for job_name, _ in job_blocks:
             if job_name != "dispatch":
                 errors.append(f"{path.name}: unexpected automatic dispatcher job: {job_name}")
@@ -583,5 +589,5 @@ if errors:
 
 print(
     "PASS: every agent/integration push produces exact-head branch CI, every PR emits stable required contexts, governance/docs-only candidates remain lightweight through internal scope classification, "
-    "build-relevant candidates run Core plus V25 compile, main owns exact-source V25 dispatch, the named hybrid coordinator may arm protected native auto-merge/refresh, and releases retain explicit confirmation."
+    "build-relevant candidates run Core plus V25 compile, main owns exact-source V25 dispatch with a bounded successful-release wakeup, the named hybrid coordinator may arm protected native auto-merge/refresh, and releases retain explicit confirmation."
 )
