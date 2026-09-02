@@ -163,10 +163,11 @@ def verify_source_contract() -> None:
         fail("generated YAML contains or directly constructs a bearer secret")
 
     require(server, 'string.Equals(name, LocalTunnelAuthorizationHeader, StringComparison.OrdinalIgnoreCase)', "dedicated header is not a security-sensitive singleton")
-    require(server, 'headers.TryGetValue(LocalTunnelAuthorizationHeader, out localAuthorization)', "embedded MCP does not read the dedicated local header")
-    require(server, 'McpTransportCoordinator.SelectedProvider == McpTransportProvider.OpenAiSecureTunnel', "dedicated header is not scoped to OpenAI Secure Tunnel")
-    require(server, 'if (!TryExtractBearerToken(localAuthorization, out localToken)) return false;', "malformed dedicated Bearer does not fail closed")
-    require(server, 'return ConstantTimeEquals(localToken, GetBearerToken());', "dedicated bearer is not compared in constant time")
+    require(server, 'private static bool IsValidLocalTunnelAuthorization(', "embedded MCP local tunnel validation helper is missing")
+    require(server, 'McpTransportCoordinator.SelectedProvider != McpTransportProvider.OpenAiSecureTunnel', "dedicated header is not scoped fail-closed to OpenAI Secure Tunnel")
+    require(server, 'headers.TryGetValue(LocalTunnelAuthorizationHeader, out authorization)', "embedded MCP does not read the dedicated local header")
+    require(server, 'if (!TryExtractBearerToken(authorization, out token)) return false;', "malformed dedicated Bearer does not fail closed")
+    require(server, 'return ConstantTimeEquals(token, GetBearerToken());', "dedicated bearer is not compared in constant time")
     require(server, 'headers.TryGetValue("Authorization", out authorization)', "direct/OAuth Authorization compatibility was removed")
     require(server, 'McpOAuthAuthorizationServer.TryValidateAccessToken(headers, publicMcpUrl, GetBearerToken())', "OAuth access-token validation was removed")
 

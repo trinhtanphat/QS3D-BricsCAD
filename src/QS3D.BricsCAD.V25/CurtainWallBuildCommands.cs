@@ -233,12 +233,10 @@ namespace QS3D.BricsCAD.V25
             {
                 CurtainWallPostCommitFailureInjection.ThrowIfArmed(CurtainWallPostCommitFailureInjection.UiRefresh);
                 PaletteCoordinator.RefreshProject();
-                document.Editor.Regen();
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status);
                 if (!string.IsNullOrWhiteSpace(stampWarning))
                     document.Editor.WriteMessage("\nQS3D warning: " + stampWarning);
-                document.SendStringToExecute("QS3DVIEW3D ", true, false, false);
             }
             catch (Exception ex)
             {
