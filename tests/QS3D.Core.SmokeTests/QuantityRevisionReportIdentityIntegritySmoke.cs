@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             BuildRejectsMalformedProjectIdentity();
             BuildRejectsMalformedElementIdentity();
             BuildRejectsMalformedQuantityIdentity();
+            SummarizeRejectsMalformedElementIdentity();
             SummarizeRejectsMalformedQuantityIdentity();
             ValidSupplementaryUnicodeRemainsAccepted();
         }
@@ -35,6 +36,23 @@ namespace QS3D.Core.SmokeTests
             var before = Snapshot("PROJECT", "E1", "Q\uD800", 1d);
             var after = Snapshot("PROJECT", "E1", "Q\uD800", 2d);
             ExpectInvalidXml(() => new QuantityRevisionReport().Build(before, after), "quantity identity");
+        }
+
+        private static void SummarizeRejectsMalformedElementIdentity()
+        {
+            var rows = new[]
+            {
+                new QuantityRevisionRow
+                {
+                    ElementId = "E\uD800",
+                    Category = ElementCategory.StructuralWall.ToString(),
+                    QuantityName = "Length",
+                    Change = "Changed",
+                    Before = 1d,
+                    After = 2d
+                }
+            };
+            ExpectInvalidXml(() => new QuantityRevisionReport().Summarize(rows), "summary element identity");
         }
 
         private static void SummarizeRejectsMalformedQuantityIdentity()
