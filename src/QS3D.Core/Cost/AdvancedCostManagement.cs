@@ -622,19 +622,39 @@ namespace QS3D.Core.Cost
                     "benchmark average");
             }
 
-            var average = values[0];
-            for (var i = 1; i < values.Count; i++)
+            var baseline = values[0];
+            var translated = new decimal[values.Count];
+            for (var i = 0; i < values.Count; i++)
+                translated[i] = checked(values[i] - baseline);
+
+            decimal translatedAverage;
+            if (CostDecimalMath.TrySumNonNegativeExactly(translated, out var translatedSum))
             {
-                var contribution = CostDecimalMath.DividePreservingNonZero(
-                    checked(values[i] - average),
-                    (decimal)(i + 1),
-                    "benchmark average contribution");
-                average = CostDecimalMath.AddPreservingNonZeroContribution(
-                    average,
-                    contribution,
-                    "benchmark average");
+                translatedAverage = CostDecimalMath.DividePreservingNonZero(
+                    translatedSum,
+                    (decimal)values.Count,
+                    "benchmark translated average contribution");
             }
-            return average;
+            else
+            {
+                translatedAverage = translated[0];
+                for (var i = 1; i < translated.Length; i++)
+                {
+                    var contribution = CostDecimalMath.DividePreservingNonZero(
+                        checked(translated[i] - translatedAverage),
+                        (decimal)(i + 1),
+                        "benchmark translated average contribution");
+                    translatedAverage = CostDecimalMath.AddPreservingNonZeroContribution(
+                        translatedAverage,
+                        contribution,
+                        "benchmark translated average contribution");
+                }
+            }
+
+            return CostDecimalMath.AddPreservingNonZeroContribution(
+                baseline,
+                translatedAverage,
+                "benchmark translated average");
         }
 
         private static decimal CalculateDeviationPercent(decimal currentUnitCost, decimal averageUnitCost)
