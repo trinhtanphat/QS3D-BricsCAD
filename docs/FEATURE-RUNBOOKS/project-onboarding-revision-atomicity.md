@@ -2,13 +2,19 @@
 
 ## Boundary
 
-`ProjectOnboardingService.Bootstrap` is a Core/project-lifecycle operation that can perform multiple persistence-state mutations in one successful starter-plan application. A rejected onboarding request must not consume part of the remaining `ProjectState.ChangeVersion` range or leave unit, Floor, Family, or metadata state partially published.
+`ProjectOnboardingService.Bootstrap` is a Core/project-lifecycle operation that can perform multiple persistence-state mutations in one successful starter-plan application. A rejected onboarding request must not consume part of the remaining `ProjectState.ChangeVersion` range or leave unit, Floor, Family, metadata, timestamp, or revision state partially published.
 
-## Revision plan
+## Admission plan
 
-After unit/material/catalog/Floor validation and before the first mutation, onboarding computes the exact revision advances required by the already-built plan:
+After unit/material/catalog/Floor validation and before the first mutation, onboarding admits both storage capacity and the exact revision advances required by the already-built plan.
 
-- drawing-unit override advances are counted from the metadata writes that `DrawingUnitResolutionPolicy.SetProjectOverride` will actually perform;
+For a required drawing-unit override, onboarding first asks the canonical `ProjectMetadataDictionary` to validate the final set of public metadata keys that `DrawingUnitResolutionPolicy.SetProjectOverride` may need. With no bound-unit record this is only the override key. With a canonical bound-unit record it is the override, effective-unit, and binding-source keys. The capacity check is read-only and uses the metadata store's own `MaximumEntries` enforcement rather than duplicating the numeric limit in onboarding.
+
+This matters because `SetProjectOverride` applies multiple public semantic metadata writes in the bound-unit path. If only one metadata slot remains, the first key can otherwise advance `ChangeVersion` before the next key fails capacity; rollback restores content but can itself advance the semantic revision/timestamp. Pre-admission makes this rejection mutation-free.
+
+The revision plan then counts:
+
+- drawing-unit override advances from the metadata writes that `DrawingUnitResolutionPolicy.SetProjectOverride` will actually perform;
   - without an existing canonical bound-unit record, only the override key is written when it differs;
   - with an existing bound-unit record, the override, effective-unit, and binding-source keys are each counted only when their exact stored value will change;
 - one advance when a starter Floor must be created or an existing single Floor must be activated;
@@ -19,12 +25,14 @@ The service rejects when the required advances exceed `long.MaxValue - project.C
 
 ## Deterministic regression
 
-`ProjectOnboardingRevisionAtomicitySmoke` measures the canonical onboarding revision footprint using the normal public services, then proves both sides of the boundary for both ordinary fresh metadata and the canonical bound-unit metadata path:
+`ProjectOnboardingRevisionAtomicitySmoke` proves the boundary through the normal public services:
 
 1. one fewer remaining revision than required is rejected before any unit override, effective-unit/binding-source metadata, Floor, Family, active-Floor, timestamp, or revision mutation;
-2. exactly the required remaining capacity is accepted and the project may finish at `long.MaxValue`.
+2. exactly the required remaining revision capacity is accepted and the project may finish at `long.MaxValue`;
+3. the canonical bound-unit path protects all multi-key metadata revision advances; and
+4. a project with 9,999 metadata entries, a canonical bound-unit record, and no override/effective/binding-source keys is rejected before `SetProjectOverride` can consume the last slot and then roll back with a changed project revision.
 
-The bound-unit cases specifically protect the multi-key metadata path in `SetProjectOverride`, where up to three semantic metadata writes can advance the project revision. The smoke is module-initialized so no shared registration file is required.
+The smoke is module-initialized so no shared registration file is required.
 
 ## Validation
 
