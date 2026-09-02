@@ -28,15 +28,15 @@ def main() -> int:
     if "preflight-agent-lane-collision.py" not in step:
         return fail("reservation/collision step must execute preflight-agent-lane-collision.py")
 
-    if "github.event.action != 'edited'" in step or "!startsWith(github.event.pull_request.head.ref, 'agent/')" in step:
-        return fail(
-            "reservation/collision validation must not skip pull_request edited events for agent branches; "
-            "PR metadata edits can refresh required contexts after reservation ownership changes"
-        )
+    if_lines = [line.strip() for line in step_lines if line.strip().startswith("if:")]
+    if len(if_lines) != 1:
+        return fail("reservation/collision step must contain exactly one admission condition")
 
-    required = "github.event_name == 'push' || github.event_name == 'pull_request'"
-    if required not in step:
-        return fail("reservation/collision gate must run for every push and pull_request validation event")
+    expected_if = "if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}"
+    if if_lines[0] != expected_if:
+        return fail(
+            "reservation/collision gate must run for every push and pull_request validation event with no action/head-ref bypass"
+        )
 
     print("PASS: shared CI revalidates reservation/collision state for every push and pull_request event, including edited PR metadata.")
     return 0
