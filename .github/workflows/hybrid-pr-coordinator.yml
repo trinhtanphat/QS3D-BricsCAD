@@ -40,8 +40,8 @@ jobs:
           set -euo pipefail
 
           if [[ -z "${GH_TOKEN:-}" ]]; then
-            echo "::error::QS3D_AUTOMERGE_TOKEN is required for native auto-merge coordination."
-            exit 1
+            echo "::warning::QS3D_AUTOMERGE_TOKEN is unavailable; native auto-merge coordination is disabled for this run."
+            exit 0
           fi
 
           event_head_sha="$EVENT_HEAD_SHA"
@@ -118,8 +118,8 @@ jobs:
           set -euo pipefail
 
           if [[ -z "${GH_TOKEN:-}" ]]; then
-            echo "::error::QS3D_AUTOMERGE_TOKEN is required for PAT-backed update-branch synchronization."
-            exit 1
+            echo "::warning::QS3D_AUTOMERGE_TOKEN is unavailable; branch refresh is disabled for this run."
+            exit 0
           fi
 
           mapfile -t pr_numbers < <(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls?state=open&base=main&per_page=100" --jq '.[].number')
