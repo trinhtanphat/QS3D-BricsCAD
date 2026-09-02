@@ -33,3 +33,5 @@ jobs:
           git diff --cached --check
           git commit -m "chore(agent): sync latest main into self-healing carrier"
           git push origin HEAD:agent/gpt56sol-selfheal-9f2c1a/issue-5340-mcp-self-healing-repair
+
+# Retry marker: main no longer carries the transient conflicting reservation files.
