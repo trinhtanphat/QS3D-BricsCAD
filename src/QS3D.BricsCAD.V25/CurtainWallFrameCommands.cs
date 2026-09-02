@@ -33,28 +33,23 @@ namespace QS3D.BricsCAD.V25
                     : "Curtain Frames 3D: đã tạo/cập nhật " + frames + " frame solid trên " + elements + " vách kính • live fingerprint " + stamped + (string.IsNullOrWhiteSpace(stampWarning) ? "." : " • fingerprint pending.");
                 FinalizeUi(document, message, stampWarning);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Report(document, "QS3DCURTAINFRAMES3D lỗi: " + ex.Message);
+                Report(document, "QS3DCURTAINFRAMES3D không thể hoàn tất. Kiểm tra selection/project/frame geometry và thử lại.");
             }
         }
 
         private static void FinalizeUi(Document document, string message, string stampWarning)
         {
-            try
-            {
-                PaletteCoordinator.RefreshProject();
-                document.Editor.Regen();
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\nQS3D " + message);
-                if (!string.IsNullOrWhiteSpace(stampWarning))
-                    document.Editor.WriteMessage("\nQS3D warning: " + stampWarning);
-            }
-            catch (Exception ex)
-            {
-                TryWriteMessage(document, "\nQS3D " + message + " UI sync warning: " + ex.Message);
-                if (!string.IsNullOrWhiteSpace(stampWarning)) TryWriteMessage(document, "\nQS3D warning: " + stampWarning);
-            }
+            var uiSyncFailed = false;
+            try { PaletteCoordinator.RefreshProject(); } catch { uiSyncFailed = true; }
+            try { document.Editor.Regen(); } catch { uiSyncFailed = true; }
+            try { PaletteCoordinator.SetStatus(message); } catch { uiSyncFailed = true; }
+            TryWriteMessage(document, "\nQS3D " + message);
+            if (!string.IsNullOrWhiteSpace(stampWarning))
+                TryWriteMessage(document, "\nQS3D warning: " + stampWarning);
+            if (uiSyncFailed)
+                TryWriteMessage(document, "\nQS3D Curtain Frames 3D: native update đã hoàn tất; một phần UI không thể đồng bộ.");
         }
 
         private static void Report(Document document, string message)
