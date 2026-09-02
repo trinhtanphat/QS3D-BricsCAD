@@ -7,6 +7,8 @@ on:
       - "QS3D Cloud V25 Preview Build & Release"
     types:
       - completed
+    branches:
+      - main
   # This quoted key is semantically the normal GitHub `push` event. It keeps the
   # legacy generic preflight compatible; scripts/preflight-ci-manual-only.py is
   # the strict guard that explicitly validates this owner-approved exception.
