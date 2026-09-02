@@ -20,7 +20,7 @@ namespace QS3D.Core.SmokeTests
             PureStreamExactBoundRemainsAccepted();
             PureStreamStopsAtItem10001();
             DuplicateIdentityRemainsCaseInsensitive();
-            PricedTotalRejectsSwallowedContribution();
+            PricedTotalRejectsFinalUnrepresentableContribution();
             PricedTotalKeepsRepresentableContribution();
             BulkPreviewRejectsSwallowedAfterTotal();
             BulkPreviewKeepsRepresentableValueDelta();
@@ -141,7 +141,7 @@ namespace QS3D.Core.SmokeTests
             throw new Exception("Case-insensitive duplicate estimating line ids must remain rejected.");
         }
 
-        private static void PricedTotalRejectsSwallowedContribution()
+        private static void PricedTotalRejectsFinalUnrepresentableContribution()
         {
             var portfolio = new EstimatingPortfolio(new[]
             {
@@ -151,8 +151,8 @@ namespace QS3D.Core.SmokeTests
 
             ExpectOverflow(
                 () => _ = portfolio.PricedTotal,
-                "precision loss",
-                "Estimating portfolio total must reject a non-zero contribution swallowed by decimal precision.");
+                "exact aggregate cannot be represented as decimal",
+                "Estimating portfolio total must reject a final exact aggregate that decimal cannot represent.");
         }
 
         private static void PricedTotalKeepsRepresentableContribution()
