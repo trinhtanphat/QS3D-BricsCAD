@@ -275,9 +275,9 @@ namespace QS3D.BricsCAD.V25
         {
             if (action == null) throw new ArgumentNullException(nameof(action));
             var work = new CadContextWork<T>(action);
-            Application.DocumentManager.ExecuteInApplicationContext(ExecuteCadContextWork<T>, work);
             try
             {
+                Application.DocumentManager.ExecuteInApplicationContext(ExecuteCadContextWork<T>, work);
                 if (!work.Done.Wait(CadDispatchTimeoutMilliseconds))
                 {
                     // The timeout may race with the BricsCAD application-context callback. If
