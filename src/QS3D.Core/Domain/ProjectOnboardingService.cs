@@ -165,6 +165,8 @@ namespace QS3D.Core.Domain
             if (project.Families.Count + createCount > MaxFamilies)
                 throw new InvalidOperationException("Starter onboarding would exceed the supported 10000 Family limit.");
 
+            RequireRevisionCapacity(project, needsOverride, existingFloorToActivate, plans);
+
             // All user decisions and catalog preconditions are validated before the first mutation.
             if (needsOverride)
                 DrawingUnitResolutionPolicy.SetProjectOverride(project.Metadata, effectiveUnit);
@@ -202,6 +204,29 @@ namespace QS3D.Core.Domain
                 created,
                 reused,
                 project.ActiveFloorId);
+        }
+
+        private static void RequireRevisionCapacity(
+            ProjectState project,
+            bool needsOverride,
+            FloorDefinition? existingFloorToActivate,
+            IReadOnlyList<StarterPlan> plans)
+        {
+            long requiredAdvances = needsOverride ? 1L : 0L;
+
+            if (project.Floors.Count == 0 || existingFloorToActivate != null)
+                requiredAdvances = checked(requiredAdvances + 1L);
+
+            foreach (var plan in plans)
+            {
+                if (plan.ReusedFamily != null) continue;
+                // One Touch for Create, one for each new default property, and one for Material.
+                requiredAdvances = checked(requiredAdvances + 2L + plan.Values.Count);
+            }
+
+            if (requiredAdvances > long.MaxValue - project.ChangeVersion)
+                throw new InvalidOperationException(
+                    "Starter onboarding cannot complete because the project revision has insufficient remaining capacity.");
         }
 
         private static bool TryResolveEffectiveUnit(
