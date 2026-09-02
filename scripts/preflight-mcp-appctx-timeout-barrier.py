@@ -24,12 +24,18 @@ invoke_body = coord[invoke_start:invoke_end]
 wait = "if (!work.Done.Wait(CadDispatchTimeoutMilliseconds))"
 cancel = "if (work.CancelBeforeStart())"
 settle = "work.Done.Wait();"
+dispatch = "Application.DocumentManager.ExecuteInApplicationContext(ExecuteCadContextWork<T>, work);"
+disposal_try = "try\n            {"
 if wait not in invoke_body:
     raise SystemExit("application-context dispatch must keep the bounded initial wait")
 if cancel not in invoke_body:
     raise SystemExit("timed-out dispatch must atomically cancel work that has not started")
 if settle not in invoke_body:
     raise SystemExit("timeout racing with already-started callback must fail closed until callback settles")
+if dispatch not in invoke_body or disposal_try not in invoke_body:
+    raise SystemExit("application-context dispatch must remain under the work-handle disposal boundary")
+if invoke_body.index(dispatch) < invoke_body.index(disposal_try):
+    raise SystemExit("synchronous ExecuteInApplicationContext failure must still dispose the work completion handle")
 if invoke_body.index(wait) > invoke_body.index(cancel):
     raise SystemExit("cancel-before-start must only be attempted after the bounded wait expires")
 if invoke_body.index(cancel) > invoke_body.index(settle):
