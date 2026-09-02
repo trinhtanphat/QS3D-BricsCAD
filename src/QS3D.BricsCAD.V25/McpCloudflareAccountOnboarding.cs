@@ -757,7 +757,6 @@ namespace QS3D.BricsCAD.V25
                 FontSize = 12,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = AccentHoverBrush,
-                CharacterSpacing = 70,
                 Margin = new Thickness(0, 0, 0, 6)
             });
             panel.Children.Add(new TextBlock
