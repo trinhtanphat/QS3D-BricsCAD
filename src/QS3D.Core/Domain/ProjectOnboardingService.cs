@@ -165,7 +165,7 @@ namespace QS3D.Core.Domain
             if (project.Families.Count + createCount > MaxFamilies)
                 throw new InvalidOperationException("Starter onboarding would exceed the supported 10000 Family limit.");
 
-            RequireRevisionCapacity(project, needsOverride, existingFloorToActivate, plans);
+            RequireRevisionCapacity(project, needsOverride, effectiveUnit, existingFloorToActivate, plans);
 
             // All user decisions and catalog preconditions are validated before the first mutation.
             if (needsOverride)
@@ -209,10 +209,13 @@ namespace QS3D.Core.Domain
         private static void RequireRevisionCapacity(
             ProjectState project,
             bool needsOverride,
+            LengthUnit effectiveUnit,
             FloorDefinition? existingFloorToActivate,
             IReadOnlyList<StarterPlan> plans)
         {
-            long requiredAdvances = needsOverride ? 1L : 0L;
+            long requiredAdvances = needsOverride
+                ? CountDrawingUnitOverrideRevisionAdvances(project.Metadata, effectiveUnit)
+                : 0L;
 
             if (project.Floors.Count == 0 || existingFloorToActivate != null)
                 requiredAdvances = checked(requiredAdvances + 1L);
@@ -227,6 +230,36 @@ namespace QS3D.Core.Domain
             if (requiredAdvances > long.MaxValue - project.ChangeVersion)
                 throw new InvalidOperationException(
                     "Starter onboarding cannot complete because the project revision has insufficient remaining capacity.");
+        }
+
+        private static long CountDrawingUnitOverrideRevisionAdvances(
+            IReadOnlyDictionary<string, string> metadata,
+            LengthUnit effectiveUnit)
+        {
+            var unitToken = effectiveUnit.ToString();
+            if (!metadata.ContainsKey(DrawingUnitResolutionPolicy.BoundMetadataKey))
+                return CountMetadataWrite(metadata, DrawingUnitResolutionPolicy.OverrideMetadataKey, unitToken);
+
+            long count = CountMetadataWrite(metadata, DrawingUnitResolutionPolicy.OverrideMetadataKey, unitToken);
+            count = checked(count + CountMetadataWrite(
+                metadata,
+                DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey,
+                unitToken));
+            count = checked(count + CountMetadataWrite(
+                metadata,
+                DrawingUnitResolutionPolicy.BindingSourceMetadataKey,
+                DrawingUnitResolutionSource.ProjectOverride.ToString()));
+            return count;
+        }
+
+        private static long CountMetadataWrite(
+            IReadOnlyDictionary<string, string> metadata,
+            string key,
+            string value)
+        {
+            return metadata.TryGetValue(key, out var existing) && string.Equals(existing, value, StringComparison.Ordinal)
+                ? 0L
+                : 1L;
         }
 
         private static bool TryResolveEffectiveUnit(
