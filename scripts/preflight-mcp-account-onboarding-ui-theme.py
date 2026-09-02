@@ -27,7 +27,7 @@ required = {
     "pressed trigger": 'Button.IsPressedProperty',
     "disabled trigger": 'IsEnabledProperty',
     "status badge": 'CreateStatusBadge()',
-    "advanced card": 'CreateAdvancedCard(advancedPanel)',
+    "advanced card": 'CreateAdvancedCard(advancedPanel, advanced)',
     "modern window chrome": 'WindowStyle = WindowStyle.SingleBorderWindow',
 }
 missing = [f"{label}: {token}" for label, token in required.items() if token not in setup]
