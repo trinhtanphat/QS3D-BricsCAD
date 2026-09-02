@@ -76,7 +76,7 @@ namespace QS3D.Core.SmokeTests
             var element = new RevisionElementSnapshot
             {
                 ElementId = "E-1",
-                Category = "Wall"
+                Category = "StructuralWall"
             };
             var field = typeof(RevisionElementSnapshot).GetField("<Properties>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)
                 ?? throw new Exception("RevisionElementSnapshot Properties backing field was not found.");
