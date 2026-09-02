@@ -10,8 +10,8 @@ namespace QS3D.BricsCAD.V25.Cad
         private sealed class State
         {
             internal readonly object Sync = new object();
-            internal RectangularTemplate Rectangular;
-            internal RadialTemplate Radial;
+            internal RectangularTemplate? Rectangular;
+            internal RadialTemplate? Radial;
         }
 
         private sealed class RectangularTemplate
@@ -95,7 +95,7 @@ namespace QS3D.BricsCAD.V25.Cad
             Point3d uDirectionPoint,
             out RectangularGridNativeRequest request)
         {
-            request = null;
+            request = null!;
             if (document == null || !States.TryGetValue(document, out var state)) return false;
             lock (state.Sync)
             {
@@ -122,7 +122,7 @@ namespace QS3D.BricsCAD.V25.Cad
             Point3d firstRayDirectionPoint,
             out RadialGridNativeRequest request)
         {
-            request = null;
+            request = null!;
             if (document == null || !States.TryGetValue(document, out var state)) return false;
             lock (state.Sync)
             {
