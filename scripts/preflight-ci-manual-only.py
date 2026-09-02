@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 VALIDATION_WORKFLOW = "ci.yml"
 AUTO_DISPATCHER = "dispatch-v25-cloud-after-main-integration.yml"
+GREEN_PR_DRAIN = "green-pr-drain.yml"
 RELEASE_WORKFLOWS = {"release-v25.yml", "release-v25-cloud.yml", "release-v26.yml"}
 MAX_WORKFLOW_SOURCE_BYTES = 1024 * 1024
 MAX_OPEN_IDENTITY_ATTEMPTS = 2
@@ -287,6 +288,13 @@ def is_hard_validation_guard(expression):
     )
 
 
+def is_hard_green_pr_drain_guard(expression):
+    return normalize_expression(expression) == (
+        "github.event.workflow_run.conclusion == 'success' && "
+        "github.event.workflow_run.event == 'pull_request'"
+    )
+
+
 def parse_trigger_name(line):
     match = re.match(
         r"^\s{2}(?:\"([A-Za-z0-9_-]+)\"|'([A-Za-z0-9_-]+)'|([A-Za-z0-9_-]+))\s*:",
@@ -359,6 +367,15 @@ def validate_guard_parser():
     if not is_hard_auto_dispatch_guard(auto_good) or is_hard_auto_dispatch_guard(auto_bad):
         errors.append("automatic dispatcher guard parser regression")
 
+    drain_good = extract_job_if_expression([
+        "    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' }}"
+    ])
+    drain_bad = extract_job_if_expression([
+        "    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.event == 'pull_request' }}"
+    ])
+    if not is_hard_green_pr_drain_guard(drain_good) or is_hard_green_pr_drain_guard(drain_bad):
+        errors.append("green PR drain guard parser regression")
+
     if parse_trigger_name('  "push":') != "push" or parse_trigger_name('  "pull_request":') != "pull_request":
         errors.append("trigger parser must support quoted automatic validation keys")
 
@@ -422,7 +439,7 @@ if not workflow_sources:
     errors.append("no GitHub Actions workflows found")
 
 workflow_names = {path.name for path, _ in workflow_sources}
-for required_workflow in (VALIDATION_WORKFLOW, AUTO_DISPATCHER):
+for required_workflow in (VALIDATION_WORKFLOW, AUTO_DISPATCHER, GREEN_PR_DRAIN):
     if required_workflow not in workflow_names:
         errors.append(f"missing owner-approved workflow: {required_workflow}")
 
@@ -528,10 +545,50 @@ for path, text in workflow_sources:
             if job_name != "dispatch":
                 errors.append(f"{path.name}: unexpected automatic dispatcher job: {job_name}")
 
+    elif path.name == GREEN_PR_DRAIN:
+        expected = {"workflow_run"}
+        if trigger_names != expected:
+            errors.append(f"{path.name}: green PR drain must expose exactly workflow_run; got {sorted(trigger_names)}")
+
+        workflow_run_block = "\n".join(trigger_blocks.get("workflow_run", []))
+        require_tokens(
+            workflow_run_block,
+            ("workflows:", "- QS3D Shared Branch and Integration CI", "types:", "- completed"),
+            f"{path.name} workflow_run",
+        )
+        require_tokens(text, (
+            "contents: read", "pull-requests: read", "cancel-in-progress: false",
+            "group: qs3d-green-pr-drain", "QS3D_AUTOMERGE_TOKEN", "RUN_HEAD_SHA:", "RUN_PRS_JSON:",
+            "no-automerge", '[[ "${state}" != "open" ]]', '[[ "${draft}" != "false" ]]',
+            '[[ "${base_ref}" != "main" ]]', '[[ "${head_repo}" != "${GITHUB_REPOSITORY}" ]]',
+            '[[ "${head_sha}" != "${RUN_HEAD_SHA}" ]]',
+            '"/repos/${GITHUB_REPOSITORY}/compare/${main_sha}...${RUN_HEAD_SHA}"',
+            '[[ "${merge_base_sha}" != "${main_sha}"',
+            '"/repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/merge"', '-f merge_method=merge',
+            '-f sha="${RUN_HEAD_SHA}"',
+            '"/repos/${GITHUB_REPOSITORY}/pulls/${other_number}/update-branch"',
+            '-f expected_head_sha="${other_head_sha}"',
+        ), path.name)
+        for forbidden in (
+            "contents: write", "actions: write", "issues: write", "packages: write", "id-token: write",
+            "${{ github.token }}", "${{ secrets.GITHUB_TOKEN }}", "actions/checkout@", "git push", "--force",
+        ):
+            if forbidden in text:
+                errors.append(f"{path.name}: green PR drain contains forbidden token: {forbidden}")
+
+        expected_jobs = {"merge-and-refresh"}
+        if {name for name, _ in job_blocks} != expected_jobs:
+            errors.append(f"{path.name}: green PR drain jobs must be exactly {sorted(expected_jobs)}")
+        drain_job = next((block for name, block in job_blocks if name == "merge-and-refresh"), None)
+        if not is_hard_green_pr_drain_guard(extract_job_if_expression(drain_job) if drain_job is not None else None):
+            errors.append(
+                f"{path.name}/merge-and-refresh: job must hard-require successful pull_request shared CI workflow_run"
+            )
+
     else:
         if trigger_names != {"workflow_dispatch"}:
             errors.append(
-                f"{path.name}: only {VALIDATION_WORKFLOW} and {AUTO_DISPATCHER} may use automatic triggers; got {sorted(trigger_names)}"
+                f"{path.name}: only {VALIDATION_WORKFLOW}, {AUTO_DISPATCHER}, and {GREEN_PR_DRAIN} may use automatic triggers; got {sorted(trigger_names)}"
             )
         for job_name, job_lines in job_blocks:
             if not is_hard_manual_dispatch_guard(extract_job_if_expression(job_lines)):
@@ -556,7 +613,7 @@ policy_path = ROOT / "CI_POLICY.md"
 policy = policy_path.read_text(encoding="utf-8") if policy_path.is_file() else ""
 for token in (
     "automatic branch/PR validation", VALIDATION_WORKFLOW, "integration/<batch-id>", "exact-main release",
-    AUTO_DISPATCHER, "release-v25-cloud.yml", "ALL MERGED TO MAIN",
+    AUTO_DISPATCHER, GREEN_PR_DRAIN, "QS3D_AUTOMERGE_TOKEN", "release-v25-cloud.yml", "ALL MERGED TO MAIN",
 ):
     if token not in policy:
         errors.append("CI_POLICY.md missing staged CI policy token: " + token)
@@ -568,6 +625,7 @@ for token in (
     "Only an agent/session explicitly authorized by the repository owner as an integration/merge coordinator may change `main`.",
     "shared branch/PR CI", "combined-tree CI", "exact-main release CI",
     "merge to `main` only within the owner's explicit authorization", "ALL MERGED TO MAIN", AUTO_DISPATCHER,
+    GREEN_PR_DRAIN, "owner-authorized green PR drain",
 ):
     if token not in registration:
         errors.append("AGENT-WORK-REGISTRATION.md missing staged integration token: " + token)
@@ -581,5 +639,5 @@ if errors:
 
 print(
     "PASS: every agent/integration push produces exact-head branch CI, every PR emits stable required contexts, governance/docs-only candidates remain lightweight through internal scope classification, "
-    "build-relevant candidates run Core plus V25 compile, main alone owns exact-source V25 dispatch, and releases retain explicit confirmation."
+    "the owner-approved green PR drain remains exact-head/current-main guarded and dedicated-token authenticated, build-relevant candidates run Core plus V25 compile, main alone owns exact-source V25 dispatch, and releases retain explicit confirmation."
 )
