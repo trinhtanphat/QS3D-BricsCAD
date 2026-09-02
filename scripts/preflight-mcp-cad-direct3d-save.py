@@ -56,12 +56,19 @@ def main() -> int:
 
     require(errors, active_document_block, (
         'var hasLocalPath = Path.IsPathRooted(filename);',
-        'var modified = SafeInteger(SafeSystemVariable("DBMOD")) != "0";',
+        'var dbmod = ReadDbmod();',
+        'var modified = (dbmod & DbmodPersistentContentMask) != 0;',
         'hasLocalPath && !modified',
         '\\"modified\\"',
     ), "active-document saved/dirty truth")
+    if 'SafeInteger(SafeSystemVariable("DBMOD")) != "0"' in active_document_block:
+        errors.append("cad_active_document still requires exact-zero DBMOD instead of persistent-content semantics")
     if 'string.IsNullOrWhiteSpace(filename) ? "false" : "true"' in active_document_block:
         errors.append("cad_active_document.saved still aliases filename presence instead of DBMOD dirty state")
+    require(errors, runtime, (
+        'private const int DbmodPersistentContentMask = 1 | 4 | 32;',
+        'private static int ReadDbmod()',
+    ), "active-document DBMOD semantics")
 
     require(errors, call_block, (
         'McpCadDirectModelRuntime.CanHandleCadCommandSequence(args)',
