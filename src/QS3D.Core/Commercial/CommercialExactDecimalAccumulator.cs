@@ -15,12 +15,9 @@ namespace QS3D.Core.Commercial
             if (value < 0m)
                 throw new InvalidOperationException(label + " cannot aggregate a negative value.");
 
-            var bits = decimal.GetBits(value);
-            var scale = (bits[3] >> 16) & 0x7F;
-            var coefficient =
-                ((BigInteger)(uint)bits[2] << 64) |
-                ((BigInteger)(uint)bits[1] << 32) |
-                (uint)bits[0];
+            Decode(value, out var coefficient, out var scale);
+            if (coefficient.Sign < 0)
+                throw new InvalidOperationException(label + " cannot aggregate a negative value.");
 
             if (!_hasValue)
             {
@@ -30,39 +27,89 @@ namespace QS3D.Core.Commercial
                 return;
             }
 
-            if (scale > _scale)
-            {
-                _coefficient *= BigInteger.Pow(10, scale - _scale);
-                _scale = scale;
-            }
-            else if (scale < _scale)
-            {
-                coefficient *= BigInteger.Pow(10, _scale - scale);
-            }
-
+            AlignScales(ref _coefficient, ref _scale, ref coefficient, ref scale);
             _coefficient += coefficient;
         }
 
         internal decimal ToDecimal(string label)
         {
-            if (!_hasValue || _coefficient.IsZero)
+            if (!_hasValue)
+                return 0m;
+            return Materialize(_coefficient, _scale, label + " exact aggregate cannot be represented as decimal without precision loss.");
+        }
+
+        internal static decimal AddExact(decimal left, decimal right, string label)
+        {
+            Decode(left, out var leftCoefficient, out var leftScale);
+            Decode(right, out var rightCoefficient, out var rightScale);
+            AlignScales(ref leftCoefficient, ref leftScale, ref rightCoefficient, ref rightScale);
+            return Materialize(
+                leftCoefficient + rightCoefficient,
+                leftScale,
+                "Commercial addition precision loss: " + label + ".");
+        }
+
+        internal static decimal SubtractExact(decimal left, decimal right, string label)
+        {
+            Decode(left, out var leftCoefficient, out var leftScale);
+            Decode(right, out var rightCoefficient, out var rightScale);
+            AlignScales(ref leftCoefficient, ref leftScale, ref rightCoefficient, ref rightScale);
+            return Materialize(
+                leftCoefficient - rightCoefficient,
+                leftScale,
+                "Commercial subtraction precision loss: " + label + ".");
+        }
+
+        private static void Decode(decimal value, out BigInteger coefficient, out int scale)
+        {
+            var bits = decimal.GetBits(value);
+            scale = (bits[3] >> 16) & 0x7F;
+            coefficient =
+                ((BigInteger)(uint)bits[2] << 64) |
+                ((BigInteger)(uint)bits[1] << 32) |
+                (uint)bits[0];
+            if ((bits[3] & unchecked((int)0x80000000)) != 0)
+                coefficient = BigInteger.Negate(coefficient);
+        }
+
+        private static void AlignScales(
+            ref BigInteger leftCoefficient,
+            ref int leftScale,
+            ref BigInteger rightCoefficient,
+            ref int rightScale)
+        {
+            if (leftScale < rightScale)
+            {
+                leftCoefficient *= BigInteger.Pow(10, rightScale - leftScale);
+                leftScale = rightScale;
+            }
+            else if (rightScale < leftScale)
+            {
+                rightCoefficient *= BigInteger.Pow(10, leftScale - rightScale);
+                rightScale = leftScale;
+            }
+        }
+
+        private static decimal Materialize(BigInteger signedCoefficient, int scale, string precisionLossMessage)
+        {
+            if (signedCoefficient.IsZero)
                 return 0m;
 
-            var coefficient = _coefficient;
-            var scale = _scale;
-            while (scale > 0 && coefficient % 10 == 0)
+            while (scale > 0 && signedCoefficient % 10 == 0)
             {
-                coefficient /= 10;
+                signedCoefficient /= 10;
                 scale--;
             }
 
+            var isNegative = signedCoefficient.Sign < 0;
+            var coefficient = BigInteger.Abs(signedCoefficient);
             if (scale > 28 || coefficient > MaximumDecimalCoefficient)
-                throw new OverflowException(label + " exact aggregate cannot be represented as decimal without precision loss.");
+                throw new OverflowException(precisionLossMessage);
 
             var low = unchecked((int)(uint)(coefficient & uint.MaxValue));
             var middle = unchecked((int)(uint)((coefficient >> 32) & uint.MaxValue));
             var high = unchecked((int)(uint)((coefficient >> 64) & uint.MaxValue));
-            return new decimal(low, middle, high, false, (byte)scale);
+            return new decimal(low, middle, high, isNegative, (byte)scale);
         }
     }
 }
