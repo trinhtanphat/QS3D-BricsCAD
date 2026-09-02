@@ -28,19 +28,19 @@ def job_block(text: str, job_name: str) -> str:
     jobs_index = next((i for i, line in enumerate(lines) if line == "jobs:"), None)
     if jobs_index is None:
         return ""
-    start = None
+    current = None
     block: list[str] = []
     for line in lines[jobs_index + 1 :]:
         if line and not line.startswith((" ", "\t", "#")):
             break
         match = re.match(r"^  ([A-Za-z0-9_-]+):\s*(?:#.*)?$", line)
         if match:
-            if start == job_name:
+            if current == job_name:
                 break
-            start = match.group(1)
+            current = match.group(1)
             block = []
             continue
-        if start == job_name:
+        if current == job_name:
             block.append(line)
     return "\n".join(block)
 
@@ -63,7 +63,9 @@ if text:
         "      - opened",
         "      - reopened",
         "      - ready_for_review",
+        "      - converted_to_draft",
         "      - synchronize",
+        "      - labeled",
         "      - unlabeled",
         "      - main",
         "permissions:",
@@ -76,12 +78,16 @@ if text:
         "arm-native-automerge:",
         "refresh-branches:",
         "enablePullRequestAutoMerge",
+        "disablePullRequestAutoMerge",
+        "pullRequestId",
+        "autoMergeRequest",
         "no-automerge",
         "event_head_sha",
         "api_head_sha",
         "head.repo.full_name",
         "base.ref",
         "draft",
+        "dependabot[bot]",
         "QS3D_AUTOMERGE_TOKEN",
         "/update-branch",
         "expected_head_sha",
@@ -99,6 +105,7 @@ if text:
         "gh release",
         "contents: write",
         "actions: write",
+        "GITHUB_TOKEN",
     )
     for token in forbidden_tokens:
         reject(text, token, "hybrid coordinator")
@@ -115,33 +122,40 @@ if text:
 
     for token in (
         "github.event_name == 'pull_request'",
-        "GH_TOKEN: ${{ github.token }}",
+        "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}",
         "event_head_sha",
         "api_head_sha",
         "enablePullRequestAutoMerge",
+        "disablePullRequestAutoMerge",
+        "pullRequestId",
+        "autoMergeRequest",
         "no-automerge",
         "head.repo.full_name",
         "base.ref",
         "draft",
+        "dependabot[bot]",
     ):
         require(arm, token, "arm-native-automerge")
 
     for token in (
         "github.event_name == 'push'",
+        "github.ref == 'refs/heads/main'",
         "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}",
         "QS3D_AUTOMERGE_TOKEN",
+        "enablePullRequestAutoMerge",
         "/update-branch",
         "expected_head_sha",
         "no-automerge",
         "head.repo.full_name",
         "draft",
+        "dependabot[bot]",
     ):
         require(refresh, token, "refresh-branches")
 
-    if "github.token" in refresh:
-        fail("refresh-branches must not use github.token for branch mutation")
-    if "secrets.QS3D_AUTOMERGE_TOKEN" not in refresh:
-        fail("refresh-branches must use QS3D_AUTOMERGE_TOKEN")
+    if "github.token" in arm or "github.token" in refresh:
+        fail("hybrid coordinator mutations must not fall back to github.token")
+    if "secrets.QS3D_AUTOMERGE_TOKEN" not in arm or "secrets.QS3D_AUTOMERGE_TOKEN" not in refresh:
+        fail("both coordinator jobs must use QS3D_AUTOMERGE_TOKEN")
 
 print("QS3D hybrid PR coordinator preflight")
 if errors:
@@ -150,4 +164,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: hybrid coordinator is narrow, native-auto-merge-only, optimistic-locked, and non-destructive.")
+print("PASS: hybrid coordinator is narrow, native-auto-merge-only, disarm-aware, optimistic-locked, and non-destructive.")
