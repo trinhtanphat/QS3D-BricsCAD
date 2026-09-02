@@ -10,12 +10,12 @@ smoke = SMOKE.read_text(encoding="utf-8")
 registration = REGISTRATION.read_text(encoding="utf-8")
 
 for anchor in [
-    "var firstMetadata = SnapshotMetadata(project.Metadata);",
-    "var firstNestedPersistedContent = SnapshotNestedPersistedContent(project, boundary);",
+    "var metadata = SnapshotMetadata(project.Metadata);",
+    "var nestedPersistedContent = SnapshotNestedPersistedContent(project, boundary);",
     "var secondMetadata = SnapshotMetadata(project.Metadata);",
     "var secondNestedPersistedContent = SnapshotNestedPersistedContent(project, boundary);",
-    "!MetadataMatches(secondMetadata, firstMetadata)",
-    "!string.Equals(secondNestedPersistedContent, firstNestedPersistedContent, StringComparison.Ordinal)",
+    "!MetadataMatches(secondMetadata, metadata)",
+    "!string.Equals(secondNestedPersistedContent, nestedPersistedContent, StringComparison.Ordinal)",
     "Nested persisted project state changed while the persistence stamp was materializing content.",
 ]:
     if anchor not in stamp:
