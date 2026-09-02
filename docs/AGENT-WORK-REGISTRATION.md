@@ -132,6 +132,16 @@ Individual branch green status is not combined-tree CI.
 
 Exact-main release CI is a separate evidence class after an applicable landing; it is not ordinary task-branch CI.
 
+## Persistent hybrid PR coordinator
+
+`.github/workflows/hybrid-pr-coordinator.yml` is a repository-level owner-approved integration mechanism, not an ordinary task carrier and not a reusable authority granted to individual agents.
+
+It may arm GitHub native auto-merge for eligible same-repository PRs and, after `main` changes, request non-destructive GitHub `update-branch` reconciliation for other eligible same-repository PRs. The workflow must preserve the canonical Issue/branch/PR of every lane: it does not create replacement carriers, force-reset heads, mutate fork branches or erase task commits.
+
+An individual lane remains owned by its registered owner/session while it is red, stale, behind `main`, queued or waiting for protected checks. Coordinator refresh does not transfer ownership. A `no-automerge` label is an explicit machine-readable opt-out for that PR.
+
+GitHub protected-main rules remain the final merge gate. The hybrid coordinator does not weaken the normal one-lane/one-carrier invariant and does not grant ordinary agents authority to bulk merge unrelated work.
+
 ## Terminal cleanup
 
 After the same task PR is merged and current `main` is verified:
@@ -157,5 +167,6 @@ The repository previously encoded older merge/admission semantics as literal str
 <!-- LEGACY_SCANNER_COMPAT: merge to `main` only within the owner's explicit authorization -->
 <!-- LEGACY_SCANNER_COMPAT: ALL MERGED TO MAIN -->
 <!-- LEGACY_SCANNER_COMPAT: dispatch-v25-cloud-after-main-integration.yml -->
+<!-- LEGACY_SCANNER_COMPAT: hybrid-pr-coordinator.yml -->
 
 These comments are compatibility debt, not precedence.
