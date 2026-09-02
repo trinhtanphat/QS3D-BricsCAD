@@ -27,7 +27,7 @@ namespace QS3D.BricsCAD.V25
             string code,
             string lane,
             string message,
-            Exception exception,
+            Exception? exception,
             bool contractFailure)
         {
             var exceptionType = exception == null
@@ -42,12 +42,12 @@ namespace QS3D.BricsCAD.V25
 
             lock (Sync)
             {
-                TicketState ticket;
-                if (!Tickets.TryGetValue(fingerprint, out ticket))
+                TicketState? ticket;
+                if (!Tickets.TryGetValue(fingerprint, out ticket) || ticket == null)
                 {
                     if (Tickets.Count >= MaxTickets)
                     {
-                        string oldestKey = null;
+                        string? oldestKey = null;
                         var oldestSeenUtc = DateTime.MaxValue;
                         foreach (var pair in Tickets)
                         {
@@ -56,7 +56,7 @@ namespace QS3D.BricsCAD.V25
                             oldestKey = pair.Key;
                         }
 
-                        if (!string.IsNullOrEmpty(oldestKey)) Tickets.Remove(oldestKey);
+                        if (oldestKey != null) Tickets.Remove(oldestKey);
                     }
 
                     ticket = new TicketState
