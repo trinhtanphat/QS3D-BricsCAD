@@ -511,7 +511,7 @@ def validate_pull_request_event(
     event: dict,
     repository: str,
     open_prs: list[dict],
-) -> tuple[str | None, list[tuple[int, str]]]:
+) -> tuple[str | None, list[tuple[int, str]], bool]:
     pr = event.get("pull_request")
     if not isinstance(pr, dict):
         raise ValueError("pull_request event payload is missing pull_request object")
@@ -523,7 +523,7 @@ def validate_pull_request_event(
     actor = _event_actor(event)
 
     if not requires_lane_lock(head_ref, head_repo, repository, actor):
-        return None, []
+        return None, [], False
 
     try:
         number = int(pr.get("number") or event.get("number"))
@@ -541,7 +541,7 @@ def validate_pull_request_event(
         except (TypeError, ValueError):
             continue
     if not current_open:
-        return None, []
+        return None, [], True
 
     explicit_lane_key = extract_lane_key(pr.get("body"))
     issue_number = branch_issue_number(head_ref) if head_ref.startswith("agent/") else None
@@ -559,7 +559,7 @@ def validate_pull_request_event(
                 f"PR #{number} head '{head_ref}' requires a Lane-Key in the PR body; "
                 "use 'Lane-Key: issue-<number>' or a stable integration batch key"
             )
-    return lane_key, find_duplicate_carriers(number, lane_key, open_prs)
+    return lane_key, find_duplicate_carriers(number, lane_key, open_prs), False
 
 
 def current_context(event_name: str, event: dict, repository: str) -> tuple[str, str, str, int]:
@@ -674,7 +674,13 @@ def main() -> int:
         open_prs = fetch_open_prs(api_url, repository, token)
 
         if event_name == "pull_request":
-            lane_key, lane_conflicts = validate_pull_request_event(event, repository, open_prs)
+            lane_key, lane_conflicts, terminal_pr = validate_pull_request_event(event, repository, open_prs)
+            if terminal_pr:
+                print(
+                    "PASS: pull_request carrier is no longer open; "
+                    "terminal reservation validation is skipped before Issue/path collision checks."
+                )
+                return 0
             if lane_conflicts:
                 print(f"ERROR: Lane-Key '{lane_key}' already has another open canonical carrier:")
                 for number, peer_ref in lane_conflicts:
