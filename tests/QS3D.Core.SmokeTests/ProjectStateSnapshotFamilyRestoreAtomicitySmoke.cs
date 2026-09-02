@@ -18,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             var family = new ProjectFamily("F-01", "Captured family", ElementCategory.Beam);
             family.Properties["Grade"] = "C30";
             project.Families.Add(family);
+            var familyProperties = family.Properties;
 
             var snapshot = ProjectStateSnapshot.Capture(project);
 
@@ -49,6 +50,8 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("Snapshot restore lost the preserved family after a throwing subscriber.");
             if (!ReferenceEquals(project.Families[0], family))
                 throw new InvalidOperationException("Snapshot restore must preserve captured ProjectFamily object identity.");
+            if (!ReferenceEquals(family.Properties, familyProperties))
+                throw new InvalidOperationException("Snapshot restore must preserve the captured ProjectFamily property-store object identity.");
             if (!string.Equals(family.Name, "Captured family", StringComparison.Ordinal))
                 throw new InvalidOperationException("Family name was not restored.");
             if (family.Category != ElementCategory.Beam)
