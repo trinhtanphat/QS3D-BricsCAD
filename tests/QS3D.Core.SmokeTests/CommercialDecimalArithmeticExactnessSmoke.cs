@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
         {
             RoundedHighMagnitudeAdditionFailsClosed();
             RoundedHighMagnitudeSubtractionFailsClosed();
+            TrueAdditionOverflowKeepsOverflowContract();
+            TrueSubtractionOverflowKeepsOverflowContract();
             RepresentableAdditionRemainsExact();
             RepresentableSubtractionRemainsExact();
         }
@@ -32,6 +34,24 @@ namespace QS3D.Core.SmokeTests
                 "Commercial subtraction precision loss: boundary subtraction.",
                 error.Message,
                 "High-magnitude commercial subtraction must reject scale-reduction rounding instead of accepting a different inexact result.");
+        }
+
+        private static void TrueAdditionOverflowKeepsOverflowContract()
+        {
+            var error = CaptureOverflow("Add", decimal.MaxValue, 1m, "true addition overflow");
+            Contains(
+                "true addition overflow overflowed decimal arithmetic.",
+                error.Message,
+                "True commercial addition overflow must keep the established overflow contract instead of being mislabeled as precision loss.");
+        }
+
+        private static void TrueSubtractionOverflowKeepsOverflowContract()
+        {
+            var error = CaptureOverflow("Subtract", decimal.MinValue, 1m, "true subtraction overflow");
+            Contains(
+                "true subtraction overflow overflowed decimal arithmetic.",
+                error.Message,
+                "True commercial subtraction overflow must keep the established overflow contract instead of being mislabeled as precision loss.");
         }
 
         private static void RepresentableAdditionRemainsExact()
