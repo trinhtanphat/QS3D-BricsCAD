@@ -165,6 +165,7 @@ namespace QS3D.Core.Domain
             if (project.Families.Count + createCount > MaxFamilies)
                 throw new InvalidOperationException("Starter onboarding would exceed the supported 10000 Family limit.");
 
+            RequireMetadataCapacity(project, needsOverride);
             RequireRevisionCapacity(project, needsOverride, effectiveUnit, existingFloorToActivate, plans);
 
             // All user decisions and catalog preconditions are validated before the first mutation.
@@ -204,6 +205,21 @@ namespace QS3D.Core.Domain
                 created,
                 reused,
                 project.ActiveFloorId);
+        }
+
+        private static void RequireMetadataCapacity(ProjectState project, bool needsOverride)
+        {
+            if (!needsOverride) return;
+            if (!(project.Metadata is ProjectMetadataDictionary metadata))
+                throw new InvalidOperationException("Project onboarding requires the canonical project metadata store.");
+
+            var keys = new List<string> { DrawingUnitResolutionPolicy.OverrideMetadataKey };
+            if (metadata.ContainsKey(DrawingUnitResolutionPolicy.BoundMetadataKey))
+            {
+                keys.Add(DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey);
+                keys.Add(DrawingUnitResolutionPolicy.BindingSourceMetadataKey);
+            }
+            metadata.EnsureCanSetPublicKeys(keys);
         }
 
         private static void RequireRevisionCapacity(
