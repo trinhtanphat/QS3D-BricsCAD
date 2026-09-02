@@ -1,0 +1,244 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
+
+namespace QS3D.BricsCAD.V25
+{
+    /// <summary>
+    /// Process-local, bounded repair identity ledger for MCP tools/call failures.
+    /// This class never performs a repair itself; it only emits fail-closed metadata
+    /// that a supervising client can use to correct a call, retry, open a source
+    /// repair carrier, or stop for human review.
+    /// </summary>
+    internal static class McpSelfHealingRepairRuntime
+    {
+        private const int CircuitOpenOccurrence = 4;
+        private const int MaxTickets = 256;
+
+        private static readonly object Sync = new object();
+        private static readonly Dictionary<string, TicketState> Tickets =
+            new Dictionary<string, TicketState>(StringComparer.Ordinal);
+
+        public static string RecordFailure(
+            string tool,
+            string code,
+            string lane,
+            string message,
+            Exception? exception,
+            bool contractFailure)
+        {
+            var exceptionType = exception == null
+                ? string.Empty
+                : exception.GetType().FullName ?? string.Empty;
+            var fingerprint = BuildFingerprint(tool, code, lane, exceptionType, message);
+            var now = DateTime.UtcNow;
+
+            int occurrenceCount;
+            DateTime firstSeenUtc;
+            DateTime lastSeenUtc;
+
+            lock (Sync)
+            {
+                TicketState? ticket;
+                if (!Tickets.TryGetValue(fingerprint, out ticket) || ticket == null)
+                {
+                    if (Tickets.Count >= MaxTickets)
+                    {
+                        string? oldestKey = null;
+                        var oldestSeenUtc = DateTime.MaxValue;
+                        foreach (var pair in Tickets)
+                        {
+                            if (pair.Value.LastSeenUtc >= oldestSeenUtc) continue;
+                            oldestSeenUtc = pair.Value.LastSeenUtc;
+                            oldestKey = pair.Key;
+                        }
+
+                        if (oldestKey != null) Tickets.Remove(oldestKey);
+                    }
+
+                    ticket = new TicketState
+                    {
+                        FirstSeenUtc = now,
+                        LastSeenUtc = now,
+                        OccurrenceCount = 0
+                    };
+                    Tickets[fingerprint] = ticket;
+                }
+
+                ticket.OccurrenceCount++;
+                ticket.LastSeenUtc = now;
+                occurrenceCount = ticket.OccurrenceCount;
+                firstSeenUtc = ticket.FirstSeenUtc;
+                lastSeenUtc = ticket.LastSeenUtc;
+            }
+
+            var callerOrPolicyFailure = contractFailure || IsCallerOrPolicyFailure(code, message);
+            var transientFailure = !callerOrPolicyFailure && IsTransientFailure(code, message);
+            var sourceRepairEligible = !callerOrPolicyFailure
+                                       && !transientFailure
+                                       && IsSourceRepairFailure(code, message);
+            var circuitOpen = sourceRepairEligible && occurrenceCount >= CircuitOpenOccurrence;
+            var humanReviewRequired = circuitOpen;
+
+            string recommendedAction;
+            if (circuitOpen) recommendedAction = "human_review";
+            else if (sourceRepairEligible) recommendedAction = "open_source_repair";
+            else if (callerOrPolicyFailure) recommendedAction = "correct_call_or_refresh_tools";
+            else if (transientFailure) recommendedAction = "retry_transient";
+            else recommendedAction = "diagnose_before_repair";
+
+            return "{\"ticketId\":\"QS3D-REPAIR-" + fingerprint.Substring(0, 12).ToUpperInvariant()
+                   + "\",\"fingerprint\":\"" + fingerprint
+                   + "\",\"occurrenceCount\":" + occurrenceCount.ToString(CultureInfo.InvariantCulture)
+                   + ",\"sourceRepairEligible\":" + JsonBool(sourceRepairEligible)
+                   + ",\"circuitOpen\":" + JsonBool(circuitOpen)
+                   + ",\"humanReviewRequired\":" + JsonBool(humanReviewRequired)
+                   + ",\"recommendedAction\":\"" + JsonEscape(recommendedAction)
+                   + "\",\"firstSeenUtc\":\"" + firstSeenUtc.ToString("o", CultureInfo.InvariantCulture)
+                   + "\",\"lastSeenUtc\":\"" + lastSeenUtc.ToString("o", CultureInfo.InvariantCulture) + "\"}";
+        }
+
+        internal static string BuildFingerprint(
+            string tool,
+            string code,
+            string lane,
+            string exceptionType,
+            string message)
+        {
+            var canonical = string.Join("|", new[]
+            {
+                Normalize(tool),
+                Normalize(code),
+                Normalize(lane),
+                Normalize(exceptionType),
+                Normalize(message)
+            });
+
+            using (var sha = SHA256.Create())
+            {
+                var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(canonical));
+                var builder = new StringBuilder(hash.Length * 2);
+                foreach (var value in hash)
+                    builder.Append(value.ToString("x2", CultureInfo.InvariantCulture));
+                return builder.ToString();
+            }
+        }
+
+        private static string Normalize(string value)
+        {
+            return Regex.Replace(
+                    (value ?? string.Empty).Trim(),
+                    "\\s+",
+                    " ",
+                    RegexOptions.CultureInvariant)
+                .ToUpperInvariant();
+        }
+
+        private static bool IsCallerOrPolicyFailure(string code, string message)
+        {
+            var value = Normalize((code ?? string.Empty) + " " + (message ?? string.Empty));
+            return ContainsAny(
+                value,
+                "UNKNOWN MCP CAD TOOL",
+                "CONFIRMMUTATION",
+                "INVALID_ARGUMENT",
+                "INVALID ARGUMENT",
+                "BAD_REQUEST",
+                "BAD REQUEST",
+                "UNAUTHORIZED",
+                "FORBIDDEN",
+                "AUTHORIZATION",
+                "AUTHENTICATION",
+                "POLICY",
+                "CONFIRMATION",
+                "SCHEMA",
+                "VALIDATION",
+                "REQUIRES OBJECT PARAMS",
+                "PARAMS.NAME",
+                "PARAMS.ARGUMENTS",
+                "NOT ALLOWED",
+                "MUST BE",
+                " IS REQUIRED",
+                "MUST MATCH",
+                "EXCEEDS");
+        }
+
+        private static bool IsTransientFailure(string code, string message)
+        {
+            var value = Normalize((code ?? string.Empty) + " " + (message ?? string.Empty));
+            return ContainsAny(
+                value,
+                "TIMEOUT",
+                "TIMED OUT",
+                "DOCUMENT_LOCK",
+                "DOCUMENT LOCK",
+                "ECANTOPENFILE",
+                "DISCONNECTED",
+                "TRANSPORT",
+                "BUSY",
+                "WRITER LEASE",
+                "LOCK VIOLATION");
+        }
+
+        private static bool IsSourceRepairFailure(string code, string message)
+        {
+            var value = Normalize((code ?? string.Empty) + " " + (message ?? string.Empty));
+            return ContainsAny(
+                value,
+                "NOT_IMPLEMENTED",
+                "NOT IMPLEMENTED",
+                "MISSING_CAPABILITY",
+                "MISSING CAPABILITY",
+                "IMPLEMENTATION",
+                "INTERNAL",
+                "TOOL_FAILED",
+                "TOOL FAILED",
+                "CAPABILITY");
+        }
+
+        private static bool ContainsAny(string value, params string[] tokens)
+        {
+            foreach (var token in tokens)
+            {
+                if (value.IndexOf(token, StringComparison.Ordinal) >= 0) return true;
+            }
+            return false;
+        }
+
+        private static string JsonBool(bool value) { return value ? "true" : "false"; }
+
+        private static string JsonEscape(string value)
+        {
+            if (value == null) return string.Empty;
+            var builder = new StringBuilder(value.Length + 8);
+            foreach (var c in value)
+            {
+                switch (c)
+                {
+                    case '\\': builder.Append("\\\\"); break;
+                    case '"': builder.Append("\\\""); break;
+                    case '\r': builder.Append("\\r"); break;
+                    case '\n': builder.Append("\\n"); break;
+                    case '\t': builder.Append("\\t"); break;
+                    default:
+                        if (c < 32)
+                            builder.Append("\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
+                        else
+                            builder.Append(c);
+                        break;
+                }
+            }
+            return builder.ToString();
+        }
+
+        private sealed class TicketState
+        {
+            public int OccurrenceCount { get; set; }
+            public DateTime FirstSeenUtc { get; set; }
+            public DateTime LastSeenUtc { get; set; }
+        }
+    }
+}
