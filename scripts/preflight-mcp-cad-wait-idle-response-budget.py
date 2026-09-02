@@ -26,9 +26,9 @@ def main() -> int:
     if expected_dispatch not in runtime:
         errors.append("cad_wait_idle runtime must default to 5000 ms and cap at 7000 ms")
 
-    expected_schema = '\\"timeoutMs\\":{\\"type\\":\\"integer\\",\\"minimum\\":100,\\"maximum\\":7000}'
+    expected_schema = '\\"timeoutMs\\":{\\"type\\":\\"integer\\",\\"minimum\\":100,\\"maximum\\":7000,\\"default\\":5000}'
     if expected_schema not in server:
-        errors.append("active MCP V2 cad_wait_idle schema must cap timeoutMs at 7000 ms")
+        errors.append("active MCP V2 cad_wait_idle schema must advertise default 5000 ms and cap timeoutMs at 7000 ms")
 
     if 'case "cad_wait_idle": return WaitUntilIdle(Integer(args, "timeoutMs", 10000, 100, 30000));' in runtime:
         errors.append("cad_wait_idle still has the legacy 10s default / 30s maximum")

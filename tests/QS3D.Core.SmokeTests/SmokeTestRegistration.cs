@@ -188,6 +188,7 @@ namespace QS3D.Core.SmokeTests
             DependencyGraphDirectDependentsSmoke.Run();
             DependencyGraphKnownCountContractSmoke.Run();
             ProjectStateLookupSmoke.Run();
+            ProjectStateSnapshotActiveContextIntegritySmoke.Run();
             ProjectStateSnapshotElementIdentitySmoke.Run();
             ProjectStateSnapshotFamilyIdentitySmoke.Run();
             ProjectPersistenceCheckpointSmoke.Run();

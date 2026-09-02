@@ -134,17 +134,21 @@ namespace QS3D.BricsCAD.V25
         {
             var foregroundPolicy = IsForegroundPolicyEnabled;
             var localConsent = McpDesktopControlSession.IsEnabled;
+            var consentState = McpDesktopControlSession.ConsentState;
             var foregroundAvailable = foregroundPolicy && localConsent;
 
-            // Stable JSON capability contract: "backgroundControl", "foregroundControl",
-            // "defaultRoute":"background", "fallback":"explicit_only", "implicitForegroundFallback":false.
+            // Stable JSON capability contract: background is always the process-start default;
+            // local desktop consent and the foreground policy are independent gates.
             return "{\"mode\":\"" + (foregroundPolicy ? "foreground_fallback" : "background_only")
                    + "\",\"globalInputAllowed\":" + (foregroundAvailable ? "true" : "false")
-                   + ",\"defaultMode\":\"background_only\",\"processScoped\":true"
+                   + ",\"defaultMode\":\"background_only\",\"processStartDefault\":\"background_only\",\"processScoped\":true"
+                   + ",\"requiresLocalReenableAfterRestart\":true"
                    + ",\"backgroundControl\":{\"available\":true,\"preferred\":true,\"usesGlobalInput\":false}"
                    + ",\"foregroundControl\":{\"available\":" + (foregroundAvailable ? "true" : "false")
                    + ",\"localConsent\":" + (localConsent ? "true" : "false")
+                   + ",\"consentState\":\"" + Escape(consentState) + "\""
                    + ",\"policyEnabled\":" + (foregroundPolicy ? "true" : "false")
+                   + ",\"policyMeaning\":\"local-consent-and-policy-must-both-be-enabled\""
                    + ",\"usesGlobalInput\":true}"
                    + ",\"defaultRoute\":\"background\",\"fallback\":\"explicit_only\",\"implicitForegroundFallback\":false}";
         }

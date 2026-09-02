@@ -111,7 +111,9 @@ jobs:
             'scripts/finalize-v25-signed-package.ps1',
             'scripts/new-v25-update-manifest.ps1',
             'scripts/verify-v25-held-file.ps1',
-            'scripts/rollback-v25-draft-release.ps1'
+            'scripts/rollback-v25-draft-release.ps1',
+            'scripts/assert-v25-release-package-identity.ps1',
+            'scripts/assert-v25-commercial-draft-identity.ps1'
           )) {
             $tokens = $null
             $parseErrors = $null
@@ -153,13 +155,11 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          $metadata = Get-Content -LiteralPath 'dist\QS3D-BricsCAD-V25\PACKAGE-METADATA.json' -Raw | ConvertFrom-Json
-          if (-not [string]::Equals([string]$metadata.productVersion, $env:RELEASE_TAG.Substring(1), [StringComparison]::Ordinal)) {
-            throw "Release tag $env:RELEASE_TAG does not exactly match source product version $($metadata.productVersion)."
-          }
-          if (-not [string]::Equals(([string]$metadata.gitCommit).Trim(), $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) {
-            throw "Package source commit $($metadata.gitCommit) does not match workflow SHA $env:GITHUB_SHA."
-          }
+          $identity = & .\scripts\assert-v25-release-package-identity.ps1 `
+            -MetadataPath 'dist\QS3D-BricsCAD-V25\PACKAGE-METADATA.json' `
+            -ExpectedSourceCommit $env:GITHUB_SHA `
+            -ExpectedReleaseTag $env:RELEASE_TAG
+          if ($null -eq $identity) { throw 'V25 held package identity validation returned no admitted identity.' }
 
       - name: Import ephemeral code-signing certificate
         shell: powershell
@@ -266,11 +266,15 @@ jobs:
           $zip = (Resolve-Path 'dist\QS3D-BricsCAD-V25.zip').Path
           $zipHash = (& .\scripts\verify-v25-held-file.ps1 -Operation Hash -Path $zip).Trim().ToLowerInvariant()
           "$zipHash  QS3D-BricsCAD-V25.zip" | Set-Content 'dist\QS3D-BricsCAD-V25.zip.sha256' -Encoding ASCII
-          $metadata = Get-Content -LiteralPath 'dist\QS3D-BricsCAD-V25\PACKAGE-METADATA.json' -Raw | ConvertFrom-Json
+          $identity = & .\scripts\assert-v25-release-package-identity.ps1 `
+            -MetadataPath 'dist\QS3D-BricsCAD-V25\PACKAGE-METADATA.json' `
+            -ExpectedSourceCommit $env:GITHUB_SHA `
+            -ExpectedReleaseTag $env:RELEASE_TAG
+          if ($null -eq $identity) { throw 'V25 held package identity validation returned no identity for provenance.' }
           $updateHash = (& .\scripts\verify-v25-held-file.ps1 -Operation Hash -Path 'dist\QS3D-BricsCAD-V25.update.json').Trim().ToLowerInvariant()
           [ordered]@{
             schemaVersion = 1; product = 'QS3D'; target = 'BricsCAD V25 x64'; releaseTag = $env:RELEASE_TAG
-            productVersion = [string]$metadata.productVersion; sourceCommit = $env:GITHUB_SHA.ToLowerInvariant()
+            productVersion = [string]$identity.ProductVersion; sourceCommit = $env:GITHUB_SHA.ToLowerInvariant()
             signerThumbprint = $env:QS3D_SIGNING_CERT_THUMBPRINT.Replace(' ', '').ToUpperInvariant(); timestampServer = $env:QS3D_TIMESTAMP_SERVER
             packageFile = 'QS3D-BricsCAD-V25.zip'; packageSha256 = $zipHash
             updateManifestFile = 'QS3D-BricsCAD-V25.update.json'; updateManifestSha256 = $updateHash
@@ -613,6 +617,15 @@ jobs:
                 $remoteHash = (& .\scripts\verify-v25-held-file.ps1 -Operation Hash -Path (Join-Path $downloadRoot $name)).Trim()
                 if (-not [string]::Equals($localHash, $remoteHash, [StringComparison]::OrdinalIgnoreCase)) { throw "Draft release asset SHA-256 mismatch for $name; release remains a draft." }
               }
+              $downloadedIdentity = & .\scripts\assert-v25-commercial-draft-identity.ps1 `
+                -PackageZip (Join-Path $downloadRoot 'QS3D-BricsCAD-V25.zip') `
+                -ChecksumPath (Join-Path $downloadRoot 'QS3D-BricsCAD-V25.zip.sha256') `
+                -UpdateManifestPath (Join-Path $downloadRoot 'QS3D-BricsCAD-V25.update.json') `
+                -ProvenancePath (Join-Path $downloadRoot 'QS3D-BricsCAD-V25.provenance.json') `
+                -ExpectedSourceCommit $env:GITHUB_SHA `
+                -ExpectedReleaseTag $env:RELEASE_TAG `
+                -ExpectedSignerThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT
+              if ($null -eq $downloadedIdentity) { throw 'Downloaded V25 draft semantic admission returned no identity.' }
               $remoteChecksum = (Get-Content -LiteralPath (Join-Path $downloadRoot 'QS3D-BricsCAD-V25.zip.sha256') -Raw).Trim()
               if ($remoteChecksum -notmatch '^([0-9a-f]{64})  QS3D-BricsCAD-V25\.zip$') { throw 'Downloaded draft checksum is malformed.' }
               $remoteZip = Join-Path $downloadRoot 'QS3D-BricsCAD-V25.zip'
