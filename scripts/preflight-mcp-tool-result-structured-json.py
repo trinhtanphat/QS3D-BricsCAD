@@ -15,6 +15,12 @@ def fail(message: str) -> None:
 
 server = SERVER.read_text(encoding="utf-8")
 
+success_start = server.find("private static string ToolSuccess(string jsonValue)")
+success_end = server.find("private static bool LooksLikeJsonValue(string value)", success_start)
+if success_start < 0 or success_end < 0:
+    fail("tool-success response builder is missing")
+tool_success = server[success_start:success_end]
+
 start = server.find("private static bool LooksLikeJsonValue(string value)")
 end = server.find("private static bool LooksLikeJsonObject(string value)", start)
 if start < 0 or end < 0:
@@ -36,8 +42,15 @@ if '"value"' not in validator or "found" not in validator or "error" not in vali
 if "string.Equals(raw, trimmed, StringComparison.Ordinal)" not in validator:
     fail("validated JSON token must equal the complete trimmed candidate")
 
-if '"\\\"data\\\":" + raw' not in server:
+# Scope the wire-contract checks to ToolSuccess instead of matching across the entire
+# source file. The C# string literal starts before structuredContent, so the stable source
+# token is the escaped JSON field sequence itself, not an invented quote boundary at data.
+if '\\"structuredContent\\":{\\"data\\":" + raw' not in tool_success:
     fail("structuredContent JSON-container projection contract drifted")
+if "if (!LooksLikeJsonValue(raw))" not in tool_success:
+    fail("tool-success path no longer validates structured JSON before projection")
+if '\\"value\\":\\"' not in tool_success or "JsonEscape(raw)" not in tool_success:
+    fail("invalid/non-container tool output no longer falls back to escaped JSON text")
 
 print("MCP tool-result structured JSON preflight passed.")
 sys.exit(0)
