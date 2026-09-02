@@ -13,6 +13,8 @@ namespace QS3D.Core.SmokeTests
             GroupsStableSemanticChangesWithoutHandleAuthority();
             ReviewOrderingIsDeterministic();
             MalformedSnapshotsFailClosed();
+            MalformedRevisionIdsFailClosed();
+            SupplementaryRevisionIdsRemainExact();
         }
 
         private static void GroupsStableSemanticChangesWithoutHandleAuthority()
@@ -104,6 +106,30 @@ namespace QS3D.Core.SmokeTests
             duplicate.Elements.Add(Element("A", "Beam", "F", "L", "Z"));
             duplicate.Elements.Add(Element("a", "Beam", "F", "L", "Z"));
             Throws<InvalidOperationException>(() => new SemanticChangeReviewBuilder().Build(duplicate, new RevisionSnapshot { Id = "R2" }));
+        }
+
+        private static void MalformedRevisionIdsFailClosed()
+        {
+            Throws<InvalidOperationException>(() => new SemanticChangeReviewBuilder().Build(
+                new RevisionSnapshot { Id = "R\uD800" },
+                new RevisionSnapshot { Id = "R2" }));
+            Throws<InvalidOperationException>(() => new SemanticChangeReviewBuilder().Build(
+                new RevisionSnapshot { Id = "R1" },
+                new RevisionSnapshot { Id = "R\uDC00" }));
+            Throws<InvalidOperationException>(() => new SemanticChangeReviewBuilder().Build(
+                new RevisionSnapshot { Id = "R\u0001" },
+                new RevisionSnapshot { Id = "R2" }));
+        }
+
+        private static void SupplementaryRevisionIdsRemainExact()
+        {
+            const string beforeId = "R\U0001F600";
+            const string afterId = "R\U0001F680";
+            var review = new SemanticChangeReviewBuilder().Build(
+                new RevisionSnapshot { Id = beforeId },
+                new RevisionSnapshot { Id = afterId });
+            Equal(beforeId, review.BeforeRevisionId);
+            Equal(afterId, review.AfterRevisionId);
         }
 
         private static RevisionElementSnapshot ChangedElement(string id, params string[] propertyPairs)

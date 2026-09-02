@@ -10,9 +10,63 @@ namespace QS3D.Core.SmokeTests
 
         internal static void Run()
         {
+            RepresentableOverflowedAggregateAverageRemainsExact();
+            RepresentableHighMagnitudeAverageRemainsAccepted();
+            UnrepresentableHighMagnitudeAverageFailsClosed();
             HighMagnitudeEvenMedianFailsClosed();
             OrdinaryEvenMedianRemainsStable();
             OddMedianRemainsStable();
+        }
+
+        private static void RepresentableOverflowedAggregateAverageRemainsExact()
+        {
+            const decimal expected = 36566844237352771197020284770m;
+            var ascending = Analyze(
+                expected,
+                0m, 0m, 0m, 0m, 0m, 0m, 0m,
+                decimal.MaxValue, decimal.MaxValue, decimal.MaxValue,
+                decimal.MaxValue, decimal.MaxValue, decimal.MaxValue);
+            var reversed = Analyze(
+                expected,
+                decimal.MaxValue, decimal.MaxValue, decimal.MaxValue,
+                decimal.MaxValue, decimal.MaxValue, decimal.MaxValue,
+                0m, 0m, 0m, 0m, 0m, 0m, 0m);
+
+            Equal(expected, ascending.AverageUnitCost,
+                "A representable benchmark mean must survive an unrepresentable aggregate without incremental-rounding drift.");
+            Equal(expected, reversed.AverageUnitCost,
+                "Benchmark average must remain deterministic when the same high-dynamic-range samples arrive in another order.");
+            Equal<decimal?>(0m, ascending.DeviationFromAveragePercent,
+                "Exact benchmark average must preserve zero deviation for the matching current cost.");
+        }
+
+        private static void RepresentableHighMagnitudeAverageRemainsAccepted()
+        {
+            var expected = decimal.MaxValue - 1m;
+            var result = Analyze(
+                expected,
+                decimal.MaxValue - 2m,
+                decimal.MaxValue - 1m,
+                decimal.MaxValue - 1m,
+                decimal.MaxValue);
+
+            Equal(4, result.SampleCount, "High-magnitude benchmark sample count changed.");
+            Equal(decimal.MaxValue - 2m, result.MinimumUnitCost, "High-magnitude benchmark minimum changed.");
+            Equal(decimal.MaxValue, result.MaximumUnitCost, "High-magnitude benchmark maximum changed.");
+            Equal(expected, result.AverageUnitCost, "Representable high-magnitude benchmark average must survive an unrepresentable raw sum.");
+            Equal(expected, result.MedianUnitCost, "High-magnitude benchmark median changed.");
+            Equal<decimal?>(0m, result.DeviationFromAveragePercent, "High-magnitude benchmark deviation changed.");
+        }
+
+        private static void UnrepresentableHighMagnitudeAverageFailsClosed()
+        {
+            var error = Capture<OverflowException>(() =>
+                Analyze(decimal.MaxValue - 1m, decimal.MaxValue - 1m, decimal.MaxValue));
+
+            Contains(
+                "benchmark translated average",
+                error.ToString(),
+                "Benchmark average must fail closed when the mathematical mean cannot be represented as decimal.");
         }
 
         private static void HighMagnitudeEvenMedianFailsClosed()

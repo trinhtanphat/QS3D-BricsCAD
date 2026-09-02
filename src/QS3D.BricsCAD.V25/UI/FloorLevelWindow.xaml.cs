@@ -98,7 +98,7 @@ namespace QS3D.BricsCAD.V25.UI
                     "Đã lưu tầng “" + floor.Name + "” • " + floor.ElevationM.ToString("0.###", CultureInfo.InvariantCulture) + " m.",
                     "Floor/Level save");
             }
-            catch (Exception ex) { SetStatus("Lưu tầng lỗi: " + ex.Message); }
+            catch (Exception) { ReportFailure("Lưu tầng"); }
         }
 
         private void OnDeleteFloorClick(object sender, RoutedEventArgs e)
@@ -128,7 +128,7 @@ namespace QS3D.BricsCAD.V25.UI
                     "Đã xóa tầng “" + floor.Name + "”.",
                     "Floor/Level delete");
             }
-            catch (Exception ex) { SetStatus("Xóa tầng lỗi: " + ex.Message); }
+            catch (Exception) { ReportFailure("Xóa tầng"); }
         }
 
         private void OnActivateClick(object sender, RoutedEventArgs e)
@@ -157,7 +157,7 @@ namespace QS3D.BricsCAD.V25.UI
                     "Tầng hoạt động: " + floor.Name + " • " + floor.ElevationM.ToString("0.###", CultureInfo.InvariantCulture) + " m.",
                     "Floor/Level activate");
             }
-            catch (Exception ex) { SetStatus("Đặt tầng active lỗi: " + ex.Message); }
+            catch (Exception) { ReportFailure("Đặt tầng active"); }
         }
 
         private void OnAssignClick(object sender, RoutedEventArgs e)
@@ -222,7 +222,7 @@ namespace QS3D.BricsCAD.V25.UI
                     "Đã gán “" + floor.Name + "” cho " + changed + "/" + elements.Count + " semantic element. Generated output liên quan đã stale; CAD source không bị Move.",
                     "Floor/Level assign");
             }
-            catch (Exception ex) { SetStatus("Gán tầng lỗi: " + ex.Message); }
+            catch (Exception) { ReportFailure("Gán tầng"); }
         }
 
         private void OnAssignBottomLevelClick(object sender, RoutedEventArgs e) =>
@@ -325,7 +325,7 @@ namespace QS3D.BricsCAD.V25.UI
                     operation + ": " + changed + "/" + elements.Count + " element • " + levelLabel + ". Rebuild output stale; source CAD không bị Move.",
                     operation);
             }
-            catch (Exception ex) { SetStatus(operation + " lỗi: " + ex.Message); }
+            catch (Exception) { ReportFailure(operation); }
         }
 
         private void OnInspectSelectionClick(object sender, RoutedEventArgs e)
@@ -343,7 +343,7 @@ namespace QS3D.BricsCAD.V25.UI
                     .ToList();
                 SetStatus(elements.Count == 0 ? "Selection chưa resolve được semantic element." : "Selection: " + string.Join(" • ", floors));
             }
-            catch (Exception ex) { SetStatus("Kiểm tra selection lỗi: " + ex.Message); }
+            catch (Exception) { ReportFailure("Kiểm tra selection"); }
         }
 
         private void RefreshAll(string preferredFloorId = "")
@@ -396,10 +396,10 @@ namespace QS3D.BricsCAD.V25.UI
                     SetStatus("Project chưa có tầng. Dùng Mới → nhập tên/cao độ → Lưu.");
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 _boundProject = null;
-                SetStatus("Đọc Floor/Level lỗi: " + ex.Message);
+                ReportFailure("Đọc Floor/Level");
             }
         }
 
@@ -461,12 +461,9 @@ namespace QS3D.BricsCAD.V25.UI
                 refresh();
                 PaletteCoordinator.RefreshProject();
             }
-            catch (Exception refreshError)
+            catch (Exception)
             {
-                var warning = successMessage + " UI sync warning: " + refreshError.Message;
-                try { StatusText.Text = warning; } catch { }
-                try { PaletteCoordinator.SetStatus(warning); } catch { }
-                try { _document.Editor.WriteMessage("\nQS3D " + context + " đã commit; UI sync warning: " + refreshError.Message); } catch { }
+                ReportPostCommitWarning(successMessage, context);
             }
         }
 
@@ -539,6 +536,20 @@ namespace QS3D.BricsCAD.V25.UI
             if (string.IsNullOrWhiteSpace(name)) return "Bản vẽ chưa lưu";
             try { return System.IO.Path.GetFileName(name); }
             catch { return name; }
+        }
+
+        private void ReportFailure(string operation)
+        {
+            SetStatus(
+                operation + " không hoàn tất. Không có thay đổi chưa xác nhận nào được giữ lại; hãy Refresh Level Picker và thử lại.");
+        }
+
+        private void ReportPostCommitWarning(string successMessage, string context)
+        {
+            var warning = successMessage + " " + context + " đã commit; đồng bộ UI chưa hoàn tất. Hãy Refresh Level Picker.";
+            try { StatusText.Text = warning; } catch { }
+            try { PaletteCoordinator.SetStatus(warning); } catch { }
+            try { _document.Editor.WriteMessage("\nQS3D " + warning); } catch { }
         }
 
         private void SetStatus(string text)

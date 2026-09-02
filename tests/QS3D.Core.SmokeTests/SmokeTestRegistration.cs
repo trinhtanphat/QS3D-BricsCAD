@@ -166,6 +166,7 @@ namespace QS3D.Core.SmokeTests
             PreviewReviewNullOrderingSmoke.Run();
             PreviewReviewQueryAndComparisonSmoke.Run();
             ProjectInterchangeJsonSmoke.Run();
+            ProjectInterchangeExportMaterializationBoundSmoke.Run();
             ProjectInterchangeImportPreviewSmoke.Run();
             ProjectInterchangeValidatedSnapshotReaderSmoke.Run();
             ProjectInterchangeSnapshotDiffSmoke.Run();
@@ -191,6 +192,7 @@ namespace QS3D.Core.SmokeTests
             ProjectStateSnapshotActiveContextIntegritySmoke.Run();
             ProjectStateSnapshotElementIdentitySmoke.Run();
             ProjectStateSnapshotFamilyIdentitySmoke.Run();
+            ProjectStateSnapshotSchemaVersionIntegritySmoke.Run();
             ProjectPersistenceCheckpointSmoke.Run();
             ProjectPersistenceCheckpointRevisionDriftSmoke.Run();
             ProjectMetadataBoundSmoke.Run();

@@ -99,11 +99,103 @@ namespace QS3D.Core.Cost
                 return false;
             }
 
+            result = CreateDecimal(coefficient, scale);
+            return true;
+        }
+
+        public static bool TryAverageNonNegativeExactly(IReadOnlyList<decimal> values, out decimal result)
+        {
+            if (values == null) throw new ArgumentNullException(nameof(values));
+            if (values.Count == 0) throw new ArgumentException("Exact cost average requires at least one value.", nameof(values));
+
+            var coefficient = BigInteger.Zero;
+            var scale = 0;
+            for (var i = 0; i < values.Count; i++)
+            {
+                var value = values[i];
+                if (value < 0m)
+                    throw new ArgumentOutOfRangeException(nameof(values), "Exact cost average only accepts non-negative values.");
+
+                var bits = decimal.GetBits(value);
+                var valueScale = (bits[3] >> 16) & 0x7F;
+                var valueCoefficient =
+                    ((BigInteger)(uint)bits[2] << 64) |
+                    ((BigInteger)(uint)bits[1] << 32) |
+                    (uint)bits[0];
+
+                if (valueScale > scale)
+                {
+                    coefficient *= BigInteger.Pow(10, valueScale - scale);
+                    scale = valueScale;
+                }
+                else if (valueScale < scale)
+                {
+                    valueCoefficient *= BigInteger.Pow(10, scale - valueScale);
+                }
+
+                coefficient += valueCoefficient;
+            }
+
+            if (coefficient.IsZero)
+            {
+                result = 0m;
+                return true;
+            }
+
+            var denominator = new BigInteger(values.Count);
+            var divisor = BigInteger.GreatestCommonDivisor(coefficient, denominator);
+            coefficient /= divisor;
+            denominator /= divisor;
+
+            var powersOfTwo = 0;
+            while (denominator % 2 == 0)
+            {
+                denominator /= 2;
+                powersOfTwo++;
+            }
+
+            var powersOfFive = 0;
+            while (denominator % 5 == 0)
+            {
+                denominator /= 5;
+                powersOfFive++;
+            }
+
+            if (denominator != BigInteger.One)
+            {
+                result = 0m;
+                return false;
+            }
+
+            var extraScale = Math.Max(powersOfTwo, powersOfFive);
+            if (powersOfTwo < extraScale)
+                coefficient *= BigInteger.Pow(2, extraScale - powersOfTwo);
+            if (powersOfFive < extraScale)
+                coefficient *= BigInteger.Pow(5, extraScale - powersOfFive);
+            scale += extraScale;
+
+            while (scale > 0 && coefficient % 10 == 0)
+            {
+                coefficient /= 10;
+                scale--;
+            }
+
+            if (scale > 28 || coefficient > MaximumDecimalCoefficient)
+            {
+                result = 0m;
+                return false;
+            }
+
+            result = CreateDecimal(coefficient, scale);
+            return true;
+        }
+
+        private static decimal CreateDecimal(BigInteger coefficient, int scale)
+        {
             var low = (uint)(coefficient & uint.MaxValue);
             var middle = (uint)((coefficient >> 32) & uint.MaxValue);
             var high = (uint)((coefficient >> 64) & uint.MaxValue);
-            result = new decimal((int)low, (int)middle, (int)high, false, (byte)scale);
-            return true;
+            return new decimal((int)low, (int)middle, (int)high, false, (byte)scale);
         }
     }
 
@@ -614,6 +706,9 @@ namespace QS3D.Core.Cost
 
         private static decimal CalculateAverage(IReadOnlyList<decimal> values)
         {
+            if (CostDecimalMath.TryAverageNonNegativeExactly(values, out var exactAverage))
+                return exactAverage;
+
             if (CostDecimalMath.TrySumNonNegativeExactly(values, out var exactSum))
             {
                 return CostDecimalMath.DividePreservingNonZero(
@@ -622,19 +717,39 @@ namespace QS3D.Core.Cost
                     "benchmark average");
             }
 
-            var average = values[0];
-            for (var i = 1; i < values.Count; i++)
+            var baseline = values[0];
+            var translated = new decimal[values.Count];
+            for (var i = 0; i < values.Count; i++)
+                translated[i] = checked(values[i] - baseline);
+
+            decimal translatedAverage;
+            if (CostDecimalMath.TrySumNonNegativeExactly(translated, out var translatedSum))
             {
-                var contribution = CostDecimalMath.DividePreservingNonZero(
-                    checked(values[i] - average),
-                    (decimal)(i + 1),
-                    "benchmark average contribution");
-                average = CostDecimalMath.AddPreservingNonZeroContribution(
-                    average,
-                    contribution,
-                    "benchmark average");
+                translatedAverage = CostDecimalMath.DividePreservingNonZero(
+                    translatedSum,
+                    (decimal)values.Count,
+                    "benchmark translated average contribution");
             }
-            return average;
+            else
+            {
+                translatedAverage = translated[0];
+                for (var i = 1; i < translated.Length; i++)
+                {
+                    var contribution = CostDecimalMath.DividePreservingNonZero(
+                        checked(translated[i] - translatedAverage),
+                        (decimal)(i + 1),
+                        "benchmark translated average contribution");
+                    translatedAverage = CostDecimalMath.AddPreservingNonZeroContribution(
+                        translatedAverage,
+                        contribution,
+                        "benchmark translated average contribution");
+                }
+            }
+
+            return CostDecimalMath.AddPreservingNonZeroContribution(
+                baseline,
+                translatedAverage,
+                "benchmark translated average");
         }
 
         private static decimal CalculateDeviationPercent(decimal currentUnitCost, decimal averageUnitCost)
