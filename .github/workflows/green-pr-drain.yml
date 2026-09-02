@@ -59,6 +59,7 @@ jobs:
 
           state="$(jq -r '.state' <<<"${pr_json}")"
           draft="$(jq -r '.draft' <<<"${pr_json}")"
+          author_login="$(jq -r '.user.login // ""' <<<"${pr_json}")"
           base_ref="$(jq -r '.base.ref' <<<"${pr_json}")"
           head_repo="$(jq -r '.head.repo.full_name // ""' <<<"${pr_json}")"
           head_sha="$(jq -r '.head.sha' <<<"${pr_json}")"
@@ -69,6 +70,10 @@ jobs:
           fi
           if [[ "${draft}" != "false" ]]; then
             echo "Safety skip: PR #${pr_number} is draft."
+            exit 0
+          fi
+          if [[ "${author_login}" == "dependabot[bot]" ]]; then
+            echo "Safety skip: PR #${pr_number} is a Dependabot PR and retains the repository's manual merge boundary."
             exit 0
           fi
           if jq -e '.labels | any(.name == "no-automerge")' <<<"${pr_json}" >/dev/null; then
