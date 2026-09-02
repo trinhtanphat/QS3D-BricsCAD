@@ -120,12 +120,15 @@ namespace QS3D.Core.Revisions
         {
             if (before == null) throw new ArgumentNullException(nameof(before));
             if (after == null) throw new ArgumentNullException(nameof(after));
-            var beforeRevisionId = CanonicalRevisionId(before.Id, "before revision id");
-            var afterRevisionId = CanonicalRevisionId(after.Id, "after revision id");
 
-            var beforeIndex = Index(before, "before");
-            var afterIndex = Index(after, "after");
-            var deltas = new RevisionService().Compare(before, after);
+            var beforeSnapshot = RevisionSnapshotDetacher.Capture(before, "semantic review before");
+            var afterSnapshot = RevisionSnapshotDetacher.Capture(after, "semantic review after");
+            var beforeRevisionId = CanonicalRevisionId(beforeSnapshot.Id, "before revision id");
+            var afterRevisionId = CanonicalRevisionId(afterSnapshot.Id, "after revision id");
+
+            var beforeIndex = Index(beforeSnapshot, "before");
+            var afterIndex = Index(afterSnapshot, "after");
+            var deltas = new RevisionService().Compare(beforeSnapshot, afterSnapshot);
             var elements = new List<SemanticChangeReviewElement>(deltas.Count);
 
             foreach (var delta in deltas)
