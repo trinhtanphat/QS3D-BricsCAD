@@ -14,6 +14,7 @@ namespace QS3D.BricsCAD.V25
     internal static class McpCadMutationCoordinator
     {
         private const int MutationAcquireTimeoutMilliseconds = 750;
+        private const int CadDispatchTimeoutMilliseconds = 5000;
         private const int DefaultLeaseSeconds = 120;
         private const int MinLeaseSeconds = 15;
         private const int MaxLeaseSeconds = 300;
@@ -122,47 +123,49 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        /// <summary>
+        /// Arms the post-return barrier before a runtime call that is known to queue a native
+        /// command. This intentionally lives above both McpCadAgentRuntime and its direct/domain
+        /// sub-runtimes, so EXTRUDE and QS3D command bridges share the same single-writer contract.
+        /// </summary>
+        internal static NativeCommandReservation? PrepareNativeCommand(string tool, string arguments, Action<string>? audit)
+        {
+            string command;
+            if (string.Equals(tool, "cad_command_sequence", StringComparison.Ordinal))
+            {
+                command = NormalizeCommand(McpTopLevelJson.ExtractString(arguments ?? "{}", "command"));
+                if (string.Equals(command, "QSAVE", StringComparison.Ordinal)) return null;
+            }
+            else if (string.Equals(tool, "qs3d_run_command", StringComparison.Ordinal))
+            {
+                command = NormalizeCommand(McpTopLevelJson.ExtractString(arguments ?? "{}", "command"));
+            }
+            else return null;
+
+            if (command.Length == 0) return null;
+            return InvokeInCadContext(() => ArmNativeCommandInCadContext(command, audit));
+        }
+
+        /// <summary>
+        /// Runtime-level helper retained for callers that already execute in CAD context.
+        /// </summary>
         internal static void QueueNativeCommand(Document document, string command, Action enqueue, Action<string>? audit)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (enqueue == null) throw new ArgumentNullException(nameof(enqueue));
-            var operationId = CurrentOperationId.Value;
-            if (!operationId.HasValue)
+            if (!CurrentOperationId.Value.HasValue)
                 throw new InvalidOperationException("Native command queueing requires the active MCP DWG writer mutation scope.");
 
-            PendingNativeCommand pending;
-            lock (Sync)
-            {
-                CleanupExpiredStateLocked(DateTime.UtcNow);
-                if (_pending != null)
-                    throw new InvalidOperationException("Another queued native command already owns the DWG write lane.");
-                pending = new PendingNativeCommand(document, NormalizeCommand(command), DateTime.UtcNow, audit);
-                pending.WillStartHandler = OnCommandWillStart;
-                pending.EndedHandler = OnCommandEnded;
-                pending.CancelledHandler = OnCommandCancelled;
-                pending.FailedHandler = OnCommandFailed;
-                document.CommandWillStart += pending.WillStartHandler;
-                document.CommandEnded += pending.EndedHandler;
-                document.CommandCancelled += pending.CancelledHandler;
-                document.CommandFailed += pending.FailedHandler;
-                _pending = pending;
-            }
-
+            var reservation = ArmNativeCommandInCadContext(command, audit);
             try
             {
                 enqueue();
+                reservation.Commit();
                 audit?.Invoke("native command queued; command=" + SafeTool(command));
             }
             catch
             {
-                lock (Sync)
-                {
-                    if (ReferenceEquals(_pending, pending))
-                    {
-                        DetachPendingLocked(pending);
-                        _pending = null;
-                    }
-                }
+                reservation.Dispose();
                 throw;
             }
         }
@@ -193,6 +196,54 @@ namespace QS3D.BricsCAD.V25
                 _lease = null;
                 CurrentOperationId.Value = null;
             }
+        }
+
+        private static NativeCommandReservation ArmNativeCommandInCadContext(string command, Action<string>? audit)
+        {
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null) throw new InvalidOperationException("No active BricsCAD document is available for native command coordination.");
+            PendingNativeCommand pending;
+            lock (Sync)
+            {
+                CleanupExpiredStateLocked(DateTime.UtcNow);
+                if (_pending != null)
+                    throw new InvalidOperationException("Another queued native command already owns the DWG write lane.");
+                pending = new PendingNativeCommand(document, NormalizeCommand(command), DateTime.UtcNow, audit);
+                pending.WillStartHandler = OnCommandWillStart;
+                pending.EndedHandler = OnCommandEnded;
+                pending.CancelledHandler = OnCommandCancelled;
+                pending.FailedHandler = OnCommandFailed;
+                document.CommandWillStart += pending.WillStartHandler;
+                document.CommandEnded += pending.EndedHandler;
+                document.CommandCancelled += pending.CancelledHandler;
+                document.CommandFailed += pending.FailedHandler;
+                _pending = pending;
+            }
+            audit?.Invoke("native command barrier armed; command=" + SafeTool(command));
+            return new NativeCommandReservation(pending);
+        }
+
+        private static T InvokeInCadContext<T>(Func<T> action)
+        {
+            if (action == null) throw new ArgumentNullException(nameof(action));
+            var work = new CadContextWork<T>(action);
+            Application.DocumentManager.ExecuteInApplicationContext(ExecuteCadContextWork<T>, work);
+            if (!work.Done.Wait(CadDispatchTimeoutMilliseconds))
+                throw new TimeoutException("Timed out while arming the MCP native-command writer barrier in BricsCAD application context.");
+            try
+            {
+                if (work.Error != null) throw new InvalidOperationException(work.Error.Message, work.Error);
+                return work.Result!;
+            }
+            finally { work.Done.Dispose(); }
+        }
+
+        private static void ExecuteCadContextWork<T>(object state)
+        {
+            var work = (CadContextWork<T>)state;
+            try { work.Result = work.Action(); }
+            catch (Exception ex) { work.Error = ex; }
+            finally { work.Done.Set(); }
         }
 
         private static void OnCommandWillStart(object sender, CommandEventArgs e)
@@ -348,6 +399,28 @@ namespace QS3D.BricsCAD.V25
             public CommandEventHandler FailedHandler = null!;
         }
 
+        internal sealed class NativeCommandReservation : IDisposable
+        {
+            private readonly PendingNativeCommand _pending;
+            private int _committed;
+            private int _disposed;
+
+            internal NativeCommandReservation(PendingNativeCommand pending) { _pending = pending; }
+
+            internal void Commit() { Volatile.Write(ref _committed, 1); }
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) != 0 || Volatile.Read(ref _committed) != 0) return;
+                lock (Sync)
+                {
+                    if (!ReferenceEquals(_pending, McpCadMutationCoordinator._pending)) return;
+                    DetachPendingLocked(_pending);
+                    McpCadMutationCoordinator._pending = null;
+                }
+            }
+        }
+
         private sealed class MutationScope : IDisposable
         {
             private readonly long _operationId;
@@ -369,6 +442,15 @@ namespace QS3D.BricsCAD.V25
                 _audit?.Invoke("writer mutation exited");
                 MutationGate.Release();
             }
+        }
+
+        private sealed class CadContextWork<T>
+        {
+            internal CadContextWork(Func<T> action) { Action = action; }
+            internal Func<T> Action { get; private set; }
+            internal T? Result;
+            internal Exception? Error;
+            internal readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
         }
     }
 }
