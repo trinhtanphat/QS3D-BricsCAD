@@ -337,29 +337,31 @@ namespace QS3D.Core.Scheduling
         private static List<T> Snapshot<T>(IEnumerable<T> source, string parameterName, string collectionName) where T : class
         {
             var knownCount = ReadKnownCount(source, parameterName, collectionName);
-
             var items = new List<T>();
-            foreach (var item in source)
+
+            using (var enumerator = source.GetEnumerator())
             {
-                if (knownCount.HasValue && items.Count >= knownCount.Value)
-                    throw CountChangedError(parameterName, collectionName);
-                if (items.Count >= MaximumEntries)
-                    throw CollectionCountError(parameterName, collectionName);
-                if (item == null)
-                    throw new ArgumentException("Schedule " + collectionName + " cannot contain null entries.", parameterName);
-                items.Add(item);
+                var acquiredCount = ReadKnownCount(source, parameterName, collectionName);
+                ValidateReboundCount(knownCount, acquiredCount, null, parameterName, collectionName);
+
+                while (enumerator.MoveNext())
+                {
+                    if (knownCount.HasValue && items.Count >= knownCount.Value)
+                        throw CountChangedError(parameterName, collectionName);
+                    if (items.Count >= MaximumEntries)
+                        throw CollectionCountError(parameterName, collectionName);
+                    var item = enumerator.Current;
+                    if (item == null)
+                        throw new ArgumentException("Schedule " + collectionName + " cannot contain null entries.", parameterName);
+                    items.Add(item);
+                }
             }
 
             if (knownCount.HasValue && knownCount.Value != items.Count)
                 throw CountChangedError(parameterName, collectionName);
 
             var reboundCount = ReadKnownCount(source, parameterName, collectionName);
-            if (reboundCount.HasValue != knownCount.HasValue ||
-                (reboundCount.HasValue && reboundCount.Value != knownCount!.Value) ||
-                (reboundCount.HasValue && reboundCount.Value != items.Count))
-            {
-                throw CountChangedError(parameterName, collectionName);
-            }
+            ValidateReboundCount(knownCount, reboundCount, items.Count, parameterName, collectionName);
             return items;
         }
 
@@ -373,6 +375,21 @@ namespace QS3D.Core.Scheduling
             if (source is System.Collections.ICollection nonGenericCollection)
                 ValidateKnownCount(nonGenericCollection.Count, ref knownCount, parameterName, collectionName);
             return knownCount;
+        }
+
+        private static void ValidateReboundCount(
+            int? knownCount,
+            int? reboundCount,
+            int? materializedCount,
+            string parameterName,
+            string collectionName)
+        {
+            if (reboundCount.HasValue != knownCount.HasValue ||
+                (reboundCount.HasValue && reboundCount.Value != knownCount!.Value) ||
+                (materializedCount.HasValue && reboundCount.HasValue && reboundCount.Value != materializedCount.Value))
+            {
+                throw CountChangedError(parameterName, collectionName);
+            }
         }
 
         private static void ValidateKnownCount(int count, ref int? knownCount, string parameterName, string collectionName)
