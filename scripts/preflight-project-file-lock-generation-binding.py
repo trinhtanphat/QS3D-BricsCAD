@@ -18,10 +18,10 @@ def read(path):
 lock_source = read(LOCK)
 safety_source = read(SAFETY)
 
-# The pre-open pathname check is still useful for rejecting obvious redirects, but
-# the post-open acceptance decision must be tied to the exact exclusive FileStream
-# generation. Re-statting only the pathname after open can observe a replacement
-# file and falsely bless a stale held lock generation.
+# Regression-first contract: the pre-open pathname check is still useful for
+# rejecting obvious redirects, but the post-open acceptance decision must be tied
+# to the exact exclusive FileStream generation. Re-statting only the pathname
+# after open can observe a replacement file and falsely bless a stale held lock.
 if "RequireExclusiveOpenStillBound(" not in safety_source:
     errors.append("PersistencePathSafety must expose an exact-open generation binding check")
 if "PersistencePathSafety.RequireExclusiveOpenStillBound(stream, lockPath, \"project-lock\")" not in lock_source:
