@@ -897,11 +897,20 @@ namespace QS3D.BricsCAD.V25
                     return ScreenshotToolSuccess(runtimeResult);
                 return ToolSuccess(runtimeResult);
             }
-            catch (McpToolContractException ex) { return ToolError(ex.Code, McpToolCapabilityContract.LaneName(ex.Lane), ex.Message); }
+            catch (McpToolContractException ex)
+            {
+                var lane = McpToolCapabilityContract.LaneName(ex.Lane);
+                var repairJson = McpSelfHealingRepairRuntime.RecordFailure(
+                    tool, ex.Code, lane, ex.Message, ex, true);
+                return ToolError(ex.Code, lane, ex.Message, repairJson);
+            }
             catch (Exception ex)
             {
                 var failure = McpToolCapabilityContract.ClassifyFailure(tool, ex);
-                return ToolError(failure.Code, McpToolCapabilityContract.LaneName(failure.Lane), failure.Message);
+                var lane = McpToolCapabilityContract.LaneName(failure.Lane);
+                var repairJson = McpSelfHealingRepairRuntime.RecordFailure(
+                    tool, failure.Code, lane, failure.Message, ex, false);
+                return ToolError(failure.Code, lane, failure.Message, repairJson);
             }
         }
 
@@ -973,15 +982,16 @@ namespace QS3D.BricsCAD.V25
             return trimmed.Length >= 2 && trimmed[0] == '{' && trimmed[trimmed.Length - 1] == '}';
         }
 
-        private static string ToolError(string code, string lane, string message)
+        private static string ToolError(string code, string lane, string message, string repairJson = null)
         {
             var safeCode = string.IsNullOrWhiteSpace(code) ? McpToolCapabilityContract.ToolFailedCode : code;
             var safeLane = string.IsNullOrWhiteSpace(lane) ? "unknown" : lane;
             var safeMessage = string.IsNullOrWhiteSpace(message) ? "MCP tool failed." : message;
+            var repair = string.IsNullOrWhiteSpace(repairJson) ? string.Empty : ",\"repair\":" + repairJson;
             return "{\"content\":[{\"type\":\"text\",\"text\":\"" + JsonEscape(safeCode + ": " + safeMessage)
                    + "\"}],\"structuredContent\":{\"error\":{\"code\":\"" + JsonEscape(safeCode)
                    + "\",\"lane\":\"" + JsonEscape(safeLane) + "\",\"message\":\"" + JsonEscape(safeMessage)
-                   + "\"}},\"isError\":true}";
+                   + "\"" + repair + "}},\"isError\":true}";
         }
 
         private static string ExecutionModeProperties()
