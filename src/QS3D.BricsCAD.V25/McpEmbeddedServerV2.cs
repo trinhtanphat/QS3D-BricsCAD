@@ -381,6 +381,7 @@ namespace QS3D.BricsCAD.V25
 
         private static bool IsAllowedOrigin(IDictionary<string, string> headers, string publicMcpUrl)
         {
+            if (headers == null) return false;
             string origin;
             if (!headers.TryGetValue("Origin", out origin)) return true;
             if (string.IsNullOrWhiteSpace(origin)) return false;
@@ -970,9 +971,19 @@ namespace QS3D.BricsCAD.V25
         private static bool LooksLikeJsonValue(string value)
         {
             if (string.IsNullOrWhiteSpace(value)) return false;
-            var first = value[0];
-            var last = value[value.Length - 1];
-            return (first == '{' && last == '}') || (first == '[' && last == ']');
+            var trimmed = value.Trim();
+            if (trimmed.Length < 2) return false;
+            var first = trimmed[0];
+            var last = trimmed[trimmed.Length - 1];
+            if (!((first == '{' && last == '}') || (first == '[' && last == ']'))) return false;
+
+            string raw;
+            bool found;
+            string error;
+            if (!McpTopLevelJson.TryFindPropertyValue("{\"value\":" + trimmed + "}", "value", out raw, out found, out error))
+                return false;
+            return found && string.IsNullOrEmpty(error)
+                && string.Equals(raw, trimmed, StringComparison.Ordinal);
         }
 
         private static bool LooksLikeJsonObject(string value)
