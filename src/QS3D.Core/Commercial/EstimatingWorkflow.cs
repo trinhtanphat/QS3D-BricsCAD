@@ -467,7 +467,7 @@ namespace QS3D.Core.Commercial
                 if (oldAmount.HasValue)
                     before.Add(oldAmount.Value, "Bulk rate assignment total before");
 
-                if (line.IsBlocked)
+                if (line.IsBlocked || line.IsStale)
                 {
                     blocked.Add(line.LineId);
                     if (oldAmount.HasValue)
