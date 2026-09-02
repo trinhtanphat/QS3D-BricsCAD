@@ -276,10 +276,20 @@ namespace QS3D.BricsCAD.V25
             if (action == null) throw new ArgumentNullException(nameof(action));
             var work = new CadContextWork<T>(action);
             Application.DocumentManager.ExecuteInApplicationContext(ExecuteCadContextWork<T>, work);
-            if (!work.Done.Wait(CadDispatchTimeoutMilliseconds))
-                throw new TimeoutException("Timed out while arming the MCP native-command writer barrier in BricsCAD application context.");
             try
             {
+                if (!work.Done.Wait(CadDispatchTimeoutMilliseconds))
+                {
+                    // The timeout may race with the BricsCAD application-context callback. If
+                    // it is still queued, cancel it atomically before caller-owned writer state
+                    // can be released. If the callback already claimed execution, keep this
+                    // request fail-closed until that bounded in-process action has settled so its
+                    // coordinator side effects cannot outlive the request invisibly.
+                    if (work.CancelBeforeStart())
+                        throw new TimeoutException("Timed out while arming the MCP native-command writer barrier in BricsCAD application context.");
+                    work.Done.Wait();
+                }
+
                 if (work.Error != null) throw new InvalidOperationException(work.Error.Message, work.Error);
                 return work.Result!;
             }
@@ -289,6 +299,7 @@ namespace QS3D.BricsCAD.V25
         private static void ExecuteCadContextWork<T>(object state)
         {
             var work = (CadContextWork<T>)state;
+            if (!work.TryBegin()) return;
             try { work.Result = work.Action(); }
             catch (Exception ex) { work.Error = ex; }
             finally { work.Done.Set(); }
@@ -539,11 +550,27 @@ namespace QS3D.BricsCAD.V25
 
         private sealed class CadContextWork<T>
         {
+            private const int CadWorkQueued = 0;
+            private const int CadWorkRunning = 1;
+            private const int CadWorkCancelledBeforeStart = 2;
+
+            private int _state = CadWorkQueued;
+
             internal CadContextWork(Func<T> action) { Action = action; }
             internal Func<T> Action { get; private set; }
             internal T? Result;
             internal Exception? Error;
             internal readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
+
+            internal bool TryBegin()
+            {
+                return Interlocked.CompareExchange(ref _state, CadWorkRunning, CadWorkQueued) == CadWorkQueued;
+            }
+
+            internal bool CancelBeforeStart()
+            {
+                return Interlocked.CompareExchange(ref _state, CadWorkCancelledBeforeStart, CadWorkQueued) == CadWorkQueued;
+            }
         }
     }
 }
