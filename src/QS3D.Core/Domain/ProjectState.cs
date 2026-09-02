@@ -201,16 +201,15 @@ namespace QS3D.Core.Domain
             get => _items[index];
             set
             {
-                if (value == null) throw new ArgumentNullException(nameof(value));
                 var previous = _items[index];
                 if (ReferenceEquals(previous, value)) return;
 
-                var previousWasLastReference = CountReferences(previous) == 1;
-                var valueAlreadyOwned = ContainsReference(value);
+                var previousWasLastReference = previous != null && CountReferences(previous) == 1;
+                var valueAlreadyOwned = value != null && ContainsReference(value);
                 _items[index] = value;
 
                 if (previousWasLastReference) _detach(previous);
-                if (!valueAlreadyOwned) _attach(value);
+                if (value != null && !valueAlreadyOwned) _attach(value);
             }
         }
 
@@ -219,10 +218,9 @@ namespace QS3D.Core.Domain
 
         public void Add(T item)
         {
-            if (item == null) throw new ArgumentNullException(nameof(item));
-            var alreadyOwned = ContainsReference(item);
+            var alreadyOwned = item != null && ContainsReference(item);
             _items.Add(item);
-            if (!alreadyOwned) _attach(item);
+            if (item != null && !alreadyOwned) _attach(item);
         }
 
         public void Clear()
@@ -239,10 +237,9 @@ namespace QS3D.Core.Domain
 
         public void Insert(int index, T item)
         {
-            if (item == null) throw new ArgumentNullException(nameof(item));
-            var alreadyOwned = ContainsReference(item);
+            var alreadyOwned = item != null && ContainsReference(item);
             _items.Insert(index, item);
-            if (!alreadyOwned) _attach(item);
+            if (item != null && !alreadyOwned) _attach(item);
         }
 
         public bool Remove(T item)
@@ -256,7 +253,7 @@ namespace QS3D.Core.Domain
         public void RemoveAt(int index)
         {
             var item = _items[index];
-            var detach = CountReferences(item) == 1;
+            var detach = item != null && CountReferences(item) == 1;
             _items.RemoveAt(index);
             if (detach) _detach(item);
         }
