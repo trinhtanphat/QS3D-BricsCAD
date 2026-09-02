@@ -7,6 +7,7 @@ REGISTRY = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpTransportProfileRegistry.cs"
 COORDINATOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpOpenAiSecureTunnel.cs"
 WRITER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCadMutationCoordinator.cs"
 SPEC = ROOT / "docs" / "superpowers" / "specs" / "2026-09-02-mcp-multi-transport-registry-design.md"
+RUNBOOK = ROOT / "docs" / "FEATURE-RUNBOOKS" / "mcp-multi-transport-registry.md"
 
 errors = []
 
@@ -18,6 +19,7 @@ registry = REGISTRY.read_text(encoding="utf-8") if REGISTRY.is_file() else ""
 coordinator = COORDINATOR.read_text(encoding="utf-8") if COORDINATOR.is_file() else ""
 writer = WRITER.read_text(encoding="utf-8") if WRITER.is_file() else ""
 spec = SPEC.read_text(encoding="utf-8") if SPEC.is_file() else ""
+runbook = RUNBOOK.read_text(encoding="utf-8") if RUNBOOK.is_file() else ""
 
 if not registry:
     errors.append("missing McpTransportProfileRegistry.cs")
@@ -49,12 +51,21 @@ else:
         if forbidden in registry:
             errors.append("registry must not persist or depend on secret material: " + forbidden)
 
+# Compatibility APIs must remain in production source. Their new meaning is a documented
+# contract, not a fragile requirement that one exact English sentence live in a monolithic
+# implementation comment.
 for token in (
-    "preferred UI/onboarding provider",
     "SelectedProvider",
     "SetSelectedProvider",
 ):
     require(coordinator, token, "transport coordinator compatibility")
+
+for token in (
+    "preferred UI/onboarding provider",
+    "not registry ownership",
+    "multiple enabled OpenAI Secure MCP Tunnel and Cloudflare profiles",
+):
+    require(runbook, token, "transport preference compatibility runbook")
 
 if not writer:
     errors.append("missing process-global mutation coordinator baseline")
