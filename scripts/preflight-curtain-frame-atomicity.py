@@ -90,6 +90,14 @@ if not live_state.is_file():
     errors.append("missing CurtainWallFrameLiveStateService.cs")
 else:
     text = live_state.read_text(encoding="utf-8")
+    try_stamp_start = text.find("public static int TryStampSelected(Document document, ProjectState project, out string warning)")
+    inspect_start = text.find("public static IReadOnlyList<ModelHealthIssue> Inspect", try_stamp_start + 1) if try_stamp_start >= 0 else -1
+    if try_stamp_start < 0 or inspect_start < 0 or inspect_start <= try_stamp_start:
+        errors.append("curtain live fingerprint best-effort contract missing: cannot isolate TryStampSelected")
+        try_stamp = ""
+    else:
+        try_stamp = text[try_stamp_start:inspect_start]
+
     for token in (
         "public static int TryStampSelected(Document document, ProjectState project, out string warning)",
         "return StampSelected(document, project);",
@@ -107,7 +115,7 @@ else:
         "GetBaseException()",
         "StackTrace",
     ):
-        if forbidden in text:
+        if forbidden in try_stamp:
             errors.append("curtain live fingerprint warning must not expose caught host detail: " + forbidden)
 
 for relative in (
