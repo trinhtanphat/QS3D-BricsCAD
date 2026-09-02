@@ -713,7 +713,7 @@ namespace QS3D.BricsCAD.V25
         private static readonly Brush CanvasBrush = Brush(Color.FromRgb(13, 17, 23));
         private static readonly Brush CardBrush = Brush(Color.FromRgb(22, 27, 34));
         private static readonly Brush RaisedBrush = Brush(Color.FromRgb(33, 38, 45));
-        private static readonly Brush BorderBrush = Brush(Color.FromRgb(48, 54, 61));
+        private new static readonly Brush BorderBrush = Brush(Color.FromRgb(48, 54, 61));
         private static readonly Brush TextPrimaryBrush = Brush(Color.FromRgb(240, 246, 252));
         private static readonly Brush TextSecondaryBrush = Brush(Color.FromRgb(139, 148, 158));
         private static readonly Brush AccentBrush = Brush(Color.FromRgb(47, 129, 247));
@@ -1010,7 +1010,7 @@ namespace QS3D.BricsCAD.V25
             hover.Setters.Add(new Setter(BorderBrushProperty, AccentHoverBrush));
             template.Triggers.Add(hover);
 
-            var pressed = new Trigger { Property = Button.IsPressedProperty, Value = true };
+            var pressed = new Trigger { Property = System.Windows.Controls.Button.IsPressedProperty, Value = true };
             pressed.Setters.Add(new Setter(BackgroundProperty, AccentPressedBrush));
             pressed.Setters.Add(new Setter(ForegroundProperty, Brushes.White));
             pressed.Setters.Add(new Setter(BorderBrushProperty, AccentPressedBrush));
