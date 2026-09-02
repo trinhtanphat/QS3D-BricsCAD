@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Revisions
@@ -212,6 +213,16 @@ namespace QS3D.Core.Revisions
             {
                 throw new InvalidOperationException(
                     "Revision " + label + " must be non-empty and must not contain leading/trailing whitespace or control characters.");
+            }
+
+            try
+            {
+                XmlConvert.VerifyXmlChars(value);
+            }
+            catch (XmlException ex)
+            {
+                throw new InvalidOperationException(
+                    "Revision " + label + " contains characters that are invalid in XML.", ex);
             }
         }
 
