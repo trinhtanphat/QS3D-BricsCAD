@@ -57,6 +57,7 @@ checks = {
     ],
     "live": [
         "source is Line", "source is Polyline", "CurtainWallFrameLiveFingerprint.Compute", "LINE hoặc POLYLINE",
+        "Live curtain fingerprint chưa được cập nhật; hãy chạy lại Curtain Frames 3D hoặc Health trước khi phát hành.",
     ],
     "health": [
         'PathFrameOverlay', 'PathFrameOverlay.OpeningAware', "CURTAIN_FRAME_PATH_SEGMENTS_INVALID",
@@ -64,7 +65,9 @@ checks = {
     ],
     "frame_command": [
         "CurtainWallFrameSolidBuilder.BuildSelectedLineWalls", "CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines",
-        "open/bulged POLYLINE WCS-XY", "FinalizeUi(document, message, stampWarning)", '" UI sync warning: " + ex.Message',
+        "open/bulged POLYLINE WCS-XY", "FinalizeUi(document, message, stampWarning)",
+        "QS3DCURTAINFRAMES3D không thể hoàn tất.", "var uiSyncFailed = false;",
+        "native update đã hoàn tất; một phần UI không thể đồng bộ.", "TryWriteMessage(document",
     ],
     "build_command": [
         "CurtainWallFrameSolidBuilder.BuildSelectedLineWalls", "CurtainWallPathFrameSolidBuilder.BuildSelectedOpenPolylines",
@@ -120,16 +123,46 @@ if files["build_command"].is_file():
     if regen_index < 0 or first_native_index < 0 or regen_index > first_native_index:
         errors.append("QS3DCURTAIN3D must resolve semantic regeneration before the first native host/frame transaction")
 
-for key in ("frame_command", "build_command"):
-    if files[key].is_file():
-        text = files[key].read_text(encoding="utf-8")
-        finalize_index = text.find("private static void FinalizeUi")
-        if finalize_index < 0:
-            errors.append(str(files[key].relative_to(ROOT)) + " missing non-fatal post-commit FinalizeUi boundary")
-        else:
-            finalize = text[finalize_index:]
-            if "catch (Exception ex)" not in finalize or "TryWriteMessage" not in finalize:
-                errors.append(str(files[key].relative_to(ROOT)) + " post-commit FinalizeUi must fail best-effort")
+if files["frame_command"].is_file():
+    text = files["frame_command"].read_text(encoding="utf-8")
+    finalize_index = text.find("private static void FinalizeUi")
+    if finalize_index < 0:
+        errors.append("CurtainWallFrameCommands.cs missing non-fatal post-commit FinalizeUi boundary")
+    else:
+        finalize = text[finalize_index:]
+        for token in (
+            "var uiSyncFailed = false;",
+            "try { PaletteCoordinator.RefreshProject(); } catch { uiSyncFailed = true; }",
+            "try { document.Editor.Regen(); } catch { uiSyncFailed = true; }",
+            "try { PaletteCoordinator.SetStatus(message); } catch { uiSyncFailed = true; }",
+            "TryWriteMessage",
+        ):
+            if token not in finalize:
+                errors.append("CurtainWallFrameCommands.cs stable post-commit FinalizeUi missing: " + token)
+        for forbidden in ("ex.Message", "UI sync warning: ", "catch (Exception ex)"):
+            if forbidden in text:
+                errors.append("CurtainWallFrameCommands.cs must not expose caught host/UI detail: " + forbidden)
+
+if files["live"].is_file():
+    text = files["live"].read_text(encoding="utf-8")
+    stamp_start = text.find("public static int TryStampSelected")
+    inspect_start = text.find("public static IReadOnlyList<ModelHealthIssue> Inspect")
+    if min(stamp_start, inspect_start) < 0:
+        errors.append("cannot resolve TryStampSelected live-state boundary")
+    else:
+        stamp = text[stamp_start:inspect_start]
+        if "ex.Message" in stamp or "catch (Exception ex)" in stamp:
+            errors.append("TryStampSelected must keep post-commit fingerprint warning stable and redact host detail")
+
+if files["build_command"].is_file():
+    text = files["build_command"].read_text(encoding="utf-8")
+    finalize_index = text.find("private static void FinalizeUi")
+    if finalize_index < 0:
+        errors.append("CurtainWallBuildCommands.cs missing non-fatal post-commit FinalizeUi boundary")
+    else:
+        finalize = text[finalize_index:]
+        if "catch (Exception ex)" not in finalize or "TryWriteMessage" not in finalize:
+            errors.append("CurtainWallBuildCommands.cs post-commit FinalizeUi must fail best-effort")
 
 print("QS3D curtain path-frame preflight")
 if errors:
@@ -138,4 +171,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: line and open/bulged WCS-XY GlassWall frame builders stay UI-free and AuditTrail-owned after commit, path sources map deterministic curtain stations to tessellated segments, linked openings preserve ownership/stale metadata, Curtain3D validates semantics before native mutation, and post-commit UI synchronization stays non-fatal at command level.")
+print("PASS: line/open-polyline frame builders remain UI-free and AuditTrail-owned, live fingerprint stamping uses a stable post-commit warning, the standalone frame command redacts caught host/UI detail with independent best-effort synchronization, Curtain3D keeps its existing validated orchestration contract, and path/opening/health invariants remain guarded.")
