@@ -57,7 +57,7 @@ namespace QS3D.Core.Commercial
             }
 
             if (scale > 28 || coefficient > MaximumDecimalCoefficient)
-                throw new OverflowException(label + " exact aggregate cannot be represented as decimal.");
+                throw new OverflowException(label + " exact aggregate cannot be represented as decimal without precision loss.");
 
             var low = unchecked((int)(uint)(coefficient & uint.MaxValue));
             var middle = unchecked((int)(uint)((coefficient >> 32) & uint.MaxValue));
