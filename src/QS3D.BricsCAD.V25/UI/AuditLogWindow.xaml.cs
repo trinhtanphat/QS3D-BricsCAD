@@ -51,9 +51,9 @@ namespace QS3D.BricsCAD.V25.UI
                 Title = "QS3D • Nhật ký thay đổi • " + DrawingLabel(document);
                 ApplyFilter();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                ClearProjection("Không đọc được audit: " + ex.Message);
+                ClearProjection("Không đọc được Audit Log. Vui lòng thử lại.");
             }
         }
 
