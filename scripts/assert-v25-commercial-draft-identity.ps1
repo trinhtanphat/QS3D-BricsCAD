@@ -198,14 +198,16 @@ function Test-HeldZipPayloadSignatures {
         finally { $archive.Dispose() }
 
         $verifyScript = Join-Path $PSScriptRoot 'verify-v25-signatures.ps1'
-        $verifyHeld = Open-HeldGeneration -LiteralPath $verifyScript -Label 'V25 Authenticode verifier'
+        $verifyHeld = $null
         try {
+            $verifyHeld = Open-HeldGeneration -LiteralPath $verifyScript -Label 'V25 Authenticode verifier'
             $verifyScriptText = Read-HeldStrictUtf8 -Held $verifyHeld -MaxBytes $MaxVerifierScriptBytes -Label 'V25 Authenticode verifier'
-            $verifyScriptBlock = [ScriptBlock]::Create($verifyScriptText)
+            try { $verifyScriptBlock = [ScriptBlock]::Create($verifyScriptText) }
+            catch { throw "V25 Authenticode verifier cannot be parsed from its held generation: $($_.Exception.Message)" }
             & $verifyScriptBlock -Path $extracted.ToArray() -ExpectedThumbprint $ExpectedThumbprint
         }
         finally {
-            $verifyHeld.Stream.Dispose()
+            if ($null -ne $verifyHeld -and $null -ne $verifyHeld.Stream) { $verifyHeld.Stream.Dispose() }
         }
     }
     finally {
