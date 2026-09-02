@@ -46,10 +46,11 @@ def main() -> int:
 
     snapshot_api = require(audit, "internal static void ValidateSnapshotHistory(ProjectState project)", "narrow snapshot audit API")
     snapshot_mode = require(audit, "allowNullActionBacking: true", "legacy null-action snapshot mode")
-    shared_validator = require(audit, "GetStoredEventValidationError(existing, allowNullActionBacking)", "shared stored-event validator")
+    shared_validator = require(audit, "? GetStoredEventValidationError(existing, allowNullActionBacking: true)", "snapshot-compatible shared stored-event validator")
+    strict_validator = require(audit, ": GetStoredEventValidationError(existing);", "strict stored-event validator")
     null_branch = require(audit, "if (!allowNullActionBacking)", "strict null-action branch")
-    if not (snapshot_api < snapshot_mode < shared_validator < null_branch):
-        raise AssertionError("AuditTrail snapshot validation must explicitly route through the shared validator with narrow null-action compatibility")
+    if not (snapshot_api < snapshot_mode < shared_validator < strict_validator < null_branch):
+        raise AssertionError("AuditTrail snapshot validation must explicitly route through the shared validator while ordinary history validation keeps the strict zero-flag call shape")
 
     require(audit, "var validationError = GetStoredEventValidationError(item);", "strict public Events validation")
     require(audit, "ValidateExistingHistory(requireAppendCapacity: true, additionalTextCharacters: newTextCharacters);", "strict Record validation")
