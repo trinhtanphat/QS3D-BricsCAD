@@ -11,18 +11,31 @@ text = SOURCE.read_text(encoding="utf-8")
 failures = []
 if re.search(r"\b(?:ex|exception)\.Message\b", text, re.IGNORECASE):
     failures.append("Start Center source exposes raw Exception.Message")
+if re.search(r"\b(?:ex|exception)\.ToString\s*\(\s*\)", text, re.IGNORECASE):
+    failures.append("Start Center source exposes raw exception ToString() detail")
 
 required = (
-    'ShowSafeFailure("Không thể làm mới Khởi đầu.',
-    'ShowSafeFailure("Không thể mở dự án gần đây.',
-    'ShowSafeFailure("Không thể hoàn tất thao tác.',
+    "ShowSafeFailure(StartCenterFailureKind.Refresh)",
+    "ShowSafeFailure(StartCenterFailureKind.RecentProjectOpen)",
+    "ShowSafeFailure(StartCenterFailureKind.UiAction)",
+    "private enum StartCenterFailureKind",
+    "private void ShowSafeFailure(StartCenterFailureKind failureKind)",
 )
 for marker in required:
     if marker not in text:
-        failures.append(f"missing stable failure boundary: {marker}")
+        failures.append(f"missing typed stable failure boundary: {marker}")
 
-if "private void ShowSafeFailure(string message)" not in text:
-    failures.append("missing centralized Start Center failure presenter")
+if "private void ShowSafeFailure(string message)" in text:
+    failures.append("Start Center failure presenter still accepts arbitrary text")
+
+stable_messages = (
+    'StartCenterFailureKind.Refresh => "Không thể làm mới Khởi đầu. Vui lòng thử lại.",',
+    'StartCenterFailureKind.RecentProjectOpen => "Không thể mở dự án gần đây. Vui lòng thử lại.",',
+    'StartCenterFailureKind.UiAction => "Không thể hoàn tất thao tác. Vui lòng thử lại.",',
+)
+for marker in stable_messages:
+    if marker not in text:
+        failures.append(f"missing stable failure message mapping: {marker}")
 
 if failures:
     for failure in failures:
