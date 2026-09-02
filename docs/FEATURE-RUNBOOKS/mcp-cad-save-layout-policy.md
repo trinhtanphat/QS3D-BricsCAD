@@ -16,6 +16,7 @@ This runbook defines the QS3D MCP save/layout/foreground-policy contract. Drawin
 - If any persistent-content bit remains dirty through the bounded wait, save confirmation fails closed and reports the bounded numeric `DBMOD` state. It does not retry the native save.
 - `cad_save_as` keeps path-transition semantics and remains the only direct route that calls `SaveAs`; it uses the same persistent-content completion check after the path transition is verified.
 - Synchronous `QSAVE` uses the same `Save()` path as `cad_save`, so it inherits the same one-attempt and persistent-DBMOD confirmation contract.
+- The historical direct-3D/save preflight is part of this source contract and must assert the same persistent-content mask semantics rather than retaining the superseded exact-zero DBMOD predicate.
 - Bounded `LAYOUT` / `-LAYOUT` actions `NEW`, `SET`, and `DELETE` use `LayoutManager` directly inside CAD context and return `completed=true` only after the native mutation has completed.
 - Unsupported layout prompt grammars remain outside the direct-completion claim; they are not reported as synchronously complete by this route.
 - Foreground Control remains fail-closed: process start is `background_only`. Local desktop consent and enabled foreground policy are separate gates and both must be enabled before global input is available.
