@@ -189,14 +189,14 @@ namespace QS3D.BricsCAD.V25
                 catch (SocketException ex)
                 {
                     if (!OwnsListener(listener)) return;
-                    SetLastError("socket: " + ex.Message);
+                    SetLastTransportError(TransportErrorKind.Socket, ex);
                     Thread.Sleep(100);
                 }
                 catch (ObjectDisposedException) { return; }
                 catch (Exception ex)
                 {
                     if (!OwnsListener(listener)) return;
-                    SetLastError("listener: " + ex.Message);
+                    SetLastTransportError(TransportErrorKind.Listener, ex);
                     Thread.Sleep(100);
                 }
                 finally { try { if (client != null) client.Dispose(); } catch { } }
@@ -227,7 +227,7 @@ namespace QS3D.BricsCAD.V25
                     }
                 }
             }
-            catch (Exception ex) { SetLastError("request: " + ex.Message); }
+            catch (Exception ex) { SetLastTransportError(TransportErrorKind.Request, ex); }
             finally { ClientSlots.Release(); }
         }
 
@@ -1540,7 +1540,34 @@ namespace QS3D.BricsCAD.V25
             return builder.ToString();
         }
 
-        private static void SetLastError(string message) { lock (Sync) _lastError = message ?? string.Empty; }
+        private enum TransportErrorKind
+        {
+            Socket,
+            Listener,
+            Request
+        }
+
+        private static void SetLastTransportError(TransportErrorKind kind, Exception exception)
+        {
+            string code;
+            switch (kind)
+            {
+                case TransportErrorKind.Socket:
+                    var socket = exception as SocketException;
+                    code = socket == null
+                        ? "socket:error"
+                        : "socket:" + socket.SocketErrorCode.ToString();
+                    break;
+                case TransportErrorKind.Listener:
+                    code = "listener:error";
+                    break;
+                default:
+                    code = "request:error";
+                    break;
+            }
+
+            lock (Sync) _lastError = code;
+        }
 
         private sealed class SessionState
         {
