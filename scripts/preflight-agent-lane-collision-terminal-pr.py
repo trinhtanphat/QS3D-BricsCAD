@@ -46,6 +46,13 @@ def main() -> int:
     if not target.pull_request_is_terminal(5284, []):
         fail("closed/non-open PR must be identified as terminal")
 
+    try:
+        target.pull_request_is_terminal(0, [])
+    except ValueError:
+        pass
+    else:
+        fail("missing/invalid PR number must remain fail-closed instead of becoming terminal")
+
     open_event = event_for(5286)
     open_pr = open_event["pull_request"]
     if target.pull_request_is_terminal(5286, [open_pr]):
@@ -58,7 +65,7 @@ def main() -> int:
     if lane_key != "issue-5286" or conflicts:
         fail("open agent PR must retain branch-derived Lane-Key validation")
 
-    print("PASS: terminal PR detection is explicit while open PR Lane-Key validation remains API-compatible")
+    print("PASS: terminal PR detection is explicit, malformed PR numbers remain fail-closed, and open PR Lane-Key validation remains API-compatible")
     return 0
 
 
