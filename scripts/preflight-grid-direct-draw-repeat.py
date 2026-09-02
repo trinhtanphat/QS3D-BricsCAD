@@ -32,9 +32,18 @@ def main() -> None:
     require(text, 'project.ChangeVersion != expected.ChangeVersion', "project revision freshness gate")
     require(text, 'EntitySnapshotReader.ReadHandles(document, new[] { source.Handle })', "canonical native snapshot reread")
     require(text, 'SemanticCaptureService.CaptureSnapshot(document, snapshots[0], ElementCategory.Grid)', "existing semantic capture authority")
-    require(text, 'CompensateSourceOrThrow(document, source.ObjectId, captureError)', "native-source compensation")
+    require(text, 'CompensateSourceOrThrow(document, source, captureError)', "exact native-source compensation")
+    require(text, 'var ownerId = line.OwnerId;', "created-source owner capture")
+    require(text, 'entity.Handle.ToString(), source.Handle', "compensation handle revalidation")
+    require(text, 'entity.OwnerId != source.OwnerId', "compensation owner-space revalidation")
+    require(text, 'as Line;', "compensation LINE type revalidation")
     require(text, 'entity.Erase();', "failed-capture source cleanup")
     require(text, 'SetImpliedSelection(new[] { sourceId })', "accepted-source review selection")
+    require(text, 'native/semantic state đã được fail-closed', "stable redacted operation failure")
+    require(text, 'native + semantic source đã commit; một phần UI review không thể đồng bộ', "post-commit UI isolation warning")
+
+    forbid(text, '"QS3DGRIDDRAW lỗi: " + ex.Message', "raw command exception detail")
+    forbid(text, '"\\nQS3D Grid UI sync warning: " + uiError.Message', "raw post-commit UI exception detail")
 
     # This lane must remain a source-authoring adapter only. It must not grow a competing
     # system/intersection/numbering engine or generated Grid 3D authority.
@@ -48,7 +57,7 @@ def main() -> None:
     v26 = V26.read_text(encoding="utf-8")
     require(v26, '<Compile Include="..\\QS3D.BricsCAD.V25\\**\\*.cs"', "V26 shared-source parity")
 
-    print("PASS Grid Direct Draw repeated-authoring source guard")
+    print("PASS Grid Direct Draw repeated-authoring compensation/redaction source guard")
 
 
 if __name__ == "__main__":
