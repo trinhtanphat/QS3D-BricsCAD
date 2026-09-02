@@ -448,7 +448,6 @@ def _request_json(url: str, token: str) -> object:
     with urllib.request.urlopen(request, timeout=20) as response:
         return json.loads(response.read().decode("utf-8"))
 
-
 def _fetch_paged(api_url: str, repository: str, endpoint: str, token: str) -> list[dict]:
     owner_repo = urllib.parse.quote(repository, safe="/")
     collected: list[dict] = []
@@ -508,6 +507,8 @@ def _event_actor(event: dict) -> str:
 
 
 def pull_request_is_terminal(current_number: int, open_prs: list[dict]) -> bool:
+    if current_number <= 0:
+        raise ValueError("pull request number is missing or invalid")
     for candidate in open_prs:
         if not isinstance(candidate, dict):
             continue
