@@ -165,12 +165,16 @@ if text:
         "head.repo.full_name",
         "draft",
         "dependabot[bot]",
+        "gh api graphql",
+        "enablePullRequestAutoMerge",
+        "autoMergeRequest",
         refresh_secret_error,
     ):
         require(refresh, token, "refresh-branches")
 
-    for token in ("gh api graphql", "enablePullRequestAutoMerge", "disablePullRequestAutoMerge", "autoMergeRequest"):
-        reject(refresh, token, "refresh-branches")
+    # Main-push refresh is allowed to re-arm native auto-merge after a successful
+    # optimistic update. Disarming remains exclusively owned by PR-event handling.
+    reject(refresh, "disablePullRequestAutoMerge", "refresh-branches")
 
     require_fail_closed_secret_gate(arm, "arm-native-automerge", arm_secret_error)
     require_fail_closed_secret_gate(refresh, "refresh-branches", refresh_secret_error)
@@ -191,4 +195,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: hybrid coordinator keeps native auto-merge on PR events and branch refresh isolated, PAT-backed, fail-closed, optimistic-locked, and non-destructive.")
+print("PASS: hybrid coordinator keeps PR-event disarm isolated while main-push refresh may re-arm native auto-merge after exact-head branch refresh.")
