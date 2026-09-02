@@ -156,19 +156,6 @@ jobs:
               continue
             fi
 
-            node_id="$(jq -r '.node_id' <<<"$pr_json")"
-            existing="$(gh api graphql \
-              -f query='query($pullRequestId:ID!){node(id:$pullRequestId){... on PullRequest{autoMergeRequest{enabledAt}}}}' \
-              -f pullRequestId="$node_id" \
-              --jq '.data.node.autoMergeRequest.enabledAt // ""')"
-            if [[ -z "$existing" ]]; then
-              gh api graphql \
-                -f query='mutation($pullRequestId:ID!){enablePullRequestAutoMerge(input:{pullRequestId:$pullRequestId,mergeMethod:MERGE}){pullRequest{number autoMergeRequest{enabledAt}}}}' \
-                -f pullRequestId="$node_id" \
-                --silent
-              echo "Armed native auto-merge for existing PR #${number}."
-            fi
-
             current_head_sha="$(jq -r '.head.sha' <<<"$pr_json")"
             if output="$(gh api --method PUT "repos/${GITHUB_REPOSITORY}/pulls/${number}/update-branch" -f expected_head_sha="$current_head_sha" 2>&1)"; then
               echo "Refresh accepted for PR #${number} at expected_head_sha=${current_head_sha}."
