@@ -617,15 +617,7 @@ jobs:
                 $remoteHash = (& .\scripts\verify-v25-held-file.ps1 -Operation Hash -Path (Join-Path $downloadRoot $name)).Trim()
                 if (-not [string]::Equals($localHash, $remoteHash, [StringComparison]::OrdinalIgnoreCase)) { throw "Draft release asset SHA-256 mismatch for $name; release remains a draft." }
               }
-              $downloadedIdentity = & .\scripts\assert-v25-commercial-draft-identity.ps1 `
-                -PackageZip (Join-Path $downloadRoot 'QS3D-BricsCAD-V25.zip') `
-                -ChecksumPath (Join-Path $downloadRoot 'QS3D-BricsCAD-V25.zip.sha256') `
-                -UpdateManifestPath (Join-Path $downloadRoot 'QS3D-BricsCAD-V25.update.json') `
-                -ProvenancePath (Join-Path $downloadRoot 'QS3D-BricsCAD-V25.provenance.json') `
-                -ExpectedSourceCommit $env:GITHUB_SHA `
-                -ExpectedReleaseTag $env:RELEASE_TAG `
-                -ExpectedSignerThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT
-              if ($null -eq $downloadedIdentity) { throw 'Downloaded V25 draft semantic admission returned no identity.' }
+
               $remoteChecksum = (Get-Content -LiteralPath (Join-Path $downloadRoot 'QS3D-BricsCAD-V25.zip.sha256') -Raw).Trim()
               if ($remoteChecksum -notmatch '^([0-9a-f]{64})  QS3D-BricsCAD-V25\.zip$') { throw 'Downloaded draft checksum is malformed.' }
               $remoteZip = Join-Path $downloadRoot 'QS3D-BricsCAD-V25.zip'
@@ -644,6 +636,16 @@ jobs:
                   (Join-Path $extract 'update-v25.ps1'), (Join-Path $extract 'unblock-v25-netload.ps1')
                 )
                 & .\scripts\verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT
+
+                $downloadedIdentity = & .\scripts\assert-v25-commercial-draft-identity.ps1 `
+                  -PackageZip $heldRemoteZip `
+                  -ChecksumPath (Join-Path $downloadRoot 'QS3D-BricsCAD-V25.zip.sha256') `
+                  -UpdateManifestPath (Join-Path $downloadRoot 'QS3D-BricsCAD-V25.update.json') `
+                  -ProvenancePath (Join-Path $downloadRoot 'QS3D-BricsCAD-V25.provenance.json') `
+                  -ExpectedSourceCommit $env:GITHUB_SHA `
+                  -ExpectedReleaseTag $env:RELEASE_TAG `
+                  -ExpectedSignerThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT
+                if ($null -eq $downloadedIdentity) { throw 'Downloaded V25 draft semantic admission returned no identity.' }
               }
               finally { Remove-Item -LiteralPath $heldRoot -Recurse -Force -ErrorAction SilentlyContinue }
             }
