@@ -43,23 +43,22 @@ def main() -> int:
     target = load_target()
     repository = "trinhtanphat/QS3D-BricsCAD"
 
-    terminal_result = target.validate_pull_request_event(event_for(5284), repository, [])
-    if not isinstance(terminal_result, tuple) or len(terminal_result) != 3:
-        fail("validate_pull_request_event must return lane/conflicts/terminal state")
-    lane_key, conflicts, terminal = terminal_result
-    if lane_key is not None or conflicts or terminal is not True:
-        fail("closed/non-open PR must be identified as terminal without lane conflicts")
+    if not target.pull_request_is_terminal(5284, []):
+        fail("closed/non-open PR must be identified as terminal")
 
     open_event = event_for(5286)
     open_pr = open_event["pull_request"]
+    if target.pull_request_is_terminal(5286, [open_pr]):
+        fail("currently open PR must not be identified as terminal")
+
     open_result = target.validate_pull_request_event(open_event, repository, [open_pr])
-    if not isinstance(open_result, tuple) or len(open_result) != 3:
-        fail("open PR validation must also return explicit terminal state")
-    lane_key, conflicts, terminal = open_result
-    if lane_key != "issue-5286" or conflicts or terminal is not False:
+    if not isinstance(open_result, tuple) or len(open_result) != 2:
+        fail("validate_pull_request_event must preserve the lane/conflicts 2-tuple API")
+    lane_key, conflicts = open_result
+    if lane_key != "issue-5286" or conflicts:
         fail("open agent PR must retain branch-derived Lane-Key validation")
 
-    print("PASS: terminal PR state is explicit while open PR Lane-Key validation remains active")
+    print("PASS: terminal PR detection is explicit while open PR Lane-Key validation remains API-compatible")
     return 0
 
 
