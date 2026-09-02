@@ -14,7 +14,7 @@ contracts = {
             'AuditTrail.ForProject(project).Record("floor.assign"',
             "_editingFloorId = floor.Id;",
             "RestoreOrThrow(project, rollback, operationError",
-            "đã commit; UI sync warning:",
+            "đã commit; đồng bộ UI chưa hoàn tất",
         ),
     },
     "src/QS3D.BricsCAD.V25/UI/ZoneManagerWindow.xaml.cs": {

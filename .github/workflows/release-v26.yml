@@ -239,6 +239,15 @@ jobs:
             -PackagePath 'dist\QS3D-BricsCAD-V26.zip' `
             -OutputPath 'dist\QS3D-BricsCAD-V26.zip.sha256' | Out-Null
 
+      - name: Create V26 candidate provenance
+        shell: powershell
+        run: |
+          & .\scripts\new-v26-candidate-provenance.ps1 `
+            -PackageZip 'dist\QS3D-BricsCAD-V26.zip' `
+            -ReleaseTag $env:RELEASE_TAG `
+            -SourceCommit $env:GITHUB_SHA `
+            -OutputPath 'dist\QS3D-BricsCAD-V26.provenance.json' | Out-Null
+
       - name: Upload V26 qualification artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -249,6 +258,7 @@ jobs:
             dist/QS3D-BricsCAD-V26.zip
             dist/QS3D-BricsCAD-V26.zip.sha256
             dist/QS3D-BricsCAD-V26.update.json
+            dist/QS3D-BricsCAD-V26.provenance.json
             artifacts/bricscad-v26-runtime-unsigned/
             artifacts/bricscad-v26-runtime-signed/
 
@@ -275,28 +285,42 @@ jobs:
           name: QS3D-BricsCAD-V26-${{ inputs.release_tag }}-${{ github.sha }}
           path: .
 
-      - name: Verify V26 candidate after job boundary
+      - name: Verify and publish held V26 candidate after job boundary
         shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $ErrorActionPreference = 'Stop'
           $zip = 'dist\QS3D-BricsCAD-V26.zip'
           $checksum = 'dist\QS3D-BricsCAD-V26.zip.sha256'
-          foreach ($path in @($zip, $checksum)) {
+          $provenance = 'dist\QS3D-BricsCAD-V26.provenance.json'
+          foreach ($path in @($zip, $checksum, $provenance)) {
             if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing V26 qualified candidate asset: $path" }
           }
-          $checksumText = (Get-Content -LiteralPath $checksum -Raw).Trim()
-          if ($checksumText -notmatch '^([0-9a-fA-F]{64})  QS3D-BricsCAD-V26\.zip$') { throw 'V26 qualification checksum file is malformed.' }
-          $zipHash = (& .\scripts\verify-v26-held-file.ps1 -Operation Hash -Path $zip).Trim()
-          if (-not [string]::Equals($zipHash, $Matches[1], [StringComparison]::OrdinalIgnoreCase)) { throw 'V26 candidate ZIP checksum mismatch after job boundary.' }
-          if ($env:V26_RELEASE_REQUEST_SIGN_PACKAGE -eq 'true' -and -not (Test-Path -LiteralPath 'dist\QS3D-BricsCAD-V26.update.json' -PathType Leaf)) {
-            throw 'Signed V26 qualification candidate is missing its update manifest.'
+          if ($env:V26_RELEASE_REQUEST_SIGN_PACKAGE -eq 'true') {
+            $updateManifest = 'dist\QS3D-BricsCAD-V26.update.json'
+            if (-not (Test-Path -LiteralPath $updateManifest -PathType Leaf)) {
+              throw 'Signed V26 qualification candidate is missing its update manifest.'
+            }
+            $candidateIdentity = & .\scripts\assert-v26-candidate-identity.ps1 `
+              -PackageZip $zip `
+              -ChecksumPath $checksum `
+              -ProvenancePath $provenance `
+              -UpdateManifestPath $updateManifest `
+              -ExpectedSourceCommit $env:GITHUB_SHA `
+              -ExpectedReleaseTag $env:RELEASE_TAG `
+              -AdmittedScript '.\scripts\publish-v26-release.ps1'
           }
-          if ($env:V26_RELEASE_REQUEST_SIGN_PACKAGE -eq 'false' -and (Test-Path -LiteralPath 'dist\QS3D-BricsCAD-V26.update.json')) {
-            throw 'Unsigned V26 prerelease candidate unexpectedly contains a signed update manifest.'
+          else {
+            if (Test-Path -LiteralPath 'dist\QS3D-BricsCAD-V26.update.json') {
+              throw 'Unsigned V26 prerelease candidate unexpectedly contains a signed update manifest.'
+            }
+            $candidateIdentity = & .\scripts\assert-v26-candidate-identity.ps1 `
+              -PackageZip $zip `
+              -ChecksumPath $checksum `
+              -ProvenancePath $provenance `
+              -ExpectedSourceCommit $env:GITHUB_SHA `
+              -ExpectedReleaseTag $env:RELEASE_TAG `
+              -AdmittedScript '.\scripts\publish-v26-release.ps1'
           }
-
-      - name: Publish V26 GitHub Release
-        shell: powershell
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: .\scripts\publish-v26-release.ps1
+          if ($null -eq $candidateIdentity) { throw 'V26 candidate semantic admission/publication returned no identity.' }
