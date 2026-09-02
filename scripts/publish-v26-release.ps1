@@ -216,7 +216,7 @@ try {
   $releaseId = [long]$release.id
   Assert-RemoteReleaseTagTargetsWorkflowSha
 
-  $releaseAssets = @('dist\QS3D-BricsCAD-V26.zip', 'dist\QS3D-BricsCAD-V26.zip.sha256')
+  $releaseAssets = @('dist\QS3D-BricsCAD-V26.zip', 'dist\QS3D-BricsCAD-V26.zip.sha256', 'dist\QS3D-BricsCAD-V26.provenance.json')
   if ($signPackage) { $releaseAssets += 'dist\QS3D-BricsCAD-V26.update.json' }
   $uploadBase = $release.upload_url -replace '\{\?name,label\}$', ''
   foreach ($assetPath in $releaseAssets) {
@@ -231,7 +231,7 @@ try {
 
   $releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$releaseId"
   $draftRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
-  $expectedAssets = @('QS3D-BricsCAD-V26.zip', 'QS3D-BricsCAD-V26.zip.sha256')
+  $expectedAssets = @('QS3D-BricsCAD-V26.zip', 'QS3D-BricsCAD-V26.zip.sha256', 'QS3D-BricsCAD-V26.provenance.json')
   if ($signPackage) { $expectedAssets += 'QS3D-BricsCAD-V26.update.json' }
   if (@($draftRelease.assets).Count -ne $expectedAssets.Count) { throw "Draft V26 release contains unexpected assets; refusing publication." }
 
