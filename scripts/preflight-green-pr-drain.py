@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "green-pr-drain.yml"
 POLICY_SCANNER = ROOT / "scripts" / "preflight-ci-manual-only.py"
 CI_POLICY = ROOT / "CI_POLICY.md"
+MAIN_WRITE = ROOT / "docs" / "MAIN-WRITE-AUTHORIZATION.md"
 REGISTRATION = ROOT / "docs" / "AGENT-WORK-REGISTRATION.md"
 
 errors = []
@@ -28,6 +29,7 @@ def require_tokens(text, tokens, label):
 workflow = read_required(WORKFLOW)
 policy_scanner = read_required(POLICY_SCANNER)
 ci_policy = read_required(CI_POLICY)
+main_write = read_required(MAIN_WRITE)
 registration = read_required(REGISTRATION)
 
 require_tokens(
@@ -47,6 +49,7 @@ require_tokens(
         "RUN_PRS_JSON: ${{ toJson(github.event.workflow_run.pull_requests) }}",
         '[[ "${state}" != "open" ]]',
         '[[ "${draft}" != "false" ]]',
+        '.labels | any(.name == "no-automerge")',
         '[[ "${base_ref}" != "main" ]]',
         '[[ "${head_repo}" != "${GITHUB_REPOSITORY}" ]]',
         '[[ "${head_sha}" != "${RUN_HEAD_SHA}" ]]',
@@ -83,6 +86,7 @@ require_tokens(
         'expected = {"workflow_run"}',
         "green PR drain",
         "QS3D_AUTOMERGE_TOKEN",
+        "no-automerge",
     ),
     "preflight-ci-manual-only.py",
 )
@@ -94,9 +98,21 @@ require_tokens(
         "exact-head",
         "current `main`",
         "QS3D_AUTOMERGE_TOKEN",
+        "no-automerge",
         "no force",
     ),
     "CI_POLICY.md",
+)
+
+require_tokens(
+    main_write,
+    (
+        "green-pr-drain.yml",
+        "repository-wide merge coordinator",
+        "no-automerge",
+        "normal agents",
+    ),
+    "docs/MAIN-WRITE-AUTHORIZATION.md",
 )
 
 require_tokens(
@@ -116,5 +132,5 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: the owner-approved green PR drain is exact-head/current-main guarded, same-repository only, serialized, dedicated-token authenticated, and refreshes without force rewriting."
+    "PASS: the owner-approved green PR drain is exact-head/current-main guarded, same-repository only, serialized, opt-out aware, dedicated-token authenticated, and refreshes without force rewriting."
 )
