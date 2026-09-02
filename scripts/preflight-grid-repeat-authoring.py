@@ -43,19 +43,28 @@ def main() -> int:
     # State is weakly keyed by the BricsCAD Document so closed DWGs are not retained and
     # separate open documents cannot read one another's templates.
     require(state, "ConditionalWeakTable<Document, State>", "weak per-document repeat state")
+    require(state, "States.GetValue(document, _ => new State())", "explicit weak-state construction")
     require(state, "States.TryGetValue(document, out var state)", "same-document lookup")
+    require(state, "HasRectangularTemplate", "rectangular availability probe")
+    require(state, "HasRadialTemplate", "radial availability probe")
     require(state, "TryCreateRectangularRequest", "rectangular template reconstruction")
     require(state, "TryCreateRadialRequest", "radial template reconstruction")
+
+    # Missing-template checks run before the first prompt; a repeat with no same-DWG state
+    # fails immediately without asking the operator for throwaway placement data.
+    require_order(repeat, "HasRectangularTemplate(document)", "New rectangular Grid system key", "rectangular pre-prompt gate")
+    require_order(repeat, "HasRadialTemplate(document)", "New radial Grid system key", "radial pre-prompt gate")
 
     # Repeat commands ask for new semantic identity/placement and reuse canonical builders.
     require(repeat, '[CommandMethod("QS3DGRIDRECTREPEAT")]', "rectangular repeat command")
     require(repeat, '[CommandMethod("QS3DGRIDRADIALREPEAT")]', "radial repeat command")
-    require(repeat, "TryCreateRectangularRequest", "rectangular missing-state gate")
-    require(repeat, "TryCreateRadialRequest", "radial missing-state gate")
+    require(repeat, "TryCreateRectangularRequest", "rectangular reconstruction gate")
+    require(repeat, "TryCreateRadialRequest", "radial reconstruction gate")
     require(repeat, "RectangularGridNativeSourceBuilder.Build(document, project, request)", "canonical rectangular builder reuse")
     require(repeat, "RadialGridNativeSourceBuilder.Build(document, project, request)", "canonical radial builder reuse")
     require(repeat, "chưa có rectangular Grid template đã commit", "rectangular fail-closed missing state")
     require(repeat, "chưa có radial Grid template đã commit", "radial fail-closed missing state")
+    require(repeat, "repeat state đã thay đổi trước materialization", "TOCTOU state fail-closed gate")
 
     # Failure reporting must remain sanitized; native exception details are not exposed.
     forbid(repeat, "ex.Message", "repeat exception redaction")
@@ -67,7 +76,7 @@ def main() -> int:
     forbid(repeat, "AppendEntity", "repeat canonical builder boundary")
     forbid(repeat, ".Erase()", "repeat canonical builder boundary")
 
-    print("PASS Grid repeat authoring per-DWG/commit-order/post-commit/canonical-builder contract")
+    print("PASS Grid repeat authoring per-DWG/pre-prompt/commit-order/post-commit/canonical-builder contract")
     return 0
 
 
