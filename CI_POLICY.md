@@ -1,10 +1,10 @@
 # GitHub Actions / CI Policy
 
-This file is the repository-level source of truth for GitHub Actions behavior. `docs/MAIN-WRITE-AUTHORIZATION.md` is authoritative for who may merge the same task PR to `main`.
+This file is the repository-level source of truth for GitHub Actions behavior. `docs/MAIN-WRITE-AUTHORIZATION.md` is authoritative for who may merge the same task PR to `main` and for the narrowly authorized repository-wide merge coordinator.
 
 ## CI purpose
 
-CI validates candidates; it does not grant merge authority and it does not publish ordinary task branches.
+Shared CI validates candidates; it does not itself grant merge authority or publish ordinary task branches. A separate owner-authorized coordinator may consume exact successful CI evidence only within the guarded contract below.
 
 QS3D uses three evidence stages:
 
@@ -73,6 +73,25 @@ Branch CI provides early isolated feedback. PR CI validates the current merge ca
 
 Do not require PR recreation because branch CI completed after PR creation. Do require fresh evidence whenever the actual candidate changes.
 
+## Owner-authorized green PR drain
+
+`.github/workflows/green-pr-drain.yml` is the only owner-approved repository-wide green-PR merge coordinator. It is separate from shared CI and from the release dispatcher.
+
+It may run only from a completed `workflow_run` of `QS3D Shared Branch and Integration CI`, and its mutation job must hard-require both:
+
+- the upstream conclusion is `success`;
+- the upstream event is `pull_request`.
+
+Before merge, the coordinator must re-fetch the PR and fail closed unless the PR is open, non-draft, targets `main`, comes from this repository, has no `no-automerge` label, is not a Dependabot PR, and its current head SHA exactly equals the successful workflow-run head SHA. It must fetch current `main` and prove that SHA is the merge base of the tested head before attempting merge. A green run against an older base is therefore stale evidence and must not merge.
+
+The merge request must include the exact tested head SHA so concurrent head movement is rejected. GitHub protected-main rules remain authoritative; this workflow has no ruleset bypass.
+
+After a successful merge advances `main`, the coordinator may request GitHub `update-branch` for the other open same-repository PRs targeting `main`, each with its current expected head SHA. Conflicts or rejected updates are per-PR warnings. There is **no force** push, reset, history rewrite or fork mutation.
+
+Mutations use the dedicated repository secret `QS3D_AUTOMERGE_TOKEN`, backed by a fine-grained token restricted to this repository with only Contents: Read and write and Pull requests: Read and write. Do not fall back to `GITHUB_TOKEN` for these mutations because downstream branch synchronization must create normal PR update events and fresh CI.
+
+A fixed non-cancelling concurrency group serializes drain runs. Ordinary agents do not inherit repository-wide merge authority from this workflow; the authorization belongs only to this named coordinator and the explicit owner policy in `docs/MAIN-WRITE-AUTHORIZATION.md`.
+
 ## Red CI remediation
 
 For a failure on the current owned carrier:
@@ -124,7 +143,7 @@ Automatic validation authorization does not imply release authorization.
 
 ## Manual workflows
 
-Workflows other than shared `ci.yml` and the approved main dispatcher remain owner-controlled manual lanes unless a current canonical policy explicitly says otherwise.
+Workflows other than shared `ci.yml`, the approved main dispatcher, and the owner-authorized `green-pr-drain.yml` remain owner-controlled manual lanes unless a current canonical policy explicitly says otherwise.
 
 Release workflows retain their own confirmation/protection boundaries.
 
@@ -134,11 +153,11 @@ A normal `continue all`, `fix bug`, source change, docs change or CI remediation
 
 GitHub Dependabot may create dependency-update PRs directly from committed Dependabot configuration.
 
-This generated-PR boundary does **not** authorize Dependabot to merge, write `main`, enable autonomous protected-main merge, bypass checks or publish releases.
+This generated-PR boundary does **not** authorize Dependabot to merge, write `main`, enable autonomous protected-main merge, bypass checks or publish releases. `green-pr-drain.yml` must explicitly skip Dependabot-authored PRs.
 
 Dependabot PRs still require the protected current-candidate checks applicable to `main`.
 
-Repository-wide blind auto-merge remains intentionally disabled.
+Repository-wide blind auto-merge remains intentionally disabled. The named green PR drain is not blind: it is exact-head/current-main guarded, same-repository only, opt-out aware and ruleset constrained.
 
 ## LOCAL_ONLY evidence
 
@@ -164,6 +183,7 @@ In particular:
 - automatic branch pushes must remain available for exact-head evidence;
 - PR path filters must not suppress required protected contexts;
 - shared validation must remain non-publishing/read-only;
+- `green-pr-drain.yml` must retain exact-head/current-main/same-repository/opt-out/dedicated-token/no-force guards;
 - the approved main dispatcher must remain narrow;
 - release workflows must retain their explicit safety/confirmation requirements.
 
