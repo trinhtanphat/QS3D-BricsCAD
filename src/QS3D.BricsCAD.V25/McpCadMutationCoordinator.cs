@@ -57,7 +57,7 @@ namespace QS3D.BricsCAD.V25
 
         internal static string ReleaseWriterLease(string writerToken, Action<string>? audit)
         {
-            var token = NormalizeToken(writerToken);
+            var token = NormalizeRequiredToken(writerToken);
             if (!MutationGate.Wait(MutationAcquireTimeoutMilliseconds))
                 throw new InvalidOperationException("DWG writer is busy with another mutation. Retry release after the current write call completes.");
             try
@@ -265,17 +265,12 @@ namespace QS3D.BricsCAD.V25
             try { pending.Document.CommandFailed -= pending.FailedHandler; } catch { }
         }
 
-        private static string NormalizeToken(string value)
+        private static string NormalizeRequiredToken(string value)
         {
-            var token = NormalizeOptionalToken(value);
+            var token = (value ?? string.Empty).Trim();
             if (token.Length != 32)
                 throw new InvalidOperationException("writerToken must be the 32-character token returned by cad_writer_acquire.");
-            for (var i = 0; i < token.Length; i++)
-            {
-                var c = token[i];
-                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))
-                    throw new InvalidOperationException("writerToken must be hexadecimal.");
-            }
+            ValidateHexToken(token);
             return token;
         }
 
@@ -283,8 +278,20 @@ namespace QS3D.BricsCAD.V25
         {
             var token = (value ?? string.Empty).Trim();
             if (token.Length == 0) return string.Empty;
-            if (token.Length > 64) throw new InvalidOperationException("writerToken exceeds the allowed bound.");
-            return NormalizeToken(token);
+            if (token.Length != 32)
+                throw new InvalidOperationException("writerToken must be the 32-character token returned by cad_writer_acquire.");
+            ValidateHexToken(token);
+            return token;
+        }
+
+        private static void ValidateHexToken(string token)
+        {
+            for (var i = 0; i < token.Length; i++)
+            {
+                var c = token[i];
+                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))
+                    throw new InvalidOperationException("writerToken must be hexadecimal.");
+            }
         }
 
         private static string NormalizeCommand(string command)
