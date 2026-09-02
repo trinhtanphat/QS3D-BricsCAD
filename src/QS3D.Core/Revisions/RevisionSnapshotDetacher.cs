@@ -62,15 +62,32 @@ namespace QS3D.Core.Revisions
             var expectedCount = source.Count;
             ValidateCount(expectedCount, MaxEntriesPerCollection, label);
             var observed = 0;
-            foreach (var pair in source)
+            using (var enumerator = source.GetEnumerator())
             {
                 if (source.Count != expectedCount)
                     throw Changed(label, expectedCount, source.Count);
-                destination.Add(pair.Key, pair.Value);
-                observed++;
-                if (observed > expectedCount)
-                    throw Changed(label, expectedCount, observed);
+
+                while (true)
+                {
+                    if (source.Count != expectedCount)
+                        throw Changed(label, expectedCount, source.Count);
+
+                    var moved = enumerator.MoveNext();
+                    if (source.Count != expectedCount)
+                        throw Changed(label, expectedCount, source.Count);
+                    if (!moved) break;
+
+                    var pair = enumerator.Current;
+                    if (source.Count != expectedCount)
+                        throw Changed(label, expectedCount, source.Count);
+
+                    destination.Add(pair.Key, pair.Value);
+                    observed++;
+                    if (observed > expectedCount)
+                        throw Changed(label, expectedCount, observed);
+                }
             }
+
             if (observed != expectedCount || source.Count != expectedCount)
                 throw Changed(label, expectedCount, observed);
         }
