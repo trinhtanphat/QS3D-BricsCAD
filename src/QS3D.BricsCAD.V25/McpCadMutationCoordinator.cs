@@ -23,6 +23,8 @@ namespace QS3D.BricsCAD.V25
         private static readonly SemaphoreSlim MutationGate = new SemaphoreSlim(1, 1);
         private static readonly object Sync = new object();
         private static readonly AsyncLocal<long?> CurrentOperationId = new AsyncLocal<long?>();
+        private static readonly AsyncLocal<NativeCommandReservation?> PreparedNativeCommand =
+            new AsyncLocal<NativeCommandReservation?>();
 
         private static WriterLease? _lease;
         private static PendingNativeCommand? _pending;
@@ -86,8 +88,12 @@ namespace QS3D.BricsCAD.V25
         internal static IDisposable EnterMutation(string writerToken, string tool, Action<string>? audit)
         {
             var token = NormalizeOptionalToken(writerToken);
-            if (!MutationGate.Wait(MutationAcquireTimeoutMilliseconds))
+            var prepared = PreparedNativeCommand.Value;
+            var acquiredHere = prepared == null;
+            if (acquiredHere && !MutationGate.Wait(MutationAcquireTimeoutMilliseconds))
                 throw new InvalidOperationException("DWG writer is busy with another mutation. Read-only tools remain available; retry this mutation later.");
+            if (prepared != null && !prepared.OwnsMutationGate)
+                throw new InvalidOperationException("Prepared native command no longer owns the MCP DWG mutation gate.");
 
             try
             {
@@ -95,7 +101,7 @@ namespace QS3D.BricsCAD.V25
                 {
                     var now = DateTime.UtcNow;
                     CleanupExpiredStateLocked(now);
-                    if (_pending != null)
+                    if (_pending != null && (prepared == null || !prepared.Owns(_pending)))
                         throw new InvalidOperationException("A queued native BricsCAD command still owns the DWG write lane. Wait for command completion/cancellation before another mutation.");
 
                     if (_lease != null)
@@ -111,6 +117,7 @@ namespace QS3D.BricsCAD.V25
                     var previous = CurrentOperationId.Value;
                     var operationId = Interlocked.Increment(ref _operationSequence);
                     CurrentOperationId.Value = operationId;
+                    if (prepared != null) prepared.TransferMutationGate();
                     audit?.Invoke("writer mutation entered; tool=" + SafeTool(tool)
                         + "; lease=" + (_lease == null ? "ephemeral" : "explicit"));
                     return new MutationScope(operationId, previous, audit);
@@ -118,15 +125,15 @@ namespace QS3D.BricsCAD.V25
             }
             catch
             {
-                MutationGate.Release();
+                if (acquiredHere) MutationGate.Release();
                 throw;
             }
         }
 
         /// <summary>
         /// Arms the post-return barrier before a runtime call that is known to queue a native
-        /// command. This intentionally lives above both McpCadAgentRuntime and its direct/domain
-        /// sub-runtimes, so EXTRUDE and QS3D command bridges share the same single-writer contract.
+        /// command. Preparation also owns MutationGate until EnterMutation transfers that gate
+        /// to the request, closing the race between transport pre-arm and runtime dispatch.
         /// </summary>
         internal static NativeCommandReservation? PrepareNativeCommand(string tool, string arguments, Action<string>? audit)
         {
@@ -143,11 +150,27 @@ namespace QS3D.BricsCAD.V25
             else return null;
 
             if (command.Length == 0) return null;
-            return InvokeInCadContext(() => ArmNativeCommandInCadContext(command, audit));
+            if (PreparedNativeCommand.Value != null)
+                throw new InvalidOperationException("Nested native-command preparation is not supported.");
+            if (!MutationGate.Wait(MutationAcquireTimeoutMilliseconds))
+                throw new InvalidOperationException("DWG writer is busy with another mutation. Read-only tools remain available; retry this native command later.");
+
+            try
+            {
+                var reservation = InvokeInCadContext(() => ArmNativeCommandInCadContext(command, audit, true));
+                PreparedNativeCommand.Value = reservation;
+                return reservation;
+            }
+            catch
+            {
+                MutationGate.Release();
+                throw;
+            }
         }
 
         /// <summary>
-        /// Runtime-level helper retained for callers that already execute in CAD context.
+        /// Runtime-level helper for the classic cad_command_sequence path. If transport already
+        /// prepared the same command, reuse that reservation rather than creating a second barrier.
         /// </summary>
         internal static void QueueNativeCommand(Document document, string command, Action enqueue, Action<string>? audit)
         {
@@ -156,7 +179,17 @@ namespace QS3D.BricsCAD.V25
             if (!CurrentOperationId.Value.HasValue)
                 throw new InvalidOperationException("Native command queueing requires the active MCP DWG writer mutation scope.");
 
-            var reservation = ArmNativeCommandInCadContext(command, audit);
+            var reservation = PreparedNativeCommand.Value;
+            if (reservation != null)
+            {
+                if (!reservation.Matches(document, command))
+                    throw new InvalidOperationException("Prepared native-command barrier does not match the command being queued.");
+            }
+            else
+            {
+                reservation = ArmNativeCommandInCadContext(command, audit, false);
+            }
+
             try
             {
                 enqueue();
@@ -196,9 +229,12 @@ namespace QS3D.BricsCAD.V25
                 _lease = null;
                 CurrentOperationId.Value = null;
             }
+            var prepared = PreparedNativeCommand.Value;
+            PreparedNativeCommand.Value = null;
+            if (prepared != null) prepared.Dispose();
         }
 
-        private static NativeCommandReservation ArmNativeCommandInCadContext(string command, Action<string>? audit)
+        private static NativeCommandReservation ArmNativeCommandInCadContext(string command, Action<string>? audit, bool ownsMutationGate)
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) throw new InvalidOperationException("No active BricsCAD document is available for native command coordination.");
@@ -220,7 +256,7 @@ namespace QS3D.BricsCAD.V25
                 _pending = pending;
             }
             audit?.Invoke("native command barrier armed; command=" + SafeTool(command));
-            return new NativeCommandReservation(pending);
+            return new NativeCommandReservation(pending, ownsMutationGate);
         }
 
         private static T InvokeInCadContext<T>(Func<T> action)
@@ -402,22 +438,66 @@ namespace QS3D.BricsCAD.V25
         internal sealed class NativeCommandReservation : IDisposable
         {
             private readonly PendingNativeCommand _pending;
+            private readonly bool _ownsMutationGate;
+            private int _gateTransferredOrReleased;
             private int _committed;
             private int _disposed;
 
-            internal NativeCommandReservation(PendingNativeCommand pending) { _pending = pending; }
+            internal NativeCommandReservation(PendingNativeCommand pending, bool ownsMutationGate)
+            {
+                _pending = pending;
+                _ownsMutationGate = ownsMutationGate;
+            }
 
-            internal void Commit() { Volatile.Write(ref _committed, 1); }
+            internal bool OwnsMutationGate
+            {
+                get { return _ownsMutationGate && Volatile.Read(ref _gateTransferredOrReleased) == 0; }
+            }
+
+            internal bool Owns(PendingNativeCommand pending)
+            {
+                return ReferenceEquals(_pending, pending);
+            }
+
+            internal bool Matches(Document document, string command)
+            {
+                return ReferenceEquals(_pending.Document, document)
+                       && string.Equals(_pending.Command, NormalizeCommand(command), StringComparison.OrdinalIgnoreCase);
+            }
+
+            internal void TransferMutationGate()
+            {
+                if (!_ownsMutationGate)
+                    throw new InvalidOperationException("Prepared native command does not own the mutation gate.");
+                if (Interlocked.CompareExchange(ref _gateTransferredOrReleased, 1, 0) != 0)
+                    throw new InvalidOperationException("Prepared native command mutation gate was already transferred or released.");
+            }
+
+            internal void Commit()
+            {
+                Volatile.Write(ref _committed, 1);
+                if (ReferenceEquals(PreparedNativeCommand.Value, this)) PreparedNativeCommand.Value = null;
+            }
 
             public void Dispose()
             {
-                if (Interlocked.Exchange(ref _disposed, 1) != 0 || Volatile.Read(ref _committed) != 0) return;
-                lock (Sync)
+                if (ReferenceEquals(PreparedNativeCommand.Value, this)) PreparedNativeCommand.Value = null;
+                if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+                if (Volatile.Read(ref _committed) == 0)
                 {
-                    if (!ReferenceEquals(_pending, McpCadMutationCoordinator._pending)) return;
-                    DetachPendingLocked(_pending);
-                    McpCadMutationCoordinator._pending = null;
+                    lock (Sync)
+                    {
+                        if (ReferenceEquals(_pending, McpCadMutationCoordinator._pending))
+                        {
+                            DetachPendingLocked(_pending);
+                            McpCadMutationCoordinator._pending = null;
+                        }
+                    }
                 }
+
+                if (_ownsMutationGate && Interlocked.CompareExchange(ref _gateTransferredOrReleased, 1, 0) == 0)
+                    MutationGate.Release();
             }
         }
 
