@@ -69,6 +69,7 @@ namespace QS3D.BricsCAD.V25
         {
             Interlocked.Increment(ref _automationEpoch);
             _automationStopped = false;
+            McpCadMutationCoordinator.Reset();
             McpQs3dDomainRuntime.ResetForServerStart();
         }
 
@@ -76,6 +77,7 @@ namespace QS3D.BricsCAD.V25
         {
             _automationStopped = true;
             Interlocked.Increment(ref _automationEpoch);
+            McpCadMutationCoordinator.Reset();
         }
 
         public static string Call(string toolName, string arguments)
@@ -174,12 +176,16 @@ namespace QS3D.BricsCAD.V25
             if (!McpTopLevelJson.ExtractBoolean(body, "confirmMutation"))
                 throw new InvalidOperationException("confirmMutation=true is required for " + tool + ".");
 
-            var epoch = Volatile.Read(ref _automationEpoch);
-            EnsureAutomationRunning(epoch);
-            var previousEpoch = MutationEpoch.Value;
-            MutationEpoch.Value = epoch;
-            try { return action(); }
-            finally { MutationEpoch.Value = previousEpoch; }
+            var writerToken = McpTopLevelJson.ExtractString(body, "writerToken");
+            using (McpCadMutationCoordinator.EnterMutation(writerToken, tool, detail => Audit(tool, detail)))
+            {
+                var epoch = Volatile.Read(ref _automationEpoch);
+                EnsureAutomationRunning(epoch);
+                var previousEpoch = MutationEpoch.Value;
+                MutationEpoch.Value = epoch;
+                try { return action(); }
+                finally { MutationEpoch.Value = previousEpoch; }
+            }
         }
 
         private static void EnsureAutomationRunning()
@@ -558,7 +564,11 @@ namespace QS3D.BricsCAD.V25
                 if (command == "QSAVE") return SaveActiveDocument(document);
                 var script = "_." + command + "\n" + inputs;
                 if (!script.EndsWith("\n", StringComparison.Ordinal)) script += "\n";
-                document.SendStringToExecute(script, true, false, true);
+                McpCadMutationCoordinator.QueueNativeCommand(
+                    document,
+                    command,
+                    () => document.SendStringToExecute(script, true, false, true),
+                    detail => Audit("cad_command_sequence", detail));
                 Audit("cad_command_sequence", "command=" + command + "; inputChars=" + inputs.Length.ToString(CultureInfo.InvariantCulture));
                 return "{\"accepted\":true,\"command\":\"" + Escape(command) + "\",\"inputChars\":" + inputs.Length.ToString(CultureInfo.InvariantCulture) + "}";
             });

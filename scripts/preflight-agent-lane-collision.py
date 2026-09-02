@@ -448,7 +448,6 @@ def _request_json(url: str, token: str) -> object:
     with urllib.request.urlopen(request, timeout=20) as response:
         return json.loads(response.read().decode("utf-8"))
 
-
 def _fetch_paged(api_url: str, repository: str, endpoint: str, token: str) -> list[dict]:
     owner_repo = urllib.parse.quote(repository, safe="/")
     collected: list[dict] = []
@@ -505,6 +504,20 @@ def current_changed_paths(base_ref: str) -> list[str]:
 def _event_actor(event: dict) -> str:
     sender = event.get("sender") or {}
     return str(sender.get("login") or os.environ.get("GITHUB_ACTOR") or "")
+
+
+def pull_request_is_terminal(current_number: int, open_prs: list[dict]) -> bool:
+    if current_number <= 0:
+        raise ValueError("pull request number is missing or invalid")
+    for candidate in open_prs:
+        if not isinstance(candidate, dict):
+            continue
+        try:
+            if int(candidate.get("number") or 0) == current_number:
+                return False
+        except (TypeError, ValueError):
+            continue
+    return True
 
 
 def validate_pull_request_event(
@@ -674,6 +687,12 @@ def main() -> int:
         open_prs = fetch_open_prs(api_url, repository, token)
 
         if event_name == "pull_request":
+            if pull_request_is_terminal(current_pr_number, open_prs):
+                print(
+                    "PASS: pull_request carrier is no longer open; "
+                    "terminal reservation validation is skipped before Issue/path collision checks."
+                )
+                return 0
             lane_key, lane_conflicts = validate_pull_request_event(event, repository, open_prs)
             if lane_conflicts:
                 print(f"ERROR: Lane-Key '{lane_key}' already has another open canonical carrier:")
