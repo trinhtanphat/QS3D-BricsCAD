@@ -93,12 +93,22 @@ else:
     for token in (
         "public static int TryStampSelected(Document document, ProjectState project, out string warning)",
         "return StampSelected(document, project);",
-        'warning = "Không stamp được live curtain fingerprint: " + ex.Message;',
+        "catch (Exception)",
+        'warning = "Live curtain fingerprint chưa được cập nhật; hãy chạy lại Curtain Frames 3D hoặc Health trước khi phát hành.";',
         "return 0;",
         "CURTAIN_FRAME_LIVE_FINGERPRINT_MISSING",
     ):
         if token not in text:
             errors.append("curtain live fingerprint best-effort contract missing: " + token)
+    for forbidden in (
+        'warning = "Không stamp được live curtain fingerprint: " + ex.Message;',
+        "ex.Message",
+        "exception.Message",
+        "GetBaseException()",
+        "StackTrace",
+    ):
+        if forbidden in text:
+            errors.append("curtain live fingerprint warning must not expose caught host detail: " + forbidden)
 
 for relative in (
     "src/QS3D.BricsCAD.V25/CurtainWallBuildCommands.cs",
@@ -123,4 +133,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: LINE/path frame replacement validates the complete previous live set before erase; semantic ownership and AuditTrail-owned project revision commit before CAD commit inside the rollback boundary; live fingerprint stamping remains best-effort post-commit.")
+print("PASS: LINE/path frame replacement validates the complete previous live set before erase; semantic ownership and AuditTrail-owned project revision commit before CAD commit inside the rollback boundary; live fingerprint stamping remains best-effort post-commit with stable redacted warning semantics.")
