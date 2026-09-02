@@ -274,6 +274,8 @@ namespace QS3D.Core.Persistence
                 RequireSupportedCount(element.DependsOn.Count, "element " + element.Id + " dependencies", MaximumSnapshotNestedEntries);
                 RequireSupportedCount(element.Properties.Count, "element " + element.Id + " properties", MaximumSnapshotNestedEntries);
                 RequireSupportedCount(element.Quantities.Count, "element " + element.Id + " quantities", MaximumSnapshotNestedEntries);
+                RequireCanonicalRelationIdentities(element.SourceHandles, element.Id, "source handle");
+                RequireCanonicalRelationIdentities(element.DependsOn, element.Id, "dependency id");
                 RequireCanonicalElementProperties(element);
                 RequireCanonicalQuantities(element);
             }
@@ -288,6 +290,31 @@ namespace QS3D.Core.Persistence
             catch (ArgumentException ex)
             {
                 throw new InvalidOperationException("Cannot snapshot Family " + family.Id + " with invalid property state.", ex);
+            }
+        }
+
+        private static void RequireCanonicalRelationIdentities(IEnumerable<string> values, string elementId, string role)
+        {
+            foreach (var value in values)
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                    throw new InvalidOperationException("Cannot snapshot element " + elementId + " with an empty " + role + ".");
+                if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Cannot snapshot element " + elementId + " with a non-canonical " + role + ": '" + value + "'.");
+                if (HasControlCharacter(value))
+                    throw new InvalidOperationException("Cannot snapshot element " + elementId + " with a " + role + " containing control characters.");
+                try
+                {
+                    XmlConvert.VerifyXmlChars(value);
+                }
+                catch (XmlException ex)
+                {
+                    throw new InvalidOperationException("Cannot snapshot element " + elementId + " with a " + role + " containing malformed XML text.", ex);
+                }
+                catch (ArgumentException ex)
+                {
+                    throw new InvalidOperationException("Cannot snapshot element " + elementId + " with a " + role + " containing malformed XML text.", ex);
+                }
             }
         }
 
