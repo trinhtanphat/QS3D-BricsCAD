@@ -344,13 +344,21 @@ namespace QS3D.Core.Scheduling
                 var acquiredCount = ReadKnownCount(source, parameterName, collectionName);
                 ValidateReboundCount(knownCount, acquiredCount, null, parameterName, collectionName);
 
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    var moved = enumerator.MoveNext();
+                    var moveNextCount = ReadKnownCount(source, parameterName, collectionName);
+                    ValidateReboundCount(knownCount, moveNextCount, null, parameterName, collectionName);
+                    if (!moved)
+                        break;
+
                     if (knownCount.HasValue && items.Count >= knownCount.Value)
                         throw CountChangedError(parameterName, collectionName);
                     if (items.Count >= MaximumEntries)
                         throw CollectionCountError(parameterName, collectionName);
                     var item = enumerator.Current;
+                    var currentCount = ReadKnownCount(source, parameterName, collectionName);
+                    ValidateReboundCount(knownCount, currentCount, null, parameterName, collectionName);
                     if (item == null)
                         throw new ArgumentException("Schedule " + collectionName + " cannot contain null entries.", parameterName);
                     items.Add(item);
