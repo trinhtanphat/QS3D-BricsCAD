@@ -73,7 +73,7 @@ namespace QS3D.BricsCAD.V25
                     }
                     catch (Exception captureError)
                     {
-                        CompensateSourceOrThrow(document, source.ObjectId, captureError);
+                        CompensateSourceOrThrow(document, source, captureError);
                         throw;
                     }
 
@@ -87,9 +87,9 @@ namespace QS3D.BricsCAD.V25
                 TrySetStatus(status);
                 TryWriteMessage(document, "\nQS3D " + status);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                var message = "QS3DGRIDDRAW lỗi: " + ex.Message;
+                const string message = "QS3DGRIDDRAW lỗi: thao tác không hoàn tất; native/semantic state đã được fail-closed. Kiểm tra Grid Family, DWG/UCS và thử lại.";
                 TrySetStatus(message);
                 TryWriteMessage(document, "\n" + message);
             }
@@ -161,49 +161,60 @@ namespace QS3D.BricsCAD.V25
                 var objectId = modelSpace.AppendEntity(line);
                 transaction.AddNewlyCreatedDBObject(line, true);
                 var handle = line.Handle.ToString();
+                var ownerId = line.OwnerId;
                 transaction.Commit();
-                return new CreatedGridSource(objectId, handle);
+                return new CreatedGridSource(objectId, handle, ownerId);
             }
         }
 
-        private static void CompensateSourceOrThrow(Document document, ObjectId sourceId, Exception captureError)
+        private static void CompensateSourceOrThrow(Document document, CreatedGridSource source, Exception captureError)
         {
             try
             {
                 using (document.LockDocument())
                 using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
-                    if (!sourceId.IsNull && sourceId.IsValid && !sourceId.IsErased)
-                    {
-                        var entity = transaction.GetObject(sourceId, OpenMode.ForWrite, false) as Entity;
-                        if (entity != null && !entity.IsErased) entity.Erase();
-                    }
+                    if (source.ObjectId.IsNull || !source.ObjectId.IsValid || source.ObjectId.IsErased)
+                        throw new InvalidOperationException("Created Grid source is no longer a live exact compensation target.");
+
+                    var entity = transaction.GetObject(source.ObjectId, OpenMode.ForWrite, false) as Line;
+                    if (entity == null || entity.IsErased)
+                        throw new InvalidOperationException("Created Grid source changed type/state before compensation.");
+                    if (!string.Equals(entity.Handle.ToString(), source.Handle, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("Created Grid source handle changed before compensation.");
+                    if (entity.OwnerId != source.OwnerId)
+                        throw new InvalidOperationException("Created Grid source owner space changed before compensation.");
+
+                    entity.Erase();
                     transaction.Commit();
                 }
             }
             catch (Exception cleanupError)
             {
                 throw new InvalidOperationException(
-                    "Grid semantic capture thất bại và cleanup LINE nguồn cũng thất bại.",
+                    "Grid semantic capture failed and exact native-source compensation could not be proven.",
                     new AggregateException(captureError, cleanupError));
             }
         }
 
         private static void FinalizeAcceptedSource(Document document, ObjectId sourceId, string familyName, int count)
         {
+            var uiSyncFailed = false;
             try
             {
                 if (!sourceId.IsNull && sourceId.IsValid) document.Editor.SetImpliedSelection(new[] { sourceId });
                 document.Editor.Regen();
             }
-            catch (Exception uiError)
+            catch (Exception)
             {
-                TryWriteMessage(document, "\nQS3D Grid UI sync warning: " + uiError.Message);
+                uiSyncFailed = true;
             }
 
             var status = "Đã tạo Grid thẳng #" + count + " • Family “" + familyName + "”. Chọn điểm đầu tiếp theo hoặc Enter/Esc để kết thúc.";
             TrySetStatus(status);
             TryWriteMessage(document, "\nQS3D " + status);
+            if (uiSyncFailed)
+                TryWriteMessage(document, "\nQS3D Grid: native + semantic source đã commit; một phần UI review không thể đồng bộ.");
         }
 
         private static void RequireModelSpace(Document document)
@@ -266,14 +277,16 @@ namespace QS3D.BricsCAD.V25
 
         private sealed class CreatedGridSource
         {
-            public CreatedGridSource(ObjectId objectId, string handle)
+            public CreatedGridSource(ObjectId objectId, string handle, ObjectId ownerId)
             {
                 ObjectId = objectId;
                 Handle = handle ?? string.Empty;
+                OwnerId = ownerId;
             }
 
             public ObjectId ObjectId { get; }
             public string Handle { get; }
+            public ObjectId OwnerId { get; }
         }
     }
 }
