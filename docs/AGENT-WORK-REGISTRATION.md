@@ -25,6 +25,8 @@ Normal agents treat `origin/main` as read-only for direct writes. Every task use
 
 Same-task merge authorization is defined only by `docs/MAIN-WRITE-AUTHORIZATION.md`. Do not derive current merge permission from historical wording in this file, old issues, claims or handoffs.
 
+The owner-authorized green PR drain at `.github/workflows/green-pr-drain.yml` is a special machine coordinator defined by `docs/MAIN-WRITE-AUTHORIZATION.md` and `CI_POLICY.md`. Its repository-wide merge authority does not transfer to normal agent sessions; agents still own and remediate only their canonical carriers unless separately assigned as a coordinator.
+
 ## New task registration
 
 Before mutating files for a new lane:
@@ -103,6 +105,8 @@ Issue/reservation
 
 Shared branch/PR CI is validation infrastructure. Branch CI is early exact-head evidence; protected current-candidate checks are the final merge gate. See `CI_POLICY.md` and `docs/PR-CI-LIFECYCLE.md`.
 
+For eligible same-repository PRs, the named green-drain coordinator may perform the protected merge after exact-head/current-main validation and then request safe update-branch reconciliation on the other open PRs. That automation does not change which session owns remediation of a red or conflicting lane.
+
 ## PR metadata
 
 A PR should make its ownership easy to resolve without duplicating data GitHub already knows.
@@ -132,6 +136,8 @@ Individual branch green status is not combined-tree CI.
 
 Exact-main release CI is a separate evidence class after an applicable landing; it is not ordinary task-branch CI.
 
+The owner-authorized green PR drain is distinct from a human/agent multi-lane integration coordinator: it never resolves semantic conflicts, never force-rewrites a branch and only consumes PRs that already satisfy its exact machine gates.
+
 ## Terminal cleanup
 
 After the same task PR is merged and current `main` is verified:
@@ -157,5 +163,7 @@ The repository previously encoded older merge/admission semantics as literal str
 <!-- LEGACY_SCANNER_COMPAT: merge to `main` only within the owner's explicit authorization -->
 <!-- LEGACY_SCANNER_COMPAT: ALL MERGED TO MAIN -->
 <!-- LEGACY_SCANNER_COMPAT: dispatch-v25-cloud-after-main-integration.yml -->
+<!-- LEGACY_SCANNER_COMPAT: green-pr-drain.yml -->
+<!-- LEGACY_SCANNER_COMPAT: owner-authorized green PR drain -->
 
 These comments are compatibility debt, not precedence.
