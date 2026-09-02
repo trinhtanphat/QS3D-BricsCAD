@@ -40,6 +40,18 @@ namespace QS3D.BricsCAD.V25.Cad
             return States.GetValue(document, _ => new State());
         }
 
+        internal static bool HasRectangularTemplate(Document document)
+        {
+            if (document == null || !States.TryGetValue(document, out var state)) return false;
+            lock (state.Sync) return state.Rectangular != null;
+        }
+
+        internal static bool HasRadialTemplate(Document document)
+        {
+            if (document == null || !States.TryGetValue(document, out var state)) return false;
+            lock (state.Sync) return state.Radial != null;
+        }
+
         internal static void RememberRectangular(Document document, RectangularGridNativeRequest request)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
