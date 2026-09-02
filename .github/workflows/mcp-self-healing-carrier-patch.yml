@@ -1,0 +1,96 @@
+name: QS3D one-shot MCP self-healing carrier patch
+
+on:
+  push:
+    branches:
+      - agent/gpt56sol-selfheal-9f2c1a/issue-5340-mcp-self-healing-repair
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: agent/gpt56sol-selfheal-9f2c1a/issue-5340-mcp-self-healing-repair
+          fetch-depth: 0
+
+      - name: Apply localized repair-envelope integration
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/QS3D.BricsCAD.V25/McpEmbeddedServerV2.cs')
+          text = path.read_text(encoding='utf-8')
+
+          old_catches = r'''            catch (McpToolContractException ex) { return ToolError(ex.Code, McpToolCapabilityContract.LaneName(ex.Lane), ex.Message); }
+            catch (Exception ex)
+            {
+                var failure = McpToolCapabilityContract.ClassifyFailure(tool, ex);
+                return ToolError(failure.Code, McpToolCapabilityContract.LaneName(failure.Lane), failure.Message);
+            }'''
+          new_catches = r'''            catch (McpToolContractException ex)
+            {
+                var lane = McpToolCapabilityContract.LaneName(ex.Lane);
+                var repairJson = McpSelfHealingRepairRuntime.RecordFailure(
+                    tool, ex.Code, lane, ex.Message, ex, true);
+                return ToolError(ex.Code, lane, ex.Message, repairJson);
+            }
+            catch (Exception ex)
+            {
+                var failure = McpToolCapabilityContract.ClassifyFailure(tool, ex);
+                var lane = McpToolCapabilityContract.LaneName(failure.Lane);
+                var repairJson = McpSelfHealingRepairRuntime.RecordFailure(
+                    tool, failure.Code, lane, failure.Message, ex, false);
+                return ToolError(failure.Code, lane, failure.Message, repairJson);
+            }'''
+
+          old_error = r'''        private static string ToolError(string code, string lane, string message)
+        {
+            var safeCode = string.IsNullOrWhiteSpace(code) ? McpToolCapabilityContract.ToolFailedCode : code;
+            var safeLane = string.IsNullOrWhiteSpace(lane) ? "unknown" : lane;
+            var safeMessage = string.IsNullOrWhiteSpace(message) ? "MCP tool failed." : message;
+            return "{\"content\":[{\"type\":\"text\",\"text\":\"" + JsonEscape(safeCode + ": " + safeMessage)
+                   + "\"}],\"structuredContent\":{\"error\":{\"code\":\"" + JsonEscape(safeCode)
+                   + "\",\"lane\":\"" + JsonEscape(safeLane) + "\",\"message\":\"" + JsonEscape(safeMessage)
+                   + "\"}},\"isError\":true}";
+        }'''
+          new_error = r'''        private static string ToolError(string code, string lane, string message, string repairJson = null)
+        {
+            var safeCode = string.IsNullOrWhiteSpace(code) ? McpToolCapabilityContract.ToolFailedCode : code;
+            var safeLane = string.IsNullOrWhiteSpace(lane) ? "unknown" : lane;
+            var safeMessage = string.IsNullOrWhiteSpace(message) ? "MCP tool failed." : message;
+            var repair = string.IsNullOrWhiteSpace(repairJson) ? string.Empty : ",\"repair\":" + repairJson;
+            return "{\"content\":[{\"type\":\"text\",\"text\":\"" + JsonEscape(safeCode + ": " + safeMessage)
+                   + "\"}],\"structuredContent\":{\"error\":{\"code\":\"" + JsonEscape(safeCode)
+                   + "\",\"lane\":\"" + JsonEscape(safeLane) + "\",\"message\":\"" + JsonEscape(safeMessage)
+                   + "\"" + repair + "}},\"isError\":true}";
+        }'''
+
+          if text.count(old_catches) != 1:
+              raise SystemExit('expected exactly one original CallTool catch block')
+          if text.count(old_error) != 1:
+              raise SystemExit('expected exactly one original ToolError block')
+
+          text = text.replace(old_catches, new_catches)
+          text = text.replace(old_error, new_error)
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          python scripts/preflight-mcp-self-healing-repair.py
+
+      - name: Commit localized patch and remove carrier
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/QS3D.BricsCAD.V25/McpEmbeddedServerV2.cs
+          git rm .github/workflows/mcp-self-healing-carrier-patch.yml
+          git diff --cached --check
+          git commit -m "feat(mcp): integrate repair metadata into tool errors"
+          git push origin HEAD:agent/gpt56sol-selfheal-9f2c1a/issue-5340-mcp-self-healing-repair
