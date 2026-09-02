@@ -10,11 +10,34 @@ namespace QS3D.Core.SmokeTests
 
         internal static void Run()
         {
+            RepresentableOverflowedAggregateAverageRemainsExact();
             RepresentableHighMagnitudeAverageRemainsAccepted();
             UnrepresentableHighMagnitudeAverageFailsClosed();
             HighMagnitudeEvenMedianFailsClosed();
             OrdinaryEvenMedianRemainsStable();
             OddMedianRemainsStable();
+        }
+
+        private static void RepresentableOverflowedAggregateAverageRemainsExact()
+        {
+            const decimal expected = 36566844237352771197020284770m;
+            var ascending = Analyze(
+                expected,
+                0m, 0m, 0m, 0m, 0m, 0m, 0m,
+                decimal.MaxValue, decimal.MaxValue, decimal.MaxValue,
+                decimal.MaxValue, decimal.MaxValue, decimal.MaxValue);
+            var reversed = Analyze(
+                expected,
+                decimal.MaxValue, decimal.MaxValue, decimal.MaxValue,
+                decimal.MaxValue, decimal.MaxValue, decimal.MaxValue,
+                0m, 0m, 0m, 0m, 0m, 0m, 0m);
+
+            Equal(expected, ascending.AverageUnitCost,
+                "A representable benchmark mean must survive an unrepresentable aggregate without incremental-rounding drift.");
+            Equal(expected, reversed.AverageUnitCost,
+                "Benchmark average must remain deterministic when the same high-dynamic-range samples arrive in another order.");
+            Equal<decimal?>(0m, ascending.DeviationFromAveragePercent,
+                "Exact benchmark average must preserve zero deviation for the matching current cost.");
         }
 
         private static void RepresentableHighMagnitudeAverageRemainsAccepted()

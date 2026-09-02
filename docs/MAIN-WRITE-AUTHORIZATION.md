@@ -37,6 +37,19 @@ Standing authorization never permits:
 - merging unrelated PRs;
 - bulk-integrating another agent's lanes without the applicable coordinator assignment.
 
+## Owner-approved hybrid coordinator exception
+
+The repository owner has explicitly authorized `.github/workflows/hybrid-pr-coordinator.yml` as the single persistent coordinator for queue maintenance.
+
+That workflow may:
+
+- arm GitHub native auto-merge for an eligible open, non-draft, same-repository PR targeting `main` when `no-automerge` is absent; and
+- after a successful landing on `main`, request GitHub `update-branch` reconciliation for remaining eligible same-repository PRs using each PR's current head SHA as an optimistic lock.
+
+This exception does **not** make the workflow a protection bypass and does not authorize direct writes to `main`. GitHub itself remains the final merge actor and must enforce the current protected-main rules, including fresh successful `preflight` and `core`, strict freshness and mergeability. The coordinator must skip drafts, forks, conflicts and opted-out PRs; it may not force-push, reset, call the direct PR merge endpoint, use `gh pr merge`, publish releases or broaden ordinary agent merge authority.
+
+Ordinary agents still may not sweep unrelated PRs merely because they appear green. The owner-approved coordinator is an executable repository mechanism with a narrowly bounded authority, not a transferable general-agent privilege.
+
 ## Normal successful endpoint: `MERGED_MAIN`
 
 For ordinary owner-requested repository work, intermediate states are not the default endpoint:
@@ -113,7 +126,7 @@ After the protected merge succeeds and current `main` is verified:
 1. close/complete the task Issue if still open;
 2. release the active reservation/ownership state;
 3. update any task-specific handoff/inbox state that must remain current;
-4. delete the merged branch when practical.
+4. delete the merged task branch when practical.
 
 A merged implementation must not leave its Issue presented as an ACTIVE owner indefinitely.
 
