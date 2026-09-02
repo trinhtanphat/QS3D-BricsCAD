@@ -108,7 +108,7 @@ namespace QS3D.Core.Persistence
                 throw new InvalidOperationException(
                     "Nested persisted project state changed while the persistence stamp was materializing content.");
 
-            return new StableSnapshot(boundary, secondMetadata, secondNestedPersistedContent);
+            return new StableSnapshot(boundary, metadata, nestedPersistedContent);
         }
 
         private static Dictionary<string, string> SnapshotMetadata(IDictionary<string, string> metadata)
