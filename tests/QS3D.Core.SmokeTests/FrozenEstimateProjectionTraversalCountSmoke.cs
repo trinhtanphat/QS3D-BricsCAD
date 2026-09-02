@@ -77,12 +77,12 @@ namespace QS3D.Core.SmokeTests
         private static void TransientCountDriftAfterMaterializationFailsClosed()
         {
             var source = new SequencedCountCollection<EstimateLine>(
-                new[] { 1, 1, 2, 1 },
+                new[] { 1, 1, 1, 2, 1 },
                 CreateLine(1));
 
             AssertCountChanged(() => FrozenEstimateProjection.Create(source));
             Assert(source.CurrentReads == 1, "Post-materialization drift must occur after exactly one caller Current read.");
-            Assert(source.CountReads == 3, "Post-materialization drift must be caught by the row checkpoint.");
+            Assert(source.CountReads == 4, "Post-materialization drift must be caught by the row checkpoint after the pre-traversal rebind.");
         }
 
         private static void HonestCountedSourceRemainsAccepted()
@@ -90,8 +90,8 @@ namespace QS3D.Core.SmokeTests
             var source = new StableReadOnlyCollection<EstimateLine>(1, CreateLine(1));
             var projection = FrozenEstimateProjection.Create(source);
 
-            Assert(source.CountReads == 4,
-                "Honest one-line counted source must bind admission, pre-Current, post-row, and final Count evidence.");
+            Assert(source.CountReads == 5,
+                "Honest one-line counted source must bind admission, post-GetEnumerator pre-traversal, pre-Current, post-row, and final Count evidence.");
             Assert(source.GetEnumeratorCalls == 1, "Honest counted source must be traversed once.");
             Assert(source.MoveNextCalls == 2, "Honest one-line source must complete exactly one traversal.");
             Assert(source.CurrentReads == 1, "Honest one-line source must read Current exactly once.");
