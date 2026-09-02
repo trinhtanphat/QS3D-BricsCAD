@@ -188,9 +188,9 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 RefreshHomeShell(recordActiveDrawing);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _statusText.Text = "Không thể làm mới Khởi đầu: " + ex.Message;
+                ShowSafeFailure("Không thể làm mới Khởi đầu. Vui lòng thử lại.");
             }
             finally
             {
@@ -756,9 +756,9 @@ namespace QS3D.BricsCAD.V25.UI
                 _statusText.Text = "Đã mở " + Path.GetFileName(normalized) + ".";
                 QueueHomeRefresh(recordActiveDrawing: true);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _statusText.Text = "Không thể mở: " + ex.Message;
+                ShowSafeFailure("Không thể mở dự án gần đây. Vui lòng thử lại.");
             }
         }
 
@@ -770,10 +770,15 @@ namespace QS3D.BricsCAD.V25.UI
                 _statusText.Text = string.Empty;
                 QueueHomeRefresh(recordActiveDrawing: true);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _statusText.Text = ex.Message;
+                ShowSafeFailure("Không thể hoàn tất thao tác. Vui lòng thử lại.");
             }
+        }
+
+        private void ShowSafeFailure(string message)
+        {
+            _statusText.Text = message;
         }
 
         private static string DisplayVersion()
