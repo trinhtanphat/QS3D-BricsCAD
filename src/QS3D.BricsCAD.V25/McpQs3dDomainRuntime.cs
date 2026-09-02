@@ -125,10 +125,15 @@ namespace QS3D.BricsCAD.V25
             McpCadMutationCoordinator.QueueNativeCommand(
                 document,
                 command,
-                () => document.SendStringToExecute(command + "\n", true, false, true),
+                () => SendQs3dCommand(document, command),
                 detail => McpCadAgentRuntime.AuditDomainMutation("qs3d_run_command", detail));
             McpCadAgentRuntime.AuditDomainMutation("qs3d_run_command", "command=" + command.ToUpperInvariant());
             return "{\"accepted\":true,\"command\":\"" + Escape(command.ToUpperInvariant()) + "\"}";
+        }
+
+        private static void SendQs3dCommand(Document document, string command)
+        {
+            document.SendStringToExecute(command + "\n", true, false, true);
         }
 
         private static string PlaceSingleFooting(string body)
