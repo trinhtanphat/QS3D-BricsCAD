@@ -3,10 +3,10 @@
 Status: ACTIVE
 Reservation-Protocol: v2
 Canonical owner/session: account:trinhtanphat|session:gpt56sol-20260902-chatgpt-onboarding-ui
-Canonical carrier: agent/gpt56sol/issue-5285-chatgpt-onboarding-pro-dark-ui
+Canonical carrier: agent/trinhtanphat/issue-5285-chatgpt-onboarding-pro-dark-ui
 Lane-Key: issue-5285
 Ownership-Key: v25.mcp.chatgpt-onboarding-pro-dark-ui
-Branch: agent/gpt56sol/issue-5285-chatgpt-onboarding-pro-dark-ui
+Branch: agent/trinhtanphat/issue-5285-chatgpt-onboarding-pro-dark-ui
 
 Expected-Paths:
 - src/QS3D.BricsCAD.V25/McpCloudflareAccountOnboarding.cs
