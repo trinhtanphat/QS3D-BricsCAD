@@ -49,6 +49,7 @@ require_tokens(
         "RUN_PRS_JSON: ${{ toJson(github.event.workflow_run.pull_requests) }}",
         '[[ "${state}" != "open" ]]',
         '[[ "${draft}" != "false" ]]',
+        '[[ "${author_login}" == "dependabot[bot]" ]]',
         '.labels | any(.name == "no-automerge")',
         '[[ "${base_ref}" != "main" ]]',
         '[[ "${head_repo}" != "${GITHUB_REPOSITORY}" ]]',
@@ -99,6 +100,7 @@ require_tokens(
         "current `main`",
         "QS3D_AUTOMERGE_TOKEN",
         "no-automerge",
+        "Dependabot",
         "no force",
     ),
     "CI_POLICY.md",
@@ -110,6 +112,7 @@ require_tokens(
         "green-pr-drain.yml",
         "repository-wide merge coordinator",
         "no-automerge",
+        "Dependabot",
         "normal agents",
     ),
     "docs/MAIN-WRITE-AUTHORIZATION.md",
@@ -132,5 +135,5 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: the owner-approved green PR drain is exact-head/current-main guarded, same-repository only, serialized, opt-out aware, dedicated-token authenticated, and refreshes without force rewriting."
+    "PASS: the owner-approved green PR drain is exact-head/current-main guarded, same-repository only, serialized, opt-out aware, preserves the Dependabot manual boundary, uses a dedicated token, and refreshes without force rewriting."
 )
