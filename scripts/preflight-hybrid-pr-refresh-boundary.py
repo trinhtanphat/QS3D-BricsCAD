@@ -15,14 +15,20 @@ tail = text[start + len(marker):]
 match = re.search(r"^  [A-Za-z0-9_-]+:\s*$", tail, re.MULTILINE)
 block = tail if match is None else tail[:match.start()]
 errors = []
-if "update-branch" not in block or "expected_head_sha" not in block:
+update_pos = block.find("update-branch")
+graphql_pos = block.find("gh api graphql")
+if update_pos < 0 or "expected_head_sha" not in block:
     errors.append("refresh-branches lost exact-head update-branch semantics")
-if "gh api graphql" in block:
-    errors.append("refresh-branches is coupled to GraphQL auto-merge operations")
-if "enablePullRequestAutoMerge" in block or "autoMergeRequest" in block:
-    errors.append("refresh-branches contains native auto-merge state handling")
+if graphql_pos < 0:
+    errors.append("refresh-branches lost native auto-merge reconciliation")
+elif update_pos < 0 or graphql_pos < update_pos:
+    errors.append("GraphQL auto-merge runs before branch refresh")
+if "automerge_failures" not in block:
+    errors.append("refresh-branches must aggregate auto-merge failures instead of aborting the PR loop")
+if "HTTP (409|422)" not in block:
+    errors.append("refresh-branches lost safe stale/conflict handling")
 if errors:
     for error in errors:
         print("ERROR:", error)
     sys.exit(1)
-print("PASS: branch refresh is independent from native auto-merge permission handling")
+print("PASS: branch refresh precedes auto-merge reconciliation and auto-merge failures are aggregated")
