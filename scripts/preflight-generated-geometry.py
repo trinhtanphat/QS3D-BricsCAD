@@ -86,14 +86,18 @@ if grid.is_file():
         "result.Count != expected.Count",
         "Refusing destructive replacement before any Grid annotation is erased.",
         "Refusing partial destructive replacement",
+        "var authoritativeOwnerId = source.OwnerId;",
+        "ValidatePrevious(document.Database, transaction, project, element, authoritativeOwnerId);",
+        "ErasePrevious(transaction, project, element, previous, authoritativeOwnerId);",
     ):
-        if needle not in text: errors.append("Grid annotation exact-set replacement guard missing: " + needle)
+        if needle not in text: errors.append("Grid annotation exact-set/owner-space replacement guard missing: " + needle)
 
-    validate_index = text.find("var previous = ValidatePrevious(document.Database, transaction, project, element);")
-    erase_index = text.find("ErasePrevious(transaction, project, element, previous);")
+    owner_index = text.find("var authoritativeOwnerId = source.OwnerId;")
+    validate_index = text.find("var previous = ValidatePrevious(document.Database, transaction, project, element, authoritativeOwnerId);")
+    erase_index = text.find("ErasePrevious(transaction, project, element, previous, authoritativeOwnerId);")
     metadata_index = text.find("element.Properties[HandlesKey] = string.Join(\";\", generatedHandles);")
-    if validate_index < 0 or erase_index < 0 or metadata_index < 0 or not (validate_index < erase_index < metadata_index):
-        errors.append("Grid annotation replacement must validate the complete previous handle set before erase and metadata replacement")
+    if owner_index < 0 or validate_index < 0 or erase_index < 0 or metadata_index < 0 or not (owner_index < validate_index < erase_index < metadata_index):
+        errors.append("Grid annotation replacement must resolve authoritative owner, validate the complete previous handle/owner set before erase, and replace metadata only afterwards")
 
     for fail_open in (
         "allowMissing: true",
@@ -151,4 +155,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: stale snapshots, exact live-handle prevalidation before destructive invalidation/replacement, query-pure obsolete markers until explicit cleanup, cross-set ownership, UI mutation path, health command and regression coverage are present.")
+print("PASS: stale snapshots, exact live-handle and owner-space prevalidation before destructive invalidation/replacement, query-pure obsolete markers until explicit cleanup, cross-set ownership, UI mutation path, health command and regression coverage are present.")
