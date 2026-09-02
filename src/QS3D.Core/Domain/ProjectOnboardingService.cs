@@ -233,7 +233,7 @@ namespace QS3D.Core.Domain
         }
 
         private static long CountDrawingUnitOverrideRevisionAdvances(
-            IReadOnlyDictionary<string, string> metadata,
+            IDictionary<string, string> metadata,
             LengthUnit effectiveUnit)
         {
             var unitToken = effectiveUnit.ToString();
@@ -253,7 +253,7 @@ namespace QS3D.Core.Domain
         }
 
         private static long CountMetadataWrite(
-            IReadOnlyDictionary<string, string> metadata,
+            IDictionary<string, string> metadata,
             string key,
             string value)
         {
