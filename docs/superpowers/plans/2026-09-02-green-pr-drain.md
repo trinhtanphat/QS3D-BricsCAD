@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a fail-closed GitHub Actions integration lane that merges exact-head green PRs into `main` and refreshes remaining same-repository PR branches against the new base.
+**Goal:** Add a fail-closed GitHub Actions integration lane that merges exact-head green PRs into `main` only after proving they contain current `main`, then refreshes remaining same-repository PR branches against the new base.
 
-**Architecture:** A `workflow_run` workflow listens only to successful pull-request runs of `QS3D Shared Branch and Integration CI`. It re-fetches the triggering PR, verifies exact-head/state/base/source invariants, merges with optimistic locking, and then best-effort updates all other eligible same-repository PR branches using a dedicated fine-grained PAT so synchronize CI is triggered normally.
+**Architecture:** A `workflow_run` workflow listens only to successful pull-request runs of `QS3D Shared Branch and Integration CI`. It re-fetches the triggering PR, verifies exact-head/state/base/source invariants, proves current-main ancestry with the compare API, merges with optimistic locking, and then best-effort updates all other eligible same-repository PR branches using a dedicated fine-grained PAT so synchronize CI is triggered normally.
 
 **Tech Stack:** GitHub Actions YAML, GitHub REST API through `gh api`, Bash, `jq` on `ubuntu-latest`.
 
@@ -14,6 +14,7 @@
 
 - Never bypass required checks or repository rulesets.
 - Never merge a stale head SHA.
+- Never merge a head that does not contain current `main`.
 - Never operate on draft PRs, fork PRs, or PRs whose base is not `main`.
 - Never force-push/reset/rewrite another PR branch.
 - `QS3D_AUTOMERGE_TOKEN` is mandatory for mutations; no `GITHUB_TOKEN` mutation fallback.
@@ -51,7 +52,14 @@ head.repo.full_name == GITHUB_REPOSITORY
 head.sha == workflow_run.head_sha
 ```
 
-Any mismatch exits successfully as an ineligible/stale run.
+Then fetch current `main` and compare `main_sha...head_sha`; require:
+
+```text
+merge_base_commit.sha == main_sha
+status in {ahead, identical}
+```
+
+Any mismatch exits successfully as an ineligible/stale/outdated run.
 
 - [ ] **Step 4: Merge with exact-head optimistic locking**
 
