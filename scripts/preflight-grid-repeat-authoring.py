@@ -19,6 +19,13 @@ def forbid(text: str, needle: str, label: str) -> None:
         raise AssertionError(f"{label}: forbidden {needle!r}")
 
 
+def require_order(text: str, first: str, second: str, label: str) -> None:
+    a = text.find(first)
+    b = text.find(second)
+    if a < 0 or b < 0 or not a < b:
+        raise AssertionError(f"{label}: expected {first!r} before {second!r}")
+
+
 def main() -> int:
     rect = RECT.read_text(encoding="utf-8")
     radial = RADIAL.read_text(encoding="utf-8")
@@ -26,8 +33,12 @@ def main() -> int:
     state = STATE.read_text(encoding="utf-8")
 
     # A template becomes repeatable only after the canonical native builder returns.
-    require(rect, "RectangularGridNativeSourceBuilder.Build(document, project, request);\n                Cad.GridAuthoringRepeatState.RememberRectangular(document, request);", "rectangular commit ordering")
-    require(radial, "RadialGridNativeSourceBuilder.Build(document, project, request);\n                Cad.GridAuthoringRepeatState.RememberRadial(document, request);", "radial commit ordering")
+    require_order(rect, "RectangularGridNativeSourceBuilder.Build(document, project, request);", "GridAuthoringRepeatState.RememberRectangular(document, request)", "rectangular commit ordering")
+    require_order(radial, "RadialGridNativeSourceBuilder.Build(document, project, request);", "GridAuthoringRepeatState.RememberRadial(document, request)", "radial commit ordering")
+    require(rect, "repeatStateSyncFailed", "rectangular post-commit cache isolation")
+    require(radial, "repeatStateSyncFailed", "radial post-commit cache isolation")
+    require(rect, "native + semantic rectangular Grid đã commit; repeat template không thể cập nhật", "rectangular committed-state warning")
+    require(radial, "native + semantic radial Grid đã commit; repeat template không thể cập nhật", "radial committed-state warning")
 
     # State is weakly keyed by the BricsCAD Document so closed DWGs are not retained and
     # separate open documents cannot read one another's templates.
@@ -56,7 +67,7 @@ def main() -> int:
     forbid(repeat, "AppendEntity", "repeat canonical builder boundary")
     forbid(repeat, ".Erase()", "repeat canonical builder boundary")
 
-    print("PASS Grid repeat authoring per-DWG/commit-order/canonical-builder contract")
+    print("PASS Grid repeat authoring per-DWG/commit-order/post-commit/canonical-builder contract")
     return 0
 
 
