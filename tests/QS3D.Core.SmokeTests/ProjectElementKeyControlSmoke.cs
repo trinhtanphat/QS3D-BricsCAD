@@ -12,6 +12,9 @@ namespace QS3D.Core.SmokeTests
             RejectMalformedQuantityKeysWithoutMutation();
             RejectMalformedRemoveKeysWithoutMutation();
             PreserveOrdinarySpaceNormalization();
+            RelationSettersMarkRelationsDirty();
+            RelationSettersMarkGeneratedGeometryStale();
+            NormalizedRelationNoOpsStayClean();
         }
 
         private static void RejectMalformedPropertyKeysWithoutMutation()
@@ -69,6 +72,47 @@ namespace QS3D.Core.SmokeTests
 
             Assert(element.Properties.ContainsKey("LengthM"), "Ordinary surrounding-space property normalization must remain supported.");
             Assert(element.Quantities.ContainsKey("VolumeM3"), "Ordinary surrounding-space quantity normalization must remain supported.");
+        }
+
+        private static void RelationSettersMarkRelationsDirty()
+        {
+            AssertRelationMutationMarksDirty(element => element.FamilyId = "family-2", "FamilyId");
+            AssertRelationMutationMarksDirty(element => element.FloorId = "floor-2", "FloorId");
+            AssertRelationMutationMarksDirty(element => element.ZoneId = "zone-2", "ZoneId");
+        }
+
+        private static void RelationSettersMarkGeneratedGeometryStale()
+        {
+            var element = new ProjectElement("element-1", ElementCategory.Beam, "family-1", "floor-1", "zone-1");
+            element.SetProperty("GeneratedSolidHandle", "AA");
+            element.ClearGeneratedGeometryStale();
+            element.MarkClean(ElementDirtyFlags.All);
+
+            element.FloorId = "floor-2";
+
+            Assert(element.IsGeneratedSolidStale(), "A relation mutation must mark existing generated output stale.");
+        }
+
+        private static void NormalizedRelationNoOpsStayClean()
+        {
+            var element = new ProjectElement("element-1", ElementCategory.Beam, "family-1", "floor-1", "zone-1");
+            element.MarkClean(ElementDirtyFlags.All);
+
+            element.FamilyId = "  family-1  ";
+            element.FloorId = " floor-1 ";
+            element.ZoneId = "zone-1";
+
+            Assert(element.Dirty == ElementDirtyFlags.None, "Normalized relation no-op assignments must not dirty a clean element.");
+        }
+
+        private static void AssertRelationMutationMarksDirty(Action<ProjectElement> mutate, string relationName)
+        {
+            var element = new ProjectElement("element-1", ElementCategory.Beam, "family-1", "floor-1", "zone-1");
+            element.MarkClean(ElementDirtyFlags.All);
+
+            mutate(element);
+
+            Assert(element.Dirty == ElementDirtyFlags.Relations, relationName + " mutation must mark Relations dirty and no unrelated dirty flags.");
         }
 
         private static ProjectElement CreateCleanElement()

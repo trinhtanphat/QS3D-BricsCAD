@@ -92,9 +92,9 @@ namespace QS3D.Core.Domain
                 MarkDirtyCore(ElementDirtyFlags.All, true);
             }
         }
-        public string FamilyId { get => _familyId; set => _familyId = NormalizeOptionalRelationId(value); }
-        public string FloorId { get => _floorId; set => _floorId = NormalizeOptionalRelationId(value); }
-        public string ZoneId { get => _zoneId; set => _zoneId = NormalizeOptionalRelationId(value); }
+        public string FamilyId { get => _familyId; set => SetRelationId(ref _familyId, value); }
+        public string FloorId { get => _floorId; set => SetRelationId(ref _floorId, value); }
+        public string ZoneId { get => _zoneId; set => SetRelationId(ref _zoneId, value); }
         public string DrawingFingerprint { get => _drawingFingerprint; set => _drawingFingerprint = NormalizeDrawingFingerprint(value); }
         public IList<string> SourceHandles { get; }
         public IList<string> DependsOn { get; }
@@ -290,6 +290,14 @@ namespace QS3D.Core.Domain
                 MarkGeneratedGeometryStale("Semantic/source state changed.");
             Dirty |= flags;
             UpdatedUtc = DateTime.UtcNow;
+        }
+
+        private void SetRelationId(ref string field, string? value)
+        {
+            var next = NormalizeOptionalRelationId(value);
+            if (string.Equals(field, next, StringComparison.Ordinal)) return;
+            field = next;
+            MarkDirtyCore(ElementDirtyFlags.Relations, true);
         }
 
         private static string NormalizeOptionalRelationId(string? value)
