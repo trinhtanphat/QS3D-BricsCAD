@@ -1,4 +1,5 @@
 using System;
+using Bricscad.ApplicationServices;
 using Bricscad.Windows;
 using QS3D.BricsCAD.V25.UI;
 using DrawingSize = System.Drawing.Size;
@@ -8,7 +9,8 @@ namespace QS3D.BricsCAD.V25
 {
     /// <summary>
     /// Owns the read-only Project Information surface hosted modelessly inside BricsCAD.
-    /// Tab visibility is controlled separately by ProjectTabActivationCoordinator.
+    /// The palette never owns project mutation; it refreshes from the active document whenever
+    /// it is shown or BricsCAD activates another drawing.
     /// </summary>
     internal static class ProjectSetupPaletteCoordinator
     {
@@ -17,6 +19,7 @@ namespace QS3D.BricsCAD.V25
 
         private static PaletteSet? _palette;
         private static BltProjectSetupPanel? _panel;
+        private static bool _documentActivatedSubscribed;
 
         public static bool IsVisible => _palette != null && _palette.Visible;
 
@@ -29,19 +32,47 @@ namespace QS3D.BricsCAD.V25
             StartCenterPaletteCoordinator.Hide();
             PaletteCoordinator.Hide();
 
-            _panel?.ShowProjectInformation();
-            if (_palette != null)
-                _palette.Visible = true;
+            var palette = _palette;
+            var panel = _panel;
+            if (palette == null || panel == null) return;
+
+            var wasVisible = palette.Visible;
+            var wasSubscribed = _documentActivatedSubscribed;
+            try
+            {
+                SubscribeToDocumentActivation();
+                panel.RefreshFromDocument(Application.DocumentManager.MdiActiveDocument);
+                palette.Visible = true;
+            }
+            catch (Exception)
+            {
+                panel.ShowUnavailable("Project Information không thể mở an toàn; dữ liệu cũ đã được xóa.");
+                if (!wasVisible)
+                {
+                    try { palette.Visible = false; } catch { }
+                }
+                if (!wasSubscribed) UnsubscribeFromDocumentActivation();
+                throw;
+            }
         }
 
         public static void Hide()
         {
-            if (_palette != null)
-                _palette.Visible = false;
+            var palette = _palette;
+            if (palette != null)
+            {
+                try { palette.Visible = false; }
+                finally { UnsubscribeFromDocumentActivation(); }
+                return;
+            }
+
+            UnsubscribeFromDocumentActivation();
         }
 
         public static void Dispose()
         {
+            UnsubscribeFromDocumentActivation();
+
             var palette = _palette;
             _palette = null;
             _panel = null;
@@ -77,6 +108,44 @@ namespace QS3D.BricsCAD.V25
             {
                 Dispose();
                 throw;
+            }
+        }
+
+        private static void SubscribeToDocumentActivation()
+        {
+            if (_documentActivatedSubscribed) return;
+            Application.DocumentManager.DocumentActivated += OnDocumentActivated;
+            _documentActivatedSubscribed = true;
+        }
+
+        private static void UnsubscribeFromDocumentActivation()
+        {
+            if (!_documentActivatedSubscribed) return;
+            try
+            {
+                Application.DocumentManager.DocumentActivated -= OnDocumentActivated;
+                _documentActivatedSubscribed = false;
+            }
+            catch
+            {
+                // Keep the flag true so a later Hide/Dispose can retry without stacking a second hook.
+            }
+        }
+
+        private static void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)
+        {
+            var panel = _panel;
+            if (_palette == null || !_palette.Visible || panel == null) return;
+
+            try
+            {
+                panel.RefreshFromDocument(e.Document ?? Application.DocumentManager.MdiActiveDocument);
+            }
+            catch (Exception)
+            {
+                // Document activation must remain fail-soft. Never retain project information from
+                // the previously active drawing after a refresh failure.
+                panel.ShowUnavailable("Project Information không thể đọc bản vẽ vừa kích hoạt; dữ liệu cũ đã được xóa.");
             }
         }
     }
