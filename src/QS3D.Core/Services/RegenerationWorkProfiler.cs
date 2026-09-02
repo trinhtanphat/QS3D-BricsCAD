@@ -123,7 +123,7 @@ namespace QS3D.Core.Services
 
             SourceChangeVersion = sourceChangeVersion;
             Scope = scope;
-            TargetElementIds = MaterializeBounded(targetElementIds, projectElementCount, nameof(targetElementIds), "target element");
+            TargetElementIds = MaterializeTargetElementIds(targetElementIds, projectElementCount, nameof(targetElementIds));
             ProjectElementCount = projectElementCount;
             DirtyProjectElementCount = dirtyProjectElementCount;
             Items = MaterializeBounded(items, projectElementCount, nameof(items), "work item");
@@ -146,6 +146,23 @@ namespace QS3D.Core.Services
         public int SemanticDirtyElementCount => Items.Count(x => x.HasSemanticDirtyWork);
         public int GeometryOnlyDirtyElementCount => PlannedElementCount - SemanticDirtyElementCount;
         public bool HasWork => PlannedElementCount > 0;
+
+        private static IReadOnlyList<string> MaterializeTargetElementIds(
+            IEnumerable<string> targetElementIds,
+            int maxCount,
+            string parameterName)
+        {
+            var materialized = MaterializeBounded(targetElementIds, maxCount, parameterName, "target element");
+            var canonical = new List<string>(materialized.Count);
+            foreach (var targetElementId in materialized)
+            {
+                canonical.Add(RegenerationWorkIdentityContract.Require(
+                    targetElementId,
+                    parameterName,
+                    "Regeneration work profile target element id"));
+            }
+            return canonical.AsReadOnly();
+        }
 
         private static IReadOnlyList<T> MaterializeBounded<T>(IEnumerable<T> values, int maxCount, string parameterName, string label)
         {
