@@ -97,6 +97,26 @@ namespace QS3D.Core.SmokeTests
             Equal(4m, Required(overridden.GetLine("L1").ReferencedRate, "L1 referenced rate after override"));
             Equal(5m, Required(overridden.GetLine("L1").EffectiveRate, "L1 effective override rate"));
             Equal(50m, Required(overridden.GetLine("L1").Amount, "L1 override amount"));
+            Equal(4, audit.Events.Count);
+
+            var staleWithOverride = service.MarkQuantitySourceStale(
+                overridden,
+                "L1",
+                "Active model is newer than overridden quantity snapshot Q1");
+            Throws<InvalidOperationException>(() => service.RemoveManualRateOverride(
+                staleWithOverride,
+                "L1",
+                "Must not rewrite stale history",
+                audit,
+                "estimator",
+                "override-stale-remove",
+                Utc(2026, 8, 19, 5, 43, 30)));
+            var staleOverriddenLine = staleWithOverride.GetLine("L1");
+            Equal(EstimatingReadinessState.Stale, staleOverriddenLine.State);
+            Equal(5m, Required(staleOverriddenLine.OverrideRate, "L1 stale preserved override rate"));
+            Equal(5m, Required(staleOverriddenLine.EffectiveRate, "L1 stale preserved effective override rate"));
+            Equal(50m, Required(staleOverriddenLine.Amount, "L1 stale preserved overridden historical amount"));
+            Equal(4, audit.Events.Count);
 
             var restored = service.RemoveManualRateOverride(
                 overridden,
@@ -114,6 +134,23 @@ namespace QS3D.Core.SmokeTests
             Equal(EstimatingReadinessState.Stale, stale.GetLine("L1").State);
             Equal(40m, Required(stale.GetLine("L1").Amount, "L1 stale historical amount"));
             Equal("Q1", stale.GetLine("L1").QuantityRevision);
+            Equal(5, audit.Events.Count);
+
+            Throws<InvalidOperationException>(() => service.ApplyManualRateOverride(
+                stale,
+                "L1",
+                6m,
+                "Must not rewrite stale history",
+                audit,
+                "estimator",
+                "override-stale-create",
+                Utc(2026, 8, 19, 5, 45, 0)));
+            var staleLineAfterRejectedOverride = stale.GetLine("L1");
+            Equal(EstimatingReadinessState.Stale, staleLineAfterRejectedOverride.State);
+            Equal(4m, Required(staleLineAfterRejectedOverride.ReferencedRate, "L1 stale preserved referenced rate"));
+            True(!staleLineAfterRejectedOverride.OverrideRate.HasValue);
+            Equal(4m, Required(staleLineAfterRejectedOverride.EffectiveRate, "L1 stale preserved effective rate"));
+            Equal(40m, Required(staleLineAfterRejectedOverride.Amount, "L1 stale preserved historical amount after rejected override"));
             Equal(5, audit.Events.Count);
         }
 
