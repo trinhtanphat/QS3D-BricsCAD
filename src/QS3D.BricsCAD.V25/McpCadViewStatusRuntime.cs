@@ -107,8 +107,10 @@ namespace QS3D.BricsCAD.V25
         {
             var padding = NumberOptional(body, "padding", 1.08d, 1d, 2d);
             var document = RequireDocument();
+            RequireViewMutationIdle();
             using (document.LockDocument())
             {
+                RequireViewMutationIdle();
                 document.Database.UpdateExt(false);
                 var extents = RequireFiniteExtents(
                     new Extents3d(document.Database.Extmin, document.Database.Extmax),
@@ -122,6 +124,7 @@ namespace QS3D.BricsCAD.V25
             var handles = ParseHandlesCsv(McpTopLevelJson.ExtractString(body, "handlesCsv"));
             var padding = NumberOptional(body, "padding", 1.12d, 1d, 2d);
             var document = RequireDocument();
+            RequireViewMutationIdle();
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
@@ -183,6 +186,7 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("twistRadians must be between -2π and 2π.");
 
             var document = RequireDocument();
+            RequireViewMutationIdle();
             using (document.LockDocument())
             using (var view = document.Editor.GetCurrentView())
             {
@@ -191,6 +195,7 @@ namespace QS3D.BricsCAD.V25
                 view.Height = height;
                 if (direction.HasValue) view.ViewDirection = direction.Value;
                 if (hasTwist) view.ViewTwist = twist;
+                RequireViewMutationIdle();
                 document.Editor.SetCurrentView(view);
             }
             return CurrentViewJson(document, "set");
@@ -198,6 +203,7 @@ namespace QS3D.BricsCAD.V25
 
         private static string ApplyExtents(Document document, Extents3d worldExtents, double padding, string source, int entityCount)
         {
+            RequireViewMutationIdle();
             using (var view = document.Editor.GetCurrentView())
             {
                 var worldToEye = Matrix3d.PlaneToWorld(view.ViewDirection);
@@ -212,6 +218,7 @@ namespace QS3D.BricsCAD.V25
                     (eye.MinPoint.Y + eye.MaxPoint.Y) / 2d);
                 view.Width = PositiveViewSize(rawWidth * padding, "computed width");
                 view.Height = PositiveViewSize(rawHeight * padding, "computed height");
+                RequireViewMutationIdle();
                 document.Editor.SetCurrentView(view);
             }
             var result = CurrentViewJson(document, source);
@@ -426,6 +433,18 @@ namespace QS3D.BricsCAD.V25
                     + minimum.ToString("R", CultureInfo.InvariantCulture) + " and "
                     + maximum.ToString("R", CultureInfo.InvariantCulture) + ".");
             return value;
+        }
+
+        private static void RequireViewMutationIdle()
+        {
+            var raw = Convert.ToString(Application.GetSystemVariable("CMDACTIVE"), CultureInfo.InvariantCulture) ?? string.Empty;
+            int active;
+            if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out active) && active == 0) return;
+            var commandNames = SafeCommandNames(
+                Convert.ToString(Application.GetSystemVariable("CMDNAMES"), CultureInfo.InvariantCulture) ?? string.Empty);
+            throw new InvalidOperationException(
+                "BricsCAD view update is busy while another command is active. Wait for cad_wait_idle/CMDACTIVE=0 before retrying the view mutation."
+                + (commandNames.Length == 0 ? string.Empty : " Active command: " + commandNames + "."));
         }
 
         private static Document RequireDocument()
