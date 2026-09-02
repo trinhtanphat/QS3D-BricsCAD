@@ -25,7 +25,7 @@ namespace QS3D.Core.SmokeTests
                 new[] { new MeasurementTraceFact("length", 2d, "m", "SRC-F1") }, 1, 0);
 
             var error = Capture<ArgumentException>(() => Trace(facts, Array.Empty<MeasurementTraceAdjustment>()));
-            Equal(2, facts.CountReads, "Fact Count must be sampled before and after traversal.");
+            Equal(7, facts.CountReads, "Fact Count must be rebound across enumerator acquisition, MoveNext, Current, and terminal traversal.");
             Contains("count changed during enumeration", error.Message, "Fact Count drift must fail closed.");
         }
 
@@ -35,7 +35,7 @@ namespace QS3D.Core.SmokeTests
                 new[] { new MeasurementTraceAdjustment(MeasurementTraceAdjustmentKind.Deduction, 1d, "m3", "opening", "SRC-A1") }, 1, 2);
 
             var error = Capture<ArgumentException>(() => Trace(Array.Empty<MeasurementTraceFact>(), adjustments));
-            Equal(2, adjustments.CountReads, "Adjustment Count must be sampled before and after traversal.");
+            Equal(7, adjustments.CountReads, "Adjustment Count must be rebound across enumerator acquisition, MoveNext, Current, and terminal traversal.");
             Contains("count changed during enumeration", error.Message, "Adjustment Count drift must fail closed.");
         }
 
@@ -43,7 +43,7 @@ namespace QS3D.Core.SmokeTests
         {
             var warnings = new PhaseReadOnlyCollection<string>(new[] { "review opening" }, 1, 0);
             var error = Capture<ArgumentException>(() => Trace(Array.Empty<MeasurementTraceFact>(), Array.Empty<MeasurementTraceAdjustment>(), warnings));
-            Equal(2, warnings.CountReads, "Message Count must be sampled before and after traversal.");
+            Equal(7, warnings.CountReads, "Message Count must be rebound across enumerator acquisition, MoveNext, Current, and terminal traversal.");
             Contains("count changed during enumeration", error.Message, "Message Count drift must fail closed.");
         }
 
@@ -52,7 +52,7 @@ namespace QS3D.Core.SmokeTests
             var facts = new PhaseReadOnlyCollection<MeasurementTraceFact>(
                 new[] { new MeasurementTraceFact("area", 3d, "m2", "SRC-F2") }, 1, -1);
             var error = Capture<ArgumentException>(() => Trace(facts, Array.Empty<MeasurementTraceAdjustment>()));
-            Equal(2, facts.CountReads, "Negative final Count must be observed by the post-traversal rebind.");
+            Equal(7, facts.CountReads, "Negative terminal Count must be observed by the post-MoveNext rebound before publication.");
             Contains("count cannot be negative", error.Message, "Negative post-traversal Count must fail through canonical Count validation.");
         }
 
@@ -67,8 +67,8 @@ namespace QS3D.Core.SmokeTests
 
             var error = Capture<ArgumentException>(() => Trace(facts, Array.Empty<MeasurementTraceAdjustment>()));
             Contains("count contracts disagree", error.Message, "Post-traversal Count-interface conflict must fail closed.");
-            Equal(2, facts.GenericCountReads, "Generic Count must be sampled before and after traversal.");
-            Equal(2, facts.ReadOnlyCountReads, "Read-only Count must expose the final conflict.");
+            Equal(7, facts.GenericCountReads, "Generic Count must be rebound through terminal traversal.");
+            Equal(7, facts.ReadOnlyCountReads, "Read-only Count must expose the terminal conflict.");
         }
 
         private static void StableCountedChildrenRemainAccepted()
@@ -83,9 +83,9 @@ namespace QS3D.Core.SmokeTests
             Equal(1, trace.InputFacts.Count, "Stable counted facts must remain accepted.");
             Equal(1, trace.Adjustments.Count, "Stable counted adjustments must remain accepted.");
             Equal(1, trace.Warnings.Count, "Stable counted messages must remain accepted.");
-            Equal(2, facts.CountReads, "Stable fact Count must be rebound.");
-            Equal(2, adjustments.CountReads, "Stable adjustment Count must be rebound.");
-            Equal(2, warnings.CountReads, "Stable message Count must be rebound.");
+            Equal(8, facts.CountReads, "Stable fact Count must include the final post-traversal publication rebound.");
+            Equal(8, adjustments.CountReads, "Stable adjustment Count must include the final post-traversal publication rebound.");
+            Equal(8, warnings.CountReads, "Stable message Count must include the final post-traversal publication rebound.");
         }
 
         private static void PureStreamingChildrenRemainAccepted()

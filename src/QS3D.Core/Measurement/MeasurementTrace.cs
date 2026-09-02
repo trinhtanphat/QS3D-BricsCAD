@@ -470,13 +470,23 @@ namespace QS3D.Core.Measurement
             if (source == null) throw new ArgumentNullException(parameterName);
             var knownCount = RequireSupportedCount(source, parameterName, "facts");
             var items = new List<MeasurementTraceFact>();
-            foreach (var item in source)
+            using (var enumerator = source.GetEnumerator())
             {
-                RequireTraversalCapacity(knownCount, items.Count, parameterName, "facts");
-                if (items.Count >= MaximumCollectionEntries)
-                    throw CollectionCountError(parameterName, "facts");
-                if (item == null) throw new ArgumentException("Measurement trace facts cannot contain null entries.", parameterName);
-                items.Add(item);
+                RequireKnownCountStable(source, knownCount, parameterName, "facts");
+                while (true)
+                {
+                    RequireKnownCountStable(source, knownCount, parameterName, "facts");
+                    var hasNext = enumerator.MoveNext();
+                    RequireKnownCountStable(source, knownCount, parameterName, "facts");
+                    if (!hasNext) break;
+                    RequireTraversalCapacity(knownCount, items.Count, parameterName, "facts");
+                    if (items.Count >= MaximumCollectionEntries)
+                        throw CollectionCountError(parameterName, "facts");
+                    var item = enumerator.Current;
+                    RequireKnownCountStable(source, knownCount, parameterName, "facts");
+                    if (item == null) throw new ArgumentException("Measurement trace facts cannot contain null entries.", parameterName);
+                    items.Add(item);
+                }
             }
             RequireObservedCount(knownCount, items.Count, parameterName, "facts");
             RequireKnownCountStable(source, knownCount, parameterName, "facts");
@@ -504,13 +514,23 @@ namespace QS3D.Core.Measurement
             if (source == null) throw new ArgumentNullException(parameterName);
             var knownCount = RequireSupportedCount(source, parameterName, "adjustments");
             var items = new List<MeasurementTraceAdjustment>();
-            foreach (var item in source)
+            using (var enumerator = source.GetEnumerator())
             {
-                RequireTraversalCapacity(knownCount, items.Count, parameterName, "adjustments");
-                if (items.Count >= MaximumCollectionEntries)
-                    throw CollectionCountError(parameterName, "adjustments");
-                if (item == null) throw new ArgumentException("Measurement trace adjustments cannot contain null entries.", parameterName);
-                items.Add(item);
+                RequireKnownCountStable(source, knownCount, parameterName, "adjustments");
+                while (true)
+                {
+                    RequireKnownCountStable(source, knownCount, parameterName, "adjustments");
+                    var hasNext = enumerator.MoveNext();
+                    RequireKnownCountStable(source, knownCount, parameterName, "adjustments");
+                    if (!hasNext) break;
+                    RequireTraversalCapacity(knownCount, items.Count, parameterName, "adjustments");
+                    if (items.Count >= MaximumCollectionEntries)
+                        throw CollectionCountError(parameterName, "adjustments");
+                    var item = enumerator.Current;
+                    RequireKnownCountStable(source, knownCount, parameterName, "adjustments");
+                    if (item == null) throw new ArgumentException("Measurement trace adjustments cannot contain null entries.", parameterName);
+                    items.Add(item);
+                }
             }
             RequireObservedCount(knownCount, items.Count, parameterName, "adjustments");
             RequireKnownCountStable(source, knownCount, parameterName, "adjustments");
@@ -528,12 +548,22 @@ namespace QS3D.Core.Measurement
             if (source == null) return new ReadOnlyCollection<string>(Array.Empty<string>());
             var knownCount = RequireSupportedCount(source, nameof(source), "messages");
             var items = new List<string>();
-            foreach (var item in source)
+            using (var enumerator = source.GetEnumerator())
             {
-                RequireTraversalCapacity(knownCount, items.Count, nameof(source), "messages");
-                if (items.Count >= MaximumCollectionEntries)
-                    throw CollectionCountError(nameof(source), "messages");
-                items.Add(RequireText(item, nameof(source)));
+                RequireKnownCountStable(source, knownCount, nameof(source), "messages");
+                while (true)
+                {
+                    RequireKnownCountStable(source, knownCount, nameof(source), "messages");
+                    var hasNext = enumerator.MoveNext();
+                    RequireKnownCountStable(source, knownCount, nameof(source), "messages");
+                    if (!hasNext) break;
+                    RequireTraversalCapacity(knownCount, items.Count, nameof(source), "messages");
+                    if (items.Count >= MaximumCollectionEntries)
+                        throw CollectionCountError(nameof(source), "messages");
+                    var item = enumerator.Current;
+                    RequireKnownCountStable(source, knownCount, nameof(source), "messages");
+                    items.Add(RequireText(item, nameof(source)));
+                }
             }
             RequireObservedCount(knownCount, items.Count, nameof(source), "messages");
             RequireKnownCountStable(source, knownCount, nameof(source), "messages");
