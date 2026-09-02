@@ -28,6 +28,8 @@ namespace QS3D.Core.Revisions
                     throw Changed(label + " elements", elementCount, elements.Count);
 
                 var element = elements[index];
+                if (elements.Count != elementCount)
+                    throw Changed(label + " elements", elementCount, elements.Count);
                 if (element == null)
                 {
                     detached.Elements.Add(null!);
@@ -101,7 +103,10 @@ namespace QS3D.Core.Revisions
             {
                 if (source.Count != expectedCount)
                     throw Changed(label, expectedCount, source.Count);
-                destination.Add(source[index]);
+                var item = source[index];
+                if (source.Count != expectedCount)
+                    throw Changed(label, expectedCount, source.Count);
+                destination.Add(item);
             }
             if (source.Count != expectedCount)
                 throw Changed(label, expectedCount, source.Count);
