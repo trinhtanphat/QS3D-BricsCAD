@@ -601,6 +601,8 @@ namespace QS3D.Core.Commercial
                 throw new InvalidOperationException("Manual rate override requires an existing referenced/base rate.");
             if (target.IsBlocked)
                 throw new InvalidOperationException("A blocked estimating line cannot receive a manual rate override.");
+            if (target.IsStale)
+                throw new InvalidOperationException("A stale estimating line cannot receive a manual rate override.");
 
             var next = target.WithOverride(overrideRate, reason);
             var result = Replace(portfolio, next);
@@ -637,6 +639,8 @@ namespace QS3D.Core.Commercial
             var target = portfolio.GetLine(lineId);
             if (!target.OverrideRate.HasValue)
                 throw new InvalidOperationException("Estimating line does not have a manual rate override.");
+            if (target.IsStale)
+                throw new InvalidOperationException("A stale estimating line cannot remove a manual rate override.");
 
             var next = target.WithoutOverride();
             var result = Replace(portfolio, next);
