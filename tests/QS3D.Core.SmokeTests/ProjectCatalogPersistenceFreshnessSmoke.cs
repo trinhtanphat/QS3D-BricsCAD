@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
             OwnedCatalogScalarMutationsAdvanceProjectFreshness();
             NormalizedNoOpsDoNotAdvanceProjectFreshness();
             OwnershipTracksRemovalReplacementAndSnapshotRestore();
+            DuplicateCatalogReferencesHaveSingleOwnershipSubscription();
         }
 
         private static void OwnedCatalogScalarMutationsAdvanceProjectFreshness()
@@ -81,6 +82,26 @@ namespace QS3D.Core.SmokeTests
             detachedCopy.Floors[0].ElevationM = 9d;
             Equal(copyVersion + 1L, detachedCopy.ChangeVersion, "detached snapshot copy ownership");
             Equal(capturedVersion + 1L, project.ChangeVersion, "detached copy must not mutate source freshness");
+        }
+
+        private static void DuplicateCatalogReferencesHaveSingleOwnershipSubscription()
+        {
+            var project = new ProjectState("P-CATALOG-DUPLICATE", "Catalog duplicate ownership");
+            var zone = new ZoneDefinition("Z-DUP", "Duplicate zone");
+            project.Zones.Add(zone);
+            project.Zones.Add(zone);
+
+            var baseline = project.ChangeVersion;
+            zone.Name = "Duplicate zone edited once";
+            Equal(baseline + 1L, project.ChangeVersion, "duplicate reference must request one project touch");
+
+            project.Zones.RemoveAt(0);
+            zone.Name = "Duplicate zone still owned";
+            Equal(baseline + 2L, project.ChangeVersion, "remaining duplicate reference must stay attached once");
+
+            project.Zones.RemoveAt(0);
+            zone.Name = "Duplicate zone detached";
+            Equal(baseline + 2L, project.ChangeVersion, "last duplicate removal must detach ownership");
         }
 
         private static ProjectState CreateProject(
