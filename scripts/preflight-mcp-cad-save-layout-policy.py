@@ -57,10 +57,10 @@ if direct:
         errors.append("direct layout completion route must not use asynchronous SendStringToExecute")
 
 if host:
-    require(host, '\"processStartDefault\":\"background_only\"', "foreground policy status")
-    require(host, '\"requiresLocalReenableAfterRestart\":true', "foreground policy status")
-    require(host, '\"consentState\":\"', "foreground policy status")
-    require(host, '\"policyMeaning\":\"local-consent-and-policy-must-both-be-enabled\"', "foreground policy status")
+    require(host, '\\"processStartDefault\\":\\"background_only\\"', "foreground policy status")
+    require(host, '\\"requiresLocalReenableAfterRestart\\":true', "foreground policy status")
+    require(host, '\\"consentState\\":\\"', "foreground policy status")
+    require(host, '\\"policyMeaning\\":\\"local-consent-and-policy-must-both-be-enabled\\"', "foreground policy status")
     if "_interactionPolicy = ForegroundFallback" in host:
         errors.append("foreground policy must not become the process-start default")
 
