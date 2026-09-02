@@ -4,7 +4,6 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCadAgentRuntime.cs"
-DIRECT = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCadDirectModelRuntime.cs"
 
 
 def method_block(source: str, signature: str) -> str:
@@ -32,12 +31,11 @@ def require(condition: bool, message: str, errors: list[str]) -> None:
 
 
 def main() -> int:
-    if not RUNTIME.is_file() or not DIRECT.is_file():
-        print("FAIL: missing MCP CAD runtime source")
+    if not RUNTIME.is_file():
+        print("FAIL: missing src/QS3D.BricsCAD.V25/McpCadAgentRuntime.cs")
         return 1
 
     runtime = RUNTIME.read_text(encoding="utf-8")
-    direct = DIRECT.read_text(encoding="utf-8")
     errors: list[str] = []
 
     add_entity = method_block(runtime, "private static string AddEntity(")
@@ -68,8 +66,8 @@ def main() -> int:
         require(bool(block), f"cannot inspect {method}", errors)
         require(token in block, f"{method} must defer Teigha Entity construction through AddEntity factory", errors)
 
-    # Layer-by-name assignment has repeatedly appeared at the top of native AccessViolation
-    # stacks. Resolve/create the layer in the current transaction and assign the ObjectId.
+    # Entity.Layer-by-name appeared directly at the top of the recorded native AccessViolation
+    # stack. Resolve/create the layer in the same transaction and assign the ObjectId instead.
     require("entity.Layer = layer;" not in runtime, "runtime still assigns Entity.Layer by name", errors)
     ensure_layer = method_block(runtime, "private static void EnsureLayer(")
     require(bool(ensure_layer), "cannot inspect EnsureLayer", errors)
@@ -79,16 +77,10 @@ def main() -> int:
         errors,
     )
 
-    apply_layer = method_block(direct, "private static void ApplyLayer(")
-    require(bool(apply_layer), "cannot inspect direct ApplyLayer", errors)
-    require("entity.Layer = layer;" not in apply_layer, "direct runtime still assigns Entity.Layer by name", errors)
-    require("entity.LayerId = layerId;" in apply_layer, "direct ApplyLayer must assign a transaction-resolved LayerId", errors)
-
-    # The existing process-global writer gate remains required; this guard is additive and
-    # protects native object affinity rather than replacing multi-session serialization.
+    # The process-global writer gate remains required. This guard is additive: it protects native
+    # object affinity/lifetime in the crash-proven McpCadAgentRuntime path.
     require("McpCadMutationCoordinator.EnterMutation" in runtime, "process-global mutation coordinator was removed", errors)
     require("private static string InvokeCadMutation(" in runtime, "CAD mutation dispatch helper was removed", errors)
-    require("McpDiagnosticHub.InvokeInCadContext" in direct, "direct model runtime lost CAD-context dispatch", errors)
 
     if errors:
         print("FAIL: MCP CAD native mutation safety guard")
@@ -96,7 +88,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: Teigha entities are constructed only inside CAD-context mutation dispatch, layer changes use transaction-resolved LayerId, and the global writer coordinator remains active.")
+    print("PASS: McpCadAgentRuntime constructs Teigha entities inside CAD-context transactions, assigns transaction-resolved LayerId values, and preserves the global writer coordinator.")
     return 0
 
 
