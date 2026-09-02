@@ -201,11 +201,16 @@ namespace QS3D.Core.Domain
             get => _items[index];
             set
             {
+                if (value == null) throw new ArgumentNullException(nameof(value));
                 var previous = _items[index];
                 if (ReferenceEquals(previous, value)) return;
-                if (previous != null) _detach(previous);
+
+                var previousWasLastReference = CountReferences(previous) == 1;
+                var valueAlreadyOwned = ContainsReference(value);
                 _items[index] = value;
-                if (value != null) _attach(value);
+
+                if (previousWasLastReference) _detach(previous);
+                if (!valueAlreadyOwned) _attach(value);
             }
         }
 
@@ -214,15 +219,16 @@ namespace QS3D.Core.Domain
 
         public void Add(T item)
         {
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            var alreadyOwned = ContainsReference(item);
             _items.Add(item);
-            if (item != null) _attach(item);
+            if (!alreadyOwned) _attach(item);
         }
 
         public void Clear()
         {
-            foreach (var item in _items)
-                if (item != null) _detach(item);
-            _items.Clear();
+            while (_items.Count > 0)
+                RemoveAt(_items.Count - 1);
         }
 
         public bool Contains(T item) => _items.Contains(item);
@@ -233,8 +239,10 @@ namespace QS3D.Core.Domain
 
         public void Insert(int index, T item)
         {
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            var alreadyOwned = ContainsReference(item);
             _items.Insert(index, item);
-            if (item != null) _attach(item);
+            if (!alreadyOwned) _attach(item);
         }
 
         public bool Remove(T item)
@@ -248,8 +256,24 @@ namespace QS3D.Core.Domain
         public void RemoveAt(int index)
         {
             var item = _items[index];
-            if (item != null) _detach(item);
+            var detach = CountReferences(item) == 1;
             _items.RemoveAt(index);
+            if (detach) _detach(item);
+        }
+
+        private bool ContainsReference(T item)
+        {
+            for (var i = 0; i < _items.Count; i++)
+                if (ReferenceEquals(_items[i], item)) return true;
+            return false;
+        }
+
+        private int CountReferences(T item)
+        {
+            var count = 0;
+            for (var i = 0; i < _items.Count; i++)
+                if (ReferenceEquals(_items[i], item)) count++;
+            return count;
         }
     }
 
