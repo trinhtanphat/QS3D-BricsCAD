@@ -246,9 +246,26 @@ def main() -> int:
         "CreateLine", "CreateCircle", "CreateArc", "CreatePolyline", "CreateText", "CreateMText",
         "TransformEntity", "DeleteEntity", "SetEntityLayer", "LayerAction", "RunCadCommandSequence",
     )
+    add_entity = method_block(runtime, "private static string AddEntity(")
+    add_entity_dispatches = bool(
+        add_entity
+        and "private static string AddEntity(Func<Entity> entityFactory, string layer, string auditTool)" in add_entity
+        and "return InvokeCadMutation(() =>" in add_entity
+        and "var entity = entityFactory();" in add_entity
+    )
+    factory_mutation_methods = {
+        "CreateLine", "CreateCircle", "CreateArc", "CreatePolyline", "CreateText", "CreateMText",
+    }
     for method in native_mutation_methods:
         block = method_block(runtime, f"private static string {method}(")
-        if not block or "return InvokeCadMutation(" not in block:
+        direct_dispatch = bool(block and "return InvokeCadMutation(" in block)
+        factory_dispatch = bool(
+            block
+            and method in factory_mutation_methods
+            and "return AddEntity(" in block
+            and add_entity_dispatches
+        )
+        if not block or not (direct_dispatch or factory_dispatch):
             errors.append(f"native CAD mutation {method} bypasses the mutation-aware CAD dispatcher")
 
     normalize_command = method_block(runtime, "private static string NormalizeCadCommandToken(")
