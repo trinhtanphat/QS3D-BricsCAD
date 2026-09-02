@@ -202,14 +202,14 @@ namespace QS3D.Core.Commercial
         {
             get
             {
-                decimal total = 0m;
+                var total = new CommercialExactDecimalAccumulator();
                 for (var i = 0; i < _lines.Count; i++)
                 {
                     var amount = _lines[i].Amount;
                     if (amount.HasValue)
-                        total = CommercialGuard.Add(total, amount.Value, "Estimating portfolio total");
+                        total.Add(amount.Value, "Estimating portfolio total");
                 }
-                return total;
+                return total.ToDecimal("Estimating portfolio total");
             }
         }
 
@@ -448,8 +448,8 @@ namespace QS3D.Core.Commercial
             var unmatched = new List<string>();
             var blocked = new List<string>();
             var replacements = 0;
-            decimal before = 0m;
-            decimal after = 0m;
+            var before = new CommercialExactDecimalAccumulator();
+            var after = new CommercialExactDecimalAccumulator();
 
             for (var i = 0; i < request.LineIds.Count; i++)
             {
@@ -461,17 +461,17 @@ namespace QS3D.Core.Commercial
                     units.Add(line.Unit, aggregate);
                 }
                 aggregate.Count++;
-                aggregate.Quantity = CommercialGuard.Add(aggregate.Quantity, line.Quantity, "Bulk rate assignment unit quantity");
+                aggregate.Quantity.Add(line.Quantity, "Bulk rate assignment unit quantity");
 
                 var oldAmount = line.Amount;
                 if (oldAmount.HasValue)
-                    before = CommercialGuard.Add(before, oldAmount.Value, "Bulk rate assignment total before");
+                    before.Add(oldAmount.Value, "Bulk rate assignment total before");
 
                 if (line.IsBlocked)
                 {
                     blocked.Add(line.LineId);
                     if (oldAmount.HasValue)
-                        after = CommercialGuard.Add(after, oldAmount.Value, "Bulk rate assignment total after blocked line");
+                        after.Add(oldAmount.Value, "Bulk rate assignment total after blocked line");
                     continue;
                 }
 
@@ -479,19 +479,22 @@ namespace QS3D.Core.Commercial
                 {
                     unmatched.Add(line.LineId);
                     if (oldAmount.HasValue)
-                        after = CommercialGuard.Add(after, oldAmount.Value, "Bulk rate assignment total after unmatched line");
+                        after.Add(oldAmount.Value, "Bulk rate assignment total after unmatched line");
                     continue;
                 }
 
                 if (line.CostCode.Length != 0 || line.ReferencedRate.HasValue || line.OverrideRate.HasValue)
                     replacements++;
                 var newAmount = CommercialGuard.Multiply(line.Quantity, rate, "Bulk rate assignment preview amount");
-                after = CommercialGuard.Add(after, newAmount, "Bulk rate assignment total after");
+                after.Add(newAmount, "Bulk rate assignment total after");
             }
 
             var distribution = new List<UnitDistributionItem>();
             foreach (var pair in units)
-                distribution.Add(new UnitDistributionItem(pair.Value.Unit, pair.Value.Count, pair.Value.Quantity));
+                distribution.Add(new UnitDistributionItem(
+                    pair.Value.Unit,
+                    pair.Value.Count,
+                    pair.Value.Quantity.ToDecimal("Bulk rate assignment unit quantity")));
             distribution.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.Unit, right.Unit));
             unmatched.Sort(StringComparer.OrdinalIgnoreCase);
             blocked.Sort(StringComparer.OrdinalIgnoreCase);
@@ -504,8 +507,8 @@ namespace QS3D.Core.Commercial
                 new ReadOnlyCollection<UnitDistributionItem>(distribution.ToArray()),
                 new ReadOnlyCollection<string>(unmatched.ToArray()),
                 new ReadOnlyCollection<string>(blocked.ToArray()),
-                before,
-                after);
+                before.ToDecimal("Bulk rate assignment total before"),
+                after.ToDecimal("Bulk rate assignment total after"));
         }
 
         public EstimatingPortfolio CommitBulkRateAssignment(
@@ -734,10 +737,14 @@ namespace QS3D.Core.Commercial
 
         private sealed class UnitAccumulator
         {
-            internal UnitAccumulator(string unit) { Unit = unit; }
+            internal UnitAccumulator(string unit)
+            {
+                Unit = unit;
+                Quantity = new CommercialExactDecimalAccumulator();
+            }
             internal string Unit { get; }
             internal int Count { get; set; }
-            internal decimal Quantity { get; set; }
+            internal CommercialExactDecimalAccumulator Quantity { get; }
         }
     }
 }
