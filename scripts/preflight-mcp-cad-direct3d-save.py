@@ -58,7 +58,7 @@ def main() -> int:
         'var hasLocalPath = Path.IsPathRooted(filename);',
         'var modified = SafeInteger(SafeSystemVariable("DBMOD")) != "0";',
         'hasLocalPath && !modified',
-        '\\"modified\\"',
+        '\"modified\"',
     ), "active-document saved/dirty truth")
     if 'string.IsNullOrWhiteSpace(filename) ? "false" : "true"' in active_document_block:
         errors.append("cad_active_document.saved still aliases filename presence instead of DBMOD dirty state")
@@ -93,7 +93,7 @@ def main() -> int:
     require(errors, direct_command_block, (
         'McpDiagnosticHub.InvokeInCadContext(() =>',
         'Save();',
-        '\\"command\\":\\"QSAVE\\"',
+        '\"command\":\"QSAVE\"',
     ), "direct QSAVE route")
 
     require(errors, extrude_block, (
@@ -115,12 +115,12 @@ def main() -> int:
         errors.append("direct boolean must not pass the database-resident tool Solid3d directly to BooleanOperation")
 
     require(errors, direct_save_block, (
-        'document.Database.SaveAs(filename, DwgVersion.Current);',
+        'document.Database.Save();',
         'WaitForCleanDbmod();',
-        'route=SaveAs-current-path',
-    ), "save/reopen regression guard")
-    if 'document.Database.Save();' in direct_save_block:
-        errors.append("direct cad_save must not use Database.Save(), which regressed after close/reopen with eCantOpenFile")
+        'route=Database.Save-current-document',
+    ), "current-document save regression guard")
+    if 'document.Database.SaveAs(filename, DwgVersion.Current);' in direct_save_block:
+        errors.append("direct cad_save must not SaveAs over the active drawing current path because that can surface eCantOpenFile")
 
     require(errors, direct_save_as_block, (
         'EnsureWritableDirectory(directory);',
@@ -152,7 +152,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: MCP direct 3D/save tools keep QSAVE owned by the bounded direct CAD runtime, use database-resident curve inputs for Region creation, transient clones for boolean kernel operands, preserve bounded mutation routing, avoid Database.Save after reopen, and confirm save/save-as completion with a bounded DBMOD settle wait.")
+    print("PASS: MCP direct 3D/save tools keep QSAVE owned by the bounded direct CAD runtime, use database-resident curve inputs for Region creation, transient clones for boolean kernel operands, preserve bounded mutation routing, save the active drawing through Database.Save instead of SaveAs(current-path), and confirm save/save-as completion with a bounded DBMOD settle wait.")
     return 0
 
 
