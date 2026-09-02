@@ -84,7 +84,7 @@ for token in (
 
 # Behavioral model pinned independently of C# implementation details.
 def normalize(value):
-    return re.sub(r"\\s+", " ", (value or "").strip()).upper()
+    return re.sub(r"\s+", " ", (value or "").strip()).upper()
 
 def fingerprint(tool, code, lane, exc_type, message):
     canonical = "|".join(normalize(v) for v in (tool, code, lane, exc_type, message))
