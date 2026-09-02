@@ -35,11 +35,16 @@ namespace QS3D.BricsCAD.V25.Cad
         // Weak document keys prevent repeat state from extending the lifetime of a closed DWG.
         private static readonly ConditionalWeakTable<Document, State> States = new ConditionalWeakTable<Document, State>();
 
+        private static State GetState(Document document)
+        {
+            return States.GetValue(document, _ => new State());
+        }
+
         internal static void RememberRectangular(Document document, RectangularGridNativeRequest request)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (request == null) throw new ArgumentNullException(nameof(request));
-            var state = States.GetOrCreateValue(document);
+            var state = GetState(document);
             lock (state.Sync)
             {
                 state.Rectangular = new RectangularTemplate
@@ -56,7 +61,7 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (request == null) throw new ArgumentNullException(nameof(request));
-            var state = States.GetOrCreateValue(document);
+            var state = GetState(document);
             lock (state.Sync)
             {
                 state.Radial = new RadialTemplate
