@@ -76,9 +76,13 @@ else:
     for token in ("SemaphoreSlim MutationGate", "single-writer", "multiSessionReads"):
         require(writer, token, "single-writer invariant")
 
+# Keep the design guard semantic rather than coupling it to Markdown punctuation. In the
+# spec the coordinator name is code-formatted with backticks, so requiring one sentence
+# without Markdown delimiters makes a valid invariant impossible to match.
 for token in (
     "multiple OpenAI and Cloudflare transports concurrently",
-    "McpCadMutationCoordinator remains the only process-global DWG write boundary",
+    "McpCadMutationCoordinator",
+    "only process-global DWG write boundary",
     "SelectedProvider",
 ):
     require(spec, token, "multi-transport design spec")
