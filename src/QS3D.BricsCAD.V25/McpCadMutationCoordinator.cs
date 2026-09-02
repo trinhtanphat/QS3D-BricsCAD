@@ -221,13 +221,19 @@ namespace QS3D.BricsCAD.V25
 
         internal static void Reset()
         {
+            var preservePending = McpCadAgentRuntime.AutomationStopped;
             lock (Sync)
             {
-                if (_pending != null) DetachPendingLocked(_pending);
-                _pending = null;
+                if (!preservePending && _pending != null) DetachPendingLocked(_pending);
+                if (!preservePending) _pending = null;
                 _lease = null;
                 CurrentOperationId.Value = null;
             }
+
+            // A prepared reservation has not yet crossed the durable post-return boundary and
+            // may be safely abandoned. A committed native command clears PreparedNativeCommand
+            // in Commit(), so emergency stop leaves its _pending event barrier intact until the
+            // matching BricsCAD terminal event arrives.
             var prepared = PreparedNativeCommand.Value;
             PreparedNativeCommand.Value = null;
             if (prepared != null) prepared.Dispose();
