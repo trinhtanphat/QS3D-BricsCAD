@@ -105,7 +105,6 @@ if text:
         "gh release",
         "contents: write",
         "actions: write",
-        "GITHUB_TOKEN",
     )
     for token in forbidden_tokens:
         reject(text, token, "hybrid coordinator")
@@ -122,7 +121,7 @@ if text:
 
     for token in (
         "github.event_name == 'pull_request'",
-        "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}",
+        "GH_TOKEN: ${{ github.token }}",
         "event_head_sha",
         "api_head_sha",
         "enablePullRequestAutoMerge",
@@ -152,10 +151,10 @@ if text:
     ):
         require(refresh, token, "refresh-branches")
 
-    if "github.token" in arm or "github.token" in refresh:
-        fail("hybrid coordinator mutations must not fall back to github.token")
-    if "secrets.QS3D_AUTOMERGE_TOKEN" not in arm or "secrets.QS3D_AUTOMERGE_TOKEN" not in refresh:
-        fail("both coordinator jobs must use QS3D_AUTOMERGE_TOKEN")
+    if "github.token" in refresh:
+        fail("refresh-branches must not fall back to github.token for branch mutation")
+    if "secrets.QS3D_AUTOMERGE_TOKEN" not in refresh:
+        fail("refresh-branches must use QS3D_AUTOMERGE_TOKEN")
 
 print("QS3D hybrid PR coordinator preflight")
 if errors:
