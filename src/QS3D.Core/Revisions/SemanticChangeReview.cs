@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml;
 using QS3D.Core.Export;
 
 namespace QS3D.Core.Revisions
@@ -31,12 +32,7 @@ namespace QS3D.Core.Revisions
 
     public sealed class SemanticChangeReviewElement
     {
-        internal SemanticChangeReviewElement(
-            string elementId,
-            string category,
-            string change,
-            IEnumerable<SemanticChangeReviewField> fields,
-            int omittedSourceReferenceChangeCount)
+        internal SemanticChangeReviewElement(string elementId, string category, string change, IEnumerable<SemanticChangeReviewField> fields, int omittedSourceReferenceChangeCount)
         {
             ElementId = elementId ?? string.Empty;
             Category = category ?? string.Empty;
@@ -57,15 +53,7 @@ namespace QS3D.Core.Revisions
 
     public sealed class SemanticChangeReviewSummary
     {
-        internal SemanticChangeReviewSummary(
-            int addedElementCount,
-            int removedElementCount,
-            int changedElementCount,
-            int identityChangeCount,
-            int propertyChangeCount,
-            int quantityChangeCount,
-            int otherChangeCount,
-            int omittedSourceReferenceChangeCount)
+        internal SemanticChangeReviewSummary(int addedElementCount, int removedElementCount, int changedElementCount, int identityChangeCount, int propertyChangeCount, int quantityChangeCount, int otherChangeCount, int omittedSourceReferenceChangeCount)
         {
             AddedElementCount = addedElementCount;
             RemovedElementCount = removedElementCount;
@@ -91,11 +79,7 @@ namespace QS3D.Core.Revisions
 
     public sealed class SemanticChangeReview
     {
-        internal SemanticChangeReview(
-            string beforeRevisionId,
-            string afterRevisionId,
-            IEnumerable<SemanticChangeReviewElement> elements,
-            SemanticChangeReviewSummary summary)
+        internal SemanticChangeReview(string beforeRevisionId, string afterRevisionId, IEnumerable<SemanticChangeReviewElement> elements, SemanticChangeReviewSummary summary)
         {
             BeforeRevisionId = beforeRevisionId ?? string.Empty;
             AfterRevisionId = afterRevisionId ?? string.Empty;
@@ -129,50 +113,23 @@ namespace QS3D.Core.Revisions
 
             foreach (var delta in deltas)
             {
-                if (delta == null || string.IsNullOrWhiteSpace(delta.ElementId))
-                    throw new InvalidOperationException("Revision comparison returned an invalid semantic delta.");
-
+                if (delta == null || string.IsNullOrWhiteSpace(delta.ElementId)) throw new InvalidOperationException("Revision comparison returned an invalid semantic delta.");
                 beforeIndex.TryGetValue(delta.ElementId, out var left);
                 afterIndex.TryGetValue(delta.ElementId, out var right);
                 var category = right?.Category ?? left?.Category ?? string.Empty;
                 var fields = new List<SemanticChangeReviewField>();
                 var omittedSourceReferences = 0;
-
                 foreach (var field in delta.Fields)
                 {
-                    if (field == null || string.IsNullOrWhiteSpace(field.Field))
-                        throw new InvalidOperationException("Revision comparison returned an invalid field delta for " + delta.ElementId + ".");
-                    if (!IsPortableReviewField(field.Field))
-                    {
-                        omittedSourceReferences++;
-                        continue;
-                    }
-
-                    fields.Add(new SemanticChangeReviewField(
-                        Classify(field.Field),
-                        field.Field,
-                        field.Before,
-                        field.After));
+                    if (field == null || string.IsNullOrWhiteSpace(field.Field)) throw new InvalidOperationException("Revision comparison returned an invalid field delta for " + delta.ElementId + ".");
+                    if (!IsPortableReviewField(field.Field)) { omittedSourceReferences++; continue; }
+                    fields.Add(new SemanticChangeReviewField(Classify(field.Field), field.Field, field.Before, field.After));
                 }
-
-                var orderedFields = fields
-                    .OrderBy(x => x.Kind)
-                    .ThenBy(x => x.Field, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-                elements.Add(new SemanticChangeReviewElement(
-                    delta.ElementId,
-                    category,
-                    delta.Change,
-                    orderedFields,
-                    omittedSourceReferences));
+                var orderedFields = fields.OrderBy(x => x.Kind).ThenBy(x => x.Field, StringComparer.OrdinalIgnoreCase).ToList();
+                elements.Add(new SemanticChangeReviewElement(delta.ElementId, category, delta.Change, orderedFields, omittedSourceReferences));
             }
 
-            var orderedElements = elements
-                .OrderBy(x => ChangeRank(x.Change))
-                .ThenBy(x => x.Category, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
+            var orderedElements = elements.OrderBy(x => ChangeRank(x.Change)).ThenBy(x => x.Category, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase).ToList();
             var summary = new SemanticChangeReviewSummary(
                 orderedElements.Count(x => string.Equals(x.Change, "Added", StringComparison.Ordinal)),
                 orderedElements.Count(x => string.Equals(x.Change, "Removed", StringComparison.Ordinal)),
@@ -182,18 +139,23 @@ namespace QS3D.Core.Revisions
                 orderedElements.Sum(x => x.Fields.Count(f => f.Kind == SemanticChangeFieldKind.Quantity)),
                 orderedElements.Sum(x => x.Fields.Count(f => f.Kind == SemanticChangeFieldKind.Other)),
                 orderedElements.Sum(x => x.OmittedSourceReferenceChangeCount));
-
-            if (summary.TotalElementCount != orderedElements.Count)
-                throw new InvalidOperationException("Semantic change review summary is inconsistent with its grouped elements.");
-
+            if (summary.TotalElementCount != orderedElements.Count) throw new InvalidOperationException("Semantic change review summary is inconsistent with its grouped elements.");
             return new SemanticChangeReview(beforeRevisionId, afterRevisionId, orderedElements, summary);
         }
 
         private static string CanonicalRevisionId(string? value, string label)
         {
             var raw = value ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
-                throw new InvalidOperationException("Revision " + label + " is required and must not contain leading/trailing whitespace.");
+            if (string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal) || raw.Any(char.IsControl))
+                throw new InvalidOperationException("Revision " + label + " is required and must not contain leading/trailing whitespace or control characters.");
+            try
+            {
+                XmlConvert.VerifyXmlChars(raw);
+            }
+            catch (XmlException ex)
+            {
+                throw new InvalidOperationException("Revision " + label + " contains characters that are invalid in XML.", ex);
+            }
             return raw;
         }
 
@@ -210,12 +172,9 @@ namespace QS3D.Core.Revisions
             var result = new Dictionary<string, RevisionElementSnapshot>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in snapshot.Elements)
             {
-                if (element == null || string.IsNullOrWhiteSpace(element.ElementId))
-                    throw new InvalidOperationException("Revision " + label + " contains an element without id.");
-                if (!string.Equals(element.ElementId, element.ElementId.Trim(), StringComparison.Ordinal))
-                    throw new InvalidOperationException("Revision " + label + " contains a non-canonical padded element id: " + element.ElementId + ".");
-                if (result.ContainsKey(element.ElementId))
-                    throw new InvalidOperationException("Revision " + label + " contains duplicate element id: " + element.ElementId + ".");
+                if (element == null || string.IsNullOrWhiteSpace(element.ElementId)) throw new InvalidOperationException("Revision " + label + " contains an element without id.");
+                if (!string.Equals(element.ElementId, element.ElementId.Trim(), StringComparison.Ordinal)) throw new InvalidOperationException("Revision " + label + " contains a non-canonical padded element id: " + element.ElementId + ".");
+                if (result.ContainsKey(element.ElementId)) throw new InvalidOperationException("Revision " + label + " contains duplicate element id: " + element.ElementId + ".");
                 result.Add(element.ElementId, element);
             }
             return result;
@@ -223,15 +182,9 @@ namespace QS3D.Core.Revisions
 
         private static SemanticChangeFieldKind Classify(string field)
         {
-            if (string.Equals(field, "Category", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(field, "FamilyId", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(field, "FloorId", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(field, "ZoneId", StringComparison.OrdinalIgnoreCase))
-                return SemanticChangeFieldKind.Identity;
-            if (field.StartsWith(PropertyFieldPrefix, StringComparison.OrdinalIgnoreCase))
-                return SemanticChangeFieldKind.Property;
-            if (field.StartsWith("Quantity:", StringComparison.OrdinalIgnoreCase))
-                return SemanticChangeFieldKind.Quantity;
+            if (string.Equals(field, "Category", StringComparison.OrdinalIgnoreCase) || string.Equals(field, "FamilyId", StringComparison.OrdinalIgnoreCase) || string.Equals(field, "FloorId", StringComparison.OrdinalIgnoreCase) || string.Equals(field, "ZoneId", StringComparison.OrdinalIgnoreCase)) return SemanticChangeFieldKind.Identity;
+            if (field.StartsWith(PropertyFieldPrefix, StringComparison.OrdinalIgnoreCase)) return SemanticChangeFieldKind.Property;
+            if (field.StartsWith("Quantity:", StringComparison.OrdinalIgnoreCase)) return SemanticChangeFieldKind.Quantity;
             return SemanticChangeFieldKind.Other;
         }
 
