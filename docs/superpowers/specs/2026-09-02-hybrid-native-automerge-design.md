@@ -13,6 +13,8 @@ Repository settings verified on 2026-09-02:
 - protected `main` ruleset requires pull requests, strict freshness, `preflight`, and `core`
 - no bypass actor is configured
 
+Runtime verification on 2026-09-02 also established that the workflow-scoped `GITHUB_TOKEN`, despite exposing `PullRequests: write`, receives `Resource not accessible by integration` for the GraphQL `enablePullRequestAutoMerge` mutation in this repository. Therefore every coordinator mutation uses the dedicated repository secret `QS3D_AUTOMERGE_TOKEN`; there is no mutation fallback to `GITHUB_TOKEN`.
+
 ## Goal
 
 Automatically drain eligible same-repository PRs into `main` while preserving protected-main checks, exact current-candidate validation, explicit opt-out, and non-destructive branch reconciliation.
@@ -22,7 +24,7 @@ Automatically drain eligible same-repository PRs into `main` while preserving pr
 - Do not directly call the pull-request merge endpoint.
 - Do not force-push, reset, or directly update `main`.
 - Do not mutate fork PR branches.
-- Do not merge drafts, conflicted PRs, or PRs carrying `no-automerge`.
+- Do not merge drafts, conflicted PRs, Dependabot PRs, or PRs carrying `no-automerge`.
 - Do not bypass, synthesize, or downgrade required `preflight`/`core` checks.
 - Do not publish releases or invoke release workflows.
 - Do not claim licensed BricsCAD runtime evidence.
@@ -33,26 +35,30 @@ Create exactly one automatic workflow: `.github/workflows/hybrid-pr-coordinator.
 
 The workflow has two independent event paths.
 
-### 1. Arm native auto-merge on PR lifecycle events
+### 1. Reconcile native auto-merge on PR lifecycle events
 
 Trigger on `pull_request` actions:
 
 - `opened`
 - `reopened`
 - `ready_for_review`
+- `converted_to_draft`
 - `synchronize`
+- `labeled`
 - `unlabeled`
 
-The arm job runs only when all of the following are true:
+The PR job first requires non-empty `QS3D_AUTOMERGE_TOKEN` and fails closed with an explicit configuration error if the credential is unavailable. It then re-fetches the PR and stays within the same-repository/main boundary. The event PR head SHA must still equal the current API PR head SHA before any auto-merge-state mutation.
 
-- base branch is `main`;
-- PR is open;
-- PR is not draft;
-- PR head repository is exactly `trinhtanphat/QS3D-BricsCAD`;
-- PR does not have label `no-automerge`;
-- event PR head SHA still equals the current API PR head SHA.
+An eligible PR must be:
 
-The job uses the normal `GITHUB_TOKEN` with `pull-requests: write` and `contents: read`. It invokes GitHub GraphQL `enablePullRequestAutoMerge` for that PR. The mutation only arms GitHub native auto-merge; it does not call the REST merge endpoint and it cannot bypass protected-main requirements.
+- targeting `main`;
+- open;
+- non-draft;
+- hosted in exactly `trinhtanphat/QS3D-BricsCAD`;
+- not authored by `dependabot[bot]`;
+- free of the `no-automerge` label.
+
+For an eligible PR, the job uses the PAT-backed GitHub GraphQL `enablePullRequestAutoMerge` mutation. For a previously armed PR that becomes draft or receives `no-automerge`, the same job uses `disablePullRequestAutoMerge`. The workflow never calls the direct REST merge endpoint and never performs the final merge itself.
 
 GitHub then performs the actual merge only when the PR's *current* candidate satisfies repository rules. If the head changes, required checks/freshness apply to the new current candidate before GitHub can merge it.
 
@@ -60,24 +66,25 @@ GitHub then performs the actual merge only when the PR's *current* candidate sat
 
 Trigger on `push` to `main`.
 
-The refresh job enumerates open PRs targeting `main` and filters out:
+The refresh job requires the same `QS3D_AUTOMERGE_TOKEN` and fails closed when it is absent. It enumerates open PRs targeting `main` and filters out:
 
 - drafts;
 - forks;
+- Dependabot PRs;
 - PRs with `no-automerge`;
 - PRs whose mergeable state reports conflict/dirty;
 - PRs whose head repository is not the canonical repository.
 
-For each remaining PR it re-fetches current metadata immediately before mutation and calls GitHub's `update-branch` endpoint with the PR's current head SHA as the optimistic-lock value. The coordinator never force-resets or rewrites a branch.
+For each remaining PR it re-fetches current metadata immediately before mutation, ensures native auto-merge is armed through the PAT-backed GraphQL mutation, then calls GitHub's `update-branch` endpoint with the PR's current head SHA as the optimistic-lock value. The coordinator never force-resets or rewrites a branch.
 
-Refresh mutations use repository secret `QS3D_AUTOMERGE_TOKEN`, not `GITHUB_TOKEN`. The secret must be a fine-grained PAT restricted to `trinhtanphat/QS3D-BricsCAD` with only:
+The secret must be a fine-grained PAT restricted to `trinhtanphat/QS3D-BricsCAD` with only:
 
 - Contents: Read and write
 - Pull requests: Read and write
 
-This external credential is required because events emitted by mutations authenticated with `GITHUB_TOKEN` are not a reliable source of recursive workflow runs. A PAT-backed `update-branch` creates the normal `synchronize` lifecycle, causing shared CI and the auto-merge arm path to evaluate the refreshed candidate.
+The external credential is required both because `enablePullRequestAutoMerge` is not accessible to the repository workflow token in the observed runtime and because PAT-backed branch updates can emit the normal `synchronize` lifecycle needed for shared CI and coordinator reevaluation.
 
-If `QS3D_AUTOMERGE_TOKEN` is absent, the refresh job fails closed with an explicit configuration error. It must not fall back to mutation with `GITHUB_TOKEN`.
+If `QS3D_AUTOMERGE_TOKEN` is absent, either mutation path fails closed with an explicit configuration error. The workflow must not silently report successful coordination and must not fall back to mutation with `GITHUB_TOKEN`.
 
 ## Concurrency
 
@@ -89,11 +96,11 @@ The repository remains fail-closed for autonomous merge behavior generally. Two 
 
 ### `scripts/preflight-ci-manual-only.py`
 
-The exception must require the coordinator to expose exactly `pull_request` plus `push` triggers with the specified PR actions and `main` push branch. It must reject release/publishing primitives, direct `main` writes, force pushes, or unrelated workflow dispatches.
+The exception must require the coordinator to expose exactly `pull_request` plus `push` triggers with the specified PR actions and `main` push branch. It must require PAT-backed mutations and reject release/publishing primitives, direct `main` writes, force pushes, or unrelated workflow dispatches.
 
 ### `scripts/preflight-repository-professionalism.py`
 
-The global autonomous-merge scan remains in force for every other workflow. The named coordinator alone may contain the `enablePullRequestAutoMerge` GraphQL mutation, and even there direct merge primitives remain forbidden:
+The global autonomous-merge scan remains in force for every other workflow. The named coordinator alone may contain the `enablePullRequestAutoMerge` and `disablePullRequestAutoMerge` GraphQL mutations, and even there direct merge primitives remain forbidden:
 
 - `gh pr merge` remains forbidden;
 - REST `/pulls/{number}/merge` remains forbidden;
@@ -108,19 +115,21 @@ Add `scripts/preflight-hybrid-pr-coordinator.py`. Because `scripts/preflight-all
 The guard fails unless the coordinator has all required contracts, including:
 
 - exact workflow name/path;
-- exact automatic trigger families;
+- exact automatic trigger families, including draft/label transitions needed to disarm;
 - serialized concurrency;
 - no `pull_request_target`;
 - no direct merge API or `gh pr merge`;
-- native `enablePullRequestAutoMerge` marker;
-- same-repository/base-main/draft/opt-out filters;
-- exact PR head re-fetch check before arming;
+- native `enablePullRequestAutoMerge` and `disablePullRequestAutoMerge` markers;
+- same-repository/base-main/draft/opt-out/Dependabot filters;
+- exact PR head re-fetch check before arming/disarming;
+- PAT-backed GraphQL mutation rather than `github.token`;
 - `update-branch` endpoint with current head SHA;
 - `QS3D_AUTOMERGE_TOKEN` for refresh;
+- explicit nonzero failure when the PAT is missing;
 - no PAT fallback to `GITHUB_TOKEN` mutation;
 - no force/reset/direct-main primitive.
 
-The first commit adds this guard before the coordinator exists, intentionally producing RED evidence. Subsequent implementation makes it GREEN.
+The first commit adds this guard before the coordinator exists, intentionally producing RED evidence. Subsequent implementation makes it GREEN. A later regression cycle additionally proved that warning-only handling of a missing PAT was incorrect; the guard now requires both mutation paths to fail closed.
 
 ## Queue behavior
 
@@ -138,7 +147,7 @@ PR opened/synchronized
   -> next eligible PR lands
 ```
 
-A red, stale, draft, opted-out, conflicted, or fork PR simply remains open. The coordinator never converts a failing candidate into a passing one and never erases PR work.
+If an armed PR becomes draft or gains `no-automerge`, its PR lifecycle event causes the coordinator to disarm native auto-merge. A red, stale, draft, opted-out, conflicted, Dependabot, or fork PR otherwise remains open. The coordinator never converts a failing candidate into a passing one and never erases PR work.
 
 ## Rollout
 
@@ -150,4 +159,5 @@ Before calling the automation operational, verify:
 2. the task PR merges through protected `main` without bypass;
 3. `main` contains the coordinator commit;
 4. repository settings still show `allow_auto_merge=true` and `allow_update_branch=true`;
-5. `QS3D_AUTOMERGE_TOKEN` exists before relying on automatic branch refresh.
+5. `QS3D_AUTOMERGE_TOKEN` exists before relying on any automatic arm/disarm or branch-refresh behavior;
+6. a live coordinator run performs a PAT-backed mutation successfully instead of taking the missing-secret failure path.
