@@ -191,6 +191,11 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
+                // Make the post-return barrier durable before handing the command to BricsCAD.
+                // Reset/emergency-stop may clean a merely prepared reservation, but once dispatch
+                // begins only the matching native terminal event (or enqueue failure below) may
+                // release this pending writer ownership.
+                reservation.BeginDispatch();
                 enqueue();
                 reservation.Commit();
                 audit?.Invoke("native command queued; command=" + SafeTool(command));
@@ -221,19 +226,21 @@ namespace QS3D.BricsCAD.V25
 
         internal static void Reset()
         {
-            var preservePending = McpCadAgentRuntime.AutomationStopped;
             lock (Sync)
             {
-                if (!preservePending && _pending != null) DetachPendingLocked(_pending);
-                if (!preservePending) _pending = null;
+                // A reservation that has not begun native dispatch is still request-local and
+                // may be abandoned during server/emergency reset. Once dispatch begins, keep
+                // the process-global barrier and its event handlers until BricsCAD reports the
+                // matching command terminal event. This prevents resume/restart from opening a
+                // second DWG writer while the previous native command can still be mutating.
+                if (_pending != null && !_pending.Dispatching)
+                {
+                    DetachPendingLocked(_pending);
+                    _pending = null;
+                }
                 _lease = null;
                 CurrentOperationId.Value = null;
             }
-
-            // A prepared reservation has not yet crossed the durable post-return boundary and
-            // may be safely abandoned. A committed native command clears PreparedNativeCommand
-            // in Commit(), so emergency stop leaves its _pending event barrier intact until the
-            // matching BricsCAD terminal event arrives.
             var prepared = PreparedNativeCommand.Value;
             PreparedNativeCommand.Value = null;
             if (prepared != null) prepared.Dispose();
@@ -423,6 +430,7 @@ namespace QS3D.BricsCAD.V25
             public Document Document { get; private set; }
             public string Command { get; private set; }
             public bool Started { get; set; }
+            public bool Dispatching { get; set; }
             public Action<string>? Audit { get; private set; }
             public CommandEventHandler WillStartHandler = null!;
             public CommandEventHandler EndedHandler = null!;
@@ -466,6 +474,16 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("Prepared native command does not own the mutation gate.");
                 if (Interlocked.CompareExchange(ref _gateTransferredOrReleased, 1, 0) != 0)
                     throw new InvalidOperationException("Prepared native command mutation gate was already transferred or released.");
+            }
+
+            internal void BeginDispatch()
+            {
+                lock (Sync)
+                {
+                    if (!ReferenceEquals(_pending, McpCadMutationCoordinator._pending))
+                        throw new InvalidOperationException("Native-command reservation is no longer active.");
+                    _pending.Dispatching = true;
+                }
             }
 
             internal void Commit()
