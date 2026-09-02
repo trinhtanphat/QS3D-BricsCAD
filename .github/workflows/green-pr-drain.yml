@@ -1,0 +1,189 @@
+name: QS3D Green PR Drain
+
+on:
+  workflow_run:
+    workflows:
+      - QS3D Shared Branch and Integration CI
+    types:
+      - completed
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: qs3d-green-pr-drain
+  cancel-in-progress: false
+
+jobs:
+  merge-and-refresh:
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}
+      RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+      RUN_PRS_JSON: ${{ toJson(github.event.workflow_run.pull_requests) }}
+    steps:
+      - name: Merge exact green head and refresh remaining PRs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::error::Missing QS3D_AUTOMERGE_TOKEN. Configure a fine-grained PAT scoped only to ${GITHUB_REPOSITORY} with Contents: Read and write and Pull requests: Read and write."
+            exit 1
+          fi
+
+          if [[ -z "${RUN_HEAD_SHA:-}" ]]; then
+            echo "::error::workflow_run.head_sha is empty; refusing mutation."
+            exit 1
+          fi
+
+          pr_count="$(jq 'length' <<<"${RUN_PRS_JSON}")"
+          if [[ "${pr_count}" != "1" ]]; then
+            echo "Safety skip: expected exactly one pull request on the successful workflow_run, got ${pr_count}."
+            exit 0
+          fi
+
+          pr_number="$(jq -r '.[0].number' <<<"${RUN_PRS_JSON}")"
+          if ! [[ "${pr_number}" =~ ^[0-9]+$ ]]; then
+            echo "::error::Invalid pull request number '${pr_number}'."
+            exit 1
+          fi
+
+          pr_json="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${GITHUB_REPOSITORY}/pulls/${pr_number}")"
+
+          state="$(jq -r '.state' <<<"${pr_json}")"
+          draft="$(jq -r '.draft' <<<"${pr_json}")"
+          base_ref="$(jq -r '.base.ref' <<<"${pr_json}")"
+          head_repo="$(jq -r '.head.repo.full_name // ""' <<<"${pr_json}")"
+          head_sha="$(jq -r '.head.sha' <<<"${pr_json}")"
+
+          if [[ "${state}" != "open" ]]; then
+            echo "Safety skip: PR #${pr_number} is no longer open."
+            exit 0
+          fi
+          if [[ "${draft}" != "false" ]]; then
+            echo "Safety skip: PR #${pr_number} is draft."
+            exit 0
+          fi
+          if [[ "${base_ref}" != "main" ]]; then
+            echo "Safety skip: PR #${pr_number} targets '${base_ref}', not main."
+            exit 0
+          fi
+          if [[ "${head_repo}" != "${GITHUB_REPOSITORY}" ]]; then
+            echo "Safety skip: PR #${pr_number} head repository '${head_repo}' is not ${GITHUB_REPOSITORY}."
+            exit 0
+          fi
+          if [[ "${head_sha}" != "${RUN_HEAD_SHA}" ]]; then
+            echo "Safety skip: successful run head ${RUN_HEAD_SHA} is stale; PR #${pr_number} is now ${head_sha}."
+            exit 0
+          fi
+
+          main_sha="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${GITHUB_REPOSITORY}/branches/main" \
+            --jq '.commit.sha')"
+
+          compare_json="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${GITHUB_REPOSITORY}/compare/${main_sha}...${RUN_HEAD_SHA}")"
+          compare_status="$(jq -r '.status' <<<"${compare_json}")"
+          merge_base_sha="$(jq -r '.merge_base_commit.sha' <<<"${compare_json}")"
+
+          if [[ "${merge_base_sha}" != "${main_sha}" || ( "${compare_status}" != "ahead" && "${compare_status}" != "identical" ) ]]; then
+            echo "Safety skip: PR #${pr_number} does not contain current main ${main_sha}; status=${compare_status}, merge-base=${merge_base_sha}."
+            exit 0
+          fi
+
+          merge_error="$(mktemp)"
+          if ! merge_json="$(gh api \
+              --method PUT \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/${GITHUB_REPOSITORY}/pulls/${pr_number}/merge" \
+              -f merge_method=merge \
+              -f sha="${RUN_HEAD_SHA}" 2>"${merge_error}")"; then
+            echo "::error::Merge of PR #${pr_number} at exact head ${RUN_HEAD_SHA} was rejected."
+            cat "${merge_error}" >&2
+            rm -f "${merge_error}"
+            exit 1
+          fi
+          rm -f "${merge_error}"
+
+          if [[ "$(jq -r '.merged' <<<"${merge_json}")" != "true" ]]; then
+            echo "::error::GitHub did not confirm PR #${pr_number} merged=true."
+            jq . <<<"${merge_json}"
+            exit 1
+          fi
+
+          merge_sha="$(jq -r '.sha' <<<"${merge_json}")"
+          echo "Merged PR #${pr_number} exact head ${RUN_HEAD_SHA}; main merge commit ${merge_sha}."
+
+          refreshed=()
+          skipped=()
+          warnings=()
+
+          if ! pr_rows="$(gh api \
+              --paginate \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/repos/${GITHUB_REPOSITORY}/pulls?state=open&base=main&per_page=100" \
+              --jq '.[] | [.number, .head.sha, (.head.repo.full_name // ""), .draft, .state] | @tsv')"; then
+            echo "::error::Merged PR #${pr_number}, but failed to list remaining PRs for refresh."
+            exit 1
+          fi
+
+          while IFS=$'\t' read -r other_number other_head_sha other_head_repo other_draft other_state; do
+            [[ -z "${other_number:-}" ]] && continue
+            [[ "${other_number}" == "${pr_number}" ]] && continue
+
+            if [[ "${other_state}" != "open" || "${other_head_repo}" != "${GITHUB_REPOSITORY}" ]]; then
+              skipped+=("#${other_number}")
+              continue
+            fi
+
+            update_error="$(mktemp)"
+            if gh api \
+                --method PUT \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "/repos/${GITHUB_REPOSITORY}/pulls/${other_number}/update-branch" \
+                -f expected_head_sha="${other_head_sha}" \
+                >/dev/null 2>"${update_error}"; then
+              refreshed+=("#${other_number}")
+              echo "Refresh requested for PR #${other_number} at expected head ${other_head_sha}."
+            else
+              warning_text="$(tr '\n' ' ' <"${update_error}" | sed 's/[[:space:]]\+/ /g')"
+              warnings+=("#${other_number}")
+              echo "::warning::Could not refresh PR #${other_number}; leaving branch unchanged. ${warning_text}"
+            fi
+            rm -f "${update_error}"
+          done <<<"${pr_rows}"
+
+          join_or_none() {
+            if (( $# == 0 )); then
+              printf 'none'
+            else
+              local IFS=', '
+              printf '%s' "$*"
+            fi
+          }
+
+          {
+            echo "## QS3D Green PR Drain"
+            echo ""
+            echo "- Merged: #${pr_number} (${RUN_HEAD_SHA})"
+            echo "- Main merge commit: ${merge_sha}"
+            echo "- Refresh requested: $(join_or_none "${refreshed[@]}")"
+            echo "- Safety skipped: $(join_or_none "${skipped[@]}")"
+            echo "- Refresh warnings/conflicts: $(join_or_none "${warnings[@]}")"
+          } >>"${GITHUB_STEP_SUMMARY}"
