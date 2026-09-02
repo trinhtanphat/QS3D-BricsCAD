@@ -156,7 +156,11 @@ namespace QS3D.BricsCAD.V25
                 var document = RequireDocument();
                 var script = "_.EXTRUDE\n" + inputs;
                 if (!script.EndsWith("\n", StringComparison.Ordinal)) script += "\n";
-                document.SendStringToExecute(script, true, false, true);
+                McpCadMutationCoordinator.QueueNativeCommand(
+                    document,
+                    command,
+                    () => document.SendStringToExecute(script, true, false, true),
+                    detail => McpCadAgentRuntime.AuditDomainMutation("cad_command_sequence", detail));
                 McpDiagnosticHub.Record("mcp", "info", "cad-command-sequence", "command=EXTRUDE; boundedMultiStage=true; inputChars=" + inputs.Length.ToString(CultureInfo.InvariantCulture), document);
                 return "{\"accepted\":true,\"command\":\"EXTRUDE\",\"multiStage\":true,\"inputChars\":" + inputs.Length.ToString(CultureInfo.InvariantCulture) + "}";
             });
