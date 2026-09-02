@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 PANEL = ROOT / "src/QS3D.BricsCAD.V25/UI/BltProjectSetupPanel.cs"
@@ -44,12 +45,29 @@ for token in (
     "Application.DocumentManager.DocumentActivated -= OnDocumentActivated;",
     "panel.RefreshFromDocument(Application.DocumentManager.MdiActiveDocument);",
     "panel.RefreshFromDocument(e.Document ?? Application.DocumentManager.MdiActiveDocument);",
-    "finally { UnsubscribeFromDocumentActivation(); }",
     "UnsubscribeFromDocumentActivation();",
     "panel.ShowUnavailable(\"Project Information không thể đọc bản vẽ vừa kích hoạt; dữ liệu cũ đã được xóa.\")",
 ):
     if token not in coordinator:
         raise SystemExit(f"Project Information palette lifecycle missing token: {token}")
+
+# Hide must release native document-activation ownership even if changing palette visibility throws.
+# Match the semantic try/finally structure rather than one exact whitespace layout so formatting does
+# not create false negatives while removal/reordering of the cleanup still fails closed.
+hide_match = re.search(
+    r"public\s+static\s+void\s+Hide\s*\(\s*\)\s*\{(?P<body>.*?)\n\s*\}\n\s*\n\s*public\s+static\s+void\s+Dispose",
+    coordinator,
+    re.DOTALL,
+)
+if hide_match is None:
+    raise SystemExit("Project Information palette lifecycle missing Hide() boundary")
+hide_body = hide_match.group("body")
+if re.search(
+    r"try\s*\{\s*palette\.Visible\s*=\s*false\s*;\s*\}\s*finally\s*\{\s*UnsubscribeFromDocumentActivation\s*\(\s*\)\s*;\s*\}",
+    hide_body,
+    re.DOTALL,
+) is None:
+    raise SystemExit("Project Information Hide() must unsubscribe document activation in finally")
 
 for forbidden in ("ex.Message", "error.Message", "Exception.Message"):
     if forbidden in coordinator:
