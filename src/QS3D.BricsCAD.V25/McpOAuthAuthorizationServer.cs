@@ -37,12 +37,21 @@ namespace QS3D.BricsCAD.V25
         private const int MaxFormBytes = 32 * 1024;
         private const int MaxParameterCount = 32;
         private const int MaxParameterLength = 8192;
+        private const int MaxConsumedCredentialEntries = 1024;
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private static readonly ConcurrentDictionary<string, long> ConsumedAuthorizationCodes =
             new ConcurrentDictionary<string, long>(StringComparer.Ordinal);
         private static readonly ConcurrentDictionary<string, long> ConsumedRefreshTokens =
             new ConcurrentDictionary<string, long>(StringComparer.Ordinal);
+        private static readonly object ConsumedCredentialSync = new object();
         private static readonly string ProcessNonce = CreateRandomToken(24);
+
+        private enum ConsumedCredentialAdmission
+        {
+            Added,
+            Replay,
+            CapacityExceeded,
+        }
 
         internal static bool TryHandle(
             string method,
@@ -378,8 +387,10 @@ namespace QS3D.BricsCAD.V25
                 || !ConstantTimeEquals(ComputePkceChallenge(verifier), challenge))
                 return OAuthError(400, "Bad Request", "invalid_grant", "authorization code binding check failed");
 
-            CleanupConsumedCodes();
-            if (!ConsumedAuthorizationCodes.TryAdd(HashForCache(code), expiry))
+            var admission = TryRememberConsumedCredential(ConsumedAuthorizationCodes, HashForCache(code), expiry);
+            if (admission == ConsumedCredentialAdmission.CapacityExceeded)
+                return OAuthError(503, "Service Unavailable", "temporarily_unavailable", "authorization code replay cache is at capacity");
+            if (admission == ConsumedCredentialAdmission.Replay)
                 return OAuthError(400, "Bad Request", "invalid_grant", "authorization code was already used");
             var includeRefreshToken = HasOfflineAccess(normalizedCodeScope);
             return IssueTokenPair(clientId, resource, signingSecret, normalizedCodeScope, includeRefreshToken);
@@ -427,8 +438,10 @@ namespace QS3D.BricsCAD.V25
                 grantedScope = normalizedRequestedScope;
             }
 
-            CleanupConsumedRefreshTokens();
-            if (!ConsumedRefreshTokens.TryAdd(HashForCache(refresh), expiry))
+            var admission = TryRememberConsumedCredential(ConsumedRefreshTokens, HashForCache(refresh), expiry);
+            if (admission == ConsumedCredentialAdmission.CapacityExceeded)
+                return OAuthError(503, "Service Unavailable", "temporarily_unavailable", "refresh token replay cache is at capacity");
+            if (admission == ConsumedCredentialAdmission.Replay)
                 return OAuthError(400, "Bad Request", "invalid_grant", "refresh token was already used");
             var includeRefreshToken = HasOfflineAccess(grantedScope);
             return IssueTokenPair(clientId, resource, signingSecret, grantedScope, includeRefreshToken);
@@ -971,39 +984,26 @@ namespace QS3D.BricsCAD.V25
             using (var sha = SHA256.Create()) return Base64Url(sha.ComputeHash(Encoding.UTF8.GetBytes(value ?? string.Empty)));
         }
 
-        private static void CleanupConsumedCodes()
+        private static ConsumedCredentialAdmission TryRememberConsumedCredential(
+            ConcurrentDictionary<string, long> cache,
+            string hash,
+            long expiry)
         {
-            if (ConsumedAuthorizationCodes.Count < 256) return;
-            var now = UnixNow();
-            foreach (var pair in ConsumedAuthorizationCodes)
+            lock (ConsumedCredentialSync)
             {
-                long ignored;
-                if (pair.Value <= now) ConsumedAuthorizationCodes.TryRemove(pair.Key, out ignored);
-            }
-            if (ConsumedAuthorizationCodes.Count <= 1024) return;
-            foreach (var pair in ConsumedAuthorizationCodes)
-            {
-                long ignored;
-                ConsumedAuthorizationCodes.TryRemove(pair.Key, out ignored);
-                if (ConsumedAuthorizationCodes.Count <= 768) break;
-            }
-        }
-
-        private static void CleanupConsumedRefreshTokens()
-        {
-            if (ConsumedRefreshTokens.Count < 256) return;
-            var now = UnixNow();
-            foreach (var pair in ConsumedRefreshTokens)
-            {
-                long ignored;
-                if (pair.Value <= now) ConsumedRefreshTokens.TryRemove(pair.Key, out ignored);
-            }
-            if (ConsumedRefreshTokens.Count <= 1024) return;
-            foreach (var pair in ConsumedRefreshTokens)
-            {
-                long ignored;
-                ConsumedRefreshTokens.TryRemove(pair.Key, out ignored);
-                if (ConsumedRefreshTokens.Count <= 768) break;
+                var now = UnixNow();
+                foreach (var pair in cache)
+                {
+                    if (pair.Value <= now)
+                    {
+                        long ignored;
+                        cache.TryRemove(pair.Key, out ignored);
+                    }
+                }
+                if (cache.ContainsKey(hash)) return ConsumedCredentialAdmission.Replay;
+                if (cache.Count >= MaxConsumedCredentialEntries) return ConsumedCredentialAdmission.CapacityExceeded;
+                if (!cache.TryAdd(hash, expiry)) return ConsumedCredentialAdmission.Replay;
+                return ConsumedCredentialAdmission.Added;
             }
         }
 
