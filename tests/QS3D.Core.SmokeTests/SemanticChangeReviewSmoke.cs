@@ -13,6 +13,8 @@ namespace QS3D.Core.SmokeTests
             GroupsStableSemanticChangesWithoutHandleAuthority();
             ReviewOrderingIsDeterministic();
             MalformedSnapshotsFailClosed();
+            MalformedRevisionIdsFailClosed();
+            SupplementaryRevisionIdsRemainExact();
         }
 
         private static void GroupsStableSemanticChangesWithoutHandleAuthority()
@@ -62,12 +64,11 @@ namespace QS3D.Core.SmokeTests
             Equal(SemanticChangeFieldKind.Property, item.Fields.Single(x => x.Field == "Property:Mark").Kind);
             Equal(SemanticChangeFieldKind.Quantity, item.Fields.Single(x => x.Field == "Quantity:NetVolumeM3").Kind);
             Equal(5, item.OmittedSourceReferenceChangeCount);
+
             True(item.Fields.All(x => x.Field.IndexOf("Handle", StringComparison.OrdinalIgnoreCase) < 0));
             True(item.Fields.All(x => x.Field.IndexOf("Generated", StringComparison.OrdinalIgnoreCase) < 0));
             True(item.Fields.All(x => x.Field.IndexOf("PhysicalOpeningCut", StringComparison.OrdinalIgnoreCase) < 0));
-            True(item.Fields.All(x =>
-                x.Before.IndexOf("HANDLE-", StringComparison.OrdinalIgnoreCase) < 0 &&
-                x.After.IndexOf("HANDLE-", StringComparison.OrdinalIgnoreCase) < 0));
+            True(item.Fields.All(x => x.Before.IndexOf("HANDLE-", StringComparison.OrdinalIgnoreCase) < 0 && x.After.IndexOf("HANDLE-", StringComparison.OrdinalIgnoreCase) < 0));
         }
 
         private static void ReviewOrderingIsDeterministic()
@@ -106,24 +107,36 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => new SemanticChangeReviewBuilder().Build(duplicate, new RevisionSnapshot { Id = "R2" }));
         }
 
+        private static void MalformedRevisionIdsFailClosed()
+        {
+            Throws<InvalidOperationException>(() => new SemanticChangeReviewBuilder().Build(
+                new RevisionSnapshot { Id = "R\uD800" }, new RevisionSnapshot { Id = "R2" }));
+            Throws<InvalidOperationException>(() => new SemanticChangeReviewBuilder().Build(
+                new RevisionSnapshot { Id = "R1" }, new RevisionSnapshot { Id = "R\uDC00" }));
+            Throws<InvalidOperationException>(() => new SemanticChangeReviewBuilder().Build(
+                new RevisionSnapshot { Id = "R\u0001" }, new RevisionSnapshot { Id = "R2" }));
+        }
+
+        private static void SupplementaryRevisionIdsRemainExact()
+        {
+            const string beforeId = "R\U0001F600";
+            const string afterId = "R\U0001F680";
+            var review = new SemanticChangeReviewBuilder().Build(
+                new RevisionSnapshot { Id = beforeId }, new RevisionSnapshot { Id = afterId });
+            Equal(beforeId, review.BeforeRevisionId);
+            Equal(afterId, review.AfterRevisionId);
+        }
+
         private static RevisionElementSnapshot ChangedElement(string id, params string[] propertyPairs)
         {
             var element = Element(id, "Beam", "F", "L", "Z");
-            for (var i = 0; i + 1 < propertyPairs.Length; i += 2)
-                element.Properties[propertyPairs[i]] = propertyPairs[i + 1];
+            for (var i = 0; i + 1 < propertyPairs.Length; i += 2) element.Properties[propertyPairs[i]] = propertyPairs[i + 1];
             return element;
         }
 
         private static RevisionElementSnapshot Element(string id, string category, string family, string floor, string zone)
         {
-            return new RevisionElementSnapshot
-            {
-                ElementId = id,
-                Category = category,
-                FamilyId = family,
-                FloorId = floor,
-                ZoneId = zone
-            };
+            return new RevisionElementSnapshot { ElementId = id, Category = category, FamilyId = family, FloorId = floor, ZoneId = zone };
         }
 
         private static void Equal<T>(T expected, T actual)
