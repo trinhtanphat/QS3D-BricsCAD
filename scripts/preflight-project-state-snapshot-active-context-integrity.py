@@ -16,31 +16,57 @@ def require(text: str, token: str, label: str) -> int:
     return pos
 
 
+def method_slice(text: str, signature: str, label: str) -> str:
+    start = require(text, signature, label)
+    open_brace = text.find("{", start)
+    if open_brace < 0:
+        raise AssertionError(f"missing opening brace for {label}")
+
+    depth = 0
+    for index in range(open_brace, len(text)):
+        ch = text[index]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:index + 1]
+
+    raise AssertionError(f"missing closing brace for {label}")
+
+
 def main() -> int:
     snapshot = SNAPSHOT.read_text(encoding="utf-8")
     smoke = SMOKE.read_text(encoding="utf-8")
     registration = REGISTRATION.read_text(encoding="utf-8")
     qsdb_smoke = QSDB_SMOKE.read_text(encoding="utf-8")
 
-    validate = require(snapshot, "private static void ValidateCollectionEntries(ProjectState source)", "snapshot validation method")
-    zone_unique = require(snapshot, 'RequireUniqueIds(source.Zones, x => x.Id, "zone");', "zone uniqueness validation")
-    floor_unique = require(snapshot, 'RequireUniqueIds(source.Floors, x => x.Id, "floor");', "floor uniqueness validation")
-    active = require(snapshot, "RequireResolvedActiveContext(source);", "active-context referential validation")
-    family_validation = require(snapshot, "foreach (var family in source.Families)", "later family validation")
-    if not (validate < zone_unique < floor_unique < active < family_validation):
+    validation = method_slice(
+        snapshot,
+        "private static void ValidateCollectionEntries(ProjectState source)",
+        "snapshot validation method",
+    )
+    zone_unique = require(validation, 'RequireUniqueIds(source.Zones, x => x.Id, "zone");', "zone uniqueness validation")
+    floor_unique = require(validation, 'RequireUniqueIds(source.Floors, x => x.Id, "floor");', "floor uniqueness validation")
+    active = require(validation, "RequireResolvedActiveContext(source);", "active-context referential validation")
+    family_validation = require(validation, "foreach (var family in source.Families)", "later family validation")
+    if not (zone_unique < floor_unique < active < family_validation):
         raise AssertionError("active-context references must be checked after catalog uniqueness and before later snapshot materialization validation")
 
-    helper = require(snapshot, "private static void RequireResolvedActiveContext(ProjectState source)", "active-context helper")
-    helper_slice = snapshot[helper:snapshot.find("private static void RequireCanonicalFamilyProperties", helper)]
+    helper = method_slice(
+        snapshot,
+        "private static void RequireResolvedActiveContext(ProjectState source)",
+        "active-context helper",
+    )
     for token in (
         "source.ActiveZoneId.Length != 0",
         "source.FindZone(source.ActiveZoneId) == null",
         "source.ActiveFloorId.Length != 0",
         "source.FindFloor(source.ActiveFloorId) == null",
     ):
-        require(helper_slice, token, "canonical ProjectState lookup usage")
+        require(helper, token, "canonical ProjectState lookup usage")
     for forbidden in ("ActiveZoneId = string.Empty", "ActiveFloorId = string.Empty", "Zones.FirstOrDefault", "Floors.FirstOrDefault"):
-        if forbidden in helper_slice:
+        if forbidden in helper:
             raise AssertionError("snapshot active-context validation must fail closed and reuse canonical lookup semantics: " + forbidden)
 
     for token in (
