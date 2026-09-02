@@ -35,7 +35,7 @@ namespace QS3D.Core.Commercial
         {
             if (!_hasValue)
                 return 0m;
-            return Materialize(
+            return MaterializeAggregate(
                 _coefficient,
                 _scale,
                 label + " exact aggregate cannot be represented as decimal without precision loss.");
@@ -101,18 +101,16 @@ namespace QS3D.Core.Commercial
             string overflowMessage,
             string precisionLossMessage)
         {
-            if (signedCoefficient.IsZero)
-                return 0m;
-
-            while (scale > 0 && signedCoefficient % 10 == 0)
-            {
-                signedCoefficient /= 10;
-                scale--;
-            }
-
-            var coefficient = BigInteger.Abs(signedCoefficient);
             if (scale > 28)
                 throw new OverflowException(precisionLossMessage);
+
+            var coefficient = BigInteger.Abs(signedCoefficient);
+            while (coefficient > MaximumDecimalCoefficient && scale > 0 && coefficient % 10 == 0)
+            {
+                signedCoefficient /= 10;
+                coefficient /= 10;
+                scale--;
+            }
 
             if (coefficient > MaximumDecimalCoefficient)
             {
@@ -122,10 +120,10 @@ namespace QS3D.Core.Commercial
                 throw new OverflowException(precisionLossMessage);
             }
 
-            return Materialize(signedCoefficient, scale, precisionLossMessage);
+            return CreateDecimal(signedCoefficient, scale);
         }
 
-        private static decimal Materialize(BigInteger signedCoefficient, int scale, string precisionLossMessage)
+        private static decimal MaterializeAggregate(BigInteger signedCoefficient, int scale, string precisionLossMessage)
         {
             if (signedCoefficient.IsZero)
                 return 0m;
@@ -136,11 +134,17 @@ namespace QS3D.Core.Commercial
                 scale--;
             }
 
-            var isNegative = signedCoefficient.Sign < 0;
             var coefficient = BigInteger.Abs(signedCoefficient);
             if (scale > 28 || coefficient > MaximumDecimalCoefficient)
                 throw new OverflowException(precisionLossMessage);
 
+            return CreateDecimal(signedCoefficient, scale);
+        }
+
+        private static decimal CreateDecimal(BigInteger signedCoefficient, int scale)
+        {
+            var isNegative = signedCoefficient.Sign < 0;
+            var coefficient = BigInteger.Abs(signedCoefficient);
             var low = unchecked((int)(uint)(coefficient & uint.MaxValue));
             var middle = unchecked((int)(uint)((coefficient >> 32) & uint.MaxValue));
             var high = unchecked((int)(uint)((coefficient >> 64) & uint.MaxValue));
