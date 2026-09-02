@@ -41,6 +41,7 @@ failures = []
 open_idx = body.find(open_call)
 record_idx = body.find(record_call)
 first_catch_idx = body.find("catch", open_idx + len(open_call)) if open_idx >= 0 else -1
+post_commit_catch_idx = body.find("catch", record_idx + len(record_call)) if record_idx >= 0 else -1
 
 if open_idx < 0:
     failures.append("missing native recent-project open call")
@@ -48,6 +49,8 @@ if record_idx < 0:
     failures.append("missing recent-project bookkeeping call")
 if body.count(open_call) != 1:
     failures.append("native recent-project open must occur exactly once (no retry/reopen)")
+if body.count(safe_open_failure) != 1:
+    failures.append("stable native-open failure message must occur exactly once")
 if first_catch_idx < 0:
     failures.append("native open has no explicit failure boundary")
 elif record_idx >= 0 and first_catch_idx > record_idx:
@@ -66,6 +69,23 @@ if first_catch_idx >= 0 and record_idx >= 0 and first_catch_idx < record_idx:
 
 success_idx = body.find('"Đã mở "')
 queue_idx = body.find("QueueHomeRefresh(recordActiveDrawing: true);")
+if post_commit_catch_idx < 0:
+    failures.append("post-commit bookkeeping must have a fail-soft boundary")
+elif success_idx >= 0 and post_commit_catch_idx > success_idx:
+    failures.append("success must not publish before post-commit failure is contained")
+else:
+    post_commit_catch_end = body.find("}", post_commit_catch_idx)
+    if post_commit_catch_end < 0:
+        failures.append("post-commit catch block is malformed")
+    else:
+        post_commit_catch = body[post_commit_catch_idx:post_commit_catch_end]
+        if "ShowSafeFailure" in post_commit_catch or safe_open_failure in post_commit_catch:
+            failures.append("post-commit failure must not be presented as a CAD-open failure")
+        if open_call in post_commit_catch:
+            failures.append("post-commit failure must never retry native open")
+
+if record_idx >= 0 and safe_open_failure in body[record_idx + len(record_call):]:
+    failures.append("native-open failure message appears after native commit bookkeeping starts")
 if record_idx >= 0 and success_idx >= 0 and success_idx < record_idx:
     failures.append("success status must not be published before bookkeeping is attempted")
 if success_idx < 0 or queue_idx < 0 or (success_idx >= 0 and queue_idx < success_idx):
