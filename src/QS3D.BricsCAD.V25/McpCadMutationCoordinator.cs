@@ -406,7 +406,7 @@ namespace QS3D.BricsCAD.V25
             public bool ReleaseWhenIdle { get; set; }
         }
 
-        private sealed class PendingNativeCommand
+        internal sealed class PendingNativeCommand
         {
             public PendingNativeCommand(Document document, string command, Action<string>? audit)
             {
