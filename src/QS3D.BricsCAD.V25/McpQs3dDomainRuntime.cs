@@ -122,7 +122,11 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("Only one QS3D command name matching " + McpCadAgentRuntime.Qs3dCommandPattern + " is allowed.");
             McpCadAgentRuntime.EnsureCurrentMutationRunning();
             var document = RequireDocument();
-            document.SendStringToExecute(command + "\n", true, false, true);
+            McpCadMutationCoordinator.QueueNativeCommand(
+                document,
+                command,
+                () => document.SendStringToExecute(command + "\n", true, false, true),
+                detail => McpCadAgentRuntime.AuditDomainMutation("qs3d_run_command", detail));
             McpCadAgentRuntime.AuditDomainMutation("qs3d_run_command", "command=" + command.ToUpperInvariant());
             return "{\"accepted\":true,\"command\":\"" + Escape(command.ToUpperInvariant()) + "\"}";
         }
