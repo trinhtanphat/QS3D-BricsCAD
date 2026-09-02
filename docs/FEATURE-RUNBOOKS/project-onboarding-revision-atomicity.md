@@ -8,7 +8,9 @@
 
 After unit/material/catalog/Floor validation and before the first mutation, onboarding computes the exact revision advances required by the already-built plan:
 
-- one advance when a drawing-unit override must be persisted;
+- drawing-unit override advances are counted from the metadata writes that `DrawingUnitResolutionPolicy.SetProjectOverride` will actually perform;
+  - without an existing canonical bound-unit record, only the override key is written when it differs;
+  - with an existing bound-unit record, the override, effective-unit, and binding-source keys are each counted only when their exact stored value will change;
 - one advance when a starter Floor must be created or an existing single Floor must be activated;
 - for each newly created starter Family: one advance for `ProjectFamilyService.Create`, one for every default quick-schema property, and one for `Material`;
 - reused Families consume no onboarding revision advance.
@@ -17,12 +19,12 @@ The service rejects when the required advances exceed `long.MaxValue - project.C
 
 ## Deterministic regression
 
-`ProjectOnboardingRevisionAtomicitySmoke` first measures the canonical fresh onboarding revision footprint using the normal public services. It then proves both sides of the boundary:
+`ProjectOnboardingRevisionAtomicitySmoke` measures the canonical onboarding revision footprint using the normal public services, then proves both sides of the boundary for both ordinary fresh metadata and the canonical bound-unit metadata path:
 
-1. one fewer remaining revision than required is rejected before any unit override, Floor, Family, active-Floor, timestamp, or revision mutation;
+1. one fewer remaining revision than required is rejected before any unit override, effective-unit/binding-source metadata, Floor, Family, active-Floor, timestamp, or revision mutation;
 2. exactly the required remaining capacity is accepted and the project may finish at `long.MaxValue`.
 
-The smoke is module-initialized so no shared registration file is required.
+The bound-unit cases specifically protect the multi-key metadata path in `SetProjectOverride`, where up to three semantic metadata writes can advance the project revision. The smoke is module-initialized so no shared registration file is required.
 
 ## Validation
 
