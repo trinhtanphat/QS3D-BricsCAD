@@ -9,7 +9,7 @@ namespace QS3D.Core.SmokeTests
         {
             ConstructorRejectsInactiveReasons();
             ConstructorAcceptsCanonicalActiveReasons();
-            StaleStateSurvivesRateTransitions();
+            StaleStateBlocksBulkAssignmentAndSurvivesManualRateTransitions();
             BlockedBulkAssignmentFailsWithoutAuditMutation();
         }
 
@@ -43,12 +43,16 @@ namespace QS3D.Core.SmokeTests
             Equal(EstimatingReadinessState.Stale, stale.State);
         }
 
-        private static void StaleStateSurvivesRateTransitions()
+        private static void StaleStateBlocksBulkAssignmentAndSurvivesManualRateTransitions()
         {
             var service = new EstimatingWorkflowService();
             var audit = new CommercialAuditLog();
             var stale = new EstimatingLine(
                 "S2", "QS2", "RQ2", 3m, "m",
+                costCode: "CC-100",
+                rateSourceId: "RATEBOOK",
+                rateRevision: "2026-08",
+                referencedRate: 10m,
                 isStale: true,
                 staleReason: "Source quantity changed");
             var portfolio = new EstimatingPortfolio(new[] { stale });
@@ -56,23 +60,27 @@ namespace QS3D.Core.SmokeTests
                 new[] { "S2" },
                 "CC-100",
                 "RATEBOOK",
-                "2026-08",
-                new[] { new UnitRateAssignment("m", 10m) });
+                "2026-09",
+                new[] { new UnitRateAssignment("m", 11m) });
 
             var preview = service.PreviewBulkRateAssignment(portfolio, request);
-            Equal(true, preview.CanCommit);
-            portfolio = service.CommitBulkRateAssignment(
+            Equal(false, preview.CanCommit);
+            Equal(1, preview.BlockedLineIds.Count);
+            Equal("S2", preview.BlockedLineIds[0]);
+            Throws<InvalidOperationException>(() => service.CommitBulkRateAssignment(
                 portfolio,
                 preview,
                 audit,
                 "w1-smoke",
                 "bulk-1",
-                new DateTime(2026, 8, 21, 0, 0, 0, DateTimeKind.Utc));
+                new DateTime(2026, 8, 21, 0, 0, 0, DateTimeKind.Utc)));
+            Equal(0, audit.Events.Count);
 
             var rated = portfolio.GetLine("S2");
             Equal(true, rated.IsStale);
             Equal("Source quantity changed", rated.StaleReason);
             Equal(10m, rated.ReferencedRate!.Value);
+            Equal("2026-08", rated.RateRevision);
             Equal(EstimatingReadinessState.Stale, rated.State);
 
             portfolio = service.ApplyManualRateOverride(
@@ -102,6 +110,7 @@ namespace QS3D.Core.SmokeTests
             Equal("Source quantity changed", restored.StaleReason);
             Equal(null, restored.OverrideRate);
             Equal(10m, restored.ReferencedRate!.Value);
+            Equal("2026-08", restored.RateRevision);
         }
 
         private static void BlockedBulkAssignmentFailsWithoutAuditMutation()
