@@ -982,7 +982,7 @@ namespace QS3D.BricsCAD.V25
             return trimmed.Length >= 2 && trimmed[0] == '{' && trimmed[trimmed.Length - 1] == '}';
         }
 
-        private static string ToolError(string code, string lane, string message, string repairJson = null)
+        private static string ToolError(string code, string lane, string message, string? repairJson = null)
         {
             var safeCode = string.IsNullOrWhiteSpace(code) ? McpToolCapabilityContract.ToolFailedCode : code;
             var safeLane = string.IsNullOrWhiteSpace(lane) ? "unknown" : lane;
@@ -1497,7 +1497,6 @@ namespace QS3D.BricsCAD.V25
 
                 if (File.Exists(path)) File.Replace(tempPath, path, null, true);
                 else File.Move(tempPath, path);
-
                 var verified = File.ReadAllText(path, Encoding.UTF8).Trim();
                 if (!ConstantTimeEquals(verified, token))
                     throw new InvalidOperationException("MCP bearer token persistence verification failed.");
