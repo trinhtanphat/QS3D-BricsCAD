@@ -493,7 +493,7 @@ for path, text in workflow_sources:
         pr_block = "\n".join(trigger_blocks.get("pull_request", []))
         require_tokens(
             pr_block,
-            ("types:", "- opened", "- reopened", "- ready_for_review", "- synchronize", "- unlabeled", "branches:", "- main"),
+            ("types:", "- opened", "- reopened", "- ready_for_review", "- converted_to_draft", "- synchronize", "- labeled", "- unlabeled", "branches:", "- main"),
             f"{path.name} pull_request",
         )
         push_block = "\n".join(trigger_blocks.get("push", []))
@@ -507,8 +507,9 @@ for path, text in workflow_sources:
             "group: qs3d-hybrid-pr-coordinator", "cancel-in-progress: false",
             "arm-native-automerge:", "refresh-branches:",
             "github.event_name == 'pull_request'", "github.event_name == 'push'",
-            "GH_TOKEN: ${{ github.token }}", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}",
-            "enablePullRequestAutoMerge", "no-automerge", "head.repo.full_name", "base.ref", "draft",
+            "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}",
+            "enablePullRequestAutoMerge", "disablePullRequestAutoMerge", "autoMergeRequest",
+            "no-automerge", "head.repo.full_name", "base.ref", "draft", "dependabot[bot]",
             "event_head_sha", "api_head_sha", "/update-branch", "expected_head_sha",
         ), path.name)
         for forbidden in (
@@ -525,10 +526,10 @@ for path, text in workflow_sources:
             errors.append(f"{path.name}: coordinator jobs must be exactly {sorted(expected_jobs)}")
         arm_block = next(("\n".join(block) for name, block in job_blocks if name == "arm-native-automerge"), "")
         refresh_block = next(("\n".join(block) for name, block in job_blocks if name == "refresh-branches"), "")
-        require_tokens(arm_block, ("github.event_name == 'pull_request'", "GH_TOKEN: ${{ github.token }}", "enablePullRequestAutoMerge"), f"{path.name}/arm-native-automerge")
+        require_tokens(arm_block, ("github.event_name == 'pull_request'", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "enablePullRequestAutoMerge", "disablePullRequestAutoMerge", "autoMergeRequest"), f"{path.name}/arm-native-automerge")
         require_tokens(refresh_block, ("github.event_name == 'push'", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "/update-branch", "expected_head_sha"), f"{path.name}/refresh-branches")
-        if "github.token" in refresh_block:
-            errors.append(f"{path.name}/refresh-branches: branch mutation must not fall back to github.token")
+        if "github.token" in arm_block or "github.token" in refresh_block:
+            errors.append(f"{path.name}: coordinator mutations must not fall back to github.token")
 
     else:
         if trigger_names != {"workflow_dispatch"}:
