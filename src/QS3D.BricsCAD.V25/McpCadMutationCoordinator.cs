@@ -18,7 +18,6 @@ namespace QS3D.BricsCAD.V25
         private const int DefaultLeaseSeconds = 120;
         private const int MinLeaseSeconds = 15;
         private const int MaxLeaseSeconds = 300;
-        private const int PendingNativeCommandMaximumSeconds = 45;
 
         private static readonly SemaphoreSlim MutationGate = new SemaphoreSlim(1, 1);
         private static readonly object Sync = new object();
@@ -169,8 +168,8 @@ namespace QS3D.BricsCAD.V25
         }
 
         /// <summary>
-        /// Runtime-level helper for the classic cad_command_sequence path. If transport already
-        /// prepared the same command, reuse that reservation rather than creating a second barrier.
+        /// Runtime-level helper for asynchronous native commands. If transport already prepared
+        /// the same command, reuse that reservation rather than creating a second barrier.
         /// </summary>
         internal static void QueueNativeCommand(Document document, string command, Action enqueue, Action<string>? audit)
         {
@@ -244,7 +243,7 @@ namespace QS3D.BricsCAD.V25
                 CleanupExpiredStateLocked(DateTime.UtcNow);
                 if (_pending != null)
                     throw new InvalidOperationException("Another queued native command already owns the DWG write lane.");
-                pending = new PendingNativeCommand(document, NormalizeCommand(command), DateTime.UtcNow, audit);
+                pending = new PendingNativeCommand(document, NormalizeCommand(command), audit);
                 pending.WillStartHandler = OnCommandWillStart;
                 pending.EndedHandler = OnCommandEnded;
                 pending.CancelledHandler = OnCommandCancelled;
@@ -321,14 +320,6 @@ namespace QS3D.BricsCAD.V25
 
         private static void CleanupExpiredStateLocked(DateTime now)
         {
-            if (_pending != null && (now - _pending.QueuedUtc).TotalSeconds > PendingNativeCommandMaximumSeconds)
-            {
-                var stale = _pending;
-                DetachPendingLocked(stale);
-                _pending = null;
-                stale.Audit?.Invoke("native command barrier expired without terminal event; command=" + SafeTool(stale.Command));
-                if (_lease != null && _lease.ReleaseWhenIdle) _lease = null;
-            }
             if (_pending == null) CleanupExpiredLeaseLocked(now);
         }
 
@@ -417,16 +408,14 @@ namespace QS3D.BricsCAD.V25
 
         private sealed class PendingNativeCommand
         {
-            public PendingNativeCommand(Document document, string command, DateTime queuedUtc, Action<string>? audit)
+            public PendingNativeCommand(Document document, string command, Action<string>? audit)
             {
                 Document = document;
                 Command = command;
-                QueuedUtc = queuedUtc;
                 Audit = audit;
             }
             public Document Document { get; private set; }
             public string Command { get; private set; }
-            public DateTime QueuedUtc { get; private set; }
             public bool Started { get; set; }
             public Action<string>? Audit { get; private set; }
             public CommandEventHandler WillStartHandler = null!;
