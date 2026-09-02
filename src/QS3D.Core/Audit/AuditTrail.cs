@@ -82,6 +82,14 @@ namespace QS3D.Core.Audit
             return new AuditTrail(project.AuditEvents, project);
         }
 
+        internal static void ValidateSnapshotHistory(ProjectState project)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            new AuditTrail(project.AuditEvents, project).ValidateExistingHistory(
+                requireAppendCapacity: false,
+                allowNullActionBacking: true);
+        }
+
         public void Record(string action, string elementId, string detail, string actor = "", string correlationId = "")
         {
             var rawAction = action ?? string.Empty;
@@ -137,7 +145,10 @@ namespace QS3D.Core.Audit
             _events.Clear();
         }
 
-        private int ValidateExistingHistory(bool requireAppendCapacity, long additionalTextCharacters = 0L)
+        private int ValidateExistingHistory(
+            bool requireAppendCapacity,
+            long additionalTextCharacters = 0L,
+            bool allowNullActionBacking = false)
         {
             if (additionalTextCharacters < 0L || additionalTextCharacters > MaxStoredTextCharacters)
                 throw new InvalidOperationException("Audit trail additional text exceeds the supported aggregate text budget.");
@@ -167,7 +178,7 @@ namespace QS3D.Core.Audit
 
                     // Reject aggregate abuse before XML/canonical scans of the event.
                     AccumulateTextCharacters(existing, ref textCharacters);
-                    var validationError = GetStoredEventValidationError(existing);
+                    var validationError = GetStoredEventValidationError(existing, allowNullActionBacking);
                     if (validationError != null)
                         throw new InvalidOperationException(validationError + " Repair the existing audit history before modifying it.");
                 }
@@ -258,19 +269,28 @@ namespace QS3D.Core.Audit
                    (correlationId?.Length ?? 0);
         }
 
-        private static string? GetStoredEventValidationError(AuditEvent? item)
+        private static string? GetStoredEventValidationError(
+            AuditEvent? item,
+            bool allowNullActionBacking = false)
         {
             if (item == null)
                 return "Audit trail contains a null event.";
             if (item.Utc.Kind != DateTimeKind.Utc)
                 return "Audit trail contains a non-UTC event timestamp.";
 
-            var action = item.Action ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(action) ||
-                !string.Equals(action, action.Trim(), StringComparison.Ordinal) ||
-                ContainsControlCharacter(action) ||
-                ContainsInvalidXmlCharacters(action))
+            var action = item.Action;
+            if (action == null)
+            {
+                if (!allowNullActionBacking)
+                    return "Audit trail contains a non-canonical action.";
+            }
+            else if (string.IsNullOrWhiteSpace(action) ||
+                     !string.Equals(action, action.Trim(), StringComparison.Ordinal) ||
+                     ContainsControlCharacter(action) ||
+                     ContainsInvalidXmlCharacters(action))
+            {
                 return "Audit trail contains a non-canonical action.";
+            }
 
             var elementId = item.ElementId ?? string.Empty;
             if (!IsCanonicalOptionalIdentity(elementId))
