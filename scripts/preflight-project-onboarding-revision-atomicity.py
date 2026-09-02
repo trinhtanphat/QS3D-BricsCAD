@@ -5,14 +5,25 @@ source = (root / "src/QS3D.Core/Domain/ProjectOnboardingService.cs").read_text(e
 smoke = (root / "tests/QS3D.Core.SmokeTests/ProjectOnboardingRevisionAtomicitySmoke.cs").read_text(encoding="utf-8")
 
 bootstrap = source.index("public static ProjectOnboardingResult Bootstrap")
-headroom_call = source.index("RequireRevisionCapacity(project, needsOverride, existingFloorToActivate, plans);", bootstrap)
+headroom_call = source.index(
+    "RequireRevisionCapacity(project, needsOverride, effectiveUnit, existingFloorToActivate, plans);",
+    bootstrap,
+)
 first_mutation = source.index("DrawingUnitResolutionPolicy.SetProjectOverride", bootstrap)
 if headroom_call >= first_mutation:
     raise SystemExit("Project onboarding revision-capacity admission must occur before the first mutation.")
 
 required_tokens = [
     "private static void RequireRevisionCapacity(",
-    "requiredAdvances = needsOverride ? 1L : 0L",
+    "CountDrawingUnitOverrideRevisionAdvances(project.Metadata, effectiveUnit)",
+    "private static long CountDrawingUnitOverrideRevisionAdvances(",
+    "DrawingUnitResolutionPolicy.BoundMetadataKey",
+    "DrawingUnitResolutionPolicy.OverrideMetadataKey",
+    "DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey",
+    "DrawingUnitResolutionPolicy.BindingSourceMetadataKey",
+    "DrawingUnitResolutionSource.ProjectOverride.ToString()",
+    "private static long CountMetadataWrite(",
+    "StringComparison.Ordinal",
     "project.Floors.Count == 0 || existingFloorToActivate != null",
     "requiredAdvances + 2L + plan.Values.Count",
     "requiredAdvances > long.MaxValue - project.ChangeVersion",
@@ -25,10 +36,13 @@ for token in required_tokens:
 smoke_tokens = [
     "RejectsInsufficientRevisionCapacityBeforeMutation",
     "AcceptsExactRevisionCapacity",
+    "RejectsBoundUnitMetadataInsufficientCapacityBeforeMutation",
+    "AcceptsExactBoundUnitMetadataCapacity",
     "long.MaxValue - requiredAdvances + 1L",
     "long.MaxValue - requiredAdvances",
-    "Rejected onboarding Floors",
-    "Rejected onboarding Families",
+    "BoundMetadataKey",
+    "EffectiveUnitMetadataKey",
+    "BindingSourceMetadataKey",
     "OverrideMetadataKey",
 ]
 for token in smoke_tokens:
