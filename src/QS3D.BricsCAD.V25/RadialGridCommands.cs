@@ -21,13 +21,16 @@ namespace QS3D.BricsCAD.V25
             {
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 result = Cad.RadialGridNativeSourceBuilder.Build(document, project, request);
-                Cad.GridAuthoringRepeatState.RememberRadial(document, request);
             }
             catch (Exception)
             {
                 ReportOperationFailure(document, "QS3DGRIDRADIAL lỗi: không thể materialize radial Grid; native/semantic state đã được fail-closed.");
                 return;
             }
+
+            var repeatStateSyncFailed = false;
+            try { Cad.GridAuthoringRepeatState.RememberRadial(document, request); }
+            catch { repeatStateSyncFailed = true; }
 
             var status = "Radial Grid " + result.SystemKey + ": đã materialize " + result.Curves +
                          " canonical LINE/ARC source(s); replaced " + result.Replaced +
@@ -36,6 +39,8 @@ namespace QS3D.BricsCAD.V25
             try { PaletteCoordinator.RefreshProject(); } catch { uiSyncFailed = true; }
             try { PaletteCoordinator.SetStatus(status); } catch { uiSyncFailed = true; }
             TryWriteMessage(document, "\nQS3D " + status);
+            if (repeatStateSyncFailed)
+                TryWriteMessage(document, "\nQS3D Grid: native + semantic radial Grid đã commit; repeat template không thể cập nhật.");
             if (uiSyncFailed)
                 TryWriteMessage(document, "\nQS3D Grid: native + semantic radial Grid đã commit; một phần UI không thể đồng bộ.");
         }
