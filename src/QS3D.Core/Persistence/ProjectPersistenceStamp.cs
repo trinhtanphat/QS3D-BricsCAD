@@ -89,8 +89,8 @@ namespace QS3D.Core.Persistence
         private static StableSnapshot CaptureStableSnapshot(ProjectState project)
         {
             var boundary = new PersistenceBoundary(project);
-            var firstMetadata = SnapshotMetadata(project.Metadata);
-            var firstNestedPersistedContent = SnapshotNestedPersistedContent(project, boundary);
+            var metadata = SnapshotMetadata(project.Metadata);
+            var nestedPersistedContent = SnapshotNestedPersistedContent(project, boundary);
 
             if (!boundary.Matches(project))
                 throw new InvalidOperationException(
@@ -103,8 +103,8 @@ namespace QS3D.Core.Persistence
             var secondNestedPersistedContent = SnapshotNestedPersistedContent(project, boundary);
 
             if (!boundary.Matches(project) ||
-                !MetadataMatches(secondMetadata, firstMetadata) ||
-                !string.Equals(secondNestedPersistedContent, firstNestedPersistedContent, StringComparison.Ordinal))
+                !MetadataMatches(secondMetadata, metadata) ||
+                !string.Equals(secondNestedPersistedContent, nestedPersistedContent, StringComparison.Ordinal))
                 throw new InvalidOperationException(
                     "Nested persisted project state changed while the persistence stamp was materializing content.");
 
