@@ -45,6 +45,19 @@ def job_block(text: str, job_name: str) -> str:
     return "\n".join(block)
 
 
+def require_fail_closed_secret_gate(block: str, purpose: str, message: str) -> None:
+    pattern = (
+        r'if \[\[ -z "\$\{GH_TOKEN:-\}" \]\]; then\s*\n'
+        + r'\s*echo "::error::'
+        + re.escape(message)
+        + r'"\s*\n'
+        + r'\s*exit 1\s*\n'
+        + r'\s*fi'
+    )
+    if not re.search(pattern, block):
+        fail(f"{purpose} must fail closed with exit 1 when QS3D_AUTOMERGE_TOKEN is unavailable")
+
+
 if not WORKFLOW.is_file():
     fail("missing .github/workflows/hybrid-pr-coordinator.yml")
     text = ""
@@ -105,6 +118,7 @@ if text:
         "gh release",
         "contents: write",
         "actions: write",
+        "::warning::QS3D_AUTOMERGE_TOKEN is unavailable",
     )
     for token in forbidden_tokens:
         reject(text, token, "hybrid coordinator")
@@ -118,6 +132,9 @@ if text:
         fail("hybrid coordinator missing arm-native-automerge job block")
     if not refresh:
         fail("hybrid coordinator missing refresh-branches job block")
+
+    arm_secret_error = "QS3D_AUTOMERGE_TOKEN is required; native auto-merge coordination cannot run."
+    refresh_secret_error = "QS3D_AUTOMERGE_TOKEN is required; branch refresh cannot run."
 
     for token in (
         "github.event_name == 'pull_request'",
@@ -133,7 +150,7 @@ if text:
         "base.ref",
         "draft",
         "dependabot[bot]",
-        "QS3D_AUTOMERGE_TOKEN is unavailable; native auto-merge coordination is disabled for this run.",
+        arm_secret_error,
     ):
         require(arm, token, "arm-native-automerge")
 
@@ -149,9 +166,12 @@ if text:
         "head.repo.full_name",
         "draft",
         "dependabot[bot]",
-        "QS3D_AUTOMERGE_TOKEN is unavailable; branch refresh is disabled for this run.",
+        refresh_secret_error,
     ):
         require(refresh, token, "refresh-branches")
+
+    require_fail_closed_secret_gate(arm, "arm-native-automerge", arm_secret_error)
+    require_fail_closed_secret_gate(refresh, "refresh-branches", refresh_secret_error)
 
     if "github.token" in arm:
         fail("arm-native-automerge must not use github.token for GraphQL auto-merge mutation")
@@ -169,4 +189,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: hybrid coordinator is narrow, native-auto-merge-only, disarm-aware, optimistic-locked, and non-destructive.")
+print("PASS: hybrid coordinator is narrow, PAT-backed, fail-closed, disarm-aware, optimistic-locked, and non-destructive.")
