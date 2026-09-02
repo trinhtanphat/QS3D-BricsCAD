@@ -35,6 +35,14 @@ namespace QS3D.Core.SmokeTests
 
             if (stamp.RequiresSave(project))
                 throw new InvalidOperationException("A newly captured persistence stamp unexpectedly reports the unchanged large project as dirty.");
+
+            project.Elements[0].DrawingFingerprint = "changed-after-capture";
+            if (!stamp.RequiresSave(project))
+                throw new InvalidOperationException("Large-project persistence stamp failed to observe nested persisted element mutation.");
+
+            stamp.MarkSaved(project);
+            if (stamp.RequiresSave(project))
+                throw new InvalidOperationException("MarkSaved rejected or incompletely refreshed a project above the obsolete top-level 10000-entry stamp limit.");
         }
 
         private static void NestedCardinalityAboveQsdbLimitRemainsRejected()
