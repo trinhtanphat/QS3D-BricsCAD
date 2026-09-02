@@ -28,6 +28,12 @@ namespace QS3D.Core.Cost
             var index = 0;
             using (var enumerator = lines.GetEnumerator())
             {
+                // GetEnumerator() itself is user code for arbitrary IEnumerable implementations.
+                // Re-admit a known Count before the first traversal call so an enumerator-induced
+                // drift is rejected with zero MoveNext/Current reads.
+                if (hasKnownCount)
+                    RequireStableKnownCount(lines, knownCount);
+
                 while (enumerator.MoveNext())
                 {
                     if (hasKnownCount)
