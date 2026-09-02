@@ -16,7 +16,7 @@ Before semantic mutation or audit publication:
 - host dependency-graph traversal applies the same text-integrity check before resolving dependency identity;
 - valid Unicode, case-insensitive semantic lookup, and canonical persisted element ids remain supported.
 
-Malformed UTF-16 and XML-invalid relationship provenance fails closed. Control characters fail with an explicit repair diagnostic. The service does not silently sanitize or delete hostile provenance because that would hide corrupted semantic state.
+Malformed UTF-16 and XML-invalid relationship provenance fails closed; control characters fail with an explicit repair diagnostic. The service does not silently sanitize or delete hostile provenance because that would hide corrupted semantic state.
 
 ## Deterministic regression
 
