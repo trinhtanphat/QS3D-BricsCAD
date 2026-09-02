@@ -70,6 +70,9 @@ for token in (
 if not writer:
     errors.append("missing process-global mutation coordinator baseline")
 else:
+    # C# source contains the JSON literal as \"mode\":\"single-writer\". Match the
+    # source representation itself (one backslash before each quote), not an over-escaped
+    # Python representation that would require three backslashes in the C# file.
     for token in ("SemaphoreSlim MutationGate", "mode\\\":\\\"single-writer", "multiSessionReads"):
         require(writer, token, "single-writer invariant")
 
