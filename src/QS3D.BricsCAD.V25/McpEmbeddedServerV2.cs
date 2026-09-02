@@ -831,6 +831,9 @@ namespace QS3D.BricsCAD.V25
                 Tool("cad_view_state", "Read command-active and current view/window state.", ""),
                 Tool("cad_wait_idle", "Wait until BricsCAD CMDACTIVE becomes zero.", "\"timeoutMs\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":7000,\"default\":5000}"),
                 Tool("cad_sysvar", "Read one privacy-safe allowlisted BricsCAD system variable.", "\"name\":{\"type\":\"string\",\"enum\":[\"CMDACTIVE\",\"INSUNITS\",\"CLAYER\",\"CTAB\",\"TILEMODE\",\"DWGNAME\",\"CVPORT\",\"ORTHOMODE\",\"OSMODE\"]}", "name"),
+                Tool("cad_writer_acquire", "Acquire the process-global DWG writer lease for a bounded multi-step MCP mutation workflow.", "\"leaseSeconds\":{\"type\":\"integer\",\"minimum\":15,\"maximum\":300,\"default\":120}"),
+                Tool("cad_writer_status", "Read process-global DWG writer lease/native-command barrier status without exposing tokens.", ""),
+                Tool("cad_writer_release", "Release the active DWG writer lease using the matching opaque token.", "", "writerToken"),
                 Tool("cad_create_line", "Create native Line in ModelSpace.", Numeric("x1","y1","z1","x2","y2","z2") + CommonLayerConfirm(), "x1","y1","x2","y2","confirmMutation"),
                 Tool("cad_create_circle", "Create native Circle in ModelSpace.", Numeric("x","y","z","radius") + CommonLayerConfirm(), "x","y","radius","confirmMutation"),
                 Tool("cad_create_arc", "Create native Arc in ModelSpace from center/radius/start/end degrees.", Numeric("x","y","z","radius","startAngleDeg","endAngleDeg") + CommonLayerConfirm(), "x","y","radius","startAngleDeg","endAngleDeg","confirmMutation"),
@@ -879,6 +882,16 @@ namespace QS3D.BricsCAD.V25
                         + "\"fullCadAgent\":true,\"structuredContent\":true,\"modernMetaEnvelope\":true,\"toolAnnotations\":true,\"automationStopped\":"
                         + (McpCadAgentRuntime.AutomationStopped ? "true" : "false") + "}");
                 }
+                if (string.Equals(tool, "cad_writer_acquire", StringComparison.Ordinal))
+                    return ToolSuccess(McpCadMutationCoordinator.AcquireWriterLease(
+                        WriterLeaseSeconds(arguments),
+                        detail => McpCadAgentRuntime.AuditDomainMutation("cad_writer_acquire", detail)));
+                if (string.Equals(tool, "cad_writer_status", StringComparison.Ordinal))
+                    return ToolSuccess(McpCadMutationCoordinator.StatusJson());
+                if (string.Equals(tool, "cad_writer_release", StringComparison.Ordinal))
+                    return ToolSuccess(McpCadMutationCoordinator.ReleaseWriterLease(
+                        McpTopLevelJson.ExtractString(arguments ?? "{}", "writerToken"),
+                        detail => McpCadAgentRuntime.AuditDomainMutation("cad_writer_release", detail)));
                 var runtimeResult = McpCadAgentRuntime.Call(tool, arguments);
                 if (string.Equals(tool, "desktop_screenshot", StringComparison.Ordinal))
                     return ScreenshotToolSuccess(runtimeResult);
@@ -927,6 +940,16 @@ namespace QS3D.BricsCAD.V25
             return value;
         }
 
+        private static int WriterLeaseSeconds(string json)
+        {
+            int value;
+            bool found;
+            string error;
+            if (!McpTopLevelJson.TryExtractInteger(json ?? "{}", "leaseSeconds", out value, out found, out error))
+                throw new InvalidOperationException(error);
+            return found ? value : 120;
+        }
+
         private static string ToolSuccess(string jsonValue)
         {
             var raw = string.IsNullOrWhiteSpace(jsonValue) ? "{}" : jsonValue.Trim();
@@ -967,10 +990,15 @@ namespace QS3D.BricsCAD.V25
                    + ",\"execution_mode\":{\"type\":\"string\",\"enum\":[\"AUTO\",\"CAD_DIRECT\",\"QS3D_DOMAIN\"]}";
         }
 
+        private static string WriterTokenProperty()
+        {
+            return "\"writerToken\":{\"type\":\"string\",\"pattern\":\"^[0-9A-Fa-f]{32}$\",\"minLength\":32,\"maxLength\":32}";
+        }
+
         private static string MergeToolProperties(string properties)
         {
-            var modes = ExecutionModeProperties();
-            return string.IsNullOrWhiteSpace(properties) ? modes : modes + "," + properties;
+            var common = ExecutionModeProperties() + "," + WriterTokenProperty();
+            return string.IsNullOrWhiteSpace(properties) ? common : common + "," + properties;
         }
 
         private static string Tool(string name, string description, string properties, params string[] required)
@@ -986,13 +1014,19 @@ namespace QS3D.BricsCAD.V25
         private static string WithExecutionModeProperties(string descriptor)
         {
             var raw = (descriptor ?? string.Empty).Trim();
-            if (!LooksLikeJsonObject(raw) || raw.IndexOf("\"executionMode\"", StringComparison.Ordinal) >= 0) return raw;
+            if (!LooksLikeJsonObject(raw)) return raw;
+            var additions = new List<string>();
+            if (raw.IndexOf("\"executionMode\"", StringComparison.Ordinal) < 0)
+                additions.Add(ExecutionModeProperties());
+            if (raw.IndexOf("\"writerToken\"", StringComparison.Ordinal) < 0)
+                additions.Add(WriterTokenProperty());
+            if (additions.Count == 0) return raw;
             const string marker = "\"properties\":{";
             var index = raw.IndexOf(marker, StringComparison.Ordinal);
             if (index < 0) return raw;
             var insertion = index + marker.Length;
-            var modes = ExecutionModeProperties();
-            var suffix = insertion < raw.Length && raw[insertion] == '}' ? modes : modes + ",";
+            var common = string.Join(",", additions);
+            var suffix = insertion < raw.Length && raw[insertion] == '}' ? common : common + ",";
             return raw.Insert(insertion, suffix);
         }
 
@@ -1036,6 +1070,7 @@ namespace QS3D.BricsCAD.V25
                 case "cad_view_state":
                 case "cad_wait_idle":
                 case "cad_sysvar":
+                case "cad_writer_status":
                 case "cad_command_catalog":
                 case "cad_audit_tail":
                 case "desktop_cursor_position":
