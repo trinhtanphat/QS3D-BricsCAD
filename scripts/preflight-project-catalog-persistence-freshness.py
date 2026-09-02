@@ -30,6 +30,8 @@ for token in (
     "zone.PersistenceMutationRequested += Touch",
     "floor.PersistenceMutationRequested += Touch",
     "family.PersistenceMutationRequested += Touch",
+    "ContainsReference(item)",
+    "CountReferences(item) == 1",
 ):
     if token not in source:
         errors.append("Project catalog freshness contract missing: " + token)
@@ -38,6 +40,7 @@ for token in (
     "OwnedCatalogScalarMutationsAdvanceProjectFreshness",
     "NormalizedNoOpsDoNotAdvanceProjectFreshness",
     "OwnershipTracksRemovalReplacementAndSnapshotRestore",
+    "DuplicateCatalogReferencesHaveSingleOwnershipSubscription",
     "ProjectStateSnapshot.CreateDetachedCopy(project)",
 ):
     if token not in smoke:
@@ -52,4 +55,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: owned Zone/Floor/Family scalar changes advance ProjectState persistence freshness while no-op/materialization/snapshot ownership semantics stay guarded.")
+print("PASS: owned Zone/Floor/Family scalar changes advance ProjectState persistence freshness with duplicate-reference ownership counted exactly once while no-op/materialization/snapshot semantics stay guarded.")
