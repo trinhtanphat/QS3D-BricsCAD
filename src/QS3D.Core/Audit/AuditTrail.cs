@@ -178,7 +178,9 @@ namespace QS3D.Core.Audit
 
                     // Reject aggregate abuse before XML/canonical scans of the event.
                     AccumulateTextCharacters(existing, ref textCharacters);
-                    var validationError = GetStoredEventValidationError(existing, allowNullActionBacking);
+                    var validationError = allowNullActionBacking
+                        ? GetStoredEventValidationError(existing, allowNullActionBacking: true)
+                        : GetStoredEventValidationError(existing);
                     if (validationError != null)
                         throw new InvalidOperationException(validationError + " Repair the existing audit history before modifying it.");
                 }
