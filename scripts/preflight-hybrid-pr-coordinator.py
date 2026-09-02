@@ -133,6 +133,7 @@ if text:
         "base.ref",
         "draft",
         "dependabot[bot]",
+        "QS3D_AUTOMERGE_TOKEN is unavailable; native auto-merge coordination is disabled for this run.",
     ):
         require(arm, token, "arm-native-automerge")
 
@@ -148,6 +149,7 @@ if text:
         "head.repo.full_name",
         "draft",
         "dependabot[bot]",
+        "QS3D_AUTOMERGE_TOKEN is unavailable; branch refresh is disabled for this run.",
     ):
         require(refresh, token, "refresh-branches")
 
