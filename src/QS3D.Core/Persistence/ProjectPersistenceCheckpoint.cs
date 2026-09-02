@@ -43,10 +43,6 @@ namespace QS3D.Core.Persistence
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (elementIds == null) throw new ArgumentNullException(nameof(elementIds));
 
-            // Bind the complete capture to the project revision that existed before
-            // caller-controlled enumeration starts. Reading these only after the
-            // enumeration can stamp a mixed-time element snapshot with a later
-            // revision and make an invalid rollback checkpoint look coherent.
             var projectId = project.ProjectId;
             var projectUpdatedUtc = project.UpdatedUtc;
             var projectChangeVersion = project.ChangeVersion;
@@ -69,7 +65,7 @@ namespace QS3D.Core.Persistence
                     throw new InvalidOperationException("Persistence checkpoint contains duplicate element id: " + id + ".");
                 var element = project.FindElement(id)
                     ?? throw new InvalidOperationException("Persistence checkpoint element is missing: " + id + ".");
-                elements.Add(id, new ElementPersistenceState(element.Dirty, element.UpdatedUtc));
+                elements.Add(id, new ElementPersistenceState(element, element.Dirty, element.UpdatedUtc));
             }
 
             if (expectedKnownCount.HasValue && observed != expectedKnownCount.Value)
@@ -80,14 +76,10 @@ namespace QS3D.Core.Persistence
                 project.ChangeVersion != projectChangeVersion)
                 throw new InvalidOperationException("Cannot capture a persistence checkpoint while the project revision is changing.");
 
-            // ProjectElement persistence state can change independently of the project-level
-            // revision (for example MarkDirty/MarkClean). Re-check every captured owner after
-            // caller-controlled enumeration so the checkpoint cannot return a mixed-time
-            // element snapshot under an unchanged ProjectState revision.
             foreach (var pair in elements)
             {
                 var element = project.FindElement(pair.Key);
-                if (element == null || !pair.Value.Matches(element))
+                if (element == null || !ReferenceEquals(element, pair.Value.Owner) || !pair.Value.Matches(element))
                     throw new InvalidOperationException("Cannot capture a persistence checkpoint while captured element persistence state is changing.");
             }
 
@@ -109,7 +101,7 @@ namespace QS3D.Core.Persistence
             foreach (var pair in _elements)
             {
                 var element = project.FindElement(pair.Key);
-                if (element == null || !pair.Value.Matches(element)) return false;
+                if (element == null || !ReferenceEquals(element, pair.Value.Owner) || !pair.Value.Matches(element)) return false;
             }
             return true;
         }
@@ -120,14 +112,17 @@ namespace QS3D.Core.Persistence
             if (!string.Equals(project.ProjectId, _projectId, StringComparison.Ordinal))
                 throw new InvalidOperationException("Cannot restore a persistence checkpoint into a different project id.");
 
-            // Resolve the complete target set before the first mutation. Captured
-            // values came from valid domain objects, so the internal exact-state
-            // restores below cannot overflow or partially advance revision state.
+            // Resolve and generation-fence the complete target set before the first mutation.
+            // Logical ids are reusable domain identity; an in-memory persistence checkpoint
+            // must never transplant stale persistence metadata onto a replacement object.
             var targets = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var id in _elementIds)
             {
                 var element = project.FindElement(id)
                     ?? throw new InvalidOperationException("Cannot restore missing persistence checkpoint element: " + id + ".");
+                var captured = _elements[id];
+                if (!ReferenceEquals(element, captured.Owner))
+                    throw new InvalidOperationException("Cannot restore persistence checkpoint because captured element generation changed: " + id + ".");
                 targets.Add(id, element);
             }
 
@@ -146,9 +141,6 @@ namespace QS3D.Core.Persistence
             if (elementIds is ICollection nonGenericCollection)
                 knownCounts.Add(nonGenericCollection.Count);
 
-            // Capacity remains the highest-priority rejection because an oversized
-            // caller is invalid regardless of whether its other Count contracts are
-            // contradictory or malformed.
             if (knownCounts.Any(count => count > MaximumElementCount))
                 throw new InvalidOperationException("Persistence checkpoint exceeds the supported " + MaximumElementCount + " element limit.");
 
@@ -163,12 +155,14 @@ namespace QS3D.Core.Persistence
 
         private sealed class ElementPersistenceState
         {
-            public ElementPersistenceState(ElementDirtyFlags dirty, DateTime updatedUtc)
+            public ElementPersistenceState(ProjectElement owner, ElementDirtyFlags dirty, DateTime updatedUtc)
             {
+                Owner = owner ?? throw new ArgumentNullException(nameof(owner));
                 Dirty = dirty;
                 UpdatedUtc = updatedUtc;
             }
 
+            public ProjectElement Owner { get; }
             public ElementDirtyFlags Dirty { get; }
             public DateTime UpdatedUtc { get; }
 
