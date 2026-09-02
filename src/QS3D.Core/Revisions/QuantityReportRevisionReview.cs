@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml;
 using QS3D.Core.Domain;
 using QS3D.Core.Reporting;
 
@@ -347,6 +348,14 @@ namespace QS3D.Core.Revisions
             if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
                 throw new InvalidOperationException(label + " must not contain surrounding whitespace: " + raw + ".");
             if (raw.Any(char.IsControl)) throw new InvalidOperationException(label + " contains control characters.");
+            try
+            {
+                XmlConvert.VerifyXmlChars(raw);
+            }
+            catch (XmlException ex)
+            {
+                throw new InvalidOperationException(label + " contains characters that are invalid in XML.", ex);
+            }
             return raw;
         }
     }
