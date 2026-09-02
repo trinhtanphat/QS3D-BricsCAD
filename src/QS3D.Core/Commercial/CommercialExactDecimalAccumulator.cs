@@ -101,6 +101,9 @@ namespace QS3D.Core.Commercial
             string overflowMessage,
             string precisionLossMessage)
         {
+            if (signedCoefficient.IsZero)
+                return 0m;
+
             if (scale > 28)
                 throw new OverflowException(precisionLossMessage);
 
