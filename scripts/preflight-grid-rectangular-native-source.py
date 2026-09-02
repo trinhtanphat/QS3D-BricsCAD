@@ -4,7 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 builder_path = ROOT / "src/QS3D.BricsCAD.V25/Cad/RectangularGridNativeSourceBuilder.cs"
-command_path = ROOT / "src/QS3D.BricsCAD.V25/GridCommands.cs"
+command_path = ROOT / "src/QS3D.BricsCAD.V25/RectangularGridCommands.cs"
 errors = []
 
 if not builder_path.is_file():
@@ -14,7 +14,7 @@ else:
     builder = builder_path.read_text(encoding="utf-8")
 
 if not command_path.is_file():
-    errors.append("missing GridCommands.cs")
+    errors.append("missing RectangularGridCommands.cs")
     command = ""
 else:
     command = command_path.read_text(encoding="utf-8")
