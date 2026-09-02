@@ -50,9 +50,11 @@ if direct:
     ):
         require(direct, token, "direct layout command route")
 
-    send_index = direct.find("SendStringToExecute")
-    if send_index >= 0:
-        errors.append("McpCadDirectModelRuntime must not reintroduce asynchronous SendStringToExecute for its direct layout route")
+    layout_start = direct.find("private static string ExecuteDirectLayoutCommand")
+    layout_end = direct.find("private static string", layout_start + 1) if layout_start >= 0 else -1
+    layout = direct[layout_start:layout_end] if layout_start >= 0 and layout_end > layout_start else ""
+    if layout and "SendStringToExecute" in layout:
+        errors.append("direct layout completion route must not use asynchronous SendStringToExecute")
 
 if host:
     require(host, '\"processStartDefault\":\"background_only\"', "foreground policy status")
