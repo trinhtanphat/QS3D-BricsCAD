@@ -1,0 +1,35 @@
+name: QS3D issue 5340 one-shot main sync
+
+on:
+  push:
+    branches:
+      - agent/gpt56sol-selfheal-9f2c1a/issue-5340-mcp-self-healing-repair
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact carrier head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: agent/gpt56sol-selfheal-9f2c1a/issue-5340-mcp-self-healing-repair
+          fetch-depth: 0
+
+      - name: Merge latest main without force and self-delete
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          echo "carrier_before=$(git rev-parse HEAD)"
+          echo "main_to_merge=$(git rev-parse origin/main)"
+          git merge --no-ff --no-commit origin/main
+          git rm .github/workflows/issue-5340-main-sync-once.yml
+          git diff --cached --check
+          git commit -m "chore(agent): sync latest main into self-healing carrier"
+          git push origin HEAD:agent/gpt56sol-selfheal-9f2c1a/issue-5340-mcp-self-healing-repair
