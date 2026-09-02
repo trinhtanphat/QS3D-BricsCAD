@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -17,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             AcceptsExactRevisionCapacity();
             RejectsBoundUnitMetadataInsufficientCapacityBeforeMutation();
             AcceptsExactBoundUnitMetadataCapacity();
+            RejectsMetadataCapacityFailureBeforeRevisionMutation();
         }
 
         private static void RejectsInsufficientRevisionCapacityBeforeMutation()
@@ -70,6 +72,51 @@ namespace QS3D.Core.SmokeTests
             Equal(DrawingUnitResolutionSource.ProjectOverride.ToString(),
                 project.Metadata[DrawingUnitResolutionPolicy.BindingSourceMetadataKey],
                 "Exact bound-unit onboarding binding source");
+        }
+
+        private static void RejectsMetadataCapacityFailureBeforeRevisionMutation()
+        {
+            var project = CreateBoundProject("REJECT-METADATA-CAPACITY");
+            for (var index = project.Metadata.Count; index < 9999; index++)
+                project.Metadata["OnboardingCapacityFiller." + index.ToString(CultureInfo.InvariantCulture)] = "x";
+
+            Equal(9999, project.Metadata.Count, "Metadata-capacity setup count");
+            False(project.Metadata.ContainsKey(DrawingUnitResolutionPolicy.OverrideMetadataKey),
+                "Metadata-capacity setup must leave the override key absent so onboarding requires an override.");
+            False(project.Metadata.ContainsKey(DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey),
+                "Metadata-capacity setup must leave the effective-unit key absent.");
+            False(project.Metadata.ContainsKey(DrawingUnitResolutionPolicy.BindingSourceMetadataKey),
+                "Metadata-capacity setup must leave the binding-source key absent.");
+
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdatedUtc = project.UpdatedUtc;
+            var beforeCount = project.Metadata.Count;
+            var threw = false;
+            try
+            {
+                Bootstrap(project);
+            }
+            catch (InvalidOperationException ex)
+            {
+                threw = ex.Message.IndexOf("metadata", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                        ex.Message.IndexOf("10000", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+
+            True(threw, "Metadata-capacity onboarding must fail closed before attempting the multi-key unit override.");
+            Equal(beforeVersion, project.ChangeVersion,
+                "Metadata-capacity rejection must not consume project revision during rollback");
+            Equal(beforeUpdatedUtc, project.UpdatedUtc,
+                "Metadata-capacity rejection must not change project timestamp during rollback");
+            Equal(beforeCount, project.Metadata.Count,
+                "Metadata-capacity rejection must preserve metadata count");
+            False(project.Metadata.ContainsKey(DrawingUnitResolutionPolicy.OverrideMetadataKey),
+                "Metadata-capacity rejection must not publish the override key.");
+            False(project.Metadata.ContainsKey(DrawingUnitResolutionPolicy.EffectiveUnitMetadataKey),
+                "Metadata-capacity rejection must not publish the effective-unit key.");
+            False(project.Metadata.ContainsKey(DrawingUnitResolutionPolicy.BindingSourceMetadataKey),
+                "Metadata-capacity rejection must not publish the binding-source key.");
+            Equal(0, project.Floors.Count, "Metadata-capacity rejection Floors");
+            Equal(0, project.Families.Count, "Metadata-capacity rejection Families");
         }
 
         private static void AssertRejectedAtomically(ProjectState project, string label)
