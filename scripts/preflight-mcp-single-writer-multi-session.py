@@ -12,6 +12,7 @@ class CoordinationModel:
     def __init__(self):
         self.token = None
         self.pending = False
+        self.prepared_by = None
         self.in_call = False
 
     def acquire(self, token):
@@ -20,8 +21,17 @@ class CoordinationModel:
         self.token = token
         return True
 
-    def enter(self, token=""):
+    def prepare_native(self, owner):
         if self.in_call or self.pending:
+            return False
+        self.pending = True
+        self.prepared_by = owner
+        return True
+
+    def enter(self, token="", owner=None):
+        if self.in_call:
+            return False
+        if self.pending and self.prepared_by != owner:
             return False
         if self.token is not None and token != self.token:
             return False
@@ -30,8 +40,11 @@ class CoordinationModel:
         self.in_call = True
         return True
 
-    def queue_native(self):
+    def queue_native(self, owner=None):
         assert self.in_call
+        if self.prepared_by is not None:
+            assert self.prepared_by == owner
+            self.prepared_by = None
         self.pending = True
 
     def exit(self):
@@ -39,6 +52,7 @@ class CoordinationModel:
 
     def terminal(self):
         self.pending = False
+        self.prepared_by = None
 
     def release(self, token):
         if self.pending or token != self.token:
@@ -67,6 +81,7 @@ def main() -> int:
     require(server, '\"writerToken\"', "McpEmbeddedServerV2", errors)
     require(server, "AcquireWriterLease", "McpEmbeddedServerV2", errors)
     require(server, "ReleaseWriterLease", "McpEmbeddedServerV2", errors)
+    require(server, "McpCadMutationCoordinator.PrepareNativeCommand", "McpEmbeddedServerV2", errors)
 
     require(runtime, "McpCadMutationCoordinator.EnterMutation", "McpCadAgentRuntime", errors)
     require(runtime, "McpCadMutationCoordinator.QueueNativeCommand", "McpCadAgentRuntime", errors)
@@ -79,6 +94,8 @@ def main() -> int:
     else:
         for token in (
             "SemaphoreSlim MutationGate",
+            "PreparedNativeCommand",
+            "TransferMutationGate",
             "AcquireWriterLease",
             "ReleaseWriterLease",
             "EnterMutation",
@@ -119,13 +136,24 @@ def main() -> int:
     assert model.enter()
     model.exit()
 
+    prepared = CoordinationModel()
+    assert prepared.prepare_native("session-a")
+    assert prepared.enter(owner="session-a")
+    assert not prepared.enter(owner="session-b")
+    prepared.queue_native(owner="session-a")
+    prepared.exit()
+    assert not prepared.enter(owner="session-b")
+    prepared.terminal()
+    assert prepared.enter(owner="session-b")
+    prepared.exit()
+
     if errors:
         print("FAIL: MCP multi-session single-writer guard")
         for error in errors:
             print(" -", error)
         return 1
 
-    print("PASS: MCP remains multi-session for reads while DWG mutations use one explicit/ephemeral writer gate, async native commands retain the barrier, and save is single-attempt.")
+    print("PASS: MCP remains multi-session for reads while DWG mutations use one explicit/ephemeral writer gate, prepared async commands do not self-block, native commands retain the barrier, and save is single-attempt.")
     return 0
 
 
