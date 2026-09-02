@@ -30,6 +30,11 @@ def main() -> None:
     require(exact, "BigInteger.Abs(signedCoefficient)", "96-bit representability check")
     require(exact, "coefficient > MaximumDecimalCoefficient", "decimal coefficient bound")
     require(exact, "maximumAtScale", "true-overflow versus precision-loss classification")
+    require(
+        exact,
+        "if (signedCoefficient.IsZero)\n                return 0m;\n\n            if (scale > 28)",
+        "arithmetic zero canonicalization before representability checks",
+    )
     require(smoke, "CommercialBoundaryMagnitude, 0.6m", "high-magnitude fractional regression")
     require(smoke, "Commercial addition precision loss: boundary addition.", "addition fail-closed assertion")
     require(smoke, "Commercial subtraction precision loss: boundary subtraction.", "subtraction fail-closed assertion")
@@ -37,6 +42,9 @@ def main() -> None:
     require(smoke, "decimal.MinValue, 1m", "true subtraction overflow compatibility regression")
     require(smoke, "true addition overflow overflowed decimal arithmetic.", "addition overflow contract assertion")
     require(smoke, "true subtraction overflow overflowed decimal arithmetic.", "subtraction overflow contract assertion")
+    require(smoke, "CommercialAdditionCancellationCanonicalizesZeroScale", "addition cancellation canonical-zero regression")
+    require(smoke, "CommercialSubtractionCancellationCanonicalizesZeroScale", "subtraction cancellation canonical-zero regression")
+    require(smoke, "DecimalScale(result)", "zero representation scale assertion")
     require(smoke, "InvokeCommercialGuard", "already-registered commercial guard regression execution")
 
     print("PASS commercial decimal add/subtract exactness source guard")
