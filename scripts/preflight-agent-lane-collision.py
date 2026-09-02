@@ -507,11 +507,23 @@ def _event_actor(event: dict) -> str:
     return str(sender.get("login") or os.environ.get("GITHUB_ACTOR") or "")
 
 
+def pull_request_is_terminal(current_number: int, open_prs: list[dict]) -> bool:
+    for candidate in open_prs:
+        if not isinstance(candidate, dict):
+            continue
+        try:
+            if int(candidate.get("number") or 0) == current_number:
+                return False
+        except (TypeError, ValueError):
+            continue
+    return True
+
+
 def validate_pull_request_event(
     event: dict,
     repository: str,
     open_prs: list[dict],
-) -> tuple[str | None, list[tuple[int, str]], bool]:
+) -> tuple[str | None, list[tuple[int, str]]]:
     pr = event.get("pull_request")
     if not isinstance(pr, dict):
         raise ValueError("pull_request event payload is missing pull_request object")
@@ -523,7 +535,7 @@ def validate_pull_request_event(
     actor = _event_actor(event)
 
     if not requires_lane_lock(head_ref, head_repo, repository, actor):
-        return None, [], False
+        return None, []
 
     try:
         number = int(pr.get("number") or event.get("number"))
@@ -541,7 +553,7 @@ def validate_pull_request_event(
         except (TypeError, ValueError):
             continue
     if not current_open:
-        return None, [], True
+        return None, []
 
     explicit_lane_key = extract_lane_key(pr.get("body"))
     issue_number = branch_issue_number(head_ref) if head_ref.startswith("agent/") else None
@@ -559,7 +571,7 @@ def validate_pull_request_event(
                 f"PR #{number} head '{head_ref}' requires a Lane-Key in the PR body; "
                 "use 'Lane-Key: issue-<number>' or a stable integration batch key"
             )
-    return lane_key, find_duplicate_carriers(number, lane_key, open_prs), False
+    return lane_key, find_duplicate_carriers(number, lane_key, open_prs)
 
 
 def current_context(event_name: str, event: dict, repository: str) -> tuple[str, str, str, int]:
@@ -674,13 +686,13 @@ def main() -> int:
         open_prs = fetch_open_prs(api_url, repository, token)
 
         if event_name == "pull_request":
-            lane_key, lane_conflicts, terminal_pr = validate_pull_request_event(event, repository, open_prs)
-            if terminal_pr:
+            if pull_request_is_terminal(current_pr_number, open_prs):
                 print(
                     "PASS: pull_request carrier is no longer open; "
                     "terminal reservation validation is skipped before Issue/path collision checks."
                 )
                 return 0
+            lane_key, lane_conflicts = validate_pull_request_event(event, repository, open_prs)
             if lane_conflicts:
                 print(f"ERROR: Lane-Key '{lane_key}' already has another open canonical carrier:")
                 for number, peer_ref in lane_conflicts:
