@@ -20,6 +20,8 @@ namespace QS3D.BricsCAD.V25
     /// </summary>
     internal static class McpCadDirectModelRuntime
     {
+        private const int DbmodPersistentContentMask = 1 | 4 | 32;
+
         private static readonly HashSet<string> Tools = new HashSet<string>(StringComparer.Ordinal)
         {
             "cad_create_box",
@@ -87,7 +89,7 @@ namespace QS3D.BricsCAD.V25
             yield return BooleanDescriptor("cad_boolean_intersect", "Intersect target Solid3d with tool Solid3d; the tool solid is consumed after success.");
             yield return Descriptor(
                 "cad_save",
-                "Synchronously save the active rooted DWG and report success only after DBMOD is clean.",
+                "Synchronously save the active rooted DWG and report success after persistent DBMOD content is clean; window/view bits may remain.",
                 ConfirmProperty(),
                 "\"confirmMutation\"");
             yield return Descriptor(
@@ -306,9 +308,12 @@ namespace QS3D.BricsCAD.V25
             RequireIdle();
             EnsureAutomationRunning();
             using (document.LockDocument()) document.Database.Save();
-            WaitForCleanDbmod();
-            RecordMutation(document, "cad-save", "completed=true; fileName=" + SafeLeaf(filename) + "; route=Database.Save-current-document");
-            return "{\"saved\":true,\"completed\":true,\"fileName\":\"" + Escape(SafeLeaf(filename)) + "\"}";
+            var dbmodAfterSave = WaitForSavedContentDbmod();
+            RecordMutation(document, "cad-save", "completed=true; fileName=" + SafeLeaf(filename)
+                + "; route=Database.Save-current-document; dbmodAfterSave=" + dbmodAfterSave.ToString(CultureInfo.InvariantCulture));
+            return "{\"saved\":true,\"completed\":true,\"fileName\":\"" + Escape(SafeLeaf(filename))
+                   + "\",\"route\":\"Database.Save-current-document\",\"dbmodAfterSave\":"
+                   + dbmodAfterSave.ToString(CultureInfo.InvariantCulture) + "}";
         }
 
         private static string SaveAs(string body)
@@ -333,11 +338,13 @@ namespace QS3D.BricsCAD.V25
             if (!Path.IsPathRooted(actual)
                 || !string.Equals(Path.GetFullPath(actual), fullPath, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("BricsCAD SaveAs returned but the active database path did not match the requested target.");
-            WaitForCleanDbmod();
+            var dbmodAfterSave = WaitForSavedContentDbmod();
             var leaf = SafeLeaf(fullPath);
-            RecordMutation(document, "cad-save-as", "completed=true; fileName=" + leaf + "; overwrite=" + overwrite);
+            RecordMutation(document, "cad-save-as", "completed=true; fileName=" + leaf + "; overwrite=" + overwrite
+                + "; dbmodAfterSave=" + dbmodAfterSave.ToString(CultureInfo.InvariantCulture));
             return "{\"saved\":true,\"completed\":true,\"saveAs\":true,\"fileName\":\"" + Escape(leaf)
-                   + "\",\"overwroteExisting\":" + (existed ? "true" : "false") + "}";
+                   + "\",\"overwroteExisting\":" + (existed ? "true" : "false")
+                   + ",\"dbmodAfterSave\":" + dbmodAfterSave.ToString(CultureInfo.InvariantCulture) + "}";
         }
 
         private static bool TryParseDirectLayoutCommand(string command, string input, out string action, out string layoutName)
@@ -523,20 +530,28 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("Cannot save while a BricsCAD command is active. Wait for idle or cancel the active command before retrying.");
         }
 
-        private static void WaitForCleanDbmod()
+        private static int WaitForSavedContentDbmod()
         {
             var deadline = DateTime.UtcNow.AddSeconds(2);
+            var lastDbmod = -1;
             string raw;
             int dbmod;
             do
             {
                 raw = Convert.ToString(Application.GetSystemVariable("DBMOD"), CultureInfo.InvariantCulture) ?? string.Empty;
-                if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out dbmod) && dbmod == 0)
-                    return;
+                if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out dbmod))
+                {
+                    lastDbmod = dbmod;
+                    // BricsCAD tracks window/view state separately; window/view DBMOD bits may remain after save.
+                    if ((dbmod & DbmodPersistentContentMask) == 0)
+                        return dbmod;
+                }
                 Thread.Sleep(25);
             }
             while (DateTime.UtcNow < deadline);
-            throw new InvalidOperationException("BricsCAD save returned but DBMOD did not settle to zero within 2 seconds; save completion was not confirmed.");
+            throw new InvalidOperationException(
+                "BricsCAD save returned but persistent-content DBMOD bits did not settle within 2 seconds; save completion was not confirmed; dbmod="
+                + (lastDbmod >= 0 ? lastDbmod.ToString(CultureInfo.InvariantCulture) : "unavailable") + ".");
         }
 
         private static void RequireConfirmedMutation(string body, string tool)
