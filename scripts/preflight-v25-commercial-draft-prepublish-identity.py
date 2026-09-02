@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed if V25 draft publication loses exact downloaded semantic admission."""
+"""Fail closed if V25 draft publication loses exact held downloaded semantic admission."""
 
 from pathlib import Path
 
@@ -8,6 +8,14 @@ VALIDATOR = (ROOT / "scripts/assert-v25-commercial-draft-identity.ps1").read_tex
 WORKFLOW = (ROOT / ".github/workflows/release-v25.yml").read_text(encoding="utf-8")
 DOWNLOAD_TOKEN = "gh release download $env:RELEASE_TAG"
 PUBLISH_TOKEN = "$published = Invoke-RestMethod -Method Patch"
+HELD_PACKAGE_TOKEN = "-PackageZip $heldRemoteZip"
+HELD_SOURCE_TOKENS = (
+    "$remoteZip = Join-Path $downloadRoot 'QS3D-BricsCAD-V25.zip'",
+    "$heldRemoteZip = Join-Path $heldRoot 'QS3D-BricsCAD-V25.zip'",
+    "& .\\scripts\\verify-v25-held-file.ps1 -Operation Copy -Path $remoteZip -Destination $heldRemoteZip | Out-Null",
+    "$remoteZipHash = (& .\\scripts\\verify-v25-held-file.ps1 -Operation Hash -Path $heldRemoteZip).Trim().ToLowerInvariant()",
+    "if ($remoteZipHash -ne $Matches[1])",
+)
 
 
 def publish_window(workflow: str) -> str:
@@ -64,7 +72,7 @@ def validate(validator: str, workflow: str) -> list[str]:
 
     workflow_tokens = (
         "assert-v25-commercial-draft-identity.ps1",
-        "-PackageZip (Join-Path $downloadRoot 'QS3D-BricsCAD-V25.zip')",
+        HELD_PACKAGE_TOKEN,
         "-ChecksumPath (Join-Path $downloadRoot 'QS3D-BricsCAD-V25.zip.sha256')",
         "-UpdateManifestPath (Join-Path $downloadRoot 'QS3D-BricsCAD-V25.update.json')",
         "-ProvenancePath (Join-Path $downloadRoot 'QS3D-BricsCAD-V25.provenance.json')",
@@ -72,6 +80,7 @@ def validate(validator: str, workflow: str) -> list[str]:
         "-ExpectedReleaseTag $env:RELEASE_TAG",
         "-ExpectedSignerThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT",
         "Downloaded V25 draft semantic admission returned no identity",
+        *HELD_SOURCE_TOKENS,
     )
     for token in workflow_tokens:
         if token not in window:
@@ -80,6 +89,11 @@ def validate(validator: str, workflow: str) -> list[str]:
     admission_index = window.find("assert-v25-commercial-draft-identity.ps1")
     if admission_index < 0:
         errors.append("downloaded V25 draft semantic admission must occur after draft download and before final publish PATCH")
+    else:
+        for token in HELD_SOURCE_TOKENS:
+            token_index = window.find(token)
+            if token_index < 0 or token_index >= admission_index:
+                errors.append(f"V25 held draft ZIP provenance must be established before semantic admission: {token}")
 
     return errors
 
@@ -90,6 +104,9 @@ if errors:
 
 mutations = {
     "workflow omits downloaded draft validator": (VALIDATOR, replace_in_publish_window(WORKFLOW, "assert-v25-commercial-draft-identity.ps1", "legacy-draft-check.ps1")),
+    "workflow omits exact held package": (VALIDATOR, replace_in_publish_window(WORKFLOW, HELD_PACKAGE_TOKEN, "-PackageZip $remoteZip")),
+    "workflow held package loses downloaded source": (VALIDATOR, replace_in_publish_window(WORKFLOW, HELD_SOURCE_TOKENS[2], "& .\\scripts\\verify-v25-held-file.ps1 -Operation Copy -Path $heldRemoteZip -Destination $heldRemoteZip | Out-Null")),
+    "workflow held package loses checksum binding": (VALIDATOR, replace_in_publish_window(WORKFLOW, HELD_SOURCE_TOKENS[4], "if ($remoteZipHash -eq '')")),
     "workflow omits exact source": (VALIDATOR, replace_in_publish_window(WORKFLOW, "-ExpectedSourceCommit $env:GITHUB_SHA", "-ExpectedSourceCommit $env:RELEASE_TAG")),
     "workflow omits exact tag": (VALIDATOR, replace_in_publish_window(WORKFLOW, "-ExpectedReleaseTag $env:RELEASE_TAG", "-ExpectedReleaseTag $env:GITHUB_SHA")),
     "validator loses provenance source": (VALIDATOR.replace("[string]$provenance.sourceCommit", "[string]$ExpectedSourceCommit", 1), WORKFLOW),
@@ -101,4 +118,4 @@ for label, (validator, workflow) in mutations.items():
     if not validate(validator, workflow):
         raise SystemExit(f"V25 commercial draft prepublish identity mutation escaped detection: {label}")
 
-print("PASS V25 downloaded commercial draft semantic identity before publish")
+print("PASS V25 held downloaded commercial draft semantic identity before publish")
