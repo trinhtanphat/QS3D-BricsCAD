@@ -13,6 +13,8 @@ required = (
     '"QS3D Cloud V25 Preview Build & Release"',
     'types:',
     '- completed',
+    'branches:',
+    '- main',
     "github.event_name == 'workflow_run'",
     "github.event.workflow_run.conclusion == 'success'",
     "github.event.workflow_run.head_branch == 'main'",
@@ -36,4 +38,4 @@ if errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("PASS: V25 cloud dispatcher re-evaluates exact current main after a successful publisher completion without auto-retrying failed releases")
+print("PASS: V25 cloud dispatcher re-evaluates exact current main after a successful main-branch publisher completion without auto-retrying failed releases")
