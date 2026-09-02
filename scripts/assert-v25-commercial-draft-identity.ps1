@@ -30,7 +30,17 @@ $ErrorActionPreference = 'Stop'
 $MaxMetadataBytes = 65536
 $MaxProvenanceBytes = 65536
 $MaxChecksumBytes = 4096
+$MaxSignedPayloadEntryBytes = 268435456
+$MaxSignedPayloadTotalBytes = 536870912
 $StrictReleaseTagPattern = '^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$'
+$RequiredSignedPayloadEntries = @(
+    'QS3D.BricsCAD.V25.dll',
+    'QS3D.Core.dll',
+    'install-v25-autoload.ps1',
+    'uninstall-v25-autoload.ps1',
+    'update-v25.ps1',
+    'unblock-v25-netload.ps1'
+)
 
 function Get-CanonicalFullPath {
     param([Parameter(Mandatory = $true)][string]$LiteralPath)
@@ -122,6 +132,79 @@ function Read-ZipMetadataIdentity {
     finally { $archive.Dispose() }
 }
 
+function Test-HeldZipPayloadSignatures {
+    param($ZipHeld, [Parameter(Mandatory = $true)][string]$ExpectedThumbprint)
+
+    Add-Type -AssemblyName System.IO.Compression -ErrorAction Stop
+    if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) { throw 'RUNNER_TEMP is required for held V25 signature verification.' }
+    $runnerTemp = Get-CanonicalFullPath -LiteralPath $env:RUNNER_TEMP
+    $runnerTempItem = Get-Item -LiteralPath $runnerTemp -Force -ErrorAction Stop
+    if (-not $runnerTempItem.PSIsContainer -or (($runnerTempItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+        throw 'RUNNER_TEMP must be an ordinary non-reparse directory for held V25 signature verification.'
+    }
+
+    $workspace = Join-Path $runnerTemp ('qs3d-v25-held-signature-' + [Guid]::NewGuid().ToString('N'))
+    if (Test-Path -LiteralPath $workspace) { throw 'Held V25 signature verification workspace unexpectedly already exists.' }
+    $workspaceItem = New-Item -ItemType Directory -Path $workspace -ErrorAction Stop
+    if (($workspaceItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw 'Held V25 signature verification workspace must not be a reparse point.'
+    }
+
+    $extracted = New-Object System.Collections.Generic.List[string]
+    try {
+        $ZipHeld.Stream.Seek(0, [IO.SeekOrigin]::Begin) | Out-Null
+        $archive = [IO.Compression.ZipArchive]::new($ZipHeld.Stream, [IO.Compression.ZipArchiveMode]::Read, $true)
+        try {
+            [int64]$totalBytes = 0
+            foreach ($requiredName in $RequiredSignedPayloadEntries) {
+                $matches = @($archive.Entries | Where-Object {
+                    [string]::Equals($_.FullName.Replace('\\','/'), $requiredName, [StringComparison]::OrdinalIgnoreCase)
+                })
+                if ($matches.Count -ne 1) {
+                    throw "Downloaded V25 draft ZIP must contain exactly one signed payload entry named $requiredName; found $($matches.Count)."
+                }
+                $entry = $matches[0]
+                if ([int64]$entry.Length -lt 0 -or [int64]$entry.Length -gt $MaxSignedPayloadEntryBytes) {
+                    throw "Downloaded V25 draft signed payload entry $requiredName exceeds the bounded extraction limit."
+                }
+                $totalBytes = [checked]($totalBytes + [int64]$entry.Length)
+                if ($totalBytes -gt $MaxSignedPayloadTotalBytes) {
+                    throw 'Downloaded V25 draft signed payload exceeds the bounded total extraction limit.'
+                }
+
+                $destination = Join-Path $workspace $requiredName
+                $destinationFull = Get-CanonicalFullPath -LiteralPath $destination
+                $workspacePrefix = (Get-CanonicalFullPath -LiteralPath $workspace).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+                if (-not $destinationFull.StartsWith($workspacePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+                    throw "Signed payload extraction escaped the private verification workspace: $requiredName"
+                }
+
+                $entryStream = $entry.Open()
+                try {
+                    $output = [IO.File]::Open($destinationFull, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+                    try { $entryStream.CopyTo($output) }
+                    finally { $output.Dispose() }
+                }
+                finally { $entryStream.Dispose() }
+
+                $written = Get-Item -LiteralPath $destinationFull -Force -ErrorAction Stop
+                if ($written.PSIsContainer -or (($written.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) -or [int64]$written.Length -ne [int64]$entry.Length) {
+                    throw "Extracted signed payload generation is invalid for $requiredName."
+                }
+                $extracted.Add($destinationFull)
+            }
+        }
+        finally { $archive.Dispose() }
+
+        $verifyScript = Join-Path $PSScriptRoot 'verify-v25-signatures.ps1'
+        if (-not (Test-Path -LiteralPath $verifyScript -PathType Leaf)) { throw 'V25 Authenticode verifier is missing.' }
+        & $verifyScript -Path $extracted.ToArray() -ExpectedThumbprint $ExpectedThumbprint
+    }
+    finally {
+        Remove-Item -LiteralPath $workspace -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 if ($ExpectedReleaseTag -notmatch $StrictReleaseTagPattern) { throw "ExpectedReleaseTag is not a strict V25 release tag: $ExpectedReleaseTag" }
 $expectedSource = $ExpectedSourceCommit.ToLowerInvariant()
 $expectedSigner = $ExpectedSignerThumbprint.Replace(' ', '').ToUpperInvariant()
@@ -165,6 +248,8 @@ try {
         -not [string]::Equals(([string]$metadata.gitCommit).Trim(), $expectedSource, [StringComparison]::OrdinalIgnoreCase)) {
         throw 'Downloaded V25 draft ZIP metadata does not exactly bind product, tag and source commit.'
     }
+
+    Test-HeldZipPayloadSignatures -ZipHeld $zipHeld -ExpectedThumbprint $expectedSigner
 
     [pscustomobject]@{
         ProductVersion = $expectedProductVersion
