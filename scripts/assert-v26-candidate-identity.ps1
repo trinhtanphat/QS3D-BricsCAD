@@ -14,6 +14,7 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
 $maxTextBytes = 65536
+$maxAdmittedScriptBytes = 262144
 
 function Resolve-OrdinaryFile([string]$Path, [string]$Label) {
     $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
@@ -48,8 +49,8 @@ function Get-HeldSha256([pscustomobject]$Held) {
     finally { $sha.Dispose(); $Held.Stream.Position = 0 }
 }
 
-function Read-HeldText([pscustomobject]$Held, [string]$Label) {
-    if ($Held.Length -gt $maxTextBytes) { throw "$Label exceeds the $maxTextBytes-byte safety limit." }
+function Read-HeldText([pscustomobject]$Held, [string]$Label, [int64]$MaxBytes = $maxTextBytes) {
+    if ($Held.Length -gt $MaxBytes) { throw "$Label exceeds the $MaxBytes-byte safety limit." }
     $Held.Stream.Position = 0
     $bytes = [byte[]]::new([int]$Held.Length)
     $offset = 0
@@ -106,11 +107,19 @@ try {
         if (-not [string]::Equals([string]$update.sha256, $zipHash, [StringComparison]::OrdinalIgnoreCase)) { throw 'V26 update manifest package digest mismatch.' }
     }
 
+    $admittedScriptBlock = $null
+    if (-not [string]::IsNullOrWhiteSpace($AdmittedScript)) {
+        $scriptHeld = Open-Held -Path $AdmittedScript -Label 'V26 admitted publication script'
+        $held.Add($scriptHeld) | Out-Null
+        $scriptText = Read-HeldText -Held $scriptHeld -Label 'V26 admitted publication script' -MaxBytes $maxAdmittedScriptBytes
+        try { $admittedScriptBlock = [ScriptBlock]::Create($scriptText) }
+        catch { throw "V26 admitted publication script cannot be parsed from its held generation: $($_.Exception.Message)" }
+    }
+
     foreach ($item in $held) { Assert-Held -Held $item -Label 'V26 candidate identity input' }
     $identity = [pscustomobject]@{ SourceCommit=$ExpectedSourceCommit.ToLowerInvariant(); ReleaseTag=$ExpectedReleaseTag; ProductVersion=[string]$metadata.productVersion; PackageSha256=$zipHash; Signed=($null -ne $updateHeld) }
-    if (-not [string]::IsNullOrWhiteSpace($AdmittedScript)) {
-        $scriptItem = Resolve-OrdinaryFile -Path $AdmittedScript -Label 'V26 admitted publication script'
-        & $scriptItem.FullName
+    if ($null -ne $admittedScriptBlock) {
+        & $admittedScriptBlock
         foreach ($item in $held) { Assert-Held -Held $item -Label 'V26 candidate identity input after publication' }
     }
     $identity
