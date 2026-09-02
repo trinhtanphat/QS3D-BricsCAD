@@ -4,6 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCadAgentRuntime.cs"
+DIRECT = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCadDirectModelRuntime.cs"
 
 
 def method_block(source: str, signature: str) -> str:
@@ -31,11 +32,12 @@ def require(condition: bool, message: str, errors: list[str]) -> None:
 
 
 def main() -> int:
-    if not RUNTIME.is_file():
-        print("FAIL: missing src/QS3D.BricsCAD.V25/McpCadAgentRuntime.cs")
+    if not RUNTIME.is_file() or not DIRECT.is_file():
+        print("FAIL: missing MCP CAD runtime source")
         return 1
 
     runtime = RUNTIME.read_text(encoding="utf-8")
+    direct = DIRECT.read_text(encoding="utf-8")
     errors: list[str] = []
 
     add_entity = method_block(runtime, "private static string AddEntity(")
@@ -77,10 +79,16 @@ def main() -> int:
         errors,
     )
 
+    apply_layer = method_block(direct, "private static void ApplyLayer(")
+    require(bool(apply_layer), "cannot inspect direct ApplyLayer", errors)
+    require("entity.Layer = layer;" not in apply_layer, "direct runtime still assigns Entity.Layer by name", errors)
+    require("entity.LayerId = layerId;" in apply_layer, "direct ApplyLayer must assign a transaction-resolved LayerId", errors)
+
     # The existing process-global writer gate remains required; this guard is additive and
     # protects native object affinity rather than replacing multi-session serialization.
     require("McpCadMutationCoordinator.EnterMutation" in runtime, "process-global mutation coordinator was removed", errors)
     require("private static string InvokeCadMutation(" in runtime, "CAD mutation dispatch helper was removed", errors)
+    require("McpDiagnosticHub.InvokeInCadContext" in direct, "direct model runtime lost CAD-context dispatch", errors)
 
     if errors:
         print("FAIL: MCP CAD native mutation safety guard")
