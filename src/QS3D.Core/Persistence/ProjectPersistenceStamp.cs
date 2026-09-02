@@ -96,6 +96,18 @@ namespace QS3D.Core.Persistence
                 throw new InvalidOperationException(
                     "Project state changed while the persistence stamp was materializing persisted content.");
 
+            // Nested Family/Element state can change without incrementing the parent
+            // ProjectState revision. Materialize a second complete pass and require the
+            // same content so a mixed-time first pass cannot be accepted as a saved state.
+            var secondMetadata = SnapshotMetadata(project.Metadata);
+            var secondNestedPersistedContent = SnapshotNestedPersistedContent(project, boundary);
+
+            if (!boundary.Matches(project) ||
+                !MetadataMatches(secondMetadata, metadata) ||
+                !string.Equals(secondNestedPersistedContent, nestedPersistedContent, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "Nested persisted project state changed while the persistence stamp was materializing content.");
+
             return new StableSnapshot(boundary, metadata, nestedPersistedContent);
         }
 

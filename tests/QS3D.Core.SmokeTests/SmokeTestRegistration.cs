@@ -193,6 +193,7 @@ namespace QS3D.Core.SmokeTests
             ProjectStateSnapshotElementIdentitySmoke.Run();
             ProjectStateSnapshotFamilyIdentitySmoke.Run();
             ProjectStateSnapshotSchemaVersionIntegritySmoke.Run();
+            ProjectPersistenceStampNestedStabilitySmoke.Run();
             ProjectPersistenceCheckpointSmoke.Run();
             ProjectPersistenceCheckpointRevisionDriftSmoke.Run();
             ProjectMetadataBoundSmoke.Run();
