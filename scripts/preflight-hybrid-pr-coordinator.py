@@ -121,7 +121,7 @@ if text:
 
     for token in (
         "github.event_name == 'pull_request'",
-        "GH_TOKEN: ${{ github.token }}",
+        "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}",
         "event_head_sha",
         "api_head_sha",
         "enablePullRequestAutoMerge",
@@ -151,6 +151,10 @@ if text:
     ):
         require(refresh, token, "refresh-branches")
 
+    if "github.token" in arm:
+        fail("arm-native-automerge must not use github.token for GraphQL auto-merge mutation")
+    if "secrets.QS3D_AUTOMERGE_TOKEN" not in arm:
+        fail("arm-native-automerge must use QS3D_AUTOMERGE_TOKEN")
     if "github.token" in refresh:
         fail("refresh-branches must not fall back to github.token for branch mutation")
     if "secrets.QS3D_AUTOMERGE_TOKEN" not in refresh:
