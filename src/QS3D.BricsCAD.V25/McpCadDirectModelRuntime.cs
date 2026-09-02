@@ -616,14 +616,19 @@ namespace QS3D.BricsCAD.V25
         {
             if (string.IsNullOrWhiteSpace(layer)) return;
             var table = (LayerTable)transaction.GetObject(database.LayerTableId, OpenMode.ForRead);
-            if (!table.Has(layer))
+            ObjectId layerId;
+            if (table.Has(layer))
+            {
+                layerId = table[layer];
+            }
+            else
             {
                 table.UpgradeOpen();
                 var record = new LayerTableRecord { Name = layer };
-                table.Add(record);
+                layerId = table.Add(record);
                 transaction.AddNewlyCreatedDBObject(record, true);
             }
-            entity.Layer = layer;
+            entity.LayerId = layerId;
         }
 
         private static Document RequireDocument()
