@@ -31,32 +31,35 @@ for token, label in (
     ("[string]$update.sha256", "update-manifest package digest"),
     ("BricsCAD V26 x64", "V26 target identity"),
     ("net8.0-windows", "V26 framework identity"),
+    ("[string]$AdmittedScript", "held-generation admitted action parameter"),
+    ("& $scriptItem.FullName", "publication while candidate handles remain held"),
+    ("after publication", "post-publication generation continuity assertion"),
 ):
     require(ASSERT, token, label)
 
 require(RUNBOOK, "Lane-Key: `issue-5313`", "canonical lane key")
 require(RUNBOOK, "exact workflow SHA", "source-boundary documentation")
 
-# Workflow wiring is intentionally structural: provenance must be created after the
-# finalized checksum and before artifact upload, then admitted after download and
-# before publication. This catches accidental relocation that would reopen the job
-# boundary even if all tokens remain present.
 create_token = "new-v26-candidate-provenance.ps1"
 upload_token = "Upload V26 qualification artifacts"
 admit_token = "assert-v26-candidate-identity.ps1"
-publish_token = "Publish V26 GitHub Release"
+held_publish_token = "-AdmittedScript '.\\scripts\\publish-v26-release.ps1'"
 for token, label in (
     (create_token, "provenance creation"),
     ("dist/QS3D-BricsCAD-V26.provenance.json", "provenance artifact upload"),
     (admit_token, "release-job semantic admission"),
     ("-ExpectedSourceCommit $env:GITHUB_SHA", "exact workflow SHA argument"),
     ("-ExpectedReleaseTag $env:RELEASE_TAG", "exact release tag argument"),
+    (held_publish_token, "publication under held admitted generations"),
+    ("GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}", "publisher token on held-admission step"),
 ):
     require(WORKFLOW, token, label)
 
 if not (WORKFLOW.index(create_token) < WORKFLOW.index(upload_token)):
     raise SystemExit("FAIL v26 candidate identity: provenance must be created before artifact upload")
-if not (WORKFLOW.index(admit_token) < WORKFLOW.index(publish_token)):
-    raise SystemExit("FAIL v26 candidate identity: downloaded candidate admission must precede publication")
+if WORKFLOW.count(held_publish_token) != 2:
+    raise SystemExit("FAIL v26 candidate identity: signed and unsigned publication must both execute under held candidate generations")
+if "- name: Publish V26 GitHub Release" in WORKFLOW:
+    raise SystemExit("FAIL v26 candidate identity: publication must not be split into a later step after held-generation admission")
 
-print("PASS v26 post-job-boundary candidate semantic identity")
+print("PASS v26 post-job-boundary candidate semantic identity and publication continuity")

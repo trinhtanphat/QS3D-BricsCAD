@@ -5,7 +5,8 @@ param(
     [Parameter(Mandatory = $true)][string]$ProvenancePath,
     [string]$UpdateManifestPath,
     [Parameter(Mandatory = $true)][ValidatePattern('^[0-9A-Fa-f]{40}$')][string]$ExpectedSourceCommit,
-    [Parameter(Mandatory = $true)][string]$ExpectedReleaseTag
+    [Parameter(Mandatory = $true)][string]$ExpectedReleaseTag,
+    [string]$AdmittedScript
 )
 
 Set-StrictMode -Version Latest
@@ -106,6 +107,12 @@ try {
     }
 
     foreach ($item in $held) { Assert-Held -Held $item -Label 'V26 candidate identity input' }
-    [pscustomobject]@{ SourceCommit=$ExpectedSourceCommit.ToLowerInvariant(); ReleaseTag=$ExpectedReleaseTag; ProductVersion=[string]$metadata.productVersion; PackageSha256=$zipHash; Signed=($null -ne $updateHeld) }
+    $identity = [pscustomobject]@{ SourceCommit=$ExpectedSourceCommit.ToLowerInvariant(); ReleaseTag=$ExpectedReleaseTag; ProductVersion=[string]$metadata.productVersion; PackageSha256=$zipHash; Signed=($null -ne $updateHeld) }
+    if (-not [string]::IsNullOrWhiteSpace($AdmittedScript)) {
+        $scriptItem = Resolve-OrdinaryFile -Path $AdmittedScript -Label 'V26 admitted publication script'
+        & $scriptItem.FullName
+        foreach ($item in $held) { Assert-Held -Held $item -Label 'V26 candidate identity input after publication' }
+    }
+    $identity
 }
 finally { for ($i=$held.Count-1; $i -ge 0; $i--) { $held[$i].Stream.Dispose() } }

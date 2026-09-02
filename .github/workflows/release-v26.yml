@@ -285,8 +285,10 @@ jobs:
           name: QS3D-BricsCAD-V26-${{ inputs.release_tag }}-${{ github.sha }}
           path: .
 
-      - name: Verify V26 candidate after job boundary
+      - name: Verify and publish held V26 candidate after job boundary
         shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $ErrorActionPreference = 'Stop'
           $zip = 'dist\QS3D-BricsCAD-V26.zip'
@@ -306,7 +308,8 @@ jobs:
               -ProvenancePath $provenance `
               -UpdateManifestPath $updateManifest `
               -ExpectedSourceCommit $env:GITHUB_SHA `
-              -ExpectedReleaseTag $env:RELEASE_TAG
+              -ExpectedReleaseTag $env:RELEASE_TAG `
+              -AdmittedScript '.\scripts\publish-v26-release.ps1'
           }
           else {
             if (Test-Path -LiteralPath 'dist\QS3D-BricsCAD-V26.update.json') {
@@ -317,12 +320,7 @@ jobs:
               -ChecksumPath $checksum `
               -ProvenancePath $provenance `
               -ExpectedSourceCommit $env:GITHUB_SHA `
-              -ExpectedReleaseTag $env:RELEASE_TAG
+              -ExpectedReleaseTag $env:RELEASE_TAG `
+              -AdmittedScript '.\scripts\publish-v26-release.ps1'
           }
-          if ($null -eq $candidateIdentity) { throw 'V26 candidate semantic admission returned no identity.' }
-
-      - name: Publish V26 GitHub Release
-        shell: powershell
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: .\scripts\publish-v26-release.ps1
+          if ($null -eq $candidateIdentity) { throw 'V26 candidate semantic admission/publication returned no identity.' }
