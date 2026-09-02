@@ -70,7 +70,9 @@ def main() -> int:
     require(server, 'Tool("cad_writer_status"', "McpEmbeddedServerV2", errors)
     require(server, 'Tool("cad_writer_release"', "McpEmbeddedServerV2", errors)
     require(server, "WriterTokenProperty()", "McpEmbeddedServerV2", errors)
-    require(server, '"writerToken"', "McpEmbeddedServerV2", errors)
+    require(server, "writerToken", "McpEmbeddedServerV2", errors)
+    require(server, "AcquireWriterLease", "McpEmbeddedServerV2", errors)
+    require(server, "ReleaseWriterLease", "McpEmbeddedServerV2", errors)
 
     # Every ordinary mutation crosses one process-global coordinator. Runtime lifecycle and
     # emergency stop clear stale leases/barriers. writerToken is optional for compatibility.
@@ -116,10 +118,11 @@ def main() -> int:
             "CommandCancelled",
             "CommandFailed",
             "GlobalCommandName",
-            "PendingNativeCommandMaximumSeconds",
             "StatusJson",
         ):
             require(coordinator, token, "McpCadMutationCoordinator", errors)
+        if "barrier expired without terminal event" in coordinator or "PendingNativeCommandMaximumSeconds" in coordinator:
+            errors.append("native-command barrier must not expire on a timer; release only on terminal events or reset/stop")
         if "writerToken=" in coordinator or "token=" in coordinator:
             errors.append("McpCadMutationCoordinator must not format raw writer tokens into audit/status text")
 
