@@ -71,6 +71,10 @@ jobs:
             echo "Safety skip: PR #${pr_number} is draft."
             exit 0
           fi
+          if jq -e '.labels | any(.name == "no-automerge")' <<<"${pr_json}" >/dev/null; then
+            echo "Safety skip: PR #${pr_number} has the no-automerge opt-out label."
+            exit 0
+          fi
           if [[ "${base_ref}" != "main" ]]; then
             echo "Safety skip: PR #${pr_number} targets '${base_ref}', not main."
             exit 0
