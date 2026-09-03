@@ -459,7 +459,7 @@ namespace QS3D.Core.Domain
             return text;
         }
 
-        private static string Value(string value, string parameterName, int maxLength)
+        private static string Value(string? value, string parameterName, int maxLength)
         {
             var text = value ?? string.Empty;
             if (text.Length > maxLength) throw new ArgumentException(parameterName + " must contain at most " + maxLength + " characters.", parameterName);
