@@ -83,6 +83,8 @@ namespace QS3D.BricsCAD.V25
         public static string PublicMcpUrl => IsRunning && !string.IsNullOrWhiteSpace(SavedHostname) ? "https://" + SavedHostname + "/mcp" : string.Empty;
         public static string LastMessage { get { lock (Sync) return _lastMessage; } }
         public static string LastError { get { lock (Sync) return _lastError; } }
+        public static bool IsConfigured => !string.IsNullOrWhiteSpace(CloudflaredPath) && !string.IsNullOrWhiteSpace(SavedHostname);
+        internal static Process? OwnedProcess { get { lock (Sync) return _process; } }
 
         public static bool IsRunning
         {
@@ -303,6 +305,11 @@ namespace QS3D.BricsCAD.V25
             }
             McpCloudflareTunnelManager.StopForHostShutdown();
             return StartProcess(executable, "tunnel --config \"" + ConfigPath + "\" run " + id, out error);
+        }
+
+        internal static bool StartForSupervisor(out string error)
+        {
+            return StartSaved(out error);
         }
 
         public static void TryAutoStart()
@@ -571,6 +578,13 @@ namespace QS3D.BricsCAD.V25
         {
             error = string.Empty;
             StopProcess();
+            string staleCleanup;
+            if (!McpTransportSupervisor.TryCleanupStaleOwnedProcess(
+                    McpTransportProvider.CloudflareNamedTunnel, executable, out staleCleanup))
+            {
+                error = staleCleanup;
+                return false;
+            }
             Process? process = null;
             try
             {
@@ -594,7 +608,20 @@ namespace QS3D.BricsCAD.V25
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
                 process.EnableRaisingEvents = true;
-                if (process.HasExited) HandleProcessExit(process);
+                if (process.HasExited)
+                {
+                    HandleProcessExit(process);
+                    error = string.IsNullOrWhiteSpace(LastError) ? "Named Tunnel đã dừng ngay sau khi khởi động." : LastError;
+                    return false;
+                }
+                string ownerError;
+                if (!McpTransportSupervisor.RegisterOwnedProcess(
+                        McpTransportProvider.CloudflareNamedTunnel, process, executable, out ownerError))
+                {
+                    error = "Không thể xác minh quyền sở hữu cloudflared: " + ownerError;
+                    StopProcess();
+                    return false;
+                }
                 return IsRunning;
             }
             catch (Exception ex)
@@ -625,7 +652,11 @@ namespace QS3D.BricsCAD.V25
                         : "Named Tunnel đã dừng.";
                 }
             }
-            if (owned) { try { process.Dispose(); } catch { } }
+            if (owned)
+            {
+                McpTransportSupervisor.ClearOwnedProcess(McpTransportProvider.CloudflareNamedTunnel);
+                try { process.Dispose(); } catch { }
+            }
         }
 
         private static void HandleRunLine(Process process, string? line, bool stderr)
@@ -652,6 +683,7 @@ namespace QS3D.BricsCAD.V25
             try { if (!process.HasExited) process.Kill(); } catch { }
             try { if (!process.HasExited) process.WaitForExit(2000); } catch { }
             try { process.Dispose(); } catch { }
+            McpTransportSupervisor.ClearOwnedProcess(McpTransportProvider.CloudflareNamedTunnel);
         }
 
         private static bool TryEnterSetup(out string error)

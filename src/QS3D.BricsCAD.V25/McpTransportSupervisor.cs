@@ -1,7 +1,6 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Reflection;
 using System.Text;
 using System.Threading;
 
@@ -279,12 +278,11 @@ namespace QS3D.BricsCAD.V25
             bool started;
             if (provider == McpTransportProvider.OpenAiSecureTunnel)
             {
-                started = McpOpenAiSecureTunnelManager.Start(
-                    McpOpenAiSecureTunnelManager.SavedTunnelId, string.Empty, out error);
+                started = McpOpenAiSecureTunnelManager.StartForSupervisor(out error);
             }
             else
             {
-                started = McpCloudflareAccountTunnelManager.StartSaved(out error);
+                started = McpCloudflareAccountTunnelManager.StartForSupervisor(out error);
             }
 
             if (!started || !IsProviderRunning(provider)) return false;
@@ -329,8 +327,7 @@ namespace QS3D.BricsCAD.V25
             if (provider == McpTransportProvider.OpenAiSecureTunnel)
                 return McpOpenAiSecureTunnelManager.IsConfigured;
             if (provider == McpTransportProvider.CloudflareNamedTunnel)
-                return !string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.CloudflaredPath)
-                       && !string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.SavedHostname);
+                return McpCloudflareAccountTunnelManager.IsConfigured;
             return false;
         }
 
@@ -399,22 +396,12 @@ namespace QS3D.BricsCAD.V25
 
         private static bool TryGetManagerProcess(McpTransportProvider provider, out Process? process)
         {
-            process = null;
-            try
-            {
-                Type managerType;
-                if (provider == McpTransportProvider.OpenAiSecureTunnel)
-                    managerType = typeof(McpOpenAiSecureTunnelManager);
-                else if (provider == McpTransportProvider.CloudflareNamedTunnel)
-                    managerType = typeof(McpCloudflareAccountTunnelManager);
-                else
-                    return false;
-
-                var field = managerType.GetField("_process", BindingFlags.Static | BindingFlags.NonPublic);
-                process = field == null ? null : field.GetValue(null) as Process;
-                return process != null;
-            }
-            catch { return false; }
+            process = provider == McpTransportProvider.OpenAiSecureTunnel
+                ? McpOpenAiSecureTunnelManager.OwnedProcess
+                : provider == McpTransportProvider.CloudflareNamedTunnel
+                    ? McpCloudflareAccountTunnelManager.OwnedProcess
+                    : null;
+            return process != null;
         }
 
         internal static bool RegisterOwnedProcess(

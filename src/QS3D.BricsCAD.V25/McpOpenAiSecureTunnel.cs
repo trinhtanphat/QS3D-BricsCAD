@@ -66,18 +66,7 @@ namespace QS3D.BricsCAD.V25
 
         public static void TryAutoStartPreferred()
         {
-            switch (SelectedProvider)
-            {
-                case McpTransportProvider.CloudflareNamedTunnel:
-                    McpCloudflareAccountTunnelManager.TryAutoStart();
-                    break;
-                case McpTransportProvider.CloudflareQuickTunnel:
-                    // Quick Tunnel hostnames rotate and are intentionally never auto-started.
-                    break;
-                default:
-                    McpOpenAiSecureTunnelManager.TryAutoStart();
-                    break;
-            }
+            McpTransportSupervisor.TryAutoStartPreferred(SelectedProvider);
         }
 
         public static bool IsChatGptRegistrationAcknowledged()
@@ -112,9 +101,7 @@ namespace QS3D.BricsCAD.V25
 
         public static void StopAllForHostShutdown()
         {
-            McpOpenAiSecureTunnelManager.StopForHostShutdown();
-            McpCloudflareAccountTunnelManager.StopForHostShutdown();
-            McpCloudflareTunnelManager.StopForHostShutdown();
+            McpTransportSupervisor.StopForHostShutdown();
         }
 
         private static McpTransportProvider LoadProvider()
@@ -228,6 +215,7 @@ namespace QS3D.BricsCAD.V25
         }
 
         public static bool IsConfigured => IsValidTunnelId(SavedTunnelId) && IsUsableClientPath(SavedClientPath);
+        internal static Process? OwnedProcess { get { lock (Sync) return _process; } }
 
         public static bool IsRunning
         {
@@ -361,6 +349,14 @@ namespace QS3D.BricsCAD.V25
                 McpCloudflareTunnelManager.StopForHostShutdown();
                 StopProcessOnly();
                 ClearDiagnostics();
+                string staleCleanup;
+                if (!McpTransportSupervisor.TryCleanupStaleOwnedProcess(
+                        McpTransportProvider.OpenAiSecureTunnel, clientPath, out staleCleanup))
+                {
+                    message = staleCleanup;
+                    SetLastError(message);
+                    return false;
+                }
 
                 var startInfo = new ProcessStartInfo
                 {
@@ -422,6 +418,16 @@ namespace QS3D.BricsCAD.V25
                     return false;
                 }
 
+                string ownerError;
+                if (!McpTransportSupervisor.RegisterOwnedProcess(
+                        McpTransportProvider.OpenAiSecureTunnel, process, clientPath, out ownerError))
+                {
+                    message = "Không thể xác minh quyền sở hữu tunnel-client: " + ownerError;
+                    SetLastError(message);
+                    StopProcessOnly();
+                    return false;
+                }
+
                 WriteTextVerified(AutoStartFile, "1");
                 McpTransportCoordinator.SetSelectedProvider(McpTransportProvider.OpenAiSecureTunnel);
                 EnsureWatchdogStarted();
@@ -434,6 +440,11 @@ namespace QS3D.BricsCAD.V25
                 message = LastError;
                 return false;
             }
+        }
+
+        internal static bool StartForSupervisor(out string message)
+        {
+            return Start(SavedTunnelId, string.Empty, out message);
         }
 
         public static void TryAutoStart()
@@ -666,6 +677,7 @@ namespace QS3D.BricsCAD.V25
             {
                 if (!_watchdogEnabled || _stopping) return false;
             }
+            if (McpTransportSupervisor.IsManaging) return false;
             if (ReadText(AutoStartFile) != "1") return false;
             if (McpTransportCoordinator.SelectedProvider != McpTransportProvider.OpenAiSecureTunnel) return false;
             return IsConfigured;
@@ -750,7 +762,11 @@ namespace QS3D.BricsCAD.V25
                 }
                 dispose = true;
             }
-            if (dispose) { try { process.Dispose(); } catch { } }
+            if (dispose)
+            {
+                McpTransportSupervisor.ClearOwnedProcess(McpTransportProvider.OpenAiSecureTunnel);
+                try { process.Dispose(); } catch { }
+            }
         }
 
         private static void StopProcessOnly()
@@ -772,6 +788,7 @@ namespace QS3D.BricsCAD.V25
                 try { if (!process.HasExited) process.Kill(); } catch { }
                 try { process.WaitForExit(1500); } catch { }
                 try { process.Dispose(); } catch { }
+                McpTransportSupervisor.ClearOwnedProcess(McpTransportProvider.OpenAiSecureTunnel);
             }
             lock (Sync) _stopping = false;
         }
