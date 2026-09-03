@@ -3,10 +3,9 @@
 
 The published prerelease/tag names an immutable commit. Release preparation must
 therefore not rewrite ProductVersion inputs only in the runner worktree and then
-publish against the unchanged commit SHA. Release preparation and its automatic
-main dispatcher must classify drift with Git pathspec/exit-status semantics,
-never by decoding line-oriented path output. The pinned Platform gitlink is part
-of release identity because the cloud workflow materializes and builds it.
+publish against the unchanged commit SHA. Release preparation, automatic main
+dispatch, batch counting, and policy documentation must classify the pinned
+Platform gitlink as part of release identity.
 """
 
 from __future__ import annotations
@@ -20,6 +19,8 @@ import tempfile
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PREPARE = ROOT / "scripts" / "prepare-v25-cloud-release.ps1"
 DISPATCH = ROOT / ".github" / "workflows" / "dispatch-v25-cloud-after-main-integration.yml"
+BATCH_GATE = ROOT / "scripts" / "v25-release-batch-gate.py"
+RELEASE_POLICY = ROOT / "docs" / "RELEASE_POLICY.md"
 
 
 def _line_parsed_diff(source: str) -> bool:
@@ -45,13 +46,7 @@ def _run_git(repo: pathlib.Path, *args: str, check: bool = True) -> subprocess.C
 
 
 def _assert_pathname_safe_git_primitive(failures: list[str]) -> None:
-    """Prove the legacy quoted-path bypass and the pathspec replacement.
-
-    Unicode is used instead of a newline/control-character filename so this
-    deterministic fixture is valid on both hosted Windows/NTFS and Linux.
-    core.quotePath=true forces Git's line-oriented name output to quote the
-    pathname, exactly the representation the legacy prefix parser mishandled.
-    """
+    """Prove the legacy quoted-path bypass and the pathspec replacement."""
 
     try:
         with tempfile.TemporaryDirectory(prefix="qs3d-release-path-") as temp:
@@ -109,6 +104,8 @@ def _assert_pathname_safe_git_primitive(failures: list[str]) -> None:
 def main() -> int:
     source = PREPARE.read_text(encoding="utf-8")
     dispatch = DISPATCH.read_text(encoding="utf-8")
+    batch_gate = BATCH_GATE.read_text(encoding="utf-8")
+    release_policy = RELEASE_POLICY.read_text(encoding="utf-8")
     failures: list[str] = []
 
     workspace_sync = re.compile(
@@ -210,6 +207,22 @@ def main() -> int:
             "admission signals: " + ", ".join(missing_dispatch)
         )
 
+    batch_signals = (
+        '"external/QS3D-Platform"',
+        "RELEASE_RELEVANT_EXACT_PATHS",
+    )
+    missing_batch = [token for token in batch_signals if token not in batch_gate]
+    if missing_batch:
+        failures.append(
+            "release batch gate does not count Platform gitlink integrations as release-relevant; missing: "
+            + ", ".join(missing_batch)
+        )
+
+    if "`external/QS3D-Platform`" not in release_policy:
+        failures.append(
+            "release policy does not document the Platform gitlink as a release-relevant integration path"
+        )
+
     _assert_pathname_safe_git_primitive(failures)
 
     if failures:
@@ -218,8 +231,8 @@ def main() -> int:
         return 1
 
     print(
-        "PASS: V25 cloud preview release/dispatcher are bound to clean committed "
-        "source identity with pathname-safe and Platform-gitlink drift admission"
+        "PASS: V25 cloud preview release/dispatcher/batch policy are bound to clean committed "
+        "source identity with pathname-safe and Platform-gitlink admission"
     )
     return 0
 
