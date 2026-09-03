@@ -433,6 +433,17 @@ jobs:
           }
           $releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$($release.id)"
           $draftRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
+          if ($draftRelease.draft -ne $true -or $draftRelease.prerelease -ne $true) {
+            throw 'Release must remain a draft prerelease throughout asset verification.'
+          }
+          if (-not [string]::Equals(([string]$draftRelease.tag_name).Trim(), $env:RELEASE_TAG, [StringComparison]::Ordinal) -or
+              -not [string]::Equals(([string]$draftRelease.target_commitish).Trim(), $env:RELEASE_COMMIT_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Draft release tag or target commit changed before asset verification.'
+          }
+          if (@($draftRelease.assets).Count -ne $assetSpecs.Count) {
+            throw "Draft release asset set mismatch. Expected exactly $($assetSpecs.Count) assets, found $(@($draftRelease.assets).Count). Release remains a draft."
+          }
+          $verifiedReleaseAssetIds = @()
           foreach ($spec in $assetSpecs) {
             $matches = @($draftRelease.assets | Where-Object { [string]::Equals([string]$_.name, $spec.Name, [StringComparison]::Ordinal) })
             if ($matches.Count -ne 1) {
@@ -441,6 +452,7 @@ jobs:
             if ([int64]$matches[0].size -ne $spec.Size) {
               throw "Uploaded release asset size mismatch for $($spec.Name). Expected=$($spec.Size), API=$($matches[0].size). Release remains a draft."
             }
+            $verifiedReleaseAssetIds += ([string]$matches[0].id)
           }
 
           $verifyDir = Join-Path $env:RUNNER_TEMP ('qs3d-release-asset-verify-' + [Guid]::NewGuid().ToString('N'))
@@ -476,6 +488,33 @@ jobs:
             'UNBLOCK-QS3D.cmd',
             'SHA256SUMS.txt'
           )
+
+          $finalDraftRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
+          if ($finalDraftRelease.draft -ne $true -or $finalDraftRelease.prerelease -ne $true) {
+            throw 'Final release state is no longer a draft prerelease; refusing publication.'
+          }
+          if (-not [string]::Equals(([string]$finalDraftRelease.tag_name).Trim(), $env:RELEASE_TAG, [StringComparison]::Ordinal) -or
+              -not [string]::Equals(([string]$finalDraftRelease.target_commitish).Trim(), $env:RELEASE_COMMIT_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Final draft release tag or target commit changed after verification; refusing publication.'
+          }
+          if (@($finalDraftRelease.assets).Count -ne $assetSpecs.Count) {
+            throw "Final draft release asset set changed after verification. Expected exactly $($assetSpecs.Count) assets, found $(@($finalDraftRelease.assets).Count)."
+          }
+          $finalReleaseAssetIds = @()
+          foreach ($spec in $assetSpecs) {
+            $finalMatches = @($finalDraftRelease.assets | Where-Object { [string]::Equals([string]$_.name, $spec.Name, [StringComparison]::Ordinal) })
+            if ($finalMatches.Count -ne 1) {
+              throw "Final draft release must contain exactly one asset named $($spec.Name), found $($finalMatches.Count)."
+            }
+            if ([int64]$finalMatches[0].size -ne $spec.Size) {
+              throw "Final draft release asset size changed for $($spec.Name). Expected=$($spec.Size), API=$($finalMatches[0].size)."
+            }
+            $finalReleaseAssetIds += ([string]$finalMatches[0].id)
+          }
+          $assetIdentityDrift = @(Compare-Object -ReferenceObject $verifiedReleaseAssetIds -DifferenceObject $finalReleaseAssetIds -SyncWindow 0)
+          if ($assetIdentityDrift.Count -ne 0) {
+            throw 'Final draft release asset IDs changed after byte verification; refusing publication.'
+          }
 
           $publishBody = @{ draft = $false } | ConvertTo-Json
           $publishedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body $publishBody
