@@ -740,6 +740,8 @@ namespace QS3D.Core.Cost
                 knownEntryCount,
                 index,
                 "BQ library entry collection");
+            if (hasKnownEntryCount)
+                RequireStableEntryGeneration(entries, knownEntryCount, snapshot, "BQ library entry collection");
             snapshot.Sort(CompareEntries);
             _entries = new ReadOnlyCollection<BqLibraryEntry>(snapshot.ToArray());
         }
@@ -757,6 +759,7 @@ namespace QS3D.Core.Cost
             var merged = new Dictionary<string, BqLibraryEntry>(StringComparer.OrdinalIgnoreCase);
             for (var i = 0; i < _entries.Count; i++) merged.Add(_entries[i].ItemCode, _entries[i]);
             var incomingIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var admittedEntries = new List<BqLibraryEntry>();
             var index = 0;
             using (var projectEntryEnumerator = projectEntries.GetEnumerator())
             {
@@ -791,6 +794,7 @@ namespace QS3D.Core.Cost
                         throw new ArgumentException("Project import contains duplicate BQ item code: " + entry.ItemCode + ".", nameof(projectEntries));
                     if (merged.ContainsKey(entry.ItemCode) && !replaceExisting)
                         throw new InvalidOperationException("BQ library import would overwrite existing item " + entry.ItemCode + ".");
+                    admittedEntries.Add(entry);
                     merged[entry.ItemCode] = entry;
                     index++;
                 }
@@ -801,7 +805,74 @@ namespace QS3D.Core.Cost
                 knownProjectEntryCount,
                 index,
                 "BQ project import collection");
+            if (hasKnownProjectEntryCount)
+                RequireStableEntryGeneration(projectEntries, knownProjectEntryCount, admittedEntries, "BQ project import collection");
             return new BqLibraryCatalog(LibraryId, merged.Values);
+        }
+
+        private static void RequireStableEntryGeneration(
+            IEnumerable<BqLibraryEntry> entries,
+            int admittedKnownCount,
+            IReadOnlyList<BqLibraryEntry> admittedEntries,
+            string collectionLabel)
+        {
+            var index = 0;
+            using (var entryEnumerator = entries.GetEnumerator())
+            {
+                AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                    entries,
+                    true,
+                    admittedKnownCount,
+                    collectionLabel);
+                while (true)
+                {
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        entries,
+                        true,
+                        admittedKnownCount,
+                        collectionLabel);
+                    if (!entryEnumerator.MoveNext())
+                        break;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        entries,
+                        true,
+                        admittedKnownCount,
+                        collectionLabel);
+                    if (index >= admittedEntries.Count)
+                        ThrowEntryContentChanged(collectionLabel);
+                    var entry = entryEnumerator.Current;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        entries,
+                        true,
+                        admittedKnownCount,
+                        collectionLabel);
+                    if (entry == null || !SameEntryState(admittedEntries[index], entry))
+                        ThrowEntryContentChanged(collectionLabel);
+                    index++;
+                }
+            }
+
+            if (index != admittedEntries.Count)
+                ThrowEntryContentChanged(collectionLabel);
+            AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                entries,
+                true,
+                admittedKnownCount,
+                collectionLabel);
+        }
+
+        private static bool SameEntryState(BqLibraryEntry left, BqLibraryEntry right)
+        {
+            return string.Equals(left.ItemCode, right.ItemCode, StringComparison.Ordinal) &&
+                   string.Equals(left.Description, right.Description, StringComparison.Ordinal) &&
+                   string.Equals(left.Unit, right.Unit, StringComparison.Ordinal) &&
+                   string.Equals(left.CategoryPath, right.CategoryPath, StringComparison.Ordinal) &&
+                   left.ReferenceUnitRate == right.ReferenceUnitRate;
+        }
+
+        private static void ThrowEntryContentChanged(string collectionLabel)
+        {
+            throw new InvalidOperationException(collectionLabel + " content changed during traversal.");
         }
 
         private static int CompareEntries(BqLibraryEntry left, BqLibraryEntry right)
