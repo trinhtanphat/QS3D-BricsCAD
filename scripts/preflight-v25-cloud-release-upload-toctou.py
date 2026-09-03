@@ -14,10 +14,6 @@ def require(condition: bool, message: str) -> None:
 def main() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     require(
-        "Invoke-RestMethod -Method Post" in workflow,
-        "cloud preview release must retain explicit GitHub asset publication",
-    )
-    require(
         "-InFile $asset" not in workflow,
         "cloud preview release must not hash a pathname and then reopen it through Invoke-RestMethod -InFile",
     )
@@ -36,6 +32,7 @@ def main() -> None:
         ("ComputeHash($stream)", "helper must hash the same open stream"),
         ("$stream.Position = 0", "helper must rewind the verified stream before upload"),
         ("[System.Net.Http.StreamContent]::new($stream)", "helper must upload the same verified stream"),
+        ("$client.PostAsync($uploadUri, $content)", "helper must perform publication from the verified StreamContent"),
     ):
         require(token in helper, message)
 
