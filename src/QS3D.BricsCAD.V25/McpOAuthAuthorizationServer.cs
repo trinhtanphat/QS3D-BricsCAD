@@ -459,6 +459,9 @@ namespace QS3D.BricsCAD.V25
                 grantedScope = normalizedRequestedScope;
             }
 
+            if (refreshGeneration == long.MaxValue)
+                return OAuthError(400, "Bad Request", "invalid_grant", "refresh token generation is exhausted");
+
             var rotationIssuedAt = UnixNow();
             var familyExpiry = rotationIssuedAt + (long)RefreshTokenLifetime.TotalSeconds;
             var successorGeneration = checked(refreshGeneration + 1);
