@@ -41,7 +41,11 @@ def main() -> int:
         "$tagCreatedByThisRun = $true",
         'Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases"',
         "$releaseId = [long]$release.id",
-        "gh release upload $env:RELEASE_TAG $resolvedAsset --repo $env:GITHUB_REPOSITORY",
+        "scripts/invoke-v25-held-release-upload.ps1",
+        "$admittedAssets = @(& .\\scripts\\invoke-v25-held-release-upload.ps1",
+        "$localAssets[$asset.Name] = $asset",
+        "$localLength = [int64]$LocalAssets[$expectedAsset].Length",
+        "$localHash = [string]$localAssets[$name].Sha256",
         "function Assert-RemoteReleaseTagTargetsWorkflowSha",
         "git ls-remote --tags origin $tagRef $peeledRef",
         "Assert-RemoteReleaseTagTargetsWorkflowSha",
@@ -76,9 +80,12 @@ def main() -> int:
         "$existing = @(git ls-remote --tags origin $tagRef",
         "& gh @createArgs",
         "gh release edit $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --draft=false",
+        "gh release upload $env:RELEASE_TAG $resolvedAsset --repo $env:GITHUB_REPOSITORY",
         "$localHash = (Get-FileHash -LiteralPath (Join-Path $dist $name) -Algorithm SHA256).Hash",
         "$remoteHash = (Get-FileHash -LiteralPath (Join-Path $downloadRoot $name) -Algorithm SHA256).Hash",
         "if ((Get-FileHash -LiteralPath $remoteZip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Matches[1])",
+        "$localLength = [int64](Get-Item -LiteralPath ([string]$LocalAssets[$expectedAsset])).Length",
+        "$localHash = (& .\\scripts\\verify-v25-held-file.ps1 -Operation Hash -Path (Join-Path $dist $name)).Trim()",
     )
     for token in forbidden:
         require(token not in text, "V25 release publication regressed to stale/unsafe integrity semantics: " + token)
@@ -104,7 +111,7 @@ def main() -> int:
     ownership_pos = text.find("$tagCreatedByThisRun = $true", tag_create_pos)
     release_create_pos = text.find('Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases"', ownership_pos)
     release_id_pos = text.find("$releaseId = [long]$release.id", release_create_pos)
-    upload_pos = text.find("gh release upload $env:RELEASE_TAG $resolvedAsset --repo $env:GITHUB_REPOSITORY", release_id_pos)
+    upload_pos = text.find("$admittedAssets = @(& .\\scripts\\invoke-v25-held-release-upload.ps1", release_id_pos)
     tag_pos = text.find("Assert-RemoteReleaseTagTargetsWorkflowSha", upload_pos)
     download_pos = text.find("gh release download $env:RELEASE_TAG", tag_pos)
     set_pos = text.find("Draft release asset set mismatch.", download_pos)
@@ -116,9 +123,9 @@ def main() -> int:
     publish_assert_pos = text.find("Assert-PublishedReleaseMatchesVerifiedTransaction", publish_pos)
     publish_snapshot_pos = text.find("-ReleaseSnapshot $published", publish_assert_pos)
     positions = (tag_create_pos, ownership_pos, release_create_pos, release_id_pos, upload_pos, tag_pos, download_pos, set_pos, hash_pos, copy_pos, checksum_pos, signature_pos, publish_pos, publish_assert_pos, publish_snapshot_pos)
-    require(min(positions) >= 0 and list(positions) == sorted(positions), "V25 release must create exact owned tag -> create exact draft -> upload resolved asset path -> assert exact tag SHA -> download exact asset set -> held hash -> stable ZIP copy/checksum -> signature verify -> publish -> verify the successful response against the exact transaction")
+    require(min(positions) >= 0 and list(positions) == sorted(positions), "V25 release must create exact owned tag -> create exact draft -> upload held local asset generations -> assert exact tag SHA -> download exact asset set -> compare admitted hashes -> stable ZIP copy/checksum -> signature verify -> publish -> verify the successful response against the exact transaction")
 
-    print("PASS: V25 commercial publication uses positive exact-tag ownership, exact draft identity, resolved-path exact asset upload, exact asset set, reusable exact-tag assertion, held-generation hashes, stable ZIP checksum, Authenticode verification, and exact-transaction verification of the successful publication response.")
+    print("PASS: V25 commercial publication uses positive exact-tag ownership, exact draft identity, held-generation asset upload, exact asset set, reusable exact-tag assertion, admitted local hashes, stable ZIP checksum, Authenticode verification, and exact-transaction verification of the successful publication response.")
     return 0
 
 

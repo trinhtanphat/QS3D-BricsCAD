@@ -111,6 +111,7 @@ jobs:
             'scripts/finalize-v25-signed-package.ps1',
             'scripts/new-v25-update-manifest.ps1',
             'scripts/verify-v25-held-file.ps1',
+            'scripts/invoke-v25-held-release-upload.ps1',
             'scripts/rollback-v25-draft-release.ps1',
             'scripts/assert-v25-release-package-identity.ps1',
             'scripts/assert-v25-commercial-draft-identity.ps1'
@@ -485,7 +486,7 @@ jobs:
               $publishedAsset = $matches[0]
               $expectedAssetId = [long]$VerifiedAssetIds[$expectedAsset]
               if ($expectedAssetId -le 0 -or [long]$publishedAsset.id -ne $expectedAssetId) { throw "Verified V25 release asset identity mismatch for $expectedAsset." }
-              $localLength = [int64](Get-Item -LiteralPath ([string]$LocalAssets[$expectedAsset])).Length
+              $localLength = [int64]$LocalAssets[$expectedAsset].Length
               if ([int64]$publishedAsset.size -ne $localLength) { throw "Published V25 release asset size mismatch for $expectedAsset during acknowledgement reconciliation." }
             }
           }
@@ -572,13 +573,14 @@ jobs:
             $releaseUri = $expectedReleaseUri
             Assert-RemoteReleaseTagTargetsWorkflowSha
 
-            foreach ($asset in $assets) {
-              $resolvedAsset = (Resolve-Path -LiteralPath $asset).Path
-              $name = [IO.Path]::GetFileName($resolvedAsset)
-              if ($localAssets.ContainsKey($name)) { throw "Duplicate local V25 release asset name: $name" }
-              $localAssets[$name] = $resolvedAsset
-              & gh release upload $env:RELEASE_TAG $resolvedAsset --repo $env:GITHUB_REPOSITORY
-              if ($LASTEXITCODE -ne 0) { throw "Failed to upload V25 draft asset: $resolvedAsset" }
+            $admittedAssets = @(& .\scripts\invoke-v25-held-release-upload.ps1 `
+              -Path $assets `
+              -ReleaseTag $env:RELEASE_TAG `
+              -Repository $env:GITHUB_REPOSITORY)
+            if ($admittedAssets.Count -ne $assetNames.Count) { throw 'Held V25 draft upload did not return the complete admitted asset set.' }
+            foreach ($asset in $admittedAssets) {
+              if ($localAssets.ContainsKey($asset.Name)) { throw "Duplicate admitted V25 release asset name: $($asset.Name)" }
+              $localAssets[$asset.Name] = $asset
             }
 
             $draftRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
@@ -598,7 +600,7 @@ jobs:
               $uploadedAsset = $matches[0]
               $uploadedAssetId = [long]$uploadedAsset.id
               if ($uploadedAssetId -le 0) { throw "V25 draft release asset has no usable identity: $name" }
-              $localLength = [int64](Get-Item -LiteralPath ([string]$localAssets[$name])).Length
+              $localLength = [int64]$localAssets[$name].Length
               if ([int64]$uploadedAsset.size -ne $localLength) { throw "V25 draft release asset size mismatch before byte verification: $name" }
               $verifiedAssetIds[$name] = $uploadedAssetId
             }
@@ -613,7 +615,7 @@ jobs:
               $expectedNames = @($assetNames | Sort-Object)
               if (($downloadedNames -join "`n") -cne ($expectedNames -join "`n")) { throw 'Draft release asset set mismatch.' }
               foreach ($name in $assetNames) {
-                $localHash = (& .\scripts\verify-v25-held-file.ps1 -Operation Hash -Path (Join-Path $dist $name)).Trim()
+                $localHash = [string]$localAssets[$name].Sha256
                 $remoteHash = (& .\scripts\verify-v25-held-file.ps1 -Operation Hash -Path (Join-Path $downloadRoot $name)).Trim()
                 if (-not [string]::Equals($localHash, $remoteHash, [StringComparison]::OrdinalIgnoreCase)) { throw "Draft release asset SHA-256 mismatch for $name; release remains a draft." }
               }
