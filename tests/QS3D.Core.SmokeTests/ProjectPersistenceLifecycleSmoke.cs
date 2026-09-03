@@ -55,7 +55,10 @@ namespace QS3D.Core.SmokeTests
             family.Name = "Family 1";
             expectedVersion = checked(expectedVersion + 1L);
             Equal(expectedVersion, project.ChangeVersion, "Restoring an owned family scalar did not advance the project revision exactly once.");
-            False(stamp.RequiresSave(project), "Restoring the persisted family value left a false-positive dirty state.");
+            True(stamp.RequiresSave(project), "Restoring an owned family scalar must remain pending until the monotonic project revision is saved.");
+            stamp.MarkSaved(project);
+            False(stamp.RequiresSave(project), "MarkSaved did not accept the restored family scalar baseline.");
+            savedUpdatedUtc = project.UpdatedUtc;
 
             family.Properties["Material"] = "Brick";
             expectedVersion = checked(expectedVersion + 1L);
@@ -64,7 +67,10 @@ namespace QS3D.Core.SmokeTests
             family.Properties["Material"] = "Concrete";
             expectedVersion = checked(expectedVersion + 1L);
             Equal(expectedVersion, project.ChangeVersion, "Restoring an owned family property did not advance the project revision exactly once.");
-            False(stamp.RequiresSave(project), "Restoring the persisted family property left a false-positive dirty state.");
+            True(stamp.RequiresSave(project), "Restoring an owned family property must remain pending until the monotonic project revision is saved.");
+            stamp.MarkSaved(project);
+            False(stamp.RequiresSave(project), "MarkSaved did not accept the restored family property baseline.");
+            savedUpdatedUtc = project.UpdatedUtc;
 
             element.Properties["LengthM"] = "6";
             Equal(expectedVersion, project.ChangeVersion, "Direct element property mutation unexpectedly changed the project revision.");
