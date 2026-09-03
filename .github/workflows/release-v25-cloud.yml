@@ -422,14 +422,14 @@ jobs:
           }
           $uploadBase = $release.upload_url -replace '\{\?name,label\}$', ''
           foreach ($spec in $assetSpecs) {
-            $asset = (Resolve-Path -LiteralPath $spec.Path).Path
-            $preUploadInfo = Get-Item -LiteralPath $asset
-            $preUploadHash = (Get-FileHash -LiteralPath $asset -Algorithm SHA256).Hash
-            if ($preUploadInfo.Length -ne $spec.Size -or -not [string]::Equals($preUploadHash, $spec.Hash, [StringComparison]::OrdinalIgnoreCase)) {
-              throw "Held release asset changed immediately before upload: $($spec.Name). Release remains a draft."
-            }
-            $encodedName = [Uri]::EscapeDataString($spec.Name)
-            Invoke-RestMethod -Method Post -Uri ($uploadBase + '?name=' + $encodedName) -Headers $headers -ContentType $spec.ContentType -InFile $asset | Out-Null
+            .\scripts\upload-v25-held-release-asset.ps1 `
+              -Path $spec.Path `
+              -Name $spec.Name `
+              -UploadBase $uploadBase `
+              -Headers $headers `
+              -ContentType $spec.ContentType `
+              -ExpectedSha256 $spec.Hash `
+              -ExpectedSize $spec.Size
           }
           $releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$($release.id)"
           $draftRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
