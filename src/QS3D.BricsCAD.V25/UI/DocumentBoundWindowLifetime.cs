@@ -329,10 +329,12 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
             {
-                // The shared coordinator rejects host-quiescing native events before dereferencing
-                // e.Document. Re-check here so the registration remains fail-closed if state changes.
+                // The shared coordinator has already matched this registration to the destroying
+                // document by managed lifecycle reference or by the safe live-wrapper native fallback.
+                // Do not reopen the event's managed Document here: native teardown may advance between
+                // affinity proof and callback dispatch, turning a proven match into a false negative.
                 if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
-                if (!MatchesNativeDatabase(e.Document)) return;
+
                 var deferForFinalDocument = !HasAnotherLiveDocument();
                 lock (_documentAccessGate)
                 {
@@ -340,9 +342,6 @@ namespace QS3D.BricsCAD.V25.UI
                     if (Interlocked.Exchange(ref _invalidated, 1) != 0) return;
                 }
 
-                // BricsCAD may surface a different managed Document wrapper for the same native
-                // database during destruction. Match the stable native database identity captured
-                // at bind time so wrapper drift still closes this window, without using mutable paths.
                 TryCloseWindow(deferForFinalDocument);
             }
 
