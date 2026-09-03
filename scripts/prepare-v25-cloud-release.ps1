@@ -26,6 +26,7 @@ $releaseRelevantPathspecs = @(
     'src/',
     'tests/',
     'scripts/',
+    'external/QS3D-Platform',
     '.gitmodules',
     'Directory.Build.props',
     'QS3D.sln',
