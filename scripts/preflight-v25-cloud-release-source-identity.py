@@ -5,7 +5,8 @@ The published prerelease/tag names an immutable commit. Release preparation must
 therefore not rewrite ProductVersion inputs only in the runner worktree and then
 publish against the unchanged commit SHA. Release preparation, automatic main
 dispatch, batch counting, and policy documentation must classify the pinned
-Platform gitlink as part of release identity.
+Platform gitlink as part of release identity. Any batch path enumeration must be
+NUL-delimited so valid quoted/newline pathnames cannot evade classification.
 """
 
 from __future__ import annotations
@@ -46,7 +47,7 @@ def _run_git(repo: pathlib.Path, *args: str, check: bool = True) -> subprocess.C
 
 
 def _assert_pathname_safe_git_primitive(failures: list[str]) -> None:
-    """Prove the legacy quoted-path bypass and the pathspec replacement."""
+    """Prove quoted line output bypasses prefix parsing while Git pathspec does not."""
 
     try:
         with tempfile.TemporaryDirectory(prefix="qs3d-release-path-") as temp:
@@ -77,6 +78,12 @@ def _assert_pathname_safe_git_primitive(failures: list[str]) -> None:
                 failures.append(
                     "quoted-path regression fixture did not reproduce the legacy prefix "
                     "classification bypass with core.quotePath=true"
+                )
+
+            nul_paths = _run_git(repo, "diff", "--name-only", "-z", commit_range, "--").stdout.split("\0")
+            if "src/café.cs" not in nul_paths:
+                failures.append(
+                    "NUL-delimited Git pathname fixture did not preserve the release-relevant Unicode path"
                 )
 
             safe = _run_git(
@@ -210,11 +217,13 @@ def main() -> int:
     batch_signals = (
         '"external/QS3D-Platform"',
         "RELEASE_RELEVANT_EXACT_PATHS",
+        '"--name-only", "-z"',
+        '.split("\\0")',
     )
     missing_batch = [token for token in batch_signals if token not in batch_gate]
     if missing_batch:
         failures.append(
-            "release batch gate does not count Platform gitlink integrations as release-relevant; missing: "
+            "release batch gate does not count/decode release-relevant paths safely; missing: "
             + ", ".join(missing_batch)
         )
 
