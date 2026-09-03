@@ -28,8 +28,11 @@ for token in (
     "ProjectStateSnapshotFamilyRestoreAtomicitySmoke",
     "ThrowingFamilySubscriberCannotPublishPartialRestore",
     "PropertyChangedEventHandler throwingSubscriber",
+    'family.Properties["NullableNote"] = null!;',
+    'family.Properties["NullableNote"] = "mutated";',
     "Snapshot restore must preserve captured ProjectFamily object identity.",
     "Snapshot restore must preserve the captured ProjectFamily property-store object identity.",
+    "Snapshot restore must preserve raw null family property values without canonicalizing them to empty strings.",
 ):
     if token not in smoke:
         errors.append("snapshot family restore regression missing: " + token)
@@ -86,4 +89,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: ProjectStateSnapshot materializes family properties once with null backing fidelity, runs the regression through dedicated deterministic registration, and restores preserved family state without external callbacks or stale property-store identity.")
+print("PASS: ProjectStateSnapshot materializes family properties once with executable null backing fidelity coverage, runs the regression through dedicated deterministic registration, and restores preserved family state without external callbacks or stale property-store identity.")
