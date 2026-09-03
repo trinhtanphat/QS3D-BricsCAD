@@ -334,8 +334,10 @@ namespace QS3D.BricsCAD.V25
                 // second DWG writer while the previous native command can still be mutating.
                 if (_pending != null && !_pending.Dispatching)
                 {
-                    DetachPendingLocked(_pending);
-                    _pending = null;
+                    if (TryDetachPendingLocked(_pending))
+                        _pending = null;
+                    else
+                        _pending.Audit?.Invoke("native command handler cleanup failed during reset; writer remains quarantined");
                 }
                 _lease = null;
                 CurrentOperationId.Value = null;
@@ -371,7 +373,11 @@ namespace QS3D.BricsCAD.V25
                 }
                 catch
                 {
-                    DetachPendingLocked(pending);
+                    if (!TryDetachPendingLocked(pending))
+                    {
+                        _pending = pending;
+                        pending.Audit?.Invoke("native command handler rollback failed; writer remains quarantined");
+                    }
                     throw;
                 }
                 _pending = pending;
@@ -435,13 +441,19 @@ namespace QS3D.BricsCAD.V25
             {
                 if (_pending == null || !PendingMatchesLocked(sender, e)) return;
                 completed = _pending;
-                DetachPendingLocked(completed);
-                _pending = null;
-                completed.Audit?.Invoke("native command " + terminalState + "; command=" + SafeTool(completed.Command));
-                if (_lease != null && _lease.ReleaseWhenIdle)
-                    _lease = null;
+                if (TryDetachPendingLocked(completed))
+                {
+                    _pending = null;
+                    if (_lease != null && _lease.ReleaseWhenIdle)
+                        _lease = null;
+                    else
+                        CleanupExpiredLeaseLocked(DateTime.UtcNow);
+                }
                 else
-                    CleanupExpiredLeaseLocked(DateTime.UtcNow);
+                {
+                    completed.Audit?.Invoke("native command terminal handler cleanup failed; writer remains quarantined");
+                }
+                completed.Audit?.Invoke("native command " + terminalState + "; command=" + SafeTool(completed.Command));
             }
 
             // Ledger synchronization is intentionally outside coordinator Sync. Mutation setup
@@ -487,12 +499,14 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void DetachPendingLocked(PendingNativeCommand pending)
+        private static bool TryDetachPendingLocked(PendingNativeCommand pending)
         {
-            try { pending.Document.CommandWillStart -= pending.WillStartHandler; } catch { }
-            try { pending.Document.CommandEnded -= pending.EndedHandler; } catch { }
-            try { pending.Document.CommandCancelled -= pending.CancelledHandler; } catch { }
-            try { pending.Document.CommandFailed -= pending.FailedHandler; } catch { }
+            var detached = true;
+            try { pending.Document.CommandWillStart -= pending.WillStartHandler; } catch { detached = false; }
+            try { pending.Document.CommandEnded -= pending.EndedHandler; } catch { detached = false; }
+            try { pending.Document.CommandCancelled -= pending.CancelledHandler; } catch { detached = false; }
+            try { pending.Document.CommandFailed -= pending.FailedHandler; } catch { detached = false; }
+            return detached;
         }
 
         private static string NormalizeRequiredToken(string value)
@@ -692,8 +706,10 @@ namespace QS3D.BricsCAD.V25
                     {
                         if (ReferenceEquals(_pending, McpCadMutationCoordinator._pending))
                         {
-                            DetachPendingLocked(_pending);
-                            McpCadMutationCoordinator._pending = null;
+                            if (TryDetachPendingLocked(_pending))
+                                McpCadMutationCoordinator._pending = null;
+                            else
+                                _pending.Audit?.Invoke("native command reservation cleanup failed; writer remains quarantined");
                         }
                     }
                 }
