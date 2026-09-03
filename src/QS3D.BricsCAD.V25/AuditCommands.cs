@@ -39,11 +39,42 @@ namespace QS3D.BricsCAD.V25
                 var hasProject = ProjectContextCoordinator.TryGetReadOnly(document, out var project);
                 var candidate = new AuditLogWindow(document);
                 candidate.Closed += (_, __) => ReleasePublishedWindow(candidate);
-                Application.ShowModelessWindow(IntPtr.Zero, candidate, true);
-                if (!candidate.IsLoaded) return;
+                try
+                {
+                    Application.ShowModelessWindow(IntPtr.Zero, candidate, true);
+                }
+                catch (System.Exception)
+                {
+                    if (!CloseUnpublishedCandidate(candidate))
+                    {
+                        const string blockedStatus = "Nhật ký thay đổi lỗi: cửa sổ chưa publish không thể đóng an toàn.";
+                        try { document.Editor.WriteMessage("\nQS3DAUDIT: candidate chưa publish chưa đạt terminal Closed; không mở thêm cửa sổ."); } catch { }
+                        try { PaletteCoordinator.SetStatus(blockedStatus); } catch { }
+                        return;
+                    }
 
-                _window = candidate;
-                _nativeDatabaseIdentity = nativeDatabaseIdentity;
+                    const string showFailure = "Nhật ký thay đổi lỗi: không thể mở nhật ký thay đổi.";
+                    try { document.Editor.WriteMessage("\nQS3DAUDIT error: không thể mở nhật ký thay đổi."); } catch { }
+                    try { PaletteCoordinator.SetStatus(showFailure); } catch { }
+                    return;
+                }
+
+                if (!candidate.IsLoaded)
+                {
+                    if (!CloseUnpublishedCandidate(candidate))
+                    {
+                        const string blockedStatus = "Nhật ký thay đổi lỗi: cửa sổ chưa publish không thể đóng an toàn.";
+                        try { document.Editor.WriteMessage("\nQS3DAUDIT: candidate chưa publish chưa đạt terminal Closed; không mở thêm cửa sổ."); } catch { }
+                        try { PaletteCoordinator.SetStatus(blockedStatus); } catch { }
+                    }
+                    return;
+                }
+
+                if (candidate.IsLoaded)
+                {
+                    _window = candidate;
+                    _nativeDatabaseIdentity = nativeDatabaseIdentity;
+                }
 
                 var status = hasProject
                     ? "Đã mở Nhật ký thay đổi • " + project.AuditEvents.Count + " sự kiện."
@@ -86,6 +117,20 @@ namespace QS3D.BricsCAD.V25
 
             ReleasePublishedWindow(published);
             return true;
+        }
+
+        private static bool CloseUnpublishedCandidate(AuditLogWindow candidate)
+        {
+            try
+            {
+                candidate.Close();
+            }
+            catch
+            {
+                return !candidate.IsLoaded;
+            }
+
+            return !candidate.IsLoaded;
         }
 
         private static void ReleasePublishedWindow(AuditLogWindow candidate)
