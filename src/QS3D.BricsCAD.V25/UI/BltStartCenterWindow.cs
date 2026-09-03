@@ -149,8 +149,15 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnHostDocumentToBeDestroyed(object sender, Bricscad.ApplicationServices.DocumentCollectionEventArgs e)
         {
-            // Defer until the host transition completes. Do not retain e.Document or record a drawing that is closing.
-            QueueHomeRefresh(ActiveDrawingRecordIntent.Suppress);
+            // Defer until the host transition completes and never retain a Document wrapper beyond this event.
+            // Only destruction of the currently active document suppresses a pending Record. Closing a
+            // background document must preserve another document's already-queued activation intent.
+            var destroyingDocument = e.Document;
+            var activeDocument = Application.DocumentManager.MdiActiveDocument;
+            var destroyIntent = ReferenceEquals(destroyingDocument, activeDocument)
+                ? ActiveDrawingRecordIntent.Suppress
+                : ActiveDrawingRecordIntent.Preserve;
+            QueueHomeRefresh(destroyIntent);
         }
 
         private void QueueHomeRefresh(ActiveDrawingRecordIntent intent)
