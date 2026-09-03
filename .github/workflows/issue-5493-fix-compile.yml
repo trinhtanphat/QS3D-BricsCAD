@@ -1,0 +1,47 @@
+name: issue-5493-fix-compile
+
+on:
+  push:
+    branches:
+      - agent/gpt56sol-20260903-durable-ack-hardening-v2/issue-5493-public-status-fingerprint
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/gpt56sol-20260903-durable-ack-hardening-v2/issue-5493-public-status-fingerprint
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Fix exact compile typo
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/QS3D.BricsCAD.V25/McpEmbeddedServerV2.cs')
+          text = path.read_text(encoding='utf-8')
+          old = 'if (string.IsNullOrWhiteSpace(jsonValue)) return false;'
+          new = 'if (string.IsNullOrWhiteSpace(value)) return false;'
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'expected exactly one compile typo, found {count}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          git diff --check
+          git diff -- src/QS3D.BricsCAD.V25/McpEmbeddedServerV2.cs
+
+      - name: Commit exact fix
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/QS3D.BricsCAD.V25/McpEmbeddedServerV2.cs
+          git commit -m 'fix: use bounded JSON value parameter'
+          git push origin HEAD:agent/gpt56sol-20260903-durable-ack-hardening-v2/issue-5493-public-status-fingerprint
