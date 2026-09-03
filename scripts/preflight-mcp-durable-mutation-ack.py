@@ -6,6 +6,7 @@ V25 = ROOT / "src" / "QS3D.BricsCAD.V25"
 LEDGER = V25 / "McpMutationAckLedger.cs"
 AGENT = V25 / "McpCadAgentRuntime.cs"
 COORD = V25 / "McpCadMutationCoordinator.cs"
+SERVER = V25 / "McpEmbeddedServerV2.cs"
 
 
 def read(path: Path) -> str:
@@ -16,6 +17,7 @@ def main() -> int:
     ledger = read(LEDGER)
     agent = read(AGENT)
     coord = read(COORD)
+    server = read(SERVER)
     errors = []
 
     if not LEDGER.exists():
@@ -49,6 +51,13 @@ def main() -> int:
             if excluded not in ledger:
                 errors.append(f"semantic fingerprint exclusion missing: {excluded}")
 
+        if "if (fingerprint.Length == 0) return string.Empty;" not in ledger:
+            errors.append("durable promotion must require a stable persisted database fingerprint")
+        if "if (fingerprint.Length == 0 && path.Length == 0) return string.Empty;" in ledger:
+            errors.append("path-only drawing identity must not prove durable acknowledgement")
+        if '"mutation-ack-not-durable"' not in ledger or "stable drawing identity could not be established" not in ledger:
+            errors.append("missing bounded diagnostic when stable durable identity cannot be proven")
+
     if 'case "cad_mutation_status"' not in agent:
         errors.append("cad_mutation_status must route read-only in McpCadAgentRuntime")
     if "McpMutationAckLedger.ReserveOrReplay" not in agent:
@@ -75,13 +84,26 @@ def main() -> int:
     if "MarkNativeCommandTerminal(completed" not in coord:
         errors.append("matching native terminal path must carry the completed pending command")
 
+    if 'Tool("cad_mutation_status"' not in server:
+        errors.append("tools/list must publish read-only cad_mutation_status")
+    if "ActionIdProperty()" not in server:
+        errors.append("tools/list must define one bounded public actionId schema property")
+    if "SupportsMutationAck" not in server:
+        errors.append("tools/list must distinguish tools whose actionId participates in mutation ACK replay")
+    if "MergeToolProperties(name, properties)" not in server:
+        errors.append("built-in tool schemas must merge retry identity using the tool name")
+    if "additions.Add(ActionIdProperty())" not in server:
+        errors.append("extension tool descriptors must receive actionId when they support mutation ACK")
+    if 'case "cad_mutation_status":' not in server:
+        errors.append("cad_mutation_status must be annotated read-only in tools/list")
+
     if errors:
         print("FAIL: MCP durable mutation acknowledgement guard")
         for error in errors:
             print(" -", error)
         return 1
 
-    print("PASS: durable mutation ACK identity, replay, terminal native success and save-backed durability contracts are present.")
+    print("PASS: durable mutation ACK identity, public retry schema, terminal native success and stable save-backed durability contracts are present.")
     return 0
 
 
