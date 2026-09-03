@@ -134,7 +134,7 @@ namespace QS3D.Core.SmokeTests
             var lines = new CountProbeCollection<EstimateLine>(1, Line("L-1"));
             var projection = FrozenEstimateProjection.Create(lines);
             Equal(1, projection.Rows.Count, "honest projection count");
-            Equal(5, lines.CountReads, "projection Count must be rebound at admission, after GetEnumerator before traversal, before Current, after materialization, and before publication");
+            Equal(11, lines.CountReads, "projection Count must be rebound across both admitted and replay traversals, including admission, MoveNext/Current boundaries, materialization, and publication");
         }
 
         private static RateItem Item(string id, int effectiveOffset = 0) =>
