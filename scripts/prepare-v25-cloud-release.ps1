@@ -130,14 +130,14 @@ function Get-CommittedProductVersion {
     [xml]$projectXml = Get-Content -LiteralPath $projectPath -Raw
     $values = @(
         $projectXml.Project.PropertyGroup |
-            ForEach-Object { $_.ProductVersion } |
+            ForEach-Object { $_.Version } |
             Where-Object { $null -ne $_ } |
             ForEach-Object { ([string]$_).Trim() } |
             Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
             Sort-Object -Unique
     )
     if ($values.Count -ne 1) {
-        throw "Committed V25 project must contain exactly one unambiguous ProductVersion value. Found $($values.Count)."
+        throw "Committed V25 project must contain exactly one unambiguous Version value. Found $($values.Count)."
     }
     return [string]$values[0]
 }
