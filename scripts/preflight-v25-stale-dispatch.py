@@ -23,6 +23,17 @@ surface_contract = (
     ),
 )
 
+
+def contains_executable_line(text: str, token: str) -> bool:
+    """Match a shell/PowerShell token only on non-comment source lines."""
+    token_lower = token.lower()
+    return any(
+        token_lower in line.lower()
+        for line in text.splitlines()
+        if not line.lstrip().startswith("#")
+    )
+
+
 if not WORKFLOW.is_file():
     errors.append("missing V25 post-main dispatcher workflow")
     workflow = ""
@@ -92,7 +103,7 @@ for forbidden in (
     "sync-preview-release-version.ps1",
     "git diff --name-only",
 ):
-    if forbidden.lower() in prepare.lower():
+    if contains_executable_line(prepare, forbidden):
         errors.append("protected-main release preparation must not contain write/line-parser primitive: " + forbidden)
 
 if workflow:
@@ -112,7 +123,7 @@ if workflow:
         errors.append(
             "dispatcher ordering must classify drift with Git pathspecs, exit only for release-relevant drift, fail on Git errors, continue inert drift, then reserve and dispatch"
         )
-    if "git diff --name-only" in workflow:
+    if contains_executable_line(workflow, "git diff --name-only"):
         errors.append("dispatcher must not classify release drift from line-oriented pathname output")
 
 if prepare:
