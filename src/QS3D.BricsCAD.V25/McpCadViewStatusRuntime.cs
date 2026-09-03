@@ -64,7 +64,7 @@ namespace QS3D.BricsCAD.V25
                 "confirmMutation");
             yield return Tool(
                 "cad_view_fit_entities",
-                "Directly fit the active BricsCAD view to up to 100 exact hexadecimal entity handles supplied as a comma-separated string. Requires confirmMutation=true.",
+                "Directly fit the active BricsCAD view to up to 100 exact hexadecimal entity handles. Live entities with unusable geometric extents are skipped and reported while valid entities still fit. Requires confirmMutation=true.",
                 "\"handlesCsv\":{\"type\":\"string\",\"maxLength\":1800},\"padding\":{\"type\":\"number\",\"minimum\":1.0,\"maximum\":2.0}," + ConfirmMutationProperty(),
                 "handlesCsv", "confirmMutation");
             yield return Tool(
@@ -128,8 +128,11 @@ namespace QS3D.BricsCAD.V25
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
+                RequireViewMutationIdle();
                 var hasExtents = false;
                 var combined = new Extents3d();
+                var skippedHandles = new List<string>();
+                var fittedCount = 0;
                 foreach (var handle in handles)
                 {
                     ObjectId id;
@@ -142,18 +145,36 @@ namespace QS3D.BricsCAD.V25
                         throw new InvalidOperationException("Handle does not identify a live entity: " + HandleText(handle));
                     Extents3d extents;
                     try { extents = RequireFiniteExtents(entity.GeometricExtents, "entity " + HandleText(handle)); }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
-                        throw new InvalidOperationException(
-                            "Entity has no usable geometric extents: " + HandleText(handle) + ". " + ex.Message,
-                            ex);
+                        skippedHandles.Add(HandleText(handle));
+                        continue;
                     }
                     if (!hasExtents) { combined = extents; hasExtents = true; }
                     else combined.AddExtents(extents);
+                    fittedCount++;
                 }
-                if (!hasExtents) throw new InvalidOperationException("No usable entity extents were supplied.");
-                return ApplyExtents(document, combined, padding, "entities", handles.Count);
+                if (!hasExtents)
+                    throw new InvalidOperationException(
+                        "No usable entity extents were supplied. Skipped live handles with unusable extents: "
+                        + string.Join(",", skippedHandles) + ".");
+                var result = ApplyExtents(document, combined, padding, "entities", fittedCount);
+                return AppendFitWarnings(result, handles.Count, skippedHandles);
             }
+        }
+
+        private static string AppendFitWarnings(string result, int requestedEntityCount, List<string> skippedHandles)
+        {
+            var json = result.Substring(0, result.Length - 1)
+                       + ",\"requestedEntityCount\":" + requestedEntityCount.ToString(CultureInfo.InvariantCulture)
+                       + ",\"skippedEntityCount\":" + skippedHandles.Count.ToString(CultureInfo.InvariantCulture)
+                       + ",\"skippedHandles\":[";
+            for (var i = 0; i < skippedHandles.Count; i++)
+            {
+                if (i > 0) json += ",";
+                json += "\"" + Escape(skippedHandles[i]) + "\"";
+            }
+            return json + "]}";
         }
 
         private static string SetView(string body)
@@ -442,8 +463,11 @@ namespace QS3D.BricsCAD.V25
             if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out active) && active == 0) return;
             var commandNames = SafeCommandNames(
                 Convert.ToString(Application.GetSystemVariable("CMDNAMES"), CultureInfo.InvariantCulture) ?? string.Empty);
+            var modal = (active & 8) != 0;
             throw new InvalidOperationException(
-                "BricsCAD view update is busy while another command is active. Wait for cad_wait_idle/CMDACTIVE=0 before retrying the view mutation."
+                modal
+                    ? "BricsCAD view update is blocked by modal/dialog state (CMDACTIVE bit 8). Dismiss the modal locally before retrying; MCP will not enter the view mutation while this state is active."
+                    : "BricsCAD view update is busy while another command is active. Wait for cad_wait_idle/CMDACTIVE=0 before retrying the view mutation."
                 + (commandNames.Length == 0 ? string.Empty : " Active command: " + commandNames + "."));
         }
 
