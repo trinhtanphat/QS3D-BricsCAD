@@ -77,9 +77,7 @@ try {
             $response = $client.PostAsync($uploadUri, $content).GetAwaiter().GetResult()
             try {
                 if (-not $response.IsSuccessStatusCode) {
-                    $responseBody = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
-                    if ($responseBody.Length -gt 1024) { $responseBody = $responseBody.Substring(0, 1024) }
-                    throw "GitHub release asset upload failed for $Name with HTTP $([int]$response.StatusCode): $responseBody"
+                    throw "GitHub release asset upload failed for $Name with HTTP $([int]$response.StatusCode)."
                 }
             }
             finally {
