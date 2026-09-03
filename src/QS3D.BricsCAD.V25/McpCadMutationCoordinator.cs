@@ -211,6 +211,10 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
+                // Bind retry identity before dispatch so even an unusually fast terminal event
+                // can be correlated to the logical MCP action without weakening writer ownership.
+                reservation.BindActionId(McpMutationAckLedger.CurrentActionId);
+
                 // Make the post-return barrier durable before handing the command to BricsCAD.
                 // Reset/emergency-stop may clean a merely prepared reservation, but once dispatch
                 // begins only the matching native terminal event (or enqueue failure below) may
@@ -224,6 +228,17 @@ namespace QS3D.BricsCAD.V25
             {
                 reservation.Dispose();
                 throw;
+            }
+        }
+
+        internal static bool HasPendingNativeCommand(string actionId)
+        {
+            var normalized = (actionId ?? string.Empty).Trim();
+            if (normalized.Length == 0) return false;
+            lock (Sync)
+            {
+                return _pending != null
+                       && string.Equals(_pending.ActionId, normalized, StringComparison.Ordinal);
             }
         }
 
@@ -343,10 +358,11 @@ namespace QS3D.BricsCAD.V25
 
         private static void CompletePending(object sender, CommandEventArgs e, string terminalState)
         {
+            PendingNativeCommand? completed = null;
             lock (Sync)
             {
                 if (_pending == null || !PendingMatchesLocked(sender, e)) return;
-                var completed = _pending;
+                completed = _pending;
                 DetachPendingLocked(completed);
                 _pending = null;
                 completed.Audit?.Invoke("native command " + terminalState + "; command=" + SafeTool(completed.Command));
@@ -355,6 +371,12 @@ namespace QS3D.BricsCAD.V25
                 else
                     CleanupExpiredLeaseLocked(DateTime.UtcNow);
             }
+
+            // Ledger synchronization is intentionally outside coordinator Sync. Mutation setup
+            // may reserve ACK identity before taking the writer coordinator lock; keeping one
+            // global lock ordering prevents a terminal-event deadlock.
+            if (completed != null)
+                McpMutationAckLedger.MarkNativeCommandTerminal(completed, terminalState);
         }
 
         private static bool PendingMatchesLocked(object sender, CommandEventArgs e)
@@ -493,6 +515,7 @@ namespace QS3D.BricsCAD.V25
             }
             public Document Document { get; private set; }
             public string Command { get; private set; }
+            public string ActionId { get; set; } = string.Empty;
             public bool Started { get; set; }
             public bool Dispatching { get; set; }
             public Action<string>? Audit { get; private set; }
@@ -530,6 +553,24 @@ namespace QS3D.BricsCAD.V25
             {
                 return ReferenceEquals(_pending.Document, document)
                        && string.Equals(_pending.Command, NormalizeCommand(command), StringComparison.OrdinalIgnoreCase);
+            }
+
+            internal void BindActionId(string actionId)
+            {
+                var normalized = (actionId ?? string.Empty).Trim();
+                if (normalized.Length == 0) return;
+                lock (Sync)
+                {
+                    if (!ReferenceEquals(_pending, McpCadMutationCoordinator._pending))
+                        throw new InvalidOperationException("Native-command reservation is no longer active.");
+                    if (_pending.ActionId.Length == 0)
+                    {
+                        _pending.ActionId = normalized;
+                        return;
+                    }
+                    if (!string.Equals(_pending.ActionId, normalized, StringComparison.Ordinal))
+                        throw new InvalidOperationException("Native-command reservation is already bound to another mutation action identity.");
+                }
             }
 
             internal void TransferMutationGate()
