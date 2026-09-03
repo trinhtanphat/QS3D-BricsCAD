@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("snapshot-family-atomicity", "Captured project");
             var family = new ProjectFamily("F-01", "Captured family", ElementCategory.Beam);
             family.Properties["Grade"] = "C30";
+            family.Properties["NullableNote"] = null!;
             project.Families.Add(family);
             var familyProperties = family.Properties;
 
@@ -26,6 +27,7 @@ namespace QS3D.Core.SmokeTests
             family.Name = "Mutated family";
             family.Category = ElementCategory.Column;
             family.Properties["Grade"] = "C40";
+            family.Properties["NullableNote"] = "mutated";
 
             PropertyChangedEventHandler throwingSubscriber = (_, __) => throw new InvalidOperationException("subscriber failure");
             family.PropertyChanged += throwingSubscriber;
@@ -58,6 +60,8 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("Family category was not restored.");
             if (!family.Properties.TryGetValue("Grade", out var grade) || !string.Equals(grade, "C30", StringComparison.Ordinal))
                 throw new InvalidOperationException("Family properties were not restored.");
+            if (!family.Properties.TryGetValue("NullableNote", out var nullableNote) || nullableNote != null)
+                throw new InvalidOperationException("Snapshot restore must preserve raw null family property values without canonicalizing them to empty strings.");
         }
     }
 }
