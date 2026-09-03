@@ -39,7 +39,8 @@ if min(resume_at, tunnel_at, agent_at) >= 0:
     if "catch (Exception ex)" not in between_agent_and_tunnel:
         errors.append("tunnel autostart is still coupled to Agent Center startup failure")
 
-# cad_command_state is read-only: it must be published but excluded from MutationTools.
+# cad_command_state is read-only: it must be published, excluded from the view mutation set,
+# and the outer direct-tool dispatcher must bypass the mutation writer for every direct read tool.
 if '"cad_command_state"' not in view:
     errors.append("cad_command_state is not published")
 mutation_start = view.find("private static readonly HashSet<string> MutationTools")
@@ -49,6 +50,23 @@ if mutation_start >= 0 and mutation_end > mutation_start:
         errors.append("cad_command_state must not require confirmMutation")
 else:
     errors.append("MutationTools block not found")
+
+direct_dispatch_start = agent.find("if (McpCadDirectModelRuntime.IsTool(tool))")
+desktop_dispatch_start = agent.find("if (McpDesktopAutomationRuntime.IsTool(tool))", direct_dispatch_start)
+direct_dispatch = agent[direct_dispatch_start:desktop_dispatch_start] if direct_dispatch_start >= 0 and desktop_dispatch_start > direct_dispatch_start else ""
+if not direct_dispatch:
+    errors.append("unable to isolate outer direct-tool dispatch")
+else:
+    for token in (
+        "if (!McpCadDirectModelRuntime.RequiresMutation(tool))",
+        "return McpCadDirectModelRuntime.Call(tool, args);",
+        "return Mutation(args, tool, () => McpCadDirectModelRuntime.Call(tool, args));",
+    ):
+        require(direct_dispatch, token, "McpCadAgentRuntime direct dispatch")
+    read_return = direct_dispatch.find("return McpCadDirectModelRuntime.Call(tool, args);")
+    mutation_return = direct_dispatch.find("return Mutation(args, tool, () => McpCadDirectModelRuntime.Call(tool, args));")
+    if read_return < 0 or mutation_return < 0 or read_return > mutation_return:
+        errors.append("direct read-only tools must bypass Mutation before the mutating direct route")
 
 # Preserve the merged #5330 display-race contract.
 for token in ("RequireViewMutationIdle", '"CMDACTIVE"', "Editor.SetCurrentView"):
@@ -128,4 +146,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: startup/tunnel/view contracts remain intact and cad_save/QSAVE share a host-owned native QSAVE lifecycle with terminal-event and DBMOD completion verification.")
+print("PASS: startup/tunnel/view contracts remain intact, direct read-only tools bypass mutation confirmation, and cad_save/QSAVE share a host-owned native QSAVE lifecycle with terminal-event and DBMOD completion verification.")
