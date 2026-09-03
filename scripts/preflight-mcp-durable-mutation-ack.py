@@ -5,7 +5,6 @@ ROOT = Path(__file__).resolve().parents[1]
 V25 = ROOT / "src" / "QS3D.BricsCAD.V25"
 LEDGER = V25 / "McpMutationAckLedger.cs"
 AGENT = V25 / "McpCadAgentRuntime.cs"
-DIRECT = V25 / "McpCadDirectModelRuntime.cs"
 COORD = V25 / "McpCadMutationCoordinator.cs"
 
 
@@ -16,7 +15,6 @@ def read(path: Path) -> str:
 def main() -> int:
     ledger = read(LEDGER)
     agent = read(AGENT)
-    direct = read(DIRECT)
     coord = read(COORD)
     errors = []
 
@@ -57,18 +55,20 @@ def main() -> int:
         errors.append("Mutation wrapper must reserve/replay action identity")
     if "McpMutationAckLedger.MarkApplied" not in agent:
         errors.append("synchronous mutation success must mark applied")
+    if "McpMutationAckLedger.PromoteDurableForDocument" not in agent:
+        errors.append("save mutation wrapper must promote only after the verified save action returns")
+    if "IsDurabilitySaveTool" not in agent:
+        errors.append("save-backed promotion must be restricted to cad_save/cad_save_as semantics")
 
     reserve = agent.find("McpMutationAckLedger.ReserveOrReplay")
     writer = agent.find("McpCadMutationCoordinator.EnterMutation")
     if reserve >= 0 and writer >= 0 and reserve > writer:
         errors.append("reserve/replay must occur before writer-gate entry")
 
-    if "McpMutationAckLedger.PromoteDurableForDocument" not in direct:
-        errors.append("verified save completion must promote matching applied records")
-    dbmod = direct.find("WaitForSavedContentDbmod")
-    promote = direct.find("McpMutationAckLedger.PromoteDurableForDocument")
-    if dbmod >= 0 and promote >= 0 and promote < dbmod:
-        errors.append("SaveAs durable promotion must occur only after clean DBMOD verification")
+    applied = agent.find("McpMutationAckLedger.MarkApplied")
+    promote = agent.find("McpMutationAckLedger.PromoteDurableForDocument")
+    if applied >= 0 and promote >= 0 and promote < applied:
+        errors.append("the save action must be marked applied before save-backed durable promotion")
 
     if "McpMutationAckLedger.MarkNativeCommandTerminal" not in coord:
         errors.append("native command terminal events must report ACK outcome")
