@@ -41,7 +41,7 @@ else:
 for token in (
     "Region.CreateFromCurves(new DBObjectCollection { source })",
     "regions.Count != 1",
-    "source curve must form exactly one closed planar region".replace("source", "Source"),
+    "Source curve must form exactly one closed planar region",
     "solid.CreateExtrudedSolid(region, new Vector3d(0d, 0d, height), new SweepOptions());",
     "region?.Dispose();",
 ):
@@ -70,10 +70,10 @@ else:
 # Legacy Solid3d extents are bounded: detailed Solid3d inspection defers extents rather than
 # evaluating GeometricExtents, and generic extents reads are caught so eNullExtents cannot escape.
 for token in (
-    "var boundedSolidInspect = extents && details && entity is Solid3d;",
-    "if (boundedSolidInspect) builder.Append(\"null\");",
-    "else try { builder.Append(ExtentsJson(entity.GeometricExtents)); } catch { builder.Append(\"null\"); }",
-    "if (boundedSolidInspect) builder.Append(\",\\\"extentsDeferred\\\":true\");",
+    'var boundedSolidInspect = extents && details && entity is Solid3d;',
+    'if (boundedSolidInspect) builder.Append("null");',
+    'else try { builder.Append(ExtentsJson(entity.GeometricExtents)); } catch { builder.Append("null"); }',
+    'if (boundedSolidInspect) builder.Append(",\\\"extentsDeferred\\\":true");',
 ):
     require(agent, token, "McpCadAgentRuntime.DescribeEntity")
 
