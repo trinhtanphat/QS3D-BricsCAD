@@ -3,7 +3,6 @@
 
 from pathlib import Path
 import re
-import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCadMutationCoordinator.cs"
@@ -26,28 +25,51 @@ for token in subscriptions:
         raise SystemExit(f"FAIL: expected exactly one native event subscription: {token}")
 
 publish = "_pending = pending;"
-if method.count(publish) != 1:
-    raise SystemExit("FAIL: native pending publication must remain singular")
-publish_at = method.index(publish)
-if any(method.index(token) > publish_at for token in subscriptions):
-    raise SystemExit("FAIL: _pending must not publish before all event subscriptions succeed")
+if method.count(publish) != 2:
+    raise SystemExit("FAIL: expected success publication plus rollback-failure quarantine publication")
+success_publish_at = method.rindex(publish)
+if any(method.index(token) > success_publish_at for token in subscriptions):
+    raise SystemExit("FAIL: success _pending publication must follow all event subscriptions")
 
-# Attachment must be transactional. A failed host event add may occur after one or more
-# earlier adds succeeded; rollback therefore has to encompass the whole subscription block,
-# detach the same candidate, and rethrow instead of retrying or swallowing the failure.
-try_at = method.find("try", method.index(subscriptions[0]) - 200)
-catch_match = re.search(
-    r"catch\s*\{\s*DetachPendingLocked\(pending\);\s*throw;\s*\}",
+# Attachment must be transactional. If detach itself cannot be proven, the candidate must be
+# published as quarantine state before rethrow so outer gate release cannot admit a second writer.
+rollback = re.search(
+    r"catch\s*\{\s*if\s*\(!TryDetachPendingLocked\(pending\)\)\s*\{?\s*_pending\s*=\s*pending;\s*\}?\s*throw;\s*\}",
     method,
     flags=re.DOTALL,
 )
-if try_at < 0 or catch_match is None:
-    raise SystemExit("FAIL: native event attachment lacks fail-closed rollback/rethrow")
-if not (try_at < method.index(subscriptions[0]) < method.index(subscriptions[-1]) < catch_match.start() < publish_at):
-    raise SystemExit("FAIL: rollback must cover every event add and complete before _pending publication")
+try_at = method.find("try", method.index(subscriptions[0]) - 200)
+if try_at < 0 or rollback is None:
+    raise SystemExit("FAIL: native event attachment lacks rollback quarantine/rethrow")
+if not (try_at < method.index(subscriptions[0]) < method.index(subscriptions[-1]) < rollback.start() < success_publish_at):
+    raise SystemExit("FAIL: rollback quarantine must cover every event add before success publication")
+
+helper_start = text.find("private static bool TryDetachPendingLocked(")
+helper_end = text.find("\n        private static string NormalizeRequiredToken", helper_start)
+if helper_start < 0 or helper_end < 0:
+    raise SystemExit("FAIL: rollback helper must report whether every unsubscribe succeeded")
+helper = text[helper_start:helper_end]
+for event_name in ("CommandWillStart", "CommandEnded", "CommandCancelled", "CommandFailed"):
+    if f"pending.Document.{event_name} -= pending." not in helper:
+        raise SystemExit(f"FAIL: rollback helper does not detach {event_name}")
+if "return detached;" not in helper or "detached = false;" not in helper:
+    raise SystemExit("FAIL: rollback helper must report unsubscribe failure instead of swallowing it")
+
+# All cleanup paths that can reopen writer admission must preserve quarantine on detach failure.
+reset_start = text.find("internal static void Reset()")
+reset_end = text.find("\n        private static NativeCommandReservation ArmNativeCommandInCadContext", reset_start)
+reset = text[reset_start:reset_end]
+if "if (TryDetachPendingLocked(_pending))" not in reset or "_pending = null;" not in reset:
+    raise SystemExit("FAIL: Reset must not clear pending state unless unsubscribe cleanup succeeds")
+
+dispose_start = text.find("public void Dispose()", text.find("internal sealed class NativeCommandReservation"))
+dispose_end = text.find("\n        private sealed class InteractiveModalScope", dispose_start)
+dispose = text[dispose_start:dispose_end]
+if "if (TryDetachPendingLocked(_pending))" not in dispose or "McpCadMutationCoordinator._pending = null;" not in dispose:
+    raise SystemExit("FAIL: reservation Dispose must preserve quarantine when unsubscribe cleanup fails")
 
 # Never repair this native boundary by retrying event registration.
 if re.search(r"(?:while|for)\s*\([^)]*\)[\s\S]{0,500}Command(?:WillStart|Ended|Cancelled|Failed)\s*\+=", method):
     raise SystemExit("FAIL: native event subscription must not be retried")
 
-print("PASS: MCP native-command event subscriptions publish atomically with rollback on attachment failure")
+print("PASS: MCP native-command event attachment is atomic and cleanup failure remains quarantined")
