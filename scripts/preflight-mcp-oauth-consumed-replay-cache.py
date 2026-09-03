@@ -106,5 +106,29 @@ for needle in [
     if needle not in source:
         fail(f"refresh token issuance lost family/generation binding: {needle}")
 
+# A refresh generation must not be consumed before the successor response has been
+# constructed successfully. Otherwise an exception while signing/serializing N+1 burns
+# generation N without returning N+1, and the client's only safe retry is rejected as a
+# replay. Compute the checked successor generation and prepare the successor response
+# before the single process-global family admission/advance.
+exchange_start = source.find("private static McpOAuthHttpResponse ExchangeRefreshToken(")
+exchange_end = source.find("private static McpOAuthHttpResponse IssueTokenPair(", exchange_start)
+if exchange_start < 0 or exchange_end < 0:
+    fail("refresh-token exchange method is missing")
+exchange = source[exchange_start:exchange_end]
+checked_pos = exchange.find("checked(refreshGeneration + 1)")
+issue_pos = exchange.find("IssueTokenPair(")
+admit_pos = exchange.find("TryAdvanceRefreshFamily(")
+if checked_pos < 0:
+    fail("successor generation is not checked before refresh-family advancement")
+if issue_pos < 0:
+    fail("successor token response is not prepared in the refresh exchange")
+if admit_pos < 0:
+    fail("refresh-family admission is missing from the refresh exchange")
+if not (checked_pos < issue_pos < admit_pos):
+    fail("refresh family advances before successor response preparation, which can strand the client on issuance failure")
+if "return successorResponse;" not in exchange:
+    fail("prepared successor response is not returned after successful refresh-family admission")
+
 print("MCP OAuth consumed replay-cache preflight passed.")
 sys.exit(0)
