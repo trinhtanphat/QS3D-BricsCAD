@@ -106,7 +106,7 @@ jobs:
         if: ${{ steps.scope.outputs.source_validation == 'true' }}
         run: python scripts/preflight-all.py
       - name: Validate tracked PowerShell syntax
-        if: ${{ steps.scope.outputs.source_validation == 'true' }}
+        if: ${{ !cancelled() && steps.scope.outputs.source_validation == 'true' }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -133,7 +133,7 @@ jobs:
           }
           Write-Host "Validated $($scripts.Count) tracked PowerShell script(s)."
       - name: V25 package integrity contract tests
-        if: ${{ steps.scope.outputs.source_validation == 'true' }}
+        if: ${{ !cancelled() && steps.scope.outputs.source_validation == 'true' }}
         shell: pwsh
         run: .\scripts\test-v25-package-verifier.ps1
 
