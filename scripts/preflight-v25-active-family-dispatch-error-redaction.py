@@ -9,18 +9,27 @@ text = SOURCE.read_text(encoding="utf-8")
 
 failures = []
 
+method_start = text.find("private static void DrawActiveFamilyCore(")
+method_end = text.find("private static ProjectFamily RequireCurrentDispatchSnapshot(", method_start)
+if method_start < 0 or method_end < 0:
+    failures.append("cannot isolate DrawActiveFamilyCore dispatch boundary")
+    method = ""
+else:
+    method = text[method_start:method_end]
+
 for forbidden in (
     'catch (Exception ex)',
-    'Report(document, operation + " lỗi: " + ex.Message);',
+    'ex.Message',
+    'Report(document, operation + " lỗi: "',
 ):
-    if forbidden in text:
+    if forbidden in method:
         failures.append("Active Family dispatcher still exposes exception detail: " + forbidden)
 
 for required in (
     'catch (Exception)',
     'Report(document, operation + ": không thể hoàn tất thao tác. Vui lòng thử lại.");',
 ):
-    if required not in text:
+    if required not in method:
         failures.append("Active Family dispatcher is missing stable redacted failure behavior: " + required)
 
 # Preserve the safety-critical dispatch validation path. Redaction must not bypass stale-document/project/family checks.
