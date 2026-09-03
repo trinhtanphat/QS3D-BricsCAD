@@ -29,8 +29,12 @@ else:
         clear_at = load.find("Records.Clear();", catch_at)
         if catch_at < 0 or clear_at < catch_at:
             errors.append("corrupt durable ledger must still clear all partially loaded records")
-        if "loaded++" not in load or "loaded < MaxDurableRecords" not in load:
+        limit_at = load.find("if (loaded >= MaxDurableRecords)")
+        parse_at = load.find("var fields = lines[i].Split('|');")
+        if "loaded++" not in load or limit_at < 0:
             errors.append("duplicate-action hardening must preserve the bounded durable-record admission")
+        elif parse_at < 0 or limit_at > parse_at:
+            errors.append("durable record limit must fail closed before parsing or storing record 1025+")
 
 if errors:
     print("FAIL: MCP durable mutation duplicate-action ledger guard")
@@ -38,4 +42,4 @@ if errors:
         print(" -", error)
     sys.exit(1)
 
-print("PASS: durable mutation ledger loading rejects duplicate persisted actionId identities before store, clears partial state on corruption, and preserves bounded admission.")
+print("PASS: durable mutation ledger loading rejects duplicate persisted actionId identities before store, clears partial state on corruption, and preserves bounded fail-closed admission.")
