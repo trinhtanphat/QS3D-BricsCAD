@@ -24,8 +24,8 @@ else:
             "SemanticUntrackResult result;",
             'ExistingProjectMutationContext.Require(doc, "Untrack semantic elements")',
             "result = SemanticUntrackService.Untrack(project, handles, predicate);",
-            "catch (Exception ex)",
-            "ReportUntrackError(doc, label, ex);",
+            "catch (Exception)",
+            "ReportUntrackError(doc, label);",
             "return;",
             "FinalizeUntrackUi(doc, result.Count, label);",
         )
@@ -35,15 +35,15 @@ else:
 
         bind = command.find('ExistingProjectMutationContext.Require(doc, "Untrack semantic elements")')
         mutate = command.find("result = SemanticUntrackService.Untrack(project, handles, predicate);")
-        catch = command.find("catch (Exception ex)", mutate)
-        failure = command.find("ReportUntrackError(doc, label, ex);", catch)
+        catch = command.find("catch (Exception)", mutate)
+        failure = command.find("ReportUntrackError(doc, label);", catch)
         ret = command.find("return;", failure)
         success = command.find("FinalizeUntrackUi(doc, result.Count, label);", ret)
         if min(bind, mutate, catch, failure, ret, success) < 0 or not bind < mutate < catch < failure < ret < success:
             errors.append("Untrack must keep bind/mutation in business try, return on business failure, then finalize UI after the try/catch")
 
         try_start = command.find("try", command.find("SemanticUntrackResult result;"))
-        try_catch = command.find("catch (Exception ex)", try_start)
+        try_catch = command.find("catch (Exception)", try_start)
         if try_start >= 0 and try_catch > try_start:
             mutation_try = command[try_start:try_catch]
             for forbidden in (
@@ -69,12 +69,14 @@ else:
 
         error_helper = text[report:next_method]
         for token in (
-            'var message = "Không thể bỏ theo dõi " + label + ": " + ex.Message;',
+            'var message = "Không thể bỏ theo dõi " + label + ". Vui lòng thử lại.";',
             "try { PaletteCoordinator.SetStatus(message); }",
             "try { document.Editor.WriteMessage(",
         ):
             if token not in error_helper:
-                errors.append("ReportUntrackError missing best-effort failure-report token: " + token)
+                errors.append("ReportUntrackError missing best-effort redacted failure-report token: " + token)
+        if ".Message" in error_helper:
+            errors.append("ReportUntrackError must not expose raw exception detail")
         if "throw" in error_helper:
             errors.append("ReportUntrackError must not throw while reporting business failure")
 
@@ -87,4 +89,4 @@ if errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("PASS: semantic untrack keeps business mutation failures separate from best-effort post-commit palette/editor finalization for both general and finish untrack commands.")
+print("PASS: semantic untrack keeps business mutation failures separate from best-effort redacted post-commit palette/editor finalization for both general and finish untrack commands.")
