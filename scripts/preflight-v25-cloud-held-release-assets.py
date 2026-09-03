@@ -96,6 +96,14 @@ def main() -> int:
     if not HELPER.is_file():
         fail("single-stream V25 held-release upload helper is missing")
     helper = HELPER.read_text(encoding="utf-8")
+    http_bootstrap = "Add-Type -AssemblyName System.Net.Http"
+    require(helper, http_bootstrap, "single-stream helper must preload System.Net.Http for Windows PowerShell")
+    first_http_type = helper.find("[System.Net.Http.")
+    if first_http_type < 0:
+        fail("single-stream helper must use System.Net.Http types for streamed upload")
+    if helper.find(http_bootstrap) > first_http_type:
+        fail("System.Net.Http assembly must be loaded before the first System.Net.Http type is resolved")
+
     for needle, message in (
         ("[System.IO.File]::Open(", "single-stream helper must explicitly open each held asset once"),
         ("[System.IO.FileMode]::Open", "single-stream helper must use FileMode.Open"),
@@ -111,7 +119,7 @@ def main() -> int:
     if "Invoke-RestMethod" in helper or "-InFile" in helper:
         fail("single-stream helper must not fall back to pathname-reopening upload APIs")
 
-    print("PASS: cloud V25 publication is bound to fixed post-verification identity and uploads the same verified held-asset stream")
+    print("PASS: cloud V25 publication is bound to fixed post-verification identity, preloads System.Net.Http for Windows PowerShell, and uploads the same verified held-asset stream")
     return 0
 
 
