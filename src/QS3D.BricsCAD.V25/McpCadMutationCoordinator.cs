@@ -228,6 +228,8 @@ namespace QS3D.BricsCAD.V25
             RejectUnsafeNativeCommand(command);
             if (PreparedNativeCommand.Value != null)
                 throw new InvalidOperationException("Nested native-command preparation is not supported.");
+            if (CurrentInteractiveModalId.Value.HasValue)
+                throw new InvalidOperationException("interaction_required: native command preparation cannot enter while this logical flow owns an MCP interactive modal.");
 
             // Preflight before taking MutationGate. ArmNativeCommandInCadContext performs the
             // second modal check after acquisition, closing the preflight/acquire race.
