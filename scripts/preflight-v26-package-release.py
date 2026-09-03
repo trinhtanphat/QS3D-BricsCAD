@@ -56,6 +56,7 @@ workflow = read(".github/workflows/release-v26.yml")
 publisher = read("scripts/publish-v26-release.ps1")
 release_surface = workflow + "\n" + publisher
 release_asset_verifier = read("scripts/verify-v26-held-file.ps1")
+held_upload = read("scripts/invoke-v26-held-release-upload.ps1")
 host_safety = read("scripts/assert-v26-host-reference-safety.ps1")
 v26_project = read("src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj")
 v25_release_client = read("src/QS3D.BricsCAD.V25/Updates/GitHubReleaseClient.cs")
@@ -233,7 +234,9 @@ for token in (
     "git ls-remote --tags origin",
     "application/octet-stream",
     "uploadedAsset.url",
-    "verify-v26-held-file.ps1 -Operation Hash -Path $localAsset",
+    "invoke-v26-held-release-upload.ps1",
+    "$expectedLength = [int64]$admittedAssets[$expectedAsset].Length",
+    "$expectedHash = [string]$admittedAssets[$expectedAsset].Sha256",
     "verify-v26-held-file.ps1 -Operation Hash -Path $downloadedAsset",
     "Uploaded V26 release asset size mismatch",
     "Uploaded V26 release asset SHA-256 mismatch",
@@ -243,6 +246,8 @@ for token in (
 for token in (
     "Get-FileHash -LiteralPath $localAsset",
     "Get-FileHash -LiteralPath $downloadedAsset",
+    "verify-v26-held-file.ps1 -Operation Hash -Path $localAsset",
+    "-InFile $asset",
 ):
     forbid(release_surface, token, "V26 release surface")
 
@@ -255,6 +260,19 @@ for token in (
     "$sha.ComputeHash($held.Stream)",
 ):
     require(release_asset_verifier, token, "V26 release asset held verifier")
+
+for token in (
+    "Assert-NoReparseAncestor",
+    "[IO.FileAttributes]::ReparsePoint",
+    "[IO.FileShare]::Read",
+    "$sha.ComputeHash($held.Stream)",
+    "$held.Stream.Position = 0",
+    "[System.Net.Http.StreamContent]::new($held.Stream)",
+    "[System.Net.Http.HttpClient]::new()",
+    "UploadedAssetId",
+    "Sha256",
+):
+    require(held_upload, token, "V26 held upload helper")
 
 # Host-file identity is centralized in the shared helper so workflow text cannot
 # drift from the exact ordinary/non-reparse files whose generations are captured.
@@ -271,15 +289,16 @@ if release_surface.count("Assert-RemoteReleaseTagTargetsWorkflowSha") < 3:
 
 release_create = release_surface.find('$release = Invoke-RestMethod -Method Post')
 first_tag_check = release_surface.find('Assert-RemoteReleaseTagTargetsWorkflowSha', release_create + 1)
-held_local_hash = release_surface.find('verify-v26-held-file.ps1 -Operation Hash -Path $localAsset', first_tag_check + 1)
-held_remote_hash = release_surface.find('verify-v26-held-file.ps1 -Operation Hash -Path $downloadedAsset', held_local_hash + 1)
+held_upload_call = release_surface.find('invoke-v26-held-release-upload.ps1', first_tag_check + 1)
+admitted_hash = release_surface.find('$expectedHash = [string]$admittedAssets[$expectedAsset].Sha256', held_upload_call + 1)
+held_remote_hash = release_surface.find('verify-v26-held-file.ps1 -Operation Hash -Path $downloadedAsset', admitted_hash + 1)
 asset_hash_check = release_surface.find('Uploaded V26 release asset SHA-256 mismatch', held_remote_hash + 1)
 second_tag_check = release_surface.find('Assert-RemoteReleaseTagTargetsWorkflowSha', asset_hash_check + 1)
 publish_release = release_surface.find('$published = Invoke-RestMethod -Method Patch', second_tag_check + 1)
-if min(release_create, first_tag_check, held_local_hash, held_remote_hash, asset_hash_check, second_tag_check, publish_release) < 0 or not (
-    release_create < first_tag_check < held_local_hash < held_remote_hash < asset_hash_check < second_tag_check < publish_release
+if min(release_create, first_tag_check, held_upload_call, admitted_hash, held_remote_hash, asset_hash_check, second_tag_check, publish_release) < 0 or not (
+    release_create < first_tag_check < held_upload_call < admitted_hash < held_remote_hash < asset_hash_check < second_tag_check < publish_release
 ):
-    errors.append("V26 release publication order must be draft create -> tag/SHA check -> held local/remote asset SHA-256 -> tag/SHA recheck -> publish")
+    errors.append("V26 release publication order must be draft create -> tag/SHA check -> held upload/admitted SHA -> remote SHA -> tag/SHA recheck -> publish")
 
 for token in ("QS3D-BricsCAD-V25", "BRICSCAD_V25_DIR", "bricscad-v25", "QS3D.BricsCAD.V25.dll"):
     forbid(release_surface, token, "V26 release surface")
@@ -313,4 +332,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: V26 packaging preserves current hardened V25 transaction/security logic under guarded major transformation; .NET 8 update networking is HttpClient-only; discovery is manifest-channel isolated; split publication revalidates remote tag identity and hashes one admitted held local/remote asset generation before publish while self-hosted qualification remains read-only.")
+print("PASS: V26 packaging preserves current hardened V25 transaction/security logic under guarded major transformation; .NET 8 update networking is HttpClient-only; discovery is manifest-channel isolated; split publication revalidates remote tag identity and binds upload plus remote verification to one admitted held local generation before publish while self-hosted qualification remains read-only.")

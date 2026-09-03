@@ -30,7 +30,10 @@ def check(publisher: str, helper: str):
             found.append("V26 held release verifier missing generation-binding token: " + token)
 
     required_publisher = (
-        "verify-v26-held-file.ps1 -Operation Hash -Path $localAsset",
+        "$admittedAsset = & .\\scripts\\invoke-v26-held-release-upload.ps1",
+        "$admittedAsset.UploadedAssetId",
+        "$expectedLength = [int64]$admittedAssets[$expectedAsset].Length",
+        "$expectedHash = [string]$admittedAssets[$expectedAsset].Sha256",
         "verify-v26-held-file.ps1 -Operation Hash -Path $downloadedAsset",
         "Uploaded V26 release asset size mismatch",
         "Uploaded V26 release asset SHA-256 mismatch",
@@ -43,22 +46,25 @@ def check(publisher: str, helper: str):
 
     for forbidden in (
         "Get-FileHash -LiteralPath $localAsset",
-        "Get-FileHash -LiteralPath $downloadedAsset",
+        "verify-v26-held-file.ps1 -Operation Hash -Path $localAsset",
     ):
         if forbidden in publisher:
             found.append("V26 release publisher must not reopen release assets by pathname for hashing: " + forbidden)
 
-    size = publisher.find("Uploaded V26 release asset size mismatch")
+    held_upload = publisher.find("invoke-v26-held-release-upload.ps1")
+    size = publisher.find("Uploaded V26 release asset size mismatch", held_upload + 1)
     download = publisher.find("-OutFile $downloadedAsset", size + 1)
-    local_hash = publisher.find("verify-v26-held-file.ps1 -Operation Hash -Path $localAsset", download + 1)
-    remote_hash = publisher.find("verify-v26-held-file.ps1 -Operation Hash -Path $downloadedAsset", local_hash + 1)
+    admitted_hash = publisher.find("$expectedHash = [string]$admittedAssets[$expectedAsset].Sha256", download + 1)
+    remote_hash = publisher.find("verify-v26-held-file.ps1 -Operation Hash -Path $downloadedAsset", admitted_hash + 1)
     hash_compare = publisher.find("Uploaded V26 release asset SHA-256 mismatch", remote_hash + 1)
     second_tag = publisher.find("Assert-RemoteReleaseTagTargetsWorkflowSha", hash_compare + 1)
     publish = publisher.find("$published = Invoke-RestMethod -Method Patch", second_tag + 1)
-    if min(size, download, local_hash, remote_hash, hash_compare, second_tag, publish) < 0 or not (
-        size < download < local_hash < remote_hash < hash_compare < second_tag < publish
+    if min(held_upload, size, download, admitted_hash, remote_hash, hash_compare, second_tag, publish) < 0 or not (
+        held_upload < size < download < admitted_hash < remote_hash < hash_compare < second_tag < publish
     ):
-        found.append("V26 release order must be size -> download -> held local hash -> held remote hash -> hash compare -> tag/SHA recheck -> publish")
+        found.append(
+            "V26 release order must be held upload/admission -> size verification -> download -> admitted SHA -> held remote hash -> hash compare -> tag/SHA recheck -> publish"
+        )
     return found
 
 if not PUBLISHER.is_file():
@@ -70,11 +76,11 @@ if not errors:
     helper_text = HELPER.read_text(encoding="utf-8")
     errors.extend(check(publisher_text, helper_text))
 
-    # Deterministic negative probes: pathname hashing and weakened held-open semantics must fail closed.
+    # Deterministic negative probes: local pathname hashing and weakened held-open semantics must fail closed.
     if not check(
         publisher_text.replace(
-            "verify-v26-held-file.ps1 -Operation Hash -Path $localAsset",
-            "Get-FileHash -LiteralPath $localAsset -Algorithm SHA256",
+            "$expectedHash = [string]$admittedAssets[$expectedAsset].Sha256",
+            "$expectedHash = (& .\\scripts\\verify-v26-held-file.ps1 -Operation Hash -Path $localAsset).Trim()",
             1,
         ),
         helper_text,
@@ -91,4 +97,4 @@ if errors:
         print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     raise SystemExit(1)
-print("PASS: V26 draft-release publisher hashes one admitted ordinary held generation and preserves publish-last tag/SHA ordering; mutation probes reject pathname reopening and weakened held-file admission.")
+print("PASS: V26 draft-release publisher uploads one admitted held generation, verifies immutable admitted length/SHA against the downloaded asset, and preserves publish-last tag/SHA ordering; mutation probes reject local pathname reopening and weakened held-file admission.")
