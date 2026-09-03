@@ -90,7 +90,7 @@ namespace QS3D.Core.Cost
                     var line = enumerator.Current;
                     RequireStableKnownCount(lines, knownCount);
                     if (line == null)
-                        ThrowProjectionContentChanged();
+                        throw new InvalidOperationException("Frozen estimate projection content changed during enumeration.");
 
                     var replayedRow = FrozenEstimateProjectionRow.From(line);
                     if (!FrozenProjectionRowStateEquals(admittedRows[index], replayedRow))
