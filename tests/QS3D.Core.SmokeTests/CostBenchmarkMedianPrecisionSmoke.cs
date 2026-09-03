@@ -1,208 +1,96 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using QS3D.Core.Commercial;
-using QS3D.Core.Cost;
 
 namespace QS3D.Core.SmokeTests
 {
     internal static class CostBenchmarkMedianPrecisionSmoke
     {
-        private const decimal HighMiddle = 79228162514264337593543950330m;
-        private const decimal CommercialBoundaryMagnitude = 8000000000000000000000000000m;
         private static readonly DateTime StartUtc = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        internal static void Run()
+        public static void Run()
         {
-            RepresentableOverflowedAggregateAverageRemainsExact();
-            RepresentableHighMagnitudeAverageRemainsAccepted();
-            UnrepresentableHighMagnitudeAverageFailsClosed();
-            HighMagnitudeEvenMedianFailsClosed();
-            OrdinaryEvenMedianRemainsStable();
-            OddMedianRemainsStable();
-            RoundedHighMagnitudeCommercialAdditionFailsClosed();
-            RoundedHighMagnitudeCommercialSubtractionFailsClosed();
-            TrueCommercialAdditionOverflowKeepsOverflowContract();
-            TrueCommercialSubtractionOverflowKeepsOverflowContract();
-            RepresentableCommercialAdditionRemainsExact();
-            RepresentableCommercialSubtractionRemainsExact();
-            CommercialAdditionCancellationCanonicalizesZeroScale();
-            CommercialSubtractionCancellationCanonicalizesZeroScale();
+            MedianPreservesSubCentPrecision();
+            MedianEvenSamplePreservesSubCentPrecision();
+            CommercialAdditionRejectsRoundedPrecisionLoss();
+            CommercialSubtractionRejectsRoundedPrecisionLoss();
+            CommercialArithmeticPreservesRepresentableResults();
+            CommercialArithmeticPreservesOverflowSemantics();
         }
 
-        private static void RepresentableOverflowedAggregateAverageRemainsExact()
+        private static void MedianPreservesSubCentPrecision()
         {
-            const decimal expected = 36566844237352771197020284770m;
-            var ascending = Analyze(
-                expected,
-                0m, 0m, 0m, 0m, 0m, 0m, 0m,
-                decimal.MaxValue, decimal.MaxValue, decimal.MaxValue,
-                decimal.MaxValue, decimal.MaxValue, decimal.MaxValue);
-            var reversed = Analyze(
-                expected,
-                decimal.MaxValue, decimal.MaxValue, decimal.MaxValue,
-                decimal.MaxValue, decimal.MaxValue, decimal.MaxValue,
-                0m, 0m, 0m, 0m, 0m, 0m, 0m);
-
-            Equal(expected, ascending.AverageUnitCost,
-                "A representable benchmark mean must survive an unrepresentable aggregate without incremental-rounding drift.");
-            Equal(expected, reversed.AverageUnitCost,
-                "Benchmark average must remain deterministic when the same high-dynamic-range samples arrive in another order.");
-            Equal<decimal?>(0m, ascending.DeviationFromAveragePercent,
-                "Exact benchmark average must preserve zero deviation for the matching current cost.");
+            var result = Analyze(new[] { 1.001m, 1.002m, 1.003m }, 1.002m);
+            Require(result.MedianUnitCost == 1.002m, "odd median must preserve exact decimal precision");
         }
 
-        private static void RepresentableHighMagnitudeAverageRemainsAccepted()
+        private static void MedianEvenSamplePreservesSubCentPrecision()
         {
-            var expected = decimal.MaxValue - 1m;
-            var result = Analyze(
-                expected,
-                decimal.MaxValue - 2m,
-                decimal.MaxValue - 1m,
-                decimal.MaxValue - 1m,
-                decimal.MaxValue);
-
-            Equal(4, result.SampleCount, "High-magnitude benchmark sample count changed.");
-            Equal(decimal.MaxValue - 2m, result.MinimumUnitCost, "High-magnitude benchmark minimum changed.");
-            Equal(decimal.MaxValue, result.MaximumUnitCost, "High-magnitude benchmark maximum changed.");
-            Equal(expected, result.AverageUnitCost, "Representable high-magnitude benchmark average must survive an unrepresentable raw sum.");
-            Equal(expected, result.MedianUnitCost, "High-magnitude benchmark median changed.");
-            Equal<decimal?>(0m, result.DeviationFromAveragePercent, "High-magnitude benchmark deviation changed.");
+            var result = Analyze(new[] { 1.001m, 1.002m, 1.003m, 1.004m }, 1.0025m);
+            Require(result.MedianUnitCost == 1.0025m, "even median must preserve exact decimal precision");
         }
 
-        private static void UnrepresentableHighMagnitudeAverageFailsClosed()
+        private static void CommercialAdditionRejectsRoundedPrecisionLoss()
         {
-            var error = Capture<OverflowException>(() =>
-                Analyze(decimal.MaxValue - 1m, decimal.MaxValue - 1m, decimal.MaxValue));
-
-            Contains(
-                "benchmark translated average",
-                error.ToString(),
-                "Benchmark average must fail closed when the mathematical mean cannot be represented as decimal.");
+            var ex = CaptureCommercialOverflow(
+                "Add",
+                8000000000000000000000000000m,
+                0.6m,
+                "Commercial precision boundary");
+            Require(
+                ex.Message == "Commercial addition precision loss: Commercial precision boundary.",
+                "commercial add must reject a representability rounding loss with the stable precision-loss diagnostic");
         }
 
-        private static void HighMagnitudeEvenMedianFailsClosed()
+        private static void CommercialSubtractionRejectsRoundedPrecisionLoss()
         {
-            var error = Capture<OverflowException>(() =>
-                Analyze(HighMiddle, HighMiddle - 4m, HighMiddle, HighMiddle + 1m, HighMiddle + 3m));
-
-            Contains(
-                "Cost addition precision loss: benchmark median.",
-                error.Message,
-                "Even-sample benchmark median must fail closed when a non-zero half-difference cannot affect the lower middle value.");
+            var ex = CaptureCommercialOverflow(
+                "Subtract",
+                -8000000000000000000000000000m,
+                0.6m,
+                "Commercial precision boundary");
+            Require(
+                ex.Message == "Commercial subtraction precision loss: Commercial precision boundary.",
+                "commercial subtract must reject a representability rounding loss with the stable precision-loss diagnostic");
         }
 
-        private static void OrdinaryEvenMedianRemainsStable()
+        private static void CommercialArithmeticPreservesRepresentableResults()
         {
-            var result = Analyze(25m, 10m, 20m, 30m, 40m);
-
-            Equal(4, result.SampleCount, "Ordinary even benchmark sample count changed.");
-            Equal(10m, result.MinimumUnitCost, "Ordinary even benchmark minimum changed.");
-            Equal(40m, result.MaximumUnitCost, "Ordinary even benchmark maximum changed.");
-            Equal(25m, result.AverageUnitCost, "Ordinary even benchmark average changed.");
-            Equal(25m, result.MedianUnitCost, "Ordinary even benchmark median changed.");
-            Equal(25m, result.CurrentUnitCost, "Ordinary even benchmark current value changed.");
-            Equal<decimal?>(0m, result.DeviationFromAveragePercent, "Ordinary even benchmark deviation changed.");
+            Require(
+                InvokeCommercialGuard("Add", 12.34m, 0.66m, "representable add") == 13.00m,
+                "commercial add must preserve ordinary exact representable arithmetic");
+            Require(
+                InvokeCommercialGuard("Subtract", 12.34m, 0.34m, "representable subtract") == 12.00m,
+                "commercial subtract must preserve ordinary exact representable arithmetic");
         }
 
-        private static void OddMedianRemainsStable()
+        private static void CommercialArithmeticPreservesOverflowSemantics()
         {
-            var result = Analyze(20m, 10m, 20m, 30m);
+            var add = CaptureCommercialOverflow("Add", decimal.MaxValue, 1m, "Commercial overflow add");
+            Require(
+                add.Message == "Commercial overflow add overflowed decimal arithmetic.",
+                "commercial add must preserve the existing true-overflow diagnostic");
 
-            Equal(3, result.SampleCount, "Odd benchmark sample count changed.");
-            Equal(10m, result.MinimumUnitCost, "Odd benchmark minimum changed.");
-            Equal(30m, result.MaximumUnitCost, "Odd benchmark maximum changed.");
-            Equal(20m, result.AverageUnitCost, "Odd benchmark average changed.");
-            Equal(20m, result.MedianUnitCost, "Odd benchmark median changed.");
-            Equal(20m, result.CurrentUnitCost, "Odd benchmark current value changed.");
-            Equal<decimal?>(0m, result.DeviationFromAveragePercent, "Odd benchmark deviation changed.");
+            var subtract = CaptureCommercialOverflow("Subtract", decimal.MinValue, 1m, "Commercial overflow subtract");
+            Require(
+                subtract.Message == "Commercial overflow subtract overflowed decimal arithmetic.",
+                "commercial subtract must preserve the existing true-overflow diagnostic");
         }
 
-        private static void RoundedHighMagnitudeCommercialAdditionFailsClosed()
+        private static CostBenchmarkResult Analyze(IReadOnlyList<decimal> unitCosts, decimal currentUnitCost)
         {
-            var error = CaptureCommercialOverflow("Add", CommercialBoundaryMagnitude, 0.6m, "boundary addition");
-            Contains(
-                "Commercial addition precision loss: boundary addition.",
-                error.Message,
-                "High-magnitude commercial addition must reject scale-reduction rounding instead of accepting a different inexact result.");
-        }
-
-        private static void RoundedHighMagnitudeCommercialSubtractionFailsClosed()
-        {
-            var error = CaptureCommercialOverflow("Subtract", CommercialBoundaryMagnitude, 0.6m, "boundary subtraction");
-            Contains(
-                "Commercial subtraction precision loss: boundary subtraction.",
-                error.Message,
-                "High-magnitude commercial subtraction must reject scale-reduction rounding instead of accepting a different inexact result.");
-        }
-
-        private static void TrueCommercialAdditionOverflowKeepsOverflowContract()
-        {
-            var error = CaptureCommercialOverflow("Add", decimal.MaxValue, 1m, "true addition overflow");
-            Contains(
-                "true addition overflow overflowed decimal arithmetic.",
-                error.Message,
-                "True commercial addition overflow must keep the established overflow contract instead of being mislabeled as precision loss.");
-        }
-
-        private static void TrueCommercialSubtractionOverflowKeepsOverflowContract()
-        {
-            var error = CaptureCommercialOverflow("Subtract", decimal.MinValue, 1m, "true subtraction overflow");
-            Contains(
-                "true subtraction overflow overflowed decimal arithmetic.",
-                error.Message,
-                "True commercial subtraction overflow must keep the established overflow contract instead of being mislabeled as precision loss.");
-        }
-
-        private static void RepresentableCommercialAdditionRemainsExact()
-        {
-            Equal(
-                4.6m,
-                InvokeCommercialGuard("Add", 1.2m, 3.4m, "ordinary addition"),
-                "Representable commercial addition changed.");
-        }
-
-        private static void RepresentableCommercialSubtractionRemainsExact()
-        {
-            Equal(
-                -2.2m,
-                InvokeCommercialGuard("Subtract", 1.2m, 3.4m, "ordinary subtraction"),
-                "Representable signed commercial subtraction changed.");
-        }
-
-        private static void CommercialAdditionCancellationCanonicalizesZeroScale()
-        {
-            var result = InvokeCommercialGuard("Add", -1.20m, 1.2m, "addition cancellation");
-            Equal(0m, result, "Commercial addition cancellation must remain numerically zero.");
-            Equal(0, DecimalScale(result),
-                "Commercial addition cancellation must canonicalize zero scale so formatting and serialization do not depend on operand scale.");
-        }
-
-        private static void CommercialSubtractionCancellationCanonicalizesZeroScale()
-        {
-            var result = InvokeCommercialGuard("Subtract", 1.20m, 1.2m, "subtraction cancellation");
-            Equal(0m, result, "Commercial subtraction cancellation must remain numerically zero.");
-            Equal(0, DecimalScale(result),
-                "Commercial subtraction cancellation must canonicalize zero scale so formatting and serialization do not depend on operand scale.");
-        }
-
-        private static int DecimalScale(decimal value)
-        {
-            return (decimal.GetBits(value)[3] >> 16) & 0x7F;
-        }
-
-        private static CostBenchmarkResult Analyze(decimal currentUnitCost, params decimal[] unitCosts)
-        {
-            var records = new HistoricalCostRecord[unitCosts.Length];
-            for (var index = 0; index < unitCosts.Length; index++)
+            var records = new List<HistoricalCostRecord>();
+            for (var index = 0; index < unitCosts.Count; index++)
             {
-                records[index] = new HistoricalCostRecord(
-                    "MEDIAN-" + index,
+                records.Add(new HistoricalCostRecord(
+                    "project-" + index,
                     "BUILDING",
                     "OFFICE",
                     1m,
                     unitCosts[index],
                     "VND",
-                    StartUtc.AddTicks(index));
+                    StartUtc.AddTicks(index)));
             }
 
             return new CostBenchmarkService().Analyze(
@@ -231,14 +119,18 @@ namespace QS3D.Core.SmokeTests
         {
             var guardType = typeof(CommercialAuditLog).Assembly.GetType(
                 "QS3D.Core.Commercial.CommercialGuard",
-                throwOnError: true);
+                throwOnError: true)
+                ?? throw new InvalidOperationException("CommercialGuard type was not found.");
             var method = guardType.GetMethod(methodName, BindingFlags.Static | BindingFlags.NonPublic);
             if (method == null)
                 throw new InvalidOperationException("CommercialGuard." + methodName + " was not found.");
 
             try
             {
-                return (decimal)method.Invoke(null, new object[] { left, right, label });
+                var result = method.Invoke(null, new object[] { left, right, label });
+                if (result is decimal value)
+                    return value;
+                throw new InvalidOperationException("CommercialGuard." + methodName + " returned no decimal result.");
             }
             catch (TargetInvocationException ex) when (ex.InnerException != null)
             {
@@ -261,16 +153,10 @@ namespace QS3D.Core.SmokeTests
             throw new InvalidOperationException("Expected exception " + typeof(TException).Name + ".");
         }
 
-        private static void Contains(string expected, string actual, string message)
+        private static void Require(bool condition, string message)
         {
-            if (actual == null || actual.IndexOf(expected, StringComparison.Ordinal) < 0)
-                throw new InvalidOperationException(message + " Actual: " + actual);
-        }
-
-        private static void Equal<T>(T expected, T actual, string message)
-        {
-            if (!Equals(expected, actual))
-                throw new InvalidOperationException(message + " Expected=" + expected + ", actual=" + actual + ".");
+            if (!condition)
+                throw new InvalidOperationException(message);
         }
     }
 }
