@@ -11,14 +11,19 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class AuditLogWindow : Window
     {
+        private readonly WeakReference<Document> _lifecycleDocument;
         private readonly IntPtr _nativeDatabaseIdentity;
+        private readonly string _boundProjectId;
+        private readonly string _boundDrawingFingerprint;
         private readonly string _boundDrawingLabel;
         private IReadOnlyList<AuditEvent> _rows = Array.Empty<AuditEvent>();
 
         public AuditLogWindow(Document document)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
+            _lifecycleDocument = new WeakReference<Document>(document);
             _nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+            CaptureBoundProjectAffinity(document, out _boundProjectId, out _boundDrawingFingerprint);
             _boundDrawingLabel = DrawingLabel(document);
             InitializeComponent();
             DocumentBoundWindowLifetime.Attach(this, document);
@@ -60,6 +65,8 @@ namespace QS3D.BricsCAD.V25.UI
         private bool TryResolveBoundDocument(out Document document)
         {
             document = null!;
+            _lifecycleDocument.TryGetTarget(out var lifecycleDocument);
+
             try
             {
                 foreach (Document candidate in BcadApplication.DocumentManager)
@@ -69,14 +76,27 @@ namespace QS3D.BricsCAD.V25.UI
                     {
                         var database = candidate.Database;
                         if (database == null || database.UnmanagedObject == IntPtr.Zero) continue;
+
+                        // Managed reference identity is the strongest proof while the original wrapper
+                        // remains live. Native identity is only a wrapper-drift candidate filter: a
+                        // recycled database address must never be enough to rebind Audit Log data.
+                        if (lifecycleDocument != null && ReferenceEquals(candidate, lifecycleDocument))
+                        {
+                            if (database.UnmanagedObject != _nativeDatabaseIdentity) continue;
+                            document = candidate;
+                            return true;
+                        }
+
                         if (database.UnmanagedObject != _nativeDatabaseIdentity) continue;
+                        if (!MatchesBoundProjectAffinity(candidate)) continue;
                         document = candidate;
                         return true;
                     }
                     catch
                     {
                         // One wrapper can become stale while BricsCAD is changing document state.
-                        // Ignore it and continue looking for the live wrapper of the bound database.
+                        // Ignore it and continue looking for a live wrapper that proves both native
+                        // candidate identity and the immutable project/drawing affinity captured here.
                     }
                 }
             }
@@ -86,6 +106,48 @@ namespace QS3D.BricsCAD.V25.UI
             }
 
             return false;
+        }
+
+        private bool MatchesBoundProjectAffinity(Document candidate)
+        {
+            // A window opened before a QS3D project exists has no semantic token with which to prove
+            // wrapper drift. In that case only the exact original managed wrapper is admissible.
+            if (string.IsNullOrWhiteSpace(_boundProjectId) ||
+                string.IsNullOrWhiteSpace(_boundDrawingFingerprint))
+                return false;
+
+            try
+            {
+                if (!ProjectContextCoordinator.TryGetReadOnly(candidate, out var project)) return false;
+                return string.Equals(project.ProjectId ?? string.Empty, _boundProjectId, StringComparison.OrdinalIgnoreCase) &&
+                       string.Equals(project.DrawingFingerprint ?? string.Empty, _boundDrawingFingerprint, StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void CaptureBoundProjectAffinity(
+            Document document,
+            out string projectId,
+            out string drawingFingerprint)
+        {
+            projectId = string.Empty;
+            drawingFingerprint = string.Empty;
+            try
+            {
+                if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project)) return;
+                projectId = (project.ProjectId ?? string.Empty).Trim();
+                drawingFingerprint = (project.DrawingFingerprint ?? string.Empty).Trim();
+            }
+            catch
+            {
+                // Audit Log remains read-only and can still bind to the exact managed wrapper. A
+                // missing semantic token intentionally disables native-pointer wrapper drift.
+                projectId = string.Empty;
+                drawingFingerprint = string.Empty;
+            }
         }
 
         private static IntPtr GetNativeDatabaseIdentity(Document document)
