@@ -12,7 +12,7 @@ NATIVE = ROOT / "src/QS3D.BricsCAD.V25/UI/DocumentBoundNativeLifecycleCoordinato
 RUNBOOK = ROOT / "docs/CURTAIN-NATIVE-PANELS.md"
 errors = []
 
-for path in (COMMAND, RUNNER, HELER, WINDOW, LIFETIME, NATIVE, RUNBOOK):
+for path in (COMMAND, RUNNER, HELPER, WINDOW, LIFETIME, NATIVE, RUNBOOK):
     if not path.is_file():
         errors.append("missing Curtain P12 probe surface: " + str(path.relative_to(ROOT)))
 
