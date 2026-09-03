@@ -130,5 +130,31 @@ if not (checked_pos < issue_pos < admit_pos):
 if "return successorResponse;" not in exchange:
     fail("prepared successor response is not returned after successful refresh-family admission")
 
+# Family retention must expire at exactly the same instant encoded in the successor
+# refresh token. Independent clock reads can straddle a one-second boundary, prune the
+# family state before the still-valid signed token expires, and turn a valid generation
+# into a false replay. Capture one rotation timestamp and propagate it into token issue.
+if exchange.count("UnixNow()") != 1:
+    fail("refresh rotation must capture exactly one timestamp for successor issuance and family retention")
+for needle in [
+    "var rotationIssuedAt = UnixNow();",
+    "var familyExpiry = rotationIssuedAt + (long)RefreshTokenLifetime.TotalSeconds;",
+    "successorGeneration,\n                rotationIssuedAt);",
+]:
+    if needle not in exchange:
+        fail(f"refresh family expiry is not bound to successor token issuance time: {needle}")
+
+issue_pair_start = exchange_end
+issue_pair_end = source.find("private static RefreshFamilyAdmission TryAdvanceRefreshFamily(", issue_pair_start)
+if issue_pair_end < 0:
+    fail("refresh-family admission helper is missing after token issuance")
+issue_pair = source[issue_pair_start:issue_pair_end]
+for needle in [
+    "long? issuedAt = null",
+    "var now = issuedAt ?? UnixNow();",
+]:
+    if needle not in issue_pair:
+        fail(f"token issuance cannot consume the rotation timestamp: {needle}")
+
 print("MCP OAuth consumed replay-cache preflight passed.")
 sys.exit(0)
