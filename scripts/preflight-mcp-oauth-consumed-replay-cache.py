@@ -130,6 +130,17 @@ if not (checked_pos < issue_pos < admit_pos):
 if "return successorResponse;" not in exchange:
     fail("prepared successor response is not returned after successful refresh-family admission")
 
+# Hostile but correctly signed refresh payloads can carry Int64.MaxValue as the generation.
+# Never let the checked successor increment escape as OverflowException through the MCP
+# HTTP boundary: reject the exhausted generation deterministically before arithmetic.
+max_generation_pos = exchange.find("if (refreshGeneration == long.MaxValue)")
+if max_generation_pos < 0:
+    fail("refresh generation exhaustion is not rejected before checked successor arithmetic")
+if max_generation_pos > checked_pos:
+    fail("refresh generation exhaustion guard runs after checked successor arithmetic")
+if "refresh token generation is exhausted" not in exchange:
+    fail("refresh generation exhaustion does not return a stable non-sensitive OAuth error")
+
 # Family retention must expire at exactly the same instant encoded in the successor
 # refresh token. Independent clock reads can straddle a one-second boundary, prune the
 # family state before the still-valid signed token expires, and turn a valid generation
