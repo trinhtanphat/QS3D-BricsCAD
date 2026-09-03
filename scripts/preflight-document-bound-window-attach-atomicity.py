@@ -106,7 +106,7 @@ if not errors:
         "private readonly IntPtr _nativeDatabaseIdentity;",
         "_nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
         "database.UnmanagedObject == _nativeDatabaseIdentity",
-        "if (!MatchesNativeDatabase(e.Document)) return;",
+        "The shared coordinator has already matched this registration",
         "CloseForProjectChange();",
         "_window.Dispatcher.BeginInvoke(new Action(TryCloseWindowOnDispatcher))",
         "private void TryCloseWindowOnDispatcher()",
@@ -126,6 +126,8 @@ if not errors:
         "lifecycleDocument.BeginDocumentClose += OnBeginDocumentClose;",
         "lifecycleDocument.CloseAborted += OnDocumentCloseAborted;",
         "new WeakReference<Callbacks>(callbacks)",
+        "TrySnapshotDestroyByLifecycleDocument",
+        "TrySnapshotDestroyByNativeIdentity",
     ):
         if token not in native:
             errors.append("shared H3 native coordinator missing atomic ownership token: " + token)
