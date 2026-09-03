@@ -53,15 +53,13 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
-                // Reuse the process-global CAD mutation/writer admission boundary so the check
-                // and ownership are atomic. An active explicit writer lease, mutation, queued
-                // native command, or BricsCAD modal state rejects this admission before the
-                // OAuth UI is dispatched. Holding the scope also prevents a new mutation from
-                // entering while the explicit foreground consent prompt is visible.
+                // Use the semantic plugin-owned interactive-modal admission instead of pretending
+                // the OAuth UI is a CAD mutation. The coordinator still owns the same process-wide
+                // MutationGate for the entire prompt lifetime and rejects mutation/native/writer
+                // ownership plus BricsCAD modal state before the UI is dispatched.
                 try
                 {
-                    interactionAdmission = McpCadMutationCoordinator.EnterMutation(
-                        string.Empty,
+                    interactionAdmission = McpCadMutationCoordinator.EnterInteractiveModal(
                         "oauth_interactive_consent",
                         null);
                 }
