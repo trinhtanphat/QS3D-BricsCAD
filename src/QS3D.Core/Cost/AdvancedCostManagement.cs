@@ -450,6 +450,11 @@ namespace QS3D.Core.Cost
                 knownComponentCount,
                 index,
                 "Rate build-up component collection");
+            RequireStableComponentGeneration(
+                components,
+                snapshot,
+                hasKnownComponentCount,
+                knownComponentCount);
             snapshot.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.ResourceCode, right.ResourceCode));
             Components = new ReadOnlyCollection<CostResourceComponent>(snapshot.ToArray());
             OverheadPercent = overheadPercent;
@@ -475,6 +480,76 @@ namespace QS3D.Core.Cost
                     ProfitUnitCost,
                     "rate build-up unit rate");
             }
+        }
+
+        private static void RequireStableComponentGeneration(
+            IEnumerable<CostResourceComponent> components,
+            IReadOnlyList<CostResourceComponent> snapshot,
+            bool hasKnownComponentCount,
+            int knownComponentCount)
+        {
+            if (!hasKnownComponentCount)
+                return;
+
+            var replayIndex = 0;
+            using (var componentEnumerator = components.GetEnumerator())
+            {
+                while (true)
+                {
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        components,
+                        true,
+                        knownComponentCount,
+                        "Rate build-up component collection");
+                    if (!componentEnumerator.MoveNext())
+                        break;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        components,
+                        true,
+                        knownComponentCount,
+                        "Rate build-up component collection");
+                    AdvancedCostCollectionContract.RequireCanProcessNext(
+                        true,
+                        knownComponentCount,
+                        replayIndex,
+                        "Rate build-up component collection");
+                    var component = componentEnumerator.Current;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        components,
+                        true,
+                        knownComponentCount,
+                        "Rate build-up component collection");
+                    if (component == null ||
+                        replayIndex >= snapshot.Count ||
+                        !SameComponentState(snapshot[replayIndex], component))
+                    {
+                        throw new InvalidOperationException(
+                            "Rate build-up component collection content changed during traversal.");
+                    }
+                    replayIndex++;
+                }
+            }
+
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                components,
+                true,
+                knownComponentCount,
+                replayIndex,
+                "Rate build-up component collection");
+            if (replayIndex != snapshot.Count)
+            {
+                throw new InvalidOperationException(
+                    "Rate build-up component collection content changed during traversal.");
+            }
+        }
+
+        private static bool SameComponentState(CostResourceComponent left, CostResourceComponent right)
+        {
+            return StringComparer.Ordinal.Equals(left.ResourceCode, right.ResourceCode) &&
+                   StringComparer.Ordinal.Equals(left.Description, right.Description) &&
+                   StringComparer.Ordinal.Equals(left.Unit, right.Unit) &&
+                   left.QuantityPerBillUnit == right.QuantityPerBillUnit &&
+                   left.UnitRate == right.UnitRate;
         }
 
         private static void ValidatePercentageForScaling(decimal value, string paramName)
