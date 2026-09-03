@@ -81,10 +81,14 @@ namespace QS3D.Core.SmokeTests
                 "Reading an exact-bound persistence stamp mutated project ChangeVersion.");
 
             family.Properties["P05000"] = "changed";
+            Equal(version + 1L, project.ChangeVersion,
+                "Direct owned family-property mutation did not advance project ChangeVersion exactly once.");
+            var mutationVersion = project.ChangeVersion;
+
             Equal(true, stamp.RequiresSave(project),
                 "Exact-bound nested family-property mutation was not detected by persistence stamp.");
-            Equal(version, project.ChangeVersion,
-                "Persistence-stamp dirty detection mutated project ChangeVersion.");
+            Equal(mutationVersion, project.ChangeVersion,
+                "Persistence-stamp dirty detection mutated project ChangeVersion after the owned property mutation.");
         }
 
         private static ProjectState Project(string id) => new ProjectState(id, "Persistence stamp bounds");
