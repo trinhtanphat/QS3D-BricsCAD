@@ -66,15 +66,16 @@ for token, label in (
 ):
     forbid(source, token, label)
 
-# The per-window registration must apply the same managed-first rule. Coordinator cleanup alone is
-# insufficient: a disposed exact wrapper must still invalidate and close the window even if no
-# BeginDocumentClose callback reached it first.
+# The shared coordinator is the sole owner of document-destroy affinity. It dispatches callbacks only
+# after matching the registered Entry by exact managed lifecycle wrapper or by a safe live-wrapper
+# native-identity fallback. A per-window callback must not reopen e.Document after that match: native
+# teardown can advance between callbacks, and the second dereference can turn a proven match into a
+# false negative or exception. The window only needs to fail closed and close itself.
 for token, label in (
-    ("var destroyingDocument = e.Document;", "window destroy callback must capture event wrapper once"),
-    ("ReferenceEquals(destroyingDocument, _lifecycleDocument)", "window destroy callback must accept exact lifecycle wrapper by managed identity"),
-    ("MatchesNativeDatabase(destroyingDocument)", "window destroy callback must retain live wrapper-drift fallback"),
     ("Interlocked.Exchange(ref _invalidated, 1)", "window destroy callback must remain fail-closed"),
+    ("Volatile.Write(ref _documentCloseStarted, 1);", "window destroy callback must preserve close-started state"),
     ("TryCloseWindow(deferForFinalDocument);", "window destroy callback must still close the bound window"),
+    ("The shared coordinator has already matched this registration", "window callback must document coordinator-owned affinity"),
 ):
     require(window_source, token, label)
 
@@ -84,15 +85,13 @@ window_handler = window_source[window_handler_start:window_handler_end] if windo
 if not window_handler:
     errors.append("window destroy handler block not found")
 else:
-    exact_match = window_handler.find("ReferenceEquals(destroyingDocument, _lifecycleDocument)")
-    native_match = window_handler.find("MatchesNativeDatabase(destroyingDocument)")
-    if exact_match < 0 or native_match < 0 or exact_match >= native_match:
-        errors.append("window destroy callback must try managed lifecycle identity before native fallback")
-
-for token, label in (
-    ("if (!MatchesNativeDatabase(e.Document)) return;", "window destroy callback must not native-dereference exact wrapper before managed matching"),
-):
-    forbid(window_source, token, label)
+    for token, label in (
+        ("e.Document", "window destroy callback must not reopen the event Document after coordinator affinity match"),
+        ("MatchesNativeDatabase(", "window destroy callback must not repeat native database matching"),
+        ("ReferenceEquals(", "window destroy callback must not repeat managed document matching"),
+    ):
+        if token in window_handler:
+            errors.append(label + ": forbidden " + token)
 
 # Preserve global quiescence and one-shot exact-entry cleanup semantics.
 for token, label in (
@@ -106,4 +105,4 @@ if errors:
         print("ERROR: " + error)
     sys.exit(1)
 
-print("PASS: document-bound modeless destroy cleanup is reference-first, disposed-wrapper safe, window-affine, and wrapper-drift compatible.")
+print("PASS: document-bound modeless destroy cleanup is reference-first, disposed-wrapper safe, coordinator-owned, and wrapper-drift compatible.")
