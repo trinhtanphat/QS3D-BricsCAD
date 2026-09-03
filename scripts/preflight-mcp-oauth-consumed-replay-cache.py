@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed unless consumed OAuth credentials remain replay-blocked until expiry."""
+"""Fail closed unless OAuth one-time credentials retain bounded replay protection."""
 
 from pathlib import Path
 import sys
@@ -15,42 +15,41 @@ def fail(message: str) -> None:
 
 source = SOURCE.read_text(encoding="utf-8")
 
+# Authorization codes are short-lived one-time credentials. Their consumed hashes may
+# be forgotten only after expiry, and cache pressure must fail closed rather than evict
+# a still-live replay marker.
 for needle in [
     "private const int MaxConsumedCredentialEntries =",
     "private static readonly object ConsumedCredentialSync = new object();",
     "TryRememberConsumedCredential(ConsumedAuthorizationCodes",
-    "TryRememberConsumedCredential(ConsumedRefreshTokens",
     "private static ConsumedCredentialAdmission TryRememberConsumedCredential(",
     "lock (ConsumedCredentialSync)",
     "pair.Value <= now",
     "cache.Count >= MaxConsumedCredentialEntries",
     "ConsumedCredentialAdmission.CapacityExceeded",
     "ConsumedCredentialAdmission.Replay",
+    "authorization code replay cache is at capacity",
+    "authorization code was already used",
 ]:
     if needle not in source:
-        fail(f"missing fail-closed replay-cache contract: {needle}")
+        fail(f"missing fail-closed authorization-code replay contract: {needle}")
 
 # The historical pressure cleanup deliberately removed arbitrary live entries after the
 # cache crossed 1024, reopening replay for still-valid one-time credentials.
 for forbidden in [
     "if (ConsumedAuthorizationCodes.Count <= 1024) return;",
-    "if (ConsumedRefreshTokens.Count <= 1024) return;",
     "if (ConsumedAuthorizationCodes.Count <= 768) break;",
-    "if (ConsumedRefreshTokens.Count <= 768) break;",
 ]:
     if forbidden in source:
-        fail(f"live consumed credentials can still be evicted under pressure: {forbidden}")
+        fail(f"live consumed authorization codes can still be evicted under pressure: {forbidden}")
 
 helper_start = source.find("private static ConsumedCredentialAdmission TryRememberConsumedCredential(")
 helper_end = source.find("private static long UnixNow()", helper_start)
 if helper_start < 0 or helper_end < 0:
-    fail("bounded consumed-credential admission helper is missing")
+    fail("bounded authorization-code replay admission helper is missing")
 helper = source[helper_start:helper_end]
-
-# Only expired entries may be forgotten. Capacity must fail closed before adding a new
-# consumed hash, and the whole cleanup/check/add sequence must be serialized.
 if helper.count("TryRemove(") != 1:
-    fail("replay cache helper may remove entries outside expired-entry cleanup")
+    fail("authorization-code replay cache may remove entries outside expired-entry cleanup")
 for needle in [
     "if (pair.Value <= now)",
     "if (cache.ContainsKey(hash)) return ConsumedCredentialAdmission.Replay;",
@@ -59,18 +58,53 @@ for needle in [
     "return ConsumedCredentialAdmission.Added;",
 ]:
     if needle not in helper:
-        fail(f"bounded replay admission ordering drifted: {needle}")
+        fail(f"bounded authorization-code admission ordering drifted: {needle}")
 
-# Exchange paths must distinguish replay from saturation rather than treating cache
-# pressure as permission to forget prior one-time use.
-for diagnostic in [
-    "authorization code replay cache is at capacity",
-    "refresh token replay cache is at capacity",
-    "authorization code was already used",
+# Refresh rotation must not retain one cache entry per consumed token for the full
+# 30-day token lifetime: that self-DoSes after 1024 legitimate rotations. Instead,
+# signed refresh tokens carry a stable random family id and monotonic generation, while
+# one process-global map stores only the next accepted generation for each active family.
+for needle in [
+    "private const int MaxRefreshTokenFamilies = 1024;",
+    "private static readonly Dictionary<string, RefreshFamilyState> RefreshTokenFamilies",
+    "private static readonly object RefreshFamilySync = new object();",
+    "private sealed class RefreshFamilyState",
+    "internal long NextGeneration;",
+    "internal long Expiry;",
+    "fields.Length != 9",
+    "TryDecodeField(fields[7], out refreshFamilyId)",
+    "long.TryParse(fields[8], NumberStyles.None, CultureInfo.InvariantCulture, out refreshGeneration)",
+    "TryAdvanceRefreshFamily(refreshFamilyId, refreshGeneration",
+    "private static RefreshFamilyAdmission TryAdvanceRefreshFamily(",
+    "lock (RefreshFamilySync)",
+    "refreshGeneration != 0",
+    "state.NextGeneration != refreshGeneration",
+    "state.NextGeneration = checked(refreshGeneration + 1)",
+    "RefreshTokenFamilies.Count >= MaxRefreshTokenFamilies",
+    "refresh token family capacity is exhausted",
     "refresh token was already used",
 ]:
-    if diagnostic not in source:
-        fail(f"missing stable replay/capacity diagnostic: {diagnostic}")
+    if needle not in source:
+        fail(f"missing bounded refresh-family rotation contract: {needle}")
+
+for forbidden in [
+    "ConsumedRefreshTokens",
+    "TryRememberConsumedCredential(ConsumedRefreshTokens",
+    "refresh token replay cache is at capacity",
+]:
+    if forbidden in source:
+        fail(f"refresh rotation still depends on per-consumed-token retention: {forbidden}")
+
+# Initial offline grants mint generation zero with a fresh family. Successors preserve
+# the same family and carry the exact generation admitted under the process-global lock.
+for needle in [
+    "CreateRandomToken(24)",
+    "refreshFamilyId ?? CreateRandomToken(24)",
+    "refreshGeneration.ToString(CultureInfo.InvariantCulture)",
+    "EncodeField(refreshFamily)",
+]:
+    if needle not in source:
+        fail(f"refresh token issuance lost family/generation binding: {needle}")
 
 print("MCP OAuth consumed replay-cache preflight passed.")
 sys.exit(0)
