@@ -101,6 +101,10 @@ def verify_index_regression():
             "internal static class InitializerSmoke { [ModuleInitializer] "
             "internal static void Register() { Run(); } internal static void Run() { } }"
         ),
+        Path("ExpressionInitializerSmoke.cs"): (
+            "internal static class ExpressionInitializerSmoke { [ModuleInitializer] "
+            "internal static void Register() => Run(); internal static void Run() { } }"
+        ),
         Path("FalseInitializerSmoke.cs"): (
             "internal static class FalseInitializerSmoke { [ModuleInitializer] "
             "internal static void Register() { } internal static void Run() { } }"
@@ -124,7 +128,7 @@ def verify_index_regression():
         "MissingSmoke.cs: MissingSmoke.Run() is never registered or invoked",
         "SelfOnlySmoke.cs: SelfOnlySmoke.Run() is never registered or invoked",
     }
-    if checked != 6 or set(errors) != expected_errors or source_scans != len(small_sources):
+    if checked != 7 or set(errors) != expected_errors or source_scans != len(small_sources):
         raise RuntimeError("smoke-registration semantic regression self-check failed")
 
     # Exercise more detached source records than the current repository while
