@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+PLUGIN = ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs"
+VIEW = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCadViewStatusRuntime.cs"
+DIRECT = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCadDirectModelRuntime.cs"
+AGENT = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCadAgentRuntime.cs"
+NATIVE_SAVE = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpNativeCurrentDocumentSave.cs"
+
+errors = []
+plugin = PLUGIN.read_text(encoding="utf-8") if PLUGIN.is_file() else ""
+view = VIEW.read_text(encoding="utf-8") if VIEW.is_file() else ""
+direct = DIRECT.read_text(encoding="utf-8") if DIRECT.is_file() else ""
+agent = AGENT.read_text(encoding="utf-8") if AGENT.is_file() else ""
+native_save = NATIVE_SAVE.read_text(encoding="utf-8") if NATIVE_SAVE.is_file() else ""
+
+
+def require(text, token, where):
+    if token not in text:
+        errors.append(f"{where} missing contract token: {token}")
+
+
+for token in (
+    "McpDesktopControlSession.ResumeFromLocalUser();",
+    "McpTransportCoordinator.TryAutoStartPreferred();",
+    'ReportOptionalStartupFailure("MCP tunnel autostart"',
+):
+    if token not in plugin:
+        errors.append("startup contract missing token: " + token)
+
+# Tunnel autostart must not share one try block with optional Agent Center UI startup.
+resume_at = plugin.find("McpDesktopControlSession.ResumeFromLocalUser();")
+tunnel_at = plugin.find("McpTransportCoordinator.TryAutoStartPreferred();")
+agent_at = plugin.find("McpTransportAgentCenterAugmenter.Start();")
+if min(resume_at, tunnel_at, agent_at) >= 0:
+    between_agent_and_tunnel = plugin[agent_at:tunnel_at]
+    if "catch (Exception ex)" not in between_agent_and_tunnel:
+        errors.append("tunnel autostart is still coupled to Agent Center startup failure")
+
+# cad_command_state is read-only: it must be published, excluded from the view mutation set,
+# and the outer direct-tool dispatcher must bypass the mutation writer for every direct read tool.
+if '"cad_command_state"' not in view:
+    errors.append("cad_command_state is not published")
+mutation_start = view.find("private static readonly HashSet<string> MutationTools")
+mutation_end = view.find("};", mutation_start)
+if mutation_start >= 0 and mutation_end > mutation_start:
+    if '"cad_command_state"' in view[mutation_start:mutation_end]:
+        errors.append("cad_command_state must not require confirmMutation")
+else:
+    errors.append("MutationTools block not found")
+
+direct_dispatch_start = agent.find("if (McpCadDirectModelRuntime.IsTool(tool))")
+desktop_dispatch_start = agent.find("if (McpDesktopAutomationRuntime.IsTool(tool))", direct_dispatch_start)
+direct_dispatch = agent[direct_dispatch_start:desktop_dispatch_start] if direct_dispatch_start >= 0 and desktop_dispatch_start > direct_dispatch_start else ""
+if not direct_dispatch:
+    errors.append("unable to isolate outer direct-tool dispatch")
+else:
+    for token in (
+        "if (!McpCadDirectModelRuntime.RequiresMutation(tool))",
+        "return McpCadDirectModelRuntime.Call(tool, args);",
+        "return Mutation(args, tool, () => McpCadDirectModelRuntime.Call(tool, args));",
+    ):
+        require(direct_dispatch, token, "McpCadAgentRuntime direct dispatch")
+    read_return = direct_dispatch.find("return McpCadDirectModelRuntime.Call(tool, args);")
+    mutation_return = direct_dispatch.find("return Mutation(args, tool, () => McpCadDirectModelRuntime.Call(tool, args));")
+    if read_return < 0 or mutation_return < 0 or read_return > mutation_return:
+        errors.append("direct read-only tools must bypass Mutation before the mutating direct route")
+
+# Preserve the merged #5330 display-race contract.
+for token in ("RequireViewMutationIdle", '"CMDACTIVE"', "Editor.SetCurrentView"):
+    if token not in view:
+        errors.append("view idle/screen-update safety missing: " + token)
+for forbidden in ("Editor.Regen(", ".UpdateScreen("):
+    if forbidden in view:
+        errors.append("view runtime must not force screen refresh: " + forbidden)
+
+# Current-document saves must be host-owned native QSAVE, not Database.Save/SaveAs against the
+# already-open active DWG path. Match the native attempt semantically so Python escape handling
+# cannot turn the C# command's literal backslash-n into a false-negative newline matcher.
+if not native_save:
+    errors.append("missing McpNativeCurrentDocumentSave.cs")
+else:
+    for token in (
+        "SaveCurrentDocument",
+        "McpCadMutationCoordinator.QueueNativeCommand",
+        "document.SendStringToExecute(",
+        "_.QSAVE",
+        "true, false, true",
+        "ManualResetEventSlim",
+        "CommandEnded",
+        "CommandCancelled",
+        "CommandFailed",
+        "document.IsReadOnly",
+        'Application.GetSystemVariable("CMDACTIVE")',
+        "DbmodPersistentContentMask",
+        "Do not retry automatically",
+    ):
+        require(native_save, token, "McpNativeCurrentDocumentSave")
+    if native_save.count("document.SendStringToExecute(") != 1:
+        errors.append("native current-document save helper must queue exactly one native command attempt")
+    for forbidden in ("Database.Save();", "Database.SaveAs("):
+        if forbidden in native_save:
+            errors.append("native current-document save helper must not call " + forbidden)
+
+# cad_save must leave the generic single CAD-context callback before invoking the two-phase helper;
+# otherwise waiting for native QSAVE would block the application context that must execute it.
+require(direct, 'if (string.Equals(tool, "cad_save", StringComparison.Ordinal)) return Save();', "McpCadDirectModelRuntime.Call")
+require(direct, "McpNativeCurrentDocumentSave.SaveCurrentDocument", "McpCadDirectModelRuntime.Save")
+save_start = direct.find("private static string Save()")
+save_end = direct.find("private static string SaveAs", save_start)
+save_body = direct[save_start:save_end] if save_start >= 0 and save_end > save_start else ""
+if not save_body:
+    errors.append("unable to isolate McpCadDirectModelRuntime.Save")
+elif "document.Database.Save();" in save_body or "document.Database.SaveAs(" in save_body:
+    errors.append("cad_save still writes the active DWG through Database.Save/SaveAs")
+
+# cad_command_sequence canonically delegates QSAVE into McpCadDirectModelRuntime. Keep that route
+# and make it call the same two-phase Save() before the generic CAD-context callback.
+require(agent, "McpCadDirectModelRuntime.CanHandleCadCommandSequence(args)", "McpCadAgentRuntime")
+require(direct, 'string.Equals(command, "QSAVE", StringComparison.Ordinal)', "McpCadDirectModelRuntime.CanHandleCadCommandSequence")
+require(direct, 'if (string.Equals(command, "QSAVE", StringComparison.Ordinal)) return SaveCadCommandSequence();', "McpCadDirectModelRuntime.CallCadCommandSequence")
+require(direct, "private static string SaveCadCommandSequence()", "McpCadDirectModelRuntime")
+command_save_start = direct.find("private static string SaveCadCommandSequence()")
+command_save_end = direct.find("private static string CreateBox", command_save_start)
+command_save_body = direct[command_save_start:command_save_end] if command_save_start >= 0 and command_save_end > command_save_start else ""
+if not command_save_body:
+    errors.append("unable to isolate direct bounded QSAVE wrapper")
+elif "Save();" not in command_save_body:
+    errors.append("bounded QSAVE wrapper must share the cad_save native lifecycle")
+
+# The old AgentRuntime private fallback must not be reachable for QSAVE while the direct route is
+# canonical. Its legacy Database.Save implementation is not accepted as evidence for save PASS.
+if 'if (command == "QSAVE") return SaveActiveDocument(document);' in agent and "McpCadDirectModelRuntime.CanHandleCadCommandSequence(args)" not in agent:
+    errors.append("QSAVE can bypass the canonical direct native-save route")
+
+# True SaveAs remains path-changing and separate; never emulate current-document save by SaveAs
+# over the currently open filename.
+if "document.Database.SaveAs(filename" in direct:
+    errors.append("cad_save must not SaveAs over the active drawing path")
+
+print("QS3D MCP startup/save stability preflight")
+if errors:
+    for error in errors:
+        print("ERROR:", error)
+    print("FAILED with", len(errors), "error(s).")
+    sys.exit(1)
+print("PASS: startup/tunnel/view contracts remain intact, direct read-only tools bypass mutation confirmation, and cad_save/QSAVE share a host-owned native QSAVE lifecycle with terminal-event and DBMOD completion verification.")
