@@ -1,6 +1,8 @@
 using System;
+using System.IO;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
+using QS3D.Core.Persistence;
 
 namespace QS3D.Core.SmokeTests
 {
@@ -9,34 +11,33 @@ namespace QS3D.Core.SmokeTests
         [ModuleInitializer]
         internal static void Initialize()
         {
-            AddAdvancesRevision();
-            RemoveAdvancesRevision();
+            AddInsertRemoveAndClearAdvanceRevision();
             ReplacementAdvancesRevision();
+            FailedAndNullMutationsRemainNeutral();
             DuplicateReferenceOwnershipRemainsStable();
-            NullInsertionFailsWithoutMutation();
+            LoadPreservesPersistedRevisionAfterCatalogHydration();
         }
 
-        private static void AddAdvancesRevision()
+        private static void AddInsertRemoveAndClearAdvanceRevision()
         {
-            var project = NewProject("P-CATALOG-ADD");
-            var before = project.ChangeVersion;
+            var project = NewProject("P-CATALOG-STRUCTURAL");
+            var floor1 = new FloorDefinition("L1", "Level 1", 0d);
+            var floor2 = new FloorDefinition("L2", "Level 2", 3d);
+            var floor3 = new FloorDefinition("L3", "Level 3", 6d);
 
-            project.Floors.Add(new FloorDefinition("L1", "Level 1", 0d));
+            ExpectOneRevision(project, () => project.Floors.Add(floor1), "Add");
+            ExpectOneRevision(project, () => project.Floors.Insert(0, floor2), "Insert");
+            ExpectOneRevision(project, () => project.Floors.RemoveAt(0), "RemoveAt");
+            ExpectOneRevision(project, () =>
+            {
+                if (!project.Floors.Remove(floor1)) throw new Exception("Fixture floor was not removed.");
+            }, "Remove");
 
-            Equal(before + 1L, project.ChangeVersion, "Adding a persisted floor did not advance the project revision exactly once.");
-        }
-
-        private static void RemoveAdvancesRevision()
-        {
-            var project = NewProject("P-CATALOG-REMOVE");
-            var floor = new FloorDefinition("L1", "Level 1", 0d);
-            project.Floors.Add(floor);
-            var before = project.ChangeVersion;
-
-            if (!project.Floors.Remove(floor))
-                throw new Exception("Fixture floor was not removed.");
-
-            Equal(before + 1L, project.ChangeVersion, "Removing a persisted floor did not advance the project revision exactly once.");
+            project.Floors.Add(floor1);
+            project.Floors.Add(floor2);
+            project.Floors.Add(floor3);
+            ExpectOneRevision(project, project.Floors.Clear, "Clear");
+            Equal(0, project.Floors.Count, "Clear left persisted floor entries behind.");
         }
 
         private static void ReplacementAdvancesRevision()
@@ -45,14 +46,35 @@ namespace QS3D.Core.SmokeTests
             var original = new ZoneDefinition("Z1", "Zone 1");
             var replacement = new ZoneDefinition("Z2", "Zone 2");
             project.Zones.Add(original);
+
+            ExpectOneRevision(project, () => project.Zones[0] = replacement, "Indexer replacement");
             var before = project.ChangeVersion;
-
-            project.Zones[0] = replacement;
-
-            Equal(before + 1L, project.ChangeVersion, "Replacing a persisted catalog entry did not advance the project revision exactly once.");
-            before = project.ChangeVersion;
             project.Zones[0] = replacement;
             Equal(before, project.ChangeVersion, "Assigning the same catalog reference should be a structural no-op.");
+        }
+
+        private static void FailedAndNullMutationsRemainNeutral()
+        {
+            var project = NewProject("P-CATALOG-REJECT");
+            var zone = new ZoneDefinition("Z1", "Zone 1");
+            project.Zones.Add(zone);
+
+            var before = project.ChangeVersion;
+            if (project.Zones.Remove(new ZoneDefinition("MISSING", "Missing")))
+                throw new Exception("Absent catalog entry was unexpectedly removed.");
+            Equal(before, project.ChangeVersion, "Absent Remove advanced the project revision.");
+
+            Throws<ArgumentOutOfRangeException>(() => project.Zones.Insert(3, new ZoneDefinition("Z2", "Zone 2")));
+            Equal(before, project.ChangeVersion, "Rejected Insert advanced the project revision.");
+            Equal(1, project.Zones.Count, "Rejected Insert corrupted the persisted catalog.");
+
+            Throws<ArgumentNullException>(() => project.Zones.Add(null!));
+            Equal(before, project.ChangeVersion, "Rejected null Add advanced the project revision.");
+            Equal(1, project.Zones.Count, "Rejected null Add corrupted the persisted catalog.");
+
+            Throws<ArgumentNullException>(() => project.Zones[0] = null!);
+            Equal(before, project.ChangeVersion, "Rejected null replacement advanced the project revision.");
+            Equal(zone, project.Zones[0], "Rejected null replacement corrupted the persisted catalog.");
         }
 
         private static void DuplicateReferenceOwnershipRemainsStable()
@@ -66,32 +88,49 @@ namespace QS3D.Core.SmokeTests
             family.Name = "Family 1A";
             Equal(beforeChildMutation + 1L, project.ChangeVersion, "Duplicate catalog references subscribed the same child more than once or not at all.");
 
-            var beforeFirstRemove = project.ChangeVersion;
-            project.Families.RemoveAt(0);
-            Equal(beforeFirstRemove + 1L, project.ChangeVersion, "Removing one duplicate reference did not advance revision once.");
-
+            ExpectOneRevision(project, () => project.Families.RemoveAt(0), "First duplicate removal");
             var beforeStillOwnedMutation = project.ChangeVersion;
             family.Name = "Family 1B";
             Equal(beforeStillOwnedMutation + 1L, project.ChangeVersion, "Removing one duplicate reference detached a still-owned child.");
 
-            var beforeLastRemove = project.ChangeVersion;
-            project.Families.RemoveAt(0);
-            Equal(beforeLastRemove + 1L, project.ChangeVersion, "Removing the last duplicate reference did not advance revision once.");
-
+            ExpectOneRevision(project, () => project.Families.RemoveAt(0), "Last duplicate removal");
             var afterDetach = project.ChangeVersion;
             family.Name = "Family 1C";
             Equal(afterDetach, project.ChangeVersion, "Removing the last duplicate reference left a stale child subscription.");
         }
 
-        private static void NullInsertionFailsWithoutMutation()
+        private static void LoadPreservesPersistedRevisionAfterCatalogHydration()
         {
-            var project = NewProject("P-CATALOG-NULL");
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-catalog-revision-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "project.qsdb");
+            try
+            {
+                var project = NewProject("P-CATALOG-ROUNDTRIP");
+                project.Zones.Add(new ZoneDefinition("Z1", "Zone 1"));
+                project.Floors.Add(new FloorDefinition("L1", "Level 1", 0d));
+                project.Families.Add(new ProjectFamily("F1", "Family 1", ElementCategory.GlassWall));
+                var store = new QsdbProjectStore();
+                store.SaveNew(project, path);
+                var persistedVersion = project.ChangeVersion;
+                var persistedUpdatedUtc = project.UpdatedUtc;
+
+                var loaded = store.Load(path);
+
+                Equal(persistedVersion, loaded.ChangeVersion, "QSDB load inflated the persisted project revision while hydrating catalogs.");
+                Equal(persistedUpdatedUtc, loaded.UpdatedUtc, "QSDB load changed the persisted update timestamp while hydrating catalogs.");
+            }
+            finally
+            {
+                if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            }
+        }
+
+        private static void ExpectOneRevision(ProjectState project, Action mutation, string label)
+        {
             var before = project.ChangeVersion;
-
-            Throws<ArgumentNullException>(() => project.Zones.Add(null!));
-
-            Equal(before, project.ChangeVersion, "Rejected null insertion advanced the project revision.");
-            Equal(0, project.Zones.Count, "Rejected null insertion corrupted the persisted catalog.");
+            mutation();
+            Equal(before + 1L, project.ChangeVersion, label + " did not advance the project revision exactly once.");
         }
 
         private static ProjectState NewProject(string id) => new ProjectState(id, "Catalog revision fixture");
