@@ -33,8 +33,8 @@ namespace QS3D.Core.SmokeTests
                 () => _ = new ProjectPersistenceStamp(project),
                 "Persistence stamp accepted a mixed-time Family snapshot.");
 
-            Equal(beforeProjectRevision, project.ChangeVersion,
-                "Family mutation unexpectedly changed the parent project revision and invalidated the regression premise.");
+            Equal(beforeProjectRevision + 1L, project.ChangeVersion,
+                "Family mutation during stamp materialization must advance the parent project revision exactly once.");
             Equal("After", family.Name, "Deterministic Family mutation did not execute during stamp materialization.");
         }
 
@@ -48,8 +48,8 @@ namespace QS3D.Core.SmokeTests
             var beforeProjectRevision = project.ChangeVersion;
             family.Name = "After";
 
-            Equal(beforeProjectRevision, project.ChangeVersion,
-                "Family mutation unexpectedly changed the parent project revision.");
+            Equal(beforeProjectRevision + 1L, project.ChangeVersion,
+                "Family mutation after stable capture must advance the parent project revision exactly once.");
             Equal(true, stamp.RequiresSave(project),
                 "Stable persistence stamp did not detect later nested persisted-state mutation.");
         }
