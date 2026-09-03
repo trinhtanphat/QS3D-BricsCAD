@@ -66,7 +66,8 @@ namespace QS3D.Core.SmokeTests
             var edges = new CountedSource<RateReferenceEdge>(1,
                 new RateReferenceEdge("R1", RateReferenceTargetKind.BillItem, "B1"));
             Equal(1, new RateReferenceGraph(edges).Edges.Count);
-            Equal(1, edges.CurrentAccesses);
+            Equal(4, edges.MoveNextCalls);
+            Equal(2, edges.CurrentAccesses);
 
             var graph = new RateReferenceGraph(Array.Empty<RateReferenceEdge>());
             var rates = new CountedSource<BuildUpRateSnapshot>(1, new BuildUpRateSnapshot("R1", 1m));
