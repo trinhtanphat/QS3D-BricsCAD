@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import pathlib
 import re
+import subprocess
 import sys
+import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PREPARE = ROOT / "scripts" / "prepare-v25-cloud-release.ps1"
@@ -27,6 +29,81 @@ def _line_parsed_diff(source: str) -> bool:
             source,
         )
     )
+
+
+def _run_git(repo: pathlib.Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=repo,
+        check=check,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="strict",
+    )
+
+
+def _assert_pathname_safe_git_primitive(failures: list[str]) -> None:
+    """Prove the legacy quoted-path bypass and the pathspec replacement.
+
+    Unicode is used instead of a newline/control-character filename so this
+    deterministic fixture is valid on both hosted Windows/NTFS and Linux.
+    core.quotePath=true forces Git's line-oriented name output to quote the
+    pathname, exactly the representation the legacy prefix parser mishandled.
+    """
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="qs3d-release-path-") as temp:
+            repo = pathlib.Path(temp)
+            _run_git(repo, "init", "-q")
+            _run_git(repo, "config", "user.name", "QS3D C05 preflight")
+            _run_git(repo, "config", "user.email", "c05-preflight@example.invalid")
+            _run_git(repo, "config", "core.quotePath", "true")
+
+            (repo / "README.md").write_text("base\n", encoding="utf-8")
+            _run_git(repo, "add", "--", "README.md")
+            _run_git(repo, "commit", "-q", "-m", "base")
+            base = _run_git(repo, "rev-parse", "HEAD").stdout.strip()
+
+            source_dir = repo / "src"
+            source_dir.mkdir()
+            (source_dir / "café.cs").write_text("// drift\n", encoding="utf-8")
+            _run_git(repo, "add", "--", "src/")
+            _run_git(repo, "commit", "-q", "-m", "release-relevant unicode path")
+            head = _run_git(repo, "rev-parse", "HEAD").stdout.strip()
+            commit_range = f"{base}..{head}"
+
+            legacy_lines = _run_git(repo, "diff", "--name-only", commit_range, "--").stdout.splitlines()
+            legacy_prefix_match = any(
+                line.strip().replace("\\", "/").startswith("src/") for line in legacy_lines
+            )
+            if legacy_prefix_match:
+                failures.append(
+                    "quoted-path regression fixture did not reproduce the legacy prefix "
+                    "classification bypass with core.quotePath=true"
+                )
+
+            safe = _run_git(
+                repo,
+                "diff",
+                "--quiet",
+                "--no-ext-diff",
+                commit_range,
+                "--",
+                "src/",
+                check=False,
+            )
+            if safe.returncode != 1:
+                failures.append(
+                    "pathname-safe git diff pathspec fixture must return exit 1 for "
+                    f"release-relevant Unicode drift; got {safe.returncode}"
+                )
+    except (OSError, subprocess.SubprocessError, UnicodeError) as exc:
+        failures.append(
+            "could not execute deterministic pathname-safe Git regression fixture: "
+            f"{type(exc).__name__}: {exc}"
+        )
 
 
 def main() -> int:
@@ -66,10 +143,6 @@ def main() -> int:
             "committed version binding and before returning the release SHA"
         )
 
-    # A pathname such as `src/evil\nname.cs` is legal in Git. Line-oriented
-    # --name-only output can split or quote it; Trim()/prefix matching can then
-    # misclassify a release-relevant commit as harmless. Admission must ask Git
-    # directly whether owned pathspecs changed and branch on git-diff's exit code.
     if _line_parsed_diff(source):
         failures.append(
             "release preparation still parses line-oriented git diff --name-only; "
@@ -136,6 +209,8 @@ def main() -> int:
             "automatic release dispatcher is missing pathname-safe/Platform drift "
             "admission signals: " + ", ".join(missing_dispatch)
         )
+
+    _assert_pathname_safe_git_primitive(failures)
 
     if failures:
         for failure in failures:
