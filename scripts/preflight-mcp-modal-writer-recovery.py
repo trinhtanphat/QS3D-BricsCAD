@@ -41,15 +41,28 @@ else:
         "internal static NativeCommandReservation? PrepareNativeCommand(",
         "internal static void QueueNativeCommand(",
     )
+    arm = method_slice(
+        coord,
+        "private static NativeCommandReservation ArmNativeCommandInCadContext(",
+        "private static T InvokeInCadContext<T>(",
+    )
     if not prepare:
         errors.append("unable to isolate PrepareNativeCommand")
     else:
         pre = prepare.find("RequireNoModalCommandBeforeMutationGate")
         gate = prepare.find("MutationGate.Wait(")
+        arm_call = prepare.find("ArmNativeCommandInCadContext(command, audit, true)")
         if pre < 0 or gate < 0 or pre > gate:
             errors.append("PrepareNativeCommand must perform modal preflight before acquiring MutationGate")
-        if "RequireNoModalCommandInCadContext" not in prepare:
-            errors.append("PrepareNativeCommand must re-check modal state after gate acquisition")
+        if arm_call < 0 or gate < 0 or arm_call < gate:
+            errors.append("PrepareNativeCommand must arm/revalidate the native command after acquiring MutationGate")
+        if "InvokeInCadContext(() => ArmNativeCommandInCadContext(command, audit, true))" not in prepare:
+            errors.append("PrepareNativeCommand must perform native arm/revalidation in CAD application context")
+
+    if not arm:
+        errors.append("unable to isolate ArmNativeCommandInCadContext")
+    elif "RequireNoModalCommandInCadContext" not in arm:
+        errors.append("native command arm helper must re-check modal state after gate acquisition")
 
     if "interaction_required:" not in coord:
         errors.append("coordinator modal failure must expose bounded interaction_required marker")
