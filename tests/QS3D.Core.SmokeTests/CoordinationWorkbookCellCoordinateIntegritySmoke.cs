@@ -11,28 +11,24 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
-            RejectMismatchedCellRowCoordinate();
-            RejectTrailingCellCoordinateGarbage();
+            RejectCoordinate("xl/worksheets/sheet1.xml", "B2", "B999", "mismatched CLASHES cell row coordinate");
+            RejectCoordinate("xl/worksheets/sheet2.xml", "A2", "A999", "mismatched TRACE_MODEL cell row coordinate");
+            RejectCoordinate("xl/worksheets/sheet1.xml", "B2", "B2garbage", "trailing cell coordinate garbage");
+            RejectCoordinate("xl/worksheets/sheet1.xml", "B2", "b2", "non-canonical lowercase cell coordinate");
+            RejectCoordinate("xl/worksheets/sheet1.xml", "B2", "B02", "non-canonical leading-zero cell row coordinate");
+            RejectCoordinate("xl/worksheets/sheet1.xml", "B2", "B0", "zero cell row coordinate");
+            RejectCoordinate("xl/worksheets/sheet1.xml", "B2", "B", "missing cell row coordinate");
+            RejectCoordinate("xl/worksheets/sheet1.xml", "B2", "XFE2", "out-of-range Excel cell column");
             Console.WriteLine("PASS coordination workbook cell coordinate integrity");
         }
 
-        private static void RejectMismatchedCellRowCoordinate()
+        private static void RejectCoordinate(string entryName, string oldCoordinate, string newCoordinate, string label)
         {
             WithWorkbook(path =>
             {
-                RewriteWorksheet(path, "xl/worksheets/sheet1.xml", xml =>
-                    ReplaceOnce(xml, "r=\"B2\"", "r=\"B999\""));
-                ExpectInvalidData(() => CoordinationWorkbookTraceReader.Read(path, 2), "mismatched cell row coordinate");
-            });
-        }
-
-        private static void RejectTrailingCellCoordinateGarbage()
-        {
-            WithWorkbook(path =>
-            {
-                RewriteWorksheet(path, "xl/worksheets/sheet1.xml", xml =>
-                    ReplaceOnce(xml, "r=\"B2\"", "r=\"B2garbage\""));
-                ExpectInvalidData(() => CoordinationWorkbookTraceReader.Read(path, 2), "trailing cell coordinate garbage");
+                RewriteWorksheet(path, entryName, xml =>
+                    ReplaceOnce(xml, "r=\"" + oldCoordinate + "\"", "r=\"" + newCoordinate + "\""));
+                ExpectInvalidData(() => CoordinationWorkbookTraceReader.Read(path, 2), label);
             });
         }
 
