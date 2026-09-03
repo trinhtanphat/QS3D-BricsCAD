@@ -21,6 +21,10 @@ namespace QS3D.BricsCAD.V25
         internal const int MaxLedgerBytes = 1024 * 1024;
         internal const int MaxStoredResultBytes = 16 * 1024;
         private const int MaxLiveRecords = 2048;
+        private const int ReplayIdentityDispatchTimeoutMilliseconds = 5000;
+        private const int ReplayIdentityQueued = 0;
+        private const int ReplayIdentityRunning = 1;
+        private const int ReplayIdentityCancelledBeforeStart = 2;
         private const string LedgerFileName = "mcp-mutation-ack-ledger-v1.txt";
         private const string LedgerHeader = "QS3D-MCP-MUTATION-ACK|1";
 
@@ -53,30 +57,142 @@ namespace QS3D.BricsCAD.V25
             var requested = supplied ? McpTopLevelJson.ExtractString(body, "actionId") : string.Empty;
             var actionId = supplied ? ValidateActionId(requested) : "auto-" + Guid.NewGuid().ToString("N");
             var fingerprint = ComputeFingerprint(tool, body);
+            AckRecord? durableCandidate = null;
 
             lock (Sync)
             {
                 AckRecord existing;
                 if (Records.TryGetValue(actionId, out existing))
                 {
-                    if (!string.Equals(existing.Fingerprint, fingerprint, StringComparison.Ordinal))
-                        throw new InvalidOperationException("actionId was already used for a different mutation request; retry identity reuse is rejected.");
-                    return new Reservation(existing, true);
+                    RequireMatchingRequestFingerprint(existing, fingerprint);
+                    if (!RequiresDurableReplayDocumentAffinity(existing))
+                        return new Reservation(existing, true);
+                    durableCandidate = existing;
+                }
+                else
+                {
+                    if (Records.Count >= MaxLiveRecords)
+                        throw new InvalidOperationException("Mutation acknowledgement ledger is full; save or restart after durable acknowledgement before submitting more mutations.");
+
+                    var record = new AckRecord
+                    {
+                        ActionId = actionId,
+                        Fingerprint = fingerprint,
+                        Tool = NormalizeTool(tool),
+                        State = AckState.Accepted,
+                        AcceptedUtc = DateTime.UtcNow
+                    };
+                    Records.Add(actionId, record);
+                    return new Reservation(record, false);
+                }
+            }
+
+            // Durable records survive process restart, so actionId + request bytes alone are not
+            // enough to prove that a replay belongs to the currently active drawing. Capture the
+            // live BricsCAD drawing fingerprint only after leaving Sync and only for a durable
+            // candidate. This avoids native/application-context work under the ledger lock while
+            // preserving same-process Accepted/Applied replay as the duplicate-mutation barrier.
+            var replayDocumentIdentity = BuildStableDocumentIdentityForReplay();
+            lock (Sync)
+            {
+                AckRecord existing;
+                if (!Records.TryGetValue(actionId, out existing)
+                    || !ReferenceEquals(existing, durableCandidate)
+                    || existing.State != AckState.Durable)
+                    throw new InvalidOperationException("Durable mutation replay state changed while active-drawing affinity was being verified; replay was not accepted.");
+                RequireMatchingRequestFingerprint(existing, fingerprint);
+                RequireMatchingReplayDocument(existing, replayDocumentIdentity);
+                return new Reservation(existing, true);
+            }
+        }
+
+        private static bool RequiresDurableReplayDocumentAffinity(AckRecord record)
+        {
+            return record != null && record.State == AckState.Durable;
+        }
+
+        private static void RequireMatchingRequestFingerprint(AckRecord existing, string fingerprint)
+        {
+            if (!string.Equals(existing.Fingerprint, fingerprint, StringComparison.Ordinal))
+                throw new InvalidOperationException("actionId was already used for a different mutation request; retry identity reuse is rejected.");
+        }
+
+        private static void RequireMatchingReplayDocument(AckRecord existing, string replayDocumentIdentity)
+        {
+            var expected = ExtractStableFingerprint(existing.DocumentIdentity);
+            var actual = ExtractStableFingerprint(replayDocumentIdentity);
+            if (expected.Length == 0 || actual.Length == 0)
+                throw new InvalidOperationException("Durable mutation replay requires a stable active-drawing fingerprint; replay was rejected because drawing identity could not be proven.");
+            if (!string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("actionId belongs to a durable mutation from a different drawing; cross-drawing replay is rejected.");
+        }
+
+        private static string ExtractStableFingerprint(string documentIdentity)
+        {
+            const string prefix = "fingerprint=";
+            var value = (documentIdentity ?? string.Empty).Trim();
+            if (!value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return string.Empty;
+            var separator = value.IndexOf(';', prefix.Length);
+            var fingerprint = separator < 0
+                ? value.Substring(prefix.Length)
+                : value.Substring(prefix.Length, separator - prefix.Length);
+            return fingerprint.Trim();
+        }
+
+        private static string BuildStableDocumentIdentityForReplay()
+        {
+            var work = new ReplayIdentityWork();
+            Application.DocumentManager.ExecuteInApplicationContext(ExecuteReplayIdentityWork, work);
+            if (!work.Done.Wait(ReplayIdentityDispatchTimeoutMilliseconds))
+            {
+                if (work.CancelBeforeStart())
+                {
+                    work.Done.Dispose();
+                    throw new TimeoutException("Timed out waiting for BricsCAD application context while verifying durable mutation replay; queued identity work was cancelled before start.");
                 }
 
-                if (Records.Count >= MaxLiveRecords)
-                    throw new InvalidOperationException("Mutation acknowledgement ledger is full; save or restart after durable acknowledgement before submitting more mutations.");
+                // The callback already owns execution. The action is deliberately bounded to
+                // active-document/fingerprint reads and must settle before this request can drop
+                // its state; never allow a late callback to validate a replay after the caller
+                // has already moved on.
+                work.Done.Wait();
+            }
 
-                var record = new AckRecord
-                {
-                    ActionId = actionId,
-                    Fingerprint = fingerprint,
-                    Tool = NormalizeTool(tool),
-                    State = AckState.Accepted,
-                    AcceptedUtc = DateTime.UtcNow
-                };
-                Records.Add(actionId, record);
-                return new Reservation(record, false);
+            try
+            {
+                if (work.Error != null)
+                    throw new InvalidOperationException("Could not verify the active BricsCAD drawing for durable mutation replay.", work.Error);
+                if (string.IsNullOrWhiteSpace(work.Result))
+                    throw new InvalidOperationException("Durable mutation replay requires a stable active-drawing fingerprint; replay was not accepted.");
+                return work.Result;
+            }
+            finally
+            {
+                work.Done.Dispose();
+            }
+        }
+
+        private static void ExecuteReplayIdentityWork(object state)
+        {
+            var work = (ReplayIdentityWork)state;
+            try
+            {
+                if (!work.TryBegin()) return;
+                var document = Application.DocumentManager.MdiActiveDocument;
+                if (document == null)
+                    throw new InvalidOperationException("No active BricsCAD document is available for durable mutation replay.");
+                work.Result = BuildStableDocumentIdentity(document);
+                if (string.IsNullOrWhiteSpace(work.Result))
+                    throw new InvalidOperationException("The active BricsCAD document has no stable database fingerprint for durable mutation replay.");
+            }
+            catch (Exception ex)
+            {
+                work.Error = ex;
+            }
+            finally
+            {
+                try { work.Done.Set(); }
+                catch (ObjectDisposedException) { }
             }
         }
 
@@ -418,6 +534,8 @@ namespace QS3D.BricsCAD.V25
                     var result = FromBase64(fields[5]);
                     if (fingerprint.Length != 64 || documentIdentity.Length == 0)
                         throw new InvalidDataException("Mutation ACK durable identity is invalid.");
+                    if (Records.ContainsKey(actionId))
+                        throw new InvalidDataException("Mutation ACK ledger contains a duplicate actionId.");
                     Records[actionId] = new AckRecord
                     {
                         ActionId = actionId,
@@ -578,6 +696,24 @@ namespace QS3D.BricsCAD.V25
             {
                 if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
                 CurrentAction.Value = _previous;
+            }
+        }
+
+        private sealed class ReplayIdentityWork
+        {
+            private int _state = ReplayIdentityQueued;
+            internal string Result = string.Empty;
+            internal Exception? Error;
+            internal readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
+
+            internal bool TryBegin()
+            {
+                return Interlocked.CompareExchange(ref _state, ReplayIdentityRunning, ReplayIdentityQueued) == ReplayIdentityQueued;
+            }
+
+            internal bool CancelBeforeStart()
+            {
+                return Interlocked.CompareExchange(ref _state, ReplayIdentityCancelledBeforeStart, ReplayIdentityQueued) == ReplayIdentityQueued;
             }
         }
 
