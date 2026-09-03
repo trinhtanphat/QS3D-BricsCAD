@@ -48,6 +48,7 @@ namespace QS3D.BricsCAD.V25
                 var hasProject = ProjectContextCoordinator.TryGetReadOnly(document, out var project);
                 var candidate = new AuditLogWindow(document);
                 candidate.Closed += (_, __) => ReleaseCandidate(candidate);
+                _unpublishedCandidate = candidate;
                 try
                 {
                     Application.ShowModelessWindow(IntPtr.Zero, candidate, true);
@@ -83,6 +84,8 @@ namespace QS3D.BricsCAD.V25
                 {
                     _window = candidate;
                     _nativeDatabaseIdentity = nativeDatabaseIdentity;
+                    if (ReferenceEquals(_unpublishedCandidate, candidate))
+                        _unpublishedCandidate = null;
                 }
 
                 var status = hasProject
