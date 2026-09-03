@@ -12,7 +12,7 @@ NATIVE = ROOT / "src/QS3D.BricsCAD.V25/UI/DocumentBoundNativeLifecycleCoordinato
 RUNBOOK = ROOT / "docs/CURTAIN-NATIVE-PANELS.md"
 errors = []
 
-for path in (COMMAND, RUNNER, HELPER, WINDOW, LIFETIME, NATIVE, RUNBOOK):
+for path in (COMMAND, RUNNER, HELER, WINDOW, LIFETIME, NATIVE, RUNBOOK):
     if not path.is_file():
         errors.append("missing Curtain P12 probe surface: " + str(path.relative_to(ROOT)))
 
@@ -154,7 +154,7 @@ if LIFETIME.is_file():
     text = LIFETIME.read_text(encoding="utf-8")
     for token in (
         '_nativeLifecycleSubscription = DocumentBoundNativeLifecycleCoordinator.Register(',
-        'if (!MatchesNativeDatabase(e.Document)) return;',
+        'The shared coordinator has already matched this registration',
         '_window.Close();',
     ):
         if token not in text:
@@ -173,6 +173,8 @@ if NATIVE.is_file():
         'lifecycleDocument.BeginDocumentClose += OnBeginDocumentClose;',
         'lifecycleDocument.CloseAborted += OnDocumentCloseAborted;',
         'new WeakReference<Callbacks>(callbacks)',
+        'TrySnapshotDestroyByLifecycleDocument',
+        'TrySnapshotDestroyByNativeIdentity',
         'if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;',
     ):
         if token not in text:
