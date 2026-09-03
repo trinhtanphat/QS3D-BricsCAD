@@ -1041,7 +1041,7 @@ namespace QS3D.BricsCAD.V25
 
         private static bool LooksLikeJsonValue(string value)
         {
-            if (string.IsNullOrWhiteSpace(jsonValue)) return false;
+            if (string.IsNullOrWhiteSpace(value)) return false;
             var trimmed = value.Trim();
             if (trimmed.Length < 2) return false;
             var first = trimmed[0];
