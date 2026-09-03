@@ -50,9 +50,34 @@ def main():
         source = palette if token.startswith("new PaletteSet") or token.startswith("_palette") else activation
         require(source, token, "Project Information hosting/activation")
 
-    require(panel, '(Chưa xây dựng — Thông tin dự án)', "Project Information placeholder")
     forbid(panel, "Thuộc tính dự án", "Project Information surface separation")
     forbid(palette, "ShowProperties", "Project Information palette separation")
+
+    # Transitional hosting contract: protected main may still carry the historical placeholder while
+    # the canonical feature carrier is in flight. Once the placeholder is removed, the surface must
+    # use the canonical read-only lookup. The feature-specific guard merged with that carrier then
+    # locks the completed surface and forbids the placeholder permanently.
+    legacy_placeholder = "(Chưa xây dựng — Thông tin dự án)"
+    if legacy_placeholder in panel:
+        forbid(panel, "ProjectState", "Project Information legacy placeholder must not retain project state")
+        forbid(panel, "ProjectContextCoordinator", "Project Information legacy placeholder must not resolve project state")
+    else:
+        require(panel, "RefreshFromDocument(Document? document)", "Project Information completed surface")
+        require(
+            panel,
+            "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+            "Project Information completed surface read-only lookup",
+        )
+
+    for token in (
+        "ProjectContextCoordinator.GetOrCreate(",
+        "ProjectContextCoordinator.Save(",
+        "ExistingProjectMutationContext",
+        "Touch()",
+        "SetMetadata",
+        "RegenerationEngine",
+    ):
+        forbid(panel, token, "Project Information panel must remain read-only")
 
     require(ribbon, 'internal const string ProjectTabGroupId = TabId;', "Project tab identity")
     require(activation, "ProjectRibbonAugmenter.ProjectTabGroupId", "Project tab activation")
@@ -65,7 +90,7 @@ def main():
     require(ribbon, "ProjectTabActivationCoordinator.Stop();", "Project Information activation lifecycle")
     require(ribbon, "ProjectSetupPaletteCoordinator.Dispose();", "Project Information palette lifecycle")
 
-    for source_name, source in (("panel", panel), ("palette", palette), ("activation", activation)):
+    for source_name, source in (("palette", palette), ("activation", activation)):
         for token in (
             "ProjectState",
             "ProjectContextCoordinator",
