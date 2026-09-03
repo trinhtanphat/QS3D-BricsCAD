@@ -23,21 +23,127 @@ LOCAL_RUN_DECLARATION_PATTERN = re.compile(
 SYNTHETIC_SCALE_SMOKES = 2048
 
 
+def _blank_non_newline(chars, start, end):
+    for index in range(start, end):
+        if chars[index] not in ("\r", "\n"):
+            chars[index] = " "
+
+
+def mask_csharp_non_code(text):
+    """Mask comments and literals while preserving source length and line breaks."""
+    chars = list(text)
+    length = len(text)
+    index = 0
+
+    while index < length:
+        if text.startswith("//", index):
+            end = text.find("\n", index + 2)
+            if end < 0:
+                end = length
+            _blank_non_newline(chars, index, end)
+            index = end
+            continue
+
+        if text.startswith("/*", index):
+            end_marker = text.find("*/", index + 2)
+            end = length if end_marker < 0 else end_marker + 2
+            _blank_non_newline(chars, index, end)
+            index = end
+            continue
+
+        raw_prefix_end = index
+        while raw_prefix_end < length and text[raw_prefix_end] == "$":
+            raw_prefix_end += 1
+        quote_count = 0
+        while raw_prefix_end + quote_count < length and text[raw_prefix_end + quote_count] == '"':
+            quote_count += 1
+        if quote_count >= 3:
+            delimiter = '"' * quote_count
+            end_marker = text.find(delimiter, raw_prefix_end + quote_count)
+            end = length if end_marker < 0 else end_marker + quote_count
+            _blank_non_newline(chars, index, end)
+            index = end
+            continue
+
+        verbatim_prefix_length = 0
+        if text.startswith('$@"', index) or text.startswith('@$"', index):
+            verbatim_prefix_length = 3
+        elif text.startswith('@"', index):
+            verbatim_prefix_length = 2
+        if verbatim_prefix_length:
+            cursor = index + verbatim_prefix_length
+            while cursor < length:
+                if text[cursor] == '"':
+                    if cursor + 1 < length and text[cursor + 1] == '"':
+                        cursor += 2
+                        continue
+                    cursor += 1
+                    break
+                cursor += 1
+            _blank_non_newline(chars, index, cursor)
+            index = cursor
+            continue
+
+        string_prefix_length = 0
+        if text.startswith('$"', index):
+            string_prefix_length = 2
+        elif text[index] == '"':
+            string_prefix_length = 1
+        if string_prefix_length:
+            cursor = index + string_prefix_length
+            escaped = False
+            while cursor < length:
+                char = text[cursor]
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    cursor += 1
+                    break
+                cursor += 1
+            _blank_non_newline(chars, index, cursor)
+            index = cursor
+            continue
+
+        if text[index] == "'":
+            cursor = index + 1
+            escaped = False
+            while cursor < length:
+                char = text[cursor]
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == "'":
+                    cursor += 1
+                    break
+                cursor += 1
+            _blank_non_newline(chars, index, cursor)
+            index = cursor
+            continue
+
+        index += 1
+
+    return "".join(chars)
+
+
 def build_run_reference_index(sources):
-    """Index ClassName.Run(...) call sites with one scan of each source file."""
+    """Index executable ClassName.Run(...) call sites with one scan of each source file."""
     references = {}
     source_scans = 0
     for path, text in sources.items():
         source_scans += 1
-        for match in RUN_CALL_PATTERN.finditer(text):
+        code = mask_csharp_non_code(text)
+        for match in RUN_CALL_PATTERN.finditer(code):
             references.setdefault(match.group(1), set()).add(path)
     return references, source_scans
 
 
-def find_matching_brace(text, opening_index):
+def find_matching_brace(code, opening_index):
     depth = 0
-    for index in range(opening_index, len(text)):
-        char = text[index]
+    for index in range(opening_index, len(code)):
+        char = code[index]
         if char == "{":
             depth += 1
         elif char == "}":
@@ -53,17 +159,17 @@ def body_invokes_smoke_run(body, qualified_run):
     return UNQUALIFIED_RUN_CALL_PATTERN.search(body) is not None and LOCAL_RUN_DECLARATION_PATTERN.search(body) is None
 
 
-def has_module_initializer_run_call(text, class_name):
+def has_module_initializer_run_call(code, class_name):
     qualified_run = re.compile(r"\b" + re.escape(class_name) + r"\s*\.\s*Run\s*\(")
-    for match in MODULE_INITIALIZER_BLOCK_PATTERN.finditer(text):
+    for match in MODULE_INITIALIZER_BLOCK_PATTERN.finditer(code):
         opening_index = match.end() - 1
-        closing_index = find_matching_brace(text, opening_index)
+        closing_index = find_matching_brace(code, opening_index)
         if closing_index is None:
             continue
-        body = text[opening_index + 1 : closing_index]
+        body = code[opening_index + 1 : closing_index]
         if body_invokes_smoke_run(body, qualified_run):
             return True
-    for match in MODULE_INITIALIZER_EXPRESSION_PATTERN.finditer(text):
+    for match in MODULE_INITIALIZER_EXPRESSION_PATTERN.finditer(code):
         if body_invokes_smoke_run(match.group(1), qualified_run):
             return True
     return False
@@ -77,19 +183,20 @@ def find_registration_errors(sources):
     for path, text in sorted(sources.items(), key=lambda item: (item[0].name.casefold(), item[0].name)):
         if not path.name.endswith("Smoke.cs"):
             continue
-        if not RUN_PATTERN.search(text):
+        code = mask_csharp_non_code(text)
+        if not RUN_PATTERN.search(code):
             continue
-        match = CLASS_PATTERN.search(text)
+        match = CLASS_PATTERN.search(code)
         if not match:
             errors.append(path.name + ": Run() exists but no smoke class could be identified")
             continue
         class_name = match.group(1)
         checked += 1
 
-        # A self-registration exemption is valid only when a ModuleInitializer
-        # method in this source actually invokes the smoke Run() method. An
-        # unqualified call is not accepted when a local Run declaration shadows it.
-        if has_module_initializer_run_call(text, class_name):
+        # A self-registration exemption is valid only when executable code in a
+        # ModuleInitializer invokes the smoke Run() method. Comments/literals do
+        # not count, and a local Run declaration shadows an unqualified call.
+        if has_module_initializer_run_call(code, class_name):
             continue
         registration_paths = references.get(class_name, ())
         if not any(other_path != path for other_path in registration_paths):
