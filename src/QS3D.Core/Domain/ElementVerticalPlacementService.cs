@@ -83,18 +83,29 @@ namespace QS3D.Core.Domain
             if (host == null) throw new ArgumentNullException(nameof(host));
             if (opening == null) throw new ArgumentNullException(nameof(opening));
 
-            var hostPlacement = Resolve(
+            IReadOnlyDictionary<string, double> floorGeneration = null;
+            if (LevelReferenceProperty(host, ProjectFloorService.BottomLevelIdKey).Length > 0)
+                floorGeneration = CaptureFloorGeneration(project);
+
+            var hostPlacement = ResolveCore(
                 project,
                 host,
                 hostSourceBaseElevationM,
                 hostLegacyHeightM,
-                hostLegacyBottomOffsetM);
-            return ResolveHostedOpening(
+                hostLegacyBottomOffsetM,
+                floorGeneration);
+
+            if (floorGeneration == null &&
+                LevelReferenceProperty(opening, ProjectFloorService.BottomLevelIdKey).Length > 0)
+                floorGeneration = CaptureFloorGeneration(project);
+
+            return ResolveHostedOpeningCore(
                 project,
                 hostPlacement,
                 opening,
                 openingLegacyHeightM,
-                openingLegacySillM);
+                openingLegacySillM,
+                floorGeneration);
         }
 
         public static HostedOpeningVerticalPlacement ResolveHostedOpening(
@@ -108,12 +119,30 @@ namespace QS3D.Core.Domain
             if (hostPlacement == null) throw new ArgumentNullException(nameof(hostPlacement));
             if (opening == null) throw new ArgumentNullException(nameof(opening));
 
-            var openingPlacement = Resolve(
+            return ResolveHostedOpeningCore(
+                project,
+                hostPlacement,
+                opening,
+                openingLegacyHeightM,
+                openingLegacySillM,
+                null);
+        }
+
+        private static HostedOpeningVerticalPlacement ResolveHostedOpeningCore(
+            ProjectState project,
+            ElementVerticalPlacement hostPlacement,
+            ProjectElement opening,
+            double openingLegacyHeightM,
+            double openingLegacySillM,
+            IReadOnlyDictionary<string, double> floorGeneration)
+        {
+            var openingPlacement = ResolveCore(
                 project,
                 opening,
                 hostPlacement.BottomElevationM,
                 openingLegacyHeightM,
-                openingLegacySillM);
+                openingLegacySillM,
+                floorGeneration);
             var relativeSillM = Add(
                 openingPlacement.BottomElevationM,
                 -hostPlacement.BottomElevationM,
@@ -142,6 +171,23 @@ namespace QS3D.Core.Domain
             double legacyHeightM,
             double legacyBottomOffsetM)
         {
+            return ResolveCore(
+                project,
+                element,
+                sourceBaseElevationM,
+                legacyHeightM,
+                legacyBottomOffsetM,
+                null);
+        }
+
+        private static ElementVerticalPlacement ResolveCore(
+            ProjectState project,
+            ProjectElement element,
+            double sourceBaseElevationM,
+            double legacyHeightM,
+            double legacyBottomOffsetM,
+            IReadOnlyDictionary<string, double> floorGeneration)
+        {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (element == null) throw new ArgumentNullException(nameof(element));
 
@@ -161,8 +207,8 @@ namespace QS3D.Core.Domain
                 return new ElementVerticalPlacement(false, false, bottom, top);
             }
 
-            var floorGeneration = CaptureFloorGeneration(project);
-            var bottomLevelElevation = FindCapturedFloor(floorGeneration, bottomLevelId, element.Id + "/BottomLevelId");
+            var effectiveFloorGeneration = floorGeneration ?? CaptureFloorGeneration(project);
+            var bottomLevelElevation = FindCapturedFloor(effectiveFloorGeneration, bottomLevelId, element.Id + "/BottomLevelId");
             var bottomOffset = OptionalFiniteProperty(element, ProjectFloorService.BottomLevelOffsetKey, 0d);
             var bottomElevation = Add(bottomLevelElevation, bottomOffset, element.Id + "/bottom level elevation");
 
@@ -175,7 +221,7 @@ namespace QS3D.Core.Domain
                 return new ElementVerticalPlacement(true, false, bottomElevation, top);
             }
 
-            var topLevelElevation = FindCapturedFloor(floorGeneration, topLevelId, element.Id + "/TopLevelId");
+            var topLevelElevation = FindCapturedFloor(effectiveFloorGeneration, topLevelId, element.Id + "/TopLevelId");
             var topOffset = OptionalFiniteProperty(element, ProjectFloorService.TopLevelOffsetKey, 0d);
             var topElevation = Add(topLevelElevation, topOffset, element.Id + "/top level elevation");
             if (topElevation <= bottomElevation)
