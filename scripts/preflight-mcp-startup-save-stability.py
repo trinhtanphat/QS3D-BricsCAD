@@ -59,15 +59,17 @@ for forbidden in ("Editor.Regen(", ".UpdateScreen("):
         errors.append("view runtime must not force screen refresh: " + forbidden)
 
 # Current-document saves must be host-owned native QSAVE, not Database.Save/SaveAs against the
-# already-open active DWG path. Native QSAVE is queued in CAD context, awaited outside that
-# callback, retains the coordinator barrier on uncertain timeout, and verifies persistent DBMOD.
+# already-open active DWG path. Match the native attempt semantically so Python escape handling
+# cannot turn the C# command's literal backslash-n into a false-negative newline matcher.
 if not native_save:
     errors.append("missing McpNativeCurrentDocumentSave.cs")
 else:
     for token in (
         "SaveCurrentDocument",
         "McpCadMutationCoordinator.QueueNativeCommand",
-        'document.SendStringToExecute("_.QSAVE\\n", true, false, true)',
+        "document.SendStringToExecute(",
+        "_.QSAVE",
+        "true, false, true",
         "ManualResetEventSlim",
         "CommandEnded",
         "CommandCancelled",
@@ -78,6 +80,8 @@ else:
         "Do not retry automatically",
     ):
         require(native_save, token, "McpNativeCurrentDocumentSave")
+    if native_save.count("document.SendStringToExecute(") != 1:
+        errors.append("native current-document save helper must queue exactly one native command attempt")
     for forbidden in ("Database.Save();", "Database.SaveAs("):
         if forbidden in native_save:
             errors.append("native current-document save helper must not call " + forbidden)
@@ -94,8 +98,8 @@ if not save_body:
 elif "document.Database.Save();" in save_body or "document.Database.SaveAs(" in save_body:
     errors.append("cad_save still writes the active DWG through Database.Save/SaveAs")
 
-# cad_command_sequence already canonically delegates QSAVE into McpCadDirectModelRuntime. Keep
-# that route and make it call the same two-phase Save() before the generic CAD-context callback.
+# cad_command_sequence canonically delegates QSAVE into McpCadDirectModelRuntime. Keep that route
+# and make it call the same two-phase Save() before the generic CAD-context callback.
 require(agent, "McpCadDirectModelRuntime.CanHandleCadCommandSequence(args)", "McpCadAgentRuntime")
 require(direct, 'string.Equals(command, "QSAVE", StringComparison.Ordinal)', "McpCadDirectModelRuntime.CanHandleCadCommandSequence")
 require(direct, 'if (string.Equals(command, "QSAVE", StringComparison.Ordinal)) return SaveCadCommandSequence();', "McpCadDirectModelRuntime.CallCadCommandSequence")
