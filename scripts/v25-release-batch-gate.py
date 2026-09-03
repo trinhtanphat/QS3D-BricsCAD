@@ -21,6 +21,7 @@ RELEASE_RELEVANT_PREFIXES = (
 )
 RELEASE_RELEVANT_EXACT_PATHS = {
     "external/QS3D-Platform",
+    ".gitmodules",
     "Directory.Build.props",
     "QS3D.sln",
     "QS3D.V26.sln",
