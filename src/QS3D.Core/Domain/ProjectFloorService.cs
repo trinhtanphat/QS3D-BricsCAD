@@ -182,7 +182,7 @@ namespace QS3D.Core.Domain
             project.Touch();
             foreach (var element in changed)
             {
-                element.Properties[TopLevelIdKey] = floor.Id;
+                element.Properties[TopLevelIdKey] = top.Id;
                 if (!element.Properties.ContainsKey(TopLevelOffsetKey)) element.Properties[TopLevelOffsetKey] = "0";
                 MarkVerticalPlacementChanged(project, element);
             }
