@@ -76,6 +76,37 @@ for forbidden in (
 for token in ("StartTime", "MainModule", "Path.GetFullPath"):
     require(supervisor, token, "owned-process identity")
 
+# Fresh child registration must not synchronously query Process.MainModule. On the BricsCAD/.NET
+# runtime that accessor can fail transiently immediately after Process.Start(), which turns a
+# successfully launched tunnel into an ownership-persistence failure. Registration already has the
+# exact trust-verified executable path used to spawn the child; persist that expected path, then keep
+# MainModule + start-time revalidation on the later stale-cleanup boundary before any Kill().
+register_owned = re.search(
+    r"internal static bool RegisterOwnedProcess\(.*?\)\s*\{(?P<body>.*?)\n        \}\n\n        internal static bool TryCleanupStaleOwnedProcess",
+    supervisor,
+    re.DOTALL,
+)
+if not register_owned:
+    errors.append("owned-process registration: cannot locate RegisterOwnedProcess body")
+else:
+    register_body = register_owned.group("body")
+    forbid(register_body, "MainModule", "fresh owned-process registration")
+    require(register_body, "NormalizePath(expectedExecutable)", "fresh owned-process registration")
+    require(register_body, "Executable = expected", "fresh owned-process registration")
+
+cleanup_owned = re.search(
+    r"internal static bool TryCleanupStaleOwnedProcess\(.*?\)\s*\{(?P<body>.*?)\n        \}\n\n        internal static void ClearOwnedProcess",
+    supervisor,
+    re.DOTALL,
+)
+if not cleanup_owned:
+    errors.append("owned-process cleanup: cannot locate TryCleanupStaleOwnedProcess body")
+else:
+    cleanup_body = cleanup_owned.group("body")
+    require(cleanup_body, "process.StartTime", "stale owned-process cleanup")
+    require(cleanup_body, "process.MainModule", "stale owned-process cleanup")
+    require(cleanup_body, "process.Kill()", "stale owned-process cleanup")
+
 # StopProvider must not erase a crash-surviving sidecar unconditionally. The sidecar is the proof used
 # on the next start to identify and safely terminate only a QS3D-owned orphan process.
 stop_provider = re.search(
