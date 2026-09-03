@@ -20,8 +20,8 @@ Unknown-count streaming inputs remain single-pass and are never replayed.
 
 ## Deterministic evidence
 
-`tests/QS3D.Core.SmokeTests/TbqWorkspaceGenerationStabilitySmoke.cs` covers same-count replacement, every bill semantic field, reordering, build-up code/rate drift, stable exactly-two-traversal counted sources, streaming exactly-one-traversal sources, and unchanged commercial totals.
+`scripts/preflight-tbq-workspace-generation-stability.py` is auto-discovered by shared CI. It locks replay-before-publication, authoritative-count-only invocation, ordered semantic equality for every published bill/build-up field, and Count fences around replay traversal observations.
 
-`scripts/preflight-tbq-workspace-generation-stability.py` is auto-discovered by shared CI and locks replay-before-publication, authoritative-count-only invocation, semantic identity fields, and Count checks around replay traversal observations.
+An initial dedicated Core smoke was intentionally removed after Reservation v2 proved that its path was inside the earlier active C01 reservation #5550 for the entire `tests/QS3D.Core.SmokeTests/` prefix. C02 does not override or rename around that ownership boundary. Hosted `core` still exercises the existing repository smoke suite against the changed production source, while the carrier-owned focused preflight provides the deterministic regression contract for this specific generation-stability behavior.
 
 Acceptance requires fresh exact-head shared/protected `preflight` and `core` success on the current PR candidate, latest-main reconciliation under repository policy, protected merge, and exact-main verification.
