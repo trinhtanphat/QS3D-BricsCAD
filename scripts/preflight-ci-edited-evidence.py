@@ -43,9 +43,10 @@ def prior_green_exists(runs: Iterable[dict], expected_sha: str, current_run_id: 
 def workflow_contract_errors(text: str) -> list[str]:
     required_needles = {
         "pull_request edited trigger": "      - edited\n",
-        "edited-safe concurrency cancellation": (
-            "cancel-in-progress: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' }}"
+        "edited-isolated concurrency group": (
+            "${{ github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata' || 'code' }}"
         ),
+        "bounded cancellation inside each concurrency class": "cancel-in-progress: true",
         "prior exact-head evidence step": "name: Check prior exact-head GREEN for PR metadata edit",
         "evidence step id": "id: edited_evidence",
         "runtime evidence verifier": "python scripts/preflight-ci-edited-evidence.py --verify-runtime",
