@@ -51,11 +51,14 @@ namespace QS3D.BricsCAD.V25
 
         internal static bool IsTool(string? tool)
         {
-            return Tools.Contains(tool ?? string.Empty) || McpCadViewStatusRuntime.IsTool(tool);
+            return Tools.Contains(tool ?? string.Empty)
+                   || McpCadLayerStateRuntime.IsTool(tool)
+                   || McpCadViewStatusRuntime.IsTool(tool);
         }
 
         internal static bool RequiresMutation(string? tool)
         {
+            if (McpCadLayerStateRuntime.IsTool(tool)) return McpCadLayerStateRuntime.RequiresMutation(tool);
             if (McpCadViewStatusRuntime.IsTool(tool)) return McpCadViewStatusRuntime.RequiresMutation(tool);
             return Tools.Contains(tool ?? string.Empty);
         }
@@ -97,6 +100,7 @@ namespace QS3D.BricsCAD.V25
                 "Safely save the active drawing to an absolute writable .dwg path after overwrite and protected-directory checks.",
                 "\"path\":{\"type\":\"string\",\"maxLength\":1024},\"overwrite\":{\"type\":\"boolean\"}," + ConfirmProperty(),
                 "\"path\",\"confirmMutation\"");
+            foreach (var descriptor in McpCadLayerStateRuntime.ToolDescriptors()) yield return descriptor;
             foreach (var descriptor in McpCadViewStatusRuntime.ToolDescriptors()) yield return descriptor;
         }
 
@@ -104,6 +108,20 @@ namespace QS3D.BricsCAD.V25
         {
             if (!IsTool(tool)) throw new InvalidOperationException("Unknown direct MCP CAD model tool: " + tool);
             var body = string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments;
+            if (McpCadLayerStateRuntime.IsTool(tool))
+            {
+                var mutation = McpCadLayerStateRuntime.RequiresMutation(tool);
+                if (mutation)
+                {
+                    RequireConfirmedMutation(body, tool);
+                    EnsureAutomationRunning();
+                }
+                return McpDiagnosticHub.InvokeInCadContext(() =>
+                {
+                    if (mutation) EnsureAutomationRunning();
+                    return McpCadLayerStateRuntime.CallInCadContext(tool, body);
+                });
+            }
             if (McpCadViewStatusRuntime.IsTool(tool))
             {
                 var mutation = McpCadViewStatusRuntime.RequiresMutation(tool);
