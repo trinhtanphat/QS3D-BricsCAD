@@ -58,9 +58,9 @@ namespace QS3D.BricsCAD.V25
             {
                 RunCore(document, category, label, expectedProjectId, expectedFamilyId);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Report(document, label + " lỗi: " + ex.Message);
+                Report(document, label + ": không thể hoàn tất thao tác. Vui lòng thử lại.");
             }
         }
 
@@ -265,7 +265,7 @@ namespace QS3D.BricsCAD.V25
             if (deferredSegmentError != null)
                 Report(
                     document,
-                    label + " dừng sau " + accepted + " segment đã commit: " + deferredSegmentError.Message);
+                    label + " dừng sau " + accepted + " segment đã commit; các segment đã commit vẫn được giữ. Vui lòng thử segment tiếp theo bằng lệnh mới.");
         }
 
         private static RepeatedWholeCommandRollbackException RollbackWholeCommand(
