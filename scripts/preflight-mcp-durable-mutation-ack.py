@@ -6,6 +6,7 @@ V25 = ROOT / "src" / "QS3D.BricsCAD.V25"
 LEDGER = V25 / "McpMutationAckLedger.cs"
 AGENT = V25 / "McpCadAgentRuntime.cs"
 COORD = V25 / "McpCadMutationCoordinator.cs"
+SERVER = V25 / "McpEmbeddedServerV2.cs"
 
 
 def read(path: Path) -> str:
@@ -16,6 +17,7 @@ def main() -> int:
     ledger = read(LEDGER)
     agent = read(AGENT)
     coord = read(COORD)
+    server = read(SERVER)
     errors = []
 
     if not LEDGER.exists():
@@ -49,6 +51,11 @@ def main() -> int:
             if excluded not in ledger:
                 errors.append(f"semantic fingerprint exclusion missing: {excluded}")
 
+        if "Guid.Empty" not in ledger or "fingerprintGuid == Guid.Empty" not in ledger:
+            errors.append("durable promotion must require a non-empty persisted database fingerprint GUID")
+        if "fingerprint.Length == 0 && path.Length == 0" in ledger:
+            errors.append("drawing path must not substitute for a stable persisted database fingerprint")
+
     if 'case "cad_mutation_status"' not in agent:
         errors.append("cad_mutation_status must route read-only in McpCadAgentRuntime")
     if "McpMutationAckLedger.ReserveOrReplay" not in agent:
@@ -75,13 +82,34 @@ def main() -> int:
     if "MarkNativeCommandTerminal(completed" not in coord:
         errors.append("matching native terminal path must carry the completed pending command")
 
+    if not SERVER.exists():
+        errors.append("missing McpEmbeddedServerV2.cs")
+    else:
+        if 'Tool("cad_mutation_status"' not in server:
+            errors.append("tools/list must publish cad_mutation_status")
+        if 'case "cad_mutation_status":' not in server:
+            errors.append("cad_mutation_status must be annotated read-only in the public MCP schema")
+        for token in (
+            "ActionIdProperty()",
+            "SupportsMutationActionId",
+            "MergeToolProperties(name, properties)",
+        ):
+            if token not in server:
+                errors.append(f"public retry schema hardening missing: {token}")
+        with_mode = server.find("private static string WithExecutionModeProperties")
+        annotations = server.find("private static string WithToolAnnotations")
+        if with_mode >= 0 and annotations > with_mode:
+            body = server[with_mode:annotations]
+            if "ActionIdProperty()" not in body or "SupportsMutationActionId" not in body:
+                errors.append("descriptor schemas must inject optional bounded actionId for mutation-capable runtime tools")
+
     if errors:
         print("FAIL: MCP durable mutation acknowledgement guard")
         for error in errors:
             print(" -", error)
         return 1
 
-    print("PASS: durable mutation ACK identity, replay, terminal native success and save-backed durability contracts are present.")
+    print("PASS: durable mutation ACK retry schema, stable fingerprint, replay, terminal native success and save-backed durability contracts are present.")
     return 0
 
 
