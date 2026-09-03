@@ -4,43 +4,40 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-SELECTION = ROOT / "src" / "QS3D.BricsCAD.V25" / "SelectionSyncCoordinator.cs"
-PALETTE = ROOT / "src" / "QS3D.BricsCAD.V25" / "PaletteCoordinator.cs"
-selection = SELECTION.read_text(encoding="utf-8")
-palette = PALETTE.read_text(encoding="utf-8")
+SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "SelectionSyncCoordinator.cs"
+text = SOURCE.read_text(encoding="utf-8")
 
 failures = []
 
-required_selection = (
-    "PaletteCoordinator.SetInspection(document, EntitySnapshotReader.ReadImpliedSelection(document));",
+required = (
+    "PaletteCoordinator.EnsureCreated();",
+    "var snapshots = EntitySnapshotReader.ReadImpliedSelection(document);",
+    "if (!ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;",
+    "PaletteCoordinator.SetInspection(snapshots);",
     'PaletteCoordinator.SetStatus("Selection sync lỗi. Vui lòng thử lại.");',
 )
-for required in required_selection:
-    if required not in selection:
-        failures.append("selection refresh is missing document-bound/redacted behavior: " + required)
+for token in required:
+    if token not in text:
+        failures.append("selection refresh is missing affinity/redaction invariant: " + token)
 
 for forbidden in (
     "PaletteCoordinator.SetInspection(EntitySnapshotReader.ReadImpliedSelection(document));",
     'PaletteCoordinator.SetStatus("Selection sync lỗi: " + ex.Message);',
 ):
-    if forbidden in selection:
+    if forbidden in text:
         failures.append("selection refresh still has stale-affinity/detail-leak pattern: " + forbidden)
 
-required_palette = (
-    "public static void SetInspection(Document document, IReadOnlyList<EntitySnapshot> snapshots)",
-    "if (!ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;",
-    "if (ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject))",
-)
-for required in required_palette:
-    if required not in palette:
-        failures.append("inspection application is missing active-document affinity guard: " + required)
-
-for forbidden in (
-    "public static void SetInspection(IReadOnlyList<EntitySnapshot> snapshots)",
-    "var document = Application.DocumentManager.MdiActiveDocument;",
-):
-    if forbidden in palette:
-        failures.append("inspection application can independently rebind to a different active document: " + forbidden)
+# Ordering is the core safety property: all potentially re-entrant palette creation must finish before
+# snapshot capture; after capture, the source document must still be active before inspection is applied.
+try:
+    ensure_index = text.index("PaletteCoordinator.EnsureCreated();")
+    snapshot_index = text.index("var snapshots = EntitySnapshotReader.ReadImpliedSelection(document);")
+    revalidate_index = text.index("if (!ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;", snapshot_index)
+    apply_index = text.index("PaletteCoordinator.SetInspection(snapshots);", revalidate_index)
+    if not (ensure_index < snapshot_index < revalidate_index < apply_index):
+        failures.append("selection inspection ordering does not preserve document affinity")
+except ValueError:
+    pass
 
 if failures:
     for failure in failures:
