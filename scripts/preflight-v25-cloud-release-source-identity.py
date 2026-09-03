@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Fail closed when the cloud V25 release can package uncommitted or stale source.
+"""Fail closed when cloud V25 release/dispatch can package stale source.
 
 The published prerelease/tag names an immutable commit. Release preparation must
 therefore not rewrite ProductVersion inputs only in the runner worktree and then
-publish against the unchanged commit SHA. Drift admission must also be pathname-
-safe: release relevance is decided by Git pathspec matching, never by parsing
-line-oriented/quoted `git diff --name-only` output. The pinned Platform gitlink is
-part of release identity because the cloud workflow materializes and builds it.
+publish against the unchanged commit SHA. Release preparation and its automatic
+main dispatcher must classify drift with Git pathspec/exit-status semantics,
+never by decoding line-oriented path output. The pinned Platform gitlink is part
+of release identity because the cloud workflow materializes and builds it.
 """
 
 from __future__ import annotations
@@ -17,10 +17,21 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PREPARE = ROOT / "scripts" / "prepare-v25-cloud-release.ps1"
+DISPATCH = ROOT / ".github" / "workflows" / "dispatch-v25-cloud-after-main-integration.yml"
+
+
+def _line_parsed_diff(source: str) -> bool:
+    return bool(
+        re.search(
+            r"(?im)^(?!\s*#)[^\r\n]*git\s+diff\s+--name-only\b",
+            source,
+        )
+    )
 
 
 def main() -> int:
     source = PREPARE.read_text(encoding="utf-8")
+    dispatch = DISPATCH.read_text(encoding="utf-8")
     failures: list[str] = []
 
     workspace_sync = re.compile(
@@ -59,16 +70,18 @@ def main() -> int:
     # --name-only output can split or quote it; Trim()/prefix matching can then
     # misclassify a release-relevant commit as harmless. Admission must ask Git
     # directly whether owned pathspecs changed and branch on git-diff's exit code.
-    line_parsed_diff = re.compile(
-        r"(?im)^(?!\s*#)[^\r\n]*&\s*git\s+diff\s+--name-only\b"
-    )
-    if line_parsed_diff.search(source):
+    if _line_parsed_diff(source):
         failures.append(
-            "release-relevant main drift still parses line-oriented `git diff "
-            "--name-only`; hostile valid pathnames can bypass release admission"
+            "release preparation still parses line-oriented git diff --name-only; "
+            "hostile valid pathnames can bypass release admission"
+        )
+    if _line_parsed_diff(dispatch):
+        failures.append(
+            "main release dispatcher still parses line-oriented git diff --name-only; "
+            "hostile valid pathnames can bypass supersession admission"
         )
 
-    pathspec_tokens = (
+    prepare_pathspec_tokens = (
         "$releaseRelevantPathspecs",
         "'src/'",
         "'tests/'",
@@ -81,7 +94,7 @@ def main() -> int:
         "'.github/workflows/release-v25-cloud.yml'",
         "'.github/workflows/dispatch-v25-cloud-after-main-integration.yml'",
     )
-    missing_pathspecs = [token for token in pathspec_tokens if token not in source]
+    missing_pathspecs = [token for token in prepare_pathspec_tokens if token not in source]
     if missing_pathspecs:
         failures.append(
             "pathname-safe release drift admission is missing owned Git pathspecs: "
@@ -93,7 +106,7 @@ def main() -> int:
     )
     if not quiet_diff_pattern.search(source):
         failures.append(
-            "release drift admission must use Git's pathname-safe --quiet pathspec "
+            "release preparation must use Git's pathname-safe --quiet pathspec "
             "comparison instead of decoding diff path output in PowerShell"
         )
 
@@ -104,8 +117,24 @@ def main() -> int:
     )
     if not exit_code_pattern.search(source):
         failures.append(
-            "release drift admission does not distinguish git diff clean/drift/error "
+            "release preparation does not distinguish git diff clean/drift/error "
             "exit codes fail-closed"
+        )
+
+    dispatch_signals = (
+        '- "external/QS3D-Platform"',
+        "release_relevant_pathspecs=(",
+        "'external/QS3D-Platform'",
+        'git diff --quiet --no-ext-diff "${source_sha}..${current_main}" -- "${release_relevant_pathspecs[@]}"',
+        "release_drift_status=$?",
+        "release_drift_status == 1",
+        "release_drift_status != 0",
+    )
+    missing_dispatch = [token for token in dispatch_signals if token not in dispatch]
+    if missing_dispatch:
+        failures.append(
+            "automatic release dispatcher is missing pathname-safe/Platform drift "
+            "admission signals: " + ", ".join(missing_dispatch)
         )
 
     if failures:
@@ -114,8 +143,8 @@ def main() -> int:
         return 1
 
     print(
-        "PASS: V25 cloud preview release is bound to clean committed source identity "
-        "with pathname-safe main-drift and Platform-gitlink admission"
+        "PASS: V25 cloud preview release/dispatcher are bound to clean committed "
+        "source identity with pathname-safe and Platform-gitlink drift admission"
     )
     return 0
 
