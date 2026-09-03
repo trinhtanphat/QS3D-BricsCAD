@@ -60,7 +60,7 @@ namespace QS3D.Core.SmokeTests
             var source = new MisreportedReadOnlyCollection(reportedCount: 2, actualCount: 2);
             var book = new RateBook("BOOK-KNOWN-COUNT-EXACT", source);
 
-            Equal(2, source.YieldedCount, "Exact counted input must enumerate every declared item once.");
+            Equal(4, source.YieldedCount, "Exact counted input must enumerate every declared item once for admission and once for semantic replay.");
             Equal(2, book.Items.Count, "Exact known Count/traversal agreement must remain accepted.");
         }
 
@@ -110,7 +110,7 @@ namespace QS3D.Core.SmokeTests
             var source = new MultiInterfaceCollection(count: 2, finalNonGenericCount: 2);
             var book = new RateBook("BOOK-KNOWN-COUNT-MULTI-HONEST", source);
 
-            Equal(2, source.YieldedCount, "Honest multi-interface input must enumerate each item once.");
+            Equal(4, source.YieldedCount, "Honest multi-interface input must enumerate each item once for admission and once for semantic replay.");
             Equal(2, book.Items.Count, "Stable matching Count interfaces must remain accepted.");
         }
 
