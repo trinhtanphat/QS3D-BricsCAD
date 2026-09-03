@@ -55,7 +55,7 @@ if errors:
 
 mutations = {
     "write sharing restored": UPLOADER.replace("[IO.FileShare]::Read)", "[IO.FileShare]::ReadWrite)", 1),
-    "reparse rejection removed": UPLOADER.replace("[IO.FileAttributes]::ReparsePoint", "[IO.FileAttributes]::Hidden", 1),
+    "reparse rejection removed": UPLOADER.replace("[IO.FileAttributes]::ReparsePoint", "[IO.FileAttributes]::Hidden"),
     "held hash removed": UPLOADER.replace("$digest = $sha.ComputeHash($stream)", "$digest = [byte[]]::new(32)", 1),
     "upload leaves helper": UPLOADER.replace("& gh release upload $ReleaseTag ([string]$asset.Path) --repo $Repository", "Write-Host 'upload elsewhere'", 1),
 }
