@@ -28,4 +28,19 @@ if "ValidateFloorIdentityCollection(project);" in text:
 if "FindFloor(project," in text:
     fail("vertical placement still performs live ProjectState floor lookup after validation")
 
-print("PASS: vertical placement resolves levels from one fenced floor generation")
+# Hosted openings are one logical placement result.  The host and opening must
+# therefore resolve against the same detached floor generation instead of two
+# independent public Resolve calls that can straddle a project-floor mutation.
+hosted_start = text.index("public static HostedOpeningVerticalPlacement ResolveHostedOpening(\n            ProjectState project,\n            ProjectElement host,")
+hosted_end = text.index("public static HostedOpeningVerticalPlacement ResolveHostedOpening(\n            ProjectState project,\n            ElementVerticalPlacement hostPlacement,", hosted_start)
+hosted_block = text[hosted_start:hosted_end]
+if "var floorGeneration = CaptureFloorGeneration(project);" not in hosted_block:
+    fail("hosted opening resolution must capture one shared floor generation before resolving host/opening")
+if hosted_block.count("floorGeneration") < 3:
+    fail("hosted opening resolution must pass the shared floor generation to both host and opening resolution")
+if "ResolveCore(" not in text:
+    fail("vertical placement must expose an internal core path that can consume a caller-captured floor generation")
+if "floorGeneration ?? CaptureFloorGeneration(project)" not in text:
+    fail("single-element resolution must capture lazily while hosted resolution may supply its shared generation")
+
+print("PASS: vertical placement and hosted openings resolve levels from one fenced floor generation")
