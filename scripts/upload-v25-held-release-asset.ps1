@@ -24,6 +24,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Net.Http
 
 if ($ExpectedSha256 -notmatch '^[0-9A-Fa-f]{64}$') {
     throw "ExpectedSha256 must be exactly 64 hexadecimal characters for $Name."
