@@ -15,6 +15,7 @@ required = (
     "if (!ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;",
     "PaletteCoordinator.SetInspection(snapshots);",
     'PaletteCoordinator.SetStatus("Selection sync lỗi. Vui lòng thử lại.");',
+    "finally { Refreshing.Remove(document); }",
 )
 for token in required:
     if token not in text:
@@ -36,6 +37,11 @@ try:
     apply_index = text.index("PaletteCoordinator.SetInspection(snapshots);", revalidate_index)
     if not (ensure_index < snapshot_index < revalidate_index < apply_index):
         failures.append("selection inspection ordering does not preserve document affinity")
+
+    between_snapshot_and_apply = text[snapshot_index:apply_index]
+    for async_handoff in ("await ", "BeginInvoke", "InvokeAsync", "Task.Run"):
+        if async_handoff in between_snapshot_and_apply:
+            failures.append("selection inspection introduces an async/re-entrant handoff after snapshot capture: " + async_handoff)
 except ValueError:
     pass
 
