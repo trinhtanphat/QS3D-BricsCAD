@@ -5,6 +5,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOT = ROOT / "src/QS3D.Core/Persistence/ProjectStateSnapshot.cs"
 DOMAIN = ROOT / "src/QS3D.Core/Domain/ProjectState.cs"
+FAMILY_SERVICE = ROOT / "src/QS3D.Core/Domain/ProjectFamilyService.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/ProjectStateSnapshotFamilyRestoreAtomicitySmoke.cs"
 REGISTRATION = ROOT / "tests/QS3D.Core.SmokeTests/ProjectStateSnapshotFamilyRestoreAtomicitySmokeRegistration.cs"
 errors = []
@@ -19,6 +20,7 @@ def read(path):
 
 snapshot = read(SNAPSHOT)
 domain = read(DOMAIN)
+family_service = read(FAMILY_SERVICE)
 smoke = read(SMOKE)
 registration = read(REGISTRATION)
 
@@ -60,7 +62,16 @@ if "internal void ReplaceSnapshotState(Dictionary<string, string> replacement)" 
 # Restore must consume that exact materialization rather than validating the
 # source dictionary and then enumerating the mutable source a second time.
 for token in (
-    'var snapshotProperties = ProjectFamilyService.SnapshotProperties(source, "Snapshot", "snapshot materialization");',
+    "bool preserveNullValues = false",
+    "preserveNullValues && pair.Value == null ? null! : normalizedValue",
+):
+    if token not in family_service:
+        errors.append("ProjectFamilyService snapshot null-fidelity contract missing: " + token)
+
+for token in (
+    "var snapshotProperties = ProjectFamilyService.SnapshotProperties(",
+    '"snapshot materialization",',
+    "preserveNullValues: true);",
     "target.RestoreSnapshotState(source.Name, source.Category, snapshotProperties);",
 ):
     if token not in snapshot:
@@ -75,4 +86,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: ProjectStateSnapshot materializes family properties once, runs the regression through dedicated deterministic registration, and restores preserved family state without external callbacks or stale property-store identity.")
+print("PASS: ProjectStateSnapshot materializes family properties once with null backing fidelity, runs the regression through dedicated deterministic registration, and restores preserved family state without external callbacks or stale property-store identity.")
