@@ -8,9 +8,13 @@ TESTS = ROOT / "tests" / "QS3D.Core.SmokeTests"
 RUN_PATTERN = re.compile(r"\b(?:public|internal|private)?\s*static\s+void\s+Run\s*\(")
 CLASS_PATTERN = re.compile(r"\b(?:public|internal|private)?\s*(?:static\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)")
 RUN_CALL_PATTERN = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*Run\s*\(")
-MODULE_INITIALIZER_METHOD_PATTERN = re.compile(
+MODULE_INITIALIZER_BLOCK_PATTERN = re.compile(
     r"\[\s*(?:System\.Runtime\.CompilerServices\.)?ModuleInitializer(?:Attribute)?\s*\]"
     r"\s*(?:(?:public|internal|private)\s+)?static\s+void\s+[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)\s*\{"
+)
+MODULE_INITIALIZER_EXPRESSION_PATTERN = re.compile(
+    r"\[\s*(?:System\.Runtime\.CompilerServices\.)?ModuleInitializer(?:Attribute)?\s*\]"
+    r"\s*(?:(?:public|internal|private)\s+)?static\s+void\s+[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)\s*=>\s*([^;]*);"
 )
 UNQUALIFIED_RUN_CALL_PATTERN = re.compile(r"(?<![A-Za-z0-9_.])Run\s*\(")
 LOCAL_RUN_DECLARATION_PATTERN = re.compile(
@@ -43,17 +47,24 @@ def find_matching_brace(text, opening_index):
     return None
 
 
+def body_invokes_smoke_run(body, qualified_run):
+    if qualified_run.search(body):
+        return True
+    return UNQUALIFIED_RUN_CALL_PATTERN.search(body) is not None and LOCAL_RUN_DECLARATION_PATTERN.search(body) is None
+
+
 def has_module_initializer_run_call(text, class_name):
     qualified_run = re.compile(r"\b" + re.escape(class_name) + r"\s*\.\s*Run\s*\(")
-    for match in MODULE_INITIALIZER_METHOD_PATTERN.finditer(text):
+    for match in MODULE_INITIALIZER_BLOCK_PATTERN.finditer(text):
         opening_index = match.end() - 1
         closing_index = find_matching_brace(text, opening_index)
         if closing_index is None:
             continue
         body = text[opening_index + 1 : closing_index]
-        if qualified_run.search(body):
+        if body_invokes_smoke_run(body, qualified_run):
             return True
-        if UNQUALIFIED_RUN_CALL_PATTERN.search(body) and not LOCAL_RUN_DECLARATION_PATTERN.search(body):
+    for match in MODULE_INITIALIZER_EXPRESSION_PATTERN.finditer(text):
+        if body_invokes_smoke_run(match.group(1), qualified_run):
             return True
     return False
 
