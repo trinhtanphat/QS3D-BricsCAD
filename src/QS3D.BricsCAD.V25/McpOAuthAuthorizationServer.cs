@@ -460,13 +460,22 @@ namespace QS3D.BricsCAD.V25
             }
 
             var familyExpiry = UnixNow() + (long)RefreshTokenLifetime.TotalSeconds;
+            var successorGeneration = checked(refreshGeneration + 1);
+            var includeRefreshToken = HasOfflineAccess(grantedScope);
+            var successorResponse = IssueTokenPair(
+                clientId,
+                resource,
+                signingSecret,
+                grantedScope,
+                includeRefreshToken,
+                refreshFamilyId,
+                successorGeneration);
             var admission = TryAdvanceRefreshFamily(refreshFamilyId, refreshGeneration, familyExpiry);
             if (admission == RefreshFamilyAdmission.CapacityExceeded)
                 return OAuthError(503, "Service Unavailable", "temporarily_unavailable", "refresh token family capacity is exhausted");
             if (admission == RefreshFamilyAdmission.Replay)
                 return OAuthError(400, "Bad Request", "invalid_grant", "refresh token was already used");
-            var includeRefreshToken = HasOfflineAccess(grantedScope);
-            return IssueTokenPair(clientId, resource, signingSecret, grantedScope, includeRefreshToken, refreshFamilyId, checked(refreshGeneration + 1));
+            return successorResponse;
         }
 
         private static McpOAuthHttpResponse IssueTokenPair(
