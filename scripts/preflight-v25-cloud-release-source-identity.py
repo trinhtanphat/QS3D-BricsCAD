@@ -5,12 +5,14 @@ The published prerelease/tag names an immutable commit. Release preparation must
 therefore not rewrite ProductVersion inputs only in the runner worktree and then
 publish against the unchanged commit SHA. Release preparation, automatic main
 dispatch, batch counting, and policy documentation must classify the pinned
-Platform gitlink as part of release identity. Any batch path enumeration must be
-NUL-delimited so valid quoted/newline pathnames cannot evade classification.
+Platform dependency identity consistently. Batch path enumeration must preserve
+exact NUL-delimited pathnames instead of trimming or decoding quoted line output.
 """
 
 from __future__ import annotations
 
+import importlib.util
+import os
 import pathlib
 import re
 import subprocess
@@ -47,7 +49,7 @@ def _run_git(repo: pathlib.Path, *args: str, check: bool = True) -> subprocess.C
 
 
 def _assert_pathname_safe_git_primitive(failures: list[str]) -> None:
-    """Prove quoted line output bypasses prefix parsing while Git pathspec does not."""
+    """Prove quoted line output bypasses prefix parsing while NUL/pathspec output does not."""
 
     try:
         with tempfile.TemporaryDirectory(prefix="qs3d-release-path-") as temp:
@@ -104,6 +106,65 @@ def _assert_pathname_safe_git_primitive(failures: list[str]) -> None:
     except (OSError, subprocess.SubprocessError, UnicodeError) as exc:
         failures.append(
             "could not execute deterministic pathname-safe Git regression fixture: "
+            f"{type(exc).__name__}: {exc}"
+        )
+
+
+def _assert_batch_gate_preserves_exact_paths(failures: list[str]) -> None:
+    """Execute the real batch path decoder against hostile-but-valid pathnames."""
+
+    try:
+        spec = importlib.util.spec_from_file_location("qs3d_v25_release_batch_gate", BATCH_GATE)
+        if spec is None or spec.loader is None:
+            failures.append("could not load v25-release-batch-gate.py for deterministic pathname regression")
+            return
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        with tempfile.TemporaryDirectory(prefix="qs3d-release-batch-path-") as temp:
+            repo = pathlib.Path(temp)
+            _run_git(repo, "init", "-q")
+            _run_git(repo, "config", "user.name", "QS3D C05 preflight")
+            _run_git(repo, "config", "user.email", "c05-preflight@example.invalid")
+            _run_git(repo, "config", "core.quotePath", "true")
+            (repo / "README.md").write_text("base\n", encoding="utf-8")
+            _run_git(repo, "add", "--", "README.md")
+            _run_git(repo, "commit", "-q", "-m", "base")
+
+            misleading = repo / " src"
+            misleading.mkdir()
+            (misleading / "not-release.txt").write_text("noise\n", encoding="utf-8")
+            source_dir = repo / "src"
+            source_dir.mkdir()
+            (source_dir / "café.cs").write_text("// relevant\n", encoding="utf-8")
+            _run_git(repo, "add", "--all")
+            _run_git(repo, "commit", "-q", "-m", "mixed exact pathname fixture")
+            head = _run_git(repo, "rev-parse", "HEAD").stdout.strip()
+
+            previous_cwd = pathlib.Path.cwd()
+            try:
+                os.chdir(repo)
+                decoded = module.changed_paths_for_first_parent_commit(head)
+            finally:
+                os.chdir(previous_cwd)
+
+            if " src/not-release.txt" not in decoded:
+                failures.append(
+                    "batch gate trimmed the leading-space pathname instead of preserving exact NUL-delimited bytes"
+                )
+            if "src/not-release.txt" in decoded:
+                failures.append(
+                    "batch gate converted a non-release leading-space pathname into a release-relevant src/ path"
+                )
+            relevant = sorted(path for path in decoded if module.is_release_relevant(path))
+            if relevant != ["src/café.cs"]:
+                failures.append(
+                    "batch gate classified hostile exact pathnames incorrectly; expected only src/café.cs, got "
+                    + repr(relevant)
+                )
+    except (OSError, subprocess.SubprocessError, UnicodeError, RuntimeError) as exc:
+        failures.append(
+            "could not execute batch-gate exact-path regression fixture: "
             f"{type(exc).__name__}: {exc}"
         )
 
@@ -200,8 +261,10 @@ def main() -> int:
 
     dispatch_signals = (
         '- "external/QS3D-Platform"',
+        '- ".gitmodules"',
         "release_relevant_pathspecs=(",
         "'external/QS3D-Platform'",
+        "'.gitmodules'",
         'git diff --quiet --no-ext-diff "${source_sha}..${current_main}" -- "${release_relevant_pathspecs[@]}"',
         "release_drift_status=$?",
         "release_drift_status == 1",
@@ -210,12 +273,13 @@ def main() -> int:
     missing_dispatch = [token for token in dispatch_signals if token not in dispatch]
     if missing_dispatch:
         failures.append(
-            "automatic release dispatcher is missing pathname-safe/Platform drift "
+            "automatic release dispatcher is missing pathname-safe/dependency drift "
             "admission signals: " + ", ".join(missing_dispatch)
         )
 
     batch_signals = (
         '"external/QS3D-Platform"',
+        '".gitmodules"',
         "RELEASE_RELEVANT_EXACT_PATHS",
         '"--name-only", "-z"',
         '.split("\\0")',
@@ -227,12 +291,15 @@ def main() -> int:
             + ", ".join(missing_batch)
         )
 
-    if "`external/QS3D-Platform`" not in release_policy:
-        failures.append(
-            "release policy does not document the Platform gitlink as a release-relevant integration path"
-        )
+    for policy_token in ("`external/QS3D-Platform`", "`.gitmodules`"):
+        if policy_token not in release_policy:
+            failures.append(
+                "release policy does not document dependency identity path as release-relevant: "
+                + policy_token
+            )
 
     _assert_pathname_safe_git_primitive(failures)
+    _assert_batch_gate_preserves_exact_paths(failures)
 
     if failures:
         for failure in failures:
@@ -241,7 +308,7 @@ def main() -> int:
 
     print(
         "PASS: V25 cloud preview release/dispatcher/batch policy are bound to clean committed "
-        "source identity with pathname-safe and Platform-gitlink admission"
+        "source identity with exact pathname and dependency-identity admission"
     )
     return 0
 
