@@ -58,10 +58,9 @@ for forbidden in ("Editor.Regen(", ".UpdateScreen("):
     if forbidden in view:
         errors.append("view runtime must not force screen refresh: " + forbidden)
 
-# RED contract for the eCantOpenFile fix: current-document saves must be host-owned native QSAVE,
-# not Database.Save/SaveAs against the already-open active DWG path. The helper queues QSAVE in
-# CAD context, waits for a terminal event outside that callback, leaves the coordinator barrier
-# armed on uncertain timeout, and only reports success after persistent DBMOD is clean.
+# Current-document saves must be host-owned native QSAVE, not Database.Save/SaveAs against the
+# already-open active DWG path. Native QSAVE is queued in CAD context, awaited outside that
+# callback, retains the coordinator barrier on uncertain timeout, and verifies persistent DBMOD.
 if not native_save:
     errors.append("missing McpNativeCurrentDocumentSave.cs")
 else:
@@ -76,6 +75,7 @@ else:
         "document.IsReadOnly",
         'Application.GetSystemVariable("CMDACTIVE")',
         "DbmodPersistentContentMask",
+        "Do not retry automatically",
     ):
         require(native_save, token, "McpNativeCurrentDocumentSave")
     for forbidden in ("Database.Save();", "Database.SaveAs("):
@@ -83,7 +83,7 @@ else:
             errors.append("native current-document save helper must not call " + forbidden)
 
 # cad_save must leave the generic single CAD-context callback before invoking the two-phase helper;
-# otherwise waiting for QSAVE would block the application context that must execute QSAVE.
+# otherwise waiting for native QSAVE would block the application context that must execute it.
 require(direct, 'if (string.Equals(tool, "cad_save", StringComparison.Ordinal)) return Save();', "McpCadDirectModelRuntime.Call")
 require(direct, "McpNativeCurrentDocumentSave.SaveCurrentDocument", "McpCadDirectModelRuntime.Save")
 save_start = direct.find("private static string Save()")
@@ -94,17 +94,24 @@ if not save_body:
 elif "document.Database.Save();" in save_body or "document.Database.SaveAs(" in save_body:
     errors.append("cad_save still writes the active DWG through Database.Save/SaveAs")
 
-# Bounded cad_command_sequence QSAVE must use the same helper before entering InvokeCadMutation;
-# both public save routes therefore share one host-owned lifecycle and one completion contract.
-require(agent, 'if (command == "QSAVE") return SaveActiveDocument();', "McpCadAgentRuntime.RunCadCommandSequence")
-require(agent, "McpNativeCurrentDocumentSave.SaveCurrentDocument", "McpCadAgentRuntime.SaveActiveDocument")
-agent_save_start = agent.find("private static string SaveActiveDocument(")
-agent_save_end = agent.find("private static string CommandCatalogJson", agent_save_start)
-agent_save_body = agent[agent_save_start:agent_save_end] if agent_save_start >= 0 and agent_save_end > agent_save_start else ""
-if not agent_save_body:
-    errors.append("unable to isolate McpCadAgentRuntime.SaveActiveDocument")
-elif "document.Database.Save();" in agent_save_body or "document.Database.SaveAs(" in agent_save_body:
-    errors.append("bounded QSAVE still writes the active DWG through Database.Save/SaveAs")
+# cad_command_sequence already canonically delegates QSAVE into McpCadDirectModelRuntime. Keep
+# that route and make it call the same two-phase Save() before the generic CAD-context callback.
+require(agent, "McpCadDirectModelRuntime.CanHandleCadCommandSequence(args)", "McpCadAgentRuntime")
+require(direct, 'string.Equals(command, "QSAVE", StringComparison.Ordinal)', "McpCadDirectModelRuntime.CanHandleCadCommandSequence")
+require(direct, 'if (string.Equals(command, "QSAVE", StringComparison.Ordinal)) return SaveCadCommandSequence();', "McpCadDirectModelRuntime.CallCadCommandSequence")
+require(direct, "private static string SaveCadCommandSequence()", "McpCadDirectModelRuntime")
+command_save_start = direct.find("private static string SaveCadCommandSequence()")
+command_save_end = direct.find("private static string CreateBox", command_save_start)
+command_save_body = direct[command_save_start:command_save_end] if command_save_start >= 0 and command_save_end > command_save_start else ""
+if not command_save_body:
+    errors.append("unable to isolate direct bounded QSAVE wrapper")
+elif "Save();" not in command_save_body:
+    errors.append("bounded QSAVE wrapper must share the cad_save native lifecycle")
+
+# The old AgentRuntime private fallback must not be reachable for QSAVE while the direct route is
+# canonical. Its legacy Database.Save implementation is not accepted as evidence for save PASS.
+if 'if (command == "QSAVE") return SaveActiveDocument(document);' in agent and "McpCadDirectModelRuntime.CanHandleCadCommandSequence(args)" not in agent:
+    errors.append("QSAVE can bypass the canonical direct native-save route")
 
 # True SaveAs remains path-changing and separate; never emulate current-document save by SaveAs
 # over the currently open filename.
