@@ -28,12 +28,16 @@ def _pull_request_trigger_block(text: str) -> str | None:
     return "\n".join(lines)
 
 
-def _job_block(text: str, job_name: str, next_job_name: str) -> str | None:
+def _job_block(text: str, job_name: str, next_job_name: str | None = None) -> str | None:
     marker = f"  {job_name}:"
-    next_marker = f"  {next_job_name}:"
-    if text.count(marker) != 1 or text.count(next_marker) != 1:
+    if text.count(marker) != 1:
         return None
     _, tail = text.split(marker, 1)
+    if next_job_name is None:
+        return tail
+    next_marker = f"  {next_job_name}:"
+    if text.count(next_marker) != 1:
+        return None
     block, _ = tail.split(next_marker, 1)
     return block
 
@@ -48,6 +52,34 @@ def _step_block(job: str, marker: str) -> str | None:
             break
         lines.append(line)
     return "\n".join(lines)
+
+
+def _validate_exact_checkout(job: str, label: str) -> str | None:
+    checkout_marker = "- uses: actions/checkout@"
+    if job.count(checkout_marker) != 1:
+        return f"{label} job must contain exactly one checkout step"
+    checkout_step = _step_block(job, checkout_marker)
+    if checkout_step is None:
+        return f"could not parse {label} checkout step"
+    expected_ref = f"ref: {EXPECTED_HEAD_EXPRESSION}"
+    if expected_ref not in checkout_step:
+        return f"{label} checkout must pin pull_request runs to the exact PR head SHA and other runs to github.sha"
+    if "persist-credentials: false" not in checkout_step:
+        return f"{label} checkout must keep persisted GitHub credentials disabled"
+    return None
+
+
+def _validate_binding_step(job: str, marker: str, label: str) -> str | None:
+    binding_step = _step_block(job, marker)
+    if binding_step is None:
+        return f"{label} job must contain exactly one exact candidate SHA binding step"
+    if f"QS3D_EXPECTED_HEAD_SHA: {EXPECTED_HEAD_EXPRESSION}" not in binding_step:
+        return f"{label} exact candidate SHA binding must derive expected SHA from PR head or github.sha"
+    if "git rev-parse HEAD" not in binding_step:
+        return f"{label} exact candidate SHA binding must read the checked-out HEAD"
+    if not re.search(r"(?i)(throw|exit\s+1).*(head|sha|candidate)", binding_step):
+        return f"{label} exact candidate SHA binding must fail closed on a checkout mismatch"
+    return None
 
 
 def main() -> int:
@@ -88,35 +120,24 @@ def main() -> int:
         )
 
     preflight_job = _job_block(text, "preflight", "core")
-    if preflight_job is None:
-        return fail("shared CI must contain one preflight job before one core job")
+    core_job = _job_block(text, "core")
+    if preflight_job is None or core_job is None:
+        return fail("shared CI must contain one preflight job followed by one core job")
 
-    checkout_marker = "- uses: actions/checkout@"
-    if preflight_job.count(checkout_marker) != 1:
-        return fail("preflight job must contain exactly one checkout step")
-    checkout_step = _step_block(preflight_job, checkout_marker)
-    if checkout_step is None:
-        return fail("could not parse preflight checkout step")
+    for job, label in ((preflight_job, "preflight"), (core_job, "core")):
+        error = _validate_exact_checkout(job, label)
+        if error is not None:
+            return fail(error)
 
-    expected_ref = f"ref: {EXPECTED_HEAD_EXPRESSION}"
-    if expected_ref not in checkout_step:
-        return fail("preflight checkout must pin pull_request runs to the exact PR head SHA and other runs to github.sha")
-    if "persist-credentials: false" not in checkout_step:
-        return fail("preflight checkout must keep persisted GitHub credentials disabled")
-
-    binding_marker = "- name: Exact candidate SHA binding"
-    binding_step = _step_block(preflight_job, binding_marker)
-    if binding_step is None:
-        return fail("preflight job must contain exactly one exact candidate SHA binding step")
-    if f"QS3D_EXPECTED_HEAD_SHA: {EXPECTED_HEAD_EXPRESSION}" not in binding_step:
-        return fail("exact candidate SHA binding must derive the expected SHA from PR head or github.sha")
-    if "git rev-parse HEAD" not in binding_step:
-        return fail("exact candidate SHA binding must read the checked-out HEAD")
-    if not re.search(r"(?i)(throw|exit\s+1).*(head|sha|candidate)", binding_step):
-        return fail("exact candidate SHA binding must fail closed when the checkout does not match the expected candidate")
+    error = _validate_binding_step(preflight_job, "- name: Exact candidate SHA binding", "preflight")
+    if error is not None:
+        return fail(error)
+    error = _validate_binding_step(core_job, "- name: Exact candidate SHA binding (core)", "core")
+    if error is not None:
+        return fail(error)
 
     print(
-        "PASS: shared CI revalidates reservation state on PR edits and binds preflight execution to the exact candidate SHA."
+        "PASS: shared CI revalidates reservation state on PR edits and binds both preflight and core execution to the exact candidate SHA."
     )
     return 0
 
