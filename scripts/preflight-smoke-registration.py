@@ -8,18 +8,213 @@ TESTS = ROOT / "tests" / "QS3D.Core.SmokeTests"
 RUN_PATTERN = re.compile(r"\b(?:public|internal|private)?\s*static\s+void\s+Run\s*\(")
 CLASS_PATTERN = re.compile(r"\b(?:public|internal|private)?\s*(?:static\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)")
 RUN_CALL_PATTERN = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*Run\s*\(")
+MODULE_INITIALIZER_BLOCK_PATTERN = re.compile(
+    r"\[\s*(?:System\.Runtime\.CompilerServices\.)?ModuleInitializer(?:Attribute)?\s*\]"
+    r"\s*(?:(?:public|internal|private)\s+)?static\s+void\s+(?P<method>[A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)\s*\{"
+)
+MODULE_INITIALIZER_EXPRESSION_PATTERN = re.compile(
+    r"\[\s*(?:System\.Runtime\.CompilerServices\.)?ModuleInitializer(?:Attribute)?\s*\]"
+    r"\s*(?:(?:public|internal|private)\s+)?static\s+void\s+(?P<method>[A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)\s*=>\s*(?P<body>[^;]*);"
+)
+UNQUALIFIED_RUN_CALL_PATTERN = re.compile(r"(?<![A-Za-z0-9_.])Run\s*\(")
+LOCAL_RUN_DECLARATION_PATTERN = re.compile(
+    r"\b(?:[A-Za-z_][A-Za-z0-9_<>,.?\[\]]*\s+)+Run\s*\("
+)
 SYNTHETIC_SCALE_SMOKES = 2048
 
 
+def _blank_non_newline(chars, start, end):
+    for index in range(start, end):
+        if chars[index] not in ("\r", "\n"):
+            chars[index] = " "
+
+
+def mask_csharp_non_code(text):
+    """Mask comments and literals while preserving source length and line breaks."""
+    chars = list(text)
+    length = len(text)
+    index = 0
+
+    while index < length:
+        if text.startswith("//", index):
+            end = text.find("\n", index + 2)
+            if end < 0:
+                end = length
+            _blank_non_newline(chars, index, end)
+            index = end
+            continue
+
+        if text.startswith("/*", index):
+            end_marker = text.find("*/", index + 2)
+            end = length if end_marker < 0 else end_marker + 2
+            _blank_non_newline(chars, index, end)
+            index = end
+            continue
+
+        raw_prefix_end = index
+        while raw_prefix_end < length and text[raw_prefix_end] == "$":
+            raw_prefix_end += 1
+        quote_count = 0
+        while raw_prefix_end + quote_count < length and text[raw_prefix_end + quote_count] == '"':
+            quote_count += 1
+        if quote_count >= 3:
+            delimiter = '"' * quote_count
+            end_marker = text.find(delimiter, raw_prefix_end + quote_count)
+            end = length if end_marker < 0 else end_marker + quote_count
+            _blank_non_newline(chars, index, end)
+            index = end
+            continue
+
+        verbatim_prefix_length = 0
+        if text.startswith('$@"', index) or text.startswith('@$"', index):
+            verbatim_prefix_length = 3
+        elif text.startswith('@"', index):
+            verbatim_prefix_length = 2
+        if verbatim_prefix_length:
+            cursor = index + verbatim_prefix_length
+            while cursor < length:
+                if text[cursor] == '"':
+                    if cursor + 1 < length and text[cursor + 1] == '"':
+                        cursor += 2
+                        continue
+                    cursor += 1
+                    break
+                cursor += 1
+            _blank_non_newline(chars, index, cursor)
+            index = cursor
+            continue
+
+        string_prefix_length = 0
+        if text.startswith('$"', index):
+            string_prefix_length = 2
+        elif text[index] == '"':
+            string_prefix_length = 1
+        if string_prefix_length:
+            cursor = index + string_prefix_length
+            escaped = False
+            while cursor < length:
+                char = text[cursor]
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    cursor += 1
+                    break
+                cursor += 1
+            _blank_non_newline(chars, index, cursor)
+            index = cursor
+            continue
+
+        if text[index] == "'":
+            cursor = index + 1
+            escaped = False
+            while cursor < length:
+                char = text[cursor]
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == "'":
+                    cursor += 1
+                    break
+                cursor += 1
+            _blank_non_newline(chars, index, cursor)
+            index = cursor
+            continue
+
+        index += 1
+
+    return "".join(chars)
+
+
 def build_run_reference_index(sources):
-    """Index ClassName.Run(...) call sites with one scan of each source file."""
+    """Index executable ClassName.Run(...) call sites with caller class affinity."""
     references = {}
     source_scans = 0
     for path, text in sources.items():
         source_scans += 1
-        for match in RUN_CALL_PATTERN.finditer(text):
-            references.setdefault(match.group(1), set()).add(path)
+        code = mask_csharp_non_code(text)
+        spans = find_class_spans(code)
+        for match in RUN_CALL_PATTERN.finditer(code):
+            caller_owner = class_owner_at(spans, match.start())
+            references.setdefault(match.group(1), set()).add((path, caller_owner))
     return references, source_scans
+
+
+def find_matching_brace(code, opening_index):
+    depth = 0
+    for index in range(opening_index, len(code)):
+        char = code[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return index
+    return None
+
+
+def find_class_spans(code):
+    """Return lexical class bodies so Run ownership is independent of declaration order."""
+    spans = []
+    for match in CLASS_PATTERN.finditer(code):
+        opening_index = code.find("{", match.end())
+        if opening_index < 0:
+            continue
+        closing_index = find_matching_brace(code, opening_index)
+        if closing_index is None:
+            continue
+        spans.append((opening_index, closing_index, match.group(1)))
+    return spans
+
+
+def class_owner_at(spans, position):
+    """Return the innermost class whose body contains position."""
+    candidates = [span for span in spans if span[0] < position < span[1]]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda span: span[0])[2]
+
+
+def find_run_owners(code, spans):
+    owners = []
+    for match in RUN_PATTERN.finditer(code):
+        owner = class_owner_at(spans, match.start())
+        if owner is not None and owner not in owners:
+            owners.append(owner)
+    return owners
+
+
+def body_invokes_smoke_run(body, qualified_run, allow_unqualified):
+    if qualified_run.search(body):
+        return True
+    if not allow_unqualified:
+        return False
+    return UNQUALIFIED_RUN_CALL_PATTERN.search(body) is not None and LOCAL_RUN_DECLARATION_PATTERN.search(body) is None
+
+
+def has_module_initializer_run_call(code, class_name, spans):
+    """Accept this smoke's Run() as the initializer entrypoint or require an initializer call to it."""
+    qualified_run = re.compile(r"\b" + re.escape(class_name) + r"\s*\.\s*Run\s*\(")
+    for match in MODULE_INITIALIZER_BLOCK_PATTERN.finditer(code):
+        initializer_owner = class_owner_at(spans, match.start())
+        if initializer_owner == class_name and match.group("method") == "Run":
+            return True
+        opening_index = match.end() - 1
+        closing_index = find_matching_brace(code, opening_index)
+        if closing_index is None:
+            continue
+        body = code[opening_index + 1 : closing_index]
+        if body_invokes_smoke_run(body, qualified_run, initializer_owner == class_name):
+            return True
+    for match in MODULE_INITIALIZER_EXPRESSION_PATTERN.finditer(code):
+        initializer_owner = class_owner_at(spans, match.start())
+        if initializer_owner == class_name and match.group("method") == "Run":
+            return True
+        if body_invokes_smoke_run(match.group("body"), qualified_run, initializer_owner == class_name):
+            return True
+    return False
 
 
 def find_registration_errors(sources):
@@ -30,24 +225,26 @@ def find_registration_errors(sources):
     for path, text in sorted(sources.items(), key=lambda item: (item[0].name.casefold(), item[0].name)):
         if not path.name.endswith("Smoke.cs"):
             continue
-        if not RUN_PATTERN.search(text):
+        code = mask_csharp_non_code(text)
+        if not RUN_PATTERN.search(code):
             continue
-        match = CLASS_PATTERN.search(text)
-        if not match:
+        spans = find_class_spans(code)
+        owners = find_run_owners(code, spans)
+        if not owners:
             errors.append(path.name + ": Run() exists but no smoke class could be identified")
             continue
-        class_name = match.group(1)
-        checked += 1
 
-        # Preserve the historical registration contract exactly: a smoke may
-        # self-register with ModuleInitializer, otherwise Class.Run() must be
-        # referenced by a different source file. Calls in the smoke's own file
-        # do not count as registration.
-        if "[ModuleInitializer]" in text:
-            continue
-        registration_paths = references.get(class_name, ())
-        if not any(other_path != path for other_path in registration_paths):
-            errors.append(path.name + ": " + class_name + ".Run() is never registered or invoked")
+        for class_name in owners:
+            checked += 1
+            # A self-registration exemption is valid only when executable code in a
+            # ModuleInitializer is this exact smoke Run() entrypoint or invokes it.
+            # Comments/literals do not count, and unqualified calls must belong to
+            # the same lexical class.
+            if has_module_initializer_run_call(code, class_name, spans):
+                continue
+            registrations = references.get(class_name, ())
+            if not any(other_path != path or caller_owner != class_name for other_path, caller_owner in registrations):
+                errors.append(path.name + ": " + class_name + ".Run() is never registered or invoked")
 
     return checked, errors, source_scans
 
@@ -55,45 +252,47 @@ def find_registration_errors(sources):
 def verify_index_regression():
     """Deterministically lock semantics and one-pass behavior at repository scale."""
     small_sources = {
-        Path("RegisteredSmoke.cs"): (
-            "internal static class RegisteredSmoke { internal static void Run() { } }"
-        ),
-        Path("RegisteredSmokeRegistration.cs"): (
-            "internal static class RegisteredSmokeRegistration { "
-            "internal static void Register() { RegisteredSmoke.Run(); } }"
-        ),
-        Path("InitializerSmoke.cs"): (
-            "internal static class InitializerSmoke { [ModuleInitializer] "
-            "internal static void Register() { Run(); } internal static void Run() { } }"
-        ),
-        Path("MissingSmoke.cs"): (
-            "internal static class MissingSmoke { internal static void Run() { } }"
-        ),
-        Path("SelfOnlySmoke.cs"): (
-            "internal static class SelfOnlySmoke { internal static void Run() { SelfOnlySmoke.Run(); } }"
-        ),
+        Path("RegisteredSmoke.cs"): "internal static class RegisteredSmoke { internal static void Run() { } }",
+        Path("RegisteredSmokeRegistration.cs"): "internal static class RegisteredSmokeRegistration { internal static void Register() { RegisteredSmoke.Run(); } }",
+        Path("InitializerSmoke.cs"): "internal static class InitializerSmoke { [ModuleInitializer] internal static void Register() { Run(); } internal static void Run() { } }",
+        Path("ExpressionInitializerSmoke.cs"): "internal static class ExpressionInitializerSmoke { [ModuleInitializer] internal static void Register() => Run(); internal static void Run() { } }",
+        Path("DirectInitializerRunSmoke.cs"): "internal static class DirectInitializerRunSmoke { [ModuleInitializer] internal static void Run() { } }",
+        Path("BraceLiteralInitializerSmoke.cs"): "internal static class BraceLiteralInitializerSmoke { [ModuleInitializer] internal static void Register() { var marker = \"{\"; Run(); } internal static void Run() { } }",
+        Path("FalseInitializerSmoke.cs"): "internal static class FalseInitializerSmoke { [ModuleInitializer] internal static void Register() { } internal static void Run() { } }",
+        Path("CommentOnlyInitializerSmoke.cs"): "internal static class CommentOnlyInitializerSmoke { [ModuleInitializer] internal static void Register() { /* Run(); */ } internal static void Run() { } }",
+        Path("StringOnlyInitializerSmoke.cs"): "internal static class StringOnlyInitializerSmoke { [ModuleInitializer] internal static void Register() { var marker = \"Run();\"; } internal static void Run() { } }",
+        Path("ExpressionStringInitializerSmoke.cs"): "internal static class ExpressionStringInitializerSmoke { [ModuleInitializer] internal static void Register() => Consume(\"Run()\"); internal static void Consume(string value) { } internal static void Run() { } }",
+        Path("ShadowedInitializerSmoke.cs"): "internal static class ShadowedInitializerSmoke { [ModuleInitializer] internal static void Register() { void Run() { } Run(); } internal static void Run() { } }",
+        Path("CommentRegisteredSmoke.cs"): "internal static class CommentRegisteredSmoke { internal static void Run() { } }",
+        Path("CommentRegistration.cs"): "internal static class CommentRegistration { internal static void Register() { /* CommentRegisteredSmoke.Run(); */ } }",
+        Path("MissingSmoke.cs"): "internal static class MissingSmoke { internal static void Run() { } }",
+        Path("SelfOnlySmoke.cs"): "internal static class SelfOnlySmoke { internal static void Run() { SelfOnlySmoke.Run(); } }",
+        Path("HelperFirstSmoke.cs"): "internal static class Helper { internal static void Touch() { } } internal static class ActualSmoke { internal static void Run() { } }",
+        Path("HelperFirstRegistration.cs"): "internal static class HelperFirstRegistration { internal static void Register() { ActualSmoke.Run(); } }",
+        Path("SameFilePeerSmoke.cs"): "internal static class DriverSmoke { internal static void Run() { PeerSmoke.Run(); } } internal static class PeerSmoke { internal static void Run() { } }",
+        Path("SameFilePeerRegistration.cs"): "internal static class SameFilePeerRegistration { internal static void Register() { DriverSmoke.Run(); } }",
+        Path("WrongClassInitializerSmoke.cs"): "internal static class Other { [ModuleInitializer] internal static void Register() { Run(); } internal static void Run() { } } internal static class WrongClassInitializerSmoke { internal static void Run() { } }",
     }
     checked, errors, source_scans = find_registration_errors(small_sources)
     expected_errors = {
+        "FalseInitializerSmoke.cs: FalseInitializerSmoke.Run() is never registered or invoked",
+        "CommentOnlyInitializerSmoke.cs: CommentOnlyInitializerSmoke.Run() is never registered or invoked",
+        "StringOnlyInitializerSmoke.cs: StringOnlyInitializerSmoke.Run() is never registered or invoked",
+        "ExpressionStringInitializerSmoke.cs: ExpressionStringInitializerSmoke.Run() is never registered or invoked",
+        "ShadowedInitializerSmoke.cs: ShadowedInitializerSmoke.Run() is never registered or invoked",
+        "CommentRegisteredSmoke.cs: CommentRegisteredSmoke.Run() is never registered or invoked",
         "MissingSmoke.cs: MissingSmoke.Run() is never registered or invoked",
         "SelfOnlySmoke.cs: SelfOnlySmoke.Run() is never registered or invoked",
+        "WrongClassInitializerSmoke.cs: WrongClassInitializerSmoke.Run() is never registered or invoked",
     }
-    if checked != 4 or set(errors) != expected_errors or source_scans != len(small_sources):
+    if checked != 18 or set(errors) != expected_errors or source_scans != len(small_sources):
         raise RuntimeError("smoke-registration semantic regression self-check failed")
 
-    # Exercise more detached source records than the current repository while
-    # asserting that reference indexing visits each source exactly once. This
-    # is a deterministic complexity guard; it does not depend on wall-clock timing.
     scale_sources = {}
     for index in range(SYNTHETIC_SCALE_SMOKES):
         class_name = "Scale" + str(index).zfill(4) + "Smoke"
-        scale_sources[Path(class_name + ".cs")] = (
-            "internal static class " + class_name + " { internal static void Run() { } }"
-        )
-        scale_sources[Path("Scale" + str(index).zfill(4) + "Registration.cs")] = (
-            "internal static class Scale" + str(index).zfill(4) + "Registration { "
-            "internal static void Register() { " + class_name + ".Run(); } }"
-        )
+        scale_sources[Path(class_name + ".cs")] = "internal static class " + class_name + " { internal static void Run() { } }"
+        scale_sources[Path("Scale" + str(index).zfill(4) + "Registration.cs")] = "internal static class Scale" + str(index).zfill(4) + "Registration { internal static void Register() { " + class_name + ".Run(); } }"
 
     checked, errors, source_scans = find_registration_errors(scale_sources)
     if checked != SYNTHETIC_SCALE_SMOKES or errors or source_scans != len(scale_sources):
@@ -114,7 +313,6 @@ def main():
     sources = {path: path.read_text(encoding="utf-8") for path in TESTS.glob("*.cs")}
     checked, errors, source_scans = find_registration_errors(sources)
 
-    # Lock the known historical regression that motivated this repository-wide guard.
     beam_registration = TESTS / "BeamRebarSmokeRegistration.cs"
     if not beam_registration.is_file():
         errors.append("missing BeamRebarSmokeRegistration.cs")
