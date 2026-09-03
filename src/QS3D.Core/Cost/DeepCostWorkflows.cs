@@ -288,6 +288,7 @@ namespace QS3D.Core.Cost
 
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var result = new List<BuildUpAnalysisLine>();
+            var admittedRates = hasKnownRateCount ? new List<BuildUpRateSnapshot>(knownRateCount) : null;
             var index = 0;
             using (var rateEnumerator = rates.GetEnumerator())
             {
@@ -320,6 +321,7 @@ namespace QS3D.Core.Cost
                         throw new ArgumentException("Build-up analysis contains a null rate at index " + index + ".", nameof(rates));
                     if (!ids.Add(rate.RateCode))
                         throw new ArgumentException("Duplicate build-up rate code: " + rate.RateCode + ".", nameof(rates));
+                    admittedRates?.Add(rate);
                     var mark = references.GetMark(rate.RateCode);
                     if (!adoptedOnly || !mark.IsUnused)
                     {
@@ -338,8 +340,66 @@ namespace QS3D.Core.Cost
                 knownRateCount,
                 index,
                 "Build-up analysis rate collection");
+            if (hasKnownRateCount)
+                RequireStableBuildUpGeneration(rates, knownRateCount, admittedRates!);
             result.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.Rate.RateCode, right.Rate.RateCode));
             return new ReadOnlyCollection<BuildUpAnalysisLine>(result.ToArray());
+        }
+
+        private static void RequireStableBuildUpGeneration(
+            IEnumerable<BuildUpRateSnapshot> rates,
+            int admittedKnownCount,
+            IReadOnlyList<BuildUpRateSnapshot> admittedRates)
+        {
+            var index = 0;
+            using (var rateEnumerator = rates.GetEnumerator())
+            {
+                while (true)
+                {
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        rates,
+                        true,
+                        admittedKnownCount,
+                        "Build-up analysis rate collection");
+                    if (!rateEnumerator.MoveNext())
+                        break;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        rates,
+                        true,
+                        admittedKnownCount,
+                        "Build-up analysis rate collection");
+                    if (index >= admittedRates.Count)
+                        ThrowBuildUpGenerationChanged();
+                    var rate = rateEnumerator.Current;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        rates,
+                        true,
+                        admittedKnownCount,
+                        "Build-up analysis rate collection");
+                    if (rate == null || !SameBuildUpRateState(admittedRates[index], rate))
+                        ThrowBuildUpGenerationChanged();
+                    index++;
+                }
+            }
+
+            if (index != admittedRates.Count)
+                ThrowBuildUpGenerationChanged();
+            AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                rates,
+                true,
+                admittedKnownCount,
+                "Build-up analysis rate collection");
+        }
+
+        private static bool SameBuildUpRateState(BuildUpRateSnapshot left, BuildUpRateSnapshot right)
+        {
+            return string.Equals(left.RateCode, right.RateCode, StringComparison.Ordinal) &&
+                   left.UnitRate == right.UnitRate;
+        }
+
+        private static void ThrowBuildUpGenerationChanged()
+        {
+            throw new InvalidOperationException("Build-up analysis rate collection content changed during traversal.");
         }
     }
 
@@ -498,6 +558,7 @@ namespace QS3D.Core.Cost
 
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var totals = new Dictionary<string, TradeAggregate>(StringComparer.OrdinalIgnoreCase);
+            var admittedItems = hasKnownItemCount ? new List<TradeCostItem>(knownItemCount) : null;
             var index = 0;
             using (var itemEnumerator = items.GetEnumerator())
             {
@@ -530,6 +591,7 @@ namespace QS3D.Core.Cost
                         throw new ArgumentException("Trade analysis contains a null item at index " + index + ".", nameof(items));
                     if (!ids.Add(item.ItemCode))
                         throw new ArgumentException("Duplicate trade-analysis item code: " + item.ItemCode + ".", nameof(items));
+                    admittedItems?.Add(item);
                     if (!totals.TryGetValue(item.TradeCode, out var aggregate))
                     {
                         aggregate = new TradeAggregate(item.TradeCode);
@@ -553,6 +615,8 @@ namespace QS3D.Core.Cost
                 knownItemCount,
                 index,
                 "Trade analysis item collection");
+            if (hasKnownItemCount)
+                RequireStableTradeGeneration(items, knownItemCount, admittedItems!);
             var rows = new List<TradeCostAnalysisRow>(totals.Count);
             foreach (var aggregate in totals.Values)
                 rows.Add(new TradeCostAnalysisRow(
@@ -562,6 +626,63 @@ namespace QS3D.Core.Cost
                     cfaM2));
             rows.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.TradeCode, right.TradeCode));
             return new ReadOnlyCollection<TradeCostAnalysisRow>(rows.ToArray());
+        }
+
+        private static void RequireStableTradeGeneration(
+            IEnumerable<TradeCostItem> items,
+            int admittedKnownCount,
+            IReadOnlyList<TradeCostItem> admittedItems)
+        {
+            var index = 0;
+            using (var itemEnumerator = items.GetEnumerator())
+            {
+                while (true)
+                {
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        items,
+                        true,
+                        admittedKnownCount,
+                        "Trade analysis item collection");
+                    if (!itemEnumerator.MoveNext())
+                        break;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        items,
+                        true,
+                        admittedKnownCount,
+                        "Trade analysis item collection");
+                    if (index >= admittedItems.Count)
+                        ThrowTradeGenerationChanged();
+                    var item = itemEnumerator.Current;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        items,
+                        true,
+                        admittedKnownCount,
+                        "Trade analysis item collection");
+                    if (item == null || !SameTradeItemState(admittedItems[index], item))
+                        ThrowTradeGenerationChanged();
+                    index++;
+                }
+            }
+
+            if (index != admittedItems.Count)
+                ThrowTradeGenerationChanged();
+            AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                items,
+                true,
+                admittedKnownCount,
+                "Trade analysis item collection");
+        }
+
+        private static bool SameTradeItemState(TradeCostItem left, TradeCostItem right)
+        {
+            return string.Equals(left.ItemCode, right.ItemCode, StringComparison.Ordinal) &&
+                   string.Equals(left.TradeCode, right.TradeCode, StringComparison.Ordinal) &&
+                   left.Cost == right.Cost;
+        }
+
+        private static void ThrowTradeGenerationChanged()
+        {
+            throw new InvalidOperationException("Trade analysis item collection content changed during traversal.");
         }
 
         private sealed class TradeAggregate
