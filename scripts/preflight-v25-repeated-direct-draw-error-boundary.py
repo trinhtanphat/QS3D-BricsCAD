@@ -38,6 +38,21 @@ for required in (
     if required not in text:
         failures.append("Repeated Direct Draw outcome/rollback invariant changed unexpectedly: " + required)
 
+# A deferred segment failure is post-checkpoint partial success. Emit the machine-readable result and
+# completion observer before the human warning, and never route this branch through whole-command rollback.
+try:
+    result_index = text.index("WriteResult(editor, category, accepted, termination);")
+    notify_index = text.index("NotifySequenceCompleted(document, accepted, termination);", result_index)
+    deferred_index = text.index("if (deferredSegmentError != null)", notify_index)
+    warning_index = text.index("các segment đã commit vẫn được giữ", deferred_index)
+    if not (result_index < notify_index < deferred_index < warning_index):
+        failures.append("partial-success reporting order no longer preserves committed-result truth")
+    partial_success_region = text[result_index:warning_index]
+    if "RollbackWholeCommand(" in partial_success_region:
+        failures.append("deferred partial-success reporting can enter whole-command rollback")
+except ValueError:
+    pass
+
 if failures:
     for failure in failures:
         print("ERROR: " + failure, file=sys.stderr)
