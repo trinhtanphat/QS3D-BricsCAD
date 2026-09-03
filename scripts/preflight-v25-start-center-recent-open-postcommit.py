@@ -36,6 +36,8 @@ body = text[brace:end]
 open_call = "Application.DocumentManager.Open(normalized, false);"
 record_call = "StartCenterUserStateStore.RecordProject(normalized);"
 safe_open_failure = 'ShowSafeFailure("Không thể mở dự án gần đây. Vui lòng thử lại.");'
+record_refresh_call = "QueueHomeRefresh(ActiveDrawingRecordIntent.Record);"
+legacy_record_refresh_call = "QueueHomeRefresh(recordActiveDrawing: true);"
 
 failures = []
 open_idx = body.find(open_call)
@@ -68,7 +70,7 @@ if first_catch_idx >= 0 and record_idx >= 0 and first_catch_idx < record_idx:
             failures.append("native-open failure must return before post-commit bookkeeping")
 
 success_idx = body.find('"Đã mở "')
-queue_idx = body.find("QueueHomeRefresh(recordActiveDrawing: true);")
+queue_idx = body.find(record_refresh_call)
 if post_commit_catch_idx < 0:
     failures.append("post-commit bookkeeping must have a fail-soft boundary")
 elif success_idx >= 0 and post_commit_catch_idx > success_idx:
@@ -89,7 +91,9 @@ if record_idx >= 0 and safe_open_failure in body[record_idx + len(record_call):]
 if record_idx >= 0 and success_idx >= 0 and success_idx < record_idx:
     failures.append("success status must not be published before bookkeeping is attempted")
 if success_idx < 0 or queue_idx < 0 or (success_idx >= 0 and queue_idx < success_idx):
-    failures.append("successful native open must still publish success and queue refresh")
+    failures.append("successful native open must still publish success and queue explicit Record refresh intent")
+if legacy_record_refresh_call in body:
+    failures.append("recent-open refresh must not regress to the legacy boolean recording queue contract")
 
 if failures:
     for failure in failures:
