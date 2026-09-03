@@ -39,7 +39,7 @@ namespace QS3D.Core.SmokeTests
         {
             var source = new SameCountDriftCollection<string>(
                 new[] { "LINE-A", "LINE-B" },
-                new[] { "LINE-A", "LINE-C" });
+                new[] { "LINE-C", "LINE-D" });
             ExpectContentDrift(
                 () => new BulkRateAssignmentRequest(
                     source,
