@@ -73,7 +73,7 @@ for token in (
     'var boundedSolidInspect = extents && details && entity is Solid3d;',
     'if (boundedSolidInspect) builder.Append("null");',
     'else try { builder.Append(ExtentsJson(entity.GeometricExtents)); } catch { builder.Append("null"); }',
-    'if (boundedSolidInspect) builder.Append(",\\\"extentsDeferred\\\":true");',
+    'extentsDeferred',
 ):
     require(agent, token, "McpCadAgentRuntime.DescribeEntity")
 
