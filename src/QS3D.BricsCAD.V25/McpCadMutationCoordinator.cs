@@ -24,10 +24,12 @@ namespace QS3D.BricsCAD.V25
         private static readonly AsyncLocal<long?> CurrentOperationId = new AsyncLocal<long?>();
         private static readonly AsyncLocal<NativeCommandReservation?> PreparedNativeCommand =
             new AsyncLocal<NativeCommandReservation?>();
+        private static readonly AsyncLocal<long?> CurrentInteractiveModalId = new AsyncLocal<long?>();
 
         private static WriterLease? _lease;
         private static PendingNativeCommand? _pending;
         private static long _operationSequence;
+        private static long _interactiveModalSequence;
 
         internal static string AcquireWriterLease(int leaseSeconds, Action<string>? audit)
         {
@@ -90,6 +92,9 @@ namespace QS3D.BricsCAD.V25
             var prepared = PreparedNativeCommand.Value;
             var acquiredHere = prepared == null;
 
+            if (CurrentInteractiveModalId.Value.HasValue)
+                throw new InvalidOperationException("interaction_required: an MCP interactive modal already owns the CAD writer admission in this logical flow.");
+
             // Never acquire the process-global write gate while BricsCAD is already modal.
             // This check intentionally runs without MutationGate ownership so a blocked UI
             // transition cannot strand the writer before the modal state is rejected.
@@ -144,6 +149,63 @@ namespace QS3D.BricsCAD.V25
         }
 
         /// <summary>
+        /// Acquires the same process-global serialization boundary used by CAD mutations for a
+        /// plugin-owned foreground modal. The returned scope must live for the entire modal
+        /// lifetime so no mutation, native command, or explicit writer lease can enter beneath it.
+        /// </summary>
+        internal static IDisposable EnterInteractiveModal(string interaction, Action<string>? audit)
+        {
+            if (string.IsNullOrWhiteSpace(interaction))
+                throw new ArgumentException("Interactive modal name is required.", nameof(interaction));
+
+            // A dialog opened from an already-active mutation/native/modal logical flow must not
+            // reacquire the non-reentrant semaphore. Fail immediately rather than self-deadlock.
+            if (CurrentOperationId.Value.HasValue)
+                throw new InvalidOperationException("interaction_required: interactive UI cannot be entered from an active MCP mutation scope.");
+            if (PreparedNativeCommand.Value != null)
+                throw new InvalidOperationException("interaction_required: interactive UI cannot be entered while this flow owns a prepared native command.");
+            if (CurrentInteractiveModalId.Value.HasValue)
+                throw new InvalidOperationException("interaction_required: nested MCP interactive modal admission is not supported.");
+
+            // Reject known global ownership before waiting so a long-lived explicit lease or
+            // queued native command returns interaction_required immediately. Re-check after the
+            // gate is acquired to close races with ownership changes between samples.
+            RequireNoWriterOwnershipForInteractiveModal();
+            RequireNoModalCommandBeforeMutationGate();
+            if (!MutationGate.Wait(MutationAcquireTimeoutMilliseconds))
+                throw new InvalidOperationException("interaction_required: CAD mutation writer is busy; retry the interactive request after the active writer completes.");
+
+            try
+            {
+                InvokeInCadContext(() =>
+                {
+                    RequireNoModalCommandInCadContext();
+                    return true;
+                });
+                RequireNoWriterOwnershipForInteractiveModal();
+
+                var previous = CurrentInteractiveModalId.Value;
+                var modalId = Interlocked.Increment(ref _interactiveModalSequence);
+                CurrentInteractiveModalId.Value = modalId;
+                try
+                {
+                    audit?.Invoke("interactive modal entered; interaction=" + SafeTool(interaction));
+                    return new InteractiveModalScope(modalId, previous, interaction, audit);
+                }
+                catch
+                {
+                    CurrentInteractiveModalId.Value = previous;
+                    throw;
+                }
+            }
+            catch
+            {
+                MutationGate.Release();
+                throw;
+            }
+        }
+
+        /// <summary>
         /// Arms the post-return barrier before a runtime call that is known to queue a native
         /// command. Preparation also owns MutationGate until EnterMutation transfers that gate
         /// to the request, closing the race between transport pre-arm and runtime dispatch.
@@ -166,6 +228,8 @@ namespace QS3D.BricsCAD.V25
             RejectUnsafeNativeCommand(command);
             if (PreparedNativeCommand.Value != null)
                 throw new InvalidOperationException("Nested native-command preparation is not supported.");
+            if (CurrentInteractiveModalId.Value.HasValue)
+                throw new InvalidOperationException("interaction_required: native command preparation cannot enter while this logical flow owns an MCP interactive modal.");
 
             // Preflight before taking MutationGate. ArmNativeCommandInCadContext performs the
             // second modal check after acquisition, closing the preflight/acquire race.
@@ -403,6 +467,18 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("DWG writer lease is owned by another MCP workflow. Supply the matching writerToken or use read-only tools until the lease is released.");
         }
 
+        private static void RequireNoWriterOwnershipForInteractiveModal()
+        {
+            lock (Sync)
+            {
+                CleanupExpiredStateLocked(DateTime.UtcNow);
+                if (_pending != null)
+                    throw new InvalidOperationException("interaction_required: a queued native BricsCAD command owns the DWG writer; wait for its terminal event before showing interactive MCP UI.");
+                if (_lease != null)
+                    throw new InvalidOperationException("interaction_required: an explicit MCP DWG writer lease is active; release it before showing interactive MCP UI.");
+            }
+        }
+
         private static void DetachPendingLocked(PendingNativeCommand pending)
         {
             try { pending.Document.CommandWillStart -= pending.WillStartHandler; } catch { }
@@ -616,6 +692,38 @@ namespace QS3D.BricsCAD.V25
 
                 if (_ownsMutationGate && Interlocked.CompareExchange(ref _gateTransferredOrReleased, 1, 0) == 0)
                     MutationGate.Release();
+            }
+        }
+
+        private sealed class InteractiveModalScope : IDisposable
+        {
+            private readonly long _modalId;
+            private readonly long? _previousModalId;
+            private readonly string _interaction;
+            private readonly Action<string>? _audit;
+            private int _disposed;
+
+            internal InteractiveModalScope(long modalId, long? previousModalId, string interaction, Action<string>? audit)
+            {
+                _modalId = modalId;
+                _previousModalId = previousModalId;
+                _interaction = interaction;
+                _audit = audit;
+            }
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+                try
+                {
+                    if (CurrentInteractiveModalId.Value == _modalId)
+                        CurrentInteractiveModalId.Value = _previousModalId;
+                    _audit?.Invoke("interactive modal exited; interaction=" + SafeTool(_interaction));
+                }
+                finally
+                {
+                    MutationGate.Release();
+                }
             }
         }
 
