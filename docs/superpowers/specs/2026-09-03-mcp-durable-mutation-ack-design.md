@@ -75,13 +75,17 @@ Add read-only `cad_mutation_status` with required `actionId`. It returns one of:
 
 The status query never enters the writer gate and never mutates the DWG.
 
-## Drawing identity
+## Drawing identity and SaveAs
 
-Each applied record is bound to the active drawing identity captured at mutation success. Use the strongest stable identity already available in the V25 runtime, preferring database fingerprint/project identity plus normalized rooted filename where available. Never use transient ObjectId/managed wrapper identity as durable drawing identity.
+Two scopes are intentionally separated.
 
-Save promotion is restricted to records whose stored drawing identity matches the drawing proved clean by the completed save operation. SaveAs must promote against the post-save published drawing identity and must not accidentally promote records belonging to another open document.
+**Volatile application scope:** while BricsCAD is running, newly accepted/applied records are bound to the exact active native `Document/Database` lifetime through a private process-local document token. That token may use managed reference identity internally because it is never persisted and is used only to prevent one open document from promoting another document's records.
 
-If the runtime cannot establish a stable drawing identity, the mutation may be `applied` but must not be promoted to `durable`.
+**Durable drawing scope:** after a save has completed and persistent DBMOD is clean, the ledger captures a stable drawing fingerprint from the saved database plus the normalized rooted filename as diagnostic metadata. The implementation must use the strongest stable V25 database fingerprint exposed by the trusted BricsCAD/Teigha references. If no stable persisted database fingerprint is available, the runtime must not promote records to `durable`; it may only report `applied` and a bounded diagnostic explaining why durability could not be proven.
+
+Save promotion uses the process-local document token, not the pre-save filename. This is critical for SaveAs: records applied to the active document before SaveAs remain attached to that same document lifetime even though its published path changes. After successful SaveAs, the durable record stores the post-save stable fingerprint/path. No record from another open document can be promoted by that save.
+
+A durable replay after restart is keyed primarily by `actionId` + semantic request fingerprint. The stored durable drawing fingerprint is retained as provenance and is returned by status/replay. A mismatched semantic request still fails closed. The server never re-executes a durable action merely because the currently active document differs; it returns the historical durable acknowledgement for that action identity instead of mutating the current DWG.
 
 ## Ledger architecture
 
@@ -93,6 +97,7 @@ Introduce one narrow V25 component, `McpMutationAckLedger`, responsible for:
 - transitioning records monotonically `accepted -> applied -> durable`;
 - replaying prior successful results without executing the action;
 - answering read-only status queries;
+- binding volatile records to one active document lifetime;
 - promoting matching applied records after verified save completion;
 - loading only durable records on server start;
 - writing only durable records to an external bounded ledger.
@@ -110,7 +115,7 @@ Requirements:
 - deterministic newest-first/oldest-eviction policy;
 - atomic temp-file replacement where supported;
 - corruption or oversize fails closed to an empty in-memory durable cache and records a bounded diagnostic; it must never block ordinary CAD startup or infer durability from malformed bytes;
-- store only bounded metadata needed for replay/status: action ID, semantic fingerprint, tool, stable drawing identity, durable timestamp, and bounded successful result;
+- store only bounded metadata needed for replay/status: action ID, semantic fingerprint, tool, durable drawing fingerprint/path metadata, durable timestamp, and bounded successful result;
 - do not persist bearer tokens, writer tokens, arbitrary headers, raw request bodies, or secrets.
 
 Only `durable` entries are serialized. `accepted`/`applied` records remain in memory and disappear on restart because unsaved CAD state cannot be inferred durable after a process boundary.
@@ -122,28 +127,37 @@ Only `durable` entries are serialized. `accepted`/`applied` records remain in me
 3. Ask ACK ledger to reserve or replay before entering the writer gate.
 4. If replay: return the stored acknowledgement/result immediately.
 5. If new reservation: enter existing `McpCadMutationCoordinator.EnterMutation(...)`.
-6. Execute the mutation body under the existing automation epoch checks.
-7. At the existing synchronous success boundary, capture drawing identity and mark the record `applied`, then return the wrapped acknowledgement.
+6. Bind the reservation to the exact current document lifetime and execute the mutation body under the existing automation epoch checks.
+7. For a synchronous CAD mutation, capture the existing success result and mark the record `applied`, then return the wrapped acknowledgement.
 8. On pre-application failure, abandon/terminalize the reservation without claiming `applied`.
 
-For asynchronous native command mutations, `applied` must be coupled to the existing native-command terminal success signal rather than mere queue acceptance. If the current call surface cannot safely observe that terminal result, that mutation class remains `accepted` until the coordinator exposes the matching success transition; it must never be promoted directly to durable.
+### Asynchronous native-command boundary
+
+Queue acceptance is **not** application success. For mutation surfaces that dispatch a BricsCAD native command asynchronously, the ACK record remains `accepted` after enqueue. The existing native-command barrier must carry the `actionId`/ACK completion hook and perform exactly one terminal transition:
+
+- matching `CommandEnded` => mark the corresponding ACK `applied` with the same document token;
+- matching `CommandCancelled` or `CommandFailed` => mark/abandon it as terminal non-applied;
+- no matching terminal event => never claim `applied` or `durable`.
+
+This requires a narrow integration point in `McpCadMutationCoordinator`; it must not weaken its current process-global writer ownership or terminal-event matching. A retry while the same action is still `accepted` returns status/acknowledgement and never queues the native command a second time.
 
 ## Save promotion
 
 `cad_save` and `cad_save_as` retain their existing host-owned save behavior and DBMOD completion checks. After those checks prove persistent-content DBMOD clean:
 
-1. capture the verified drawing identity;
-2. promote all in-memory `applied` records for that same drawing identity to `durable`;
-3. persist the bounded durable ledger;
-4. return the save action acknowledgement plus promotion evidence such as `durablePromotedCount`.
+1. capture the exact current process-local document token;
+2. capture the post-save stable database fingerprint and normalized rooted filename;
+3. promote all in-memory `applied` records bound to that same document token to `durable`;
+4. persist the bounded durable ledger atomically;
+5. return the save action acknowledgement plus promotion evidence such as `durablePromotedCount`.
 
-The save mutation's own action record becomes durable only after its save success boundary is proven.
+The save mutation's own action record becomes durable only after its save success boundary is proven and the durable ledger write succeeds.
 
-No DBMOD sample before save completion may promote records.
+No DBMOD sample before save completion may promote records. A durable ledger write failure must not retroactively make the CAD save fail, but the response must keep affected records non-durable/volatile and report bounded persistence failure evidence.
 
 ## Canonical request fingerprint
 
-Prefer a structural/canonical JSON projection over raw request bytes. The fingerprint input must include the tool name and mutation-semantic arguments while excluding retry/transport fields. Ordering/whitespace differences in JSON must not create a different logical fingerprint.
+Use a structural/canonical JSON projection rather than raw request bytes. The fingerprint input must include the tool name and mutation-semantic arguments while excluding retry/transport fields. Ordering/whitespace differences in JSON must not create a different logical fingerprint.
 
 If the repository's existing JSON helper cannot safely produce such a projection without a broad parser change, add one narrow bounded canonicalization helper for top-level MCP arguments rather than hashing the raw body. Unknown fields remain part of the fingerprint so an `actionId` cannot be silently reused for a changed request.
 
@@ -159,9 +173,9 @@ If the repository's existing JSON helper cannot safely produce such a projection
 ## Failure semantics
 
 - Duplicate identity with different fingerprint: stable fail-closed error, no writer-gate entry.
-- Durable ledger write failure after CAD save: the CAD save remains successful, but the response must not claim durable ACK persistence that was not written. Keep the record at `applied`/volatile and emit bounded diagnostic evidence.
-- Corrupt durable ledger on startup: quarantine/ignore it and expose entries as `unknown`; never guess.
-- Emergency stop/reset does not erase durable persisted records. It may clear in-flight accepted/applied volatile records.
+- Durable ledger write failure after CAD save: the CAD save remains successful, but the response must not claim durable ACK persistence that was not written. Keep affected records at `applied`/volatile and emit bounded diagnostic evidence.
+- Corrupt durable ledger on startup: ignore/quarantine it and expose entries as `unknown`; never guess.
+- Emergency stop/reset does not erase durable persisted records. It may clear in-flight accepted/applied volatile records only after existing native-command ownership safety permits release; a dispatching native command is never forgotten merely to clear ACK state.
 - A retry of a durable entry after restart returns the stored durable acknowledgement without touching the DWG.
 
 ## Source changes anticipated
@@ -170,6 +184,7 @@ Exact production/test paths must be reserved before implementation. Expected sur
 
 - `src/QS3D.BricsCAD.V25/McpCadAgentRuntime.cs` — mutation wrapper, status routing, ACK response integration.
 - `src/QS3D.BricsCAD.V25/McpMutationAckLedger.cs` — new bounded identity/state/persistence component.
+- `src/QS3D.BricsCAD.V25/McpCadMutationCoordinator.cs` — narrow async native-command ACK terminal hook only; preserve writer/barrier semantics.
 - `src/QS3D.BricsCAD.V25/McpCadDirectModelRuntime.cs` and/or the existing save helper only where needed to expose verified save/drawing evidence; do not duplicate save logic.
 - `scripts/preflight-mcp-durable-mutation-ack.py` — focused auto-discovered source contract/regression.
 - existing aggregate/direct guards only if their current contract conflicts with this feature; reservation must be expanded before touching them.
@@ -183,13 +198,15 @@ TDD begins with a focused failing preflight/regression proving the current code 
 3. same-ID/different-request rejection before mutation;
 4. monotonic `accepted -> applied -> durable` transitions;
 5. status query is read-only;
-6. only matching drawing identity is promoted by save;
-7. DBMOD/save evidence is required before `durable`;
-8. restart restores durable entries only;
-9. corrupt/oversized ledger fails closed;
-10. bounded record/result eviction behavior;
-11. existing writer/native-command/emergency-stop contracts remain enforced;
-12. V25 compile against trusted locked BricsCAD references remains green.
+6. process-local document scoping prevents cross-document promotion;
+7. SaveAs promotes the same document lifetime and stores post-save identity;
+8. DBMOD/save evidence and stable post-save fingerprint are required before `durable`;
+9. async native queue remains `accepted` until matching terminal success and is never queued twice on retry;
+10. restart restores durable entries only;
+11. corrupt/oversized ledger fails closed;
+12. bounded record/result eviction behavior;
+13. existing writer/native-command/emergency-stop contracts remain enforced;
+14. V25 compile against trusted locked BricsCAD references remains green.
 
 Hosted CI proves source contracts and compile only. Licensed BricsCAD runtime remains a separate qualification boundary.
 
