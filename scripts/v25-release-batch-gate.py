@@ -60,10 +60,9 @@ def run_git_exact(*args: str) -> str:
 
 
 def is_release_relevant(path: str) -> bool:
-    normalized = path.replace("\\", "/")
-    if normalized in RELEASE_RELEVANT_EXACT_PATHS:
+    if path in RELEASE_RELEVANT_EXACT_PATHS:
         return True
-    return any(normalized.startswith(prefix) for prefix in RELEASE_RELEVANT_PREFIXES)
+    return any(path.startswith(prefix) for prefix in RELEASE_RELEVANT_PREFIXES)
 
 
 def parse_preview_ordinal(tag: str, series_prefix: str, source_label: str) -> int:
@@ -112,7 +111,7 @@ def changed_paths_for_first_parent_commit(commit: str) -> list[str]:
         output = run_git_exact("diff-tree", "--root", "--no-commit-id", "--name-only", "-z", "-r", commit)
     else:
         output = run_git_exact("diff", "--name-only", "-z", parents[1], commit, "--")
-    return [path.replace("\\", "/") for path in output.split("\0") if path]
+    return [path for path in output.split("\0") if path]
 
 
 def collect_relevant_integrations(source_sha: str, previous_tag: str | None) -> list[tuple[str, str, list[str]]]:
