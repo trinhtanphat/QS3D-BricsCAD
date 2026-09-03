@@ -1,0 +1,44 @@
+name: Issue 5457 one-shot owner-sidecar fix
+
+on:
+  push:
+    branches:
+      - agent/gpt56sol-20260903-multi-transport-failover/issue-5457-multi-transport-failover
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: "!contains(github.event.head_commit.message, '[5457-sidecar-fixed]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Preserve crash-surviving owner sidecar
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('src/QS3D.BricsCAD.V25/McpTransportSupervisor.cs')
+          text = path.read_text(encoding='utf-8')
+          old = '''        private static void StopProvider(McpTransportProvider provider)\n        {\n            try\n            {\n                if (provider == McpTransportProvider.OpenAiSecureTunnel)\n                    McpOpenAiSecureTunnelManager.StopForHostShutdown();\n                else if (provider == McpTransportProvider.CloudflareNamedTunnel)\n                    McpCloudflareAccountTunnelManager.StopForHostShutdown();\n            }\n            catch { }\n            ClearOwnedProcess(provider);\n        }\n'''
+          new = '''        private static void StopProvider(McpTransportProvider provider)\n        {\n            // Do not clear the durable owner sidecar here. If a child crashed or became detached,\n            // that sidecar is the only authority that lets the next start prove PID + start-time +\n            // executable identity before terminating the stale QS3D-owned process. Each manager\n            // clears its sidecar only after it actually owns and stops/disposes its live child.\n            try\n            {\n                if (provider == McpTransportProvider.OpenAiSecureTunnel)\n                    McpOpenAiSecureTunnelManager.StopForHostShutdown();\n                else if (provider == McpTransportProvider.CloudflareNamedTunnel)\n                    McpCloudflareAccountTunnelManager.StopForHostShutdown();\n            }\n            catch { }\n        }\n'''
+          if old not in text:
+              raise SystemExit('expected StopProvider block not found; refusing fuzzy patch')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+      - name: Run transport supervisor regression guard
+        run: python scripts/preflight-mcp-transport-supervisor.py
+
+      - name: Commit carrier fix and remove one-shot workflow
+        shell: bash
+        run: |
+          rm .github/workflows/issue-5457-autopatch.yml
+          git config user.name "qs3d-gpt56sol"
+          git config user.email "89531707+trinhtanphat@users.noreply.github.com"
+          git add src/QS3D.BricsCAD.V25/McpTransportSupervisor.cs scripts/preflight-mcp-transport-supervisor.py .github/workflows/issue-5457-autopatch.yml
+          git commit -m "fix(mcp): preserve stale tunnel ownership evidence (#5457) [5457-sidecar-fixed]"
+          git push origin HEAD:${{ github.ref_name }}
