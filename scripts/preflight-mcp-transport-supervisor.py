@@ -5,6 +5,7 @@ This guard is intentionally deterministic. It validates the lifecycle/failover c
 without claiming live concurrent Cloudflare/OpenAI qualification; that boundary remains LOCAL_ONLY.
 """
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,6 +40,7 @@ for token in (
     "McpTransportSupervisorSnapshot",
     "ActiveProvider",
     "FailoverReason",
+    "LOCAL_ONLY",
 ):
     require(supervisor, token, "supervisor")
 
@@ -69,6 +71,18 @@ for forbidden in (
 
 for token in ("StartTime", "MainModule", "Path.GetFullPath"):
     require(supervisor, token, "owned-process identity")
+
+# StopProvider must not erase a crash-surviving sidecar unconditionally. The sidecar is the proof used
+# on the next start to identify and safely terminate only a QS3D-owned orphan process.
+stop_provider = re.search(
+    r"private static void StopProvider\(McpTransportProvider provider\)\s*\{(?P<body>.*?)\n        \}\n\n        internal static bool TryGetFallbackProvider",
+    supervisor,
+    re.DOTALL,
+)
+if not stop_provider:
+    errors.append("supervisor: cannot locate StopProvider body")
+elif "ClearOwnedProcess(provider)" in stop_provider.group("body"):
+    errors.append("supervisor: StopProvider must preserve crash-surviving ownership sidecar")
 
 if errors:
     print("MCP transport supervisor preflight FAILED:")
