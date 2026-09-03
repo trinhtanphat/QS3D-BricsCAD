@@ -100,6 +100,19 @@ namespace QS3D.Core.Domain
 
         internal event Action? PersistenceMutationRequested;
 
+        internal void ApplyPersistedUpdate(string name, bool updateName, double elevationM, bool updateElevation)
+        {
+            var nextName = updateName ? Require(name, nameof(name)) : _name;
+            var nextElevation = updateElevation ? RequireElevation(elevationM) : _elevationM;
+            var nameChanged = updateName && !string.Equals(_name, nextName, StringComparison.Ordinal);
+            var elevationChanged = updateElevation && !_elevationM.Equals(nextElevation);
+            if (!nameChanged && !elevationChanged) return;
+
+            PersistenceMutationRequested?.Invoke();
+            if (nameChanged) _name = nextName;
+            if (elevationChanged) _elevationM = nextElevation;
+        }
+
         private static double RequireElevation(double value)
         {
             if (double.IsNaN(value) || double.IsInfinity(value))
