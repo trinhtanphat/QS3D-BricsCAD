@@ -20,6 +20,8 @@ RELEASE_RELEVANT_PREFIXES = (
     "scripts/",
 )
 RELEASE_RELEVANT_EXACT_PATHS = {
+    "external/QS3D-Platform",
+    ".gitmodules",
     "Directory.Build.props",
     "QS3D.sln",
     "QS3D.V26.sln",
@@ -32,7 +34,7 @@ class GateError(RuntimeError):
     pass
 
 
-def run_git(*args: str) -> str:
+def _git_completed(*args: str) -> subprocess.CompletedProcess[str]:
     completed = subprocess.run(
         ["git", *args],
         check=False,
@@ -45,14 +47,22 @@ def run_git(*args: str) -> str:
     if completed.returncode != 0:
         detail = completed.stderr.strip() or completed.stdout.strip() or f"exit {completed.returncode}"
         raise GateError(f"git {' '.join(args)} failed: {detail}")
-    return completed.stdout.strip()
+    return completed
+
+
+def run_git(*args: str) -> str:
+    return _git_completed(*args).stdout.strip()
+
+
+def run_git_exact(*args: str) -> str:
+    """Return Git stdout without trimming pathname-significant characters."""
+    return _git_completed(*args).stdout
 
 
 def is_release_relevant(path: str) -> bool:
-    normalized = path.strip().replace("\\", "/")
-    if normalized in RELEASE_RELEVANT_EXACT_PATHS:
+    if path in RELEASE_RELEVANT_EXACT_PATHS:
         return True
-    return any(normalized.startswith(prefix) for prefix in RELEASE_RELEVANT_PREFIXES)
+    return any(path.startswith(prefix) for prefix in RELEASE_RELEVANT_PREFIXES)
 
 
 def parse_preview_ordinal(tag: str, series_prefix: str, source_label: str) -> int:
@@ -98,10 +108,10 @@ def changed_paths_for_first_parent_commit(commit: str) -> list[str]:
         raise GateError(f"could not resolve commit parents for {commit}")
 
     if len(parents) == 1:
-        output = run_git("diff-tree", "--root", "--no-commit-id", "--name-only", "-r", commit)
+        output = run_git_exact("diff-tree", "--root", "--no-commit-id", "--name-only", "-z", "-r", commit)
     else:
-        output = run_git("diff", "--name-only", parents[1], commit, "--")
-    return [line.strip().replace("\\", "/") for line in output.splitlines() if line.strip()]
+        output = run_git_exact("diff", "--name-only", "-z", parents[1], commit, "--")
+    return [path for path in output.split("\0") if path]
 
 
 def collect_relevant_integrations(source_sha: str, previous_tag: str | None) -> list[tuple[str, str, list[str]]]:
