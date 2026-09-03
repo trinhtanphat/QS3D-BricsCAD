@@ -19,6 +19,16 @@ def require(text: str, tokens: tuple[str, ...], label: str, failures: list[str])
             failures.append(f"{label} missing contract marker: {token}")
 
 
+def contains_executable_line(text: str, token: str) -> bool:
+    """Match a PowerShell source token only on non-comment lines."""
+    token_lower = token.lower()
+    return any(
+        token_lower in line.lower()
+        for line in text.splitlines()
+        if not line.lstrip().startswith("#")
+    )
+
+
 def main() -> int:
     failures = []
     prepare = PREPARE.read_text(encoding="utf-8")
@@ -33,18 +43,27 @@ def main() -> int:
         "git config user.name",
         "git config user.email",
         "HEAD:refs/heads/main",
+        "sync-preview-release-version.ps1",
+        "git diff --name-only",
     )
     for token in forbidden_prepare:
-        if token.lower() in prepare.lower():
-            failures.append(f"release preparation must not contain protected-main write primitive: {token}")
+        if contains_executable_line(prepare, token):
+            failures.append(f"release preparation must not contain protected-main/unstable-source primitive: {token}")
 
     require(
         prepare,
         (
-            "sync-preview-release-version.ps1",
+            "validate-preview-release-sequence.ps1",
             "preflight-runtime-product-version-identity.py",
+            "function Get-CommittedProductVersion",
+            "Committed V25 project must contain exactly one unambiguous Version value",
+            "$expectedReleaseTag = \"v$committedProductVersion\"",
+            "Merge the version update to protected main before publishing.",
+            "$releaseRelevantPathspecs = @(",
+            "external/QS3D-Platform",
+            "git diff --quiet --no-ext-diff $range -- @releaseRelevantPathspecs",
             "Release workspace HEAD must remain the protected-main source commit",
-            "No commit, push, branch-protection bypass, or main mutation was performed by release preparation.",
+            "No commit, push, branch-protection bypass, workspace-only version rewrite, or main mutation was performed by release preparation.",
             "Write-Output $releaseBase",
         ),
         "release preparation",
@@ -125,8 +144,8 @@ def main() -> int:
         return 1
 
     print("PASS: V25 preview release and pre-merge compile contracts are protected-main safe.")
-    print(" - preview version synchronization is workspace-only")
-    print(" - source HEAD/provenance remains an exact protected-main commit")
+    print(" - preview identity is validated from committed protected-main source; workspace-only version rewriting is forbidden")
+    print(" - source HEAD/provenance remains an exact protected-main commit and release drift uses Git pathspec semantics")
     print(" - canonical core check compiles V25 through locked, held-verified reference generations with immutable Action refs")
     return 0
 

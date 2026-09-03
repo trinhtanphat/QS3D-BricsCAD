@@ -13,6 +13,7 @@ for path in (ADVANCED, DEEP, SMOKE):
         errors.append("missing advanced-cost known-count file: " + str(path.relative_to(ROOT)))
 
 sources = ""
+replay_guard_count = 0
 if ADVANCED.is_file():
     advanced = ADVANCED.read_text(encoding="utf-8")
     sources += advanced
@@ -26,6 +27,20 @@ if ADVANCED.is_file():
     ):
         if token not in advanced:
             errors.append("AdvancedCostCollectionContract missing early/final Count-integrity contract: " + token)
+
+    replay_start_marker = "private static void RequireStableComponentGeneration("
+    replay_end_marker = "private static bool SameComponentState("
+    replay_start = advanced.find(replay_start_marker)
+    replay_end = advanced.find(replay_end_marker, replay_start + len(replay_start_marker)) if replay_start >= 0 else -1
+    if replay_start < 0 or replay_end < 0:
+        errors.append("Rate build-up generation replay method boundary is missing from Advanced Cost source")
+    else:
+        replay_block = advanced[replay_start:replay_end]
+        replay_guard_count = replay_block.count("AdvancedCostCollectionContract.RequireCanProcessNext(")
+        if replay_guard_count != 1:
+            errors.append(
+                "expected exactly one known-count pre-item guard inside rate build-up generation replay, found "
+                + str(replay_guard_count))
 
 if DEEP.is_file():
     sources += DEEP.read_text(encoding="utf-8")
@@ -46,10 +61,12 @@ expected_labels = (
 
 if sources:
     guard_count = sources.count("AdvancedCostCollectionContract.RequireCanProcessNext(")
-    if guard_count != len(expected_labels):
+    original_consumer_guard_count = guard_count - replay_guard_count
+    if original_consumer_guard_count != len(expected_labels):
         errors.append(
-            "expected exactly " + str(len(expected_labels)) +
-            " Advanced Cost pre-item known-count guards, found " + str(guard_count))
+            "expected exactly " + str(len(expected_labels))+
+            " original Advanced Cost pre-item known-count guards outside generation replay, found "
+            + str(original_consumer_guard_count))
     for label in expected_labels:
         marker = '"' + label + '"'
         if sources.count(marker) < 3:
@@ -89,4 +106,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: all Advanced Cost known-count consumers reject the first unexpected item before semantic processing, retain post-traversal under-yield validation, and keep unknown-stream bounds.")
+print("PASS: all original Advanced Cost known-count consumers plus rate build-up generation replay reject the first unexpected item before semantic processing, retain post-traversal under-yield validation, and keep unknown-stream bounds.")
