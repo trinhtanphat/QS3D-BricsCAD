@@ -9,6 +9,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             OwnedCatalogScalarMutationsAdvanceProjectFreshness();
+            OwnedFamilyPropertyMutationsAdvanceProjectFreshness();
             NormalizedNoOpsDoNotAdvanceProjectFreshness();
             OwnershipTracksRemovalReplacementAndSnapshotRestore();
             DuplicateCatalogReferencesHaveSingleOwnershipSubscription();
@@ -36,6 +37,43 @@ namespace QS3D.Core.SmokeTests
 
             family.Category = ElementCategory.StructuralWall;
             Equal(baseline + 5L, project.ChangeVersion, "family category");
+        }
+
+        private static void OwnedFamilyPropertyMutationsAdvanceProjectFreshness()
+        {
+            var project = CreateProject(out _, out _, out var family);
+            var baseline = project.ChangeVersion;
+
+            family.Properties.Add("FireRating", "60");
+            Equal(baseline + 1L, project.ChangeVersion, "family property add");
+
+            family.Properties["FireRating"] = "60";
+            Equal(baseline + 1L, project.ChangeVersion, "family property identical replacement no-op");
+
+            family.Properties["firerating"] = "90";
+            Equal(baseline + 2L, project.ChangeVersion, "family property replacement");
+            Equal("90", family.Properties["FireRating"], "family property comparer compatibility");
+
+            if (family.Properties.Remove("missing"))
+                throw new Exception("Removing a missing family property must report false.");
+            Equal(baseline + 2L, project.ChangeVersion, "family property missing remove no-op");
+
+            if (!family.Properties.Remove("FIRERATING"))
+                throw new Exception("Removing an existing family property must report true.");
+            Equal(baseline + 3L, project.ChangeVersion, "family property remove");
+
+            family.Properties.Clear();
+            Equal(baseline + 3L, project.ChangeVersion, "empty family property clear no-op");
+
+            family.Properties.Add("A", "1");
+            family.Properties.Add("B", "2");
+            Equal(baseline + 5L, project.ChangeVersion, "family property additions before clear");
+            family.Properties.Clear();
+            Equal(baseline + 6L, project.ChangeVersion, "family property clear must be one logical mutation");
+
+            project.Families.Remove(family);
+            family.Properties.Add("Detached", "true");
+            Equal(baseline + 6L, project.ChangeVersion, "detached family property mutation must not touch former owner");
         }
 
         private static void NormalizedNoOpsDoNotAdvanceProjectFreshness()
