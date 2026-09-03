@@ -121,6 +121,7 @@ namespace QS3D.BricsCAD.V25
 
             RequireConfirmedMutation(body, tool);
             EnsureAutomationRunning();
+            if (string.Equals(tool, "cad_save", StringComparison.Ordinal)) return Save();
             return McpDiagnosticHub.InvokeInCadContext(() =>
             {
                 EnsureAutomationRunning();
@@ -132,7 +133,6 @@ namespace QS3D.BricsCAD.V25
                     case "cad_boolean_union": result = Boolean(body, BooleanOperationType.BoolUnite, "union"); break;
                     case "cad_boolean_subtract": result = Boolean(body, BooleanOperationType.BoolSubtract, "subtract"); break;
                     case "cad_boolean_intersect": result = Boolean(body, BooleanOperationType.BoolIntersect, "intersect"); break;
-                    case "cad_save": result = Save(); break;
                     case "cad_save_as": result = SaveAs(body); break;
                     default: throw new InvalidOperationException("Unknown direct MCP CAD model tool: " + tool);
                 }
@@ -157,14 +157,10 @@ namespace QS3D.BricsCAD.V25
             var inputs = string.Equals(command, "EXTRUDE", StringComparison.Ordinal)
                 ? NormalizeExtrudeInputs(rawInputs)
                 : string.Empty;
+            if (string.Equals(command, "QSAVE", StringComparison.Ordinal)) return SaveCadCommandSequence();
             return McpDiagnosticHub.InvokeInCadContext(() =>
             {
                 EnsureAutomationRunning();
-                if (string.Equals(command, "QSAVE", StringComparison.Ordinal))
-                {
-                    Save();
-                    return "{\"accepted\":true,\"completed\":true,\"saved\":true,\"command\":\"QSAVE\",\"inputChars\":0}";
-                }
                 if (directLayout)
                     return ExecuteDirectLayoutCommand(command, layoutAction, layoutName);
                 var document = RequireDocument();
@@ -178,6 +174,12 @@ namespace QS3D.BricsCAD.V25
                 McpDiagnosticHub.Record("mcp", "info", "cad-command-sequence", "command=EXTRUDE; boundedMultiStage=true; inputChars=" + inputs.Length.ToString(CultureInfo.InvariantCulture), document);
                 return "{\"accepted\":true,\"command\":\"EXTRUDE\",\"multiStage\":true,\"inputChars\":" + inputs.Length.ToString(CultureInfo.InvariantCulture) + "}";
             });
+        }
+
+        private static string SaveCadCommandSequence()
+        {
+            Save();
+            return "{\"accepted\":true,\"completed\":true,\"saved\":true,\"command\":\"QSAVE\",\"inputChars\":0}";
         }
 
         private static string CreateBox(string body)
@@ -301,19 +303,13 @@ namespace QS3D.BricsCAD.V25
 
         private static string Save()
         {
-            var document = RequireDocument();
-            var filename = document.Database.Filename ?? string.Empty;
-            if (!Path.IsPathRooted(filename))
-                throw new InvalidOperationException("Active drawing has no existing local path. Use cad_save_as first.");
-            RequireIdle();
             EnsureAutomationRunning();
-            using (document.LockDocument()) document.Database.Save();
-            var dbmodAfterSave = WaitForSavedContentDbmod();
-            RecordMutation(document, "cad-save", "completed=true; fileName=" + SafeLeaf(filename)
-                + "; route=Database.Save-current-document; dbmodAfterSave=" + dbmodAfterSave.ToString(CultureInfo.InvariantCulture));
-            return "{\"saved\":true,\"completed\":true,\"fileName\":\"" + Escape(SafeLeaf(filename))
-                   + "\",\"route\":\"Database.Save-current-document\",\"dbmodAfterSave\":"
-                   + dbmodAfterSave.ToString(CultureInfo.InvariantCulture) + "}";
+            var result = McpNativeCurrentDocumentSave.SaveCurrentDocument(
+                EnsureAutomationRunning,
+                detail => McpCadAgentRuntime.AuditDomainMutation("cad_save", detail));
+            return "{\"saved\":true,\"completed\":true,\"fileName\":\"" + Escape(result.FileName)
+                   + "\",\"route\":\"native-QSAVE-current-document\",\"dbmodAfterSave\":"
+                   + result.DbmodAfterSave.ToString(CultureInfo.InvariantCulture) + "}";
         }
 
         private static string SaveAs(string body)
