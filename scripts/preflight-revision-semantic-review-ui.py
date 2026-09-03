@@ -92,8 +92,20 @@ helper = commands[helper_start:helper_end] if helper_start >= 0 and helper_end >
 if "ProjectContextCoordinator.GetOrCreate(document)" in helper:
     errors.append("Revision modeless Locate must not create/cache replacement project state")
 
-if "new RevisionService().Compare(before, after)" not in core:
-    errors.append("semantic review UI must remain backed by RevisionService.Compare through the Core review builder")
+# Semantic UI review must be backed by one detached Core generation. Pin the semantic
+# behavior rather than the obsolete live-input Compare(before, after) implementation detail.
+for token in (
+    'RevisionSnapshotDetacher.Capture(before, "semantic review before")',
+    'RevisionSnapshotDetacher.Capture(after, "semantic review after")',
+    'var beforeIndex = Index(beforeSnapshot, "before")',
+    'var afterIndex = Index(afterSnapshot, "after")',
+    "new RevisionService().Compare(beforeSnapshot, afterSnapshot)",
+):
+    if token not in core:
+        errors.append("semantic review UI Core backing missing detached-generation token: " + token)
+
+if "new RevisionService().Compare(before, after)" in core:
+    errors.append("semantic review UI Core backing regressed to live caller-owned snapshots")
 
 print("QS3D revision semantic review UI preflight")
 if errors:
@@ -102,4 +114,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: RevisionWindow presents quantity and grouped semantic changes, hides raw source handles, resolves a live source Document for the current-state read-only stable-ID locate path, and performs no native write mutation.")
+print("PASS: RevisionWindow presents quantity and grouped semantic changes, hides raw source handles, resolves a live source Document for the current-state read-only stable-ID locate path, and remains backed by one detached Core semantic generation without native write mutation.")
