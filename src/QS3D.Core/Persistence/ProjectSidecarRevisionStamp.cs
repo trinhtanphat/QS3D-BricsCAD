@@ -32,8 +32,11 @@ namespace QS3D.Core.Persistence
             RequireCanonicalPath(primaryPath, nameof(primaryPath));
 
             var fullPath = Path.GetFullPath(primaryPath);
+            var backupPath = fullPath + ".bak";
+            PersistencePathSafety.RequireNonRedirected(fullPath, "sidecar revision primary read");
+            PersistencePathSafety.RequireNonRedirected(backupPath, "sidecar revision backup read");
             using (var primary = FileCapture.Open(fullPath))
-            using (var backup = FileCapture.Open(fullPath + ".bak"))
+            using (var backup = FileCapture.Open(backupPath))
             {
                 // Keep every existing member open without write/delete sharing while both
                 // digests are produced. Missing members are rechecked before returning.
