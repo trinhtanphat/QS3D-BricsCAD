@@ -115,6 +115,7 @@ namespace QS3D.Core.Persistence
 
             public static FileCapture Open(string path)
             {
+                PersistencePathSafety.RequireNonRedirected(path, "sidecar revision member read");
                 FileAttributes attributes;
                 try { attributes = File.GetAttributes(path); }
                 catch (FileNotFoundException) { return new FileCapture(path, null); }
@@ -126,8 +127,10 @@ namespace QS3D.Core.Persistence
                     var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
                     try
                     {
-                        // Recheck path identity after opening so a redirected member cannot
-                        // gain digest authority through a pre-open attribute race.
+                        // Recheck the complete path graph and final member after opening so
+                        // a redirected ancestor or member cannot gain digest authority via
+                        // an admission/open race.
+                        PersistencePathSafety.RequireNonRedirected(path, "sidecar revision member read");
                         RequireRegularSidecar(File.GetAttributes(path));
                         if (stream.Length > MaxSidecarBytes)
                             throw new InvalidDataException("QS3D sidecar exceeds the bounded revision-check size.");
@@ -156,6 +159,7 @@ namespace QS3D.Core.Persistence
 
             public void EnsurePresenceUnchanged()
             {
+                PersistencePathSafety.RequireNonRedirected(_path, "sidecar revision member read");
                 if (_stream != null)
                 {
                     FileAttributes attributes;
