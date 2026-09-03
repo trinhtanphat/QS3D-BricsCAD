@@ -121,6 +121,27 @@ function Assert-ReleaseBaseIsSafe {
     }
 }
 
+function Get-CommittedProductVersion {
+    $projectPath = Join-Path $root 'src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj'
+    if (-not (Test-Path -LiteralPath $projectPath -PathType Leaf)) {
+        throw "Could not locate committed V25 project version source: $projectPath"
+    }
+
+    [xml]$projectXml = Get-Content -LiteralPath $projectPath -Raw
+    $values = @(
+        $projectXml.Project.PropertyGroup |
+            ForEach-Object { $_.ProductVersion } |
+            Where-Object { $null -ne $_ } |
+            ForEach-Object { ([string]$_).Trim() } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            Sort-Object -Unique
+    )
+    if ($values.Count -ne 1) {
+        throw "Committed V25 project must contain exactly one unambiguous ProductVersion value. Found $($values.Count)."
+    }
+    return [string]$values[0]
+}
+
 Push-Location $root
 try {
     $head = ([string](& git rev-parse --verify HEAD)).Trim().ToLowerInvariant()
@@ -134,12 +155,6 @@ try {
     }
 
     & (Join-Path $PSScriptRoot 'validate-preview-release-sequence.ps1') -ReleaseTag $tag
-
-    $allowed = @(
-        'src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj',
-        'src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj',
-        'src/QS3D.Core/QS3D.Core.csproj'
-    )
 
     $maxAttempts = 12
     for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
@@ -157,35 +172,24 @@ try {
 
         $baseStatus = @(Get-ReleaseStatusEntries)
         foreach ($entry in $baseStatus) {
-            throw "Release base must be clean before version synchronization. Unexpected status '$($entry.State)' at $($entry.Path)."
+            throw "Release base must be clean before committed version validation. Unexpected status '$($entry.State)' at $($entry.Path)."
         }
 
         if ($releaseBase -ne $dispatch) {
             Write-Host "main advanced only through non-release paths; release preparation is rebased safely from dispatched source $dispatch onto $releaseBase."
         }
 
-        & (Join-Path $PSScriptRoot 'sync-preview-release-version.ps1') -ReleaseTag $tag
-        if ($LASTEXITCODE -ne 0) {
-            throw "Preview source identity synchronization failed for $tag."
-        }
-
         & python (Join-Path $PSScriptRoot 'preflight-runtime-product-version-identity.py')
         if ($LASTEXITCODE -ne 0) {
-            throw 'Runtime product-version identity preflight failed after synchronization.'
+            throw 'Runtime product-version identity preflight failed for committed release source.'
         }
 
-        $status = @(Get-ReleaseStatusEntries)
-        $changed = @()
-        foreach ($entry in $status) {
-            if ($entry.State -ne ' M') {
-                throw "Preview synchronization produced an unexpected Git status '$($entry.State)' at $($entry.Path)."
-            }
-            if ($entry.Path -notin $allowed) {
-                throw "Release preparation touched an unexpected path: $($entry.Path)"
-            }
-            $changed += $entry.Path
+        $committedProductVersion = Get-CommittedProductVersion
+        $expectedReleaseTag = "v$committedProductVersion"
+        if (-not [string]::Equals($tag, $expectedReleaseTag, [StringComparison]::Ordinal)) {
+            throw "Committed preview ProductVersion '$committedProductVersion' at protected-main source $releaseBase requires tag '$expectedReleaseTag'; requested '$tag'. Merge the version update to protected main before publishing."
         }
-        $changed = @($changed | Sort-Object -Unique)
+        Write-Host "Committed preview ProductVersion '$committedProductVersion' matches requested release tag '$tag' at source $releaseBase."
 
         & git diff --check
         if ($LASTEXITCODE -ne 0) {
@@ -197,24 +201,23 @@ try {
             throw "Release workspace HEAD must remain the protected-main source commit. Expected $releaseBase, got $workspaceHead."
         }
 
+        $finalStatus = @(Get-ReleaseStatusEntries)
+        foreach ($entry in $finalStatus) {
+            throw "Release preparation must remain clean after committed version validation. Unexpected status '$($entry.State)' at $($entry.Path)."
+        }
+
         $latestMain = Get-RemoteMain
         Assert-ReleaseBaseIsSafe -TargetSha $latestMain
         if ($latestMain -ne $releaseBase) {
             if ($attempt -ge $maxAttempts) {
                 throw "main kept advancing through non-release paths during $maxAttempts protected-main release-preparation attempts. Retry from a fresh workflow run."
             }
-            Write-Host "main advanced through additional non-release paths while preparing the workspace ($releaseBase -> $latestMain); retrying without writing main."
+            Write-Host "main advanced through additional non-release paths while validating committed release source ($releaseBase -> $latestMain); retrying without writing main."
             continue
         }
 
-        if ($changed.Count -eq 0) {
-            Write-Host "Source identity already matches $tag on protected-main source $releaseBase."
-        }
-        else {
-            Write-Host "Prepared workspace-only preview identity $tag on protected-main source $releaseBase. Modified build inputs:"
-            $changed | ForEach-Object { Write-Host " - $_" }
-        }
-        Write-Host 'No commit, push, branch-protection bypass, or main mutation was performed by release preparation.'
+        Write-Host "Release source identity $tag is committed and clean on protected-main source $releaseBase."
+        Write-Host 'No commit, push, branch-protection bypass, workspace-only version rewrite, or main mutation was performed by release preparation.'
         Write-Output $releaseBase
         return
     }
