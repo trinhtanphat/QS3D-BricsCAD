@@ -48,7 +48,7 @@ try {
 
     $sha256 = [System.Security.Cryptography.SHA256]::Create()
     try {
-        $actualHash = [Convert]::ToHexString($sha256.ComputeHash($stream))
+        $actualHash = ([BitConverter]::ToString($sha256.ComputeHash($stream))).Replace('-', '')
     }
     finally {
         $sha256.Dispose()
