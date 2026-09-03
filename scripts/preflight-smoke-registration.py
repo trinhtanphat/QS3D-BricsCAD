@@ -129,14 +129,16 @@ def mask_csharp_non_code(text):
 
 
 def build_run_reference_index(sources):
-    """Index executable ClassName.Run(...) call sites with one scan of each source file."""
+    """Index executable ClassName.Run(...) call sites with caller class affinity."""
     references = {}
     source_scans = 0
     for path, text in sources.items():
         source_scans += 1
         code = mask_csharp_non_code(text)
+        spans = find_class_spans(code)
         for match in RUN_CALL_PATTERN.finditer(code):
-            references.setdefault(match.group(1), set()).add(path)
+            caller_owner = class_owner_at(spans, match.start())
+            references.setdefault(match.group(1), set()).add((path, caller_owner))
     return references, source_scans
 
 
@@ -240,8 +242,8 @@ def find_registration_errors(sources):
             # the same lexical class.
             if has_module_initializer_run_call(code, class_name, spans):
                 continue
-            registration_paths = references.get(class_name, ())
-            if not any(other_path != path for other_path in registration_paths):
+            registrations = references.get(class_name, ())
+            if not any(other_path != path or caller_owner != class_name for other_path, caller_owner in registrations):
                 errors.append(path.name + ": " + class_name + ".Run() is never registered or invoked")
 
     return checked, errors, source_scans
@@ -267,6 +269,8 @@ def verify_index_regression():
         Path("SelfOnlySmoke.cs"): "internal static class SelfOnlySmoke { internal static void Run() { SelfOnlySmoke.Run(); } }",
         Path("HelperFirstSmoke.cs"): "internal static class Helper { internal static void Touch() { } } internal static class ActualSmoke { internal static void Run() { } }",
         Path("HelperFirstRegistration.cs"): "internal static class HelperFirstRegistration { internal static void Register() { ActualSmoke.Run(); } }",
+        Path("SameFilePeerSmoke.cs"): "internal static class DriverSmoke { internal static void Run() { PeerSmoke.Run(); } } internal static class PeerSmoke { internal static void Run() { } }",
+        Path("SameFilePeerRegistration.cs"): "internal static class SameFilePeerRegistration { internal static void Register() { DriverSmoke.Run(); } }",
         Path("WrongClassInitializerSmoke.cs"): "internal static class Other { [ModuleInitializer] internal static void Register() { Run(); } internal static void Run() { } } internal static class WrongClassInitializerSmoke { internal static void Run() { } }",
     }
     checked, errors, source_scans = find_registration_errors(small_sources)
@@ -281,7 +285,7 @@ def verify_index_regression():
         "SelfOnlySmoke.cs: SelfOnlySmoke.Run() is never registered or invoked",
         "WrongClassInitializerSmoke.cs: WrongClassInitializerSmoke.Run() is never registered or invoked",
     }
-    if checked != 16 or set(errors) != expected_errors or source_scans != len(small_sources):
+    if checked != 18 or set(errors) != expected_errors or source_scans != len(small_sources):
         raise RuntimeError("smoke-registration semantic regression self-check failed")
 
     scale_sources = {}
