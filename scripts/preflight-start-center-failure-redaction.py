@@ -43,7 +43,12 @@ def main() -> int:
         "    }\n}",
         "Start Center document activation",
     )
-    require(activation, "_panel.RefreshFromActiveDocument();", "activation refresh")
+    require(
+        activation,
+        "panel.RefreshFromDocument(e.Document ?? Application.DocumentManager.MdiActiveDocument);",
+        "document-affine activation refresh",
+    )
+    forbid(activation, "RefreshFromActiveDocument()", "activation must not re-query process-global active document")
     require(activation, "catch (Exception)", "activation containment")
     require(
         activation,
@@ -53,7 +58,7 @@ def main() -> int:
     forbid(activation, "ex.Message", "activation callback")
     forbid(activation, ".Message", "activation callback")
 
-    # Preserve the native lifecycle safety contract while changing only diagnostics.
+    # Preserve the native lifecycle safety contract while changing only diagnostics/affinity.
     require(coordinator, "var wasVisible = palette.Visible;", "visibility rollback snapshot")
     require(coordinator, "var wasSubscribed = _documentActivatedSubscribed;", "subscription rollback snapshot")
     require(coordinator, "if (!wasVisible)", "visibility rollback gate")
@@ -61,7 +66,7 @@ def main() -> int:
     require(coordinator, "Application.DocumentManager.DocumentActivated += OnDocumentActivated;", "activation subscribe")
     require(coordinator, "Application.DocumentManager.DocumentActivated -= OnDocumentActivated;", "activation unsubscribe")
 
-    print("PASS: Start Center command/activation failures are stable-redacted while native PaletteSet lifecycle rollback remains pinned.")
+    print("PASS: Start Center command/activation failures are stable-redacted, document-affine, and native PaletteSet lifecycle rollback remains pinned.")
     return 0
 
 

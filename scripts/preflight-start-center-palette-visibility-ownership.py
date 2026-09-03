@@ -17,12 +17,13 @@ if not show:
     errors.append("StartCenterPaletteCoordinator.Show was not found")
 else:
     body = show.group("body")
+    refresh_token = "panel.RefreshFromDocument(Application.DocumentManager.MdiActiveDocument);"
     required = (
         "var wasVisible = palette.Visible;",
         "var wasSubscribed = _documentActivatedSubscribed;",
         "SubscribeToDocumentActivation();",
         "palette.Visible = true;",
-        "panel.RefreshFromActiveDocument();",
+        refresh_token,
         "if (!wasVisible)",
         "palette.Visible = false;",
         "if (!wasSubscribed)",
@@ -35,7 +36,7 @@ else:
 
     subscribe = body.find("SubscribeToDocumentActivation();")
     visible = body.find("palette.Visible = true;")
-    refresh = body.find("panel.RefreshFromActiveDocument();")
+    refresh = body.find(refresh_token)
     if min(subscribe, visible, refresh) >= 0 and not (subscribe < visible < refresh):
         errors.append("Show must subscribe before native visibility and refresh only after visibility succeeds")
 
@@ -58,9 +59,11 @@ else:
     if unsubscribe < 0:
         errors.append("Hide must release DocumentActivated ownership while dormant")
     if hide_visible >= 0 and unsubscribe >= 0 and hide_visible > unsubscribe:
-        errors.append("Hide must release host event ownership only after native hide succeeds")
+        errors.append("Hide must attempt native hide before releasing host event ownership")
     if "return;" in body[:unsubscribe if unsubscribe >= 0 else len(body)]:
         errors.append("Hide must not bypass callback release when the PaletteSet is absent or already hidden")
+    if "finally" not in body:
+        errors.append("Hide must release DocumentActivated ownership even when native hide throws")
 
 unsubscribe = re.search(
     r"private static void UnsubscribeFromDocumentActivation\(\)\s*\{(?P<body>.*?)\n\s*\}\n\n\s*private static void OnDocumentActivated",
