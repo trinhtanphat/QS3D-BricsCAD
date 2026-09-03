@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             NormalizedNoOpsDoNotAdvanceProjectFreshness();
             OwnershipTracksRemovalReplacementAndSnapshotRestore();
             DuplicateCatalogReferencesHaveSingleOwnershipSubscription();
+            ServiceRenameAdvancesProjectFreshnessExactlyOnce();
         }
 
         private static void OwnedCatalogScalarMutationsAdvanceProjectFreshness()
@@ -102,6 +103,22 @@ namespace QS3D.Core.SmokeTests
             project.Zones.RemoveAt(0);
             zone.Name = "Duplicate zone detached";
             Equal(baseline + 2L, project.ChangeVersion, "last duplicate removal must detach ownership");
+        }
+
+        private static void ServiceRenameAdvancesProjectFreshnessExactlyOnce()
+        {
+            var project = CreateProject(out _, out _, out var family);
+            var baseline = project.ChangeVersion;
+
+            var renamed = ProjectFamilyService.Rename(project, family.Id, "Wall Type Renamed");
+
+            if (!ReferenceEquals(family, renamed))
+                throw new Exception("ProjectFamilyService.Rename must preserve the owned family object identity.");
+            Equal("Wall Type Renamed", family.Name, "service rename family name");
+            Equal(baseline + 1L, project.ChangeVersion, "service rename must advance project freshness exactly once");
+
+            ProjectFamilyService.Rename(project, family.Id, " Wall Type Renamed ");
+            Equal(baseline + 1L, project.ChangeVersion, "normalized service rename no-op must not advance project freshness");
         }
 
         private static ProjectState CreateProject(
