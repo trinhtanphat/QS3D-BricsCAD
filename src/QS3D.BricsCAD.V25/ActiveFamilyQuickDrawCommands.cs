@@ -94,9 +94,9 @@ namespace QS3D.BricsCAD.V25
                         Dispatch(document, dispatchFamily, advanced, operation);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Report(document, operation + " lỗi: " + ex.Message);
+                Report(document, operation + ": không thể hoàn tất thao tác. Vui lòng thử lại.");
             }
         }
 
