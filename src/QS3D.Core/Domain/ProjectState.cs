@@ -131,6 +131,76 @@ namespace QS3D.Core.Domain
 
     public sealed class ProjectFamily : INotifyPropertyChanged
     {
+        private sealed class PersistenceAwarePropertyDictionary : IDictionary<string, string>
+        {
+            private readonly Dictionary<string, string> _inner = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            private readonly Action _beforeMutation;
+
+            internal PersistenceAwarePropertyDictionary(Action beforeMutation)
+            {
+                _beforeMutation = beforeMutation ?? throw new ArgumentNullException(nameof(beforeMutation));
+            }
+
+            public string this[string key]
+            {
+                get => _inner[key];
+                set
+                {
+                    if (_inner.TryGetValue(key, out var current) && string.Equals(current, value, StringComparison.Ordinal)) return;
+                    _beforeMutation();
+                    _inner[key] = value;
+                }
+            }
+
+            public ICollection<string> Keys => _inner.Keys;
+            public ICollection<string> Values => _inner.Values;
+            public int Count => _inner.Count;
+            public bool IsReadOnly => false;
+
+            public void Add(string key, string value)
+            {
+                if (_inner.ContainsKey(key))
+                {
+                    _inner.Add(key, value);
+                    return;
+                }
+                _beforeMutation();
+                _inner.Add(key, value);
+            }
+
+            public void Add(KeyValuePair<string, string> item) => Add(item.Key, item.Value);
+
+            public void Clear()
+            {
+                if (_inner.Count == 0) return;
+                _beforeMutation();
+                _inner.Clear();
+            }
+
+            public bool Contains(KeyValuePair<string, string> item) => ((ICollection<KeyValuePair<string, string>>)_inner).Contains(item);
+            public bool ContainsKey(string key) => _inner.ContainsKey(key);
+            public void CopyTo(KeyValuePair<string, string>[] array, int arrayIndex) => ((ICollection<KeyValuePair<string, string>>)_inner).CopyTo(array, arrayIndex);
+            public IEnumerator<KeyValuePair<string, string>> GetEnumerator() => _inner.GetEnumerator();
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            public bool Remove(string key)
+            {
+                if (!_inner.ContainsKey(key)) return false;
+                _beforeMutation();
+                return _inner.Remove(key);
+            }
+
+            public bool Remove(KeyValuePair<string, string> item)
+            {
+                var collection = (ICollection<KeyValuePair<string, string>>)_inner;
+                if (!collection.Contains(item)) return false;
+                _beforeMutation();
+                return collection.Remove(item);
+            }
+
+            public bool TryGetValue(string key, out string value) => _inner.TryGetValue(key, out value!);
+        }
+
         private string _name;
         private ElementCategory _category;
 
@@ -139,7 +209,7 @@ namespace QS3D.Core.Domain
             Id = RequireId(id);
             _name = RequireName(name);
             _category = RequireCategory(category);
-            Properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            Properties = new PersistenceAwarePropertyDictionary(() => PersistenceMutationRequested?.Invoke());
         }
 
         public string Id { get; }
