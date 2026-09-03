@@ -50,7 +50,42 @@ def main() -> int:
                 f"observed marker {observed!r}"
             )
 
-    print("PASS: aggregate feature preflight executes the exact source bytes admitted before pathname replacement.")
+        helper_path = temp / "identity_peer.py"
+        helper_path.write_text("VALUE = 'peer-import-ok'\n", encoding="utf-8")
+        semantics_marker = temp / "semantics.txt"
+        semantics_gate = temp / "semantics_gate.py"
+        semantics_gate.write_text(
+            "from pathlib import Path\n"
+            "import os\n"
+            "import sys\n"
+            "import identity_peer\n"
+            "expected = os.environ['QS3D_EXPECTED_GATE']\n"
+            "checks = [\n"
+            "    sys.argv[0] == expected,\n"
+            "    __file__ == expected,\n"
+            "    identity_peer.VALUE == 'peer-import-ok',\n"
+            "]\n"
+            "Path(os.environ['QS3D_SEMANTICS_MARKER']).write_text('ok' if all(checks) else repr((sys.argv[0], __file__, sys.path[0])), encoding='utf-8')\n"
+            "raise SystemExit(0 if all(checks) else 23)\n",
+            encoding="utf-8",
+        )
+        semantics = runner.admit_gate(semantics_gate, allowed_root=temp)
+        semantics_env = runner.build_child_env(
+            {
+                **os.environ,
+                "QS3D_EXPECTED_GATE": str(semantics_gate),
+                "QS3D_SEMANTICS_MARKER": str(semantics_marker),
+            }
+        )
+        semantics_returncode = runner.run_gate(semantics, semantics_env, 10)
+        semantics_observed = semantics_marker.read_text(encoding="utf-8") if semantics_marker.exists() else "<missing>"
+        if semantics_returncode != 0 or semantics_observed != "ok":
+            raise RuntimeError(
+                "admitted-byte execution changed direct-script argv/import semantics; "
+                f"exit={semantics_returncode}, observed={semantics_observed!r}"
+            )
+
+    print("PASS: aggregate feature preflight executes admitted bytes while preserving direct-script execution semantics.")
     return 0
 
 
