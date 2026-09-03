@@ -44,50 +44,64 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(element);
 
             var stamp = new ProjectPersistenceStamp(project);
-            var savedVersion = project.ChangeVersion;
+            var expectedVersion = project.ChangeVersion;
             var savedUpdatedUtc = project.UpdatedUtc;
             False(stamp.RequiresSave(project), "Baseline nested persisted state was marked pending.");
 
             family.Name = "Family 1 revised";
-            Equal(savedVersion, project.ChangeVersion, "Direct family mutation unexpectedly changed the project revision.");
+            expectedVersion = checked(expectedVersion + 1L);
+            Equal(expectedVersion, project.ChangeVersion, "Direct owned family mutation did not advance the project revision exactly once.");
             True(stamp.RequiresSave(project), "Direct persisted family mutation bypassed dirty detection.");
             family.Name = "Family 1";
+            expectedVersion = checked(expectedVersion + 1L);
+            Equal(expectedVersion, project.ChangeVersion, "Restoring an owned family scalar did not advance the project revision exactly once.");
             False(stamp.RequiresSave(project), "Restoring the persisted family value left a false-positive dirty state.");
 
             family.Properties["Material"] = "Brick";
-            Equal(savedVersion, project.ChangeVersion, "Direct family property mutation unexpectedly changed the project revision.");
+            expectedVersion = checked(expectedVersion + 1L);
+            Equal(expectedVersion, project.ChangeVersion, "Direct owned family property mutation did not advance the project revision exactly once.");
             True(stamp.RequiresSave(project), "Direct persisted family property mutation bypassed dirty detection.");
             family.Properties["Material"] = "Concrete";
+            expectedVersion = checked(expectedVersion + 1L);
+            Equal(expectedVersion, project.ChangeVersion, "Restoring an owned family property did not advance the project revision exactly once.");
             False(stamp.RequiresSave(project), "Restoring the persisted family property left a false-positive dirty state.");
 
             element.Properties["LengthM"] = "6";
-            Equal(savedVersion, project.ChangeVersion, "Direct element property mutation unexpectedly changed the project revision.");
+            Equal(expectedVersion, project.ChangeVersion, "Direct element property mutation unexpectedly changed the project revision.");
             True(stamp.RequiresSave(project), "Direct persisted element mutation bypassed dirty detection.");
             element.Properties["LengthM"] = "5";
+            Equal(expectedVersion, project.ChangeVersion, "Restoring a direct element property unexpectedly changed the project revision.");
             False(stamp.RequiresSave(project), "Restoring the persisted element property left a false-positive dirty state.");
 
             element.SourceHandles.Add("CD34");
-            Equal(savedVersion, project.ChangeVersion, "Direct element handle mutation unexpectedly changed the project revision.");
+            Equal(expectedVersion, project.ChangeVersion, "Direct element handle mutation unexpectedly changed the project revision.");
             True(stamp.RequiresSave(project), "Direct persisted element handle mutation bypassed dirty detection.");
             element.SourceHandles.Remove("CD34");
+            Equal(expectedVersion, project.ChangeVersion, "Restoring direct element handles unexpectedly changed the project revision.");
             False(stamp.RequiresSave(project), "Restoring the persisted element handles left a false-positive dirty state.");
 
             project.Zones.Add(new ZoneDefinition("zone-1", "Zone 1"));
-            Equal(savedVersion, project.ChangeVersion, "Direct nested collection mutation unexpectedly changed the project revision.");
+            Equal(expectedVersion, project.ChangeVersion, "Direct nested collection mutation unexpectedly changed the project revision.");
             True(stamp.RequiresSave(project), "Direct persisted nested collection mutation bypassed dirty detection.");
             project.Zones.Clear();
+            Equal(expectedVersion, project.ChangeVersion, "Restoring a direct nested collection unexpectedly changed the project revision.");
             False(stamp.RequiresSave(project), "Restoring the persisted nested collection left a false-positive dirty state.");
 
             project.UpdatedUtc = savedUpdatedUtc.AddSeconds(1);
-            Equal(savedVersion, project.ChangeVersion, "Direct persisted timestamp mutation unexpectedly changed the project revision.");
+            Equal(expectedVersion, project.ChangeVersion, "Direct persisted timestamp mutation unexpectedly changed the project revision.");
             True(stamp.RequiresSave(project), "Direct persisted project timestamp mutation bypassed dirty detection.");
             project.UpdatedUtc = savedUpdatedUtc;
+            Equal(expectedVersion, project.ChangeVersion, "Restoring the direct persisted timestamp unexpectedly changed the project revision.");
             False(stamp.RequiresSave(project), "Restoring the persisted project timestamp left a false-positive dirty state.");
 
             family.Name = "Saved family";
+            expectedVersion = checked(expectedVersion + 1L);
+            Equal(expectedVersion, project.ChangeVersion, "Pre-save owned family mutation did not advance the project revision exactly once.");
             stamp.MarkSaved(project);
             False(stamp.RequiresSave(project), "MarkSaved did not refresh the nested persisted-content baseline.");
             family.Name = "Family 1";
+            expectedVersion = checked(expectedVersion + 1L);
+            Equal(expectedVersion, project.ChangeVersion, "Post-save owned family mutation did not advance the project revision exactly once.");
             True(stamp.RequiresSave(project), "A post-MarkSaved nested mutation was not detected.");
         }
 
