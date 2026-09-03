@@ -1,0 +1,17 @@
+name: Issue 5457 verify transport supervisor
+
+on:
+  push:
+    branches:
+      - agent/gpt56sol-20260903-multi-transport-failover/issue-5457-multi-transport-failover
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run transport supervisor regression guard
+        run: python scripts/preflight-mcp-transport-supervisor.py
