@@ -22,8 +22,23 @@ def main() -> int:
     require(source, "raw.Any(char.IsControl)", "control rejection")
     require(source, "XmlConvert.VerifyXmlChars(raw);", "XML character validation")
     require(source, "contains characters that are invalid in XML", "stable invalid-XML diagnostic")
-    require(source, "CanonicalRevisionId(before.Id, \"before revision id\")", "before revision admission")
-    require(source, "CanonicalRevisionId(after.Id, \"after revision id\")", "after revision admission")
+
+    build = source.index("public SemanticChangeReview Build")
+    detach_before = source.index('RevisionSnapshotDetacher.Capture(before, "semantic review before")', build)
+    detach_after = source.index('RevisionSnapshotDetacher.Capture(after, "semantic review after")', detach_before)
+    before_id = source.index('CanonicalRevisionId(beforeSnapshot.Id, "before revision id")', detach_after)
+    after_id = source.index('CanonicalRevisionId(afterSnapshot.Id, "after revision id")', before_id)
+    index_before = source.index('Index(beforeSnapshot, "before")', after_id)
+
+    if not (build < detach_before < detach_after < before_id < after_id < index_before):
+        raise SystemExit("ERROR: semantic review revision IDs must be admitted from detached snapshots before indexing.")
+
+    for forbidden in (
+        'CanonicalRevisionId(before.Id, "before revision id")',
+        'CanonicalRevisionId(after.Id, "after revision id")',
+    ):
+        if forbidden in source[build:]:
+            raise SystemExit("ERROR: semantic review revision identity still consults live caller state: " + forbidden)
 
     require(smoke, "MalformedRevisionIdsFailClosed", "hostile revision-id regression")
     require(smoke, 'Id = "R\\uD800"', "lone high-surrogate probe")
@@ -36,7 +51,7 @@ def main() -> int:
     require(runbook, "supplementary-plane Unicode", "valid Unicode contract")
     require(runbook, "Runtime: NOT_APPLICABLE", "runtime boundary")
 
-    print("PASS semantic change review revision identity")
+    print("PASS semantic change review revision identity from detached generation")
     return 0
 
 
