@@ -300,6 +300,9 @@ namespace QS3D.BricsCAD.V25
 
         private static void StopProvider(McpTransportProvider provider)
         {
+            // Manager stop paths clear ownership only when they actually own a live child.
+            // Do not erase a crash-surviving sidecar here: it is the proof needed by the next
+            // start to distinguish a QS3D-owned orphan from an unrelated tunnel process.
             try
             {
                 if (provider == McpTransportProvider.OpenAiSecureTunnel)
@@ -308,7 +311,6 @@ namespace QS3D.BricsCAD.V25
                     McpCloudflareAccountTunnelManager.StopForHostShutdown();
             }
             catch { }
-            ClearOwnedProcess(provider);
         }
 
         internal static bool TryGetFallbackProvider(McpTransportProvider failedProvider, out McpTransportProvider fallback)
