@@ -18,6 +18,11 @@ def require_tokens(text, tokens, label):
             raise ValueError(f"{label} lost required committed-source guard: {token}")
 
 
+def contains_executable_line(text, token):
+    """Match a source token only on non-comment PowerShell lines."""
+    return any(token in line for line in text.splitlines() if not line.lstrip().startswith("#"))
+
+
 def main():
     try:
         workflow = WORKFLOW.read_text(encoding="utf-8")
@@ -83,7 +88,7 @@ def main():
         )
         if "sync-preview-release-version.ps1" in prepare:
             raise ValueError("V25 release preparation must not rewrite preview identity only in the workspace")
-        if "git diff --name-only" in prepare:
+        if contains_executable_line(prepare, "git diff --name-only"):
             raise ValueError("V25 release preparation must not classify release drift from line-oriented pathname output")
         if "Test-IsExpectedNuGetCachePath" in prepare:
             raise ValueError("V25 release preparation must exclude NuGet cache before status parsing")
