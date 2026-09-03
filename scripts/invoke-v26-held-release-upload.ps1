@@ -16,6 +16,11 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Windows PowerShell does not guarantee that System.Net.Http is loaded before a script
+# resolves its first HttpClient/StreamContent type literal. Load the framework assembly
+# explicitly while the admitted-generation stream contract remains unchanged.
+Add-Type -AssemblyName System.Net.Http
+
 function Get-CanonicalFullPath {
     param([Parameter(Mandatory = $true)][string]$LiteralPath)
     return [IO.Path]::GetFullPath($LiteralPath)
