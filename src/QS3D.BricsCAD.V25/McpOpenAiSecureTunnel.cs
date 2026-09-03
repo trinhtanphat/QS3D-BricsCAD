@@ -162,6 +162,8 @@ namespace QS3D.BricsCAD.V25
         private const string LocalBearerEnvironment = "QS3D_TUNNEL_MCP_AUTH";
         private const string LocalTunnelAuthorizationHeader = "X-QS3D-MCP-Local-Authorization";
         private const string ExpectedSha256Environment = "QS3D_OPENAI_TUNNEL_CLIENT_SHA256";
+        // 0.0.11 is the first tunnel-client line with mcp.extra_headers and mcp.discovery_extra_headers.
+        private static readonly Version MinimumSupportedTunnelClientVersion = new Version(0, 0, 11);
         private const int MaxDiagnosticLines = 80;
         private const int WatchdogPeriodMilliseconds = 5000;
         private const int UnreadyRestartThreshold = 3;
@@ -171,6 +173,9 @@ namespace QS3D.BricsCAD.V25
             "^tunnel_[0-9a-f]{32}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex Sha256Regex = new Regex(
             "^[0-9a-fA-F]{64}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        private static readonly Regex TunnelClientVersionRegex = new Regex(
+            "(?<![0-9])v?([0-9]{1,5})\\.([0-9]{1,5})\\.([0-9]{1,5})(?:[-+][0-9A-Za-z.-]{1,64})?(?![0-9])",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
         private static readonly Regex ApiKeyRegex = new Regex(
             "\\bsk-[A-Za-z0-9_\\-]{8,}\\b", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex AuthorizationRegex = new Regex(
@@ -823,6 +828,12 @@ namespace QS3D.BricsCAD.V25
                 error = "file không chạy được với --version như tunnel-client.";
                 return false;
             }
+            string versionError;
+            if (!IsSupportedTunnelClientVersion(version, out versionError))
+            {
+                error = versionError;
+                return false;
+            }
 
             var trust = VerifyAuthenticode(path);
             if (trust == 0)
@@ -871,6 +882,43 @@ namespace QS3D.BricsCAD.V25
                 return false;
             }
             summary = "version=" + version + "; SHA-256 verified via " + ExpectedSha256Environment + "=" + actual.ToLowerInvariant();
+            return true;
+        }
+
+        private static bool IsSupportedTunnelClientVersion(string versionText, out string error)
+        {
+            error = string.Empty;
+            Version parsed;
+            if (!TryParseTunnelClientVersion(versionText, out parsed))
+            {
+                error = "tunnel-client version is unsupported: --version output did not contain a bounded semantic version.";
+                return false;
+            }
+            if (parsed.CompareTo(MinimumSupportedTunnelClientVersion) < 0)
+            {
+                error = "tunnel-client version is unsupported: found " + parsed
+                        + ", minimum required for MCP runtime/discovery static headers is "
+                        + MinimumSupportedTunnelClientVersion + ".";
+                return false;
+            }
+            return true;
+        }
+
+        private static bool TryParseTunnelClientVersion(string versionText, out Version version)
+        {
+            version = new Version(0, 0, 0);
+            var match = TunnelClientVersionRegex.Match((versionText ?? string.Empty).Trim());
+            if (!match.Success) return false;
+            int major;
+            int minor;
+            int patch;
+            if (!int.TryParse(match.Groups[1].Value, out major)
+                || !int.TryParse(match.Groups[2].Value, out minor)
+                || !int.TryParse(match.Groups[3].Value, out patch))
+                return false;
+            if (major < 0 || minor < 0 || patch < 0 || major > 65535 || minor > 65535 || patch > 65535)
+                return false;
+            version = new Version(major, minor, patch);
             return true;
         }
 
