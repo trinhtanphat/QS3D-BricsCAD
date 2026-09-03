@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOT = ROOT / "src/QS3D.Core/Persistence/ProjectStateSnapshot.cs"
 DOMAIN = ROOT / "src/QS3D.Core/Domain/ProjectState.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/ProjectStateSnapshotFamilyRestoreAtomicitySmoke.cs"
+REGISTRATION = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 errors = []
 
 
@@ -19,6 +20,7 @@ def read(path):
 snapshot = read(SNAPSHOT)
 domain = read(DOMAIN)
 smoke = read(SMOKE)
+registration = read(REGISTRATION)
 
 for token in (
     "ProjectStateSnapshotFamilyRestoreAtomicitySmoke",
@@ -29,6 +31,9 @@ for token in (
 ):
     if token not in smoke:
         errors.append("snapshot family restore regression missing: " + token)
+
+if "ProjectStateSnapshotFamilyRestoreAtomicitySmoke.Run();" not in registration:
+    errors.append("snapshot family restore atomicity smoke is not registered in the canonical deterministic smoke suite")
 
 # Snapshot rollback/materialization must not route through externally-observable
 # ProjectFamily setters. A hostile PropertyChanged subscriber can throw after a
@@ -61,4 +66,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: ProjectStateSnapshot materializes family properties once and restores preserved family state without external callbacks or stale property-store identity.")
+print("PASS: ProjectStateSnapshot materializes family properties once, executes the regression through the canonical smoke suite, and restores preserved family state without external callbacks or stale property-store identity.")
