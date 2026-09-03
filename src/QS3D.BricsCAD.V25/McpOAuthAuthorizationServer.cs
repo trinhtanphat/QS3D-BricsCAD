@@ -314,6 +314,8 @@ namespace QS3D.BricsCAD.V25
                 return RedirectOAuthError(redirect, values, "invalid_request", "PKCE S256 is required");
 
             var consent = McpOAuthConsent.RequestApproval(resource, normalizedScope);
+            if (consent == McpOAuthConsentResult.InteractionRequired)
+                return RedirectOAuthError(redirect, values, "interaction_required", "local QS3D authorization requires foreground interaction after CAD writer activity completes");
             if (consent == McpOAuthConsentResult.Denied)
                 return RedirectOAuthError(redirect, values, "access_denied", "local QS3D authorization was denied");
             if (consent != McpOAuthConsentResult.Approved)
@@ -673,7 +675,7 @@ namespace QS3D.BricsCAD.V25
                         continue;
                     }
                     if (ch > 0x7f) return false;
-                    bytes.Add((byte)ch);
+                    bytes.Add((byte)ch;
                 }
                 decoded = StrictUtf8.GetString(bytes.ToArray());
                 return decoded.IndexOf('\0') < 0;
