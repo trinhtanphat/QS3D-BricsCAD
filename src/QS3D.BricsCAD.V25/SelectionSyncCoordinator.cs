@@ -65,8 +65,20 @@ namespace QS3D.BricsCAD.V25
             if (!PaletteCoordinator.IsWorkspaceVisible) return;
             StopPending(document);
             if (!Refreshing.Add(document)) return;
-            try { PaletteCoordinator.SetInspection(EntitySnapshotReader.ReadImpliedSelection(document)); }
-            catch (Exception ex) { PaletteCoordinator.SetStatus("Selection sync lỗi: " + ex.Message); }
+            try
+            {
+                // Palette creation is native/modeless work and may pump host callbacks. Finish it before
+                // taking the document-bound selection snapshot so a re-entrant document switch cannot
+                // cause that snapshot to be applied against a different project's active-document state.
+                PaletteCoordinator.EnsureCreated();
+                var snapshots = EntitySnapshotReader.ReadImpliedSelection(document);
+                if (!ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;
+                PaletteCoordinator.SetInspection(snapshots);
+            }
+            catch (Exception)
+            {
+                PaletteCoordinator.SetStatus("Selection sync lỗi. Vui lòng thử lại.");
+            }
             finally { Refreshing.Remove(document); }
         }
 
