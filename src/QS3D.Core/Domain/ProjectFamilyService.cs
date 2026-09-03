@@ -196,7 +196,11 @@ namespace QS3D.Core.Domain
             return ResolveFamilyMembers(project, family.Id).Count;
         }
 
-        internal static IReadOnlyList<KeyValuePair<string, string>> SnapshotProperties(ProjectFamily family, string role, string repairOperation)
+        internal static IReadOnlyList<KeyValuePair<string, string>> SnapshotProperties(
+            ProjectFamily family,
+            string role,
+            string repairOperation,
+            bool preserveNullValues = false)
         {
             if (family == null) throw new ArgumentNullException(nameof(family));
             var normalizedRole = Required(role, nameof(role), 40);
@@ -212,7 +216,10 @@ namespace QS3D.Core.Domain
                     throw new InvalidOperationException(normalizedRole + " Family contains a non-canonical property key: '" + pair.Key + "'. Repair the Family before " + normalizedOperation + ".");
                 if (!canonicalKeys.Add(normalizedKey))
                     throw new InvalidOperationException(normalizedRole + " Family contains duplicate canonical property key: " + normalizedKey);
-                properties.Add(new KeyValuePair<string, string>(normalizedKey, Value(pair.Value, parameterPrefix + " property value", MaxPropertyValueLength)));
+                var normalizedValue = Value(pair.Value, parameterPrefix + " property value", MaxPropertyValueLength);
+                properties.Add(new KeyValuePair<string, string>(
+                    normalizedKey,
+                    preserveNullValues && pair.Value == null ? null! : normalizedValue));
             }
 
             return properties.AsReadOnly();
