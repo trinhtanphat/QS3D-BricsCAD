@@ -96,9 +96,8 @@ namespace QS3D.BricsCAD.V25
             lock (Sync)
             {
                 AckRecord existing;
-                if (!Records.TryGetValue(actionId, out existing))
-                    throw new InvalidOperationException("Durable mutation replay state changed while active-drawing affinity was being verified; replay was not accepted.");
-                if (!ReferenceEquals(existing, durableCandidate)
+                if (!Records.TryGetValue(actionId, out existing)
+                    || !ReferenceEquals(existing, durableCandidate)
                     || existing.State != AckState.Durable)
                     throw new InvalidOperationException("Durable mutation replay state changed while active-drawing affinity was being verified; replay was not accepted.");
                 RequireMatchingRequestFingerprint(existing, fingerprint);
