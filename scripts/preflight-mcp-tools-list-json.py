@@ -88,6 +88,8 @@ def eval_term(term: str) -> str:
         return ",".join(json.dumps(name) + ':{"type":"number"}' for name in names)
     if term == "ConfirmProperty()":
         return '"confirmMutation":{"type":"boolean"}'
+    if term == "ActionIdProperty()":
+        return '"actionId":{"type":"string","minLength":1,"maxLength":128,"description":"Stable retry identity used to query or replay mutation acknowledgement."}'
     if term == "CommonLayerConfirm()":
         return ',"layer":{"type":"string","maxLength":255},' + eval_term("ConfirmProperty()")
     raise ValueError(f"unsupported tools/list schema expression: {term}")
@@ -164,7 +166,22 @@ def main() -> int:
         print("ERROR: cad_entity_transform confirmMutation is not required")
         return 1
 
-    print(f"PASS MCP tools/list generated JSON ({len(tools)} tools; cad_entity_transform confirmed)")
+    status = next((tool for tool in tools if tool.get("name") == "cad_mutation_status"), None)
+    if status is None:
+        print("ERROR: cad_mutation_status missing from reconstructed tools/list")
+        return 1
+    status_schema = status.get("inputSchema", {})
+    status_properties = status_schema.get("properties", {})
+    status_required = status_schema.get("required", [])
+    action_id = status_properties.get("actionId")
+    if not isinstance(action_id, dict) or action_id.get("type") != "string" or action_id.get("minLength") != 1 or action_id.get("maxLength") != 128:
+        print("ERROR: cad_mutation_status actionId schema missing or invalid")
+        return 1
+    if "actionId" not in status_required:
+        print("ERROR: cad_mutation_status actionId is not required")
+        return 1
+
+    print(f"PASS MCP tools/list generated JSON ({len(tools)} tools; cad_entity_transform and cad_mutation_status confirmed)")
     return 0
 
 
