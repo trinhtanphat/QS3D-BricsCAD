@@ -58,7 +58,10 @@ def main() -> int:
     # --name-only output can split or quote it; Trim()/prefix matching can then
     # misclassify a release-relevant commit as harmless. Admission must ask Git
     # directly whether owned pathspecs changed and branch on git-diff's exit code.
-    if re.search(r"(?i)git\s+diff\s+--name-only", source):
+    line_parsed_diff = re.compile(
+        r"(?im)^(?!\s*#)[^\r\n]*&\s*git\s+diff\s+--name-only\b"
+    )
+    if line_parsed_diff.search(source):
         failures.append(
             "release-relevant main drift still parses line-oriented `git diff "
             "--name-only`; hostile valid pathnames can bypass release admission"
