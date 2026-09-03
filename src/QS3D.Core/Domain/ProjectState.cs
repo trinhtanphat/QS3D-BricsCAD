@@ -254,7 +254,7 @@ namespace QS3D.Core.Domain
         internal void RestoreSnapshotState(
             string name,
             ElementCategory category,
-            IReadOnlyDictionary<string, string> properties)
+            IReadOnlyList<KeyValuePair<string, string>> properties)
         {
             var nextName = RequireName(name);
             var nextCategory = RequireCategory(category);
