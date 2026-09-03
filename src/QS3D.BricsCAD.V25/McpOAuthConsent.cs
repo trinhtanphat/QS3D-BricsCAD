@@ -10,6 +10,7 @@ namespace QS3D.BricsCAD.V25
         Unavailable = 0,
         Approved = 1,
         Denied = 2,
+        InteractionRequired = 3,
     }
 
     /// <summary>
@@ -32,49 +33,79 @@ namespace QS3D.BricsCAD.V25
             internal McpOAuthConsentResult Result = McpOAuthConsentResult.Unavailable;
             internal readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
             internal int DispatchState = ConsentQueued;
-            internal int Abandoned;
         }
 
         internal static McpOAuthConsentResult RequestApproval(string resource, string scope)
         {
             if (string.IsNullOrWhiteSpace(resource) || string.IsNullOrWhiteSpace(scope))
                 return McpOAuthConsentResult.Unavailable;
-            if (!ConsentGate.Wait(0)) return McpOAuthConsentResult.Unavailable;
+
+            // A concurrent foreground consent already owns the interactive lane. Do not queue
+            // another modal behind it: return a bounded retryable OAuth state instead.
+            if (!ConsentGate.Wait(0)) return McpOAuthConsentResult.InteractionRequired;
 
             var item = new ConsentWorkItem
             {
                 Resource = resource,
                 Scope = scope,
             };
+            IDisposable? interactionAdmission = null;
 
             try
             {
-                BricsApplication.DocumentManager.ExecuteInApplicationContext(ShowConsentInCadContext, item);
-            }
-            catch
-            {
-                ConsentGate.Release();
-                item.Done.Dispose();
-                return McpOAuthConsentResult.Unavailable;
-            }
-
-            if (!item.Done.Wait(ConsentTimeoutMilliseconds))
-            {
-                Interlocked.Exchange(ref item.Abandoned, 1);
-                if (Interlocked.CompareExchange(
-                        ref item.DispatchState,
-                        ConsentCancelledBeforeStart,
-                        ConsentQueued) == ConsentQueued)
+                // Reuse the process-global CAD mutation/writer admission boundary so the check
+                // and ownership are atomic. An active explicit writer lease, mutation, queued
+                // native command, or BricsCAD modal state rejects this admission before the
+                // OAuth UI is dispatched. Holding the scope also prevents a new mutation from
+                // entering while the explicit foreground consent prompt is visible.
+                try
                 {
-                    ConsentGate.Release();
-                    item.Done.Dispose();
+                    interactionAdmission = McpCadMutationCoordinator.EnterMutation(
+                        string.Empty,
+                        "oauth_interactive_consent",
+                        null);
                 }
-                // If the prompt had already started, the callback owns gate/event cleanup.
-                return McpOAuthConsentResult.Unavailable;
-            }
+                catch (InvalidOperationException)
+                {
+                    return McpOAuthConsentResult.InteractionRequired;
+                }
 
-            try { return item.Result; }
-            finally { item.Done.Dispose(); }
+                try
+                {
+                    BricsApplication.DocumentManager.ExecuteInApplicationContext(ShowConsentInCadContext, item);
+                }
+                catch
+                {
+                    return McpOAuthConsentResult.Unavailable;
+                }
+
+                if (!item.Done.Wait(ConsentTimeoutMilliseconds))
+                {
+                    // If dispatch is still queued, cancel it before releasing CAD admission so
+                    // the delayed callback can never surface a modal after this request returns.
+                    if (Interlocked.CompareExchange(
+                            ref item.DispatchState,
+                            ConsentCancelledBeforeStart,
+                            ConsentQueued) == ConsentQueued)
+                        return McpOAuthConsentResult.InteractionRequired;
+
+                    // The callback already owns the foreground prompt. Keep CAD admission and
+                    // the single-flight gate until that prompt actually closes; otherwise a
+                    // mutation could enter underneath a still-visible consent modal.
+                    item.Done.Wait();
+                }
+
+                return item.Result;
+            }
+            finally
+            {
+                try { item.Done.Dispose(); }
+                finally
+                {
+                    if (interactionAdmission != null) interactionAdmission.Dispose();
+                    ConsentGate.Release();
+                }
+            }
         }
 
         private static void ShowConsentInCadContext(object state)
@@ -104,15 +135,7 @@ namespace QS3D.BricsCAD.V25
             }
             finally
             {
-                try { item.Done.Set(); }
-                finally
-                {
-                    ConsentGate.Release();
-                    if (Volatile.Read(ref item.Abandoned) != 0)
-                    {
-                        try { item.Done.Dispose(); } catch (ObjectDisposedException) { }
-                    }
-                }
+                item.Done.Set();
             }
         }
     }
