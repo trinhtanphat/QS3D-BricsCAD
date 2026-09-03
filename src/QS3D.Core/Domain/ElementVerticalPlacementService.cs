@@ -202,8 +202,9 @@ namespace QS3D.Core.Domain
             {
                 if (floor == null)
                     throw new InvalidOperationException("Project floor collection contains a null floor.");
-                if (!floors.TryAdd(floor.Id, floor.ElevationM))
+                if (floors.ContainsKey(floor.Id))
                     throw new InvalidOperationException("Project contains duplicate floor id: " + floor.Id + ".");
+                floors.Add(floor.Id, floor.ElevationM);
             }
 
             if (floors.Count != count || project.Floors.Count != count || project.ChangeVersion != generation)
