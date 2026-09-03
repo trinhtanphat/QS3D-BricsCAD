@@ -34,6 +34,7 @@ namespace QS3D.BricsCAD.V25
         private const string BearerEnvironment = "QS3D_MCP_BEARER_TOKEN";
         private const string TokenFileName = "mcp-bearer-token.txt";
         private const string LocalTunnelAuthorizationHeader = "X-QS3D-MCP-Local-Authorization";
+        private const string EmbeddedListenerProcessLeaseKey = "QS3D.BricsCAD.V25.McpEmbeddedServer.ListenerLease";
 
         private static readonly object Sync = new object();
         private static readonly object SessionSync = new object();
@@ -41,6 +42,7 @@ namespace QS3D.BricsCAD.V25
         private static readonly SemaphoreSlim ClientSlots = new SemaphoreSlim(MaxConcurrentClients, MaxConcurrentClients);
         private static readonly ConcurrentDictionary<string, SessionState> Sessions =
             new ConcurrentDictionary<string, SessionState>(StringComparer.Ordinal);
+        private static readonly Action ProcessLeaseStopAction = StopForProcessLease;
 
         private static TcpListener? _listener;
         private static Thread? _listenerThread;
@@ -71,20 +73,82 @@ namespace QS3D.BricsCAD.V25
             lock (Sync)
             {
                 if (_listener != null && !_stopping) return;
-                EnsureBearerToken();
-                _stopping = false;
-                _lastError = string.Empty;
-                _lastOAuthMcpActivityUtc = DateTime.MinValue;
-                _lastOAuthMcpMethod = string.Empty;
-                _lastOAuthMcpPublicUrl = string.Empty;
-                McpCadAgentRuntime.ResetForServerStart();
-                int boundPort;
-                var listener = StartLoopbackListener(out boundPort);
-                Volatile.Write(ref _boundPort, boundPort);
-                _listener = listener;
-                _listenerThread = new Thread(() => ServeLoop(listener)) { IsBackground = true, Name = "QS3D MCP loopback server v2" };
-                _listenerThread.Start();
+                lock (AppDomain.CurrentDomain)
+                {
+                    StopPreviousProcessLease();
+                    EnsureBearerToken();
+                    _stopping = false;
+                    _lastError = string.Empty;
+                    _lastOAuthMcpActivityUtc = DateTime.MinValue;
+                    _lastOAuthMcpMethod = string.Empty;
+                    _lastOAuthMcpPublicUrl = string.Empty;
+                    McpCadAgentRuntime.ResetForServerStart();
+                    int boundPort;
+                    var listener = StartLoopbackListener(out boundPort);
+                    Volatile.Write(ref _boundPort, boundPort);
+                    _listener = listener;
+                    _listenerThread = new Thread(() => ServeLoop(listener)) { IsBackground = true, Name = "QS3D MCP loopback server v2" };
+                    _listenerThread.Start();
+                    PublishProcessLease();
+                }
             }
+        }
+
+        private static void StopPreviousProcessLease()
+        {
+            var domain = AppDomain.CurrentDomain;
+            var previous = domain.GetData(EmbeddedListenerProcessLeaseKey) as Action;
+            domain.SetData(EmbeddedListenerProcessLeaseKey, null);
+            if (previous != null && !ReferenceEquals(previous, ProcessLeaseStopAction))
+            {
+                try { previous(); } catch { }
+            }
+
+            // The first upgrade from a build that predates the lease has no AppDomain callback.
+            // Stop any older loaded generation of this type before binding the preferred port.
+            var currentAssembly = typeof(McpEmbeddedServer).Assembly;
+            var currentAssemblyName = currentAssembly.GetName().Name;
+            var currentTypeName = typeof(McpEmbeddedServer).FullName;
+            foreach (var assembly in domain.GetAssemblies())
+            {
+                if (ReferenceEquals(assembly, currentAssembly)) continue;
+                if (!string.Equals(assembly.GetName().Name, currentAssemblyName, StringComparison.Ordinal)) continue;
+                try
+                {
+                    var previousType = assembly.GetType(currentTypeName, false, false);
+                    if (previousType == null) continue;
+                    var stop = previousType.GetMethod(
+                        "Stop",
+                        System.Reflection.BindingFlags.Static
+                        | System.Reflection.BindingFlags.Public
+                        | System.Reflection.BindingFlags.NonPublic);
+                    if (stop != null && stop.GetParameters().Length == 0) stop.Invoke(null, null);
+                }
+                catch { }
+            }
+        }
+
+        private static void PublishProcessLease()
+        {
+            lock (AppDomain.CurrentDomain)
+            {
+                AppDomain.CurrentDomain.SetData(EmbeddedListenerProcessLeaseKey, ProcessLeaseStopAction);
+            }
+        }
+
+        private static void ReleaseProcessLease()
+        {
+            lock (AppDomain.CurrentDomain)
+            {
+                var current = AppDomain.CurrentDomain.GetData(EmbeddedListenerProcessLeaseKey);
+                if (ReferenceEquals(current, ProcessLeaseStopAction))
+                    AppDomain.CurrentDomain.SetData(EmbeddedListenerProcessLeaseKey, null);
+            }
+        }
+
+        private static void StopForProcessLease()
+        {
+            StopCore(false);
         }
 
         private static TcpListener StartLoopbackListener(out int boundPort)
@@ -122,6 +186,11 @@ namespace QS3D.BricsCAD.V25
 
         public static void Stop()
         {
+            StopCore(true);
+        }
+
+        private static void StopCore(bool releaseProcessLease)
+        {
             Thread? thread;
             lock (Sync)
             {
@@ -138,6 +207,7 @@ namespace QS3D.BricsCAD.V25
             {
                 try { thread.Join(1000); } catch { }
             }
+            if (releaseProcessLease) ReleaseProcessLease();
         }
 
         public static string GetBearerToken() { EnsureBearerToken(); lock (Sync) return _bearerToken; }
