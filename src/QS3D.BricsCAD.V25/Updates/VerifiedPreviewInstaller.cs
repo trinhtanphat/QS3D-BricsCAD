@@ -1,9 +1,11 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -15,6 +17,9 @@ namespace QS3D.BricsCAD.V25.Updates
         private const long MaxArchiveUncompressedBytes = 512L * 1024L * 1024L;
         private const long MaxPayloadFileBytes = 256L * 1024L * 1024L;
         private const int WorkerStartupProbeMilliseconds = 5000;
+        private const uint CreateBreakawayFromJob = 0x01000000;
+        private const uint CreateUnicodeEnvironment = 0x00000400;
+        private const uint CreateNoWindow = 0x08000000;
         private static readonly string[] RequiredPayload = new[] { "QS3D.BricsCAD.V25.dll", "QS3D.Core.dll" };
         private static int _scheduled;
 
@@ -163,11 +168,13 @@ namespace QS3D.BricsCAD.V25.Updates
                     backupHashes,
                     destinations);
 
-                using (var worker = Process.Start(startInfo))
-                {
-                    if (worker == null)
-                        throw new InvalidOperationException("Không thể khởi động updater worker tách rời.");
+                Process? worker;
+                string workerError;
+                if (!TryStartBreakawayWorker(startInfo, out worker, out workerError) || worker == null)
+                    throw new InvalidOperationException(workerError);
 
+                using (worker)
+                {
                     if (worker.WaitForExit(WorkerStartupProbeMilliseconds))
                     {
                         var exitCode = worker.ExitCode;
@@ -175,7 +182,7 @@ namespace QS3D.BricsCAD.V25.Updates
                     }
                 }
 
-                stagingRoot = null; // ownership transferred to detached worker
+                stagingRoot = null; // ownership transferred to breakaway worker
                 return true;
             }
             catch (Exception ex)
@@ -184,6 +191,118 @@ namespace QS3D.BricsCAD.V25.Updates
                 Interlocked.Exchange(ref _scheduled, 0);
                 error = ex.Message;
                 return false;
+            }
+        }
+
+        private static bool TryStartBreakawayWorker(ProcessStartInfo startInfo, out Process? worker, out string error)
+        {
+            worker = null;
+            error = string.Empty;
+            IntPtr environmentBlock = IntPtr.Zero;
+            var processInformation = new ProcessInformation();
+            try
+            {
+                if (startInfo == null || string.IsNullOrWhiteSpace(startInfo.FileName))
+                {
+                    error = "Không thể tạo updater worker độc lập khỏi vòng đời BricsCAD: thiếu executable worker.";
+                    return false;
+                }
+
+                environmentBlock = BuildEnvironmentBlock(startInfo);
+                var commandLine = new StringBuilder();
+                commandLine.Append('"').Append(startInfo.FileName).Append('"');
+                if (!string.IsNullOrWhiteSpace(startInfo.Arguments))
+                    commandLine.Append(' ').Append(startInfo.Arguments);
+
+                var startupInfo = new StartupInfo
+                {
+                    cb = Marshal.SizeOf(typeof(StartupInfo))
+                };
+                var creationFlags = CreateBreakawayFromJob | CreateUnicodeEnvironment | CreateNoWindow;
+                var workingDirectory = string.IsNullOrWhiteSpace(startInfo.WorkingDirectory)
+                    ? null
+                    : startInfo.WorkingDirectory;
+
+                if (!CreateProcess(
+                        startInfo.FileName,
+                        commandLine,
+                        IntPtr.Zero,
+                        IntPtr.Zero,
+                        false,
+                        creationFlags,
+                        environmentBlock,
+                        workingDirectory,
+                        ref startupInfo,
+                        out processInformation))
+                {
+                    var win32 = Marshal.GetLastWin32Error();
+                    error = "Không thể tạo updater worker độc lập khỏi vòng đời BricsCAD (Win32 " +
+                            win32.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                            "). Cập nhật đã dừng trước khi đóng BricsCAD.";
+                    return false;
+                }
+
+                try
+                {
+                    worker = Process.GetProcessById(processInformation.dwProcessId);
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    error = "Updater worker đã khởi động nhưng không thể mở handle giám sát: " + ex.Message;
+                    TryTerminateProcess(processInformation.dwProcessId);
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                error = "Không thể tạo updater worker độc lập khỏi vòng đời BricsCAD: " + ex.Message;
+                return false;
+            }
+            finally
+            {
+                if (processInformation.hThread != IntPtr.Zero) CloseHandle(processInformation.hThread);
+                if (processInformation.hProcess != IntPtr.Zero) CloseHandle(processInformation.hProcess);
+                if (environmentBlock != IntPtr.Zero) Marshal.FreeHGlobal(environmentBlock);
+            }
+        }
+
+        private static IntPtr BuildEnvironmentBlock(ProcessStartInfo startInfo)
+        {
+            var entries = new List<KeyValuePair<string, string>>();
+            foreach (DictionaryEntry entry in startInfo.EnvironmentVariables)
+            {
+                var key = entry.Key as string;
+                if (string.IsNullOrEmpty(key)) continue;
+                var value = entry.Value as string ?? string.Empty;
+                entries.Add(new KeyValuePair<string, string>(key, value));
+            }
+
+            entries.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.Key, right.Key));
+            var builder = new StringBuilder();
+            foreach (var entry in entries)
+                builder.Append(entry.Key).Append('=').Append(entry.Value).Append('\0');
+            builder.Append('\0');
+
+            var bytes = Encoding.Unicode.GetBytes(builder.ToString());
+            var block = Marshal.AllocHGlobal(bytes.Length);
+            Marshal.Copy(bytes, 0, block, bytes.Length);
+            return block;
+        }
+
+        private static void TryTerminateProcess(int processId)
+        {
+            try
+            {
+                using (var process = Process.GetProcessById(processId))
+                {
+                    if (process.HasExited) return;
+                    process.Kill();
+                    process.WaitForExit(WorkerStartupProbeMilliseconds);
+                }
+            }
+            catch
+            {
             }
         }
 
@@ -287,9 +406,17 @@ namespace QS3D.BricsCAD.V25.Updates
         {
             var script = BuildWorkerScript();
             var encodedScript = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+            var powershellPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.System),
+                "WindowsPowerShell",
+                "v1.0",
+                "powershell.exe");
+            if (!File.Exists(powershellPath))
+                throw new FileNotFoundException("Không tìm thấy Windows PowerShell để chạy updater worker.", powershellPath);
+
             var startInfo = new ProcessStartInfo
             {
-                FileName = "powershell.exe",
+                FileName = powershellPath,
                 Arguments = "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -EncodedCommand " + encodedScript,
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -488,5 +615,55 @@ catch {
             {
             }
         }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct StartupInfo
+        {
+            public int cb;
+            public string? lpReserved;
+            public string? lpDesktop;
+            public string? lpTitle;
+            public int dwX;
+            public int dwY;
+            public int dwXSize;
+            public int dwYSize;
+            public int dwXCountChars;
+            public int dwYCountChars;
+            public int dwFillAttribute;
+            public int dwFlags;
+            public short wShowWindow;
+            public short cbReserved2;
+            public IntPtr lpReserved2;
+            public IntPtr hStdInput;
+            public IntPtr hStdOutput;
+            public IntPtr hStdError;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct ProcessInformation
+        {
+            public IntPtr hProcess;
+            public IntPtr hThread;
+            public int dwProcessId;
+            public int dwThreadId;
+        }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool CreateProcess(
+            string? lpApplicationName,
+            StringBuilder lpCommandLine,
+            IntPtr lpProcessAttributes,
+            IntPtr lpThreadAttributes,
+            [MarshalAs(UnmanagedType.Bool)] bool bInheritHandles,
+            uint dwCreationFlags,
+            IntPtr lpEnvironment,
+            string? lpCurrentDirectory,
+            ref StartupInfo lpStartupInfo,
+            out ProcessInformation lpProcessInformation);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool CloseHandle(IntPtr hObject);
     }
 }
