@@ -5,6 +5,7 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 EXPECTED_HEAD_EXPRESSION = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+EXPECTED_INDEPENDENT_SAFETY_IF = "if: ${{ !cancelled() && steps.scope.outputs.source_validation == 'true' }}"
 
 
 def fail(message: str) -> int:
@@ -82,6 +83,21 @@ def _validate_binding_step(job: str, marker: str, label: str) -> str | None:
     return None
 
 
+def _validate_independent_safety_step(job: str, marker: str, label: str) -> str | None:
+    step = _step_block(job, marker)
+    if step is None:
+        return f"preflight job must contain exactly one {label} step"
+    if_lines = [line.strip() for line in step.splitlines() if line.strip().startswith("if:")]
+    if if_lines != [EXPECTED_INDEPENDENT_SAFETY_IF]:
+        return (
+            f"{label} must continue after unrelated earlier failures unless the workflow is cancelled, "
+            "while remaining scoped to source-validation candidates"
+        )
+    if "continue-on-error" in step:
+        return f"{label} must remain fail-closed and must not use continue-on-error"
+    return None
+
+
 def main() -> int:
     text = WORKFLOW.read_text(encoding="utf-8")
 
@@ -136,8 +152,17 @@ def main() -> int:
     if error is not None:
         return fail(error)
 
+    for marker, label in (
+        ("- name: Validate tracked PowerShell syntax", "PowerShell syntax validation"),
+        ("- name: V25 package integrity contract tests", "V25 package integrity validation"),
+    ):
+        error = _validate_independent_safety_step(preflight_job, marker, label)
+        if error is not None:
+            return fail(error)
+
     print(
-        "PASS: shared CI revalidates reservation state on PR edits and binds both preflight and core execution to the exact candidate SHA."
+        "PASS: shared CI revalidates reservation state on PR edits, binds preflight/core to the exact candidate SHA, "
+        "and keeps independent safety gates running after unrelated failures without weakening fail-closed behavior."
     )
     return 0
 
