@@ -53,6 +53,21 @@ else:
         if "new InteractiveModalScope(" not in modal:
             errors.append("interactive modal admission must return a scope that retains shared serialization ownership")
 
+    prepare = method_slice(
+        coord,
+        "internal static NativeCommandReservation? PrepareNativeCommand(",
+        "internal static void QueueNativeCommand(",
+    )
+    if not prepare:
+        errors.append("missing native-command preparation method")
+    else:
+        gate = prepare.find("MutationGate.Wait(")
+        modal_rejection = prepare.find("CurrentInteractiveModalId.Value.HasValue")
+        if gate < 0:
+            errors.append("native-command preparation must use the shared MutationGate")
+        elif modal_rejection < 0 or modal_rejection > gate:
+            errors.append("native-command preparation must reject same-flow interactive-modal ownership before MutationGate acquisition")
+
     if "private sealed class InteractiveModalScope : IDisposable" not in coord:
         errors.append("missing interactive modal lifetime scope")
     else:
@@ -79,4 +94,4 @@ if errors:
         print(" -", error)
     sys.exit(1)
 
-print("PASS: plugin-owned interactive UI has semantic shared admission, rejects nested mutation/native ownership, checks writer and CAD modal state before/after acquisition, holds MutationGate for modal lifetime, and OAuth no longer masquerades as a mutation.")
+print("PASS: plugin-owned interactive UI has semantic shared admission, rejects nested mutation/native ownership before shared-gate acquisition, checks writer and CAD modal state before/after acquisition, holds MutationGate for modal lifetime, and OAuth no longer masquerades as a mutation.")
