@@ -29,6 +29,10 @@ registration = read(REGISTRATION)
 for token in (
     "internal event Action? PersistenceMutationRequested;",
     "PersistenceMutationRequested?.Invoke();",
+    "private sealed class PersistenceAwarePropertyDictionary : IDictionary<string, string>",
+    "Properties = new PersistenceAwarePropertyDictionary(() => PersistenceMutationRequested?.Invoke());",
+    "if (_inner.TryGetValue(key, out var current) && string.Equals(current, value, StringComparison.Ordinal)) return;",
+    "if (_inner.Count == 0) return;",
     "internal sealed class CatalogOwnershipList<T> : IList<T>",
     "Zones = new CatalogOwnershipList<ZoneDefinition>(AttachZone, DetachZone);",
     "Floors = new CatalogOwnershipList<FloorDefinition>(AttachFloor, DetachFloor);",
@@ -45,10 +49,13 @@ for token in (
 
 for token in (
     "OwnedCatalogScalarMutationsAdvanceProjectFreshness",
+    "OwnedFamilyPropertyMutationsAdvanceProjectFreshness",
     "NormalizedNoOpsDoNotAdvanceProjectFreshness",
     "OwnershipTracksRemovalReplacementAndSnapshotRestore",
     "DuplicateCatalogReferencesHaveSingleOwnershipSubscription",
     "ServiceRenameAdvancesProjectFreshnessExactlyOnce",
+    "ServicePropertyMutationsAdvanceProjectFreshnessExactlyOnce",
+    "ServiceDuplicateAdvancesProjectFreshnessExactlyOnce",
     "ServiceZoneUpdateAdvancesProjectFreshnessExactlyOnce",
     "ServiceFloorUpdateAdvancesProjectFreshnessOncePerLogicalUpdate",
     "ProjectStateSnapshot.CreateDetachedCopy(project)",
@@ -58,12 +65,22 @@ for token in (
 
 for forbidden, label in (
     ("project.Touch();\n            family.Name = normalized;", "Family rename must not pre-touch before the owned scalar setter"),
+    ("project.Touch();\n            family.Properties[normalizedKey] = normalizedValue;", "Family SetProperty must not pre-touch before the owned property store"),
+    ("project.Touch();\n            family.Properties.Remove(normalizedKey);", "Family RemoveProperty must not pre-touch before the owned property store"),
     ("project.Touch();\n            zone.Name = normalizedName;", "Zone update must not pre-touch before the owned scalar setter"),
     ("project.Touch();\n            floor.Name = normalizedName;", "Floor update must not pre-touch before owned scalar mutation"),
 ):
-    text = family_service if "family.Name" in forbidden else zone_service if "zone.Name" in forbidden else floor_service
+    text = family_service if "family." in forbidden else zone_service if "zone.Name" in forbidden else floor_service
     if forbidden in text:
         errors.append(label)
+
+for token in (
+    "var clone = CreateDetached(project, newId, newName, source.Category);",
+    "foreach (var pair in properties) clone.Properties[pair.Key] = pair.Value;",
+    "project.Touch();\n            project.Families.Add(clone);",
+):
+    if token not in family_service:
+        errors.append("Family duplicate must initialize properties while detached and admit the completed clone in one project revision: " + token)
 
 if "floor.ApplyPersistedUpdate(normalizedName, nameChanged, elevationM, elevationChanged);" not in floor_service:
     errors.append("Floor service must batch name/elevation persistence freshness into one logical revision.")
@@ -77,4 +94,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: owned Zone/Floor/Family scalar changes advance ProjectState persistence freshness exactly once per logical catalog operation while no-op/materialization/snapshot semantics stay guarded.")
+print("PASS: owned Zone/Floor/Family scalar and Family property changes advance ProjectState persistence freshness exactly once per logical catalog operation while no-op/materialization/snapshot semantics stay guarded.")
