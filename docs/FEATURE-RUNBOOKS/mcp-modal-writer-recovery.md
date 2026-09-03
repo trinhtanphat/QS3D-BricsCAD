@@ -7,9 +7,9 @@ Issue: #5454
 - A BricsCAD modal/dialog state (`CMDACTIVE` bit 8) is sampled before attempting to acquire the process-global mutation writer.
 - The modal state is sampled again after acquisition before mutation begins, preventing a race between preflight and writer ownership.
 - Modal failures return a bounded `interaction_required` signal. MCP does not press Escape, close windows, inject keystrokes, or force-dismiss arbitrary dialogs.
-- No modal wait/retry loop is permitted while the writer lease is held.
-- `cad_command_state` exposes structured `modal`, `busyKind`, and `interactionRequired` fields without exposing command-line history or prompt text.
-- Existing emergency-stop epoch, writer token, preview and document-fingerprint contracts remain authoritative.
+- No modal wait/retry loop is introduced while the writer lease is held.
+- Existing `cad_command_state`/view-level modal detection remains the bounded read-side status contract; this carrier changes writer acquisition ordering rather than adding a second status schema.
+- Existing emergency-stop epoch, writer token, native terminal-event barrier and document coordination contracts remain authoritative.
 
 ## Verification boundary
 
