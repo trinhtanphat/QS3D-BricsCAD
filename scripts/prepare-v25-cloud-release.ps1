@@ -18,12 +18,14 @@ if ($dispatch -notmatch '^[0-9a-f]{40}$') {
     throw "DispatchSha must be one exact 40-hex commit. Got: $DispatchSha"
 }
 
-$releaseRelevantPrefixes = @(
+# Keep release-drift admission pathname-safe. Do not parse line-oriented
+# `git diff --name-only` output: Git may quote/escape hostile-but-valid pathnames,
+# and embedded newlines cannot be represented safely as one PowerShell line.
+# Instead ask Git itself whether any path in the owned release surface differs.
+$releaseRelevantPathspecs = @(
     'src/',
     'tests/',
-    'scripts/'
-)
-$releaseRelevantExactPaths = @(
+    'scripts/',
     '.gitmodules',
     'Directory.Build.props',
     'QS3D.sln',
@@ -57,21 +59,6 @@ function Get-ReleaseStatusEntries {
     return @($entries)
 }
 
-function Test-ReleaseRelevantPath {
-    param([Parameter(Mandatory = $true)][string]$Path)
-
-    $normalized = $Path.Trim().Replace('\', '/')
-    if ($normalized -in $releaseRelevantExactPaths) {
-        return $true
-    }
-    foreach ($prefix in $releaseRelevantPrefixes) {
-        if ($normalized.StartsWith($prefix, [StringComparison]::Ordinal)) {
-            return $true
-        }
-    }
-    return $false
-}
-
 function Get-RemoteMain {
     & git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
     if ($LASTEXITCODE -ne 0) {
@@ -84,11 +71,11 @@ function Get-RemoteMain {
     return $remoteMain
 }
 
-function Get-ReleaseRelevantDriftPaths {
+function Test-ReleaseRelevantDrift {
     param([Parameter(Mandatory = $true)][string]$TargetSha)
 
     if ([string]::Equals($TargetSha, $dispatch, [StringComparison]::OrdinalIgnoreCase)) {
-        return @()
+        return $false
     }
 
     & git merge-base --is-ancestor $dispatch $TargetSha
@@ -97,27 +84,22 @@ function Get-ReleaseRelevantDriftPaths {
     }
 
     $range = "${dispatch}..${TargetSha}"
-    $paths = @(& git diff --name-only $range --)
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not inspect main drift between $dispatch and $TargetSha."
+    & git diff --quiet --no-ext-diff $range -- @releaseRelevantPathspecs
+    $diffExit = $LASTEXITCODE
+    if ($diffExit -eq 0) {
+        return $false
     }
-
-    $relevant = @()
-    foreach ($rawPath in $paths) {
-        $path = ([string]$rawPath).Trim().Replace('\', '/')
-        if (-not [string]::IsNullOrWhiteSpace($path) -and (Test-ReleaseRelevantPath -Path $path)) {
-            $relevant += $path
-        }
+    if ($diffExit -eq 1) {
+        return $true
     }
-    return @($relevant | Sort-Object -Unique)
+    throw "Could not inspect release-relevant main drift between $dispatch and $TargetSha (git diff exit $diffExit)."
 }
 
 function Assert-ReleaseBaseIsSafe {
     param([Parameter(Mandatory = $true)][string]$TargetSha)
 
-    $relevant = @(Get-ReleaseRelevantDriftPaths -TargetSha $TargetSha)
-    if ($relevant.Count -ne 0) {
-        throw "main moved after dispatch with release-relevant changes. Dispatched=$dispatch current-origin/main=$TargetSha paths=$($relevant -join ', '). A newer release-relevant main push must own the next release."
+    if (Test-ReleaseRelevantDrift -TargetSha $TargetSha) {
+        throw "main moved after dispatch with release-relevant changes. Dispatched=$dispatch current-origin/main=$TargetSha. A newer release-relevant main push must own the next release."
     }
 }
 
