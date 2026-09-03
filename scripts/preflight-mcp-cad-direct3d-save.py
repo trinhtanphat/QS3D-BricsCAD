@@ -114,23 +114,42 @@ def main() -> int:
     if 'McpCadMutationCoordinator.QueueNativeCommand' in direct_qsave_block:
         errors.append("bounded QSAVE wrapper must share McpNativeCurrentDocumentSave instead of owning a second native bridge")
 
+    # Direct extrusion must detach the source curve before entering the BricsCAD solid kernel.
+    # Region.CreateFromCurves is deliberately forbidden: the licensed-runtime regression occurs
+    # on that conversion path even for a profile accepted by native EXTRUDE.
     require(errors, extrude_block, (
         'OpenEntity(transaction, document.Database, handle, OpenMode.ForRead) as Curve',
-        'Region.CreateFromCurves(new DBObjectCollection { source })',
-        'regionSource=database-resident',
-    ), "database-resident closed-curve extrusion")
-    if 'source.Clone()' in extrude_block or 'new DBObjectCollection { clone }' in extrude_block:
-        errors.append("cad_extrude must not feed a transient Curve clone to Region.CreateFromCurves")
+        'var sourceClone = source.Clone() as Curve;',
+        'solid.CreateExtrudedSolid(sourceClone, new Vector3d(0d, 0d, height), new SweepOptions());',
+        'sourceClone.Dispose();',
+        'kernelSource=transient-curve-clone',
+    ), "transient direct curve extrusion")
+    if 'Region.CreateFromCurves' in extrude_block:
+        errors.append("cad_extrude must not route the profile through Region.CreateFromCurves")
+    if 'solid.CreateExtrudedSolid(source,' in extrude_block:
+        errors.append("cad_extrude must not feed the database-resident Curve directly to CreateExtrudedSolid")
 
+    # Both boolean inputs must be detached from the database while the kernel evaluates. After a
+    # successful transient operation the result takes over the original target identity, preserving
+    # the target ObjectId/handle; only then may the original tool entity be consumed.
     require(errors, boolean_block, (
+        'var targetClone = target.Clone() as Solid3d;',
         'var operandClone = operand.Clone() as Solid3d;',
-        'target.BooleanOperation(operation, operandClone);',
+        'targetClone.BooleanOperation(operation, operandClone);',
+        'target.HandOverTo(targetClone, true, true);',
+        'handedOver = true;',
         'if (!operand.IsErased) operand.Erase();',
         'operandClone.Dispose();',
-        'operand=transient-clone',
-    ), "transient boolean kernel operand")
-    if 'target.BooleanOperation(operation, operand);' in boolean_block:
-        errors.append("direct boolean must not pass the database-resident tool Solid3d directly to BooleanOperation")
+        'if (!handedOver) targetClone.Dispose();',
+        'target=transient-clone; operand=transient-clone; result=handed-over',
+    ), "detached boolean kernel inputs with target identity handover")
+    if 'target.BooleanOperation(operation' in boolean_block:
+        errors.append("direct boolean must not execute the kernel against the database-resident target Solid3d")
+    kernel_at = boolean_block.find('targetClone.BooleanOperation(operation, operandClone);')
+    handover_at = boolean_block.find('target.HandOverTo(targetClone, true, true);')
+    erase_at = boolean_block.find('if (!operand.IsErased) operand.Erase();')
+    if kernel_at < 0 or handover_at < 0 or erase_at < 0 or not (kernel_at < handover_at < erase_at):
+        errors.append("direct boolean ordering must be transient kernel success -> target identity handover -> tool erase")
 
     # Current-document save is host-owned native QSAVE. The helper queues one attempt, observes
     # terminal events and waits for persistent DBMOD bits to settle before reporting success.
@@ -200,7 +219,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: MCP direct 3D/save tools keep QSAVE owned by the bounded direct CAD runtime, use database-resident curve inputs for Region creation, transient clones for boolean kernel operands, preserve bounded mutation routing, save the active drawing through one host-owned native QSAVE lifecycle, and confirm current-save/SaveAs completion from persistent-content DBMOD bits while allowing residual window/view state.")
+    print("PASS: MCP direct 3D/save tools keep QSAVE owned by the bounded direct CAD runtime, extrude from a transient Curve clone without Region conversion, evaluate boolean kernels on detached target/tool clones then hand the result back to the original target identity, preserve bounded mutation routing, save the active drawing through one host-owned native QSAVE lifecycle, and confirm current-save/SaveAs completion from persistent-content DBMOD bits while allowing residual window/view state.")
     return 0
 
 
