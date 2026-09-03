@@ -19,7 +19,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("stamp-cardinality-top-level", "Stamp cardinality");
             for (var index = 0; index < AboveLegacyTopLevelLimit; index++)
-                project.Elements.Add(new ProjectElement("E-" + index.ToString("D5"), ElementCategory.Wall));
+                project.Elements.Add(new ProjectElement("E-" + index.ToString("D5"), ElementCategory.ArchitecturalWall));
 
             ProjectPersistenceStamp stamp;
             try
@@ -48,7 +48,7 @@ namespace QS3D.Core.SmokeTests
         private static void NestedCardinalityAboveQsdbLimitRemainsRejected()
         {
             var project = new ProjectState("stamp-cardinality-nested", "Nested cardinality");
-            var family = new ProjectFamily("F-01", "Large property family", ElementCategory.Wall);
+            var family = new ProjectFamily("F-01", "Large property family", ElementCategory.ArchitecturalWall);
             project.Families.Add(family);
             for (var index = 0; index < AboveNestedLimit; index++)
                 family.Properties.Add("P-" + index.ToString("D5"), "value");
