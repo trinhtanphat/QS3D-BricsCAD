@@ -534,6 +534,8 @@ namespace QS3D.BricsCAD.V25
                     var result = FromBase64(fields[5]);
                     if (fingerprint.Length != 64 || documentIdentity.Length == 0)
                         throw new InvalidDataException("Mutation ACK durable identity is invalid.");
+                    if (Records.ContainsKey(actionId))
+                        throw new InvalidDataException("Mutation ACK ledger contains a duplicate actionId.");
                     Records[actionId] = new AckRecord
                     {
                         ActionId = actionId,
