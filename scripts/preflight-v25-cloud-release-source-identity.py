@@ -5,7 +5,8 @@ The published prerelease/tag names an immutable commit. Release preparation must
 therefore not rewrite ProductVersion inputs only in the runner worktree and then
 publish against the unchanged commit SHA. Drift admission must also be pathname-
 safe: release relevance is decided by Git pathspec matching, never by parsing
-line-oriented/quoted `git diff --name-only` output.
+line-oriented/quoted `git diff --name-only` output. The pinned Platform gitlink is
+part of release identity because the cloud workflow materializes and builds it.
 """
 
 from __future__ import annotations
@@ -72,6 +73,7 @@ def main() -> int:
         "'src/'",
         "'tests/'",
         "'scripts/'",
+        "'external/QS3D-Platform'",
         "'.gitmodules'",
         "'Directory.Build.props'",
         "'QS3D.sln'",
@@ -113,7 +115,7 @@ def main() -> int:
 
     print(
         "PASS: V25 cloud preview release is bound to clean committed source identity "
-        "with pathname-safe main-drift admission"
+        "with pathname-safe main-drift and Platform-gitlink admission"
     )
     return 0
 
