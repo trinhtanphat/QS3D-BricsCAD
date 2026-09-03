@@ -13,6 +13,9 @@ MODULE_INITIALIZER_METHOD_PATTERN = re.compile(
     r"\s*(?:(?:public|internal|private)\s+)?static\s+void\s+[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)\s*\{"
 )
 UNQUALIFIED_RUN_CALL_PATTERN = re.compile(r"(?<![A-Za-z0-9_.])Run\s*\(")
+LOCAL_RUN_DECLARATION_PATTERN = re.compile(
+    r"\b(?:[A-Za-z_][A-Za-z0-9_<>,.?\[\]]*\s+)+Run\s*\("
+)
 SYNTHETIC_SCALE_SMOKES = 2048
 
 
@@ -48,7 +51,9 @@ def has_module_initializer_run_call(text, class_name):
         if closing_index is None:
             continue
         body = text[opening_index + 1 : closing_index]
-        if UNQUALIFIED_RUN_CALL_PATTERN.search(body) or qualified_run.search(body):
+        if qualified_run.search(body):
+            return True
+        if UNQUALIFIED_RUN_CALL_PATTERN.search(body) and not LOCAL_RUN_DECLARATION_PATTERN.search(body):
             return True
     return False
 
@@ -71,7 +76,8 @@ def find_registration_errors(sources):
         checked += 1
 
         # A self-registration exemption is valid only when a ModuleInitializer
-        # method in this source actually invokes the smoke Run() method.
+        # method in this source actually invokes the smoke Run() method. An
+        # unqualified call is not accepted when a local Run declaration shadows it.
         if has_module_initializer_run_call(text, class_name):
             continue
         registration_paths = references.get(class_name, ())
