@@ -56,8 +56,8 @@ if SMOKE.is_file():
         "StableCountedInputRemainsAccepted();",
         'Equal(0, source.MoveNextCalls, "Pre-advance Count drift must fail before caller traversal advances.");',
         'Equal(0, source.CurrentReads, "Post-advance Count drift must fail before Current is observed.");',
-        'Equal(6, source.MoveNextCalls, "Stable counted traversal must include the terminal false MoveNext for admission and semantic replay.");',
-        'Equal(4, source.CurrentReads, "Stable counted traversal must observe each admitted Current once per admission and replay traversal.");',
+        'Equal(6, source.MoveNextCalls, "Stable counted input must include terminal false MoveNext once for admission and once for semantic replay.");',
+        'Equal(4, source.CurrentReads, "Stable counted input must observe each item once for admission and once for semantic replay.");',
         "internal static class RateBookTransientCountStabilityRegistration",
         "[ModuleInitializer]",
     ):
