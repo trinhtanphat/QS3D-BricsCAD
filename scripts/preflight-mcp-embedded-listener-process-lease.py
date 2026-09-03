@@ -26,9 +26,9 @@ def main():
     if missing:
         return fail("missing process-wide listener lease contract token(s): " + ", ".join(missing))
 
-    start_index = text.find("public static bool Start()")
+    start_index = text.find("public static void Start()")
     stop_previous_index = text.find("StopPreviousProcessLease", start_index)
-    bind_index = text.find("TryStartListener", start_index)
+    bind_index = text.find("StartLoopbackListener", start_index)
     publish_index = text.find("PublishProcessLease", start_index)
     if min(start_index, stop_previous_index, bind_index, publish_index) < 0:
         return fail("could not locate listener start/rebind lease sequence")
