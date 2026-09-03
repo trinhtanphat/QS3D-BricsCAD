@@ -161,10 +161,10 @@ namespace QS3D.Core.Domain
                 return new ElementVerticalPlacement(false, false, bottom, top);
             }
 
-            ValidateFloorIdentityCollection(project);
-            var bottomLevel = FindFloor(project, bottomLevelId, element.Id + "/BottomLevelId");
+            var floorGeneration = CaptureFloorGeneration(project);
+            var bottomLevelElevation = FindCapturedFloor(floorGeneration, bottomLevelId, element.Id + "/BottomLevelId");
             var bottomOffset = OptionalFiniteProperty(element, ProjectFloorService.BottomLevelOffsetKey, 0d);
-            var bottomElevation = Add(bottomLevel.ElevationM, bottomOffset, element.Id + "/bottom level elevation");
+            var bottomElevation = Add(bottomLevelElevation, bottomOffset, element.Id + "/bottom level elevation");
 
             if (topLevelId.Length == 0)
             {
@@ -175,9 +175,9 @@ namespace QS3D.Core.Domain
                 return new ElementVerticalPlacement(true, false, bottomElevation, top);
             }
 
-            var topLevel = FindFloor(project, topLevelId, element.Id + "/TopLevelId");
+            var topLevelElevation = FindCapturedFloor(floorGeneration, topLevelId, element.Id + "/TopLevelId");
             var topOffset = OptionalFiniteProperty(element, ProjectFloorService.TopLevelOffsetKey, 0d);
-            var topElevation = Add(topLevel.ElevationM, topOffset, element.Id + "/top level elevation");
+            var topElevation = Add(topLevelElevation, topOffset, element.Id + "/top level elevation");
             if (topElevation <= bottomElevation)
                 throw new InvalidOperationException("Top level elevation must be above bottom level elevation on element " + element.Id + ".");
             return new ElementVerticalPlacement(true, true, bottomElevation, topElevation);
@@ -193,22 +193,29 @@ namespace QS3D.Core.Domain
             return OptionalFiniteProperty(element, canonicalKey, 0d);
         }
 
-        private static FloorDefinition FindFloor(ProjectState project, string floorId, string label)
+        private static Dictionary<string, double> CaptureFloorGeneration(ProjectState project)
         {
-            return project.FindFloor(floorId)
-                ?? throw new InvalidOperationException(label + " references missing floor/level " + floorId + ".");
-        }
-
-        private static void ValidateFloorIdentityCollection(ProjectState project)
-        {
-            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var generation = project.ChangeVersion;
+            var count = project.Floors.Count;
+            var floors = new Dictionary<string, double>(count, StringComparer.OrdinalIgnoreCase);
             foreach (var floor in project.Floors)
             {
                 if (floor == null)
                     throw new InvalidOperationException("Project floor collection contains a null floor.");
-                if (!seenIds.Add(floor.Id))
+                if (!floors.TryAdd(floor.Id, floor.ElevationM))
                     throw new InvalidOperationException("Project contains duplicate floor id: " + floor.Id + ".");
             }
+
+            if (floors.Count != count || project.Floors.Count != count || project.ChangeVersion != generation)
+                throw new InvalidOperationException("Project floors changed while vertical placement was being resolved.");
+            return floors;
+        }
+
+        private static double FindCapturedFloor(IReadOnlyDictionary<string, double> floors, string floorId, string label)
+        {
+            if (!floors.TryGetValue(floorId, out var elevationM))
+                throw new InvalidOperationException(label + " references missing floor/level " + floorId + ".");
+            return elevationM;
         }
 
         private static string LevelReferenceProperty(ProjectElement element, string key)
