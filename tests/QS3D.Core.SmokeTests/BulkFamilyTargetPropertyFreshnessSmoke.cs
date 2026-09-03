@@ -11,46 +11,50 @@ namespace QS3D.Core.SmokeTests
         [ModuleInitializer]
         internal static void Initialize()
         {
-            UpdatedTargetPropertyDuringLazyEnumerationUsesCurrentValue();
-            RemovedTargetPropertyDuringLazyEnumerationDoesNotLeakStaleDefault();
+            UpdatedTargetPropertyDuringLazyEnumerationFailsClosed();
+            RemovedTargetPropertyDuringLazyEnumerationFailsClosed();
         }
 
-        private static void UpdatedTargetPropertyDuringLazyEnumerationUsesCurrentValue()
+        private static void UpdatedTargetPropertyDuringLazyEnumerationFailsClosed()
         {
             var project = CreateProject("P-BULK-FAMILY-TARGET-PROP-1", out var family, out var element);
             family.Properties["WidthM"] = "0.4";
             element.MarkClean(ElementDirtyFlags.All);
             var beforeVersion = project.ChangeVersion;
 
-            var changed = new BulkEditService().AssignFamily(
-                project,
-                YieldThenSetTargetProperty(family, element.Id, "WidthM", "0.8"),
-                family.Id);
+            ThrowsInvalidOperation(
+                () => new BulkEditService().AssignFamily(
+                    project,
+                    YieldThenSetTargetProperty(family, element.Id, "WidthM", "0.8"),
+                    family.Id),
+                "updated-property lazy enumeration freshness",
+                "changed the project while targets were being enumerated");
 
-            Equal(1, changed, "updated-property assignment count");
             Equal("0.8", family.Properties["WidthM"], "updated canonical Family value");
-            Equal("0.8", element.Properties["WidthM"], "updated assigned value");
-            Equal(family.Id, element.FamilyId, "updated-property FamilyId");
-            Equal(beforeVersion + 1L, project.ChangeVersion, "updated-property project revision");
+            False(element.Properties.ContainsKey("WidthM"), "stale bulk assignment must not copy updated Family property");
+            Equal(string.Empty, element.FamilyId, "stale bulk assignment must not set FamilyId");
+            Equal(beforeVersion + 1L, project.ChangeVersion, "updated-property mutation project revision");
         }
 
-        private static void RemovedTargetPropertyDuringLazyEnumerationDoesNotLeakStaleDefault()
+        private static void RemovedTargetPropertyDuringLazyEnumerationFailsClosed()
         {
             var project = CreateProject("P-BULK-FAMILY-TARGET-PROP-2", out var family, out var element);
             family.Properties["WidthM"] = "0.4";
             element.MarkClean(ElementDirtyFlags.All);
             var beforeVersion = project.ChangeVersion;
 
-            var changed = new BulkEditService().AssignFamily(
-                project,
-                YieldThenRemoveTargetProperty(family, element.Id, "WidthM"),
-                family.Id);
+            ThrowsInvalidOperation(
+                () => new BulkEditService().AssignFamily(
+                    project,
+                    YieldThenRemoveTargetProperty(family, element.Id, "WidthM"),
+                    family.Id),
+                "removed-property lazy enumeration freshness",
+                "changed the project while targets were being enumerated");
 
-            Equal(1, changed, "removed-property assignment count");
             False(family.Properties.ContainsKey("WidthM"), "removed canonical Family property");
-            False(element.Properties.ContainsKey("WidthM"), "removed property must not leak from stale snapshot");
-            Equal(family.Id, element.FamilyId, "removed-property FamilyId");
-            Equal(beforeVersion + 1L, project.ChangeVersion, "removed-property project revision");
+            False(element.Properties.ContainsKey("WidthM"), "stale bulk assignment must not leak removed Family property");
+            Equal(string.Empty, element.FamilyId, "stale bulk assignment must not set FamilyId after removal");
+            Equal(beforeVersion + 1L, project.ChangeVersion, "removed-property mutation project revision");
         }
 
         private static ProjectState CreateProject(string id, out ProjectFamily family, out ProjectElement element)
@@ -73,6 +77,22 @@ namespace QS3D.Core.SmokeTests
         {
             yield return elementId;
             family.Properties.Remove(key);
+        }
+
+        private static void ThrowsInvalidOperation(Action action, string label, string expectedMessagePart)
+        {
+            try
+            {
+                action();
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf(expectedMessagePart, StringComparison.Ordinal) < 0)
+                    throw new Exception("BulkFamilyTargetPropertyFreshnessSmoke " + label + " message: expected token='" + expectedMessagePart + "', actual='" + ex.Message + "'.");
+                return;
+            }
+
+            throw new Exception("BulkFamilyTargetPropertyFreshnessSmoke expected InvalidOperationException: " + label + ".");
         }
 
         private static void False(bool value, string label)
