@@ -324,3 +324,5 @@ jobs:
               -AdmittedScript '.\scripts\publish-v26-release.ps1'
           }
           if ($null -eq $candidateIdentity) { throw 'V26 candidate semantic admission/publication returned no identity.' }
+
+          & .\scripts\publish-v26-release.ps1
