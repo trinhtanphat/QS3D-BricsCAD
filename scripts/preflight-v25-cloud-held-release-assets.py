@@ -4,6 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "release-v25-cloud.yml"
+HELPER = ROOT / "scripts" / "upload-v25-held-release-asset.ps1"
 
 
 def fail(message: str) -> None:
@@ -75,8 +76,9 @@ def main() -> int:
         ("[int64]::TryParse($env:RELEASE_ZIP_SIZE", "publish must validate fixed size identity before draft creation"),
         ("Get-FileHash -LiteralPath $spec.Path -Algorithm SHA256", "publish must revalidate held hash before draft creation"),
         ("Get-Item -LiteralPath $spec.Path", "publish must revalidate held size before draft creation"),
-        ("$preUploadHash = (Get-FileHash -LiteralPath $asset -Algorithm SHA256).Hash", "publish must revalidate immediately before each upload"),
-        ("$preUploadInfo = Get-Item -LiteralPath $asset", "publish must revalidate size immediately before each upload"),
+        ("upload-v25-held-release-asset.ps1", "publish must delegate final verification/upload to the single-stream helper"),
+        ("-ExpectedSha256 $spec.Hash", "single-stream upload must receive the fixed verified hash identity"),
+        ("-ExpectedSize $spec.Size", "single-stream upload must receive the fixed verified size identity"),
         ("$downloadInfo.Length -ne $spec.Size", "downloaded release asset must match fixed verified size"),
         ("[string]::Equals($spec.Hash, $downloadHash", "downloaded release asset must match fixed verified hash"),
     ):
@@ -86,11 +88,30 @@ def main() -> int:
         "Resolve-Path (Join-Path 'dist' $expectedAsset)",
         "@('dist\\QS3D-BricsCAD-V25.zip', 'dist\\QS3D-BricsCAD-V25.zip.sha256')",
         "$localHash = (Get-FileHash -LiteralPath $localPath",
+        "-InFile $asset",
     ):
         if needle in publish_block:
-            fail("publish must never derive admission identity from mutable dist paths after verification")
+            fail("publish must never derive or upload admission bytes by reopening mutable paths after verification")
 
-    print("PASS: cloud V25 publication is bound to fixed post-verification asset identity")
+    if not HELPER.is_file():
+        fail("single-stream V25 held-release upload helper is missing")
+    helper = HELPER.read_text(encoding="utf-8")
+    for needle, message in (
+        ("[System.IO.File]::Open(", "single-stream helper must explicitly open each held asset once"),
+        ("[System.IO.FileMode]::Open", "single-stream helper must use FileMode.Open"),
+        ("[System.IO.FileAccess]::Read", "single-stream helper must open held assets read-only"),
+        ("[System.IO.FileShare]::Read", "single-stream helper must deny writers/deleters during verification and upload"),
+        ("$stream.Length -ne $ExpectedSize", "single-stream helper must bind upload to fixed verified size"),
+        ("ComputeHash($stream)", "single-stream helper must hash the same open stream"),
+        ("$stream.Position = 0", "single-stream helper must rewind the verified stream"),
+        ("[System.Net.Http.StreamContent]::new($stream)", "single-stream helper must upload the same verified stream"),
+        ("$client.PostAsync($uploadUri, $content)", "single-stream helper must publish from verified StreamContent"),
+    ):
+        require(helper, needle, message)
+    if "Invoke-RestMethod" in helper or "-InFile" in helper:
+        fail("single-stream helper must not fall back to pathname-reopening upload APIs")
+
+    print("PASS: cloud V25 publication is bound to fixed post-verification identity and uploads the same verified held-asset stream")
     return 0
 
 
