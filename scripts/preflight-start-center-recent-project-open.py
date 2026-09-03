@@ -40,14 +40,15 @@ snippet = method_block(
     "private void OpenRecentProject(StartCenterRecentProject recent)",
 )
 
+failure_text = '_statusText.Text = "Không thể mở dự án gần đây an toàn. Hãy kiểm tra tệp và thử lại.";'
 required_markers = (
     "StartCenterUserStateStore.TryNormalizeDwgPath(recent.Path, out var normalized)",
     "File.Exists(normalized)",
     "ProjectFileUiService.OpenProject(normalized);",
     "StartCenterUserStateStore.RecordProject(normalized);",
     "RefreshRecentProjects();",
-    "catch (Exception ex)",
-    '_statusText.Text = "Không thể mở: " + ex.Message;',
+    "catch (Exception)",
+    failure_text,
     '_statusText.Text = "Đã mở " + Path.GetFileName(normalized) + ".";',
 )
 for marker in required_markers:
@@ -56,12 +57,14 @@ for marker in required_markers:
 forbidden_markers = (
     "Application.DocumentManager.Open(",
     "ProjectContextCoordinator.GetOrCreate(",
+    "ex.Message",
+    ".Message",
 )
 for marker in forbidden_markers:
-    require(marker not in snippet, f"OpenRecentProject must not bypass the shared project-open route: {marker}")
+    require(marker not in snippet, f"OpenRecentProject must not bypass/redact the shared project-open route: {marker}")
 
 open_index = snippet.index("ProjectFileUiService.OpenProject(normalized);")
-failure_index = snippet.index('_statusText.Text = "Không thể mở: " + ex.Message;')
+failure_index = snippet.index(failure_text)
 success_index = snippet.index('_statusText.Text = "Đã mở " + Path.GetFileName(normalized) + ".";')
 record_index = snippet.index("StartCenterUserStateStore.RecordProject(normalized);")
 
@@ -74,7 +77,7 @@ require(
     "A failed shared open must return before the success/bookkeeping path.",
 )
 require(
-    "catch (Exception ex)" not in snippet[success_index:record_index],
+    "catch (Exception)" not in snippet[success_index:record_index],
     "The open-failure catch must not wrap post-open recent-project bookkeeping.",
 )
 
@@ -90,4 +93,4 @@ project_route_markers = (
 for marker in project_route_markers:
     require(marker in open_drawing, f"Shared DWG open route must preserve project sidecar behavior: {marker}")
 
-print("[OK] Start Center recent-project opens preserve shared routing and cannot be misreported by post-open bookkeeping failures.")
+print("[OK] Start Center recent-project opens preserve shared routing, redact open failures, and cannot be misreported by post-open bookkeeping failures.")

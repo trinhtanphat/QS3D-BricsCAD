@@ -11,6 +11,7 @@ using System.Windows.Media;
 using QS3D.BricsCAD.V25.Ribbon;
 using QS3D.BricsCAD.V25.Services;
 using Application = Bricscad.ApplicationServices.Application;
+using Document = Bricscad.ApplicationServices.Document;
 
 namespace QS3D.BricsCAD.V25.UI
 {
@@ -49,12 +50,16 @@ namespace QS3D.BricsCAD.V25.UI
         {
             Background = ShellBrush;
             Content = BuildShell();
-            Loaded += (_, __) => RefreshFromActiveDocument();
+            Loaded += (_, __) => RefreshFromDocument(Application.DocumentManager.MdiActiveDocument);
         }
 
         public void RefreshFromActiveDocument()
         {
-            var document = Application.DocumentManager.MdiActiveDocument;
+            RefreshFromDocument(Application.DocumentManager.MdiActiveDocument);
+        }
+
+        public void RefreshFromDocument(Document? document)
+        {
             if (document != null)
             {
                 var path = document.Name ?? string.Empty;
@@ -755,9 +760,9 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 ProjectFileUiService.OpenProject(normalized);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _statusText.Text = "Không thể mở: " + ex.Message;
+                _statusText.Text = "Không thể mở dự án gần đây an toàn. Hãy kiểm tra tệp và thử lại.";
                 return;
             }
 
@@ -781,9 +786,9 @@ namespace QS3D.BricsCAD.V25.UI
                 _statusText.Text = string.Empty;
                 RefreshFromActiveDocument();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _statusText.Text = ex.Message;
+                _statusText.Text = "Thao tác không thể hoàn tất an toàn. Hãy kiểm tra trạng thái bản vẽ và thử lại.";
                 RefreshStatusControls();
             }
         }
