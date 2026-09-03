@@ -28,6 +28,8 @@ permissions:
 
 concurrency:
   group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Code-bearing push/synchronize/reopen runs retain cancel-in-progress: true semantics;
+  # metadata-only edited runs serialize so they cannot destroy exact-head build evidence.
   cancel-in-progress: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' }}
 
 jobs:
