@@ -47,7 +47,7 @@ if not errors:
         "_nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
         "database.UnmanagedObject == _nativeDatabaseIdentity",
         "if (!MatchesNativeDatabase(document))",
-        "if (!MatchesNativeDatabase(e.Document)) return;",
+        "The shared coordinator has already matched this registration",
         "private IDisposable? _nativeLifecycleSubscription;",
         "_nativeLifecycleSubscription = DocumentBoundNativeLifecycleCoordinator.Register(",
         "DetachNativeLifecycleSubscription();",
@@ -66,6 +66,23 @@ if not errors:
     ):
         if legacy in text["lifetime"]:
             errors.append("document-bound lifetime must not depend on managed Document wrapper identity: " + legacy)
+
+    destroy_start = text["lifetime"].find("private void OnDocumentToBeDestroyed")
+    destroy_end = text["lifetime"].find("private void OnDocumentCloseAborted", destroy_start)
+    if destroy_start < 0 or destroy_end <= destroy_start:
+        errors.append("document-bound lifetime destroy callback boundary is missing")
+    else:
+        destroy_body = text["lifetime"][destroy_start:destroy_end]
+        for forbidden in (
+            "e.Document",
+            "MatchesNativeDatabase(",
+            "ReferenceEquals(",
+        ):
+            if forbidden in destroy_body:
+                errors.append(
+                    "document-bound lifetime destroy callback must consume coordinator-owned affinity without re-opening event Document: "
+                    + forbidden
+                )
 
     for forbidden in (
         "BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;",
