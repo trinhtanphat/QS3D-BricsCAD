@@ -89,6 +89,12 @@ namespace QS3D.BricsCAD.V25
             var token = NormalizeOptionalToken(writerToken);
             var prepared = PreparedNativeCommand.Value;
             var acquiredHere = prepared == null;
+
+            // Never acquire the process-global write gate while BricsCAD is already modal.
+            // This check intentionally runs without MutationGate ownership so a blocked UI
+            // transition cannot strand the writer before the modal state is rejected.
+            RequireNoModalCommandBeforeMutationGate();
+
             if (acquiredHere && !MutationGate.Wait(MutationAcquireTimeoutMilliseconds))
                 throw new InvalidOperationException("DWG writer is busy with another mutation. Read-only tools remain available; retry this mutation later.");
             if (prepared != null && !prepared.OwnsMutationGate)
@@ -96,6 +102,14 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
+                // Revalidate after acquisition to close the race between the preflight sample and
+                // actual writer ownership. Never wait/retry for modal recovery while holding it.
+                InvokeInCadContext(() =>
+                {
+                    RequireNoModalCommandInCadContext();
+                    return true;
+                });
+
                 lock (Sync)
                 {
                     var now = DateTime.UtcNow;
@@ -152,6 +166,10 @@ namespace QS3D.BricsCAD.V25
             RejectUnsafeNativeCommand(command);
             if (PreparedNativeCommand.Value != null)
                 throw new InvalidOperationException("Nested native-command preparation is not supported.");
+
+            // Preflight before taking MutationGate. ArmNativeCommandInCadContext performs the
+            // second modal check after acquisition, closing the preflight/acquire race.
+            RequireNoModalCommandBeforeMutationGate();
             if (!MutationGate.Wait(MutationAcquireTimeoutMilliseconds))
                 throw new InvalidOperationException("DWG writer is busy with another mutation. Read-only tools remain available; retry this native command later.");
 
@@ -415,6 +433,15 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("REGENALL is not permitted through MCP native command dispatch because BricsCAD can enter modal CMDACTIVE bit 8 and strand logical DWG writer ownership. Use bounded view/status operations or run REGENALL locally after MCP writer activity is idle.");
         }
 
+        private static void RequireNoModalCommandBeforeMutationGate()
+        {
+            InvokeInCadContext(() =>
+            {
+                RequireNoModalCommandInCadContext();
+                return true;
+            });
+        }
+
         private static void RequireNoModalCommandInCadContext()
         {
             int commandActive;
@@ -427,7 +454,7 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("Could not read BricsCAD CMDACTIVE before native MCP command dispatch; command was not queued.", ex);
             }
             if ((commandActive & 8) != 0)
-                throw new InvalidOperationException("BricsCAD is in a modal command state (CMDACTIVE bit 8). Finish or cancel the modal command before retrying native MCP command dispatch.");
+                throw new InvalidOperationException("interaction_required: BricsCAD is in a modal command state (CMDACTIVE bit 8). Finish or cancel the modal interaction in the foreground before retrying; MCP will not acquire or retain the CAD writer while this state is active.");
         }
 
         private static string SafeTool(string value)
