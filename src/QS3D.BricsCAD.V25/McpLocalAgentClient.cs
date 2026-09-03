@@ -158,15 +158,18 @@ namespace QS3D.BricsCAD.V25
 
         private static void ValidateLocalEndpoint(Uri endpoint)
         {
+            var expected = McpEmbeddedServer.Endpoint;
             if (endpoint == null
                 || !endpoint.IsAbsoluteUri
                 || !string.Equals(endpoint.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
                 || !endpoint.IsLoopback
                 || !string.IsNullOrEmpty(endpoint.UserInfo)
+                || !string.Equals(endpoint.Host, expected.Host, StringComparison.OrdinalIgnoreCase)
+                || endpoint.Port != expected.Port
                 || !string.Equals(endpoint.AbsolutePath, "/mcp", StringComparison.Ordinal)
                 || !string.IsNullOrEmpty(endpoint.Query)
                 || !string.IsNullOrEmpty(endpoint.Fragment))
-                throw new InvalidOperationException("Local MCP endpoint must be the canonical loopback http://.../mcp endpoint.");
+                throw new InvalidOperationException("Local MCP endpoint must match the current embedded loopback http://.../mcp endpoint.");
         }
 
         private static LocalHttpResult Send(Uri endpoint, string method, string body, int timeoutMilliseconds, string? session)
