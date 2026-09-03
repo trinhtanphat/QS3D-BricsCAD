@@ -62,8 +62,10 @@ namespace QS3D.BricsCAD.V25
             }
             finally
             {
-                operation.DetachBestEffort();
-                operation.Done.Dispose();
+                // Always serialize cleanup through BricsCAD application context before disposing
+                // the wait handle. If a long-running QSAVE prevents that cleanup, intentionally
+                // leave the handle alive so a late terminal event can still signal it safely.
+                if (operation.DetachBestEffort()) operation.Done.Dispose();
             }
         }
 
@@ -196,21 +198,26 @@ namespace QS3D.BricsCAD.V25
                 }
             }
 
-            internal void DetachBestEffort()
+            internal bool DetachBestEffort()
             {
-                if (Document == null || !_handlersAttached) return;
+                if (Document == null) return true;
                 try
                 {
+                    // Even when the terminal handler already detached itself, this empty CAD
+                    // callback is a serialization barrier proving that handler has returned before
+                    // the worker thread disposes Done.
                     McpDiagnosticHub.InvokeInCadContext(() =>
                     {
                         DetachInCadContext();
                         return string.Empty;
                     });
+                    return true;
                 }
                 catch
                 {
                     // Coordinator-owned terminal handlers remain authoritative for writer safety.
-                    // This helper cleanup is best effort and must not mask the original save result.
+                    // Keep Done alive because a late helper terminal callback may still need it.
+                    return false;
                 }
             }
 
