@@ -96,8 +96,9 @@ namespace QS3D.BricsCAD.V25
             lock (Sync)
             {
                 AckRecord existing;
-                if (!Records.TryGetValue(actionId, out existing)
-                    || !ReferenceEquals(existing, durableCandidate)
+                if (!Records.TryGetValue(actionId, out existing))
+                    throw new InvalidOperationException("Durable mutation replay state changed while active-drawing affinity was being verified; replay was not accepted.");
+                if (!ReferenceEquals(existing, durableCandidate)
                     || existing.State != AckState.Durable)
                     throw new InvalidOperationException("Durable mutation replay state changed while active-drawing affinity was being verified; replay was not accepted.");
                 RequireMatchingRequestFingerprint(existing, fingerprint);
@@ -519,9 +520,11 @@ namespace QS3D.BricsCAD.V25
                 if (lines.Length == 0 || !string.Equals(lines[0], LedgerHeader, StringComparison.Ordinal))
                     throw new InvalidDataException("Mutation ACK ledger header is invalid.");
                 var loaded = 0;
-                for (var i = 1; i < lines.Length && loaded < MaxDurableRecords; i++)
+                for (var i = 1; i < lines.Length; i++)
                 {
                     if (string.IsNullOrWhiteSpace(lines[i])) continue;
+                    if (loaded >= MaxDurableRecords)
+                        throw new InvalidDataException("Mutation ACK ledger exceeds the durable record limit.");
                     var fields = lines[i].Split('|');
                     if (fields.Length != 6) throw new InvalidDataException("Mutation ACK ledger record is malformed.");
                     long ticks;
