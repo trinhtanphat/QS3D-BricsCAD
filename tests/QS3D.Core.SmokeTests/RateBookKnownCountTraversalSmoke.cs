@@ -307,7 +307,6 @@ namespace QS3D.Core.SmokeTests
             public bool Contains(RateItem item) => _items.Contains(item);
             public void CopyTo(RateItem[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
             void ICollection.CopyTo(Array array, int index) => ((ICollection)_items.ToArray()).CopyTo(array, index);
-            public bool Contains(RateItem item) => _items.Contains(item);
             public void Add(RateItem item) => throw new NotSupportedException();
             public bool Remove(RateItem item) => throw new NotSupportedException();
             public void Clear() => throw new NotSupportedException();
