@@ -29,17 +29,21 @@ def validate_success_response(workflow: str, version: str) -> list[str]:
         "-ReleaseUri $releaseUri",
         "-ReleaseId $releaseId",
         "-VerifiedAssetIds $verifiedAssetIds",
-        "-LocalAssets $localAssets",
     ]
     if version == "V25":
         required += [
+            "-LocalAssets $localAssets",
             "-ExpectedReleaseName $expectedReleaseName",
             "-ExpectedAssets $assetNames",
             "-IsPrerelease:($env:RELEASE_PRERELEASE -eq 'true')",
             "-TransactionMarker $draftTransactionMarker",
         ]
     else:
-        required += ["-ExpectedAssets $expectedAssets", "-IsPrerelease $isPrerelease"]
+        required += [
+            "-AdmittedAssets $admittedAssets",
+            "-ExpectedAssets $expectedAssets",
+            "-IsPrerelease $isPrerelease",
+        ]
     for token in required:
         if token not in success_scope:
             errors.append(f"{version} successful publish verification missing: {token}")

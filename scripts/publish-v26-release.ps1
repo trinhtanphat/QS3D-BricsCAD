@@ -107,7 +107,7 @@ function Assert-PublishedReleaseMatchesVerifiedTransaction {
     [Parameter(Mandatory = $true)][long]$ReleaseId,
     [Parameter(Mandatory = $true)][string[]]$ExpectedAssets,
     [Parameter(Mandatory = $true)][hashtable]$VerifiedAssetIds,
-    [Parameter(Mandatory = $true)][hashtable]$LocalAssets,
+    [Parameter(Mandatory = $true)][hashtable]$AdmittedAssets,
     [Parameter(Mandatory = $true)][bool]$IsPrerelease
   )
   if ($null -eq $ReleaseSnapshot -or [long]$ReleaseSnapshot.id -ne $ReleaseId) { throw "Published V26 release identity mismatch during acknowledgement reconciliation." }
@@ -122,12 +122,12 @@ function Assert-PublishedReleaseMatchesVerifiedTransaction {
   foreach ($expectedAsset in $ExpectedAssets) {
     $matches = @($ReleaseSnapshot.assets | Where-Object { [string]$_.name -ceq $expectedAsset })
     if ($matches.Count -ne 1) { throw "Published V26 release asset identity is ambiguous for $expectedAsset." }
-    if (-not $VerifiedAssetIds.ContainsKey($expectedAsset) -or -not $LocalAssets.ContainsKey($expectedAsset)) { throw "Verified V26 release asset identity mapping is missing for $expectedAsset." }
+    if (-not $VerifiedAssetIds.ContainsKey($expectedAsset) -or -not $AdmittedAssets.ContainsKey($expectedAsset)) { throw "Verified V26 release asset identity mapping is missing for $expectedAsset." }
     $publishedAsset = $matches[0]
     $expectedAssetId = [long]$VerifiedAssetIds[$expectedAsset]
     if ($expectedAssetId -le 0 -or [long]$publishedAsset.id -ne $expectedAssetId) { throw "Verified V26 release asset identity mismatch for $expectedAsset." }
-    $localLength = [int64](Get-Item -LiteralPath ([string]$LocalAssets[$expectedAsset])).Length
-    if ([int64]$publishedAsset.size -ne $localLength) { throw "Published V26 release asset size mismatch for $expectedAsset during acknowledgement reconciliation." }
+    $expectedLength = [int64]$AdmittedAssets[$expectedAsset].Length
+    if ([int64]$publishedAsset.size -ne $expectedLength) { throw "Published V26 release asset size mismatch for $expectedAsset during acknowledgement reconciliation." }
   }
 }
 
@@ -157,7 +157,7 @@ $releaseId = [long]0
 $release = $null
 $releaseUri = $null
 $expectedAssets = @()
-$localAssets = @{}
+$admittedAssets = @{}
 $verifiedAssetIds = @{}
 $publishPatchAttempted = $false
 
@@ -220,13 +220,19 @@ try {
   if ($signPackage) { $releaseAssets += 'dist\QS3D-BricsCAD-V26.update.json' }
   $uploadBase = $release.upload_url -replace '\{\?name,label\}$', ''
   foreach ($assetPath in $releaseAssets) {
-    $asset = (Resolve-Path -LiteralPath $assetPath).Path
-    $name = [IO.Path]::GetFileName($asset)
+    $name = [IO.Path]::GetFileName($assetPath)
     if ($name -match 'V25') { throw "V25 release asset leaked into V26 publication: $name" }
-    if ($localAssets.ContainsKey($name)) { throw "Duplicate local V26 release asset name: $name" }
-    $localAssets[$name] = $asset
+    if ($admittedAssets.ContainsKey($name)) { throw "Duplicate local V26 release asset name: $name" }
     $contentType = if ($name.EndsWith('.zip')) { 'application/zip' } elseif ($name.EndsWith('.json')) { 'application/json' } else { 'text/plain' }
-    Invoke-RestMethod -Method Post -Uri ($uploadBase + '?name=' + [Uri]::EscapeDataString($name)) -Headers $headers -ContentType $contentType -InFile $asset | Out-Null
+    $admittedAsset = & .\scripts\invoke-v26-held-release-upload.ps1 `
+      -UploadBase $uploadBase `
+      -Token $env:GH_TOKEN `
+      -Path $assetPath `
+      -ContentType $contentType
+    if ($null -eq $admittedAsset -or -not [string]::Equals([string]$admittedAsset.Name, $name, [StringComparison]::Ordinal)) {
+      throw "V26 held upload returned no matching admitted record for $name."
+    }
+    $admittedAssets[$name] = $admittedAsset
   }
 
   $releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$releaseId"
@@ -243,20 +249,21 @@ try {
     foreach ($expectedAsset in $expectedAssets) {
       $matches = @($draftRelease.assets | Where-Object { [string]$_.name -ceq $expectedAsset })
       if ($matches.Count -ne 1) { throw "Expected exactly one V26 release asset named $expectedAsset; found $($matches.Count). Release remains a draft." }
-      if (-not $localAssets.ContainsKey($expectedAsset)) { throw "Local V26 release asset mapping is missing for $expectedAsset. Release remains a draft." }
+      if (-not $admittedAssets.ContainsKey($expectedAsset)) { throw "Admitted V26 release asset mapping is missing for $expectedAsset. Release remains a draft." }
       $uploadedAsset = $matches[0]
       $uploadedAssetId = [long]$uploadedAsset.id
       if ($uploadedAssetId -le 0) { throw "Uploaded V26 release asset returned no usable identity for $expectedAsset. Release remains a draft." }
-      $localAsset = [string]$localAssets[$expectedAsset]
-      $localLength = [int64](Get-Item -LiteralPath $localAsset).Length
+      $admittedAsset = $admittedAssets[$expectedAsset]
+      if ([long]$admittedAsset.UploadedAssetId -ne $uploadedAssetId) { throw "Uploaded V26 release asset identity changed after held upload for $expectedAsset. Release remains a draft." }
+      $expectedLength = [int64]$admittedAssets[$expectedAsset].Length
       $remoteLength = [int64]$uploadedAsset.size
-      if ($remoteLength -ne $localLength) { throw "Uploaded V26 release asset size mismatch for $expectedAsset. Local=$localLength Remote=$remoteLength. Release remains a draft." }
+      if ($remoteLength -ne $expectedLength) { throw "Uploaded V26 release asset size mismatch for $expectedAsset. Admitted=$expectedLength Remote=$remoteLength. Release remains a draft." }
       $childName = 'asset-' + [Guid]::NewGuid().ToString('N')
       $downloadedAsset = & .\scripts\v26-release-verification-workspace.ps1 -Operation Child -Workspace $verificationWorkspace -ChildName $childName
       Invoke-WebRequest -Method Get -Uri ([string]$uploadedAsset.url) -Headers $assetDownloadHeaders -OutFile $downloadedAsset -UseBasicParsing
-      $localHash = (& .\scripts\verify-v26-held-file.ps1 -Operation Hash -Path $localAsset).Trim()
+      $expectedHash = [string]$admittedAssets[$expectedAsset].Sha256
       $remoteHash = (& .\scripts\verify-v26-held-file.ps1 -Operation Hash -Path $downloadedAsset).Trim()
-      if (-not [string]::Equals($localHash, $remoteHash, [StringComparison]::OrdinalIgnoreCase)) { throw "Uploaded V26 release asset SHA-256 mismatch for $expectedAsset. Release remains a draft." }
+      if (-not [string]::Equals($expectedHash, $remoteHash, [StringComparison]::OrdinalIgnoreCase)) { throw "Uploaded V26 release asset SHA-256 mismatch for $expectedAsset. Release remains a draft." }
       $verifiedAssetIds[$expectedAsset] = $uploadedAssetId
     }
   }
@@ -273,7 +280,7 @@ try {
     -ReleaseId $releaseId `
     -ExpectedAssets $expectedAssets `
     -VerifiedAssetIds $verifiedAssetIds `
-    -LocalAssets $localAssets `
+    -AdmittedAssets $admittedAssets `
     -IsPrerelease $isPrerelease
 }
 catch {
@@ -291,7 +298,7 @@ catch {
           -ReleaseId $releaseId `
           -ExpectedAssets $expectedAssets `
           -VerifiedAssetIds $verifiedAssetIds `
-          -LocalAssets $localAssets `
+          -AdmittedAssets $admittedAssets `
           -IsPrerelease $isPrerelease
         Write-Host "V26 publish acknowledgement was ambiguous, but authoritative release state confirms the exact qualified release is already published; treating publication as committed."
         return
