@@ -27,7 +27,9 @@ permissions:
   issues: read
 
 concurrency:
-  group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Metadata-only PR edits use a distinct cancellation class. This preserves the repository's
+  # bounded cancel-in-progress behavior without allowing an edited event to cancel code CI.
+  group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata' || 'code' }}
   cancel-in-progress: true
 
 jobs:
@@ -38,6 +40,7 @@ jobs:
     outputs:
       source_validation: ${{ steps.scope.outputs.source_validation }}
       build_validation: ${{ steps.scope.outputs.build_validation }}
+      reuse_exact_head_green: ${{ steps.edited_evidence.outputs.reuse_exact_head_green }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -59,6 +62,13 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
+      - name: Check prior exact-head GREEN for PR metadata edit
+        id: edited_evidence
+        if: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' }}
+        env:
+          QS3D_EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/preflight-ci-edited-evidence.py --verify-runtime
       - name: CI trigger and publishing policy gate
         run: python scripts/preflight-ci-manual-only.py
       - name: Changed-path tokenization regression
@@ -69,12 +79,22 @@ jobs:
         run: python scripts/check-actions-pinned.py
       - name: Classify validation scope
         id: scope
+        env:
+          QS3D_PR_ACTION: ${{ github.event.action }}
+          QS3D_REUSE_EXACT_HEAD_GREEN: ${{ steps.edited_evidence.outputs.reuse_exact_head_green }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           # scripts/ci-validation-scope.py owns the exact path classes: src/, tests/, scripts/,
           # samples/generated/, .github/workflows/, build roots, and watched policy Markdown.
-          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
+          # An edited PR may reuse source/build evidence only after the preceding step proves a
+          # successful Shared CI run for this exact SHA. Missing/uncertain evidence falls through
+          # to ordinary path classification and therefore full validation where required.
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request' -and $env:QS3D_PR_ACTION -eq 'edited' -and $env:QS3D_REUSE_EXACT_HEAD_GREEN -eq 'true') {
+            "source_validation=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            "build_validation=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          }
+          elseif ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
             & python scripts/ci-validation-scope.py --all --github-output $env:GITHUB_OUTPUT
           }
           else {
