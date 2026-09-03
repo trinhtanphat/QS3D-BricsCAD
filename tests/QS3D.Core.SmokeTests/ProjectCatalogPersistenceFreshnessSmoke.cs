@@ -13,6 +13,8 @@ namespace QS3D.Core.SmokeTests
             OwnershipTracksRemovalReplacementAndSnapshotRestore();
             DuplicateCatalogReferencesHaveSingleOwnershipSubscription();
             ServiceRenameAdvancesProjectFreshnessExactlyOnce();
+            ServiceZoneUpdateAdvancesProjectFreshnessExactlyOnce();
+            ServiceFloorUpdateAdvancesProjectFreshnessOncePerLogicalUpdate();
         }
 
         private static void OwnedCatalogScalarMutationsAdvanceProjectFreshness()
@@ -119,6 +121,46 @@ namespace QS3D.Core.SmokeTests
 
             ProjectFamilyService.Rename(project, family.Id, " Wall Type Renamed ");
             Equal(baseline + 1L, project.ChangeVersion, "normalized service rename no-op must not advance project freshness");
+        }
+
+        private static void ServiceZoneUpdateAdvancesProjectFreshnessExactlyOnce()
+        {
+            var project = CreateProject(out var zone, out _, out _);
+            var baseline = project.ChangeVersion;
+
+            var updated = ProjectZoneService.Update(project, zone.Id, "Zone Updated");
+
+            if (!ReferenceEquals(zone, updated))
+                throw new Exception("ProjectZoneService.Update must preserve the owned zone object identity.");
+            Equal("Zone Updated", zone.Name, "service zone update name");
+            Equal(baseline + 1L, project.ChangeVersion, "service zone update must advance project freshness exactly once");
+
+            ProjectZoneService.Update(project, zone.Id, " Zone Updated ");
+            Equal(baseline + 1L, project.ChangeVersion, "normalized service zone update no-op must not advance project freshness");
+        }
+
+        private static void ServiceFloorUpdateAdvancesProjectFreshnessOncePerLogicalUpdate()
+        {
+            var project = CreateProject(out _, out var floor, out _);
+            var baseline = project.ChangeVersion;
+
+            var nameOnly = ProjectFloorService.Update(project, floor.Id, "Floor Renamed", floor.ElevationM);
+            if (!ReferenceEquals(floor, nameOnly))
+                throw new Exception("ProjectFloorService.Update must preserve the owned floor object identity.");
+            Equal("Floor Renamed", floor.Name, "floor name-only update");
+            Equal(baseline + 1L, project.ChangeVersion, "floor name-only update must advance freshness once");
+
+            ProjectFloorService.Update(project, floor.Id, floor.Name, 4.5d);
+            Equal(4.5d, floor.ElevationM, "floor elevation-only update");
+            Equal(baseline + 2L, project.ChangeVersion, "floor elevation-only update must advance freshness once");
+
+            ProjectFloorService.Update(project, floor.Id, "Floor Combined", 8.25d);
+            Equal("Floor Combined", floor.Name, "floor combined update name");
+            Equal(8.25d, floor.ElevationM, "floor combined update elevation");
+            Equal(baseline + 3L, project.ChangeVersion, "floor combined update must advance freshness once");
+
+            ProjectFloorService.Update(project, floor.Id, " Floor Combined ", 8.25d);
+            Equal(baseline + 3L, project.ChangeVersion, "normalized floor update no-op must not advance freshness");
         }
 
         private static ProjectState CreateProject(
