@@ -362,10 +362,18 @@ namespace QS3D.BricsCAD.V25
                 pending.EndedHandler = OnCommandEnded;
                 pending.CancelledHandler = OnCommandCancelled;
                 pending.FailedHandler = OnCommandFailed;
-                document.CommandWillStart += pending.WillStartHandler;
-                document.CommandEnded += pending.EndedHandler;
-                document.CommandCancelled += pending.CancelledHandler;
-                document.CommandFailed += pending.FailedHandler;
+                try
+                {
+                    document.CommandWillStart += pending.WillStartHandler;
+                    document.CommandEnded += pending.EndedHandler;
+                    document.CommandCancelled += pending.CancelledHandler;
+                    document.CommandFailed += pending.FailedHandler;
+                }
+                catch
+                {
+                    DetachPendingLocked(pending);
+                    throw;
+                }
                 _pending = pending;
             }
             audit?.Invoke("native command barrier armed; command=" + SafeTool(command));
