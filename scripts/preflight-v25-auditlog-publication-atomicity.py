@@ -14,6 +14,12 @@ def main() -> None:
     source = SOURCE.read_text(encoding="utf-8")
 
     require("CloseUnpublishedCandidate" in source, "missing unpublished-candidate terminal cleanup helper")
+    require("_unpublishedCandidate" in source, "failed unpublished cleanup must remain quarantined across invocations")
+    require("PrepareUnpublishedCandidate" in source, "command must retry/quarantine unresolved unpublished candidates before creating another")
+    require(
+        "if (!PrepareUnpublishedCandidate())" in source,
+        "Audit Log command must fail closed before a new candidate while prior unpublished cleanup is unresolved",
+    )
     require(
         "if (!candidate.IsLoaded)" in source and "CloseUnpublishedCandidate(candidate)" in source,
         "non-loaded modeless candidate must be terminally cleaned before return",
@@ -28,15 +34,15 @@ def main() -> None:
     )
     helper_start = source.find("private static bool CloseUnpublishedCandidate")
     require(helper_start >= 0, "missing cleanup helper body")
-    helper_end = source.find("private static void ReleasePublishedWindow", helper_start)
+    helper_end = source.find("private static void ReleaseCandidate", helper_start)
     require(helper_end > helper_start, "cannot bound cleanup helper")
     helper = source[helper_start:helper_end]
     require("candidate.Close();" in helper, "cleanup helper must attempt terminal Close")
-    require("return !candidate.IsLoaded;" in helper, "cleanup helper must prove terminal non-loaded state")
+    require("_unpublishedCandidate = candidate;" in helper, "failed cleanup must quarantine the exact candidate")
     require("_window = candidate" not in helper, "cleanup helper must never publish an unproven candidate")
     require("ProjectContextCoordinator.GetOrCreate" not in source, "Audit Log command must keep project reads non-creating")
 
-    print("PASS: Audit Log modeless publication is atomic and unpublished candidates fail closed")
+    print("PASS: Audit Log modeless publication is atomic and unresolved unpublished candidates remain quarantined")
 
 
 if __name__ == "__main__":
