@@ -36,34 +36,46 @@ else:
     if reject_at < 0 or gate_at < 0 or reject_at > gate_at:
         errors.append("REGENALL rejection must occur before MutationGate acquisition")
 
-# Direct extrusion must build exactly one transient Region from the closed planar curve and feed
-# that Region to the solid kernel. Do not regress to passing a generic database Entity directly.
-for token in (
-    "Region.CreateFromCurves(new DBObjectCollection { source })",
-    "regions.Count != 1",
-    "Source curve must form exactly one closed planar region",
-    "solid.CreateExtrudedSolid(region, new Vector3d(0d, 0d, height), new SweepOptions());",
-    "region?.Dispose();",
-):
-    require(direct, token, "McpCadDirectModelRuntime.Extrude")
+# Direct extrusion must isolate the BricsCAD solid kernel from the database-resident Curve.
+# Clone the source Curve, feed the transient clone directly to CreateExtrudedSolid, then dispose it.
+extrude_start = direct.find("private static string Extrude(")
+extrude_end = direct.find("private static string Boolean(", extrude_start)
+extrude_body = direct[extrude_start:extrude_end] if extrude_start >= 0 and extrude_end > extrude_start else ""
+if not extrude_body:
+    errors.append("unable to isolate Extrude implementation")
+else:
+    for token in (
+        "var sourceClone = source.Clone() as Curve;",
+        "solid.CreateExtrudedSolid(sourceClone, new Vector3d(0d, 0d, height), new SweepOptions());",
+        "sourceClone.Dispose();",
+    ):
+        require(extrude_body, token, "McpCadDirectModelRuntime.Extrude")
+    if "Region.CreateFromCurves" in extrude_body:
+        errors.append("cad_extrude must not route the source Curve through Region.CreateFromCurves")
 
-# Boolean evaluation must use a transient clone and only erase the original tool solid after the
-# kernel operation succeeds. This prevents database-resident operand eInvalidInput regressions.
+# Boolean evaluation must run entirely on transient clones. Only after kernel success may the
+# successful target clone take over the original target identity via HandOverTo; the original tool
+# entity is erased after handover. This keeps the target handle/ObjectId stable without asking the
+# BricsCAD boolean kernel to mutate either database-resident input.
 for token in (
+    "var targetClone = target.Clone() as Solid3d;",
     "var operandClone = operand.Clone() as Solid3d;",
-    "target.BooleanOperation(operation, operandClone);",
+    "targetClone.BooleanOperation(operation, operandClone);",
+    "target.HandOverTo(targetClone, true, true);",
     "if (!operand.IsErased) operand.Erase();",
-    "operandClone.Dispose();",
 ):
     require(direct, token, "McpCadDirectModelRuntime.Boolean")
 boolean_start = direct.find("private static string Boolean(")
 boolean_end = direct.find("private static string Save()", boolean_start)
 boolean_body = direct[boolean_start:boolean_end] if boolean_start >= 0 and boolean_end > boolean_start else ""
 if boolean_body:
-    kernel_at = boolean_body.find("target.BooleanOperation(operation, operandClone);")
+    if "target.BooleanOperation(operation" in boolean_body:
+        errors.append("boolean kernel must not mutate the database-resident target directly")
+    kernel_at = boolean_body.find("targetClone.BooleanOperation(operation, operandClone);")
+    handover_at = boolean_body.find("target.HandOverTo(targetClone, true, true);")
     erase_at = boolean_body.find("if (!operand.IsErased) operand.Erase();")
-    if kernel_at < 0 or erase_at < 0 or erase_at < kernel_at:
-        errors.append("boolean tool solid must be erased only after transient-clone kernel success")
+    if kernel_at < 0 or handover_at < 0 or erase_at < 0 or not (kernel_at < handover_at < erase_at):
+        errors.append("boolean ordering must be transient kernel success -> target HandOverTo -> tool erase")
 else:
     errors.append("unable to isolate Boolean implementation")
 
@@ -83,4 +95,4 @@ if errors:
         print(" -", error)
     sys.exit(1)
 
-print("PASS: REGENALL/modal native dispatch is fail-closed, direct extrusion remains Region-backed, Boolean operands remain transient clones, and Solid3d extents stay bounded against eNullExtents.")
+print("PASS: REGENALL/modal dispatch is fail-closed, direct extrusion uses a transient Curve clone, Boolean kernel evaluation stays on transient clones with target identity handover, and Solid3d extents remain bounded.")
