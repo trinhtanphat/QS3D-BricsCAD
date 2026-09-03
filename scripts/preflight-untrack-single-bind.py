@@ -37,10 +37,18 @@ else:
         }
         positions = {}
         for name, token in tokens.items():
+            if name == "preview_error":
+                continue
             at = command.find(token)
             positions[name] = at
             if at < 0:
                 errors.append("Untrack single-bind lifecycle missing token: " + token)
+
+        preview_target_at = positions.get("preview_targets", -1)
+        preview_error_at = command.find(tokens["preview_error"], preview_target_at if preview_target_at >= 0 else 0)
+        positions["preview_error"] = preview_error_at
+        if preview_error_at < 0:
+            errors.append("Untrack single-bind lifecycle missing preview failure token after target resolution: " + tokens["preview_error"])
 
         ordered = (
             "selection", "handles", "readonly", "project_id", "version", "preview_decl",
