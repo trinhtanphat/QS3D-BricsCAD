@@ -52,7 +52,7 @@ namespace QS3D.BricsCAD.V25
             var handles = snapshots.Select(x => x.Handle).ToArray();
             if (!ProjectContextCoordinator.TryGetReadOnly(doc, out var previewProject))
             {
-                ReportUntrackError(doc, label, new InvalidOperationException("Untrack semantic elements yêu cầu QS3D project hiện hữu; lệnh không tạo project mới."));
+                ReportUntrackError(doc, label);
                 return;
             }
 
@@ -63,9 +63,9 @@ namespace QS3D.BricsCAD.V25
             {
                 previewTargetIds = ResolveUntrackTargetIds(previewProject, handles, predicate);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                ReportUntrackError(doc, label, ex);
+                ReportUntrackError(doc, label);
                 return;
             }
 
@@ -90,9 +90,9 @@ namespace QS3D.BricsCAD.V25
 
                 result = SemanticUntrackService.Untrack(project, handles, predicate);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                ReportUntrackError(doc, label, ex);
+                ReportUntrackError(doc, label);
                 return;
             }
 
@@ -121,13 +121,13 @@ namespace QS3D.BricsCAD.V25
             try { document.Editor.WriteMessage("\nQS3D: untracked " + count + " " + label + "; CAD geometry was not erased."); }
             catch (Exception ex) { if (warning == null) warning = ex; }
             if (warning == null) return;
-            try { document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI sau untrack commit: " + warning.Message); }
+            try { document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI sau untrack commit; semantic change đã được lưu nhưng UI chưa đồng bộ hoàn toàn."); }
             catch { }
         }
 
-        private static void ReportUntrackError(Document document, string label, Exception ex)
+        private static void ReportUntrackError(Document document, string label)
         {
-            var message = "Không thể bỏ theo dõi " + label + ": " + ex.Message;
+            var message = "Không thể bỏ theo dõi " + label + ". Vui lòng thử lại.";
             try { PaletteCoordinator.SetStatus(message); }
             catch { }
             try { document.Editor.WriteMessage("\nQS3D: " + message); }
