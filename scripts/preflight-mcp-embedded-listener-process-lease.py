@@ -21,6 +21,9 @@ def main():
         "PublishProcessLease",
         "ReleaseProcessLease",
         "StopForProcessLease",
+        "previous();",
+        "stop.Invoke(null, null)",
+        "could not stop the previous embedded listener generation",
     )
     missing = [token for token in required if token not in text]
     if missing:
@@ -34,6 +37,21 @@ def main():
         return fail("could not locate listener start/rebind lease sequence")
     if not (stop_previous_index < bind_index < publish_index):
         return fail("previous listener generation must stop before bind and lease publication must follow bind")
+
+    handoff_start = text.find("private static void StopPreviousProcessLease()")
+    handoff_end = text.find("private static void PublishProcessLease()", handoff_start)
+    if handoff_start < 0 or handoff_end < 0:
+        return fail("could not isolate previous-generation handoff implementation")
+    handoff = text[handoff_start:handoff_end]
+
+    swallowed = (
+        "try { previous(); } catch { }",
+        "catch { }",
+    )
+    if any(token in handoff for token in swallowed):
+        return fail("known QS3D listener handoff must not swallow stop failures and continue to fallback binding")
+    if "throw new InvalidOperationException" not in handoff:
+        return fail("known QS3D listener handoff failures must propagate fail-closed")
 
     stop_index = text.find("public static void Stop()")
     release_index = text.find("ReleaseProcessLease", stop_index)
