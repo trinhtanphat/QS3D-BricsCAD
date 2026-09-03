@@ -102,7 +102,10 @@ namespace QS3D.BricsCAD.V25
                 }
             }
 
-            var circuitOpen = sourceRepairEligible && occurrenceCount >= CircuitOpenOccurrence;
+            // Both source-repair loops and repeated transient loops must eventually fail closed.
+            // Caller/policy failures remain non-retryable and never enter this circuit.
+            var circuitOpen = (sourceRepairEligible || transientFailure)
+                              && occurrenceCount >= CircuitOpenOccurrence;
             var humanReviewRequired = circuitOpen;
 
             string recommendedAction;
