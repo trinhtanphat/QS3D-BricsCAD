@@ -61,7 +61,6 @@ require(
     "Managed Document wrapper identity must not own modeless lifetime or rebind validation.",
 )
 
-# No per-window BricsCAD application/document reactor ownership remains.
 for marker in (
     "BcadApplication.BeginQuit +=", "BcadApplication.BeginQuit -=",
     "BcadApplication.QuitWillStart +=", "BcadApplication.QuitWillStart -=",
@@ -81,6 +80,8 @@ require("private static readonly Dictionary<IntPtr, Entry> Entries" in native,
         "Shared document lifecycle ownership must be keyed by stable native database identity.")
 require("List<WeakReference<Callbacks>>" in native,
         "Native lifecycle entries must not strongly root per-window WPF callback bundles.")
+for marker in ("TrySnapshotDestroyByLifecycleDocument", "TrySnapshotDestroyByNativeIdentity"):
+    require(marker in native, f"Shared destroy affinity owner is missing: {marker}")
 
 native_identity = method_block(source, "private static IntPtr GetNativeDatabaseIdentity(Document document)")
 require(
@@ -134,21 +135,21 @@ require(project_change.index("Interlocked.Exchange(ref _invalidated, 1) != 0") <
 teardown = method_block(source, "private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)")
 for marker in (
     barrier,
-    "if (!MatchesNativeDatabase(e.Document)) return;",
     "var deferForFinalDocument = !HasAnotherLiveDocument();",
     "Interlocked.Exchange(ref _invalidated, 1) != 0",
     "TryCloseWindow(deferForFinalDocument);",
 ):
     require(marker in teardown, f"Document teardown must retain lifecycle marker: {marker}")
+require("e.Document" not in teardown and "MatchesNativeDatabase(" not in teardown,
+        "Document teardown must consume coordinator-owned affinity without reopening the event Document.")
 require("Detach();" not in teardown and "DetachNativeLifecycleSubscription" not in teardown,
         "Document teardown must keep input guards attached and leave native ownership to the shared coordinator.")
 require(
     teardown.index(barrier)
-    < teardown.index("if (!MatchesNativeDatabase(e.Document)) return;")
     < teardown.index("var deferForFinalDocument = !HasAnotherLiveDocument();")
     < teardown.index("Interlocked.Exchange(ref _invalidated, 1) != 0")
     < teardown.index("TryCloseWindow(deferForFinalDocument);"),
-    "Document teardown must cross quiescence before native access, invalidate atomically, then request ordinary close.",
+    "Document teardown must cross quiescence, classify final-document deferral, invalidate atomically, then request ordinary close.",
 )
 
 request_close = method_block(source, "private void TryCloseWindow(bool deferOnDispatcher = false)")
