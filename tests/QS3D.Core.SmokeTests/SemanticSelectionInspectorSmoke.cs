@@ -328,10 +328,25 @@ namespace QS3D.Core.SmokeTests
         private static void InPlaceFamilyPropertyMutationDuringEnumerationFailsClosed()
         {
             var project = BuildProject();
-            FreshnessMutationMustFail(
-                project,
-                () => project.FindFamily("FAM-B")!.Properties["FireRating"] = "R90",
-                "B-001");
+            var version = project.ChangeVersion;
+            try
+            {
+                SemanticSelectionInspector.Inspect(
+                    project,
+                    new MutatingSelectionSource(
+                        () => project.FindFamily("FAM-B")!.Properties["FireRating"] = "R90",
+                        "B-001"));
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf("Project state changed while materializing semantic selection ids", StringComparison.Ordinal) < 0)
+                    throw new Exception("Unexpected owned Family-property semantic selection freshness rejection: " + ex.Message);
+                Equal(version + 1L, project.ChangeVersion);
+                Equal("R90", project.FindFamily("FAM-B")!.Properties["FireRating"]);
+                return;
+            }
+
+            throw new Exception("Owned Family-property mutation during lazy selection enumeration must fail closed at the project freshness barrier.");
         }
 
         private static void InPlaceQuantityMutationDuringEnumerationFailsClosed()
