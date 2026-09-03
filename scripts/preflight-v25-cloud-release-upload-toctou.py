@@ -47,8 +47,12 @@ def main() -> None:
         "ExpectedSha256" in helper and "ExpectedSize" in helper,
         "single-stream helper must retain expected hash and size admission",
     )
+    require(
+        "ReadAsStringAsync" not in helper and "$responseBody" not in helper,
+        "upload failures must not copy an untrusted GitHub response body into exception/log output",
+    )
 
-    print("PASS: cloud preview held assets are verified and uploaded from one writer-blocking read stream without pathname reopen")
+    print("PASS: cloud preview held assets are verified/uploaded from one writer-blocking stream and failures redact response bodies")
 
 
 if __name__ == "__main__":
