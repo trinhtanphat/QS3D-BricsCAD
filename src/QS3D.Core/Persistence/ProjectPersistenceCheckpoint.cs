@@ -50,8 +50,13 @@ namespace QS3D.Core.Persistence
 
             var elements = new Dictionary<string, ElementPersistenceState>(StringComparer.OrdinalIgnoreCase);
             var observed = 0;
-            foreach (var rawId in elementIds)
+            using var enumerator = elementIds.GetEnumerator();
+            while (enumerator.MoveNext())
             {
+                if (expectedKnownCount.HasValue && observed >= expectedKnownCount.Value)
+                    throw new InvalidOperationException("Persistence checkpoint known element count was exceeded during enumeration.");
+
+                var rawId = enumerator.Current;
                 observed++;
                 if (observed > MaximumElementCount)
                     throw new InvalidOperationException("Persistence checkpoint exceeds the supported " + MaximumElementCount + " element limit.");
