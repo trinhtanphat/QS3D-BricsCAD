@@ -59,6 +59,7 @@ namespace QS3D.BricsCAD.V25
 
         private static volatile bool _automationStopped;
         private static int _automationEpoch;
+        private static int _ackLedgerInitialized;
 
         public static bool AutomationStopped { get { return _automationStopped; } }
         public static string AuditFilePath
@@ -70,6 +71,11 @@ namespace QS3D.BricsCAD.V25
         {
             Interlocked.Increment(ref _automationEpoch);
             _automationStopped = false;
+            // Same-process transport restarts must not erase an accepted action whose native
+            // BricsCAD command is still in flight. A true process restart recreates statics and
+            // reloads durable-only state here.
+            if (Interlocked.Exchange(ref _ackLedgerInitialized, 1) == 0)
+                McpMutationAckLedger.ResetForServerStart();
             McpCadMutationCoordinator.Reset();
             McpQs3dDomainRuntime.ResetForServerStart();
         }
@@ -96,6 +102,7 @@ namespace QS3D.BricsCAD.V25
                 case "qs3d_status": return InvokeCad(() => McpQs3dDomainRuntime.BuildStatusJson(true));
                 case "qs3d_domain_status": return InvokeCad(() => McpQs3dDomainRuntime.BuildStatusJson(false));
                 case "cad_active_document": return InvokeCad(BuildActiveDocumentJson);
+                case "cad_mutation_status": return McpMutationAckLedger.StatusJson(McpTopLevelJson.ExtractString(args, "actionId"));
                 case "cad_selection": return InvokeCad(BuildSelectionJson);
                 case "cad_database_snapshot": return InvokeCad(() => BuildDatabaseSnapshotJson(Integer(args, "limit", 250, 1, 1000)));
                 case "cad_entity_inspect": return InspectEntity(args);
@@ -181,16 +188,70 @@ namespace QS3D.BricsCAD.V25
             if (!McpTopLevelJson.ExtractBoolean(body, "confirmMutation"))
                 throw new InvalidOperationException("confirmMutation=true is required for " + tool + ".");
 
-            var writerToken = McpTopLevelJson.ExtractString(body, "writerToken");
-            using (McpCadMutationCoordinator.EnterMutation(writerToken, tool, detail => Audit(tool, detail)))
+            var reservation = McpMutationAckLedger.ReserveOrReplay(tool, body);
+            if (reservation.Replayed)
+                return McpMutationAckLedger.BuildResponse(reservation, true, 0);
+
+            IDisposable? writerScope = null;
+            try
             {
-                var epoch = Volatile.Read(ref _automationEpoch);
-                EnsureAutomationRunning(epoch);
-                var previousEpoch = MutationEpoch.Value;
-                MutationEpoch.Value = epoch;
-                try { return action(); }
-                finally { MutationEpoch.Value = previousEpoch; }
+                var writerToken = McpTopLevelJson.ExtractString(body, "writerToken");
+                writerScope = McpCadMutationCoordinator.EnterMutation(writerToken, tool, detail => Audit(tool, detail));
+                using (McpMutationAckLedger.EnterActionContext(reservation.ActionId))
+                {
+                    var epoch = Volatile.Read(ref _automationEpoch);
+                    EnsureAutomationRunning(epoch);
+                    var previousEpoch = MutationEpoch.Value;
+                    MutationEpoch.Value = epoch;
+                    string result;
+                    try { result = action(); }
+                    finally { MutationEpoch.Value = previousEpoch; }
+
+                    if (McpCadMutationCoordinator.HasPendingNativeCommand(reservation.ActionId))
+                    {
+                        McpMutationAckLedger.MarkAcceptedResult(reservation.ActionId, result);
+                        return McpMutationAckLedger.BuildResponse(reservation, false, 0);
+                    }
+
+                    return InvokeCad(() =>
+                    {
+                        var document = RequireDocument();
+                        McpMutationAckLedger.MarkApplied(reservation.ActionId, result, document);
+                        var promoted = 0;
+                        if (IsDurabilitySaveTool(tool, body))
+                        {
+                            var promotion = McpMutationAckLedger.PromoteDurableForDocument(document);
+                            promoted = promotion.PromotedCount;
+                        }
+                        return McpMutationAckLedger.BuildResponse(reservation, false, promoted);
+                    });
+                }
             }
+            catch
+            {
+                // If writer ownership was never acquired, no CAD mutation could have started and
+                // this identity may be retried normally. Once the writer was entered, preserve
+                // accepted state on uncertainty to prevent a disconnected/retrying caller from
+                // duplicating an operation that may already have reached BricsCAD.
+                if (writerScope == null) McpMutationAckLedger.Abandon(reservation.ActionId);
+                throw;
+            }
+            finally
+            {
+                if (writerScope != null) writerScope.Dispose();
+            }
+        }
+
+        private static bool IsDurabilitySaveTool(string tool, string body)
+        {
+            if (string.Equals(tool, "cad_save", StringComparison.Ordinal)
+                || string.Equals(tool, "cad_save_as", StringComparison.Ordinal))
+                return true;
+            if (!string.Equals(tool, "cad_command_sequence", StringComparison.Ordinal)) return false;
+            return string.Equals(
+                NormalizeCadCommandToken(McpTopLevelJson.ExtractString(body ?? "{}", "command")),
+                "QSAVE",
+                StringComparison.Ordinal);
         }
 
         private static void EnsureAutomationRunning()
