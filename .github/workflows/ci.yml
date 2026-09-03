@@ -28,7 +28,7 @@ permissions:
 
 concurrency:
   group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'pull_request' || github.event.action != 'edited' }}
 
 jobs:
   preflight:
@@ -59,6 +59,12 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
+      - name: Require prior exact-head GREEN for PR metadata edit
+        if: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' }}
+        env:
+          QS3D_EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/preflight-ci-edited-evidence.py --verify-runtime
       - name: CI trigger and publishing policy gate
         run: python scripts/preflight-ci-manual-only.py
       - name: Changed-path tokenization regression
@@ -69,12 +75,19 @@ jobs:
         run: python scripts/check-actions-pinned.py
       - name: Classify validation scope
         id: scope
+        env:
+          QS3D_PR_ACTION: ${{ github.event.action }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          # scripts/ci-validation-scope.py owns the exact path classes: src/, tests/, scripts/,
-          # samples/generated/, .github/workflows/, build roots, and watched policy Markdown.
-          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
+          # An edited PR has identical source bytes to its prior exact-head run. The
+          # preceding evidence step proves that run GREEN before we emit lightweight
+          # required contexts; metadata/reservation checks below still run fail closed.
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request' -and $env:QS3D_PR_ACTION -eq 'edited') {
+            "source_validation=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            "build_validation=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          }
+          elseif ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
             & python scripts/ci-validation-scope.py --all --github-output $env:GITHUB_OUTPUT
           }
           else {
