@@ -41,8 +41,21 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Exact candidate SHA binding
+        env:
+          QS3D_EXPECTED_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        shell: pwsh
+        run: |
+          $actualHead = (& git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($actualHead)) {
+            throw 'Could not resolve checked-out HEAD for exact candidate SHA validation.'
+          }
+          if ($actualHead -ne $env:QS3D_EXPECTED_HEAD_SHA) {
+            throw "Exact candidate SHA mismatch: expected $($env:QS3D_EXPECTED_HEAD_SHA), got $actualHead."
+          }
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
@@ -81,7 +94,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/preflight-pr-branch-ci-gate.py
       - name: Agent reservation / Lane-Key / path collision gate
-        if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && (github.event.action != 'edited' || !startsWith(github.event.pull_request.head.ref, 'agent/'))) }}
+        if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
         env:
           QS3D_AGENT_LANE_COLLISION_RUNTIME: "1"
           GITHUB_TOKEN: ${{ github.token }}
@@ -93,7 +106,7 @@ jobs:
         if: ${{ steps.scope.outputs.source_validation == 'true' }}
         run: python scripts/preflight-all.py
       - name: Validate tracked PowerShell syntax
-        if: ${{ steps.scope.outputs.source_validation == 'true' }}
+        if: ${{ !cancelled() && steps.scope.outputs.source_validation == 'true' }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -120,7 +133,7 @@ jobs:
           }
           Write-Host "Validated $($scripts.Count) tracked PowerShell script(s)."
       - name: V25 package integrity contract tests
-        if: ${{ steps.scope.outputs.source_validation == 'true' }}
+        if: ${{ !cancelled() && steps.scope.outputs.source_validation == 'true' }}
         shell: pwsh
         run: .\scripts\test-v25-package-verifier.ps1
 
@@ -142,8 +155,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: ${{ needs.preflight.outputs.build_validation == 'true' }}
         with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
           submodules: recursive
+      - name: Exact candidate SHA binding (core)
+        if: ${{ needs.preflight.outputs.build_validation == 'true' }}
+        env:
+          QS3D_EXPECTED_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        shell: pwsh
+        run: |
+          $actualHead = (& git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($actualHead)) {
+            throw 'Could not resolve checked-out HEAD for exact candidate SHA validation.'
+          }
+          if ($actualHead -ne $env:QS3D_EXPECTED_HEAD_SHA) {
+            throw "Exact candidate SHA mismatch in core: expected $($env:QS3D_EXPECTED_HEAD_SHA), got $actualHead."
+          }
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         if: ${{ needs.preflight.outputs.build_validation == 'true' }}
         with:
