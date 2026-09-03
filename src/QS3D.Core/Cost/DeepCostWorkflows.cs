@@ -89,7 +89,10 @@ namespace QS3D.Core.Cost
                     "Rate reference edge collection known count does not match the observed traversal.",
                     nameof(edges));
             if (knownCount.HasValue)
+            {
                 RequireKnownCountStableAfterTraversal(edges, knownCount.Value);
+                RequireStableEdgeGeneration(edges, knownCount.Value, snapshot);
+            }
             snapshot.Sort(CompareEdges);
             _edges = new ReadOnlyCollection<RateReferenceEdge>(snapshot.ToArray());
         }
@@ -176,6 +179,49 @@ namespace QS3D.Core.Cost
             int admittedKnownCount)
         {
             RequireKnownCountStableDuringTraversal(edges, admittedKnownCount);
+        }
+
+        private static void RequireStableEdgeGeneration(
+            IEnumerable<RateReferenceEdge> edges,
+            int admittedKnownCount,
+            IReadOnlyList<RateReferenceEdge> admittedEdges)
+        {
+            var index = 0;
+            using (var edgeEnumerator = edges.GetEnumerator())
+            {
+                RequireKnownCountStableDuringTraversal(edges, admittedKnownCount);
+                while (true)
+                {
+                    RequireKnownCountStableDuringTraversal(edges, admittedKnownCount);
+                    if (!edgeEnumerator.MoveNext())
+                        break;
+                    RequireKnownCountStableDuringTraversal(edges, admittedKnownCount);
+                    if (index >= admittedEdges.Count)
+                        ThrowEdgeContentChanged();
+
+                    var edge = edgeEnumerator.Current;
+                    RequireKnownCountStableDuringTraversal(edges, admittedKnownCount);
+                    if (edge == null || !SameEdgeState(admittedEdges[index], edge))
+                        ThrowEdgeContentChanged();
+                    index++;
+                }
+            }
+
+            if (index != admittedEdges.Count)
+                ThrowEdgeContentChanged();
+            RequireKnownCountStableDuringTraversal(edges, admittedKnownCount);
+        }
+
+        private static bool SameEdgeState(RateReferenceEdge left, RateReferenceEdge right)
+        {
+            return string.Equals(left.SourceRateCode, right.SourceRateCode, StringComparison.Ordinal) &&
+                   left.TargetKind == right.TargetKind &&
+                   string.Equals(left.TargetId, right.TargetId, StringComparison.Ordinal);
+        }
+
+        private static void ThrowEdgeContentChanged()
+        {
+            throw new InvalidOperationException("Rate reference edge source content changed during traversal.");
         }
 
         private static int CompareEdges(RateReferenceEdge left, RateReferenceEdge right)
