@@ -52,36 +52,54 @@ namespace QS3D.BricsCAD.V25
             lock (Sync)
             {
                 TicketState? ticket;
+                var ephemeralTicket = false;
                 if (!Tickets.TryGetValue(fingerprint, out ticket) || ticket == null)
                 {
                     if (Tickets.Count >= MaxTickets)
                     {
-                        string? oldestKey = null;
-                        var oldestSeenUtc = DateTime.MaxValue;
-                        foreach (var pair in Tickets)
+                        var evictionCandidate = SelectEvictionCandidateLocked(sourceRepairEligible);
+                        if (evictionCandidate == null)
                         {
-                            if (pair.Value.LastSeenUtc >= oldestSeenUtc) continue;
-                            oldestSeenUtc = pair.Value.LastSeenUtc;
-                            oldestKey = pair.Key;
+                            ephemeralTicket = true;
                         }
-
-                        if (oldestKey != null) Tickets.Remove(oldestKey);
+                        else
+                        {
+                            Tickets.Remove(evictionCandidate);
+                        }
                     }
 
-                    ticket = new TicketState
+                    if (ephemeralTicket)
                     {
-                        FirstSeenUtc = now,
-                        LastSeenUtc = now,
-                        OccurrenceCount = 0
-                    };
-                    Tickets[fingerprint] = ticket;
-                }
+                        occurrenceCount = 1;
+                        firstSeenUtc = now;
+                        lastSeenUtc = now;
+                    }
+                    else
+                    {
+                        ticket = new TicketState
+                        {
+                            FirstSeenUtc = now,
+                            LastSeenUtc = now,
+                            OccurrenceCount = 0,
+                            SourceRepairEligible = sourceRepairEligible
+                        };
+                        Tickets[fingerprint] = ticket;
 
-                ticket.OccurrenceCount++;
-                ticket.LastSeenUtc = now;
-                occurrenceCount = ticket.OccurrenceCount;
-                firstSeenUtc = ticket.FirstSeenUtc;
-                lastSeenUtc = ticket.LastSeenUtc;
+                        ticket.OccurrenceCount++;
+                        ticket.LastSeenUtc = now;
+                        occurrenceCount = ticket.OccurrenceCount;
+                        firstSeenUtc = ticket.FirstSeenUtc;
+                        lastSeenUtc = ticket.LastSeenUtc;
+                    }
+                }
+                else
+                {
+                    ticket.OccurrenceCount++;
+                    ticket.LastSeenUtc = now;
+                    occurrenceCount = ticket.OccurrenceCount;
+                    firstSeenUtc = ticket.FirstSeenUtc;
+                    lastSeenUtc = ticket.LastSeenUtc;
+                }
             }
 
             var circuitOpen = sourceRepairEligible && occurrenceCount >= CircuitOpenOccurrence;
@@ -103,6 +121,46 @@ namespace QS3D.BricsCAD.V25
                    + ",\"recommendedAction\":\"" + JsonEscape(recommendedAction)
                    + "\",\"firstSeenUtc\":\"" + firstSeenUtc.ToString("o", CultureInfo.InvariantCulture)
                    + "\",\"lastSeenUtc\":\"" + lastSeenUtc.ToString("o", CultureInfo.InvariantCulture) + "\"}";
+        }
+
+        private static string? SelectEvictionCandidateLocked(bool incomingSourceRepair)
+        {
+            string? oldestNonSourceKey = null;
+            var oldestNonSourceSeenUtc = DateTime.MaxValue;
+            foreach (var pair in Tickets)
+            {
+                if (pair.Value.SourceRepairEligible) continue;
+                if (!IsEarlierTicket(pair.Key, pair.Value.LastSeenUtc, oldestNonSourceKey, oldestNonSourceSeenUtc)) continue;
+                oldestNonSourceKey = pair.Key;
+                oldestNonSourceSeenUtc = pair.Value.LastSeenUtc;
+            }
+
+            if (oldestNonSourceKey != null) return oldestNonSourceKey;
+            if (!incomingSourceRepair) return null;
+
+            string? oldestSourceKey = null;
+            var oldestSourceSeenUtc = DateTime.MaxValue;
+            foreach (var pair in Tickets)
+            {
+                if (!pair.Value.SourceRepairEligible) continue;
+                if (!IsEarlierTicket(pair.Key, pair.Value.LastSeenUtc, oldestSourceKey, oldestSourceSeenUtc)) continue;
+                oldestSourceKey = pair.Key;
+                oldestSourceSeenUtc = pair.Value.LastSeenUtc;
+            }
+
+            return oldestSourceKey;
+        }
+
+        private static bool IsEarlierTicket(
+            string candidateKey,
+            DateTime candidateSeenUtc,
+            string? currentKey,
+            DateTime currentSeenUtc)
+        {
+            if (candidateSeenUtc < currentSeenUtc) return true;
+            if (candidateSeenUtc > currentSeenUtc) return false;
+            if (currentKey == null) return true;
+            return StringComparer.Ordinal.Compare(candidateKey, currentKey) < 0;
         }
 
         internal static string BuildFingerprint(
@@ -296,6 +354,7 @@ namespace QS3D.BricsCAD.V25
             public int OccurrenceCount { get; set; }
             public DateTime FirstSeenUtc { get; set; }
             public DateTime LastSeenUtc { get; set; }
+            public bool SourceRepairEligible { get; set; }
         }
     }
 }
