@@ -172,7 +172,10 @@ namespace QS3D.Core.Cost
             if (hasKnownCount && index != knownCount)
                 ThrowKnownCountTraversalMismatch();
             if (hasKnownCount)
+            {
                 RequireStableKnownCount(items, knownCount);
+                RequireStableRateBookGeneration(items, knownCount, snapshot);
+            }
 
             foreach (var pair in _byScope)
                 pair.Value.Sort(CompareEffectiveItems);
@@ -206,6 +209,53 @@ namespace QS3D.Core.Cost
             return match == null
                 ? RateBookResolution.Unmatched(costCode, canonicalUnit, canonicalCurrency, canonicalAsOf)
                 : RateBookResolution.Matched(match.CostCode, canonicalUnit, canonicalCurrency, canonicalAsOf, match);
+        }
+
+        private static void RequireStableRateBookGeneration(
+            IEnumerable<RateItem> items,
+            int knownCount,
+            IReadOnlyList<RateItem> admittedItems)
+        {
+            var index = 0;
+            using (var enumerator = items.GetEnumerator())
+            {
+                RequireStableKnownCount(items, knownCount);
+                while (true)
+                {
+                    RequireStableKnownCount(items, knownCount);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireStableKnownCount(items, knownCount);
+                    if (index >= admittedItems.Count)
+                        ThrowContentChangedDuringTraversal();
+
+                    var item = enumerator.Current;
+                    RequireStableKnownCount(items, knownCount);
+                    if (item == null || !RateItemStateEquals(admittedItems[index], item))
+                        ThrowContentChangedDuringTraversal();
+                    index++;
+                }
+            }
+
+            if (index != admittedItems.Count)
+                ThrowContentChangedDuringTraversal();
+            RequireStableKnownCount(items, knownCount);
+        }
+
+        private static bool RateItemStateEquals(RateItem left, RateItem right)
+        {
+            return string.Equals(left.RateItemId, right.RateItemId, StringComparison.Ordinal) &&
+                   string.Equals(left.CostCode.Value, right.CostCode.Value, StringComparison.Ordinal) &&
+                   string.Equals(left.Unit, right.Unit, StringComparison.Ordinal) &&
+                   string.Equals(left.Currency, right.Currency, StringComparison.Ordinal) &&
+                   left.UnitRate == right.UnitRate &&
+                   left.EffectiveFromUtc == right.EffectiveFromUtc &&
+                   string.Equals(left.Version, right.Version, StringComparison.Ordinal);
+        }
+
+        private static void ThrowContentChangedDuringTraversal()
+        {
+            throw new InvalidOperationException("Rate book item source content changed during traversal.");
         }
 
         private static void RequireStableKnownCount(IEnumerable<RateItem> items, int knownCount)
