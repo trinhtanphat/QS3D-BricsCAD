@@ -23,11 +23,14 @@ Release-relevant paths are:
 - `src/**`
 - `tests/**`
 - `scripts/**`
+- `external/QS3D-Platform`
 - `Directory.Build.props`
 - `QS3D.sln`
 - `QS3D.V26.sln`
 - `.github/workflows/release-v25-cloud.yml`
 - `.github/workflows/dispatch-v25-cloud-after-main-integration.yml`
+
+`external/QS3D-Platform` is the pinned Platform gitlink materialized and built by the cloud release workflow, so a gitlink SHA change is release-relevant even though it appears as one repository path rather than a nested source-file diff.
 
 This definition deliberately counts a merged PR as one integration checkpoint even when that PR contains multiple internal commits. It also counts a legitimate direct integration commit if it changes a release-relevant path. Commit-message prefixes do not affect the decision; changed paths are authoritative.
 
