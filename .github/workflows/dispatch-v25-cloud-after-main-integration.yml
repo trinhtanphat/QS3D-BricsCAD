@@ -19,6 +19,7 @@ on:
       - "src/**"
       - "tests/**"
       - "scripts/**"
+      - "external/QS3D-Platform"
       - ".gitmodules"
       - "Directory.Build.props"
       - "QS3D.sln"
@@ -78,19 +79,29 @@ jobs:
               echo "Triggering source is no longer an ancestor of current main; refusing ambiguous automatic dispatch." >&2
               exit 1
             fi
-            release_relevant_drift=0
-            while IFS= read -r changed_path; do
-              [[ -n "${changed_path}" ]] || continue
-              case "${changed_path}" in
-                src/*|tests/*|scripts/*|.gitmodules|Directory.Build.props|QS3D.sln|QS3D.V26.sln|.github/workflows/release-v25-cloud.yml|.github/workflows/dispatch-v25-cloud-after-main-integration.yml)
-                  echo "Newer release-relevant main path supersedes ${source_sha}: ${changed_path}"
-                  release_relevant_drift=1
-                  ;;
-              esac
-            done < <(git diff --name-only "${source_sha}..${current_main}" --)
-            if (( release_relevant_drift != 0 )); then
+            release_relevant_pathspecs=(
+              'src/'
+              'tests/'
+              'scripts/'
+              'external/QS3D-Platform'
+              '.gitmodules'
+              'Directory.Build.props'
+              'QS3D.sln'
+              'QS3D.V26.sln'
+              '.github/workflows/release-v25-cloud.yml'
+              '.github/workflows/dispatch-v25-cloud-after-main-integration.yml'
+            )
+            set +e
+            git diff --quiet --no-ext-diff "${source_sha}..${current_main}" -- "${release_relevant_pathspecs[@]}"
+            release_drift_status=$?
+            set -e
+            if (( release_drift_status == 1 )); then
               echo "main advanced with release-relevant changes; superseded dispatcher ${source_sha} exits before reservation/dispatch. Newer relevant main push owns the next release decision."
               exit 0
+            fi
+            if (( release_drift_status != 0 )); then
+              echo "Could not inspect release-relevant main drift between ${source_sha} and ${current_main}; git diff exit ${release_drift_status}." >&2
+              exit "${release_drift_status}"
             fi
             echo "main advanced only through non-release paths; dispatch remains pinned to ${source_sha}. Release preparation may absorb that inert main drift without changing source provenance."
           fi
