@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             SameCountReplacementIsRejected();
+            SameCountSemanticStateDriftIsRejected();
+            SameCountReorderingIsRejected();
             StableCountedSourceReplaysExactlyOnce();
             StreamingSourceRemainsSinglePassCompatible();
             Console.WriteLine("PASS rate build-up generation stability");
@@ -21,21 +23,41 @@ namespace QS3D.Core.SmokeTests
         {
             var original = new CostResourceComponent("LAB-A", "Original labor", "h", 1m, 10m);
             var replacement = new CostResourceComponent("LAB-B", "Replacement labor", "h", 2m, 20m);
-            var source = new SameCountGenerationCollection<CostResourceComponent>(
+            RequireGenerationRejected(
                 new[] { original },
-                new[] { replacement });
+                new[] { replacement },
+                "same-count rate build-up component replacement must fail closed");
+        }
 
-            var threw = false;
-            try
+        private static void SameCountSemanticStateDriftIsRejected()
+        {
+            var original = new CostResourceComponent("LAB-E", "Original labor", "h", 1.25m, 12.5m);
+            var replacements = new[]
             {
-                _ = CreateBuildUp(source);
-            }
-            catch (InvalidOperationException ex)
-            {
-                threw = ex.Message.Contains("Rate build-up component collection content changed during traversal.", StringComparison.Ordinal);
-            }
+                new CostResourceComponent("LAB-F", "Original labor", "h", 1.25m, 12.5m),
+                new CostResourceComponent("LAB-E", "Changed labor", "h", 1.25m, 12.5m),
+                new CostResourceComponent("LAB-E", "Original labor", "d", 1.25m, 12.5m),
+                new CostResourceComponent("LAB-E", "Original labor", "h", 1.5m, 12.5m),
+                new CostResourceComponent("LAB-E", "Original labor", "h", 1.25m, 13m),
+            };
 
-            Require(threw, "same-count rate build-up component replacement must fail closed");
+            for (var i = 0; i < replacements.Length; i++)
+            {
+                RequireGenerationRejected(
+                    new[] { original },
+                    new[] { replacements[i] },
+                    "rate build-up semantic generation drift at field index " + i + " must fail closed");
+            }
+        }
+
+        private static void SameCountReorderingIsRejected()
+        {
+            var first = new CostResourceComponent("LAB-G", "First labor", "h", 1m, 10m);
+            var second = new CostResourceComponent("MAT-G", "Material", "kg", 2m, 20m);
+            RequireGenerationRejected(
+                new[] { first, second },
+                new[] { second, first },
+                "same-count rate build-up component reordering must fail closed");
         }
 
         private static void StableCountedSourceReplaysExactlyOnce()
@@ -59,6 +81,25 @@ namespace QS3D.Core.SmokeTests
 
             Require(source.GetEnumeratorCalls == 1, "streaming rate build-up source was replayed unexpectedly");
             Require(buildUp.Components.Count == 1 && buildUp.DirectUnitCost == 120m, "streaming build-up result changed");
+        }
+
+        private static void RequireGenerationRejected(
+            IReadOnlyList<CostResourceComponent> first,
+            IReadOnlyList<CostResourceComponent> second,
+            string message)
+        {
+            var source = new SameCountGenerationCollection<CostResourceComponent>(first, second);
+            var threw = false;
+            try
+            {
+                _ = CreateBuildUp(source);
+            }
+            catch (InvalidOperationException ex)
+            {
+                threw = ex.Message.Contains("Rate build-up component collection content changed during traversal.", StringComparison.Ordinal);
+            }
+
+            Require(threw, message);
         }
 
         private static CostRateBuildUp CreateBuildUp(IEnumerable<CostResourceComponent> components)
