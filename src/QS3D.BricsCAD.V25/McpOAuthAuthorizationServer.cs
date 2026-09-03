@@ -459,7 +459,8 @@ namespace QS3D.BricsCAD.V25
                 grantedScope = normalizedRequestedScope;
             }
 
-            var familyExpiry = UnixNow() + (long)RefreshTokenLifetime.TotalSeconds;
+            var rotationIssuedAt = UnixNow();
+            var familyExpiry = rotationIssuedAt + (long)RefreshTokenLifetime.TotalSeconds;
             var successorGeneration = checked(refreshGeneration + 1);
             var includeRefreshToken = HasOfflineAccess(grantedScope);
             var successorResponse = IssueTokenPair(
@@ -469,7 +470,8 @@ namespace QS3D.BricsCAD.V25
                 grantedScope,
                 includeRefreshToken,
                 refreshFamilyId,
-                successorGeneration);
+                successorGeneration,
+                rotationIssuedAt);
             var admission = TryAdvanceRefreshFamily(refreshFamilyId, refreshGeneration, familyExpiry);
             if (admission == RefreshFamilyAdmission.CapacityExceeded)
                 return OAuthError(503, "Service Unavailable", "temporarily_unavailable", "refresh token family capacity is exhausted");
@@ -485,14 +487,15 @@ namespace QS3D.BricsCAD.V25
             string grantedScope,
             bool includeRefreshToken,
             string? refreshFamilyId = null,
-            long refreshGeneration = 0)
+            long refreshGeneration = 0,
+            long? issuedAt = null)
         {
             string normalizedScope;
             if (!TryNormalizeAuthorizationScope(grantedScope, out normalizedScope)
                 || !ConstantTimeEquals(grantedScope, normalizedScope))
                 return OAuthError(400, "Bad Request", "invalid_scope", "granted OAuth scope is invalid");
 
-            var now = UnixNow();
+            var now = issuedAt ?? UnixNow();
             var accessExpiry = now + (long)AccessTokenLifetime.TotalSeconds;
             var access = CreateSignedToken(
                 new[] { "v1", "access", accessExpiry.ToString(CultureInfo.InvariantCulture), EncodeField(clientId), EncodeField(resource), EncodeField(RequiredScope) },
