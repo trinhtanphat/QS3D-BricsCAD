@@ -61,7 +61,6 @@ namespace QS3D.Core.Domain
             var normalized = Required(newName, nameof(newName), MaxNameLength);
             EnsureUniqueName(project, normalized, family.Category, family.Id);
             if (string.Equals(family.Name, normalized, StringComparison.Ordinal)) return family;
-            project.Touch();
             family.Name = normalized;
             return family;
         }
