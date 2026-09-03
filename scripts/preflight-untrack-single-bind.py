@@ -25,7 +25,7 @@ else:
             "version": "var expectedChangeVersion = previewProject.ChangeVersion;",
             "preview_decl": "List<string> previewTargetIds;",
             "preview_targets": "previewTargetIds = ResolveUntrackTargetIds(previewProject, handles, predicate);",
-            "preview_error": "ReportUntrackError(doc, label, ex);",
+            "preview_error": "ReportUntrackError(doc, label);",
             "zero": "if (previewTargetIds.Count == 0)",
             "zero_ui": "FinalizeUntrackUi(doc, 0, label);",
             "bind": 'ExistingProjectMutationContext.Require(doc, "Untrack semantic elements")',
@@ -57,7 +57,7 @@ else:
         zero_at = positions.get("zero", -1)
         if min(preview_assign, preview_error, zero_at) >= 0:
             preview_block = command[preview_assign:zero_at]
-            if "try" not in command[positions["preview_decl"]:preview_assign + 1] or "catch (Exception ex)" not in preview_block or "return;" not in preview_block:
+            if "try" not in command[positions["preview_decl"]:preview_assign + 1] or "catch (Exception)" not in preview_block or "return;" not in preview_block:
                 errors.append("Untrack preview target resolution must stay exception-isolated and return before zero-target/bind flow on failure")
 
         if command.count("ExistingProjectMutationContext.Require(") != 1:
@@ -93,4 +93,4 @@ if errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("PASS: semantic untrack resolves ownership read-only with exception-isolated preview resolution, no-ops zero targets before binding, pins ProjectId/ChangeVersion/target IDs, binds once, revalidates, then delegates to the unchanged Core untrack executor.")
+print("PASS: semantic untrack resolves ownership read-only with exception-isolated preview resolution, no-ops zero targets before binding, pins ProjectId/ChangeVersion/target IDs, binds once, revalidates, then delegates to the unchanged Core untrack executor using redacted failure reporting.")
