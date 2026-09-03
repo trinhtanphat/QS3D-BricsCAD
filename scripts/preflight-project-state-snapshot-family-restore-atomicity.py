@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOT = ROOT / "src/QS3D.Core/Persistence/ProjectStateSnapshot.cs"
 DOMAIN = ROOT / "src/QS3D.Core/Domain/ProjectState.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/ProjectStateSnapshotFamilyRestoreAtomicitySmoke.cs"
-REGISTRATION = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
+REGISTRATION = ROOT / "tests/QS3D.Core.SmokeTests/ProjectStateSnapshotFamilyRestoreAtomicitySmokeRegistration.cs"
 errors = []
 
 
@@ -32,20 +32,29 @@ for token in (
     if token not in smoke:
         errors.append("snapshot family restore regression missing: " + token)
 
-if "ProjectStateSnapshotFamilyRestoreAtomicitySmoke.Run();" not in registration:
-    errors.append("snapshot family restore atomicity smoke is not registered in the canonical deterministic smoke suite")
+for token in (
+    "[ModuleInitializer]",
+    "ProjectStateSnapshotFamilyRestoreAtomicitySmoke.Run();",
+):
+    if token not in registration:
+        errors.append("snapshot family restore atomicity smoke registration missing: " + token)
 
 # Snapshot rollback/materialization must not route through externally-observable
-# ProjectFamily setters. A hostile PropertyChanged subscriber can throw after a
-# setter has already mutated the family, leaving CopyInto half-applied.
+# ProjectFamily setters or persistence-aware dictionary mutation callbacks.
 for token in (
     "internal void RestoreSnapshotState(",
+    "var nextName = RequireName(name);",
+    "var nextCategory = RequireCategory(category);",
+    "var nextProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);",
     "_name = nextName;",
     "_category = nextCategory;",
-    "Properties.Clear();",
+    "_properties.ReplaceSnapshotState(nextProperties);",
 ):
     if token not in domain:
         errors.append("ProjectFamily snapshot restore atomicity contract missing: " + token)
+
+if "internal void ReplaceSnapshotState(Dictionary<string, string> replacement)" not in domain:
+    errors.append("ProjectFamily property store lacks an internal callback-free snapshot replacement path")
 
 # SnapshotProperties returns one validated, detached, read-only materialization.
 # Restore must consume that exact materialization rather than validating the
@@ -66,4 +75,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: ProjectStateSnapshot materializes family properties once, executes the regression through the canonical smoke suite, and restores preserved family state without external callbacks or stale property-store identity.")
+print("PASS: ProjectStateSnapshot materializes family properties once, runs the regression through dedicated deterministic registration, and restores preserved family state without external callbacks or stale property-store identity.")
