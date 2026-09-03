@@ -114,25 +114,27 @@ for forbidden in ("abandonForHostShutdown", "DetachNativeLifecycleSubscription",
 destroyed = method_block(source, "private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)")
 for marker in (
     barrier,
-    "if (!MatchesNativeDatabase(e.Document)) return;",
     defer,
     "lock (_documentAccessGate)",
     "Interlocked.Exchange(ref _invalidated, 1) != 0",
     "TryCloseWindow(deferForFinalDocument);",
 ):
     require(marker in destroyed, f"DocumentToBeDestroyed must retain close-dispatch marker: {marker}")
+require("e.Document" not in destroyed and "MatchesNativeDatabase(" not in destroyed,
+        "DocumentToBeDestroyed must consume shared-coordinator affinity without reopening the event Document.")
 require(
     destroyed.index(barrier)
-    < destroyed.index("if (!MatchesNativeDatabase(e.Document)) return;")
     < destroyed.index(defer)
     < destroyed.index("lock (_documentAccessGate)")
     < destroyed.index("Interlocked.Exchange(ref _invalidated, 1) != 0")
     < destroyed.index("TryCloseWindow(deferForFinalDocument);"),
-    "DocumentToBeDestroyed must cross host quiescence before native-wrapper access and preserve ordinary close dispatch.",
+    "DocumentToBeDestroyed must cross host quiescence before DocumentManager access and preserve ordinary close dispatch.",
 )
 for forbidden in ("abandonForHostShutdown", "DetachNativeLifecycleSubscription", "+=", "-="):
     require(forbidden not in destroyed,
             f"Managed DocumentToBeDestroyed must not own host/native teardown mutation: {forbidden}")
+for marker in ("TrySnapshotDestroyByLifecycleDocument", "TrySnapshotDestroyByNativeIdentity"):
+    require(marker in native, f"Shared destroy affinity owner is missing: {marker}")
 
 project_change = method_block(source, "private void CloseForProjectChange()")
 require("TryCloseWindow();" in project_change,
