@@ -25,6 +25,10 @@ def require(text: str, token: str, label: str) -> None:
     if token not in text:
         errors.append(f"{label}: missing contract token {token!r}")
 
+def forbid(text: str, token: str, label: str) -> None:
+    if token in text:
+        errors.append(f"{label}: forbidden contract token {token!r}")
+
 supervisor = read(SUPERVISOR)
 openai = read(OPENAI)
 cloudflare = read(CLOUDFLARE)
@@ -83,6 +87,27 @@ if not stop_provider:
     errors.append("supervisor: cannot locate StopProvider body")
 elif "ClearOwnedProcess(provider)" in stop_provider.group("body"):
     errors.append("supervisor: StopProvider must preserve crash-surviving ownership sidecar")
+
+# Provider stop paths must clear ownership metadata only after the child is confirmed exited.
+# A kill exception or WaitForExit timeout must retain the sidecar for the next identity-safe cleanup.
+for text, provider_token, label in (
+    (openai, "McpTransportProvider.OpenAiSecureTunnel", "openai owned-process stop"),
+    (cloudflare, "McpTransportProvider.CloudflareNamedTunnel", "cloudflare owned-process stop"),
+):
+    require(text, "var exitConfirmed = false;", label)
+    require(text, "if (exitConfirmed)", label)
+    require(text, "McpTransportSupervisor.ClearOwnedProcess(" + provider_token + ");", label)
+
+forbid(
+    openai,
+    "try { process.Dispose(); } catch { }\n                McpTransportSupervisor.ClearOwnedProcess(McpTransportProvider.OpenAiSecureTunnel);",
+    "openai owned-process stop",
+)
+forbid(
+    cloudflare,
+    "try { process.Dispose(); } catch { }\n            McpTransportSupervisor.ClearOwnedProcess(McpTransportProvider.CloudflareNamedTunnel);",
+    "cloudflare owned-process stop",
+)
 
 if errors:
     print("MCP transport supervisor preflight FAILED:")
