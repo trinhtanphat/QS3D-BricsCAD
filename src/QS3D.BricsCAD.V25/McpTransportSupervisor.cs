@@ -415,11 +415,9 @@ namespace QS3D.BricsCAD.V25
             {
                 if (process.HasExited) { error = "Owned process already exited."; return false; }
                 var expected = NormalizePath(expectedExecutable);
-                var actual = NormalizePath(process.MainModule?.FileName ?? string.Empty);
-                if (string.IsNullOrWhiteSpace(expected) || string.IsNullOrWhiteSpace(actual)
-                    || !string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
+                if (string.IsNullOrWhiteSpace(expected))
                 {
-                    error = "Owned process executable identity mismatch.";
+                    error = "Owned process executable path is invalid.";
                     return false;
                 }
 
@@ -428,7 +426,7 @@ namespace QS3D.BricsCAD.V25
                     Provider = provider,
                     Pid = process.Id,
                     StartUtcTicks = process.StartTime.ToUniversalTime().Ticks,
-                    Executable = actual
+                    Executable = expected
                 };
                 Directory.CreateDirectory(SettingsDirectory);
                 File.WriteAllText(OwnedProcessPath(provider), SerializeRecord(record), new UTF8Encoding(false));
