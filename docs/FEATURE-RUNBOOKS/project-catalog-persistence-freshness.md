@@ -12,6 +12,8 @@ Ownership follows the public `IList` lifecycle: remove/clear/replacement detache
 
 The mutation request occurs after value validation and before scalar assignment so `ChangeVersion` overflow fails closed before partially mutating the catalog record. Existing `ProjectFamily.PropertyChanged` behavior is preserved after successful assignment.
 
+Service APIs preserve one logical revision per successful logical edit. `ProjectFamilyService.Rename` and `ProjectZoneService.Update` rely on the owned scalar setter rather than pre-touching. `ProjectFloorService.Update` batches a simultaneous name/elevation change behind one internal persistence mutation request, while retaining the existing elevation tolerance, vertical-reference validation, dirty propagation and no-op behavior.
+
 ## Deterministic validation
 
 Run:
@@ -21,7 +23,7 @@ python scripts/preflight-project-catalog-persistence-freshness.py
 dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
 ```
 
-The focused smoke covers Zone name, Floor name/elevation, Family name/category, normalized no-ops, remove/replacement ownership, snapshot restore identity/stamp restoration, and detached-copy isolation.
+The focused smoke covers Zone name, Floor name/elevation, Family name/category, normalized no-ops, remove/replacement ownership, snapshot restore identity/stamp restoration, detached-copy isolation, and exactly-one revision semantics for Family rename, Zone update, and Floor name/elevation/combined updates.
 
 ## Runtime boundary
 
