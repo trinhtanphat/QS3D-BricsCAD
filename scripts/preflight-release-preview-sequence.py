@@ -89,11 +89,13 @@ def main() -> int:
             fail(f"preview sequence helper is missing required guard token: {token}")
 
     gate_call = "validate-preview-release-sequence.ps1"
-    sync_call = "sync-preview-release-version.ps1"
-    if gate_call not in prepare or sync_call not in prepare:
-        fail("release preparation lost the sequence or source-synchronization gate")
-    if prepare.index(gate_call) > prepare.index(sync_call):
-        fail("preview sequence validation must run before release source mutation")
+    committed_version_admission = "$committedProductVersion = Get-CommittedProductVersion"
+    if gate_call not in prepare or committed_version_admission not in prepare:
+        fail("release preparation lost the sequence or committed-source version admission call")
+    if prepare.index(gate_call) > prepare.index(committed_version_admission):
+        fail("preview sequence validation must run before committed-source version admission")
+    if "sync-preview-release-version.ps1" in prepare:
+        fail("release preparation must not reintroduce workspace-only preview version synchronization")
 
     workflow_prepare = "prepare-v25-cloud-release.ps1"
     publish_step = "- name: Publish GitHub prerelease"
