@@ -19,6 +19,16 @@ def require(text: str, tokens: tuple[str, ...], label: str, failures: list[str])
             failures.append(f"{label} missing contract marker: {token}")
 
 
+def contains_executable_line(text: str, token: str) -> bool:
+    """Match a PowerShell source token only on non-comment lines."""
+    token_lower = token.lower()
+    return any(
+        token_lower in line.lower()
+        for line in text.splitlines()
+        if not line.lstrip().startswith("#")
+    )
+
+
 def main() -> int:
     failures = []
     prepare = PREPARE.read_text(encoding="utf-8")
@@ -37,7 +47,7 @@ def main() -> int:
         "git diff --name-only",
     )
     for token in forbidden_prepare:
-        if token.lower() in prepare.lower():
+        if contains_executable_line(prepare, token):
             failures.append(f"release preparation must not contain protected-main/unstable-source primitive: {token}")
 
     require(
