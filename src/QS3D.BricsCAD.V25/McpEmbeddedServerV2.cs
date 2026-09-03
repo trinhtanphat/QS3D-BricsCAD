@@ -896,6 +896,7 @@ namespace QS3D.BricsCAD.V25
                 Tool("qs3d_status", "Deprecated compatibility alias for QS3D domain-only status.", ""),
                 Tool("qs3d_domain_status", "Read QS3D business-domain health and context without CAD host fields.", ""),
                 Tool("cad_active_document", "Read privacy-safe active document identity without local filesystem path.", ""),
+                Tool("cad_mutation_status", "Read mutation acknowledgement state for one bounded actionId.", ActionIdProperty(), "actionId"),
                 Tool("cad_selection", "Read current implied selection handles/types/layers.", ""),
                 Tool("cad_database_snapshot", "Read bounded ModelSpace entity snapshot.", "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":1000}"),
                 Tool("cad_entity_inspect", "Inspect one entity by hexadecimal handle.", "\"handle\":{\"type\":\"string\",\"maxLength\":32}", "handle"),
@@ -1040,7 +1041,7 @@ namespace QS3D.BricsCAD.V25
 
         private static bool LooksLikeJsonValue(string value)
         {
-            if (string.IsNullOrWhiteSpace(value)) return false;
+            if (string.IsNullOrWhiteSpace(jsonValue)) return false;
             var trimmed = value.Trim();
             if (trimmed.Length < 2) return false;
             var first = trimmed[0];
@@ -1086,9 +1087,44 @@ namespace QS3D.BricsCAD.V25
             return "\"writerToken\":{\"type\":\"string\",\"pattern\":\"^[0-9A-Fa-f]{32}$\",\"minLength\":32,\"maxLength\":32}";
         }
 
-        private static string MergeToolProperties(string properties)
+        private static string ActionIdProperty()
+        {
+            return "\"actionId\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":128,\"description\":\"Stable retry identity used to query or replay mutation acknowledgement.\"}";
+        }
+
+        private static bool SupportsMutationAck(string name)
+        {
+            var tool = name ?? string.Empty;
+            switch (tool)
+            {
+                case "cad_create_line":
+                case "cad_create_circle":
+                case "cad_create_arc":
+                case "cad_create_polyline":
+                case "cad_create_text":
+                case "cad_create_mtext":
+                case "cad_entity_transform":
+                case "cad_entity_delete":
+                case "cad_entity_set_layer":
+                case "cad_layer":
+                case "cad_command_sequence":
+                case "qs3d_run_command":
+                case "qs3d_place_single_footing":
+                case "cad_ui_click":
+                case "cad_ui_type":
+                case "cad_ui_key":
+                    return true;
+            }
+            if (McpQs3dDomainRuntime.IsTool(tool)) return McpQs3dDomainRuntime.RequiresMutation(tool);
+            if (McpCadDirectModelRuntime.IsTool(tool)) return McpCadDirectModelRuntime.RequiresMutation(tool);
+            if (McpDesktopAutomationRuntime.IsTool(tool)) return McpDesktopAutomationRuntime.RequiresMutation(tool);
+            return false;
+        }
+
+        private static string MergeToolProperties(string name, string properties)
         {
             var common = ExecutionModeProperties() + "," + WriterTokenProperty();
+            if (SupportsMutationAck(name)) common += "," + ActionIdProperty();
             return string.IsNullOrWhiteSpace(properties) ? common : common + "," + properties;
         }
 
@@ -1098,7 +1134,7 @@ namespace QS3D.BricsCAD.V25
                 ? string.Empty
                 : ",\"required\":[\"" + string.Join("\",\"", required) + "\"]";
             return "{\"name\":\"" + JsonEscape(name) + "\",\"description\":\"" + JsonEscape(description)
-                   + "\",\"inputSchema\":{\"type\":\"object\",\"properties\":{" + MergeToolProperties(properties)
+                   + "\",\"inputSchema\":{\"type\":\"object\",\"properties\":{" + MergeToolProperties(name, properties)
                    + "},\"additionalProperties\":false" + requiredJson + "},\"annotations\":" + ToolAnnotations(name) + "}";
         }
 
@@ -1106,11 +1142,16 @@ namespace QS3D.BricsCAD.V25
         {
             var raw = (descriptor ?? string.Empty).Trim();
             if (!LooksLikeJsonObject(raw)) return raw;
+            string name;
+            try { name = McpTopLevelJson.ExtractString(raw, "name"); }
+            catch (InvalidOperationException) { return raw; }
             var additions = new List<string>();
             if (raw.IndexOf("\"executionMode\"", StringComparison.Ordinal) < 0)
                 additions.Add(ExecutionModeProperties());
             if (raw.IndexOf("\"writerToken\"", StringComparison.Ordinal) < 0)
                 additions.Add(WriterTokenProperty());
+            if (SupportsMutationAck(name) && raw.IndexOf("\"actionId\"", StringComparison.Ordinal) < 0)
+                additions.Add(ActionIdProperty());
             if (additions.Count == 0) return raw;
             const string marker = "\"properties\":{";
             var index = raw.IndexOf(marker, StringComparison.Ordinal);
@@ -1155,6 +1196,7 @@ namespace QS3D.BricsCAD.V25
                 case "qs3d_status":
                 case "qs3d_domain_status":
                 case "cad_active_document":
+                case "cad_mutation_status":
                 case "cad_selection":
                 case "cad_database_snapshot":
                 case "cad_entity_inspect":
