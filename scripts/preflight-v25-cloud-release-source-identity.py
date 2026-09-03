@@ -6,7 +6,8 @@ therefore not rewrite ProductVersion inputs only in the runner worktree and then
 publish against the unchanged commit SHA. Release preparation, automatic main
 dispatch, batch counting, and policy documentation must classify the pinned
 Platform dependency identity consistently. Batch path enumeration must preserve
-exact NUL-delimited pathnames instead of trimming or decoding quoted line output.
+exact NUL-delimited pathnames instead of trimming, separator rewriting, or
+decoding quoted line output.
 """
 
 from __future__ import annotations
@@ -120,6 +121,20 @@ def _assert_batch_gate_preserves_exact_paths(failures: list[str]) -> None:
             return
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
+
+        # Git emits repository-relative path separators as '/', including on
+        # Windows. A literal backslash can be part of a Unix filename and must
+        # not be rewritten into a synthetic directory separator.
+        if module.is_release_relevant(r"src\not-release.txt"):
+            failures.append(
+                "batch gate rewrote a literal backslash filename into a synthetic release-relevant src/ path"
+            )
+        if module.is_release_relevant(r"external\QS3D-Platform"):
+            failures.append(
+                "batch gate rewrote a literal backslash filename into the Platform gitlink path"
+            )
+        if not module.is_release_relevant("src/actual-release.cs"):
+            failures.append("batch gate stopped recognizing canonical Git src/ paths")
 
         with tempfile.TemporaryDirectory(prefix="qs3d-release-batch-path-") as temp:
             repo = pathlib.Path(temp)
@@ -283,6 +298,7 @@ def main() -> int:
         "RELEASE_RELEVANT_EXACT_PATHS",
         '"--name-only", "-z"',
         '.split("\\0")',
+        "run_git_exact",
     )
     missing_batch = [token for token in batch_signals if token not in batch_gate]
     if missing_batch:
