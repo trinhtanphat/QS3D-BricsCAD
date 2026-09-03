@@ -44,7 +44,6 @@ host_source = HOST_SOURCE.read_text(encoding="utf-8")
 native_source = NATIVE_SOURCE.read_text(encoding="utf-8")
 barrier = "if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;"
 
-# The only native Application quit owner remains the global host coordinator.
 for marker in (
     "BcadApplication.QuitWillStart += OnQuitWillStart;",
     "BcadApplication.QuitAborted += OnQuitAborted;",
@@ -63,7 +62,6 @@ for forbidden in (
     require(forbidden not in window_source,
             f"Per-window Registration must not own native BricsCAD Application quit state: {forbidden}")
 
-# Per-window WPF registrations must also stop owning BricsCAD document/native reactors.
 for forbidden in (
     "_lifecycleDocument.BeginDocumentClose += OnBeginDocumentClose;",
     "_lifecycleDocument.CloseAborted += OnDocumentCloseAborted;",
@@ -79,6 +77,8 @@ for marker in (
     "lifecycleDocument.BeginDocumentClose += OnBeginDocumentClose;",
     "lifecycleDocument.CloseAborted += OnDocumentCloseAborted;",
     "BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;",
+    "TrySnapshotDestroyByLifecycleDocument",
+    "TrySnapshotDestroyByNativeIdentity",
 ):
     require(marker in native_source, f"Shared native coordinator is missing ownership marker: {marker}")
 
@@ -124,12 +124,12 @@ require(fail_closed in ensure_affinity,
 require(ensure_affinity.index(fail_closed) < ensure_affinity.index("lock (_documentAccessGate)"),
         "Global host-quiescence guard must run before DocumentManager/project access.")
 
-# The shared native owner must reject native callbacks before accessing destroying wrappers or
-# dispatching managed callbacks into WPF registrations.
 native_destroyed = method_block(native_source, "private static void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)")
 require(barrier in native_destroyed,
         "Shared DocumentToBeDestroyed callback must fail closed during host quiescence.")
-require(native_destroyed.index(barrier) < native_destroyed.index("var document = e.Document;"),
+require("document = e.Document;" in native_destroyed,
+        "Shared DocumentToBeDestroyed callback must read the event document only in its guarded owner.")
+require(native_destroyed.index(barrier) < native_destroyed.index("document = e.Document;"),
         "Shared DocumentToBeDestroyed callback must cross quiescence before dereferencing e.Document.")
 
 native_begin = method_block(native_source, "private void OnBeginDocumentClose(object sender, DocumentBeginCloseEventArgs e)")
@@ -144,7 +144,6 @@ require(barrier in native_abort,
 require(native_abort.index(barrier) < native_abort.index("callbacks = SnapshotLiveCallbacks();"),
         "Shared CloseAborted callback must cross quiescence before dispatching to windows.")
 
-# Per-window callbacks retain normal close semantics but do not perform native subscription mutation.
 for signature in (
     "private void OnBeginDocumentClose(object sender, DocumentBeginCloseEventArgs e)",
     "private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)",
@@ -156,6 +155,10 @@ for signature in (
     for forbidden in ("+=", "-=", "DetachNativeLifecycleSubscription()"):
         require(forbidden not in teardown,
                 f"{signature} must not mutate native lifecycle ownership: {forbidden}")
+
+window_destroyed = method_block(window_source, "private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)")
+require("e.Document" not in window_destroyed and "MatchesNativeDatabase(" not in window_destroyed,
+        "Managed destroy callback must not repeat affinity matching after the coordinator has dispatched it.")
 
 recover = method_block(window_source, "private void TryRecoverAfterQuitAbort()")
 for marker in (
