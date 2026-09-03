@@ -44,7 +44,6 @@ namespace QS3D.Core.Domain
                 .Where(x => ReferencesZone(x, zone.Id))
                 .ToList();
 
-            project.Touch();
             zone.Name = normalizedName;
             foreach (var element in referencedElements)
                 element.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
