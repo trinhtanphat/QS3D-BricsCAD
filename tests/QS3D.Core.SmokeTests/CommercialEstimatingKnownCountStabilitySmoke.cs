@@ -103,15 +103,15 @@ namespace QS3D.Core.SmokeTests
             var portfolio = new EstimatingPortfolio(lines);
             Equal(2, portfolio.Lines.Count, "honest portfolio count");
             Equal("L-1", portfolio.Lines[0].LineId, "honest portfolio deterministic order");
-            Equal(9, lines.CountReads, "honest portfolio traversal-wide Count evidence including post-Current rebinds");
+            Equal(17, lines.CountReads, "honest portfolio admission-plus-replay Count evidence including post-Current rebinds");
 
             var ids = new CountProbeCollection<string>(1, 1, "L-1");
             var rates = new CountProbeCollection<UnitRateAssignment>(1, 1, new UnitRateAssignment("m3", 10m));
             var request = Request(ids, rates);
             Equal(1, request.LineIds.Count, "honest selected-line count");
             Equal(1, request.UnitRates.Count, "honest unit-rate count");
-            Equal(6, ids.CountReads, "honest selected-line traversal-wide Count evidence including post-Current rebound");
-            Equal(6, rates.CountReads, "honest unit-rate traversal-wide Count evidence including post-Current rebound");
+            Equal(11, ids.CountReads, "honest selected-line admission-plus-replay Count evidence including post-Current rebound");
+            Equal(11, rates.CountReads, "honest unit-rate admission-plus-replay Count evidence including post-Current rebound");
         }
 
         private static EstimatingLine Line(string id)
