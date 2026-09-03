@@ -10,11 +10,11 @@ CLASS_PATTERN = re.compile(r"\b(?:public|internal|private)?\s*(?:static\s+)?clas
 RUN_CALL_PATTERN = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*Run\s*\(")
 MODULE_INITIALIZER_BLOCK_PATTERN = re.compile(
     r"\[\s*(?:System\.Runtime\.CompilerServices\.)?ModuleInitializer(?:Attribute)?\s*\]"
-    r"\s*(?:(?:public|internal|private)\s+)?static\s+void\s+[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)\s*\{"
+    r"\s*(?:(?:public|internal|private)\s+)?static\s+void\s+(?P<method>[A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)\s*\{"
 )
 MODULE_INITIALIZER_EXPRESSION_PATTERN = re.compile(
     r"\[\s*(?:System\.Runtime\.CompilerServices\.)?ModuleInitializer(?:Attribute)?\s*\]"
-    r"\s*(?:(?:public|internal|private)\s+)?static\s+void\s+[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)\s*=>\s*([^;]*);"
+    r"\s*(?:(?:public|internal|private)\s+)?static\s+void\s+(?P<method>[A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)\s*=>\s*(?P<body>[^;]*);"
 )
 UNQUALIFIED_RUN_CALL_PATTERN = re.compile(r"(?<![A-Za-z0-9_.])Run\s*\(")
 LOCAL_RUN_DECLARATION_PATTERN = re.compile(
@@ -193,20 +193,24 @@ def body_invokes_smoke_run(body, qualified_run, allow_unqualified):
 
 
 def has_module_initializer_run_call(code, class_name, spans):
-    """Require a qualified call, or an unqualified call from the same lexical class."""
+    """Accept this smoke's Run() as the initializer entrypoint or require an initializer call to it."""
     qualified_run = re.compile(r"\b" + re.escape(class_name) + r"\s*\.\s*Run\s*\(")
     for match in MODULE_INITIALIZER_BLOCK_PATTERN.finditer(code):
+        initializer_owner = class_owner_at(spans, match.start())
+        if initializer_owner == class_name and match.group("method") == "Run":
+            return True
         opening_index = match.end() - 1
         closing_index = find_matching_brace(code, opening_index)
         if closing_index is None:
             continue
         body = code[opening_index + 1 : closing_index]
-        initializer_owner = class_owner_at(spans, match.start())
         if body_invokes_smoke_run(body, qualified_run, initializer_owner == class_name):
             return True
     for match in MODULE_INITIALIZER_EXPRESSION_PATTERN.finditer(code):
         initializer_owner = class_owner_at(spans, match.start())
-        if body_invokes_smoke_run(match.group(1), qualified_run, initializer_owner == class_name):
+        if initializer_owner == class_name and match.group("method") == "Run":
+            return True
+        if body_invokes_smoke_run(match.group("body"), qualified_run, initializer_owner == class_name):
             return True
     return False
 
@@ -231,8 +235,9 @@ def find_registration_errors(sources):
         for class_name in owners:
             checked += 1
             # A self-registration exemption is valid only when executable code in a
-            # ModuleInitializer invokes this exact smoke Run() method. Comments/literals
-            # do not count, and unqualified calls must belong to the same lexical class.
+            # ModuleInitializer is this exact smoke Run() entrypoint or invokes it.
+            # Comments/literals do not count, and unqualified calls must belong to
+            # the same lexical class.
             if has_module_initializer_run_call(code, class_name, spans):
                 continue
             registration_paths = references.get(class_name, ())
@@ -249,6 +254,7 @@ def verify_index_regression():
         Path("RegisteredSmokeRegistration.cs"): "internal static class RegisteredSmokeRegistration { internal static void Register() { RegisteredSmoke.Run(); } }",
         Path("InitializerSmoke.cs"): "internal static class InitializerSmoke { [ModuleInitializer] internal static void Register() { Run(); } internal static void Run() { } }",
         Path("ExpressionInitializerSmoke.cs"): "internal static class ExpressionInitializerSmoke { [ModuleInitializer] internal static void Register() => Run(); internal static void Run() { } }",
+        Path("DirectInitializerRunSmoke.cs"): "internal static class DirectInitializerRunSmoke { [ModuleInitializer] internal static void Run() { } }",
         Path("BraceLiteralInitializerSmoke.cs"): "internal static class BraceLiteralInitializerSmoke { [ModuleInitializer] internal static void Register() { var marker = \"{\"; Run(); } internal static void Run() { } }",
         Path("FalseInitializerSmoke.cs"): "internal static class FalseInitializerSmoke { [ModuleInitializer] internal static void Register() { } internal static void Run() { } }",
         Path("CommentOnlyInitializerSmoke.cs"): "internal static class CommentOnlyInitializerSmoke { [ModuleInitializer] internal static void Register() { /* Run(); */ } internal static void Run() { } }",
@@ -275,7 +281,7 @@ def verify_index_regression():
         "SelfOnlySmoke.cs: SelfOnlySmoke.Run() is never registered or invoked",
         "WrongClassInitializerSmoke.cs: WrongClassInitializerSmoke.Run() is never registered or invoked",
     }
-    if checked != 15 or set(errors) != expected_errors or source_scans != len(small_sources):
+    if checked != 16 or set(errors) != expected_errors or source_scans != len(small_sources):
         raise RuntimeError("smoke-registration semantic regression self-check failed")
 
     scale_sources = {}
