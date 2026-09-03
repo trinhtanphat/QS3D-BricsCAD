@@ -206,9 +206,9 @@ namespace QS3D.Core.Domain
 
                 var previousWasLastReference = previous != null && CountReferences(previous) == 1;
                 var valueAlreadyOwned = value != null && ContainsReference(value);
-                _items[index] = value;
+                _items[index] = value!;
 
-                if (previousWasLastReference) _detach(previous);
+                if (previousWasLastReference) _detach(previous!);
                 if (value != null && !valueAlreadyOwned) _attach(value);
             }
         }
@@ -219,7 +219,7 @@ namespace QS3D.Core.Domain
         public void Add(T item)
         {
             var alreadyOwned = item != null && ContainsReference(item);
-            _items.Add(item);
+            _items.Add(item!);
             if (item != null && !alreadyOwned) _attach(item);
         }
 
@@ -238,7 +238,7 @@ namespace QS3D.Core.Domain
         public void Insert(int index, T item)
         {
             var alreadyOwned = item != null && ContainsReference(item);
-            _items.Insert(index, item);
+            _items.Insert(index, item!);
             if (item != null && !alreadyOwned) _attach(item);
         }
 
@@ -255,7 +255,7 @@ namespace QS3D.Core.Domain
             var item = _items[index];
             var detach = item != null && CountReferences(item) == 1;
             _items.RemoveAt(index);
-            if (detach) _detach(item);
+            if (detach) _detach(item!);
         }
 
         private bool ContainsReference(T item)
