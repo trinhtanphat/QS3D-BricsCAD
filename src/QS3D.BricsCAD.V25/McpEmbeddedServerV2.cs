@@ -98,10 +98,18 @@ namespace QS3D.BricsCAD.V25
         {
             var domain = AppDomain.CurrentDomain;
             var previous = domain.GetData(EmbeddedListenerProcessLeaseKey) as Action;
-            domain.SetData(EmbeddedListenerProcessLeaseKey, null);
             if (previous != null && !ReferenceEquals(previous, ProcessLeaseStopAction))
             {
-                try { previous(); } catch { }
+                try
+                {
+                    previous();
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        "QS3D MCP could not stop the previous embedded listener generation through the registered process lease.",
+                        ex);
+                }
             }
 
             // The first upgrade from a build that predates the lease has no AppDomain callback.
@@ -124,8 +132,18 @@ namespace QS3D.BricsCAD.V25
                         | System.Reflection.BindingFlags.NonPublic);
                     if (stop != null && stop.GetParameters().Length == 0) stop.Invoke(null, null);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        "QS3D MCP could not stop the previous embedded listener generation through the loaded-assembly fallback.",
+                        ex);
+                }
             }
+
+            // Keep the known-generation lease published until every required stop succeeds. If any
+            // stop fails, Start() aborts and the next attempt can retry the same handoff instead of
+            // silently falling through to a secondary loopback port.
+            domain.SetData(EmbeddedListenerProcessLeaseKey, null);
         }
 
         private static void PublishProcessLease()
