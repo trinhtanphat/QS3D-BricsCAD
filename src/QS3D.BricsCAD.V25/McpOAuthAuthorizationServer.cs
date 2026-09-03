@@ -37,12 +37,36 @@ namespace QS3D.BricsCAD.V25
         private const int MaxFormBytes = 32 * 1024;
         private const int MaxParameterCount = 32;
         private const int MaxParameterLength = 8192;
+        private const int MaxConsumedCredentialEntries = 1024;
+        private const int MaxRefreshTokenFamilies = 1024;
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private static readonly ConcurrentDictionary<string, long> ConsumedAuthorizationCodes =
             new ConcurrentDictionary<string, long>(StringComparer.Ordinal);
-        private static readonly ConcurrentDictionary<string, long> ConsumedRefreshTokens =
-            new ConcurrentDictionary<string, long>(StringComparer.Ordinal);
+        private static readonly object ConsumedCredentialSync = new object();
+        private static readonly Dictionary<string, RefreshFamilyState> RefreshTokenFamilies =
+            new Dictionary<string, RefreshFamilyState>(StringComparer.Ordinal);
+        private static readonly object RefreshFamilySync = new object();
         private static readonly string ProcessNonce = CreateRandomToken(24);
+
+        private sealed class RefreshFamilyState
+        {
+            internal long NextGeneration;
+            internal long Expiry;
+        }
+
+        private enum ConsumedCredentialAdmission
+        {
+            Added,
+            Replay,
+            CapacityExceeded,
+        }
+
+        private enum RefreshFamilyAdmission
+        {
+            Advanced,
+            Replay,
+            CapacityExceeded,
+        }
 
         internal static bool TryHandle(
             string method,
@@ -378,8 +402,10 @@ namespace QS3D.BricsCAD.V25
                 || !ConstantTimeEquals(ComputePkceChallenge(verifier), challenge))
                 return OAuthError(400, "Bad Request", "invalid_grant", "authorization code binding check failed");
 
-            CleanupConsumedCodes();
-            if (!ConsumedAuthorizationCodes.TryAdd(HashForCache(code), expiry))
+            var admission = TryRememberConsumedCredential(ConsumedAuthorizationCodes, HashForCache(code), expiry);
+            if (admission == ConsumedCredentialAdmission.CapacityExceeded)
+                return OAuthError(503, "Service Unavailable", "temporarily_unavailable", "authorization code replay cache is at capacity");
+            if (admission == ConsumedCredentialAdmission.Replay)
                 return OAuthError(400, "Bad Request", "invalid_grant", "authorization code was already used");
             var includeRefreshToken = HasOfflineAccess(normalizedCodeScope);
             return IssueTokenPair(clientId, resource, signingSecret, normalizedCodeScope, includeRefreshToken);
@@ -396,16 +422,20 @@ namespace QS3D.BricsCAD.V25
                 return OAuthError(400, "Bad Request", "invalid_grant", "refresh token is required");
             string[] fields;
             long expiry;
-            if (!TryReadSignedToken(refresh, "refresh", signingSecret, out fields, out expiry) || fields.Length != 7)
+            if (!TryReadSignedToken(refresh, "refresh", signingSecret, out fields, out expiry) || fields.Length != 9)
                 return OAuthError(400, "Bad Request", "invalid_grant", "refresh token is invalid or expired");
             string processNonce;
             string tokenClient;
             string tokenResource;
             string tokenScope;
+            string refreshFamilyId;
+            long refreshGeneration;
             if (!TryDecodeField(fields[3], out processNonce)
                 || !TryDecodeField(fields[4], out tokenClient)
                 || !TryDecodeField(fields[5], out tokenResource)
-                || !TryDecodeField(fields[6], out tokenScope))
+                || !TryDecodeField(fields[6], out tokenScope)
+                || !TryDecodeField(fields[7], out refreshFamilyId)
+                || !long.TryParse(fields[8], NumberStyles.None, CultureInfo.InvariantCulture, out refreshGeneration))
                 return OAuthError(400, "Bad Request", "invalid_grant", "refresh token binding check failed");
             string normalizedTokenScope;
             if (!TryNormalizeAuthorizationScope(tokenScope, out normalizedTokenScope)
@@ -413,7 +443,9 @@ namespace QS3D.BricsCAD.V25
                 || !HasOfflineAccess(normalizedTokenScope)
                 || !ConstantTimeEquals(processNonce, ProcessNonce)
                 || !ConstantTimeEquals(tokenClient, clientId)
-                || !ConstantTimeEquals(tokenResource, resource))
+                || !ConstantTimeEquals(tokenResource, resource)
+                || string.IsNullOrWhiteSpace(refreshFamilyId)
+                || refreshGeneration < 0)
                 return OAuthError(400, "Bad Request", "invalid_grant", "refresh token binding check failed");
 
             var grantedScope = normalizedTokenScope;
@@ -427,11 +459,28 @@ namespace QS3D.BricsCAD.V25
                 grantedScope = normalizedRequestedScope;
             }
 
-            CleanupConsumedRefreshTokens();
-            if (!ConsumedRefreshTokens.TryAdd(HashForCache(refresh), expiry))
-                return OAuthError(400, "Bad Request", "invalid_grant", "refresh token was already used");
+            if (refreshGeneration == long.MaxValue)
+                return OAuthError(400, "Bad Request", "invalid_grant", "refresh token generation is exhausted");
+
+            var rotationIssuedAt = UnixNow();
+            var familyExpiry = rotationIssuedAt + (long)RefreshTokenLifetime.TotalSeconds;
+            var successorGeneration = checked(refreshGeneration + 1);
             var includeRefreshToken = HasOfflineAccess(grantedScope);
-            return IssueTokenPair(clientId, resource, signingSecret, grantedScope, includeRefreshToken);
+            var successorResponse = IssueTokenPair(
+                clientId,
+                resource,
+                signingSecret,
+                grantedScope,
+                includeRefreshToken,
+                refreshFamilyId,
+                successorGeneration,
+                rotationIssuedAt);
+            var admission = TryAdvanceRefreshFamily(refreshFamilyId, refreshGeneration, familyExpiry);
+            if (admission == RefreshFamilyAdmission.CapacityExceeded)
+                return OAuthError(503, "Service Unavailable", "temporarily_unavailable", "refresh token family capacity is exhausted");
+            if (admission == RefreshFamilyAdmission.Replay)
+                return OAuthError(400, "Bad Request", "invalid_grant", "refresh token was already used");
+            return successorResponse;
         }
 
         private static McpOAuthHttpResponse IssueTokenPair(
@@ -439,14 +488,17 @@ namespace QS3D.BricsCAD.V25
             string resource,
             string signingSecret,
             string grantedScope,
-            bool includeRefreshToken)
+            bool includeRefreshToken,
+            string? refreshFamilyId = null,
+            long refreshGeneration = 0,
+            long? issuedAt = null)
         {
             string normalizedScope;
             if (!TryNormalizeAuthorizationScope(grantedScope, out normalizedScope)
                 || !ConstantTimeEquals(grantedScope, normalizedScope))
                 return OAuthError(400, "Bad Request", "invalid_scope", "granted OAuth scope is invalid");
 
-            var now = UnixNow();
+            var now = issuedAt ?? UnixNow();
             var accessExpiry = now + (long)AccessTokenLifetime.TotalSeconds;
             var access = CreateSignedToken(
                 new[] { "v1", "access", accessExpiry.ToString(CultureInfo.InvariantCulture), EncodeField(clientId), EncodeField(resource), EncodeField(RequiredScope) },
@@ -457,8 +509,14 @@ namespace QS3D.BricsCAD.V25
             if (includeRefreshToken)
             {
                 var refreshExpiry = now + (long)RefreshTokenLifetime.TotalSeconds;
+                var refreshFamily = refreshFamilyId ?? CreateRandomToken(24);
                 var refresh = CreateSignedToken(
-                    new[] { "v1", "refresh", refreshExpiry.ToString(CultureInfo.InvariantCulture), EncodeField(ProcessNonce), EncodeField(clientId), EncodeField(resource), EncodeField(normalizedScope) },
+                    new[]
+                    {
+                        "v1", "refresh", refreshExpiry.ToString(CultureInfo.InvariantCulture), EncodeField(ProcessNonce),
+                        EncodeField(clientId), EncodeField(resource), EncodeField(normalizedScope), EncodeField(refreshFamily),
+                        refreshGeneration.ToString(CultureInfo.InvariantCulture)
+                    },
                     signingSecret);
                 body += ",\"refresh_token\":\"" + JsonEscape(refresh) + "\"";
             }
@@ -971,39 +1029,68 @@ namespace QS3D.BricsCAD.V25
             using (var sha = SHA256.Create()) return Base64Url(sha.ComputeHash(Encoding.UTF8.GetBytes(value ?? string.Empty)));
         }
 
-        private static void CleanupConsumedCodes()
+        private static ConsumedCredentialAdmission TryRememberConsumedCredential(
+            ConcurrentDictionary<string, long> cache,
+            string hash,
+            long expiry)
         {
-            if (ConsumedAuthorizationCodes.Count < 256) return;
-            var now = UnixNow();
-            foreach (var pair in ConsumedAuthorizationCodes)
+            lock (ConsumedCredentialSync)
             {
-                long ignored;
-                if (pair.Value <= now) ConsumedAuthorizationCodes.TryRemove(pair.Key, out ignored);
-            }
-            if (ConsumedAuthorizationCodes.Count <= 1024) return;
-            foreach (var pair in ConsumedAuthorizationCodes)
-            {
-                long ignored;
-                ConsumedAuthorizationCodes.TryRemove(pair.Key, out ignored);
-                if (ConsumedAuthorizationCodes.Count <= 768) break;
+                var now = UnixNow();
+                foreach (var pair in cache)
+                {
+                    if (pair.Value <= now)
+                    {
+                        long ignored;
+                        cache.TryRemove(pair.Key, out ignored);
+                    }
+                }
+                if (cache.ContainsKey(hash)) return ConsumedCredentialAdmission.Replay;
+                if (cache.Count >= MaxConsumedCredentialEntries) return ConsumedCredentialAdmission.CapacityExceeded;
+                if (!cache.TryAdd(hash, expiry)) return ConsumedCredentialAdmission.Replay;
+                return ConsumedCredentialAdmission.Added;
             }
         }
 
-        private static void CleanupConsumedRefreshTokens()
+        private static RefreshFamilyAdmission TryAdvanceRefreshFamily(
+            string refreshFamilyId,
+            long refreshGeneration,
+            long expiry)
         {
-            if (ConsumedRefreshTokens.Count < 256) return;
-            var now = UnixNow();
-            foreach (var pair in ConsumedRefreshTokens)
+            lock (RefreshFamilySync)
             {
-                long ignored;
-                if (pair.Value <= now) ConsumedRefreshTokens.TryRemove(pair.Key, out ignored);
-            }
-            if (ConsumedRefreshTokens.Count <= 1024) return;
-            foreach (var pair in ConsumedRefreshTokens)
-            {
-                long ignored;
-                ConsumedRefreshTokens.TryRemove(pair.Key, out ignored);
-                if (ConsumedRefreshTokens.Count <= 768) break;
+                var now = UnixNow();
+                var expiredFamilies = new List<string>();
+                foreach (var pair in RefreshTokenFamilies)
+                {
+                    if (pair.Value.Expiry <= now) expiredFamilies.Add(pair.Key);
+                }
+                foreach (var familyId in expiredFamilies) RefreshTokenFamilies.Remove(familyId);
+
+                RefreshFamilyState state;
+                if (!RefreshTokenFamilies.TryGetValue(refreshFamilyId, out state))
+                {
+                    if (refreshGeneration != 0) return RefreshFamilyAdmission.Replay;
+                    if (RefreshTokenFamilies.Count >= MaxRefreshTokenFamilies) return RefreshFamilyAdmission.CapacityExceeded;
+                    RefreshTokenFamilies[refreshFamilyId] = new RefreshFamilyState
+                    {
+                        NextGeneration = 1,
+                        Expiry = expiry,
+                    };
+                    return RefreshFamilyAdmission.Advanced;
+                }
+
+                if (state.NextGeneration != refreshGeneration) return RefreshFamilyAdmission.Replay;
+                try
+                {
+                    state.NextGeneration = checked(refreshGeneration + 1);
+                }
+                catch (OverflowException)
+                {
+                    return RefreshFamilyAdmission.Replay;
+                }
+                state.Expiry = expiry;
+                return RefreshFamilyAdmission.Advanced;
             }
         }
 
