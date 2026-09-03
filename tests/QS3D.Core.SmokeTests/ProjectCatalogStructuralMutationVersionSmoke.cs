@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
@@ -15,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             ReplacementAdvancesRevision();
             FailedAndNullMutationsRemainNeutral();
             DuplicateReferenceOwnershipRemainsStable();
+            StructuralMutationOverflowFailsBeforeCatalogChange();
             LoadPreservesPersistedRevisionAfterCatalogHydration();
         }
 
@@ -99,6 +101,40 @@ namespace QS3D.Core.SmokeTests
             Equal(afterDetach, project.ChangeVersion, "Removing the last duplicate reference left a stale child subscription.");
         }
 
+        private static void StructuralMutationOverflowFailsBeforeCatalogChange()
+        {
+            var marker = new DateTime(2026, 9, 3, 12, 0, 0, DateTimeKind.Utc);
+
+            var addProject = NewProject("P-CATALOG-OVERFLOW-ADD");
+            RestoreProjectRevision(addProject, marker, long.MaxValue);
+            Throws<OverflowException>(() => addProject.Zones.Add(new ZoneDefinition("Z1", "Zone 1")));
+            Equal(0, addProject.Zones.Count, "Overflowing Add mutated the catalog before revision admission.");
+            Equal(marker, addProject.UpdatedUtc, "Overflowing Add changed UpdatedUtc.");
+
+            var replaceProject = NewProject("P-CATALOG-OVERFLOW-REPLACE");
+            var original = new ZoneDefinition("Z1", "Zone 1");
+            replaceProject.Zones.Add(original);
+            RestoreProjectRevision(replaceProject, marker, long.MaxValue);
+            Throws<OverflowException>(() => replaceProject.Zones[0] = new ZoneDefinition("Z2", "Zone 2"));
+            Equal(original, replaceProject.Zones[0], "Overflowing replacement changed the catalog entry.");
+
+            var removeProject = NewProject("P-CATALOG-OVERFLOW-REMOVE");
+            var floor = new FloorDefinition("L1", "Level 1", 0d);
+            removeProject.Floors.Add(floor);
+            RestoreProjectRevision(removeProject, marker, long.MaxValue);
+            Throws<OverflowException>(() => removeProject.Floors.RemoveAt(0));
+            Equal(1, removeProject.Floors.Count, "Overflowing RemoveAt removed the catalog entry.");
+            Equal(floor, removeProject.Floors[0], "Overflowing RemoveAt changed the retained catalog entry.");
+
+            var clearProject = NewProject("P-CATALOG-OVERFLOW-CLEAR");
+            clearProject.Families.Add(new ProjectFamily("F1", "Family 1", ElementCategory.GlassWall));
+            clearProject.Families.Add(new ProjectFamily("F2", "Family 2", ElementCategory.GlassWall));
+            RestoreProjectRevision(clearProject, marker, long.MaxValue);
+            Throws<OverflowException>(clearProject.Families.Clear);
+            Equal(2, clearProject.Families.Count, "Overflowing Clear changed the catalog.");
+            Equal(marker, clearProject.UpdatedUtc, "Overflowing Clear changed UpdatedUtc.");
+        }
+
         private static void LoadPreservesPersistedRevisionAfterCatalogHydration()
         {
             var directory = Path.Combine(Path.GetTempPath(), "qs3d-catalog-revision-" + Guid.NewGuid().ToString("N"));
@@ -124,6 +160,15 @@ namespace QS3D.Core.SmokeTests
             {
                 if (Directory.Exists(directory)) Directory.Delete(directory, true);
             }
+        }
+
+        private static void RestoreProjectRevision(ProjectState project, DateTime updatedUtc, long changeVersion)
+        {
+            var method = typeof(ProjectState).GetMethod("RestorePersistenceState", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("ProjectState.RestorePersistenceState was not found.");
+            method.Invoke(project, new object[] { updatedUtc, changeVersion });
+            Equal(changeVersion, project.ChangeVersion, "Fixture could not restore the requested project revision.");
+            Equal(updatedUtc, project.UpdatedUtc, "Fixture could not restore the requested project timestamp.");
         }
 
         private static void ExpectOneRevision(ProjectState project, Action mutation, string label)
