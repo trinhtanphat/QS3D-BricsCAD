@@ -41,13 +41,18 @@ for stale in (
     if stale in workflow:
         raise SystemExit("Estimating aggregation stale pairwise fold remains: " + stale)
 
+# The accumulator may share exact decimal helpers with CommercialGuard.Add/Subtract.
+# Assert the semantic scale-alignment and final materialization contract rather than
+# pinning the historical inline `_scale` implementation detail.
 for token in (
     "using System.Numerics;",
     "internal sealed class CommercialExactDecimalAccumulator",
     "MaximumDecimalCoefficient",
     "decimal.GetBits(value)",
-    "BigInteger.Pow(10, scale - _scale)",
-    "coefficient % 10 == 0",
+    "AlignScales(ref _coefficient, ref _scale, ref coefficient, ref scale);",
+    "BigInteger.Pow(10, rightScale - leftScale)",
+    "BigInteger.Pow(10, leftScale - rightScale)",
+    "while (scale > 0 && signedCoefficient % 10 == 0)",
     "exact aggregate cannot be represented as decimal",
 ):
     if token not in accumulator:
