@@ -74,28 +74,39 @@ namespace QS3D.BricsCAD.V25.UI
             // dereference it after the global quit boundary; the host owns final destruction then.
             if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
 
-            IntPtr identity;
+            Document document;
             try
             {
-                var document = e.Document;
-                if (document == null || document.IsDisposed) return;
-                var database = document.Database;
-                if (database == null) return;
-                identity = database.UnmanagedObject;
-                if (identity == IntPtr.Zero) return;
+                document = e.Document;
+                if (document == null) return;
             }
             catch
             {
                 return;
             }
 
-            Entry? entry;
-            List<Callbacks> callbacks;
-            lock (Gate)
+            // Managed reference identity is safe even after the wrapper reports IsDisposed. Try the
+            // exact lifecycle wrapper first so a normal destroy event cannot strand its process-global
+            // entry merely because native teardown advanced before DocumentToBeDestroyed was raised.
+            if (!TrySnapshotDestroyByLifecycleDocument(document, out var entry, out var callbacks))
             {
-                if (!Entries.TryGetValue(identity, out entry)) return;
-                entry.MarkCloseStarted();
-                callbacks = entry.SnapshotLiveCallbacks();
+                IntPtr identity;
+                try
+                {
+                    // Wrapper drift is still supported, but only a live alternate wrapper may be
+                    // dereferenced to recover the stable native database identity.
+                    if (document.IsDisposed) return;
+                    var database = document.Database;
+                    if (database == null) return;
+                    identity = database.UnmanagedObject;
+                    if (identity == IntPtr.Zero) return;
+                }
+                catch
+                {
+                    return;
+                }
+
+                if (!TrySnapshotDestroyByNativeIdentity(identity, out entry, out callbacks)) return;
             }
 
             foreach (var callback in callbacks)
@@ -106,11 +117,52 @@ namespace QS3D.BricsCAD.V25.UI
 
             lock (Gate)
             {
-                if (Entries.TryGetValue(identity, out var current) && ReferenceEquals(current, entry))
+                if (Entries.TryGetValue(entry.NativeDatabaseIdentity, out var current) && ReferenceEquals(current, entry))
                 {
-                    Entries.Remove(identity);
+                    Entries.Remove(entry.NativeDatabaseIdentity);
                     entry.ClearCallbacks();
                 }
+            }
+        }
+
+        private static bool TrySnapshotDestroyByLifecycleDocument(
+            Document document,
+            out Entry entry,
+            out List<Callbacks> callbacks)
+        {
+            lock (Gate)
+            {
+                foreach (var candidate in Entries.Values)
+                {
+                    if (!ReferenceEquals(candidate.LifecycleDocument, document)) continue;
+                    candidate.MarkCloseStarted();
+                    entry = candidate;
+                    callbacks = candidate.SnapshotLiveCallbacks();
+                    return true;
+                }
+            }
+
+            entry = null!;
+            callbacks = null!;
+            return false;
+        }
+
+        private static bool TrySnapshotDestroyByNativeIdentity(
+            IntPtr nativeDatabaseIdentity,
+            out Entry entry,
+            out List<Callbacks> callbacks)
+        {
+            lock (Gate)
+            {
+                if (!Entries.TryGetValue(nativeDatabaseIdentity, out entry!))
+                {
+                    callbacks = null!;
+                    return false;
+                }
+
+                entry.MarkCloseStarted();
+                callbacks = entry.SnapshotLiveCallbacks();
+                return true;
             }
         }
 
@@ -174,6 +226,7 @@ namespace QS3D.BricsCAD.V25.UI
                 NativeDatabaseIdentity = nativeDatabaseIdentity;
             }
 
+            public Document LifecycleDocument => _lifecycleDocument;
             public IntPtr NativeDatabaseIdentity { get; }
             public bool CloseStarted { get; private set; }
 

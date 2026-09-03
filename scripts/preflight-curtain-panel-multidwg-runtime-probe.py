@@ -154,7 +154,7 @@ if LIFETIME.is_file():
     text = LIFETIME.read_text(encoding="utf-8")
     for token in (
         '_nativeLifecycleSubscription = DocumentBoundNativeLifecycleCoordinator.Register(',
-        'if (!MatchesNativeDatabase(e.Document)) return;',
+        'The shared coordinator has already matched this registration',
         '_window.Close();',
     ):
         if token not in text:
@@ -173,6 +173,8 @@ if NATIVE.is_file():
         'lifecycleDocument.BeginDocumentClose += OnBeginDocumentClose;',
         'lifecycleDocument.CloseAborted += OnDocumentCloseAborted;',
         'new WeakReference<Callbacks>(callbacks)',
+        'TrySnapshotDestroyByLifecycleDocument',
+        'TrySnapshotDestroyByNativeIdentity',
         'if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;',
     ):
         if token not in text:

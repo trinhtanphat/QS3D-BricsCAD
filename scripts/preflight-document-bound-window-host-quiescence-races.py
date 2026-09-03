@@ -42,8 +42,12 @@ barrier = "if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;"
 native_destroyed = method_block(native_source, "private static void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)")
 require(barrier in native_destroyed,
         "Shared DocumentToBeDestroyed must fail closed immediately during host quiescence.")
-require(native_destroyed.index(barrier) < native_destroyed.index("var document = e.Document;"),
+require("document = e.Document;" in native_destroyed,
+        "Shared DocumentToBeDestroyed must capture the event document only inside its guarded owner.")
+require(native_destroyed.index(barrier) < native_destroyed.index("document = e.Document;"),
         "Shared DocumentToBeDestroyed must test host quiescence before dereferencing the destroying wrapper.")
+for marker in ("TrySnapshotDestroyByLifecycleDocument", "TrySnapshotDestroyByNativeIdentity"):
+    require(marker in native_destroyed, f"Shared DocumentToBeDestroyed is missing affinity lookup: {marker}")
 
 # Per-document native BeginDocumentClose / CloseAborted handlers must not dispatch callbacks after
 # the host quit boundary. That keeps per-window WPF registrations off native teardown stacks.
@@ -57,12 +61,15 @@ for signature in (
             f"{signature} must test quiescence before dispatching managed callbacks.")
 
 # Registration itself still re-checks before DocumentManager access; quiescence may arm between
-# native coordinator dispatch and the managed callback's first instruction.
+# native coordinator dispatch and the managed callback's first instruction. The coordinator has
+# already proved affinity, so the per-window callback must not reopen the event Document.
 window_destroyed = method_block(window_source, "private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)")
 require(barrier in window_destroyed,
         "Managed DocumentToBeDestroyed callback must fail closed immediately during host quiescence.")
-require(window_destroyed.index(barrier) < window_destroyed.index("MatchesNativeDatabase(e.Document)"),
-        "Managed DocumentToBeDestroyed callback must re-check quiescence before e.Document access.")
+require("e.Document" not in window_destroyed and "MatchesNativeDatabase(" not in window_destroyed,
+        "Managed DocumentToBeDestroyed callback must consume coordinator-owned affinity without wrapper access.")
+require(window_destroyed.index(barrier) < window_destroyed.index("HasAnotherLiveDocument()"),
+        "Managed DocumentToBeDestroyed callback must re-check quiescence before DocumentManager enumeration.")
 
 window_begin = method_block(window_source, "private void OnBeginDocumentClose(object sender, DocumentBeginCloseEventArgs e)")
 require(barrier in window_begin,
