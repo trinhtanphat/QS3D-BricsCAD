@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed unless the local MCP client keeps the bearer on canonical loopback transport."""
+"""Fail closed unless the local MCP client keeps the bearer on the exact embedded loopback endpoint."""
 
 from pathlib import Path
 import sys
@@ -17,15 +17,18 @@ source = SOURCE.read_text(encoding="utf-8")
 
 for needle in [
     "private static void ValidateLocalEndpoint(Uri endpoint)",
+    "var expected = McpEmbeddedServer.Endpoint;",
     "endpoint == null",
     "!endpoint.IsAbsoluteUri",
     "!string.Equals(endpoint.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)",
     "!endpoint.IsLoopback",
     "!string.IsNullOrEmpty(endpoint.UserInfo)",
+    "!string.Equals(endpoint.Host, expected.Host, StringComparison.OrdinalIgnoreCase)",
+    "endpoint.Port != expected.Port",
     "!string.Equals(endpoint.AbsolutePath, \"/mcp\", StringComparison.Ordinal)",
     "!string.IsNullOrEmpty(endpoint.Query)",
     "!string.IsNullOrEmpty(endpoint.Fragment)",
-    "Local MCP endpoint must be the canonical loopback http://.../mcp endpoint.",
+    "Local MCP endpoint must match the current embedded loopback http://.../mcp endpoint.",
     "request.AllowAutoRedirect = false;",
 ]:
     if needle not in source:
@@ -46,7 +49,7 @@ redirect = send.find("request.AllowAutoRedirect = false;")
 if min(validation, request_create, bearer, redirect) < 0:
     fail("Send is missing validation/request/bearer/redirect boundary")
 if not (validation < request_create < redirect < bearer):
-    fail("endpoint validation and redirect refusal must precede local bearer attachment")
+    fail("exact-endpoint validation and redirect refusal must precede local bearer attachment")
 
 # Preserve the already-hardened timeout, response-size and strict UTF-8 boundaries.
 for needle in [
@@ -59,5 +62,5 @@ for needle in [
     if needle not in source:
         fail(f"existing bounded local-client safety contract drifted: {needle}")
 
-print("MCP local client loopback-auth boundary preflight passed.")
+print("MCP local client exact-loopback auth boundary preflight passed.")
 sys.exit(0)
