@@ -5,12 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 STEP_NAME = "      - name: Agent reservation / Lane-Key / path collision gate\n"
-EXPECTED_IF = (
-    "        if: ${{ github.event_name == 'push' || "
-    "(github.event_name == 'pull_request' && "
-    "(github.event.action != 'edited' || "
-    "!startsWith(github.event.pull_request.head.ref, 'agent/'))) }}"
-)
+EXPECTED_IF = "        if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}"
 
 
 def require(condition: bool, message: str) -> None:
@@ -32,14 +27,19 @@ def main() -> None:
 
     require(
         EXPECTED_IF in block,
-        "reservation gate must skip only edited agent/** PR events while preserving push, opened/synchronize/reopened, and edited integration/non-agent validation",
+        "reservation gate must validate every push and pull_request event, including edited agent/** PR metadata events",
+    )
+    require(
+        "github.event.action != 'edited'" not in block
+        and "!startsWith(github.event.pull_request.head.ref, 'agent/')" not in block,
+        "reservation gate must not restore an edited-agent bypass",
     )
     require(
         "run: python scripts/preflight-agent-lane-collision.py" in block,
         "reservation gate must continue invoking the canonical lane-collision validator",
     )
 
-    print("PASS: edited agent PR metadata events skip only the reservation collision step")
+    print("PASS: edited agent PR metadata events remain fail-closed through the reservation collision gate")
 
 
 if __name__ == "__main__":
