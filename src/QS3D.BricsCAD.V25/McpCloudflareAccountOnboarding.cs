@@ -679,11 +679,25 @@ namespace QS3D.BricsCAD.V25
             Process? process;
             lock (Sync) { process = _process; _process = null; }
             if (process == null) return;
+            var exitConfirmed = false;
             try { process.EnableRaisingEvents = false; } catch { }
-            try { if (!process.HasExited) process.Kill(); } catch { }
-            try { if (!process.HasExited) process.WaitForExit(2000); } catch { }
+            try
+            {
+                if (process.HasExited)
+                {
+                    exitConfirmed = true;
+                }
+                else
+                {
+                    process.Kill();
+                    exitConfirmed = process.WaitForExit(2000);
+                    if (exitConfirmed) exitConfirmed = process.HasExited;
+                }
+            }
+            catch { exitConfirmed = false; }
+            if (exitConfirmed)
+                McpTransportSupervisor.ClearOwnedProcess(McpTransportProvider.CloudflareNamedTunnel);
             try { process.Dispose(); } catch { }
-            McpTransportSupervisor.ClearOwnedProcess(McpTransportProvider.CloudflareNamedTunnel);
         }
 
         private static bool TryEnterSetup(out string error)

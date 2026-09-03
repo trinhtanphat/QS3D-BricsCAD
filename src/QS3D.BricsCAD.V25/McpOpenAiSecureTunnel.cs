@@ -782,13 +782,27 @@ namespace QS3D.BricsCAD.V25
             }
             if (process != null)
             {
+                var exitConfirmed = false;
                 try { process.EnableRaisingEvents = false; } catch { }
                 try { process.CancelOutputRead(); } catch { }
                 try { process.CancelErrorRead(); } catch { }
-                try { if (!process.HasExited) process.Kill(); } catch { }
-                try { process.WaitForExit(1500); } catch { }
+                try
+                {
+                    if (process.HasExited)
+                    {
+                        exitConfirmed = true;
+                    }
+                    else
+                    {
+                        process.Kill();
+                        exitConfirmed = process.WaitForExit(1500);
+                        if (exitConfirmed) exitConfirmed = process.HasExited;
+                    }
+                }
+                catch { exitConfirmed = false; }
+                if (exitConfirmed)
+                    McpTransportSupervisor.ClearOwnedProcess(McpTransportProvider.OpenAiSecureTunnel);
                 try { process.Dispose(); } catch { }
-                McpTransportSupervisor.ClearOwnedProcess(McpTransportProvider.OpenAiSecureTunnel);
             }
             lock (Sync) _stopping = false;
         }
