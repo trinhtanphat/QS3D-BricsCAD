@@ -20,6 +20,7 @@ RELEASE_RELEVANT_PREFIXES = (
     "scripts/",
 )
 RELEASE_RELEVANT_EXACT_PATHS = {
+    "external/QS3D-Platform",
     "Directory.Build.props",
     "QS3D.sln",
     "QS3D.V26.sln",
@@ -98,10 +99,10 @@ def changed_paths_for_first_parent_commit(commit: str) -> list[str]:
         raise GateError(f"could not resolve commit parents for {commit}")
 
     if len(parents) == 1:
-        output = run_git("diff-tree", "--root", "--no-commit-id", "--name-only", "-r", commit)
+        output = run_git("diff-tree", "--root", "--no-commit-id", "--name-only", "-z", "-r", commit)
     else:
-        output = run_git("diff", "--name-only", parents[1], commit, "--")
-    return [line.strip().replace("\\", "/") for line in output.splitlines() if line.strip()]
+        output = run_git("diff", "--name-only", "-z", parents[1], commit, "--")
+    return [path.replace("\\", "/") for path in output.split("\0") if path]
 
 
 def collect_relevant_integrations(source_sha: str, previous_tag: str | None) -> list[tuple[str, str, list[str]]]:
