@@ -77,13 +77,13 @@ for forbidden in (
     require(forbidden not in attach,
             f"Per-window Attach must not subscribe a native reactor directly: {forbidden}")
 
-# The shared coordinator is now the sole native document-lifecycle owner and uses weak callbacks so
-# native reactor roots cannot keep Window/Registration objects alive through host teardown.
 for marker in (
     "lifecycleDocument.BeginDocumentClose += OnBeginDocumentClose;",
     "lifecycleDocument.CloseAborted += OnDocumentCloseAborted;",
     "BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;",
     "List<WeakReference<Callbacks>>",
+    "TrySnapshotDestroyByLifecycleDocument",
+    "TrySnapshotDestroyByNativeIdentity",
 ):
     require(marker in native, f"Shared native ownership marker is missing: {marker}")
 
@@ -146,7 +146,6 @@ require("DetachNativeLifecycleSubscription" not in begin_close,
 teardown = method_block(source, "private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)")
 for marker in (
     barrier,
-    "if (!MatchesNativeDatabase(e.Document)) return;",
     "var deferForFinalDocument = !HasAnotherLiveDocument();",
     "lock (_documentAccessGate)",
     "Volatile.Write(ref _documentCloseStarted, 1)",
@@ -154,14 +153,15 @@ for marker in (
     "TryCloseWindow(deferForFinalDocument);",
 ):
     require(marker in teardown, f"DocumentToBeDestroyed barrier is missing: {marker}")
+require("e.Document" not in teardown and "MatchesNativeDatabase(" not in teardown,
+        "DocumentToBeDestroyed must rely on coordinator-owned affinity without reopening the event Document.")
 require(
     teardown.index(barrier)
-    < teardown.index("if (!MatchesNativeDatabase(e.Document)) return;")
     < teardown.index("var deferForFinalDocument = !HasAnotherLiveDocument();")
     < teardown.index("lock (_documentAccessGate)")
     < teardown.index("Interlocked.Exchange(ref _invalidated, 1) != 0")
     < teardown.index("TryCloseWindow(deferForFinalDocument);"),
-    "DocumentToBeDestroyed must cross global quiescence before wrapper access and preserve ordinary close behavior.",
+    "DocumentToBeDestroyed must cross global quiescence before DocumentManager access and preserve ordinary close behavior.",
 )
 require("_lifecycleDocument." not in teardown,
         "Native destruction fallback must never touch the retained lifecycle wrapper.")
