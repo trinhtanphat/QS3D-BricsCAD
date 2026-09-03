@@ -34,10 +34,13 @@ def main():
     required = [
         "_projectAffinityBound",
         "_projectId",
+        "_drawingFingerprint",
         "BindProjectAffinityIfPresent()",
         "TryResolveLiveDocument(out var document)",
-        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
-        "string.Equals(project.ProjectId ?? string.Empty, _projectId, StringComparison.OrdinalIgnoreCase)",
+        "MatchesBoundDocumentAffinity(document)",
+        "ProjectContextCoordinator.TryGetReadOnly(candidate, out var project)",
+        "string.Equals(project.ProjectId ?? string.Empty,",
+        "string.Equals(project.DrawingFingerprint ?? string.Empty,",
         "_window.Activated += OnWindowActivated",
         "_window.PreviewMouseDown += OnPreviewMouseDown",
         "_window.PreviewKeyDown += OnPreviewKeyDown",
@@ -49,18 +52,51 @@ def main():
     ]
     missing = [needle for needle in required if needle not in text]
     if missing:
-        print("ERROR: modeless project-affinity contract is incomplete:")
+        print("ERROR: modeless project/drawing-affinity contract is incomplete:")
         for needle in missing:
             print(" - missing:", needle)
         return 1
+
+    resolver = method_block(text, "private bool TryResolveLiveDocument(out Document document)")
+    for marker in (
+        "ReferenceEquals(candidate, _lifecycleDocument)",
+        "MatchesNativeDatabase(candidate)",
+        "if (ReferenceEquals(candidate, _lifecycleDocument)) continue",
+        "if (!MatchesNativeDatabase(candidate)) continue",
+        "if (!MatchesBoundDocumentAffinity(candidate)) continue",
+    ):
+        require(marker in resolver, f"TryResolveLiveDocument is missing: {marker}")
+
+    require(
+        resolver.index("ReferenceEquals(candidate, _lifecycleDocument)")
+        < resolver.index("if (ReferenceEquals(candidate, _lifecycleDocument)) continue")
+        < resolver.index("if (!MatchesBoundDocumentAffinity(candidate)) continue"),
+        "Original managed-wrapper affinity must be attempted before semantically admitting wrapper drift.",
+    )
+
+    semantic_match = method_block(text, "private bool MatchesBoundDocumentAffinity(Document candidate)")
+    for marker in (
+        "_projectAffinityBound",
+        "_projectId",
+        "_drawingFingerprint",
+        "ProjectContextCoordinator.TryGetReadOnly(candidate, out var project)",
+        "project.ProjectId ?? string.Empty",
+        "project.DrawingFingerprint ?? string.Empty",
+        "StringComparison.OrdinalIgnoreCase",
+    ):
+        require(marker in semantic_match, f"MatchesBoundDocumentAffinity is missing: {marker}")
+    require(
+        "ProjectContextCoordinator.GetOrCreate" not in semantic_match
+        and "ProjectContextCoordinator.Get(" not in semantic_match,
+        "Wrapper-drift affinity proof must remain read-only and must not create project state.",
+    )
 
     ensure = method_block(text, "private bool EnsureProjectAffinity()")
     for marker in (
         "lock (_documentAccessGate)",
         "Volatile.Read(ref _invalidated) != 0",
         "TryResolveLiveDocument(out var document)",
-        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
-        "string.Equals(project.ProjectId ?? string.Empty, _projectId, StringComparison.OrdinalIgnoreCase)",
+        "MatchesBoundDocumentAffinity(document)",
         "CloseForProjectChange()",
     ):
         require(marker in ensure, f"EnsureProjectAffinity is missing: {marker}")
@@ -69,27 +105,36 @@ def main():
         ensure.index("lock (_documentAccessGate)")
         < ensure.index("Volatile.Read(ref _invalidated) != 0")
         < ensure.index("TryResolveLiveDocument(out var document)")
-        < ensure.index("ProjectContextCoordinator.TryGetReadOnly(document, out var project)"),
-        "Project affinity must observe invalidation and resolve a live wrapper before semantic revalidation.",
+        < ensure.index("MatchesBoundDocumentAffinity(document)"),
+        "Project affinity must observe invalidation, resolve the wrapper safely, then revalidate drawing affinity.",
     )
 
     bind_live = method_block(text, "private void BindProjectAffinityIfPresent(Document document)")
+    for marker in (
+        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
+        "project.ProjectId ?? string.Empty",
+        "project.DrawingFingerprint ?? string.Empty",
+        "_projectId = projectId",
+        "_drawingFingerprint = drawingFingerprint",
+        "_projectAffinityBound = true",
+    ):
+        require(marker in bind_live, f"Initial semantic affinity capture is missing: {marker}")
     require(
-        "ProjectContextCoordinator.TryGetReadOnly(document, out var project)" in bind_live,
-        "Initial semantic affinity capture must use the resolved live document wrapper.",
+        "ProjectContextCoordinator.GetOrCreate" not in bind_live
+        and "ProjectContextCoordinator.Get(" not in bind_live,
+        "Initial modeless affinity capture must remain read-only.",
     )
 
     require(
-        text.count("ProjectContextCoordinator.TryGetReadOnly(document, out var project)") == 2,
-        "Project affinity must be captured and revalidated through exactly the two live-document paths.",
+        text.count("ProjectContextCoordinator.TryGetReadOnly(") == 2,
+        "Modeless affinity must use exactly two read-only project-context paths: initial capture and wrapper-drift proof.",
     )
     require(
-        "ProjectContextCoordinator.TryGetReadOnly(_document" not in text
-        and "ProjectContextCoordinator.TryGetReadOnly(_lifecycleDocument" not in text,
-        "Modeless affinity must never dereference a retained managed Document wrapper through the project coordinator.",
+        "ProjectContextCoordinator.TryGetReadOnly(_lifecycleDocument" not in text,
+        "The retained lifecycle wrapper must not be dereferenced through project context after lifecycle binding.",
     )
 
-    print("PASS: document-bound modeless windows capture/revalidate ProjectId through a live native-identity-matched Document and fail closed on drift.")
+    print("PASS: document-bound modeless windows prefer the original managed wrapper and admit wrapper drift only after read-only ProjectId + DrawingFingerprint proof.")
     return 0
 
 
