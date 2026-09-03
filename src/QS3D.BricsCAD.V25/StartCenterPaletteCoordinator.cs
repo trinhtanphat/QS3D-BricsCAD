@@ -143,11 +143,17 @@ namespace QS3D.BricsCAD.V25
 
         private static void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)
         {
+            var palette = _palette;
             var panel = _panel;
-            if (_palette == null || !_palette.Visible || panel == null) return;
+            if (palette == null || panel == null) return;
 
             try
             {
+                // PaletteSet visibility is a native-host boundary and can fail during teardown.
+                // Keep that read inside the fail-soft callback boundary and use the captured palette
+                // so concurrent coordinator cleanup cannot swap the reference mid-check.
+                if (!palette.Visible) return;
+
                 // Bind display state to the document carried by this activation event. Re-querying
                 // MdiActiveDocument here can observe a later host transition and render the wrong DWG.
                 panel.RefreshFromDocument(e.Document ?? Application.DocumentManager.MdiActiveDocument);
