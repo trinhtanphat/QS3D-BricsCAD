@@ -19,6 +19,7 @@ for needle in [
     "private const int MaxTickets = 256;",
     "SourceRepairEligible = sourceRepairEligible",
     "private static string? SelectEvictionCandidateLocked(bool incomingSourceRepair)",
+    "private static bool IsEarlierTicket(",
     "pair.Value.SourceRepairEligible",
     "if (!incomingSourceRepair) return null;",
     "ephemeralTicket",
@@ -56,9 +57,11 @@ for needle in [
     "if (oldestNonSourceKey != null) return oldestNonSourceKey;",
     "if (!incomingSourceRepair) return null;",
     "return oldestSourceKey;",
+    "IsEarlierTicket(pair.Key, pair.Value.LastSeenUtc",
+    "StringComparer.Ordinal.Compare(candidateKey, currentKey) < 0",
 ]:
     if needle not in helper:
-        fail(f"eviction priority is incomplete: {needle}")
+        fail(f"eviction priority/determinism is incomplete: {needle}")
 
 if "occurrenceCount = 1;" not in record or "firstSeenUtc = now;" not in record or "lastSeenUtc = now;" not in record:
     fail("ephemeral non-source metadata is not deterministic occurrence-1 state")
