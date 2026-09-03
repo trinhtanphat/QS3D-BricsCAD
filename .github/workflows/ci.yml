@@ -85,6 +85,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          # scripts/ci-validation-scope.py owns the exact path classes: src/, tests/, scripts/,
+          # samples/generated/, .github/workflows/, build roots, and watched policy Markdown.
           # An edited PR may reuse source/build evidence only after the preceding step proves a
           # successful Shared CI run for this exact SHA. Missing/uncertain evidence falls through
           # to ordinary path classification and therefore full validation where required.
