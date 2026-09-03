@@ -129,7 +129,11 @@ namespace QS3D.BricsCAD.V25
                 case "cad_cancel_command": return CancelCurrentCommand();
                 default:
                     if (McpCadDirectModelRuntime.IsTool(tool))
+                    {
+                        if (!McpCadDirectModelRuntime.RequiresMutation(tool))
+                            return McpCadDirectModelRuntime.Call(tool, args);
                         return Mutation(args, tool, () => McpCadDirectModelRuntime.Call(tool, args));
+                    }
                     if (McpDesktopAutomationRuntime.IsTool(tool))
                     {
                         if (McpDesktopAutomationRuntime.RequiresMutation(tool))

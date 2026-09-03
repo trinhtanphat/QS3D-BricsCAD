@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "QS3D.BricsCAD.V25"
 RUNTIME = SRC / "McpCadAgentRuntime.cs"
 DIRECT = SRC / "McpCadDirectModelRuntime.cs"
+NATIVE_SAVE = SRC / "McpNativeCurrentDocumentSave.cs"
 SERVER = SRC / "McpEmbeddedServerV2.cs"
 
 
@@ -24,7 +25,7 @@ def require(errors: list[str], text: str, tokens: tuple[str, ...], label: str) -
 
 
 def main() -> int:
-    missing = [path for path in (RUNTIME, DIRECT, SERVER) if not path.is_file()]
+    missing = [path for path in (RUNTIME, DIRECT, NATIVE_SAVE, SERVER) if not path.is_file()]
     if missing:
         for path in missing:
             print("ERROR: missing", path.relative_to(ROOT))
@@ -32,6 +33,7 @@ def main() -> int:
 
     runtime = RUNTIME.read_text(encoding="utf-8")
     direct = DIRECT.read_text(encoding="utf-8")
+    native_save = NATIVE_SAVE.read_text(encoding="utf-8")
     server = SERVER.read_text(encoding="utf-8")
     errors: list[str] = []
 
@@ -40,6 +42,7 @@ def main() -> int:
     call_block = method_block(runtime, "public static string Call")
     direct_route_block = method_block(direct, "internal static bool CanHandleCadCommandSequence")
     direct_command_block = method_block(direct, "internal static string CallCadCommandSequence")
+    direct_qsave_block = method_block(direct, "private static string SaveCadCommandSequence")
     extrude_block = method_block(direct, "private static string Extrude")
     boolean_block = method_block(direct, "private static string Boolean")
     direct_save_block = method_block(direct, "private static string Save()")
@@ -97,11 +100,19 @@ def main() -> int:
         'McpCadAgentRuntime.EnsureCurrentMutationRunning();',
         'string.Equals(command, "QSAVE", StringComparison.Ordinal)',
     ), "direct CAD runtime")
+
+    # QSAVE must leave the single CAD-context callback before waiting for the host command.
     require(errors, direct_command_block, (
-        'McpDiagnosticHub.InvokeInCadContext(() =>',
+        'if (string.Equals(command, "QSAVE", StringComparison.Ordinal)) return SaveCadCommandSequence();',
+    ), "direct QSAVE route")
+    require(errors, direct_qsave_block, (
         'Save();',
         '\\"command\\":\\"QSAVE\\"',
-    ), "direct QSAVE route")
+    ), "bounded QSAVE wrapper")
+    if 'McpDiagnosticHub.InvokeInCadContext' in direct_qsave_block:
+        errors.append("bounded QSAVE wrapper must await native QSAVE outside a CAD-context callback")
+    if 'McpCadMutationCoordinator.QueueNativeCommand' in direct_qsave_block:
+        errors.append("bounded QSAVE wrapper must share McpNativeCurrentDocumentSave instead of owning a second native bridge")
 
     require(errors, extrude_block, (
         'OpenEntity(transaction, document.Database, handle, OpenMode.ForRead) as Curve',
@@ -121,14 +132,36 @@ def main() -> int:
     if 'target.BooleanOperation(operation, operand);' in boolean_block:
         errors.append("direct boolean must not pass the database-resident tool Solid3d directly to BooleanOperation")
 
+    # Current-document save is host-owned native QSAVE. The helper queues one attempt, observes
+    # terminal events and waits for persistent DBMOD bits to settle before reporting success.
     require(errors, direct_save_block, (
-        'document.Database.Save();',
-        'WaitForSavedContentDbmod();',
-        'dbmodAfterSave=',
-        'route=Database.Save-current-document',
+        'McpNativeCurrentDocumentSave.SaveCurrentDocument(',
+        'dbmodAfterSave',
+        'route\\\":\\\"native-QSAVE-current-document',
     ), "current-document save regression guard")
-    if 'document.Database.SaveAs(filename, DwgVersion.Current);' in direct_save_block:
-        errors.append("direct cad_save must not SaveAs over the active drawing current path because that can surface eCantOpenFile")
+    for forbidden in ('document.Database.Save();', 'document.Database.SaveAs('):
+        if forbidden in direct_save_block:
+            errors.append("direct cad_save must not write the already-open active drawing through " + forbidden)
+
+    require(errors, native_save, (
+        'SaveCurrentDocument',
+        'McpCadMutationCoordinator.QueueNativeCommand',
+        'document.SendStringToExecute(',
+        '_.QSAVE',
+        'ManualResetEventSlim',
+        'CommandEnded',
+        'CommandCancelled',
+        'CommandFailed',
+        'WaitForCleanDbmod',
+        'DbmodPersistentContentMask = 1 | 4 | 32',
+        'Application.GetSystemVariable("DBMOD")',
+        '(dbmod & DbmodPersistentContentMask) == 0',
+        'Do not retry automatically',
+    ), "native current-document save lifecycle")
+    if native_save.count('document.SendStringToExecute(') != 1:
+        errors.append("native current-document save lifecycle must queue exactly one native command attempt")
+    if 'Database.Save();' in native_save or 'Database.SaveAs(' in native_save:
+        errors.append("native current-document save helper must never write the active path through Database.Save/SaveAs")
 
     require(errors, direct_save_as_block, (
         'EnsureWritableDirectory(directory);',
@@ -146,7 +179,7 @@ def main() -> int:
         '(dbmod & DbmodPersistentContentMask) == 0',
         'Thread.Sleep(25)',
         'window/view DBMOD bits may remain after save',
-    ), "bounded persistent-content DBMOD completion wait")
+    ), "bounded SaveAs persistent-content DBMOD completion wait")
     require(errors, direct, (
         'private const int DbmodPersistentContentMask = 1 | 4 | 32;',
     ), "persistent-content DBMOD mask")
@@ -167,7 +200,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: MCP direct 3D/save tools keep QSAVE owned by the bounded direct CAD runtime, use database-resident curve inputs for Region creation, transient clones for boolean kernel operands, preserve bounded mutation routing, save the active drawing through Database.Save instead of SaveAs(current-path), and confirm save/save-as completion from persistent-content DBMOD bits while allowing residual window/view state.")
+    print("PASS: MCP direct 3D/save tools keep QSAVE owned by the bounded direct CAD runtime, use database-resident curve inputs for Region creation, transient clones for boolean kernel operands, preserve bounded mutation routing, save the active drawing through one host-owned native QSAVE lifecycle, and confirm current-save/SaveAs completion from persistent-content DBMOD bits while allowing residual window/view state.")
     return 0
 
 
