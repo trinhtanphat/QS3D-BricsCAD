@@ -272,8 +272,7 @@ namespace QS3D.BricsCAD.V25.Updates
             var entries = new List<KeyValuePair<string, string>>();
             foreach (DictionaryEntry entry in startInfo.EnvironmentVariables)
             {
-                var key = entry.Key as string;
-                if (string.IsNullOrEmpty(key)) continue;
+                if (!(entry.Key is string key) || key.Length == 0) continue;
                 var value = entry.Value as string ?? string.Empty;
                 entries.Add(new KeyValuePair<string, string>(key, value));
             }
