@@ -53,6 +53,14 @@ def main():
     if "throw new InvalidOperationException" not in handoff:
         return fail("known QS3D listener handoff failures must propagate fail-closed")
 
+    callback_index = handoff.find("previous();")
+    reflection_index = handoff.find("stop.Invoke(null, null)")
+    lease_clear_index = handoff.rfind("domain.SetData(EmbeddedListenerProcessLeaseKey, null)")
+    if min(callback_index, reflection_index, lease_clear_index) < 0:
+        return fail("could not locate fail-closed handoff/lease-clear sequence")
+    if not (callback_index < lease_clear_index and reflection_index < lease_clear_index):
+        return fail("known-generation process lease must remain published until callback/reflection handoff succeeds")
+
     stop_index = text.find("public static void Stop()")
     release_index = text.find("ReleaseProcessLease", stop_index)
     if stop_index < 0 or release_index < 0:
