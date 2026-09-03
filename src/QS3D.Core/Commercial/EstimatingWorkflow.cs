@@ -183,6 +183,7 @@ namespace QS3D.Core.Commercial
             var postTraversalKnownCount = SnapshotKnownCount(lines);
             if (postTraversalKnownCount != knownCount)
                 throw new InvalidOperationException("Estimating portfolio known line count changed during enumeration.");
+            RequireStableKnownCountGeneration(lines, knownCount, snapshot);
 
             snapshot.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.LineId, right.LineId));
             _lines = new ReadOnlyCollection<EstimatingLine>(snapshot.ToArray());
@@ -211,6 +212,56 @@ namespace QS3D.Core.Commercial
                 }
                 return total.ToDecimal("Estimating portfolio total");
             }
+        }
+
+        private static void RequireStableKnownCountGeneration(
+            IEnumerable<EstimatingLine> lines,
+            int? expectedKnownCount,
+            IReadOnlyList<EstimatingLine> snapshot)
+        {
+            if (!expectedKnownCount.HasValue)
+                return;
+
+            var index = 0;
+            using (var enumerator = lines.GetEnumerator())
+            {
+                while (true)
+                {
+                    RequireKnownCountStable(lines, expectedKnownCount);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireKnownCountStable(lines, expectedKnownCount);
+                    if (index >= snapshot.Count)
+                        throw new InvalidOperationException("Estimating portfolio line content changed during enumeration.");
+                    var current = enumerator.Current;
+                    RequireKnownCountStable(lines, expectedKnownCount);
+                    if (current == null || !EstimatingLineStateEquals(snapshot[index], current))
+                        throw new InvalidOperationException("Estimating portfolio line content changed during enumeration.");
+                    index++;
+                }
+            }
+
+            if (index != snapshot.Count || SnapshotKnownCount(lines) != expectedKnownCount)
+                throw new InvalidOperationException("Estimating portfolio line content changed during enumeration.");
+        }
+
+        private static bool EstimatingLineStateEquals(EstimatingLine left, EstimatingLine right)
+        {
+            return string.Equals(left.LineId, right.LineId, StringComparison.Ordinal) &&
+                string.Equals(left.QuantitySourceId, right.QuantitySourceId, StringComparison.Ordinal) &&
+                string.Equals(left.QuantityRevision, right.QuantityRevision, StringComparison.Ordinal) &&
+                left.Quantity == right.Quantity &&
+                string.Equals(left.Unit, right.Unit, StringComparison.Ordinal) &&
+                string.Equals(left.CostCode, right.CostCode, StringComparison.Ordinal) &&
+                string.Equals(left.RateSourceId, right.RateSourceId, StringComparison.Ordinal) &&
+                string.Equals(left.RateRevision, right.RateRevision, StringComparison.Ordinal) &&
+                left.ReferencedRate == right.ReferencedRate &&
+                left.OverrideRate == right.OverrideRate &&
+                string.Equals(left.OverrideReason, right.OverrideReason, StringComparison.Ordinal) &&
+                left.IsBlocked == right.IsBlocked &&
+                string.Equals(left.BlockReason, right.BlockReason, StringComparison.Ordinal) &&
+                left.IsStale == right.IsStale &&
+                string.Equals(left.StaleReason, right.StaleReason, StringComparison.Ordinal);
         }
 
         private static void RequireKnownCountStable(IEnumerable<EstimatingLine> lines, int? expectedKnownCount)
@@ -304,6 +355,14 @@ namespace QS3D.Core.Commercial
             var postTraversalLineIdCount = SnapshotKnownCount(lineIds, MaximumSelectedLines, "selected-line");
             if (postTraversalLineIdCount != lineIdKnownCount)
                 throw new InvalidOperationException("Bulk rate assignment selected-line known count changed during enumeration.");
+            RequireStableKnownCountGeneration(
+                lineIds,
+                lineIdKnownCount,
+                ids,
+                MaximumSelectedLines,
+                "selected-line",
+                (left, right) => string.Equals(left, right, StringComparison.Ordinal),
+                "Bulk rate assignment selected-line content changed during enumeration.");
             if (ids.Count == 0) throw new ArgumentException("Bulk rate assignment requires at least one selected line.", nameof(lineIds));
             LineIds = new ReadOnlyCollection<string>(ids.ToArray());
 
@@ -338,6 +397,14 @@ namespace QS3D.Core.Commercial
             var postTraversalUnitRateCount = SnapshotKnownCount(unitRates, MaximumUnitRates, "unit-rate");
             if (postTraversalUnitRateCount != unitRateKnownCount)
                 throw new InvalidOperationException("Bulk rate assignment unit-rate known count changed during enumeration.");
+            RequireStableKnownCountGeneration(
+                unitRates,
+                unitRateKnownCount,
+                rates,
+                MaximumUnitRates,
+                "unit-rate",
+                UnitRateAssignmentStateEquals,
+                "Bulk rate assignment unit-rate content changed during enumeration.");
             UnitRates = new ReadOnlyCollection<UnitRateAssignment>(rates.ToArray());
         }
 
@@ -346,6 +413,48 @@ namespace QS3D.Core.Commercial
         public string RateSourceId { get; }
         public string RateRevision { get; }
         public IReadOnlyList<UnitRateAssignment> UnitRates { get; }
+
+        private static void RequireStableKnownCountGeneration<T>(
+            IEnumerable<T> values,
+            int? expectedKnownCount,
+            IReadOnlyList<T> snapshot,
+            int maximum,
+            string subject,
+            Func<T, T, bool> equals,
+            string driftMessage)
+        {
+            if (!expectedKnownCount.HasValue)
+                return;
+
+            var index = 0;
+            using (var enumerator = values.GetEnumerator())
+            {
+                while (true)
+                {
+                    RequireKnownCountStable(values, expectedKnownCount, maximum, subject);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireKnownCountStable(values, expectedKnownCount, maximum, subject);
+                    if (index >= snapshot.Count)
+                        throw new InvalidOperationException(driftMessage);
+                    var current = enumerator.Current;
+                    RequireKnownCountStable(values, expectedKnownCount, maximum, subject);
+                    if (!equals(snapshot[index], current))
+                        throw new InvalidOperationException(driftMessage);
+                    index++;
+                }
+            }
+
+            if (index != snapshot.Count || SnapshotKnownCount(values, maximum, subject) != expectedKnownCount)
+                throw new InvalidOperationException(driftMessage);
+        }
+
+        private static bool UnitRateAssignmentStateEquals(UnitRateAssignment left, UnitRateAssignment right)
+        {
+            return left != null && right != null &&
+                string.Equals(left.Unit, right.Unit, StringComparison.Ordinal) &&
+                left.Rate == right.Rate;
+        }
 
         private static void RequireKnownCountStable<T>(IEnumerable<T> values, int? expectedKnownCount, int maximum, string subject)
         {
