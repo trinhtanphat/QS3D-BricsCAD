@@ -89,10 +89,10 @@ def main() -> int:
             fail(f"preview sequence helper is missing required guard token: {token}")
 
     gate_call = "validate-preview-release-sequence.ps1"
-    committed_version_gate = "Get-CommittedProductVersion"
-    if gate_call not in prepare or committed_version_gate not in prepare:
-        fail("release preparation lost the sequence or committed-source version gate")
-    if prepare.index(gate_call) > prepare.index(committed_version_gate):
+    committed_version_admission = "$committedProductVersion = Get-CommittedProductVersion"
+    if gate_call not in prepare or committed_version_admission not in prepare:
+        fail("release preparation lost the sequence or committed-source version admission call")
+    if prepare.index(gate_call) > prepare.index(committed_version_admission):
         fail("preview sequence validation must run before committed-source version admission")
     if "sync-preview-release-version.ps1" in prepare:
         fail("release preparation must not reintroduce workspace-only preview version synchronization")
