@@ -8,6 +8,7 @@ namespace QS3D.BricsCAD.V25
     public sealed class AuditCommands
     {
         private static AuditLogWindow? _window;
+        private static AuditLogWindow? _unpublishedCandidate;
         private static IntPtr _nativeDatabaseIdentity;
 
         [CommandMethod("QS3DAUDIT", CommandFlags.Modal)]
@@ -17,6 +18,14 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
+                if (!PrepareUnpublishedCandidate())
+                {
+                    const string blockedStatus = "Nhật ký thay đổi lỗi: cửa sổ chưa publish trước đó chưa thể đóng an toàn.";
+                    try { document.Editor.WriteMessage("\nQS3DAUDIT: candidate chưa publish trước đó chưa đạt terminal Closed; không mở thêm cửa sổ."); } catch { }
+                    try { PaletteCoordinator.SetStatus(blockedStatus); } catch { }
+                    return;
+                }
+
                 var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
                 if (!PreparePublishedWindow(nativeDatabaseIdentity))
                 {
@@ -38,7 +47,7 @@ namespace QS3D.BricsCAD.V25
 
                 var hasProject = ProjectContextCoordinator.TryGetReadOnly(document, out var project);
                 var candidate = new AuditLogWindow(document);
-                candidate.Closed += (_, __) => ReleasePublishedWindow(candidate);
+                candidate.Closed += (_, __) => ReleaseCandidate(candidate);
                 try
                 {
                     Application.ShowModelessWindow(IntPtr.Zero, candidate, true);
@@ -89,6 +98,13 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        private static bool PrepareUnpublishedCandidate()
+        {
+            var candidate = _unpublishedCandidate;
+            if (candidate == null) return true;
+            return CloseUnpublishedCandidate(candidate);
+        }
+
         private static bool PreparePublishedWindow(IntPtr requestedNativeDatabaseIdentity)
         {
             var published = _window;
@@ -96,7 +112,7 @@ namespace QS3D.BricsCAD.V25
 
             if (!published.IsLoaded)
             {
-                ReleasePublishedWindow(published);
+                ReleaseCandidate(published);
                 return true;
             }
 
@@ -115,7 +131,7 @@ namespace QS3D.BricsCAD.V25
             if (published.IsLoaded)
                 return false;
 
-            ReleasePublishedWindow(published);
+            ReleaseCandidate(published);
             return true;
         }
 
@@ -127,17 +143,36 @@ namespace QS3D.BricsCAD.V25
             }
             catch
             {
-                return !candidate.IsLoaded;
+                if (!candidate.IsLoaded)
+                {
+                    ReleaseCandidate(candidate);
+                    return true;
+                }
+
+                _unpublishedCandidate = candidate;
+                return false;
             }
 
-            return !candidate.IsLoaded;
+            if (!candidate.IsLoaded)
+            {
+                ReleaseCandidate(candidate);
+                return true;
+            }
+
+            _unpublishedCandidate = candidate;
+            return false;
         }
 
-        private static void ReleasePublishedWindow(AuditLogWindow candidate)
+        private static void ReleaseCandidate(AuditLogWindow candidate)
         {
-            if (!ReferenceEquals(_window, candidate)) return;
-            _window = null;
-            _nativeDatabaseIdentity = IntPtr.Zero;
+            if (ReferenceEquals(_window, candidate))
+            {
+                _window = null;
+                _nativeDatabaseIdentity = IntPtr.Zero;
+            }
+
+            if (ReferenceEquals(_unpublishedCandidate, candidate))
+                _unpublishedCandidate = null;
         }
 
         private static IntPtr GetNativeDatabaseIdentity(Document document)
