@@ -349,7 +349,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch { path = string.Empty; }
 
-            if (fingerprint.Length == 0 && path.Length == 0) return string.Empty;
+            if (fingerprint.Length == 0) return string.Empty;
             return "fingerprint=" + fingerprint.Trim().ToLowerInvariant() + ";path=" + path.ToLowerInvariant();
         }
 
