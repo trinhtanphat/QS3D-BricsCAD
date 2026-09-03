@@ -204,6 +204,6 @@ namespace QS3D.BricsCAD.V25.UI
             }
         }
 
-        private static string Display(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value.Trim();
+        private static string Display(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value!.Trim();
     }
 }
