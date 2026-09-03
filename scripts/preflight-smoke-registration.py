@@ -116,14 +116,38 @@ def verify_index_regression():
             "internal static class ExpressionInitializerSmoke { [ModuleInitializer] "
             "internal static void Register() => Run(); internal static void Run() { } }"
         ),
+        Path("BraceLiteralInitializerSmoke.cs"): (
+            "internal static class BraceLiteralInitializerSmoke { [ModuleInitializer] "
+            "internal static void Register() { var marker = \"{\"; Run(); } internal static void Run() { } }"
+        ),
         Path("FalseInitializerSmoke.cs"): (
             "internal static class FalseInitializerSmoke { [ModuleInitializer] "
             "internal static void Register() { } internal static void Run() { } }"
+        ),
+        Path("CommentOnlyInitializerSmoke.cs"): (
+            "internal static class CommentOnlyInitializerSmoke { [ModuleInitializer] "
+            "internal static void Register() { /* Run(); */ } internal static void Run() { } }"
+        ),
+        Path("StringOnlyInitializerSmoke.cs"): (
+            "internal static class StringOnlyInitializerSmoke { [ModuleInitializer] "
+            "internal static void Register() { var marker = \"Run();\"; } internal static void Run() { } }"
+        ),
+        Path("ExpressionStringInitializerSmoke.cs"): (
+            "internal static class ExpressionStringInitializerSmoke { [ModuleInitializer] "
+            "internal static void Register() => Consume(\"Run()\"); "
+            "internal static void Consume(string value) { } internal static void Run() { } }"
         ),
         Path("ShadowedInitializerSmoke.cs"): (
             "internal static class ShadowedInitializerSmoke { [ModuleInitializer] "
             "internal static void Register() { void Run() { } Run(); } "
             "internal static void Run() { } }"
+        ),
+        Path("CommentRegisteredSmoke.cs"): (
+            "internal static class CommentRegisteredSmoke { internal static void Run() { } }"
+        ),
+        Path("CommentRegistration.cs"): (
+            "internal static class CommentRegistration { "
+            "internal static void Register() { /* CommentRegisteredSmoke.Run(); */ } }"
         ),
         Path("MissingSmoke.cs"): (
             "internal static class MissingSmoke { internal static void Run() { } }"
@@ -135,11 +159,15 @@ def verify_index_regression():
     checked, errors, source_scans = find_registration_errors(small_sources)
     expected_errors = {
         "FalseInitializerSmoke.cs: FalseInitializerSmoke.Run() is never registered or invoked",
+        "CommentOnlyInitializerSmoke.cs: CommentOnlyInitializerSmoke.Run() is never registered or invoked",
+        "StringOnlyInitializerSmoke.cs: StringOnlyInitializerSmoke.Run() is never registered or invoked",
+        "ExpressionStringInitializerSmoke.cs: ExpressionStringInitializerSmoke.Run() is never registered or invoked",
         "ShadowedInitializerSmoke.cs: ShadowedInitializerSmoke.Run() is never registered or invoked",
+        "CommentRegisteredSmoke.cs: CommentRegisteredSmoke.Run() is never registered or invoked",
         "MissingSmoke.cs: MissingSmoke.Run() is never registered or invoked",
         "SelfOnlySmoke.cs: SelfOnlySmoke.Run() is never registered or invoked",
     }
-    if checked != 7 or set(errors) != expected_errors or source_scans != len(small_sources):
+    if checked != 12 or set(errors) != expected_errors or source_scans != len(small_sources):
         raise RuntimeError("smoke-registration semantic regression self-check failed")
 
     # Exercise more detached source records than the current repository while
