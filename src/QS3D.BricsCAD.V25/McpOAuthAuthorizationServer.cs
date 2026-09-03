@@ -675,7 +675,7 @@ namespace QS3D.BricsCAD.V25
                         continue;
                     }
                     if (ch > 0x7f) return false;
-                    bytes.Add((byte)ch;
+                    bytes.Add((byte)ch);
                 }
                 decoded = StrictUtf8.GetString(bytes.ToArray());
                 return decoded.IndexOf('\0') < 0;
