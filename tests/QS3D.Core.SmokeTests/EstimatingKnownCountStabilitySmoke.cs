@@ -95,8 +95,8 @@ namespace QS3D.Core.SmokeTests
             var portfolio = new EstimatingPortfolio(lines);
             Equal(2, portfolio.Lines.Count, "stable portfolio count");
             Equal("L-1", portfolio.Lines[0].LineId, "stable portfolio ordering");
-            Equal(3, lines.MoveNextCalls, "stable portfolio MoveNext calls");
-            Equal(2, lines.CurrentReads, "stable portfolio Current reads");
+            Equal(6, lines.MoveNextCalls, "stable portfolio admission-plus-replay MoveNext calls");
+            Equal(4, lines.CurrentReads, "stable portfolio admission-plus-replay Current reads");
 
             var ids = new TransientCountCollection<string>(new[] { "L-1", "L-2" }, TransientCountMode.None);
             var rates = new TransientCountCollection<UnitRateAssignment>(
@@ -105,10 +105,10 @@ namespace QS3D.Core.SmokeTests
             var request = new BulkRateAssignmentRequest(ids, "CC-1", "RATE-SOURCE", "R1", rates);
             Equal(2, request.LineIds.Count, "stable selected-line count");
             Equal(2, request.UnitRates.Count, "stable unit-rate count");
-            Equal(3, ids.MoveNextCalls, "stable selected-line MoveNext calls");
-            Equal(2, ids.CurrentReads, "stable selected-line Current reads");
-            Equal(3, rates.MoveNextCalls, "stable unit-rate MoveNext calls");
-            Equal(2, rates.CurrentReads, "stable unit-rate Current reads");
+            Equal(6, ids.MoveNextCalls, "stable selected-line admission-plus-replay MoveNext calls");
+            Equal(4, ids.CurrentReads, "stable selected-line admission-plus-replay Current reads");
+            Equal(6, rates.MoveNextCalls, "stable unit-rate admission-plus-replay MoveNext calls");
+            Equal(4, rates.CurrentReads, "stable unit-rate admission-plus-replay Current reads");
         }
 
         private static void PreserveStreamingInputs()
