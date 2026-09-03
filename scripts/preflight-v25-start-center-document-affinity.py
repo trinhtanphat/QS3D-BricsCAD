@@ -30,8 +30,18 @@ handler_match = re.search(
 )
 if handler_match is None:
     raise SystemExit("Start Center DocumentActivated handler boundary missing")
-if "RefreshFromActiveDocument()" in handler_match.group("body"):
+handler_body = handler_match.group("body")
+if "RefreshFromActiveDocument()" in handler_body:
     raise SystemExit("Start Center DocumentActivated must not re-query active document")
+
+# PaletteSet.Visible is a native-host boundary. During shutdown/dispose races even the getter can
+# fail, so the activation callback must not read it before entering its fail-soft try/catch.
+visibility_index = handler_body.find("_palette.Visible")
+try_index = handler_body.find("try")
+if visibility_index < 0:
+    raise SystemExit("Start Center DocumentActivated visibility gate missing")
+if try_index < 0 or visibility_index < try_index:
+    raise SystemExit("Start Center DocumentActivated must guard PaletteSet.Visible inside try/catch")
 
 # Hide must release native event ownership even if PaletteSet.Visible throws. This intentionally
 # checks the semantic try/finally relationship rather than one whitespace-specific formatting.
