@@ -53,7 +53,7 @@ def main() -> int:
 
     require(errors, request, (
         "if (!ConsentGate.Wait(0)) return McpOAuthConsentResult.InteractionRequired;",
-        "McpCadMutationCoordinator.EnterMutation(",
+        "McpCadMutationCoordinator.EnterInteractiveModal(",
         '"oauth_interactive_consent"',
         "catch (InvalidOperationException)",
         "return McpOAuthConsentResult.InteractionRequired;",
@@ -65,11 +65,14 @@ def main() -> int:
         "ConsentGate.Release();",
     ), "OAuth interactive CAD admission")
 
-    # Runtime ordering spans two methods: RequestApproval owns CAD admission while the
-    # application-context callback presents the modal and signals Done. Assert each method's
-    # causal ordering instead of comparing source offsets between separate method bodies.
+    if "McpCadMutationCoordinator.EnterMutation(" in request:
+        errors.append("OAuth consent must not model foreground UI as a CAD mutation")
+
+    # Runtime ordering spans two methods: RequestApproval owns semantic interactive admission
+    # while the application-context callback presents the modal and signals Done. Assert each
+    # method's causal ordering instead of comparing source offsets between separate bodies.
     ordered(errors, request, (
-        "McpCadMutationCoordinator.EnterMutation(",
+        "McpCadMutationCoordinator.EnterInteractiveModal(",
         "ExecuteInApplicationContext(ShowConsentInCadContext, item)",
         "item.Done.Wait(ConsentTimeoutMilliseconds)",
         "ConsentCancelledBeforeStart",
@@ -101,7 +104,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: OAuth consent acquires CAD mutation/writer admission before UI dispatch, holds it until the foreground callback closes/signals, cancels queued dispatch before releasing admission, prevents concurrent modal storms, and maps CAD-busy admission failures to OAuth interaction_required.")
+    print("PASS: OAuth consent acquires semantic shared interactive-modal admission before UI dispatch, holds it until the foreground callback closes/signals, cancels queued dispatch before releasing admission, prevents concurrent modal storms, and maps CAD-busy admission failures to OAuth interaction_required.")
     return 0
 
 
