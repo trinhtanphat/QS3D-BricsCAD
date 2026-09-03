@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src" / "QS3D.Core" / "Domain" / "ElementVerticalPlacementService.cs"
@@ -17,6 +16,8 @@ required = (
     "CaptureFloorGeneration(project)",
     "FindCapturedFloor(",
     "project.ChangeVersion",
+    "project.Floors.Count",
+    "StringComparer.OrdinalIgnoreCase",
 )
 for marker in required:
     if marker not in text:
