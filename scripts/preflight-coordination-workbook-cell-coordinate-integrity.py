@@ -45,10 +45,16 @@ for forbidden, label in (
         errors.append(label)
 
 for token in (
-    "RejectMismatchedCellRowCoordinate",
-    "RejectTrailingCellCoordinateGarbage",
+    "RejectCoordinate",
+    "xl/worksheets/sheet1.xml",
+    "xl/worksheets/sheet2.xml",
     "B999",
+    "A999",
     "B2garbage",
+    "b2",
+    "B02",
+    "B0",
+    "XFE2",
     "ExpectInvalidData",
 ):
     if token not in smoke:
