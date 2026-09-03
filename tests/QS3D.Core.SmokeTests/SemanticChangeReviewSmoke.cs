@@ -1,5 +1,8 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Revisions;
 
@@ -15,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             MalformedSnapshotsFailClosed();
             MalformedRevisionIdsFailClosed();
             SupplementaryRevisionIdsRemainExact();
+            ReviewUsesOneDetachedCategoryGeneration();
         }
 
         private static void GroupsStableSemanticChangesWithoutHandleAuthority()
@@ -132,6 +136,30 @@ namespace QS3D.Core.SmokeTests
             Equal(afterId, review.AfterRevisionId);
         }
 
+        private static void ReviewUsesOneDetachedCategoryGeneration()
+        {
+            var before = new RevisionSnapshot { Id = "R1", ProjectId = "P1" };
+            var beforeElement = Element("E1", "StructuralWall", "F", "L", "Z");
+            beforeElement.Properties["Mark"] = "BEFORE";
+            before.Elements.Add(beforeElement);
+
+            var after = new RevisionSnapshot { Id = "R2", ProjectId = "P1" };
+            var afterElement = Element("E1", "StructuralWall", "F", "L", "Z");
+            var hostile = new MutatingDictionary(
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["Mark"] = "AFTER" },
+                () => afterElement.Category = "StructuralColumn");
+            SetBackingField(afterElement, "<Properties>k__BackingField", hostile);
+            after.Elements.Add(afterElement);
+
+            var review = new SemanticChangeReviewBuilder().Build(before, after);
+            Equal("StructuralColumn", afterElement.Category);
+            var item = review.Elements.Single(x => x.ElementId == "E1");
+            Equal("StructuralWall", item.Category);
+            Equal("Property:Mark", item.Fields.Single().Field);
+            Equal("BEFORE", item.Fields.Single().Before);
+            Equal("AFTER", item.Fields.Single().After);
+        }
+
         private static RevisionElementSnapshot ChangedElement(string id, params string[] propertyPairs)
         {
             var element = Element(id, "Beam", "F", "L", "Z");
@@ -152,6 +180,13 @@ namespace QS3D.Core.SmokeTests
             };
         }
 
+        private static void SetBackingField(object target, string name, object value)
+        {
+            var field = target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("Backing field not found: " + name);
+            field.SetValue(target, value);
+        }
+
         private static void Equal<T>(T expected, T actual)
         {
             if (!Equals(expected, actual)) throw new Exception("Expected " + expected + ", got " + actual + ".");
@@ -167,6 +202,45 @@ namespace QS3D.Core.SmokeTests
             try { action(); }
             catch (T) { return; }
             throw new Exception("Expected " + typeof(T).Name + ".");
+        }
+
+        private sealed class MutatingDictionary : IDictionary<string, string>
+        {
+            private readonly IDictionary<string, string> _inner;
+            private readonly Action _mutation;
+            private bool _mutated;
+
+            internal MutatingDictionary(IDictionary<string, string> inner, Action mutation)
+            {
+                _inner = inner;
+                _mutation = mutation;
+            }
+
+            public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
+            {
+                if (!_mutated)
+                {
+                    _mutated = true;
+                    _mutation();
+                }
+                return _inner.GetEnumerator();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public int Count => _inner.Count;
+            public bool IsReadOnly => _inner.IsReadOnly;
+            public ICollection<string> Keys => _inner.Keys;
+            public ICollection<string> Values => _inner.Values;
+            public string this[string key] { get => _inner[key]; set => _inner[key] = value; }
+            public void Add(string key, string value) => _inner.Add(key, value);
+            public void Add(KeyValuePair<string, string> item) => _inner.Add(item);
+            public void Clear() => _inner.Clear();
+            public bool Contains(KeyValuePair<string, string> item) => _inner.Contains(item);
+            public bool ContainsKey(string key) => _inner.ContainsKey(key);
+            public void CopyTo(KeyValuePair<string, string>[] array, int arrayIndex) => _inner.CopyTo(array, arrayIndex);
+            public bool Remove(string key) => _inner.Remove(key);
+            public bool Remove(KeyValuePair<string, string> item) => _inner.Remove(item);
+            public bool TryGetValue(string key, out string value) => _inner.TryGetValue(key, out value!);
         }
     }
 }
