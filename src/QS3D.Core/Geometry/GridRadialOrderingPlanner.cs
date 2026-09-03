@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace QS3D.Core.Geometry
 {
@@ -38,11 +37,9 @@ namespace QS3D.Core.Geometry
             if (!Finite(radiusTolerance) || radiusTolerance <= 0.0)
                 throw new ArgumentOutOfRangeException(nameof(radiusTolerance), "Grid radial radius tolerance must be finite and positive.");
 
-            var list = curves.Take(MaxCurves + 1).ToList();
+            var list = GridSnapInputMaterializer.Materialize(curves, MaxCurves, "Grid radial ordering input");
             if (list.Count == 0)
                 throw new InvalidOperationException("At least one Grid ARC is required for radial ordering.");
-            if (list.Count > MaxCurves)
-                throw new InvalidOperationException("Grid radial ordering supports at most " + MaxCurves + " curves.");
 
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var entries = new List<GridRadialOrderingEntry>(list.Count);

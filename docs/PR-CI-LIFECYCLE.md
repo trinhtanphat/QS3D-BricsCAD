@@ -1,50 +1,52 @@
-# PR CI lifecycle and timing
+# PR and CI lifecycle
 
-This document records the owner-approved correction for pull-request CI timing. It supplements `CI_POLICY.md`, `docs/AGENT-WORK-REGISTRATION.md`, and `docs/AGENT-DUPLICATE-PROMPT-RACE-POLICY.md`. Where older wording treats PR creation time as a permanent admission boundary, this correction controls: **timing alone must not invalidate a canonical PR or require a replacement carrier**.
+This document clarifies branch CI, pull-request CI and protected merge checks.
 
-## Safety properties that remain mandatory
+## Core rule
 
-- Normal agents do not write directly to `main`.
-- `main` remains protected by the repository's required pull-request path.
-- The current merge candidate must satisfy required `preflight` and `core` checks and strict freshness before merge.
-- Merge uses the current expected head SHA; stale-head merges are rejected.
-- One Lane-Key has one canonical owner, branch, and open PR carrier at a time.
-- Red CI on the current carrier is diagnosed and fixed on that same carrier unless an explicit supersession is genuinely required.
-- Force-push, protection bypass, fake/no-op CI trigger commits, and stale CI reuse remain forbidden.
+Branch CI provides early exact-head evidence. The canonical PR is the review/merge carrier. Protected current-candidate checks are the hard merge gate.
 
-## Automatic branch CI
+The order of timestamps between branch-CI completion and PR creation is not a permanent carrier requirement.
 
-Every push to `agent/**` and `integration/**` remains eligible for automatic shared CI. This is early isolated validation and should be allowed to finish when practical before PR handoff, but **its completion timestamp is not a permanent PR-admission identity**.
+## Normal flow
 
-A PR may already exist while the automatic branch run is queued, running, or completes later. That ordering does not make the PR historical, poisoned, or non-canonical. Do not close/recreate a PR solely to make a branch-CI completion timestamp precede PR creation.
+```text
+commit + push canonical branch
+  -> automatic branch CI starts
+  -> open/update the canonical PR when ready for protected review
+  -> fix any known red current-head evidence on the same branch
+  -> protected PR `preflight` + `core`
+  -> strict freshness + mergeability + collision checks
+  -> merge when current, green and authorized
+```
 
-If automatic branch CI is red on the current branch head, fix the concrete failure on the same branch and push the remediation. The open PR remains the canonical review/merge carrier and receives fresh synchronized validation for the new candidate.
+## Keep the canonical carrier
 
-## Protected PR checks are the merge gate
+Do not replace a correct branch/PR solely because:
 
-The hard merge decision is based on the **current PR merge candidate**, not the historical order in which branch CI and PR creation occurred. Before an authorized merge require:
+- a branch run completes after PR creation;
+- CI is queued/running;
+- the branch is behind `main` but can be reconciled safely;
+- the carrier is red but the failure can be fixed in the same lane.
 
-1. the intended canonical Lane-Key/carrier with no duplicate open carrier;
-2. current branch/PR head identity and expected-head protection;
-3. current `main` freshness under the protected ruleset;
-4. required `preflight` SUCCESS;
-5. required `core` SUCCESS;
-6. no unresolved blocker that invalidates the candidate.
+Do not reuse an older green result for a changed candidate.
 
-If `main` moves or the branch head changes, obtain the fresh checks GitHub requires for that new candidate. Keep the same canonical PR unless there is a real ownership/scope reason to supersede it.
+## Candidate changes
 
-## What is no longer a valid close/replacement reason
+Whenever the actual branch/merge candidate changes, obtain fresh applicable evidence.
 
-None of the following, by itself, makes a PR permanently invalid:
+If `main` moves and GitHub strict freshness requires reconciliation, update the same canonical branch safely and let the new candidate validate.
 
-- branch CI completed after PR creation;
-- branch CI was still queued/running when the PR opened;
-- the PR was opened seconds before the branch run reached terminal success;
-- a later same-carrier remediation changed the head SHA;
-- current `main` moved and the same carrier needs reconciliation.
+## Merge gate
 
-Those cases are lifecycle updates. Revalidate the current candidate; do not manufacture a replacement PR for timestamp ordering.
+Before merge:
 
-## Real reasons a PR can still be blocked or superseded
+- `preflight` is current and `SUCCESS`;
+- `core` is current and `SUCCESS`;
+- strict freshness is satisfied;
+- the PR is mergeable;
+- ownership/collision checks are clean;
+- the current head/candidate is the intended task result;
+- merge authorization under `MAIN-WRITE-AUTHORIZATION.md` applies.
 
-A PR may still be blocked when there is a real technical failure, stale protected merge candidate, invalid/missing Lane-Key metadata, duplicate active carrier, wrong canonical ownership, unresolved conflict, or another concrete protection/policy violation. A replacement carrier is reserved for genuine explicit supersession, not CI timing cosmetics.
+`CI_POLICY.md` is authoritative for CI semantics. `MAIN-WRITE-AUTHORIZATION.md` is authoritative for merge permission.

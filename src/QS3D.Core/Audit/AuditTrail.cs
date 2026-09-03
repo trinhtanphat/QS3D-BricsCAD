@@ -46,10 +46,19 @@ namespace QS3D.Core.Audit
                 long textCharacters = 0L;
                 using (var enumerator = _events.GetEnumerator())
                 {
-                    while (enumerator.MoveNext())
+                    while (true)
                     {
+                        RequireStableHistoryCount(storedCount);
+                        if (!enumerator.MoveNext())
+                        {
+                            RequireStableHistoryCount(storedCount);
+                            break;
+                        }
+
+                        RequireStableHistoryCount(storedCount);
                         RequireCanReadCurrent(storedCount, observed);
                         var item = enumerator.Current;
+                        RequireStableHistoryCount(storedCount);
                         observed++;
                         if (item == null)
                             throw new InvalidOperationException("Audit trail contains a null event.");
@@ -71,6 +80,14 @@ namespace QS3D.Core.Audit
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             return new AuditTrail(project.AuditEvents, project);
+        }
+
+        internal static void ValidateSnapshotHistory(ProjectState project)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            new AuditTrail(project.AuditEvents, project).ValidateExistingHistory(
+                requireAppendCapacity: false,
+                allowNullActionBacking: true);
         }
 
         public void Record(string action, string elementId, string detail, string actor = "", string correlationId = "")
@@ -128,7 +145,10 @@ namespace QS3D.Core.Audit
             _events.Clear();
         }
 
-        private int ValidateExistingHistory(bool requireAppendCapacity, long additionalTextCharacters = 0L)
+        private int ValidateExistingHistory(
+            bool requireAppendCapacity,
+            long additionalTextCharacters = 0L,
+            bool allowNullActionBacking = false)
         {
             if (additionalTextCharacters < 0L || additionalTextCharacters > MaxStoredTextCharacters)
                 throw new InvalidOperationException("Audit trail additional text exceeds the supported aggregate text budget.");
@@ -139,17 +159,28 @@ namespace QS3D.Core.Audit
             long textCharacters = 0L;
             using (var enumerator = _events.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableHistoryCount(storedCount);
+                    if (!enumerator.MoveNext())
+                    {
+                        RequireStableHistoryCount(storedCount);
+                        break;
+                    }
+
+                    RequireStableHistoryCount(storedCount);
                     RequireCanReadCurrent(storedCount, observed);
                     var existing = enumerator.Current;
+                    RequireStableHistoryCount(storedCount);
                     observed++;
                     if (existing == null)
                         throw new InvalidOperationException("Audit trail contains a null event. Repair the existing audit history before modifying it.");
 
                     // Reject aggregate abuse before XML/canonical scans of the event.
                     AccumulateTextCharacters(existing, ref textCharacters);
-                    var validationError = GetStoredEventValidationError(existing);
+                    var validationError = allowNullActionBacking
+                        ? GetStoredEventValidationError(existing, allowNullActionBacking: true)
+                        : GetStoredEventValidationError(existing);
                     if (validationError != null)
                         throw new InvalidOperationException(validationError + " Repair the existing audit history before modifying it.");
                 }
@@ -240,19 +271,28 @@ namespace QS3D.Core.Audit
                    (correlationId?.Length ?? 0);
         }
 
-        private static string? GetStoredEventValidationError(AuditEvent? item)
+        private static string? GetStoredEventValidationError(
+            AuditEvent? item,
+            bool allowNullActionBacking = false)
         {
             if (item == null)
                 return "Audit trail contains a null event.";
             if (item.Utc.Kind != DateTimeKind.Utc)
                 return "Audit trail contains a non-UTC event timestamp.";
 
-            var action = item.Action ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(action) ||
-                !string.Equals(action, action.Trim(), StringComparison.Ordinal) ||
-                ContainsControlCharacter(action) ||
-                ContainsInvalidXmlCharacters(action))
+            var action = item.Action;
+            if (action == null)
+            {
+                if (!allowNullActionBacking)
+                    return "Audit trail contains a non-canonical action.";
+            }
+            else if (string.IsNullOrWhiteSpace(action) ||
+                     !string.Equals(action, action.Trim(), StringComparison.Ordinal) ||
+                     ContainsControlCharacter(action) ||
+                     ContainsInvalidXmlCharacters(action))
+            {
                 return "Audit trail contains a non-canonical action.";
+            }
 
             var elementId = item.ElementId ?? string.Empty;
             if (!IsCanonicalOptionalIdentity(elementId))

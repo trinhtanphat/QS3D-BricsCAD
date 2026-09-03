@@ -12,15 +12,16 @@ namespace QS3D.BricsCAD.V25.Cad
             {
                 document.Editor.Regen();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 try
                 {
                     document.Editor.WriteMessage(
-                        "\nQS3D " + operation + " đã commit; viewport regen warning: " + ex.Message);
+                        "\nQS3D " + operation + " đã commit; viewport could not refresh.");
                 }
                 catch
                 {
+                    // Post-commit diagnostics are optional and must never escape.
                 }
             }
         }

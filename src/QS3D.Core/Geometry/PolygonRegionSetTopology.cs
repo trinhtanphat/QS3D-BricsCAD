@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using System.Xml;
 
 namespace QS3D.Core.Geometry
 {
@@ -64,6 +66,7 @@ namespace QS3D.Core.Geometry
         private const int MaxTaggedScanSegments = 16384;
         private const int MaxRegionIdLength = 160;
         private const double Epsilon = 1e-10d;
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         public static PolygonRegionSet2 NormalizeAndValidate(IEnumerable<PolygonRegionSeed2> regions)
         {
@@ -142,7 +145,29 @@ namespace QS3D.Core.Geometry
                 throw new ArgumentException("Polygon multi-region island id exceeds the supported " + MaxRegionIdLength + " character limit: " + id.Substring(0, MaxRegionIdLength) + "...");
             if (id.Any(char.IsControl))
                 throw new ArgumentException("Polygon multi-region island id contains control characters: " + id + ".");
+            RequirePortableRegionId(id);
             return id;
+        }
+
+        private static void RequirePortableRegionId(string id)
+        {
+            try
+            {
+                StrictUtf8.GetByteCount(id);
+            }
+            catch (EncoderFallbackException ex)
+            {
+                throw new ArgumentException("Polygon multi-region island id must contain well-formed Unicode text.", ex);
+            }
+
+            try
+            {
+                XmlConvert.VerifyXmlChars(id);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException("Polygon multi-region island id contains characters that are invalid in XML.", ex);
+            }
         }
 
         private static void ValidateIslandPair(PolygonRegionIsland2 left, PolygonRegionIsland2 right)

@@ -47,8 +47,12 @@ if not errors:
 
     if "semanticRollback.Restore(project);" not in build:
         errors.append("QS3DBUILD3D no longer exposes the snapshot-restore behavior that requires P1 canonical re-resolution")
-    if 'Report(document, "QS3DBUILD3D lỗi: " + ex.Message);' not in build:
-        errors.append("QS3DBUILD3D command-surface failure reporting contract changed; review P1 nested-call failure propagation")
+    stable_failure = 'Report(document, "QS3DBUILD3D lỗi: không thể hoàn tất native rebuild cho selection hiện tại.");'
+    if stable_failure not in build:
+        errors.append("QS3DBUILD3D stable command-surface failure reporting contract changed; review P1 nested-call failure propagation")
+    for forbidden in ("operationError.Message", "ex.Message", "uiError.Message"):
+        if forbidden in build:
+            errors.append("QS3DBUILD3D nested-call surface must not expose raw caught host detail: " + forbidden)
 
 print("QS3D Direct Draw P1 canonical-state preflight")
 if errors:
@@ -57,4 +61,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Direct Draw P1 never trusts a pre-QS3DBUILD3D ProjectElement reference after the nested command can restore ProjectState; canonical ownership is re-resolved by stable Id before live-handle validation and rollback cleanup.")
+print("PASS: Direct Draw P1 never trusts a pre-QS3DBUILD3D ProjectElement reference after the nested command can restore ProjectState; canonical ownership is re-resolved by stable Id before live-handle validation and rollback cleanup, while the nested Build3D failure surface remains stable/redacted.")

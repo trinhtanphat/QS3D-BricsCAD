@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WRAPPER = ROOT / "scripts" / "package-v25-release.ps1"
+VALIDATOR = ROOT / "scripts" / "assert-v25-release-package-identity.ps1"
 WORKFLOW = ROOT / ".github" / "workflows" / "release-v25.yml"
 
 
@@ -21,9 +22,11 @@ def provenance_valid(*, dirty_before: bool, dirty_after: bool, head_before: str,
 
 def main() -> int:
     require(WRAPPER.is_file(), "missing scripts/package-v25-release.ps1")
+    require(VALIDATOR.is_file(), "missing scripts/assert-v25-release-package-identity.ps1")
     require(WORKFLOW.is_file(), "missing .github/workflows/release-v25.yml")
 
     wrapper = WRAPPER.read_text(encoding="utf-8")
+    validator = VALIDATOR.read_text(encoding="utf-8")
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     required_wrapper_tokens = (
@@ -35,33 +38,50 @@ def main() -> int:
         "$headAfter = Get-ExactHeadSha",
         "Repository HEAD changed during release packaging",
         "Assert-CleanRepository -Phase 'after package creation'",
-        "PACKAGE-METADATA.json",
-        "QS3D-BricsCAD-V25.zip",
-        "$metadata.gitCommit",
+        "assert-v25-release-package-identity.ps1",
+        "-MetadataPath $metadataPath -ExpectedSourceCommit $headBefore",
+        "PACKAGE-METADATA gitCommit",
         "does not match the exact clean package source HEAD",
     )
     for token in required_wrapper_tokens:
         require(token in wrapper, "release package provenance wrapper missing token: " + token)
 
+    require(
+        "Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json" not in wrapper,
+        "release package provenance wrapper must not re-admit metadata through an unlocked pathname read",
+    )
+
+    required_validator_tokens = (
+        "[IO.FileShare]::Read",
+        "[IO.FileAttributes]::ReparsePoint",
+        "$script:MaxMetadataBytes = 65536",
+        "[Text.UTF8Encoding]::new($false, $true)",
+        "Read-HeldStrictUtf8Metadata",
+        "Assert-HeldMetadataBinding -Held $held",
+        "ExpectedSourceCommit -notmatch '^[0-9A-Fa-f]{40}$'",
+        "([string]$metadata.gitCommit).Trim()",
+        "does not match expected source commit",
+    )
+    for token in required_validator_tokens:
+        require(token in validator, "held package identity validator missing token: " + token)
+    require("[IO.FileShare]::ReadWrite" not in validator, "metadata admission must not share write access")
+
     before_status = wrapper.find("Assert-CleanRepository -Phase 'before package creation'")
     package_call = wrapper.find("& $packer")
     after_head = wrapper.find("$headAfter = Get-ExactHeadSha")
     after_status = wrapper.find("Assert-CleanRepository -Phase 'after package creation'")
-    metadata_read = wrapper.find("$metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json")
+    metadata_admission = wrapper.find("$identity = & $identityValidator -MetadataPath $metadataPath -ExpectedSourceCommit $headBefore")
     metadata_compare = wrapper.find("does not match the exact clean package source HEAD")
-    positions = (before_status, package_call, after_head, after_status, metadata_read, metadata_compare)
+    positions = (before_status, package_call, after_head, after_status, metadata_admission, metadata_compare)
     require(min(positions) >= 0, "release package provenance ordering token is missing")
     require(
-        before_status < package_call < after_head < after_status < metadata_read < metadata_compare,
-        "release package provenance must verify clean source before packaging and stable clean HEAD plus metadata after packaging",
+        before_status < package_call < after_head < after_status < metadata_admission < metadata_compare,
+        "release package provenance must verify clean source before packaging, stable clean HEAD after packaging, then one held metadata generation before downstream release use",
     )
 
     workflow_wrapper = "run: .\\scripts\\package-v25-release.ps1"
     require(workflow_wrapper in workflow, "V25 release workflow must route package creation through package-v25-release.ps1")
-    require(
-        "- name: Build V25 release package" in workflow,
-        "V25 release workflow missing package step",
-    )
+    require("- name: Build V25 release package" in workflow, "V25 release workflow missing package step")
 
     clean = "a" * 40
     cases = (
@@ -82,7 +102,7 @@ def main() -> int:
         require(actual is expected, f"package provenance model mismatch for {label}: expected {expected}, got {actual}")
 
     print(
-        "PASS: official V25 release packaging is wrapped by a clean-source provenance gate that binds a stable exact HEAD to PACKAGE-METADATA gitCommit before downstream release steps."
+        "PASS: official V25 release packaging is wrapped by a clean-source provenance gate that binds a stable exact HEAD to one held, non-reparse, bounded strict-UTF8 PACKAGE-METADATA generation before downstream release steps."
     )
     return 0
 

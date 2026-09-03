@@ -27,8 +27,10 @@ namespace QS3D.Core.Services
             var enumerationVersion = _changeVersion;
             var next = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var inputCount = 0;
+            RequireStableKnownCount(ids, knownCount);
             using (var enumerator = ids.GetEnumerator())
             {
+                RequireStableKnownCount(ids, knownCount);
                 while (true)
                 {
                     RequireStableKnownCount(ids, knownCount);
@@ -41,6 +43,7 @@ namespace QS3D.Core.Services
                     if (inputCount >= MaxInputCount)
                         throw new InvalidOperationException("Semantic selection cannot exceed " + MaxInputCount + " input entries.");
                     var raw = enumerator.Current;
+                    RequireStableKnownCount(ids, knownCount);
                     inputCount++;
                     if (string.IsNullOrWhiteSpace(raw)) continue;
                     next.Add(raw.Trim());
@@ -51,6 +54,8 @@ namespace QS3D.Core.Services
                 throw new InvalidOperationException("Selection changed while replacement element ids were being enumerated. Retry replacement against the current selection state.");
 
             var finalKnownCount = ResolveKnownCount(ids);
+            if (_changeVersion != enumerationVersion)
+                throw new InvalidOperationException("Selection changed while replacement element ids were being enumerated. Retry replacement against the current selection state.");
             if (knownCount.HasValue != finalKnownCount.HasValue ||
                 (knownCount.HasValue && knownCount.Value != finalKnownCount!.Value))
                 throw new InvalidOperationException(

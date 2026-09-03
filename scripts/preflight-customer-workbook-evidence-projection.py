@@ -52,16 +52,22 @@ def main():
         'row.HasGrossFormworkM2Evidence = AggregateEvidence(',
         'row.HasConcreteContactDeductionM2Evidence = AggregateEvidence(',
         'row.HasNetFormworkM2Evidence = AggregateEvidence(',
-        'row.GrossFormworkM2 = QuantityReportMath.Add(',
-        'row.ConcreteContactDeductionM2 = QuantityReportMath.Add(',
-        'row.NetFormworkM2 = QuantityReportMath.Add(',
-        'row.FormworkM2 = QuantityReportMath.Add(row.FormworkM2, netFormwork,',
-        'row.WidthM = QuantityReportMath.Add(',
-        'row.HeightM = QuantityReportMath.Add(',
+        'aggregate.GrossFormworkM2.Add(grossFormwork, element.Id + "/GrossFormworkM2")',
+        'aggregate.ConcreteContactDeductionM2.Add(formworkDeduction, element.Id + "/ConcreteContactDeductionM2")',
+        'aggregate.NetFormworkM2.Add(netFormwork, element.Id + "/NetFormworkM2")',
+        'aggregate.FormworkM2.Add(netFormwork, element.Id + "/FormworkM2")',
+        'aggregate.WidthM.Add(Q(element, "WidthM"), element.Id + "/WidthM")',
+        'aggregate.HeightM.Add(Q(element, "HeightM"), element.Id + "/HeightM")',
+        'row.GrossFormworkM2 = aggregate.GrossFormworkM2.Value("GrossFormworkM2")',
+        'row.ConcreteContactDeductionM2 = aggregate.ConcreteContactDeductionM2.Value("ConcreteContactDeductionM2")',
+        'row.NetFormworkM2 = aggregate.NetFormworkM2.Value("NetFormworkM2")',
+        'row.FormworkM2 = aggregate.FormworkM2.Value("FormworkM2")',
+        'row.WidthM = aggregate.WidthM.Value("WidthM")',
+        'row.HeightM = aggregate.HeightM.Value("HeightM")',
     ]
     missing = [token for token in builder_required if token not in builder]
     if missing:
-        return fail("ProjectQuantityReportBuilder does not project explicit evidence", missing)
+        return fail("ProjectQuantityReportBuilder does not project explicit evidence through compensated aggregation", missing)
 
     exporter_required = [
         "row.HasGrossFormworkM2Evidence || row.HasConcreteContactDeductionM2Evidence || row.HasNetFormworkM2Evidence",
@@ -104,7 +110,7 @@ def main():
     if missing:
         return fail("customer workbook smoke is missing evidence/trace regressions", missing)
 
-    print("PASS: customer workbook projects explicit formwork and dimensions, preserves legacy net-only formwork, leaves unsupported evidence blank, and retains hidden trace semantics.")
+    print("PASS: customer workbook projects explicit formwork and dimensions through compensated aggregation, preserves legacy net-only formwork, leaves unsupported evidence blank, and retains hidden trace semantics.")
     return 0
 
 

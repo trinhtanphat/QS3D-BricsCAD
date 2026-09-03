@@ -1,6 +1,6 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace QS3D.Core.Geometry
 {
@@ -43,10 +43,11 @@ namespace QS3D.Core.Geometry
         {
             if (intersections == null) throw new ArgumentNullException(nameof(intersections));
 
-            var source = intersections.Take(MaxMarkers + 1).ToList();
-            if (source.Count > MaxMarkers)
-                throw new InvalidOperationException("Grid intersection marker plan exceeds the supported " + MaxMarkers + " marker limit.");
+            var knownCount = GetKnownInputCount(intersections);
+            if (knownCount.HasValue && knownCount.Value > MaxMarkers)
+                ThrowTooManyMarkers();
 
+            var source = MaterializeBounded(intersections, knownCount);
             var identities = GridIntersectionIdentityPlanner.Assign(source);
             var result = new List<GridIntersectionMarkerPlan>(identities.Count);
             foreach (var identity in identities)
@@ -61,6 +62,101 @@ namespace QS3D.Core.Geometry
             }
 
             return result.AsReadOnly();
+        }
+
+        private static List<GridIntersection> MaterializeBounded(
+            IEnumerable<GridIntersection> intersections,
+            int? knownCount)
+        {
+            var source = new List<GridIntersection>();
+            var observedCount = 0;
+            using (var enumerator = intersections.GetEnumerator())
+            {
+                while (true)
+                {
+                    RequireStableKnownInputCount(intersections, knownCount);
+                    if (!enumerator.MoveNext())
+                    {
+                        RequireStableKnownInputCount(intersections, knownCount);
+                        break;
+                    }
+                    RequireStableKnownInputCount(intersections, knownCount);
+
+                    if (knownCount.HasValue && observedCount >= knownCount.Value)
+                        throw new InvalidOperationException("Grid intersection marker source known count does not match traversal.");
+                    if (observedCount >= MaxMarkers)
+                        ThrowTooManyMarkers();
+
+                    var intersection = enumerator.Current;
+                    source.Add(intersection);
+                    observedCount++;
+                }
+            }
+
+            RequireStableKnownInputCount(intersections, knownCount);
+            if (knownCount.HasValue && observedCount != knownCount.Value)
+                throw new InvalidOperationException("Grid intersection marker source known count does not match traversal.");
+            return source;
+        }
+
+        private static int? GetKnownInputCount(IEnumerable<GridIntersection> intersections)
+        {
+            var hasKnownCount = false;
+            var firstKnownCount = 0;
+            var maximumKnownCount = 0;
+            var conflictingKnownCounts = false;
+
+            if (intersections is ICollection<GridIntersection> collection)
+                ObserveKnownCount(collection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
+            if (intersections is IReadOnlyCollection<GridIntersection> readOnlyCollection)
+                ObserveKnownCount(readOnlyCollection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
+            if (intersections is ICollection nonGenericCollection)
+                ObserveKnownCount(nonGenericCollection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref conflictingKnownCounts);
+
+            if (maximumKnownCount > MaxMarkers)
+                return maximumKnownCount;
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("Grid intersection marker source reports conflicting known counts.");
+            return hasKnownCount ? firstKnownCount : (int?)null;
+        }
+
+        private static void RequireStableKnownInputCount(
+            IEnumerable<GridIntersection> intersections,
+            int? knownCount)
+        {
+            if (!knownCount.HasValue) return;
+            var currentCount = GetKnownInputCount(intersections);
+            if (!currentCount.HasValue || currentCount.Value != knownCount.Value)
+                throw new InvalidOperationException("Grid intersection marker source known count changed during traversal.");
+        }
+
+        private static void ObserveKnownCount(
+            int candidate,
+            ref bool hasKnownCount,
+            ref int firstKnownCount,
+            ref int maximumKnownCount,
+            ref bool conflictingKnownCounts)
+        {
+            if (candidate < 0)
+                throw new InvalidOperationException("Grid intersection marker source reports an invalid negative known count.");
+
+            if (!hasKnownCount)
+            {
+                hasKnownCount = true;
+                firstKnownCount = candidate;
+                maximumKnownCount = candidate;
+                return;
+            }
+
+            if (candidate != firstKnownCount)
+                conflictingKnownCounts = true;
+            if (candidate > maximumKnownCount)
+                maximumKnownCount = candidate;
+        }
+
+        private static void ThrowTooManyMarkers()
+        {
+            throw new InvalidOperationException("Grid intersection marker plan exceeds the supported " + MaxMarkers + " marker limit.");
         }
     }
 }

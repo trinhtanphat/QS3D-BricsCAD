@@ -14,10 +14,14 @@ required_source = [
     "internal const int MaxGroups = 10000;",
     "TryGetKnownCount(groups, out var knownCount)",
     "knownCount > MaxGroups",
+    "using (var enumerator = groups.GetEnumerator())",
+    "RequireStableKnownCount(groups, knownCount);",
+    "var moved = enumerator.MoveNext();",
+    "if (!moved)",
     "index == MaxGroups",
     "index >= knownCount",
+    "var group = enumerator.Current;",
     "index != knownCount",
-    "RequireStableKnownCount(groups, knownCount)",
     "ICollection<MepQuantityGroup>",
     "IReadOnlyCollection<MepQuantityGroup>",
     "ICollection nonGenericCollection",
@@ -50,17 +54,20 @@ missing += [token for token in required_runbook if token not in runbook]
 if missing:
     raise SystemExit("MEP/TBQ traversal guard missing contract token(s): " + ", ".join(missing))
 
-order = [
-    "TryGetKnownCount(groups, out var knownCount)",
-    "foreach (var group in groups)",
-    "if (hasKnownCount && index >= knownCount)",
-    "rows.Add(new MepTbqReportRow(group));",
-    "if (hasKnownCount && index != knownCount)",
-    "RequireStableKnownCount(groups, knownCount)",
-    "rows.Sort(CompareRows);",
-]
-pos = [source.index(token) for token in order]
-if pos != sorted(pos):
+start = source.index("public IReadOnlyList<MepTbqReportRow> BuildReport(")
+end = source.index("public string SerializeCsv(", start)
+region = source[start:end]
+first_rebound = region.index("RequireStableKnownCount(groups, knownCount);")
+move = region.index("var moved = enumerator.MoveNext();", first_rebound)
+second_rebound = region.index("RequireStableKnownCount(groups, knownCount);", move)
+cap = region.index("if (index == MaxGroups)", second_rebound)
+overrun = region.index("if (hasKnownCount && index >= knownCount)", cap)
+current = region.index("var group = enumerator.Current;", overrun)
+add = region.index("rows.Add(new MepTbqReportRow(group));", current)
+under_yield = region.index("if (hasKnownCount && index != knownCount)", add)
+final_rebound = region.index("RequireStableKnownCount(groups, knownCount);", under_yield)
+sort = region.index("rows.Sort(CompareRows);", final_rebound)
+if not (first_rebound < move < second_rebound < cap < overrun < current < add < under_yield < final_rebound < sort):
     raise SystemExit("MEP/TBQ traversal validation order regressed")
 
 print("PASS MEP/TBQ report traversal bound, Count stability, and lane runbook contract")

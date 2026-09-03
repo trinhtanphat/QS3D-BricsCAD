@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml;
 using QS3D.Core.Export;
 
 namespace QS3D.Core.Revisions
@@ -119,12 +120,15 @@ namespace QS3D.Core.Revisions
         {
             if (before == null) throw new ArgumentNullException(nameof(before));
             if (after == null) throw new ArgumentNullException(nameof(after));
-            var beforeRevisionId = CanonicalRevisionId(before.Id, "before revision id");
-            var afterRevisionId = CanonicalRevisionId(after.Id, "after revision id");
 
-            var beforeIndex = Index(before, "before");
-            var afterIndex = Index(after, "after");
-            var deltas = new RevisionService().Compare(before, after);
+            var beforeSnapshot = RevisionSnapshotDetacher.Capture(before, "semantic review before");
+            var afterSnapshot = RevisionSnapshotDetacher.Capture(after, "semantic review after");
+            var beforeRevisionId = CanonicalRevisionId(beforeSnapshot.Id, "before revision id");
+            var afterRevisionId = CanonicalRevisionId(afterSnapshot.Id, "after revision id");
+
+            var beforeIndex = Index(beforeSnapshot, "before");
+            var afterIndex = Index(afterSnapshot, "after");
+            var deltas = new RevisionService().Compare(beforeSnapshot, afterSnapshot);
             var elements = new List<SemanticChangeReviewElement>(deltas.Count);
 
             foreach (var delta in deltas)
@@ -192,8 +196,23 @@ namespace QS3D.Core.Revisions
         private static string CanonicalRevisionId(string? value, string label)
         {
             var raw = value ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(raw) || !string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
-                throw new InvalidOperationException("Revision " + label + " is required and must not contain leading/trailing whitespace.");
+            if (string.IsNullOrWhiteSpace(raw) ||
+                !string.Equals(raw, raw.Trim(), StringComparison.Ordinal) ||
+                raw.Any(char.IsControl))
+            {
+                throw new InvalidOperationException(
+                    "Revision " + label + " is required and must not contain leading/trailing whitespace or control characters.");
+            }
+
+            try
+            {
+                XmlConvert.VerifyXmlChars(raw);
+            }
+            catch (XmlException ex)
+            {
+                throw new InvalidOperationException(
+                    "Revision " + label + " contains characters that are invalid in XML.", ex);
+            }
             return raw;
         }
 

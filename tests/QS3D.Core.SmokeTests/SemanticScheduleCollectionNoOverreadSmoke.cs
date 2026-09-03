@@ -17,7 +17,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             KnownCountOverrunStopsBeforeUnexpectedCurrent();
-            PostTraversalCountDriftFailsClosed();
+            TerminalMoveNextCountDriftFailsClosed();
             CatalogCapacityStopsBeforeUnexpectedCurrent();
             StableCountedSnapshotStillMaterializesExactly();
         }
@@ -35,17 +35,17 @@ namespace QS3D.Core.SmokeTests
                 "Semantic schedule known-count N+1 must reject before Current for the disallowed item.");
         }
 
-        private static void PostTraversalCountDriftFailsClosed()
+        private static void TerminalMoveNextCountDriftFailsClosed()
         {
             var values = new InstrumentedCountCollection<int>(new[] { 3, 4 }, 2, 3);
-            var error = InvokeSnapshotExpectingInvalidOperation(values, 5000, "post-traversal Count drift");
+            var error = InvokeSnapshotExpectingInvalidOperation(values, 5000, "terminal MoveNext Count drift");
 
-            Contains("known Count changed or conflicted after traversal", error.Message,
-                "Semantic schedule snapshot must rebind supported Count evidence after exact traversal.");
+            Contains("known Count changed or conflicted after MoveNext", error.Message,
+                "Semantic schedule snapshot must rebind supported Count evidence immediately after terminal MoveNext=false.");
             Equal(3, values.MoveNextCalls,
                 "Exact two-item semantic schedule traversal must observe terminal MoveNext=false.");
             Equal(2, values.CurrentReads,
-                "Post-traversal Count drift must be rejected after exactly the admitted values were read.");
+                "Terminal MoveNext Count drift must be rejected after exactly the admitted values were read.");
         }
 
         private static void CatalogCapacityStopsBeforeUnexpectedCurrent()

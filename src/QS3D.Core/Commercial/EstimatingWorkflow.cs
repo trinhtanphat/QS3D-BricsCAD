@@ -158,13 +158,18 @@ namespace QS3D.Core.Commercial
             _byId = new Dictionary<string, EstimatingLine>(StringComparer.OrdinalIgnoreCase);
             using (var enumerator = lines.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireKnownCountStable(lines, knownCount);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireKnownCountStable(lines, knownCount);
                     if (knownCount.HasValue && snapshot.Count >= knownCount.Value)
                         throw new InvalidOperationException("Estimating portfolio line count changed during enumeration.");
                     if (snapshot.Count >= MaximumLines)
                         throw new InvalidOperationException("Estimating portfolio supports at most 10000 lines.");
                     var line = enumerator.Current;
+                    RequireKnownCountStable(lines, knownCount);
                     if (line == null) throw new ArgumentException("Estimating portfolio contains a null line.", nameof(lines));
                     if (_byId.ContainsKey(line.LineId))
                         throw new ArgumentException("Duplicate estimating line id: " + line.LineId + ".", nameof(lines));
@@ -197,15 +202,22 @@ namespace QS3D.Core.Commercial
         {
             get
             {
-                decimal total = 0m;
+                var total = new CommercialExactDecimalAccumulator();
                 for (var i = 0; i < _lines.Count; i++)
                 {
                     var amount = _lines[i].Amount;
                     if (amount.HasValue)
-                        total = CommercialGuard.Add(total, amount.Value, "Estimating portfolio total");
+                        total.Add(amount.Value, "Estimating portfolio total");
                 }
-                return total;
+                return total.ToDecimal("Estimating portfolio total");
             }
+        }
+
+        private static void RequireKnownCountStable(IEnumerable<EstimatingLine> lines, int? expectedKnownCount)
+        {
+            var currentKnownCount = SnapshotKnownCount(lines);
+            if (currentKnownCount != expectedKnownCount)
+                throw new InvalidOperationException("Estimating portfolio known line count changed during enumeration.");
         }
 
         private static int? SnapshotKnownCount(IEnumerable<EstimatingLine> lines)
@@ -269,13 +281,18 @@ namespace QS3D.Core.Commercial
             var uniqueIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             using (var enumerator = lineIds.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireKnownCountStable(lineIds, lineIdKnownCount, MaximumSelectedLines, "selected-line");
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireKnownCountStable(lineIds, lineIdKnownCount, MaximumSelectedLines, "selected-line");
                     if (lineIdKnownCount.HasValue && ids.Count >= lineIdKnownCount.Value)
                         throw new InvalidOperationException("Bulk rate assignment selected-line count changed during enumeration.");
                     if (ids.Count >= MaximumSelectedLines)
                         throw new InvalidOperationException("Bulk rate assignment supports at most 10000 selected lines.");
                     var raw = enumerator.Current;
+                    RequireKnownCountStable(lineIds, lineIdKnownCount, MaximumSelectedLines, "selected-line");
                     var id = CommercialGuard.RequireToken(raw, nameof(lineIds));
                     if (!uniqueIds.Add(id))
                         throw new ArgumentException("Bulk rate assignment contains duplicate line id: " + id + ".", nameof(lineIds));
@@ -298,13 +315,18 @@ namespace QS3D.Core.Commercial
             var units = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             using (var enumerator = unitRates.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireKnownCountStable(unitRates, unitRateKnownCount, MaximumUnitRates, "unit-rate");
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireKnownCountStable(unitRates, unitRateKnownCount, MaximumUnitRates, "unit-rate");
                     if (unitRateKnownCount.HasValue && rates.Count >= unitRateKnownCount.Value)
                         throw new InvalidOperationException("Bulk rate assignment unit-rate count changed during enumeration.");
                     if (rates.Count >= MaximumUnitRates)
                         throw new InvalidOperationException("Bulk rate assignment supports at most 256 unit rates.");
                     var assignment = enumerator.Current;
+                    RequireKnownCountStable(unitRates, unitRateKnownCount, MaximumUnitRates, "unit-rate");
                     if (assignment == null) throw new ArgumentException("Bulk rate assignment contains a null unit rate.", nameof(unitRates));
                     if (!units.Add(assignment.Unit))
                         throw new ArgumentException("Duplicate unit-rate assignment for unit: " + assignment.Unit + ".", nameof(unitRates));
@@ -324,6 +346,13 @@ namespace QS3D.Core.Commercial
         public string RateSourceId { get; }
         public string RateRevision { get; }
         public IReadOnlyList<UnitRateAssignment> UnitRates { get; }
+
+        private static void RequireKnownCountStable<T>(IEnumerable<T> values, int? expectedKnownCount, int maximum, string subject)
+        {
+            var currentKnownCount = SnapshotKnownCount(values, maximum, subject);
+            if (currentKnownCount != expectedKnownCount)
+                throw new InvalidOperationException("Bulk rate assignment " + subject + " known count changed during enumeration.");
+        }
 
         private static int? SnapshotKnownCount<T>(IEnumerable<T> values, int maximum, string subject)
         {
@@ -419,8 +448,8 @@ namespace QS3D.Core.Commercial
             var unmatched = new List<string>();
             var blocked = new List<string>();
             var replacements = 0;
-            decimal before = 0m;
-            decimal after = 0m;
+            var before = new CommercialExactDecimalAccumulator();
+            var after = new CommercialExactDecimalAccumulator();
 
             for (var i = 0; i < request.LineIds.Count; i++)
             {
@@ -432,17 +461,17 @@ namespace QS3D.Core.Commercial
                     units.Add(line.Unit, aggregate);
                 }
                 aggregate.Count++;
-                aggregate.Quantity = CommercialGuard.Add(aggregate.Quantity, line.Quantity, "Bulk rate assignment unit quantity");
+                aggregate.Quantity.Add(line.Quantity, "Bulk rate assignment unit quantity");
 
                 var oldAmount = line.Amount;
                 if (oldAmount.HasValue)
-                    before = CommercialGuard.Add(before, oldAmount.Value, "Bulk rate assignment total before");
+                    before.Add(oldAmount.Value, "Bulk rate assignment total before");
 
-                if (line.IsBlocked)
+                if (line.IsBlocked || line.IsStale)
                 {
                     blocked.Add(line.LineId);
                     if (oldAmount.HasValue)
-                        after = CommercialGuard.Add(after, oldAmount.Value, "Bulk rate assignment total after blocked line");
+                        after.Add(oldAmount.Value, "Bulk rate assignment total after blocked line");
                     continue;
                 }
 
@@ -450,19 +479,22 @@ namespace QS3D.Core.Commercial
                 {
                     unmatched.Add(line.LineId);
                     if (oldAmount.HasValue)
-                        after = CommercialGuard.Add(after, oldAmount.Value, "Bulk rate assignment total after unmatched line");
+                        after.Add(oldAmount.Value, "Bulk rate assignment total after unmatched line");
                     continue;
                 }
 
                 if (line.CostCode.Length != 0 || line.ReferencedRate.HasValue || line.OverrideRate.HasValue)
                     replacements++;
                 var newAmount = CommercialGuard.Multiply(line.Quantity, rate, "Bulk rate assignment preview amount");
-                after = CommercialGuard.Add(after, newAmount, "Bulk rate assignment total after");
+                after.Add(newAmount, "Bulk rate assignment total after");
             }
 
             var distribution = new List<UnitDistributionItem>();
             foreach (var pair in units)
-                distribution.Add(new UnitDistributionItem(pair.Value.Unit, pair.Value.Count, pair.Value.Quantity));
+                distribution.Add(new UnitDistributionItem(
+                    pair.Value.Unit,
+                    pair.Value.Count,
+                    pair.Value.Quantity.ToDecimal("Bulk rate assignment unit quantity")));
             distribution.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.Unit, right.Unit));
             unmatched.Sort(StringComparer.OrdinalIgnoreCase);
             blocked.Sort(StringComparer.OrdinalIgnoreCase);
@@ -475,8 +507,8 @@ namespace QS3D.Core.Commercial
                 new ReadOnlyCollection<UnitDistributionItem>(distribution.ToArray()),
                 new ReadOnlyCollection<string>(unmatched.ToArray()),
                 new ReadOnlyCollection<string>(blocked.ToArray()),
-                before,
-                after);
+                before.ToDecimal("Bulk rate assignment total before"),
+                after.ToDecimal("Bulk rate assignment total after"));
         }
 
         public EstimatingPortfolio CommitBulkRateAssignment(
@@ -705,10 +737,14 @@ namespace QS3D.Core.Commercial
 
         private sealed class UnitAccumulator
         {
-            internal UnitAccumulator(string unit) { Unit = unit; }
+            internal UnitAccumulator(string unit)
+            {
+                Unit = unit;
+                Quantity = new CommercialExactDecimalAccumulator();
+            }
             internal string Unit { get; }
             internal int Count { get; set; }
-            internal decimal Quantity { get; set; }
+            internal CommercialExactDecimalAccumulator Quantity { get; }
         }
     }
 }

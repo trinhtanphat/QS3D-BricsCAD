@@ -241,6 +241,7 @@ namespace QS3D.Core.Persistence
 
         private static void ValidateCollectionEntries(ProjectState source)
         {
+            RequireSupportedSchemaVersion(source);
             RequireSupportedCount(source.Metadata.Count, "metadata", MaximumSnapshotNestedEntries);
             RequireSupportedCount(source.Zones.Count, "zones", MaximumSnapshotTopLevelEntries);
             RequireSupportedCount(source.Floors.Count, "floors", MaximumSnapshotTopLevelEntries);
@@ -255,12 +256,14 @@ namespace QS3D.Core.Persistence
             RequireNoNullEntries(source.Elements, "element");
             RequireNoNullEntries(source.QuantityRules, "quantity rule");
             RequireNoNullEntries(source.AuditEvents, "audit event");
+            AuditTrail.ValidateSnapshotHistory(source);
 
             RequireUniqueIds(source.Zones, x => x.Id, "zone");
             RequireUniqueIds(source.Floors, x => x.Id, "floor");
             RequireUniqueIds(source.Families, x => x.Id, "family");
             RequireUniqueIds(source.Elements, x => x.Id, "element");
             RequireUniqueIds(source.QuantityRules, x => x.Id, "quantity rule");
+            RequireResolvedActiveContext(source);
 
             foreach (var family in source.Families)
             {
@@ -274,9 +277,29 @@ namespace QS3D.Core.Persistence
                 RequireSupportedCount(element.DependsOn.Count, "element " + element.Id + " dependencies", MaximumSnapshotNestedEntries);
                 RequireSupportedCount(element.Properties.Count, "element " + element.Id + " properties", MaximumSnapshotNestedEntries);
                 RequireSupportedCount(element.Quantities.Count, "element " + element.Id + " quantities", MaximumSnapshotNestedEntries);
+                RequireCanonicalRelationIdentities(element.SourceHandles, element.Id, "source handle");
+                RequireCanonicalRelationIdentities(element.DependsOn, element.Id, "dependency id");
                 RequireCanonicalElementProperties(element);
                 RequireCanonicalQuantities(element);
             }
+        }
+
+        private static void RequireSupportedSchemaVersion(ProjectState source)
+        {
+            if (source.SchemaVersion <= 0)
+                throw new InvalidOperationException("Cannot snapshot a project with a non-positive schema version: " + source.SchemaVersion + ".");
+            if (source.SchemaVersion > ProjectState.CurrentSchemaVersion)
+                throw new InvalidOperationException(
+                    "Cannot snapshot a project with schema version " + source.SchemaVersion
+                    + " newer than supported version " + ProjectState.CurrentSchemaVersion + ".");
+        }
+
+        private static void RequireResolvedActiveContext(ProjectState source)
+        {
+            if (source.ActiveZoneId.Length != 0 && source.FindZone(source.ActiveZoneId) == null)
+                throw new InvalidOperationException("Cannot snapshot a project whose active zone does not exist: " + source.ActiveZoneId + ".");
+            if (source.ActiveFloorId.Length != 0 && source.FindFloor(source.ActiveFloorId) == null)
+                throw new InvalidOperationException("Cannot snapshot a project whose active floor does not exist: " + source.ActiveFloorId + ".");
         }
 
         private static void RequireCanonicalFamilyProperties(ProjectFamily family)
@@ -288,6 +311,31 @@ namespace QS3D.Core.Persistence
             catch (ArgumentException ex)
             {
                 throw new InvalidOperationException("Cannot snapshot Family " + family.Id + " with invalid property state.", ex);
+            }
+        }
+
+        private static void RequireCanonicalRelationIdentities(IEnumerable<string> values, string elementId, string role)
+        {
+            foreach (var value in values)
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                    throw new InvalidOperationException("Cannot snapshot element " + elementId + " with an empty " + role + ".");
+                if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Cannot snapshot element " + elementId + " with a non-canonical " + role + ": '" + value + "'.");
+                if (HasControlCharacter(value))
+                    throw new InvalidOperationException("Cannot snapshot element " + elementId + " with a " + role + " containing control characters.");
+                try
+                {
+                    XmlConvert.VerifyXmlChars(value);
+                }
+                catch (XmlException ex)
+                {
+                    throw new InvalidOperationException("Cannot snapshot element " + elementId + " with a " + role + " containing malformed XML text.", ex);
+                }
+                catch (ArgumentException ex)
+                {
+                    throw new InvalidOperationException("Cannot snapshot element " + elementId + " with a " + role + " containing malformed XML text.", ex);
+                }
             }
         }
 

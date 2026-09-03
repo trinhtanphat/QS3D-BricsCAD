@@ -1,14 +1,14 @@
-# #4373 IFC round-trip known Count stability
+# IFC round-trip known Count stability
 
 Status: `SOURCE_READY / PENDING_BRANCH_CI`
 
-Lane-Key: `issue-4373`
-
-Baseline source audited: `main@11179b617e5924901383e79228b24e0be3199193`.
+Historical foundation: issue-4373. Traversal rebound extension: `issue-4679`. Current-induced rebound extension: `issue-4890`.
 
 ## Scope
 
-This source package hardens deterministic collection-count evidence across the five IFC collection boundaries that canonicalize export/trace state:
+This package hardens deterministic collection-count evidence across the IFC projection collection boundaries that canonicalize export/trace state. The issue-4373 source rebound Count only after traversal. Issue-4679 additionally rejects transient Count drift while traversal is active, before affected `Current` values are observed. Issue-4890 closes the remaining caller-controlled gap by rebinding Count immediately after each successful `Current` getter and before semantic staging.
+
+The five established IFC boundaries remain:
 
 1. `IfcRoundTripProjection.CanonicalizeDimensions`;
 2. `IfcRoundTripProjection.CanonicalizeProvenance`;
@@ -16,39 +16,44 @@ This source package hardens deterministic collection-count evidence across the f
 4. `IfcRoundTripQuantityEvidenceSet.Create`;
 5. `IfcRoundTripExchangeResultSet.Create`.
 
-The earlier issue-4316 contract already rejects the first yielded item beyond an admitted known Count before semantic processing. #4373 preserves that behavior and closes the remaining post-traversal stability gap.
+Issue-4890 changes the first three projection-owned boundaries. Quantity-evidence and exchange-result behavior remains under the existing post-traversal stability contract and historical guards.
 
-## Required ordering
+## Required projection ordering
 
-For a source exposing deterministic Count metadata, the acceptance sequence is:
+For a projection source exposing deterministic Count metadata, the acceptance sequence is:
 
 1. observe and validate supported `ICollection<T>`, `IReadOnlyCollection<T>`, and non-generic `ICollection` Count evidence;
-2. reject any first item beyond the admitted Count before null, duplicate, token, identity, or grouping work;
-3. independently enforce the existing 10,000-item collection cap;
-4. enumerate and perform the existing semantic accumulation;
-5. reject under-yield when the enumerated item count differs from the admitted Count;
-6. rebind supported Count evidence after traversal;
-7. fail closed if rebound Count is changed, newly negative, newly conflicting, or no longer available after an admitted deterministic Count;
-8. only then perform canonical sorting, identity validation, evidence grouping, and result publication.
+2. rebind Count immediately before each `MoveNext`;
+3. after a successful `MoveNext`, rebind Count again before any `Current` read;
+4. reject transient value drift, negative Count, or conflicting Count evidence before reading the next item;
+5. reject any first item beyond the admitted Count before null, duplicate, token, identity, or grouping work;
+6. independently enforce the existing 10,000-item collection cap;
+7. read `enumerator.Current`;
+8. immediately rebind the exact admitted Count again because the caller-controlled `Current` getter can mutate supported Count surfaces;
+9. only after the post-`Current` rebound succeeds may null/token/identity/duplicate validation and semantic accumulation stage the item;
+10. reject under-yield when enumerated item count differs from the admitted Count;
+11. rebind supported Count evidence after traversal;
+12. only then perform canonical sorting and publication.
 
-For a pure streaming source with no supported deterministic Count metadata, the post-traversal rebind is a no-op and the independent 10,000-item cap remains the governing bound.
+For a pure streaming source with no supported deterministic Count metadata, traversal rebinds are no-ops and the independent 10,000-item cap remains governing.
 
 ## Regression matrix
 
 Deterministic Core smoke must prove:
 
-- dimension Count drift fails before projection publication;
-- provenance Count drift fails before projection publication;
-- projection-set Count drift fails before identity sorting/publication;
-- quantity-evidence Count drift fails before evidence sorting/grouping;
-- exchange-result Count drift fails before result publication;
-- newly negative Count evidence after traversal fails closed;
-- newly conflicting supported Count evidence after traversal fails closed;
-- stable two-phase counted inputs remain accepted and retain canonical ordering/grouping semantics;
-- pure streaming inputs remain accepted under the unchanged streaming cap;
-- the existing early-overrun and under-yield behavior remains intact.
+- transient dimension Count growth/shrink fails before the next dimension `Current` read;
+- transient provenance Count drift fails before token normalization;
+- transient projection-set Count drift fails before projection identity reads;
+- `Current`-induced dimension Count drift wins over null-item semantic failure;
+- `Current`-induced provenance Count drift wins over invalid-token semantic failure;
+- `Current`-induced projection-set Count drift wins over null-projection semantic failure;
+- transient negative/conflicting Count evidence fails closed during traversal;
+- restored-after-drift Count cannot evade detection;
+- stable counted inputs remain accepted and retain canonical ordering with the added post-`Current` rebound;
+- pure streaming inputs remain accepted;
+- historical post-traversal drift, early-overrun, under-yield, duplicate identity and 10,000-item bounds remain intact.
 
-`preflight-ifc-roundtrip-known-count-stability.py` statically guards the shared contract, all five production call sites, ordering relative to final under-yield checks and canonical publication, existing pre-item guards, existing size bounds, smoke registration, and this runbook.
+`preflight-ifc-roundtrip-known-count-stability.py` statically guards the shared during/after traversal contract, all three projection-owned call sites, ordering before and immediately after `Current`, the Current-induced regression smoke, historical post-traversal checks, existing pre-item guards and existing size bounds.
 
 ## Runtime boundary
 
@@ -56,4 +61,4 @@ This is Core/export/trace data-integrity work. No licensed BricsCAD, private DWG
 
 ## Merge boundary
 
-The final candidate must be reconciled to exact current `main`, pass branch CI, then pass protected PR `preflight` and `core` on the current candidate. Only then may the same-task PR be merged under the repository's standing expected-head authorization, followed by exact protected-main verification.
+The final candidate must be reconciled to exact current `main`, pass branch CI, then pass protected PR `preflight` and `core` on the current candidate. Only then may the same-task PR be merged under expected-head authorization, followed by exact protected-main verification.

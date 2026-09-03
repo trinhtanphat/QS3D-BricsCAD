@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 
@@ -22,6 +23,7 @@ namespace QS3D.Core.Services
             var hasPreviousHost = opening.Properties.TryGetValue("HostWallId", out var previous);
             var previousHostRaw = hasPreviousHost ? previous ?? string.Empty : string.Empty;
             ValidateCanonicalPersistedHostId(previousHostRaw, opening.Id);
+            ValidateCanonicalDependencyIds(opening);
             var previousHost = previousHostRaw.Trim();
             var relationshipChanged = !string.Equals(previousHost, wall.Id, StringComparison.OrdinalIgnoreCase);
             var matchingDependencies = opening.DependsOn.Where(x => DependencyMatches(x, wall.Id)).ToList();
@@ -71,6 +73,7 @@ namespace QS3D.Core.Services
             ValidateUniqueElementIds(project);
             var opening = project.FindElement(openingId) ?? throw new InvalidOperationException("Opening element not found: " + openingId);
             EnsureOpening(opening, openingId);
+            ValidateCanonicalDependencyIds(opening);
             var hasHostProperty = opening.Properties.TryGetValue("HostWallId", out var value);
             if (!hasHostProperty)
             {
@@ -116,6 +119,7 @@ namespace QS3D.Core.Services
             if (string.IsNullOrWhiteSpace(value)) return;
             if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
                 throw new InvalidOperationException(label + " id is non-canonical. Use the exact semantic identifier without surrounding whitespace.");
+            ValidateRelationshipIdentityText(value, label + " id");
         }
 
         private static void ValidateCanonicalPersistedHostId(string rawHostId, string openingId)
@@ -123,6 +127,34 @@ namespace QS3D.Core.Services
             if (string.IsNullOrWhiteSpace(rawHostId)) return;
             if (!string.Equals(rawHostId, rawHostId.Trim(), StringComparison.Ordinal))
                 throw new InvalidOperationException("Opening " + openingId + " has a non-canonical HostWallId. Repair the host relationship before changing it.");
+            ValidateRelationshipIdentityText(rawHostId, "Opening " + openingId + " HostWallId");
+        }
+
+        private static void ValidateCanonicalDependencyIds(ProjectElement opening)
+        {
+            for (var index = 0; index < opening.DependsOn.Count; index++)
+            {
+                var dependencyId = opening.DependsOn[index] ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(dependencyId))
+                    throw new InvalidOperationException("Opening " + opening.Id + " contains a blank dependency at index " + index + ". Repair the relationship before changing it.");
+                if (!string.Equals(dependencyId, dependencyId.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Opening " + opening.Id + " contains a non-canonical dependency at index " + index + ". Repair the relationship before changing it.");
+                ValidateRelationshipIdentityText(dependencyId, "Opening " + opening.Id + " dependency at index " + index);
+            }
+        }
+
+        private static void ValidateRelationshipIdentityText(string value, string label)
+        {
+            if (value.Any(char.IsControl))
+                throw new InvalidOperationException(label + " contains control characters. Repair the relationship before changing it.");
+            try
+            {
+                XmlConvert.VerifyXmlChars(value);
+            }
+            catch (XmlException ex)
+            {
+                throw new InvalidOperationException(label + " contains malformed UTF-16 or XML-invalid characters. Repair the relationship before changing it.", ex);
+            }
         }
 
         private static void ValidateUniqueElementIds(ProjectState project)
@@ -154,6 +186,7 @@ namespace QS3D.Core.Services
                         throw new InvalidOperationException("Cannot validate host dependency cycle because element " + current.Id + " contains a blank dependency at index " + index + ".");
                     if (!string.Equals(dependencyId, dependencyId.Trim(), StringComparison.Ordinal))
                         throw new InvalidOperationException("Cannot validate host dependency cycle because element " + current.Id + " contains a non-canonical dependency at index " + index + ".");
+                    ValidateRelationshipIdentityText(dependencyId, "Element " + current.Id + " dependency at index " + index);
                     if (string.Equals(dependencyId, opening.Id, StringComparison.OrdinalIgnoreCase))
                         throw new InvalidOperationException("Linking opening " + opening.Id + " to host " + wall.Id + " would create a semantic dependency cycle.");
                     if (!elementsById.TryGetValue(dependencyId, out var dependency))

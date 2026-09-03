@@ -170,10 +170,14 @@ namespace QS3D.BricsCAD.V25.Cad
             if (textHeight > radius * 1.8d)
                 throw new InvalidOperationException("GridTextHeightM quá lớn so với GridBubbleRadiusM cho " + element.Id + ".");
 
-            var previous = ValidatePrevious(document.Database, transaction, project, element);
-            ErasePrevious(transaction, project, element, previous);
+            var authoritativeOwnerId = source.OwnerId;
+            if (authoritativeOwnerId.IsNull || !authoritativeOwnerId.IsValid)
+                throw new InvalidOperationException("Grid source không có owner space hợp lệ: " + element.Id + ".");
 
-            var owner = transaction.GetObject(source.OwnerId, OpenMode.ForWrite, false) as BlockTableRecord;
+            var previous = ValidatePrevious(document.Database, transaction, project, element, authoritativeOwnerId);
+            ErasePrevious(transaction, project, element, previous, authoritativeOwnerId);
+
+            var owner = transaction.GetObject(authoritativeOwnerId, OpenMode.ForWrite, false) as BlockTableRecord;
             if (owner == null) throw new InvalidOperationException("Không mở được owner space của Grid source " + element.Id + ".");
 
             var centers = BubbleCenters(source, start, end, radius);
@@ -278,7 +282,8 @@ namespace QS3D.BricsCAD.V25.Cad
             Database database,
             Transaction transaction,
             ProjectState project,
-            ProjectElement element)
+            ProjectElement element,
+            ObjectId authoritativeOwnerId)
         {
             if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw))
                 return Array.Empty<KeyValuePair<string, ObjectId>>();
@@ -309,6 +314,9 @@ namespace QS3D.BricsCAD.V25.Cad
                 if (!(entity is Line) && !(entity is Circle) && !(entity is DBText))
                     throw new InvalidOperationException(
                         "Generated Grid annotation có loại CAD object không hợp lệ. Refusing destructive replacement before any Grid annotation is erased: " + handle + "/" + entity.GetType().Name + ".");
+                if (entity.OwnerId != authoritativeOwnerId)
+                    throw new InvalidOperationException(
+                        "Generated Grid annotation đã drift sang owner space/layout khác authoritative Grid source. Refusing destructive replacement before any Grid annotation is erased: " + handle + ".");
                 GeneratedGeometryService.RequireMatchingOwnership(entity, project, element, "validate Grid annotation " + handle);
                 result.Add(new KeyValuePair<string, ObjectId>(handle, id));
             }
@@ -323,7 +331,8 @@ namespace QS3D.BricsCAD.V25.Cad
             Transaction transaction,
             ProjectState project,
             ProjectElement element,
-            IReadOnlyList<KeyValuePair<string, ObjectId>> previous)
+            IReadOnlyList<KeyValuePair<string, ObjectId>> previous,
+            ObjectId authoritativeOwnerId)
         {
             foreach (var item in previous)
             {
@@ -334,6 +343,9 @@ namespace QS3D.BricsCAD.V25.Cad
                 if (!(entity is Line) && !(entity is Circle) && !(entity is DBText))
                     throw new InvalidOperationException(
                         "Generated Grid annotation type changed after validation. Refusing partial destructive replacement: " + item.Key + ".");
+                if (entity.OwnerId != authoritativeOwnerId)
+                    throw new InvalidOperationException(
+                        "Generated Grid annotation owner space/layout changed after validation. Refusing partial destructive replacement: " + item.Key + ".");
                 GeneratedGeometryService.RequireMatchingOwnership(entity, project, element, "erase Grid annotation " + item.Key);
                 entity.Erase();
             }

@@ -216,10 +216,10 @@ namespace QS3D.BricsCAD.V25.UI
                            ". Dòng unresolved/foreign vẫn hiển thị nhưng không được định vị.");
                 UpdateActionState();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 _grid.ItemsSource = Array.Empty<CoordinationManagerRow>();
-                SetMessage("Không thể làm mới Coordination Manager: " + ex.Message);
+                SetMessage("Không thể làm mới Coordination Manager. Vui lòng thử lại.");
                 UpdateActionState();
             }
         }
@@ -257,9 +257,9 @@ namespace QS3D.BricsCAD.V25.UI
                     ? "Đã định vị issue " + issue.IssueId + " bằng " + resolved.Count + " CAD object sau khi revalidate toàn bộ provenance."
                     : "Đã chọn issue " + issue.IssueId + " bằng " + resolved.Count + " CAD object sau khi revalidate toàn bộ provenance nhưng chưa thể zoom vùng chọn hiện hành.");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                SetMessage("Định vị bị từ chối: " + ex.Message);
+                SetMessage("Không thể định vị Coordination issue. Vui lòng thử lại.");
             }
         }
 
@@ -329,9 +329,9 @@ namespace QS3D.BricsCAD.V25.UI
                 SetMessage("Đã lưu lifecycle của issue " + issue.IssueId + " qua canonical QSDB persistence.");
                 SafeRefresh();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                SetMessage("Không thể lưu Coordination issue: " + ex.Message);
+                SetMessage("Không thể lưu Coordination issue. Vui lòng thử lại.");
             }
         }
 

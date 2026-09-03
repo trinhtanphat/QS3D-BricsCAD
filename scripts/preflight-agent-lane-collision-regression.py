@@ -197,7 +197,12 @@ def main():
         "dependabot[bot]",
     )
 
+    # Current-state fixtures are intentionally present in open_prs so the ordinary
+    # lane/duplicate tests exercise open carriers rather than the terminal-PR bypass.
     peers = [
+        {"number": 99, "body": "", "head": {"ref": "agent/opaque/task"}},
+        {"number": 100, "body": "", "head": {"ref": "agent/opaque-20260828/issue-2305-infer-lane"}},
+        {"number": 101, "body": "", "head": {"ref": "integration/batch-a"}},
         {"number": 10, "body": "Lane-Key: issue-2305", "head": {"ref": "agent/a/task"}},
         {"number": 11, "body": "Issue: #2306", "head": {"ref": "agent/b/task"}},
         {"number": 12, "body": "Fixes #2305", "head": {"ref": "agent/c/task"}},
@@ -230,6 +235,61 @@ def main():
         (12, "agent/c/task"),
         (14, "agent/bad"),
     ]
+
+    inferred_event = {
+        "number": 100,
+        "sender": {"login": "trinhtanphat"},
+        "pull_request": {
+            "number": 100,
+            "body": "## Summary\nNo duplicated lane metadata here.",
+            "head": {
+                "ref": "agent/opaque-20260828/issue-2305-infer-lane",
+                "repo": {"full_name": "trinhtanphat/QS3D-BricsCAD"},
+            },
+        },
+    }
+    key, conflicts = gate.validate_pull_request_event(
+        inferred_event, "trinhtanphat/QS3D-BricsCAD", peers
+    )
+    assert key == "issue-2305"
+    assert conflicts == [
+        (10, "agent/a/task"),
+        (12, "agent/c/task"),
+        (14, "agent/bad"),
+    ]
+
+    mismatched_event = {
+        **inferred_event,
+        "pull_request": {
+            **inferred_event["pull_request"],
+            "body": "Lane-Key: issue-9999",
+        },
+    }
+    expect_raises(
+        lambda: gate.validate_pull_request_event(
+            mismatched_event, "trinhtanphat/QS3D-BricsCAD", peers
+        ),
+        "does not match branch-derived Lane-Key 'issue-2305'",
+    )
+
+    integration_missing_event = {
+        "number": 101,
+        "sender": {"login": "trinhtanphat"},
+        "pull_request": {
+            "number": 101,
+            "body": "## Summary\nIntegration batch without explicit lane metadata.",
+            "head": {
+                "ref": "integration/batch-a",
+                "repo": {"full_name": "trinhtanphat/QS3D-BricsCAD"},
+            },
+        },
+    }
+    expect_raises(
+        lambda: gate.validate_pull_request_event(
+            integration_missing_event, "trinhtanphat/QS3D-BricsCAD", peers
+        ),
+        "requires a Lane-Key in the PR body",
+    )
 
     print("PASS: agent reservation/Lane-Key collision preflight regression")
     return 0

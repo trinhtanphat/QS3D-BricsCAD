@@ -188,9 +188,9 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 RefreshHomeShell(recordActiveDrawing);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _statusText.Text = "Không thể làm mới Khởi đầu: " + ex.Message;
+                ShowSafeFailure("Không thể làm mới Khởi đầu. Vui lòng thử lại.");
             }
             finally
             {
@@ -752,14 +752,25 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 Application.DocumentManager.Open(normalized, false);
-                StartCenterUserStateStore.RecordProject(normalized);
-                _statusText.Text = "Đã mở " + Path.GetFileName(normalized) + ".";
-                QueueHomeRefresh(recordActiveDrawing: true);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _statusText.Text = "Không thể mở: " + ex.Message;
+                ShowSafeFailure("Không thể mở dự án gần đây. Vui lòng thử lại.");
+                return;
             }
+
+            try
+            {
+                StartCenterUserStateStore.RecordProject(normalized);
+            }
+            catch (Exception)
+            {
+                // Native open already committed. Recent-project state is best-effort and must never
+                // be reinterpreted as a failed CAD open or trigger a duplicate reopen attempt.
+            }
+
+            _statusText.Text = "Đã mở " + Path.GetFileName(normalized) + ".";
+            QueueHomeRefresh(recordActiveDrawing: true);
         }
 
         private void RunUiAction(Action action)
@@ -770,10 +781,15 @@ namespace QS3D.BricsCAD.V25.UI
                 _statusText.Text = string.Empty;
                 QueueHomeRefresh(recordActiveDrawing: true);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _statusText.Text = ex.Message;
+                ShowSafeFailure("Không thể hoàn tất thao tác. Vui lòng thử lại.");
             }
+        }
+
+        private void ShowSafeFailure(string message)
+        {
+            _statusText.Text = message;
         }
 
         private static string DisplayVersion()

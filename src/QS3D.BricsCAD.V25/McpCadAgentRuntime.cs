@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using QS3D.Core.Agent;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
 using Teigha.DatabaseServices;
@@ -21,12 +22,14 @@ namespace QS3D.BricsCAD.V25
     /// </summary>
     internal static class McpCadAgentRuntime
     {
-        private const int CadDispatchTimeoutMilliseconds = 15000;
+        private const int CadDispatchTimeoutMilliseconds = 8000;
         private const long MaxAuditBytes = 4L * 1024L * 1024L;
         private const string AuditFileName = "mcp-agent-audit.jsonl";
         private const int CadWorkQueued = 0;
         private const int CadWorkRunning = 1;
         private const int CadWorkCancelledBeforeStart = 2;
+        private const int DbmodPersistentContentMask = 1 | 4 | 32;
+        internal const string Qs3dCommandPattern = "^QS3D[A-Za-z0-9_]*$";
 
         private static readonly object AuditSync = new object();
         private static readonly AsyncLocal<int?> MutationEpoch = new AsyncLocal<int?>();
@@ -67,27 +70,37 @@ namespace QS3D.BricsCAD.V25
         {
             Interlocked.Increment(ref _automationEpoch);
             _automationStopped = false;
+            McpCadMutationCoordinator.Reset();
+            McpQs3dDomainRuntime.ResetForServerStart();
         }
 
         public static void StopAutomation()
         {
             _automationStopped = true;
             Interlocked.Increment(ref _automationEpoch);
+            McpCadMutationCoordinator.Reset();
         }
 
         public static string Call(string toolName, string arguments)
         {
             var tool = (toolName ?? string.Empty).Trim();
             var args = string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments;
+            var executionMode = McpToolCapabilityContract.ResolveExecutionMode(
+                McpTopLevelJson.ExtractString(args, "executionMode"),
+                McpTopLevelJson.ExtractString(args, "execution_mode"));
+            McpToolCapabilityContract.EnsureAllowed(tool, executionMode, ToolRequiresMutation(tool));
             switch (tool)
             {
-                case "qs3d_status": return InvokeCad(BuildStatusJson);
+                case "mcp_status": return InvokeCad(() => BuildMcpStatusJson(executionMode));
+                case "bricscad_status": return InvokeCad(BuildBricscadStatusJson);
+                case "qs3d_status": return InvokeCad(() => McpQs3dDomainRuntime.BuildStatusJson(true));
+                case "qs3d_domain_status": return InvokeCad(() => McpQs3dDomainRuntime.BuildStatusJson(false));
                 case "cad_active_document": return InvokeCad(BuildActiveDocumentJson);
                 case "cad_selection": return InvokeCad(BuildSelectionJson);
                 case "cad_database_snapshot": return InvokeCad(() => BuildDatabaseSnapshotJson(Integer(args, "limit", 250, 1, 1000)));
                 case "cad_entity_inspect": return InspectEntity(args);
                 case "cad_view_state": return InvokeCad(BuildViewStateJson);
-                case "cad_wait_idle": return WaitUntilIdle(Integer(args, "timeoutMs", 10000, 100, 30000));
+                case "cad_wait_idle": return WaitUntilIdle(Integer(args, "timeoutMs", 5000, 100, 7000));
                 case "cad_sysvar": return ReadSystemVariable(args);
                 case "cad_create_line": return Mutation(args, tool, () => CreateLine(args));
                 case "cad_create_circle": return Mutation(args, tool, () => CreateCircle(args));
@@ -100,8 +113,13 @@ namespace QS3D.BricsCAD.V25
                 case "cad_entity_set_layer": return Mutation(args, tool, () => SetEntityLayer(args));
                 case "cad_layer": return Mutation(args, tool, () => LayerAction(args));
                 case "cad_command_catalog": return CommandCatalogJson();
-                case "cad_command_sequence": return Mutation(args, tool, () => RunCadCommandSequence(args));
-                case "qs3d_run_command": return Mutation(args, tool, () => RunQs3dCommand(args));
+                case "cad_command_sequence":
+                    return Mutation(args, tool, () =>
+                        McpCadDirectModelRuntime.CanHandleCadCommandSequence(args)
+                            ? McpCadDirectModelRuntime.CallCadCommandSequence(args)
+                            : RunCadCommandSequence(args));
+                case "qs3d_run_command": return Mutation(args, tool, () => McpQs3dDomainRuntime.Call(tool, args));
+                case "qs3d_place_single_footing": return Mutation(args, tool, () => McpQs3dDomainRuntime.Call(tool, args));
                 case "cad_ui_click": return Mutation(args, tool, () => UiClick(args));
                 case "cad_ui_type": return Mutation(args, tool, () => UiType(args));
                 case "cad_ui_key": return Mutation(args, tool, () => UiKey(args));
@@ -110,6 +128,12 @@ namespace QS3D.BricsCAD.V25
                 case "cad_audit_tail": return ReadAuditTail(Integer(args, "limit", 25, 1, 100));
                 case "cad_cancel_command": return CancelCurrentCommand();
                 default:
+                    if (McpCadDirectModelRuntime.IsTool(tool))
+                    {
+                        if (!McpCadDirectModelRuntime.RequiresMutation(tool))
+                            return McpCadDirectModelRuntime.Call(tool, args);
+                        return Mutation(args, tool, () => McpCadDirectModelRuntime.Call(tool, args));
+                    }
                     if (McpDesktopAutomationRuntime.IsTool(tool))
                     {
                         if (McpDesktopAutomationRuntime.RequiresMutation(tool))
@@ -121,18 +145,52 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        private static bool ToolRequiresMutation(string? tool)
+        {
+            var normalizedTool = tool ?? string.Empty;
+            switch (normalizedTool)
+            {
+                case "cad_create_line":
+                case "cad_create_circle":
+                case "cad_create_arc":
+                case "cad_create_polyline":
+                case "cad_create_text":
+                case "cad_create_mtext":
+                case "cad_entity_transform":
+                case "cad_entity_delete":
+                case "cad_entity_set_layer":
+                case "cad_layer":
+                case "cad_command_sequence":
+                case "cad_ui_click":
+                case "cad_ui_type":
+                case "cad_ui_key":
+                case "cad_agent_stop":
+                case "cad_agent_resume":
+                case "cad_cancel_command":
+                    return true;
+            }
+            if (McpQs3dDomainRuntime.IsTool(normalizedTool)) return McpQs3dDomainRuntime.RequiresMutation(normalizedTool);
+            if (McpCadDirectModelRuntime.IsTool(normalizedTool)) return McpCadDirectModelRuntime.RequiresMutation(normalizedTool);
+            if (McpDesktopAutomationRuntime.IsTool(normalizedTool)) return McpDesktopAutomationRuntime.RequiresMutation(normalizedTool);
+            return false;
+        }
+
         private static string Mutation(string body, string tool, Func<string> action)
         {
             EnsureAutomationRunning();
             if (!McpTopLevelJson.ExtractBoolean(body, "confirmMutation"))
                 throw new InvalidOperationException("confirmMutation=true is required for " + tool + ".");
 
-            var epoch = Volatile.Read(ref _automationEpoch);
-            EnsureAutomationRunning(epoch);
-            var previousEpoch = MutationEpoch.Value;
-            MutationEpoch.Value = epoch;
-            try { return action(); }
-            finally { MutationEpoch.Value = previousEpoch; }
+            var writerToken = McpTopLevelJson.ExtractString(body, "writerToken");
+            using (McpCadMutationCoordinator.EnterMutation(writerToken, tool, detail => Audit(tool, detail)))
+            {
+                var epoch = Volatile.Read(ref _automationEpoch);
+                EnsureAutomationRunning(epoch);
+                var previousEpoch = MutationEpoch.Value;
+                MutationEpoch.Value = epoch;
+                try { return action(); }
+                finally { MutationEpoch.Value = previousEpoch; }
+            }
         }
 
         private static void EnsureAutomationRunning()
@@ -147,7 +205,7 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("Automation was stopped or restarted before this mutation could continue. Submit a new confirmed mutation after resume.");
         }
 
-        private static void EnsureCurrentMutationRunning()
+        internal static void EnsureCurrentMutationRunning()
         {
             var epoch = MutationEpoch.Value;
             if (!epoch.HasValue)
@@ -155,23 +213,37 @@ namespace QS3D.BricsCAD.V25
             EnsureAutomationRunning(epoch.Value);
         }
 
+        internal static void AuditDomainMutation(string tool, string detail)
+        {
+            Audit(tool, detail);
+        }
+
         private static string CreateLine(string body)
         {
-            var entity = new Line(
-                new Point3d(NumberRequired(body, "x1"), NumberRequired(body, "y1"), NumberOptional(body, "z1", 0d)),
-                new Point3d(NumberRequired(body, "x2"), NumberRequired(body, "y2"), NumberOptional(body, "z2", 0d)));
-            return InvokeCadMutation(() => AddEntity(entity, LayerOptional(body), "cad_create_line"));
+            var x1 = NumberRequired(body, "x1");
+            var y1 = NumberRequired(body, "y1");
+            var z1 = NumberOptional(body, "z1", 0d);
+            var x2 = NumberRequired(body, "x2");
+            var y2 = NumberRequired(body, "y2");
+            var z2 = NumberOptional(body, "z2", 0d);
+            var layer = LayerOptional(body);
+            return AddEntity(() => new Line(
+                new Point3d(x1, y1, z1),
+                new Point3d(x2, y2, z2)), layer, "cad_create_line");
         }
 
         private static string CreateCircle(string body)
         {
             var radius = NumberRequired(body, "radius");
             if (!(radius > 0d)) throw new InvalidOperationException("radius must be > 0.");
-            var entity = new Circle(
-                new Point3d(NumberRequired(body, "x"), NumberRequired(body, "y"), NumberOptional(body, "z", 0d)),
+            var x = NumberRequired(body, "x");
+            var y = NumberRequired(body, "y");
+            var z = NumberOptional(body, "z", 0d);
+            var layer = LayerOptional(body);
+            return AddEntity(() => new Circle(
+                new Point3d(x, y, z),
                 Vector3d.ZAxis,
-                radius);
-            return InvokeCadMutation(() => AddEntity(entity, LayerOptional(body), "cad_create_circle"));
+                radius), layer, "cad_create_circle");
         }
 
         private static string CreateArc(string body)
@@ -181,12 +253,15 @@ namespace QS3D.BricsCAD.V25
             var start = NumberRequired(body, "startAngleDeg") * Math.PI / 180d;
             var end = NumberRequired(body, "endAngleDeg") * Math.PI / 180d;
             if (Math.Abs(end - start) < 1e-12) throw new InvalidOperationException("Arc start/end angles must define a non-zero sweep.");
-            var entity = new Arc(
-                new Point3d(NumberRequired(body, "x"), NumberRequired(body, "y"), NumberOptional(body, "z", 0d)),
+            var x = NumberRequired(body, "x");
+            var y = NumberRequired(body, "y");
+            var z = NumberOptional(body, "z", 0d);
+            var layer = LayerOptional(body);
+            return AddEntity(() => new Arc(
+                new Point3d(x, y, z),
                 radius,
                 start,
-                end);
-            return InvokeCadMutation(() => AddEntity(entity, LayerOptional(body), "cad_create_arc"));
+                end), layer, "cad_create_arc");
         }
 
         private static string CreatePolyline(string body)
@@ -198,14 +273,15 @@ namespace QS3D.BricsCAD.V25
             if (points.Count > 2048) throw new InvalidOperationException("Polyline exceeds 2048 vertices.");
             var closed = McpTopLevelJson.ExtractBoolean(body, "closed");
             var elevation = NumberOptional(body, "elevation", 0d);
-            return InvokeCadMutation(() =>
+            var layer = LayerOptional(body);
+            return AddEntity(() =>
             {
                 var entity = new Polyline(points.Count);
                 for (var i = 0; i < points.Count; i++) entity.AddVertexAt(i, points[i], 0d, 0d, 0d);
                 entity.Closed = closed;
                 entity.Elevation = elevation;
-                return AddEntity(entity, LayerOptional(body), "cad_create_polyline");
-            });
+                return entity;
+            }, layer, "cad_create_polyline");
         }
 
         private static string CreateText(string body)
@@ -213,14 +289,18 @@ namespace QS3D.BricsCAD.V25
             var text = RequiredText(body, "text", 4000, true);
             var height = NumberRequired(body, "height");
             if (!(height > 0d)) throw new InvalidOperationException("height must be > 0.");
-            var entity = new DBText
+            var x = NumberRequired(body, "x");
+            var y = NumberRequired(body, "y");
+            var z = NumberOptional(body, "z", 0d);
+            var rotation = NumberOptional(body, "rotationDeg", 0d) * Math.PI / 180d;
+            var layer = LayerOptional(body);
+            return AddEntity(() => new DBText
             {
                 TextString = text,
-                Position = new Point3d(NumberRequired(body, "x"), NumberRequired(body, "y"), NumberOptional(body, "z", 0d)),
+                Position = new Point3d(x, y, z),
                 Height = height,
-                Rotation = NumberOptional(body, "rotationDeg", 0d) * Math.PI / 180d
-            };
-            return InvokeCadMutation(() => AddEntity(entity, LayerOptional(body), "cad_create_text"));
+                Rotation = rotation
+            }, layer, "cad_create_text");
         }
 
         private static string CreateMText(string body)
@@ -230,38 +310,57 @@ namespace QS3D.BricsCAD.V25
             if (!(height > 0d)) throw new InvalidOperationException("height must be > 0.");
             var width = NumberOptional(body, "width", 0d);
             if (width < 0d) throw new InvalidOperationException("width must be >= 0.");
-            return InvokeCadMutation(() =>
+            var x = NumberRequired(body, "x");
+            var y = NumberRequired(body, "y");
+            var z = NumberOptional(body, "z", 0d);
+            var rotation = NumberOptional(body, "rotationDeg", 0d) * Math.PI / 180d;
+            var layer = LayerOptional(body);
+            return AddEntity(() =>
             {
                 var entity = new MText
                 {
-                    Location = new Point3d(NumberRequired(body, "x"), NumberRequired(body, "y"), NumberOptional(body, "z", 0d)),
+                    Location = new Point3d(x, y, z),
                     TextHeight = height,
                     Contents = text,
                     Normal = Vector3d.ZAxis,
-                    Rotation = NumberOptional(body, "rotationDeg", 0d) * Math.PI / 180d
+                    Rotation = rotation
                 };
                 if (width > 0d) entity.Width = width;
-                return AddEntity(entity, LayerOptional(body), "cad_create_mtext");
-            });
+                return entity;
+            }, layer, "cad_create_mtext");
         }
 
-        private static string AddEntity(Entity entity, string layer, string auditTool)
+        private static string AddEntity(Func<Entity> entityFactory, string layer, string auditTool)
         {
-            var document = RequireDocument();
-            using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartTransaction())
+            if (entityFactory == null) throw new ArgumentNullException(nameof(entityFactory));
+            return InvokeCadMutation(() =>
             {
-                entity.SetDatabaseDefaults(document.Database);
-                EnsureLayer(transaction, document.Database, layer, entity);
-                var table = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
-                var model = (BlockTableRecord)transaction.GetObject(table[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
-                var id = model.AppendEntity(entity);
-                transaction.AddNewlyCreatedDBObject(entity, true);
-                transaction.Commit();
-                var handle = id.Handle.ToString();
-                Audit(auditTool, "handle=" + handle);
-                return "{\"created\":true,\"handle\":\"" + Escape(handle) + "\",\"type\":\"" + Escape(entity.GetType().Name) + "\"}";
-            }
+                var document = RequireDocument();
+                using (document.LockDocument())
+                using (var transaction = document.Database.TransactionManager.StartTransaction())
+                {
+                    var entity = entityFactory();
+                    if (entity == null) throw new InvalidOperationException("Entity factory returned null.");
+                    try
+                    {
+                        entity.SetDatabaseDefaults(document.Database);
+                        EnsureLayer(transaction, document.Database, layer, entity);
+                        var table = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
+                        var model = (BlockTableRecord)transaction.GetObject(table[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                        var id = model.AppendEntity(entity);
+                        transaction.AddNewlyCreatedDBObject(entity, true);
+                        transaction.Commit();
+                        var handle = id.Handle.ToString();
+                        Audit(auditTool, "handle=" + handle);
+                        return "{\"created\":true,\"handle\":\"" + Escape(handle) + "\",\"type\":\"" + Escape(entity.GetType().Name) + "\"}";
+                    }
+                    catch
+                    {
+                        if (entity.ObjectId.IsNull) entity.Dispose();
+                        throw;
+                    }
+                }
+            });
         }
 
         private static string TransformEntity(string body)
@@ -368,23 +467,38 @@ namespace QS3D.BricsCAD.V25
             });
         }
 
-        private static string BuildStatusJson()
+        private static string BuildBricscadStatusJson()
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             var layer = SafeSystemVariable("CLAYER");
-            return "{\"product\":\"QS3D-BricsCAD\",\"bricscadVersion\":\"" + Escape(Convert.ToString(Application.Version) ?? string.Empty)
+            return "{\"product\":\"BricsCAD\",\"connected\":true,\"bricscadVersion\":\"" + Escape(Convert.ToString(Application.Version) ?? string.Empty)
                    + "\",\"activeDocument\":\"" + Escape(document == null ? string.Empty : SafeDocumentName(document))
                    + "\",\"currentLayer\":\"" + Escape(layer)
-                   + "\",\"fullCadAgent\":true,\"automationStopped\":" + (_automationStopped ? "true" : "false") + "}";
+                   + "\",\"automationStopped\":" + (_automationStopped ? "true" : "false") + "}";
+        }
+
+        private static string BuildMcpStatusJson(McpExecutionMode executionMode)
+        {
+            var document = Application.DocumentManager.MdiActiveDocument;
+            var documentName = document == null ? string.Empty : SafeDocumentName(document);
+            return "{\"executionMode\":\"" + McpToolCapabilityContract.ModeName(executionMode)
+                   + "\",\"bricscad\":{\"connected\":true,\"activeDocument\":\"" + Escape(documentName) + "\"}"
+                   + ",\"cadDirect\":{\"available\":" + (document == null ? "false" : "true") + "}"
+                   + ",\"desktopAutomation\":{\"available\":true,\"consent\":\"runtime-gated\"}"
+                   + ",\"qs3dDomain\":" + McpQs3dDomainRuntime.BuildStatusJson(false) + "}";
         }
 
         private static string BuildActiveDocumentJson()
         {
             var document = RequireDocument();
             var filename = document.Database.Filename ?? string.Empty;
+            var hasLocalPath = Path.IsPathRooted(filename);
+            var dbmod = ReadDbmod();
+            var modified = (dbmod & DbmodPersistentContentMask) != 0;
             return "{\"name\":\"" + Escape(SafeDocumentName(document))
-                   + "\",\"saved\":" + (string.IsNullOrWhiteSpace(filename) ? "false" : "true")
-                   + ",\"hasLocalPath\":" + (Path.IsPathRooted(filename) ? "true" : "false") + "}";
+                   + "\",\"saved\":" + (hasLocalPath && !modified ? "true" : "false")
+                   + ",\"hasLocalPath\":" + (hasLocalPath ? "true" : "false")
+                   + ",\"modified\":" + (modified ? "true" : "false") + "}";
         }
 
         private static string BuildSelectionJson()
@@ -489,25 +603,41 @@ namespace QS3D.BricsCAD.V25
             return InvokeCadMutation(() =>
             {
                 var document = RequireDocument();
+                if (command == "QSAVE") return SaveActiveDocument(document);
                 var script = "_." + command + "\n" + inputs;
                 if (!script.EndsWith("\n", StringComparison.Ordinal)) script += "\n";
-                document.SendStringToExecute(script, true, false, true);
+                McpCadMutationCoordinator.QueueNativeCommand(
+                    document,
+                    command,
+                    () => document.SendStringToExecute(script, true, false, true),
+                    detail => Audit("cad_command_sequence", detail));
                 Audit("cad_command_sequence", "command=" + command + "; inputChars=" + inputs.Length.ToString(CultureInfo.InvariantCulture));
                 return "{\"accepted\":true,\"command\":\"" + Escape(command) + "\",\"inputChars\":" + inputs.Length.ToString(CultureInfo.InvariantCulture) + "}";
             });
         }
 
-        private static string RunQs3dCommand(string body)
+        private static string SaveActiveDocument(Document document)
         {
-            var command = McpTopLevelJson.ExtractString(body, "command").Trim();
-            if (command.Length == 0 || command.Length > 80 || !Regex.IsMatch(command, "^QS3D[A-Za-z0-9_]*$", RegexOptions.CultureInvariant))
-                throw new InvalidOperationException("Only one QS3D command name matching ^QS3D[A-Za-z0-9_]*$ is allowed.");
-            return InvokeCadMutation(() =>
+            var filename = document.Database.Filename ?? string.Empty;
+            if (!Path.IsPathRooted(filename))
+                throw new InvalidOperationException("Active drawing has no existing local path. Use SAVEAS before QSAVE.");
+            if (SafeInteger(SafeSystemVariable("CMDACTIVE")) != "0")
+                throw new InvalidOperationException("Cannot save while a BricsCAD command is active. Wait for idle or cancel the active command before retrying.");
+
+            EnsureCurrentMutationRunning();
+            using (document.LockDocument())
             {
-                RequireDocument().SendStringToExecute(command + "\n", true, false, true);
-                Audit("qs3d_run_command", "command=" + command.ToUpperInvariant());
-                return "{\"accepted\":true,\"command\":\"" + Escape(command.ToUpperInvariant()) + "\"}";
-            });
+                document.Database.Save();
+            }
+
+            var dbmodAfterSave = ReadDbmod();
+            if ((dbmodAfterSave & DbmodPersistentContentMask) != 0)
+                throw new InvalidOperationException(
+                    "BricsCAD save returned but persistent DBMOD content bits remain; save completion was not confirmed. DBMOD="
+                    + dbmodAfterSave.ToString(CultureInfo.InvariantCulture) + ".");
+
+            Audit("cad_command_sequence", "command=QSAVE; inputChars=0; completed=true; dbmod=" + dbmodAfterSave.ToString(CultureInfo.InvariantCulture));
+            return "{\"accepted\":true,\"completed\":true,\"saved\":true,\"command\":\"QSAVE\",\"inputChars\":0}";
         }
 
         private static string CommandCatalogJson()
@@ -522,7 +652,6 @@ namespace QS3D.BricsCAD.V25
             }
             return builder.Append("],\"guard\":\"one allowlisted command; bounded prompt lines; no known command chaining after terminators\"}").ToString();
         }
-
         private static string NormalizeCadCommandToken(string value)
         {
             var token = (value ?? string.Empty).Trim();
@@ -758,12 +887,15 @@ namespace QS3D.BricsCAD.V25
         private static string DescribeEntity(Entity entity, bool extents, bool details)
         {
             var builder = new StringBuilder();
+            var boundedSolidInspect = extents && details && entity is Solid3d;
             builder.Append("{\"handle\":\"").Append(Escape(entity.Handle.ToString())).Append("\",\"type\":\"")
                 .Append(Escape(entity.GetType().Name)).Append("\",\"layer\":\"").Append(Escape(entity.Layer)).Append('"');
             if (extents)
             {
                 builder.Append(",\"extents\":");
-                try { builder.Append(ExtentsJson(entity.GeometricExtents)); } catch { builder.Append("null"); }
+                if (boundedSolidInspect) builder.Append("null");
+                else try { builder.Append(ExtentsJson(entity.GeometricExtents)); } catch { builder.Append("null"); }
+                if (boundedSolidInspect) builder.Append(",\"extentsDeferred\":true");
             }
             if (details)
             {
@@ -808,8 +940,7 @@ namespace QS3D.BricsCAD.V25
         private static void EnsureLayer(Transaction transaction, Database database, string layer, Entity entity)
         {
             if (string.IsNullOrWhiteSpace(layer)) return;
-            EnsureLayerRecord(transaction, database, layer);
-            entity.Layer = layer;
+            entity.LayerId = EnsureLayerRecord(transaction, database, layer);
         }
 
         private static ObjectId EnsureLayerRecord(Transaction transaction, Database database, string layer)
@@ -933,6 +1064,22 @@ namespace QS3D.BricsCAD.V25
         {
             try { return Convert.ToString(Application.GetSystemVariable(name), CultureInfo.InvariantCulture) ?? string.Empty; }
             catch { return string.Empty; }
+        }
+
+        private static int ReadDbmod()
+        {
+            object raw;
+            try { raw = Application.GetSystemVariable("DBMOD"); }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Could not read BricsCAD DBMOD; drawing save state cannot be confirmed.", ex);
+            }
+
+            var text = Convert.ToString(raw, CultureInfo.InvariantCulture) ?? string.Empty;
+            int parsed;
+            if (!int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out parsed) || parsed < 0)
+                throw new InvalidOperationException("BricsCAD DBMOD was not a non-negative integer; drawing save state cannot be confirmed.");
+            return parsed;
         }
 
         private static string SafeInteger(string value)

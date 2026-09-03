@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using QS3D.Core.Domain;
@@ -9,6 +10,7 @@ namespace QS3D.Core.Diagnostics
     {
         private const string GeneratedSolidOwnerKey = "GeneratedSolidHandle";
         private const string OpeningCutOwnerKey = "PhysicalOpeningCutSolidHandle";
+        private const int MaxDestructiveHandleCount = 10000;
         private static readonly IReadOnlyList<string> RebarSlots = Array.AsReadOnly(new[]
         {
             "GeneratedRebarHandles",
@@ -131,15 +133,36 @@ namespace QS3D.Core.Diagnostics
             if (nativeOwnershipValidator == null) throw new ArgumentNullException(nameof(nativeOwnershipValidator));
             if (string.IsNullOrWhiteSpace(expectedPropertyKey)) throw new ArgumentException("Generated owner slot is required.", nameof(expectedPropertyKey));
 
-            var normalized = new List<string>();
+            var knownCount = ResolveKnownDestructiveHandleCount(handles);
+            var normalized = new List<string>(knownCount ?? 0);
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var rawHandle in handles)
+            var observedCount = 0;
+            using (var enumerator = handles.GetEnumerator())
             {
-                var handle = NormalizeHandleIdentity(rawHandle);
-                if (handle.Length == 0) throw new InvalidOperationException("Generated handle set contains a blank handle.");
-                if (!seen.Add(handle)) throw new InvalidOperationException("Generated handle set contains duplicate handle " + handle + ".");
-                normalized.Add(handle);
+                while (true)
+                {
+                    RequireStableKnownDestructiveHandleCount(handles, knownCount);
+                    var moved = enumerator.MoveNext();
+                    RequireStableKnownDestructiveHandleCount(handles, knownCount);
+                    if (!moved) break;
+                    if (knownCount.HasValue && observedCount >= knownCount.Value)
+                        throw DestructiveHandleCountMismatch(knownCount.Value, observedCount + 1);
+                    if (observedCount >= MaxDestructiveHandleCount)
+                        throw new InvalidOperationException("Generated handle set cannot exceed " + MaxDestructiveHandleCount + " input entries.");
+
+                    var rawHandle = enumerator.Current;
+                    RequireStableKnownDestructiveHandleCount(handles, knownCount);
+                    observedCount++;
+                    var handle = NormalizeHandleIdentity(rawHandle);
+                    if (handle.Length == 0) throw new InvalidOperationException("Generated handle set contains a blank handle.");
+                    if (!seen.Add(handle)) throw new InvalidOperationException("Generated handle set contains duplicate handle " + handle + ".");
+                    normalized.Add(handle);
+                }
             }
+
+            RequireStableKnownDestructiveHandleCount(handles, knownCount);
+            if (knownCount.HasValue && observedCount != knownCount.Value)
+                throw DestructiveHandleCountMismatch(knownCount.Value, observedCount);
 
             normalized.Sort(StringComparer.OrdinalIgnoreCase);
             foreach (var handle in normalized)
@@ -153,6 +176,47 @@ namespace QS3D.Core.Diagnostics
                 nativeOwnershipValidator(handle);
             }
             return normalized.AsReadOnly();
+        }
+
+        private static int? ResolveKnownDestructiveHandleCount(IEnumerable<string> handles)
+        {
+            int? knownCount = null;
+            if (handles is ICollection<string> genericCollection)
+                AcceptKnownDestructiveHandleCount(genericCollection.Count, ref knownCount);
+            if (handles is IReadOnlyCollection<string> readOnlyCollection)
+                AcceptKnownDestructiveHandleCount(readOnlyCollection.Count, ref knownCount);
+            if (handles is ICollection nonGenericCollection)
+                AcceptKnownDestructiveHandleCount(nonGenericCollection.Count, ref knownCount);
+            return knownCount;
+        }
+
+        private static void AcceptKnownDestructiveHandleCount(int candidate, ref int? knownCount)
+        {
+            if (candidate < 0)
+                throw new InvalidOperationException("Generated handle set known Count cannot be negative.");
+            if (candidate > MaxDestructiveHandleCount)
+                throw new InvalidOperationException("Generated handle set cannot exceed " + MaxDestructiveHandleCount + " input entries.");
+            if (knownCount.HasValue && knownCount.Value != candidate)
+                throw new InvalidOperationException(
+                    "Generated handle set exposes conflicting known Counts: " + knownCount.Value + " and " + candidate + ".");
+            knownCount = candidate;
+        }
+
+        private static void RequireStableKnownDestructiveHandleCount(IEnumerable<string> handles, int? expectedCount)
+        {
+            if (!expectedCount.HasValue) return;
+            var observedCount = ResolveKnownDestructiveHandleCount(handles);
+            if (!observedCount.HasValue || observedCount.Value != expectedCount.Value)
+                throw new InvalidOperationException(
+                    "Generated handle set known Count changed during traversal from " + expectedCount.Value + " to " +
+                    (observedCount.HasValue ? observedCount.Value.ToString() : "<none>") + ".");
+        }
+
+        private static InvalidOperationException DestructiveHandleCountMismatch(int reportedCount, int observedCount)
+        {
+            return new InvalidOperationException(
+                "Generated handle set changed during traversal; Count reported " + reportedCount +
+                " entries but traversal produced " + observedCount + ".");
         }
 
         private static void EnsureValidElementSet(ProjectState project)
@@ -192,11 +256,33 @@ namespace QS3D.Core.Diagnostics
             string.Equals(key, GeneratedSolidOwnerKey, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(key, OpeningCutOwnerKey, StringComparison.OrdinalIgnoreCase);
 
-        private static IEnumerable<string> SplitHandles(string raw) =>
-            (raw ?? string.Empty)
-                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(NormalizeHandleIdentity)
-                .Where(x => x.Length > 0)
-                .Distinct(StringComparer.OrdinalIgnoreCase);
+        private static IReadOnlyList<string> SplitHandles(string raw)
+        {
+            var source = raw ?? string.Empty;
+            var handles = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var tokenStart = 0;
+
+            for (var index = 0; index <= source.Length; index++)
+            {
+                if (index < source.Length && source[index] != ';') continue;
+                if (handles.Count >= MaxDestructiveHandleCount)
+                    throw new InvalidOperationException(
+                        "Generated owner handle property cannot exceed " + MaxDestructiveHandleCount +
+                        " handle tokens; persisted ownership provenance is outside the destructive safety envelope.");
+
+                var token = source.Substring(tokenStart, index - tokenStart);
+                tokenStart = index + 1;
+                var normalized = NormalizeHandleIdentity(token);
+                if (normalized.Length == 0)
+                    throw new InvalidOperationException("Generated owner handle property contains an empty handle token; persisted ownership provenance is malformed.");
+                if (!string.Equals(token, normalized, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Generated owner handle property contains non-canonical handle token '" + token + "'; expected '" + normalized + "'.");
+                if (!seen.Add(normalized))
+                    throw new InvalidOperationException("Generated owner handle property contains duplicate handle token " + normalized + ".");
+                handles.Add(normalized);
+            }
+            return handles.AsReadOnly();
+        }
     }
 }

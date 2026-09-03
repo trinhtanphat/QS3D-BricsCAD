@@ -32,16 +32,18 @@ on:
         type: boolean
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: qs3d-manual-v26-release
   cancel-in-progress: false
 
 jobs:
-  release:
+  qualify:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' }}
     runs-on: [self-hosted, windows, x64, bricscad-v26]
+    permissions:
+      contents: read
     env:
       BRICSCAD_V26_DIR: ${{ vars.BRICSCAD_V26_DIR }}
       BRICSCAD_V26_PROFILE: ${{ vars.BRICSCAD_V26_PROFILE }}
@@ -74,6 +76,7 @@ jobs:
       - name: Validate manual V26 release request
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Stop'
           if ($env:GITHUB_REF -ne 'refs/heads/main') {
             throw "V26 releases must be dispatched from refs/heads/main. Current ref: $env:GITHUB_REF"
           }
@@ -87,15 +90,21 @@ jobs:
           if ($null -eq $releaseRequest) {
             throw 'Strict V26 release request validation did not return a parsed request.'
           }
-          $isPrerelease = [bool]$releaseRequest.IsPrerelease
-          $signPackage = [bool]$releaseRequest.SignPackage
-          "V26_RELEASE_REQUEST_PRERELEASE=$($isPrerelease.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "V26_RELEASE_REQUEST_SIGN_PACKAGE=$($signPackage.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-          git rev-parse --verify HEAD | Out-Null
-          if (git tag --list $env:RELEASE_TAG) { throw "Tag already exists locally: $env:RELEASE_TAG" }
+          $head = ([string](git rev-parse --verify HEAD)).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $head -ne $env:GITHUB_SHA.ToLowerInvariant()) {
+            throw 'Checked-out V26 qualification HEAD does not match the workflow SHA.'
+          }
+          $localTag = @(git tag --list --format='%(objecttype) %(objectname)' $env:RELEASE_TAG)
+          if ($LASTEXITCODE -ne 0 -or $localTag.Count -gt 1) { throw "Unable to classify local V26 tag identity for $env:RELEASE_TAG." }
+          if ($localTag.Count -eq 1) {
+            $expectedLocal = "commit $($env:GITHUB_SHA.ToLowerInvariant())"
+            if (-not [string]::Equals(([string]$localTag[0]).Trim().ToLowerInvariant(), $expectedLocal, [StringComparison]::Ordinal)) {
+              throw "Existing local V26 release tag $env:RELEASE_TAG is not an exact lightweight tag at workflow SHA $env:GITHUB_SHA."
+            }
+          }
 
-          if ($signPackage) {
+          if ([bool]$releaseRequest.SignPackage) {
             if ($env:QS3D_SIGNING_CERT_THUMBPRINT -notmatch '^[0-9A-Fa-f]{40}$') {
               throw "QS3D_SIGNING_CERT_THUMBPRINT must be a 40-hex Authenticode thumbprint."
             }
@@ -129,7 +138,6 @@ jobs:
       - name: Validate BricsCAD V26 references and .NET 8 host
         shell: powershell
         run: |
-          # Capture the exact ordinary/non-reparse V26 host-reference generations that later build/runtime steps are allowed to consume.
           & .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $env:BRICSCAD_V26_DIR -StatePath $env:V26_HOST_REFERENCE_STATE | Out-Null
           if (@(dotnet --list-runtimes | Where-Object { $_ -match '^Microsoft\.WindowsDesktop\.App 8\.' }).Count -eq 0) {
             throw ".NET 8 Windows Desktop Runtime is required for the V26 managed host."
@@ -231,146 +239,90 @@ jobs:
             -PackagePath 'dist\QS3D-BricsCAD-V26.zip' `
             -OutputPath 'dist\QS3D-BricsCAD-V26.zip.sha256' | Out-Null
 
+      - name: Create V26 candidate provenance
+        shell: powershell
+        run: |
+          & .\scripts\new-v26-candidate-provenance.ps1 `
+            -PackageZip 'dist\QS3D-BricsCAD-V26.zip' `
+            -ReleaseTag $env:RELEASE_TAG `
+            -SourceCommit $env:GITHUB_SHA `
+            -OutputPath 'dist\QS3D-BricsCAD-V26.provenance.json' | Out-Null
+
       - name: Upload V26 qualification artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: QS3D-BricsCAD-V26-${{ inputs.release_tag }}
+          name: QS3D-BricsCAD-V26-${{ inputs.release_tag }}-${{ github.sha }}
           if-no-files-found: error
+          retention-days: 14
           path: |
             dist/QS3D-BricsCAD-V26.zip
             dist/QS3D-BricsCAD-V26.zip.sha256
             dist/QS3D-BricsCAD-V26.update.json
+            dist/QS3D-BricsCAD-V26.provenance.json
             artifacts/bricscad-v26-runtime-unsigned/
             artifacts/bricscad-v26-runtime-signed/
 
-      - name: Publish V26 GitHub Release
+  release:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' }}
+    needs: qualify
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      RELEASE_RUN_RUNTIME: ${{ inputs.run_runtime }}
+      V26_RELEASE_REQUEST_PRERELEASE: ${{ inputs.prerelease }}
+      V26_RELEASE_REQUEST_SIGN_PACKAGE: ${{ inputs.sign_package }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: QS3D-BricsCAD-V26-${{ inputs.release_tag }}-${{ github.sha }}
+          path: .
+
+      - name: Verify and publish held V26 candidate after job boundary
         shell: powershell
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $headers = @{
-            Authorization = "Bearer $env:GH_TOKEN"
-            Accept = "application/vnd.github+json"
-            "X-GitHub-Api-Version" = "2022-11-28"
-            "User-Agent" = "QS3D-V26-Manual-Release"
+          $ErrorActionPreference = 'Stop'
+          $zip = 'dist\QS3D-BricsCAD-V26.zip'
+          $checksum = 'dist\QS3D-BricsCAD-V26.zip.sha256'
+          $provenance = 'dist\QS3D-BricsCAD-V26.provenance.json'
+          foreach ($path in @($zip, $checksum, $provenance)) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing V26 qualified candidate asset: $path" }
           }
-
-          function Assert-RemoteReleaseTagTargetsWorkflowSha {
-            $tagRef = "refs/tags/$env:RELEASE_TAG"
-            $peeledRef = $tagRef + '^{}'
-            $lines = @(git ls-remote --tags origin $tagRef $peeledRef)
-            if ($LASTEXITCODE -ne 0) {
-              throw "Failed to resolve remote V26 release tag $env:RELEASE_TAG from origin. Release remains a draft."
+          if ($env:V26_RELEASE_REQUEST_SIGN_PACKAGE -eq 'true') {
+            $updateManifest = 'dist\QS3D-BricsCAD-V26.update.json'
+            if (-not (Test-Path -LiteralPath $updateManifest -PathType Leaf)) {
+              throw 'Signed V26 qualification candidate is missing its update manifest.'
             }
-
-            $exact = New-Object System.Collections.Generic.List[string]
-            $peeled = New-Object System.Collections.Generic.List[string]
-            foreach ($line in $lines) {
-              if ($line -notmatch '^([0-9a-fA-F]{40})\s+(.+)$') {
-                throw "Malformed git ls-remote output while resolving V26 release tag $env:RELEASE_TAG. Release remains a draft."
-              }
-              $sha = $Matches[1]
-              $refName = $Matches[2]
-              if ([string]::Equals($refName, $tagRef, [StringComparison]::Ordinal)) { $exact.Add($sha) }
-              elseif ([string]::Equals($refName, $peeledRef, [StringComparison]::Ordinal)) { $peeled.Add($sha) }
-              else { throw "Unexpected remote ref while resolving V26 release tag: $refName. Release remains a draft." }
-            }
-            if ($exact.Count -ne 1 -or $peeled.Count -gt 1) {
-              throw "V26 release tag $env:RELEASE_TAG did not resolve to exactly one remote tag identity. Release remains a draft."
-            }
-
-            $resolvedSha = if ($peeled.Count -eq 1) { $peeled[0] } else { $exact[0] }
-            if (-not [string]::Equals($resolvedSha, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) {
-              throw "V26 release tag $env:RELEASE_TAG targets $resolvedSha instead of qualified workflow SHA $env:GITHUB_SHA. Release remains a draft."
-            }
+            $candidateIdentity = & .\scripts\assert-v26-candidate-identity.ps1 `
+              -PackageZip $zip `
+              -ChecksumPath $checksum `
+              -ProvenancePath $provenance `
+              -UpdateManifestPath $updateManifest `
+              -ExpectedSourceCommit $env:GITHUB_SHA `
+              -ExpectedReleaseTag $env:RELEASE_TAG `
+              -AdmittedScript '.\scripts\publish-v26-release.ps1'
           }
-
-          $isPrerelease = $env:V26_RELEASE_REQUEST_PRERELEASE -eq 'true'
-          $signPackage = $env:V26_RELEASE_REQUEST_SIGN_PACKAGE -eq 'true'
-          $runtimeState = if ($env:RELEASE_RUN_RUNTIME -eq 'true') {
-            if ($signPackage) { 'passed required V26 runtime gate on the exact signed release payload' }
-            else { 'passed V26 runtime gate on the unsigned prerelease payload' }
-          } else { 'runtime skipped only for explicit prerelease preview' }
-          $signingState = if ($signPackage) { 'Authenticode-signed/timestamped with V26-only update manifest' } else { 'unsigned prerelease; manual install only' }
-          $request = @{
-            tag_name = $env:RELEASE_TAG
-            target_commitish = $env:GITHUB_SHA
-            name = "QS3D for BricsCAD V26 $env:RELEASE_TAG"
-            body = "Owner-dispatched V26 release. Source/Core/V26 build gates completed. Runtime: $runtimeState. Package: $signingState. V25 assets are not accepted by this lane."
-            draft = $true
-            prerelease = $isPrerelease
-            generate_release_notes = $true
-          } | ConvertTo-Json
-          $release = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases" -Headers $headers -ContentType 'application/json' -Body $request
-
-          Assert-RemoteReleaseTagTargetsWorkflowSha
-
-          $releaseAssets = @('dist\QS3D-BricsCAD-V26.zip', 'dist\QS3D-BricsCAD-V26.zip.sha256')
-          if ($signPackage) { $releaseAssets += 'dist\QS3D-BricsCAD-V26.update.json' }
-          $localAssets = @{}
-          $uploadBase = $release.upload_url -replace '\{\?name,label\}$', ''
-          foreach ($assetPath in $releaseAssets) {
-            $asset = (Resolve-Path -LiteralPath $assetPath).Path
-            $name = [IO.Path]::GetFileName($asset)
-            if ($name -match 'V25') { throw "V25 release asset leaked into V26 publication: $name" }
-            if ($localAssets.ContainsKey($name)) { throw "Duplicate local V26 release asset name: $name" }
-            $localAssets[$name] = $asset
-            $contentType = if ($name.EndsWith('.zip')) { 'application/zip' } elseif ($name.EndsWith('.json')) { 'application/json' } else { 'text/plain' }
-            Invoke-RestMethod -Method Post -Uri ($uploadBase + '?name=' + [Uri]::EscapeDataString($name)) -Headers $headers -ContentType $contentType -InFile $asset | Out-Null
-          }
-
-          $releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$($release.id)"
-          $draftRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
-          $expectedAssets = @('QS3D-BricsCAD-V26.zip', 'QS3D-BricsCAD-V26.zip.sha256')
-          if ($signPackage) { $expectedAssets += 'QS3D-BricsCAD-V26.update.json' }
-          if (@($draftRelease.assets).Count -ne $expectedAssets.Count) {
-            throw "Draft V26 release contains unexpected assets; refusing publication."
-          }
-
-          $assetDownloadHeaders = @{}
-          foreach ($key in $headers.Keys) { $assetDownloadHeaders[$key] = $headers[$key] }
-          $assetDownloadHeaders['Accept'] = 'application/octet-stream'
-          $verificationWorkspace = & .\scripts\v26-release-verification-workspace.ps1 -Operation Create -TempRoot $env:RUNNER_TEMP
-          try {
-            foreach ($expectedAsset in $expectedAssets) {
-              $matches = @($draftRelease.assets | Where-Object { [string]$_.name -ceq $expectedAsset })
-              if ($matches.Count -ne 1) {
-                throw "Expected exactly one V26 release asset named $expectedAsset; found $($matches.Count). Release remains a draft."
-              }
-              if (-not $localAssets.ContainsKey($expectedAsset)) {
-                throw "Local V26 release asset mapping is missing for $expectedAsset. Release remains a draft."
-              }
-
-              $uploadedAsset = $matches[0]
-              $localAsset = [string]$localAssets[$expectedAsset]
-              $localLength = [int64](Get-Item -LiteralPath $localAsset).Length
-              $remoteLength = [int64]$uploadedAsset.size
-              if ($remoteLength -ne $localLength) {
-                throw "Uploaded V26 release asset size mismatch for $expectedAsset. Local=$localLength Remote=$remoteLength. Release remains a draft."
-              }
-
-              $childName = 'asset-' + [Guid]::NewGuid().ToString('N')
-              $downloadedAsset = & .\scripts\v26-release-verification-workspace.ps1 -Operation Child -Workspace $verificationWorkspace -ChildName $childName
-              Invoke-WebRequest `
-                -Method Get `
-                -Uri ([string]$uploadedAsset.url) `
-                -Headers $assetDownloadHeaders `
-                -OutFile $downloadedAsset `
-                -UseBasicParsing
-              $localHash = (Get-FileHash -LiteralPath $localAsset -Algorithm SHA256).Hash
-              $remoteHash = (Get-FileHash -LiteralPath $downloadedAsset -Algorithm SHA256).Hash
-              if (-not [string]::Equals($localHash, $remoteHash, [StringComparison]::OrdinalIgnoreCase)) {
-                throw "Uploaded V26 release asset SHA-256 mismatch for $expectedAsset. Release remains a draft."
-              }
+          else {
+            if (Test-Path -LiteralPath 'dist\QS3D-BricsCAD-V26.update.json') {
+              throw 'Unsigned V26 prerelease candidate unexpectedly contains a signed update manifest.'
             }
+            $candidateIdentity = & .\scripts\assert-v26-candidate-identity.ps1 `
+              -PackageZip $zip `
+              -ChecksumPath $checksum `
+              -ProvenancePath $provenance `
+              -ExpectedSourceCommit $env:GITHUB_SHA `
+              -ExpectedReleaseTag $env:RELEASE_TAG `
+              -AdmittedScript '.\scripts\publish-v26-release.ps1'
           }
-          finally {
-            if (-not [string]::IsNullOrWhiteSpace($verificationWorkspace)) {
-              & .\scripts\v26-release-verification-workspace.ps1 -Operation Cleanup -Workspace $verificationWorkspace
-            }
-          }
+          if ($null -eq $candidateIdentity) { throw 'V26 candidate semantic admission/publication returned no identity.' }
 
-          Assert-RemoteReleaseTagTargetsWorkflowSha
-
-          $published = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body (@{ draft = $false } | ConvertTo-Json)
-          if ($published.draft -ne $false) { throw "V26 GitHub release remained a draft after publish request." }
+          & .\scripts\publish-v26-release.ps1

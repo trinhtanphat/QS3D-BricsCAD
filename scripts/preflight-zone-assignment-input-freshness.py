@@ -7,22 +7,24 @@ registration = (root / "tests/QS3D.Core.SmokeTests/ZoneAssignmentInputFreshnessS
 
 capture = "var targetEnumerationVersion = project.ChangeVersion;"
 enumerator = "using (var enumerator = elements.GetEnumerator())"
-move_next = "while (enumerator.MoveNext())"
+loop = "while (true)"
+move_next = "var moved = enumerator.MoveNext();"
 freshness = "if (project.ChangeVersion != targetEnumerationVersion)"
 changed = "var changed = unique.Values"
 message = 'throw new InvalidOperationException("Project changed while Zone assignment targets were being enumerated. Retry assignment against the current project state.");'
 
-for token in (capture, enumerator, move_next, freshness, changed, message):
+for token in (capture, enumerator, loop, move_next, freshness, changed, message):
     assert token in source, f"missing Zone assignment input-freshness contract: {token}"
 
 capture_pos = source.index(capture)
 enumerator_pos = source.index(enumerator, capture_pos)
-move_next_pos = source.index(move_next, enumerator_pos)
+loop_pos = source.index(loop, enumerator_pos)
+move_next_pos = source.index(move_next, loop_pos)
 freshness_pos = source.index(freshness, move_next_pos)
 changed_pos = source.index(changed, freshness_pos)
-assert capture_pos < enumerator_pos < move_next_pos < freshness_pos < changed_pos, (
+assert capture_pos < enumerator_pos < loop_pos < move_next_pos < freshness_pos < changed_pos, (
     "Zone assignment freshness ordering changed: version capture must precede explicit target traversal, "
-    "and freshness rejection must precede changed-target calculation"
+    "and freshness rejection must follow traversal and precede changed-target calculation"
 )
 
 for token in (

@@ -21,7 +21,7 @@ namespace QS3D.Core.SmokeTests
             var first = new ProjectElement("E1", ElementCategory.Beam);
             first.Properties["GeneratedSolidHandle"] = "AA11";
             var second = new ProjectElement("E2", ElementCategory.Beam);
-            second.Properties["GeneratedRebarHandles"] = "CC33;BB22;CC33";
+            second.Properties["GeneratedRebarHandles"] = "CC33;BB22";
             project.Elements.Add(first);
             project.Elements.Add(second);
 

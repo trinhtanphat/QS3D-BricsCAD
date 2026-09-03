@@ -300,8 +300,39 @@ namespace QS3D.Core.Export
             var observedCount = 0;
             using (var enumerator = values.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableKnownCounts(
+                        values,
+                        maximumCount,
+                        parameterName,
+                        overflowMessage,
+                        knownCount,
+                        corroboratedKnownCount,
+                        knownCountSources);
+
+                    if (!enumerator.MoveNext())
+                    {
+                        RequireStableKnownCounts(
+                            values,
+                            maximumCount,
+                            parameterName,
+                            overflowMessage,
+                            knownCount,
+                            corroboratedKnownCount,
+                            knownCountSources);
+                        break;
+                    }
+
+                    RequireStableKnownCounts(
+                        values,
+                        maximumCount,
+                        parameterName,
+                        overflowMessage,
+                        knownCount,
+                        corroboratedKnownCount,
+                        knownCountSources);
+
                     if (corroboratedKnownCount && knownCount.HasValue && observedCount >= knownCount.Value)
                         throw new ArgumentException("BCF collection Count does not match enumerated item count.", parameterName);
                     if (!corroboratedKnownCount && values is ICollection<T> && knownCount.HasValue && observedCount >= knownCount.Value)
@@ -309,6 +340,14 @@ namespace QS3D.Core.Export
                     if (observedCount >= maximumCount)
                         throw new ArgumentException(overflowMessage, parameterName);
                     var value = enumerator.Current;
+                    RequireStableKnownCounts(
+                        values,
+                        maximumCount,
+                        parameterName,
+                        overflowMessage,
+                        knownCount,
+                        corroboratedKnownCount,
+                        knownCountSources);
                     items.Add(value);
                     observedCount++;
                 }
@@ -317,6 +356,27 @@ namespace QS3D.Core.Export
             if (knownCount.HasValue && observedCount != knownCount.Value)
                 throw new ArgumentException("BCF collection Count does not match enumerated item count.", parameterName);
 
+            RequireStableKnownCounts(
+                values,
+                maximumCount,
+                parameterName,
+                overflowMessage,
+                knownCount,
+                corroboratedKnownCount,
+                knownCountSources);
+
+            return items;
+        }
+
+        private static void RequireStableKnownCounts<T>(
+            IEnumerable<T> values,
+            int maximumCount,
+            string parameterName,
+            string overflowMessage,
+            int? expectedKnownCount,
+            bool expectedCorroboratedKnownCount,
+            int expectedKnownCountSources)
+        {
             var currentKnownCount = ValidateKnownCounts(
                 values,
                 maximumCount,
@@ -324,12 +384,10 @@ namespace QS3D.Core.Export
                 overflowMessage,
                 out var currentCorroboratedKnownCount,
                 out var currentKnownCountSources);
-            if (knownCountSources != currentKnownCountSources ||
-                corroboratedKnownCount != currentCorroboratedKnownCount ||
-                knownCount != currentKnownCount)
+            if (expectedKnownCountSources != currentKnownCountSources ||
+                expectedCorroboratedKnownCount != currentCorroboratedKnownCount ||
+                expectedKnownCount != currentKnownCount)
                 throw new ArgumentException("BCF collection Count changed during enumeration.", parameterName);
-
-            return items;
         }
 
         private static int? ValidateKnownCounts<T>(

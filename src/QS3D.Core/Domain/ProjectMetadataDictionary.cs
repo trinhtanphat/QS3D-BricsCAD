@@ -19,6 +19,7 @@ namespace QS3D.Core.Domain
         private const string WallJunctionSnapPreviewChangeVersionMetadataKey = "WallJunctionSnapPreviewChangeVersion";
         private readonly Dictionary<string, string> _items = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private ProjectState? _project;
+        private long _mutationVersion;
 
         public string this[string key] { get => _items[key]; set => SetPublic(key, value, false); }
         public ICollection<string> Keys => _items.Keys;
@@ -50,8 +51,10 @@ namespace QS3D.Core.Domain
         {
             if (_items.Count == 0) return;
             if (_items.Keys.Any(IsReservedKey)) ValidateReserved(_items);
+            var nextMutationVersion = checked(_mutationVersion + 1L);
             if (_items.Keys.Any(TracksSemanticDirtyState)) TouchProject();
             _items.Clear();
+            _mutationVersion = nextMutationVersion;
         }
 
         public bool Contains(KeyValuePair<string, string> item) => ((ICollection<KeyValuePair<string, string>>)_items).Contains(item);
@@ -62,8 +65,11 @@ namespace QS3D.Core.Domain
             var collection = (ICollection<KeyValuePair<string, string>>)_items;
             if (!collection.Contains(item)) return false;
             if (IsReservedKey(item.Key)) ValidateReserved(_items);
+            var nextMutationVersion = checked(_mutationVersion + 1L);
             if (TracksSemanticDirtyState(item.Key)) TouchProject();
-            return collection.Remove(item);
+            var removed = collection.Remove(item);
+            if (removed) _mutationVersion = nextMutationVersion;
+            return removed;
         }
 
         public IEnumerator<KeyValuePair<string, string>> GetEnumerator() => _items.GetEnumerator();
@@ -90,6 +96,20 @@ namespace QS3D.Core.Domain
                 finalKeys.Add(key);
             }
         }
+
+        internal void EnsureCanSetPublicKeys(IEnumerable<string> keys)
+        {
+            if (keys == null) throw new ArgumentNullException(nameof(keys));
+            var finalKeys = new HashSet<string>(_items.Keys, StringComparer.OrdinalIgnoreCase);
+            foreach (var key in keys)
+            {
+                var canonicalKey = RequirePublicKey(key);
+                if (finalKeys.Contains(canonicalKey)) continue;
+                if (finalKeys.Count >= MaximumEntries) throw MetadataCountError();
+                finalKeys.Add(canonicalKey);
+            }
+        }
+
         internal void AddOwned(string key, string value) => Set(key, value, true, false);
         internal void SetOwned(string key, string value) => Set(key, value, false, false);
         internal bool RemoveOwned(string key) => Remove(key, false);
@@ -99,7 +119,9 @@ namespace QS3D.Core.Domain
             var keys = _items.Keys.Where(ProjectMeasurementWorkItemMappingCodec.IsReservedKey).ToArray();
             if (keys.Length == 0) return;
             ValidateReserved(_items);
+            var nextMutationVersion = checked(_mutationVersion + 1L);
             foreach (var key in keys) _items.Remove(key);
+            _mutationVersion = nextMutationVersion;
         }
 
         internal void SetPersistenceValue(string key, string value) => Set(key, value, false, false);
@@ -107,16 +129,22 @@ namespace QS3D.Core.Domain
         internal void ReplacePersistenceState(IEnumerable<KeyValuePair<string, string>> values)
         {
             if (values == null) throw new ArgumentNullException(nameof(values));
+            var targetMutationVersion = _mutationVersion;
             var knownCount = RequireSupportedKnownPersistenceCount(values);
+            RequireStablePersistenceTarget(targetMutationVersion);
             var next = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var observedCount = 0;
             using (var enumerator = values.GetEnumerator())
             {
                 while (true)
                 {
+                    RequireStablePersistenceTarget(targetMutationVersion);
                     RequireStableKnownPersistenceCount(values, knownCount);
+                    RequireStablePersistenceTarget(targetMutationVersion);
                     if (!enumerator.MoveNext()) break;
+                    RequireStablePersistenceTarget(targetMutationVersion);
                     RequireStableKnownPersistenceCount(values, knownCount);
+                    RequireStablePersistenceTarget(targetMutationVersion);
 
                     if (knownCount.HasValue && observedCount >= knownCount.Value)
                         throw MetadataTraversalCountMismatchError(knownCount.Value, observedCount + 1);
@@ -124,35 +152,47 @@ namespace QS3D.Core.Domain
                         throw MetadataCountError();
 
                     var item = enumerator.Current;
+                    RequireStablePersistenceTarget(targetMutationVersion);
+                    RequireStableKnownPersistenceCount(values, knownCount);
+                    RequireStablePersistenceTarget(targetMutationVersion);
                     observedCount++;
                     if (item.Key == null) throw new ArgumentNullException(nameof(values), "Project metadata contains a null key.");
                     if (next.ContainsKey(item.Key)) throw new ArgumentException("Project metadata contains a duplicate key: " + item.Key + ".", nameof(values));
                     next.Add(item.Key, item.Value ?? string.Empty);
                 }
             }
+            RequireStablePersistenceTarget(targetMutationVersion);
             RequireStableKnownPersistenceCount(values, knownCount);
+            RequireStablePersistenceTarget(targetMutationVersion);
             if (knownCount.HasValue && observedCount != knownCount.Value)
                 throw MetadataTraversalCountMismatchError(knownCount.Value, observedCount);
 
             var finalKnownCount = RequireSupportedKnownPersistenceCount(values);
+            RequireStablePersistenceTarget(targetMutationVersion);
             if (knownCount.HasValue != finalKnownCount.HasValue ||
                 (knownCount.HasValue && knownCount.Value != finalKnownCount!.Value))
                 throw MetadataTraversalCountChangedError();
 
             ValidateReserved(next);
+            RequireStablePersistenceTarget(targetMutationVersion);
+            var nextMutationVersion = checked(_mutationVersion + 1L);
             _items.Clear();
             foreach (var item in next) _items.Add(item.Key, item.Value);
+            _mutationVersion = nextMutationVersion;
         }
 
         private bool Remove(string key, bool touchMutation)
         {
             if (!_items.ContainsKey(key)) return false;
             if (IsReservedKey(key)) ValidateReserved(_items);
+            var nextMutationVersion = checked(_mutationVersion + 1L);
             if (TracksSemanticDirtyState(key))
             {
                 if (touchMutation) TouchProject();
             }
-            return _items.Remove(key);
+            var removed = _items.Remove(key);
+            if (removed) _mutationVersion = nextMutationVersion;
+            return removed;
         }
 
         private void SetPublic(string key, string value, bool addOnly)
@@ -184,11 +224,19 @@ namespace QS3D.Core.Domain
                 ValidateReserved(next);
             }
 
+            var nextMutationVersion = checked(_mutationVersion + 1L);
             if (TracksSemanticDirtyState(key))
             {
                 if (touchMutation) TouchProject();
             }
             if (addOnly) _items.Add(key, normalizedValue); else _items[key] = normalizedValue;
+            _mutationVersion = nextMutationVersion;
+        }
+
+        private void RequireStablePersistenceTarget(long expectedMutationVersion)
+        {
+            if (_mutationVersion != expectedMutationVersion)
+                throw new InvalidOperationException("Project metadata changed while persistence input was being enumerated. Retry persistence replacement against the current metadata state.");
         }
 
         private static int? RequireSupportedKnownPersistenceCount(IEnumerable<KeyValuePair<string, string>> values)

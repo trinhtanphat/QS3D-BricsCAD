@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Numerics;
 
 namespace QS3D.Core.Cost
 {
@@ -57,8 +58,14 @@ namespace QS3D.Core.Cost
             var index = 0;
             using (var edgeEnumerator = edges.GetEnumerator())
             {
-                while (edgeEnumerator.MoveNext())
+                while (true)
                 {
+                    if (knownCount.HasValue)
+                        RequireKnownCountStableDuringTraversal(edges, knownCount.Value);
+                    if (!edgeEnumerator.MoveNext())
+                        break;
+                    if (knownCount.HasValue)
+                        RequireKnownCountStableDuringTraversal(edges, knownCount.Value);
                     if (knownCount.HasValue && index == knownCount.Value)
                         throw new ArgumentException(
                             "Rate reference edge collection contains more entries than its known count.",
@@ -66,6 +73,8 @@ namespace QS3D.Core.Cost
                     if (index == MaximumEdges)
                         ThrowTooManyEdges();
                     var edge = edgeEnumerator.Current;
+                    if (knownCount.HasValue)
+                        RequireKnownCountStableDuringTraversal(edges, knownCount.Value);
                     if (edge == null)
                         throw new ArgumentException("Rate reference graph contains a null edge at index " + index + ".", nameof(edges));
                     var key = edge.SourceRateCode + "\u001f" + ((int)edge.TargetKind) + "\u001f" + edge.TargetId;
@@ -151,7 +160,7 @@ namespace QS3D.Core.Cost
             return expected;
         }
 
-        private static void RequireKnownCountStableAfterTraversal(
+        private static void RequireKnownCountStableDuringTraversal(
             IEnumerable<RateReferenceEdge> edges,
             int admittedKnownCount)
         {
@@ -160,6 +169,13 @@ namespace QS3D.Core.Cost
                 throw new ArgumentException(
                     "Rate reference edge collection known count changed during traversal.",
                     nameof(edges));
+        }
+
+        private static void RequireKnownCountStableAfterTraversal(
+            IEnumerable<RateReferenceEdge> edges,
+            int admittedKnownCount)
+        {
+            RequireKnownCountStableDuringTraversal(edges, admittedKnownCount);
         }
 
         private static int CompareEdges(RateReferenceEdge left, RateReferenceEdge right)
@@ -229,14 +245,31 @@ namespace QS3D.Core.Cost
             var index = 0;
             using (var rateEnumerator = rates.GetEnumerator())
             {
-                while (rateEnumerator.MoveNext())
+                while (true)
                 {
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        rates,
+                        hasKnownRateCount,
+                        knownRateCount,
+                        "Build-up analysis rate collection");
+                    if (!rateEnumerator.MoveNext())
+                        break;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        rates,
+                        hasKnownRateCount,
+                        knownRateCount,
+                        "Build-up analysis rate collection");
                     AdvancedCostCollectionContract.RequireCanProcessNext(
                         hasKnownRateCount,
                         knownRateCount,
                         index,
                         "Build-up analysis rate collection");
                     var rate = rateEnumerator.Current;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        rates,
+                        hasKnownRateCount,
+                        knownRateCount,
+                        "Build-up analysis rate collection");
                     if (rate == null)
                         throw new ArgumentException("Build-up analysis contains a null rate at index " + index + ".", nameof(rates));
                     if (!ids.Add(rate.RateCode))
@@ -422,14 +455,31 @@ namespace QS3D.Core.Cost
             var index = 0;
             using (var itemEnumerator = items.GetEnumerator())
             {
-                while (itemEnumerator.MoveNext())
+                while (true)
                 {
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        items,
+                        hasKnownItemCount,
+                        knownItemCount,
+                        "Trade analysis item collection");
+                    if (!itemEnumerator.MoveNext())
+                        break;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        items,
+                        hasKnownItemCount,
+                        knownItemCount,
+                        "Trade analysis item collection");
                     AdvancedCostCollectionContract.RequireCanProcessNext(
                         hasKnownItemCount,
                         knownItemCount,
                         index,
                         "Trade analysis item collection");
                     var item = itemEnumerator.Current;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        items,
+                        hasKnownItemCount,
+                        knownItemCount,
+                        "Trade analysis item collection");
                     if (item == null)
                         throw new ArgumentException("Trade analysis contains a null item at index " + index + ".", nameof(items));
                     if (!ids.Add(item.ItemCode))
@@ -446,10 +496,7 @@ namespace QS3D.Core.Cost
                     checked
                     {
                         aggregate.ItemCount++;
-                        aggregate.TotalCost = CostDecimalMath.AddPreservingNonZeroContribution(
-                            aggregate.TotalCost,
-                            item.Cost,
-                            "trade cost aggregate total");
+                        aggregate.TotalCost.Add(item.Cost);
                     }
                     index++;
                 }
@@ -462,17 +509,101 @@ namespace QS3D.Core.Cost
                 "Trade analysis item collection");
             var rows = new List<TradeCostAnalysisRow>(totals.Count);
             foreach (var aggregate in totals.Values)
-                rows.Add(new TradeCostAnalysisRow(aggregate.TradeCode, aggregate.ItemCount, aggregate.TotalCost, cfaM2));
+                rows.Add(new TradeCostAnalysisRow(
+                    aggregate.TradeCode,
+                    aggregate.ItemCount,
+                    aggregate.TotalCost.ToDecimal(),
+                    cfaM2));
             rows.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.TradeCode, right.TradeCode));
             return new ReadOnlyCollection<TradeCostAnalysisRow>(rows.ToArray());
         }
 
         private sealed class TradeAggregate
         {
-            internal TradeAggregate(string tradeCode) { TradeCode = tradeCode; }
+            internal TradeAggregate(string tradeCode)
+            {
+                TradeCode = tradeCode;
+                TotalCost = new ExactNonNegativeDecimalAccumulator();
+            }
+
             internal string TradeCode { get; set; }
             internal int ItemCount { get; set; }
-            internal decimal TotalCost { get; set; }
+            internal ExactNonNegativeDecimalAccumulator TotalCost { get; }
+        }
+
+        private sealed class ExactNonNegativeDecimalAccumulator
+        {
+            private static readonly BigInteger MaxDecimalCoefficient = (BigInteger.One << 96) - BigInteger.One;
+            private BigInteger _coefficient;
+            private int _scale;
+            private bool _hasValue;
+
+            internal void Add(decimal value)
+            {
+                if (value < 0m)
+                    throw new InvalidOperationException("Trade cost aggregate cannot contain a negative value.");
+
+                var bits = decimal.GetBits(value);
+                var flags = bits[3];
+                if ((flags & int.MinValue) != 0)
+                    throw new InvalidOperationException("Trade cost aggregate cannot contain a negative value.");
+
+                var scale = (flags >> 16) & 0x7f;
+                var coefficient =
+                    new BigInteger((uint)bits[0]) |
+                    (new BigInteger((uint)bits[1]) << 32) |
+                    (new BigInteger((uint)bits[2]) << 64);
+
+                if (!_hasValue)
+                {
+                    _coefficient = coefficient;
+                    _scale = scale;
+                    _hasValue = true;
+                    return;
+                }
+
+                if (scale > _scale)
+                {
+                    _coefficient *= PowerOfTen(scale - _scale);
+                    _scale = scale;
+                }
+                else if (scale < _scale)
+                {
+                    coefficient *= PowerOfTen(_scale - scale);
+                }
+
+                _coefficient += coefficient;
+            }
+
+            internal decimal ToDecimal()
+            {
+                if (!_hasValue || _coefficient.IsZero)
+                    return 0m;
+
+                var coefficient = _coefficient;
+                var scale = _scale;
+                while (scale > 0 && coefficient % 10 == 0)
+                {
+                    coefficient /= 10;
+                    scale--;
+                }
+
+                if (coefficient < BigInteger.Zero || coefficient > MaxDecimalCoefficient)
+                    throw new OverflowException("Trade cost aggregate total exceeds the representable decimal range.");
+
+                var low = unchecked((int)(uint)(coefficient & uint.MaxValue));
+                var mid = unchecked((int)(uint)((coefficient >> 32) & uint.MaxValue));
+                var high = unchecked((int)(uint)((coefficient >> 64) & uint.MaxValue));
+                return new decimal(low, mid, high, false, (byte)scale);
+            }
+
+            private static BigInteger PowerOfTen(int exponent)
+            {
+                var result = BigInteger.One;
+                for (var i = 0; i < exponent; i++)
+                    result *= 10;
+                return result;
+            }
         }
     }
 
@@ -524,14 +655,31 @@ namespace QS3D.Core.Cost
             var index = 0;
             using (var entryEnumerator = entries.GetEnumerator())
             {
-                while (entryEnumerator.MoveNext())
+                while (true)
                 {
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        entries,
+                        hasKnownEntryCount,
+                        knownEntryCount,
+                        "BQ library entry collection");
+                    if (!entryEnumerator.MoveNext())
+                        break;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        entries,
+                        hasKnownEntryCount,
+                        knownEntryCount,
+                        "BQ library entry collection");
                     AdvancedCostCollectionContract.RequireCanProcessNext(
                         hasKnownEntryCount,
                         knownEntryCount,
                         index,
                         "BQ library entry collection");
                     var entry = entryEnumerator.Current;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        entries,
+                        hasKnownEntryCount,
+                        knownEntryCount,
+                        "BQ library entry collection");
                     if (entry == null)
                         throw new ArgumentException("BQ library contains a null entry at index " + index + ".", nameof(entries));
                     if (!ids.Add(entry.ItemCode))
@@ -566,14 +714,31 @@ namespace QS3D.Core.Cost
             var index = 0;
             using (var projectEntryEnumerator = projectEntries.GetEnumerator())
             {
-                while (projectEntryEnumerator.MoveNext())
+                while (true)
                 {
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        projectEntries,
+                        hasKnownProjectEntryCount,
+                        knownProjectEntryCount,
+                        "BQ project import collection");
+                    if (!projectEntryEnumerator.MoveNext())
+                        break;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        projectEntries,
+                        hasKnownProjectEntryCount,
+                        knownProjectEntryCount,
+                        "BQ project import collection");
                     AdvancedCostCollectionContract.RequireCanProcessNext(
                         hasKnownProjectEntryCount,
                         knownProjectEntryCount,
                         index,
                         "BQ project import collection");
                     var entry = projectEntryEnumerator.Current;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        projectEntries,
+                        hasKnownProjectEntryCount,
+                        knownProjectEntryCount,
+                        "BQ project import collection");
                     if (entry == null)
                         throw new ArgumentException("Project import contains a null BQ entry at index " + index + ".", nameof(projectEntries));
                     if (!incomingIds.Add(entry.ItemCode))

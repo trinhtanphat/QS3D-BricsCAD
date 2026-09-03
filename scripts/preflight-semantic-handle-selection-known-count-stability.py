@@ -18,16 +18,24 @@ if source.is_file():
     materialize = text[start:end] if start >= 0 and end > start else ""
     required = (
         "var knownCount = TryGetKnownCount(selectedHandles",
-        "foreach (var rawHandle in selectedHandles)",
+        "using (var enumerator = selectedHandles.GetEnumerator())",
+        "RequireStableKnownCountDuringTraversal(selectedHandles, knownCount);",
+        "var moved = enumerator.MoveNext();",
+        "if (!moved) break;",
+        "inputCount >= knownCount.Value",
+        "var rawHandle = enumerator.Current;",
         "inputCount != knownCount.Value",
         "RevalidateKnownCountAfterTraversal(selectedHandles, knownCount);",
         "return selected;",
     )
     positions = [materialize.find(token) for token in required]
     if not materialize or any(pos < 0 for pos in positions) or positions != sorted(positions):
-        errors.append("Semantic handle selection must rebind known Count after exact traversal and before returning selected handles.")
-    if "inputCount >= knownCount.Value" not in materialize:
-        errors.append("Semantic handle selection must reject the first known-Count overrun before processing it.")
+        errors.append(
+            "Semantic handle selection must rebind admitted Count around MoveNext, reject overrun before Current, and rebind after exact traversal.")
+    if materialize.count("RequireStableKnownCountDuringTraversal(selectedHandles, knownCount);") < 3:
+        errors.append("Semantic handle selection must rebind known Count before MoveNext, after successful MoveNext, and after Current.")
+    if "foreach (var rawHandle in selectedHandles)" in materialize:
+        errors.append("Semantic handle selection must not use foreach because Current would be read before the overrun guard.")
     for token in (
         "selectedHandles is ICollection<string>",
         "selectedHandles is IReadOnlyCollection<string>",
@@ -35,6 +43,8 @@ if source.is_file():
         "negativeKnownCount",
         "conflictingKnownCounts",
         "!reboundCount.HasValue || reboundCount.Value != admittedCount.Value",
+        "negative known Count value during traversal",
+        "conflicting known Count values during traversal",
     ):
         if token not in materialize:
             errors.append("Semantic handle Count-stability implementation missing contract token: " + token)
@@ -48,9 +58,18 @@ if smoke.is_file():
         "NonGenericCountDriftRejects",
         "NegativePostTraversalCountRejects",
         "ConflictingPostTraversalCountsReject",
-        "CountOverrunRejectsBeforeSecondHandleCanResolve",
+        "CountOverrunRejectsBeforeSecondCurrent",
+        "MoveNextTransientGrowthRejectsBeforeCurrent",
+        "MoveNextTransientShrinkRejectsBeforeCurrent",
+        "MoveNextTransientNegativeRejectsBeforeCurrent",
+        "MoveNextTransientConflictRejectsBeforeCurrent",
+        "MoveNextCalls == 2",
+        "CurrentReads == 1",
+        "MoveNextCalls == 1",
+        "CurrentReads == 0",
         "CountUnderYieldRejects",
         "StableCountedSelectionResolves",
+        "StableMultiInterfaceSelectionResolves",
         "PureStreamingSelectionResolves",
     ):
         if token not in text:
@@ -63,4 +82,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: semantic handle selection rebinds deterministic Count evidence before ownership resolution.")
+print("PASS: semantic handle selection rejects transient Count drift before Current and preserves exact traversal cardinality.")

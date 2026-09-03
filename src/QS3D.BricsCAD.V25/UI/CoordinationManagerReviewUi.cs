@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -62,9 +63,10 @@ namespace QS3D.BricsCAD.V25.UI
                 Section = 1 << 4,
                 RestoreView = 1 << 5,
                 GridSelection = 1 << 6,
-                WindowClosed = 1 << 7,
-                DocumentActivated = 1 << 8,
-                DocumentToBeDestroyed = 1 << 9,
+                WindowClosing = 1 << 7,
+                WindowClosed = 1 << 8,
+                DocumentActivated = 1 << 9,
+                DocumentToBeDestroyed = 1 << 10,
             }
 
             private readonly CoordinationManagerWindow _window;
@@ -157,6 +159,8 @@ namespace QS3D.BricsCAD.V25.UI
                     _attachments |= Attachment.RestoreView;
                     _grid.SelectionChanged += OnSelectionChanged;
                     _attachments |= Attachment.GridSelection;
+                    _window.Closing += OnWindowClosing;
+                    _attachments |= Attachment.WindowClosing;
                     _window.Closed += OnWindowClosed;
                     _attachments |= Attachment.WindowClosed;
                     Bricscad.ApplicationServices.Application.DocumentManager.DocumentActivated += OnDocumentActivated;
@@ -223,18 +227,17 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 if (!_attached || _disposeInProgress || _disposed) return;
 
-                var cleanupBarrierBefore = _cleanupBarrier;
                 try
                 {
                     effect();
-                    _cleanupBarrier = cleanupBarrierBefore && _session.HasTransientState;
+                    _cleanupBarrier = _session.HasTransientState;
                     SetStatus(_cleanupBarrier
                         ? actionName + " • cleanup còn pending; review mới vẫn bị khóa."
                         : actionName + " • transient review state đã được dọn sạch.");
                 }
                 catch (Exception ex)
                 {
-                    _cleanupBarrier = cleanupBarrierBefore && _session.HasTransientState;
+                    _cleanupBarrier = _session.HasTransientState;
                     SetStatus(actionName + " bị từ chối: " + ex.Message);
                 }
                 finally
@@ -263,6 +266,7 @@ namespace QS3D.BricsCAD.V25.UI
                 }
                 catch (Exception ex)
                 {
+                    _cleanupBarrier = _session.HasTransientState;
                     SetStatus(actionName + " bị từ chối: " + ex.Message);
                 }
                 finally
@@ -360,6 +364,21 @@ namespace QS3D.BricsCAD.V25.UI
                 if (_window.IsLoaded) _window.Close();
             }
 
+            private void OnWindowClosing(object sender, CancelEventArgs e)
+            {
+                if (!_attached || _disposeInProgress || _disposed) return;
+                if (e.Cancel) return;
+
+                var cleanupFailure = _session.TryResetTransientStateBestEffort();
+                if (cleanupFailure == null && !_session.HasTransientState)
+                    return;
+
+                e.Cancel = true;
+                _cleanupBarrier = true;
+                SetStatus("Không thể đóng Coordination Manager khi transient review state còn pending; hãy retry cleanup trước.");
+                UpdateActionState();
+            }
+
             private void OnWindowClosed(object sender, EventArgs e)
             {
                 Dispose();
@@ -415,6 +434,7 @@ namespace QS3D.BricsCAD.V25.UI
                 TryDetach(Attachment.DocumentActivated, () =>
                     Bricscad.ApplicationServices.Application.DocumentManager.DocumentActivated -= OnDocumentActivated);
                 TryDetach(Attachment.WindowClosed, () => _window.Closed -= OnWindowClosed);
+                TryDetach(Attachment.WindowClosing, () => _window.Closing -= OnWindowClosing);
                 TryDetach(Attachment.GridSelection, () => _grid.SelectionChanged -= OnSelectionChanged);
                 TryDetach(Attachment.RestoreView, () => _restoreView.Click -= OnRestoreView);
                 TryDetach(Attachment.Section, () => _section.Click -= OnSection);

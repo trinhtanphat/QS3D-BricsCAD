@@ -66,7 +66,7 @@ namespace QS3D.Core.SmokeTests
             var error = Capture<InvalidOperationException>(() => new MepQuantityService().Aggregate(source));
 
             Equal(1, source.GetEnumeratorCalls, "MEP Count-drift source must be traversed exactly once.");
-            Equal(7, source.CountReads, "MEP Count evidence must be rebound around traversal and before publication.");
+            Equal(9, source.CountReads, "MEP Count evidence must be rebound around traversal, after Current, and before publication.");
             Contains(
                 "known count changed during traversal",
                 error.Message,
@@ -116,7 +116,7 @@ namespace QS3D.Core.SmokeTests
             var groups = new MepQuantityService().Aggregate(source);
 
             Equal(1, source.GetEnumeratorCalls, "Stable two-phase MEP source must be traversed exactly once.");
-            Equal(9, source.CountReads, "Stable MEP Count evidence must be rebound before/after every advancement and before publication.");
+            Equal(12, source.CountReads, "Stable MEP Count evidence must be rebound before/after every advancement, after every Current, and before publication.");
             Equal(1, groups.Count, "Stable two-phase MEP source grouping changed unexpectedly.");
             Equal(3, groups[0].ElementCount, "Stable two-phase MEP source element count changed unexpectedly.");
         }

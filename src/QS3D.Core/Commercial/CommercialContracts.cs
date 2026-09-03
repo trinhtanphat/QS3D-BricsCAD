@@ -95,13 +95,18 @@ namespace QS3D.Core.Commercial
             var snapshot = new List<CommercialAuditRecord>();
             using (var enumerator = records.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableKnownCountDuringTraversal(records, knownCount);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireStableKnownCountDuringTraversal(records, knownCount);
                     CommercialGuard.RequireCanProcessNext(knownCount, snapshot.Count, "Commercial audit batch source");
                     if (snapshot.Count == remainingCapacity)
                         throw new InvalidOperationException("Commercial audit log supports at most 10000 events.");
 
                     var record = enumerator.Current;
+                    RequireStableKnownCountDuringTraversal(records, knownCount);
                     if (record == null) throw new ArgumentException("Commercial audit batch contains a null record.", nameof(records));
                     RequireUniqueEventId(record.EventId, eventIds);
                     snapshot.Add(record);
@@ -135,6 +140,22 @@ namespace QS3D.Core.Commercial
         {
             if (!eventIds.Add(eventId))
                 throw new InvalidOperationException("Commercial audit log contains duplicate event id: " + eventId + ".");
+        }
+
+        private static void RequireStableKnownCountDuringTraversal(
+            IEnumerable<CommercialAuditRecord> records,
+            int? admittedCount)
+        {
+            if (!admittedCount.HasValue)
+                return;
+
+            var reboundCount = TryGetKnownCount(records, out var conflictingKnownCounts, out var negativeKnownCount);
+            if (negativeKnownCount)
+                throw new InvalidOperationException("Commercial audit batch source exposes an invalid negative known Count value during traversal.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("Commercial audit batch source exposes conflicting known Count values during traversal.");
+            if (!reboundCount.HasValue || reboundCount.Value != admittedCount.Value)
+                throw new InvalidOperationException("Commercial audit batch source known Count changed during traversal.");
         }
 
         private static void RequireStableKnownCount(
@@ -265,13 +286,18 @@ namespace QS3D.Core.Commercial
                 : new List<T>();
             using (var enumerator = source.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                while (true)
                 {
+                    RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum);
                     RequireCanProcessNext(knownCount, result.Count, paramName);
                     if (result.Count == maximum)
                         throw new InvalidOperationException(paramName + " supports at most " + maximum + " entries.");
 
                     var item = enumerator.Current;
+                    RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum);
                     if (item == null)
                         throw new ArgumentException(paramName + " contains a null item.", paramName);
                     result.Add(item);
@@ -289,6 +315,21 @@ namespace QS3D.Core.Commercial
         {
             if (knownCount.HasValue && observedCount >= knownCount.Value)
                 throw new InvalidOperationException(label + " known Count was exceeded during traversal.");
+        }
+
+        private static void RequireStableSnapshotKnownCountDuringTraversal<T>(
+            IEnumerable<T> source,
+            int? admittedCount,
+            string paramName,
+            int maximum)
+            where T : class
+        {
+            if (!admittedCount.HasValue)
+                return;
+
+            var reboundCount = SnapshotKnownCount(source, paramName, maximum);
+            if (!reboundCount.HasValue || reboundCount.Value != admittedCount.Value)
+                throw new InvalidOperationException(paramName + " known Count changed during traversal.");
         }
 
         private static void RequireStableSnapshotKnownCount<T>(
@@ -347,38 +388,12 @@ namespace QS3D.Core.Commercial
 
         internal static decimal Add(decimal left, decimal right, string label)
         {
-            decimal result;
-            try
-            {
-                result = checked(left + right);
-            }
-            catch (OverflowException ex)
-            {
-                throw new OverflowException(label + " overflowed decimal arithmetic.", ex);
-            }
-
-            if ((right != 0m && result == left) || (left != 0m && result == right))
-                throw new OverflowException("Commercial addition precision loss: " + label + ".");
-
-            return result;
+            return CommercialExactDecimalAccumulator.AddExact(left, right, label);
         }
 
         internal static decimal Subtract(decimal left, decimal right, string label)
         {
-            decimal result;
-            try
-            {
-                result = checked(left - right);
-            }
-            catch (OverflowException ex)
-            {
-                throw new OverflowException(label + " overflowed decimal arithmetic.", ex);
-            }
-
-            if ((right != 0m && result == left) || (left != 0m && result == -right))
-                throw new OverflowException("Commercial subtraction precision loss: " + label + ".");
-
-            return result;
+            return CommercialExactDecimalAccumulator.SubtractExact(left, right, label);
         }
     }
 }

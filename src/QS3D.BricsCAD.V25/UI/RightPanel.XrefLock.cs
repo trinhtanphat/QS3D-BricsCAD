@@ -7,6 +7,9 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class RightPanel
     {
+        private const string XrefInstanceLockFailureStatus = "Không thể khóa các layer chứa instance của Xref. Trạng thái panel đã được làm mới lại.";
+        private const string XrefInstanceUnlockFailureStatus = "Không thể mở khóa các layer chứa instance của Xref. Trạng thái panel đã được làm mới lại.";
+
         private void OnLockXrefClick(object sender, RoutedEventArgs e) => SetSelectedXrefInstanceLayerLocks(true);
 
         private void OnUnlockXrefClick(object sender, RoutedEventArgs e) => SetSelectedXrefInstanceLayerLocks(false);
@@ -25,15 +28,19 @@ namespace QS3D.BricsCAD.V25.UI
                     : (locked ? "Đã khóa " : "Đã mở khóa ") + affected + " layer chứa instance của Xref " + item.Name + ".";
                 RefreshAfterXrefMutation(status);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _viewModel.Status = (locked ? "Không thể khóa Xref: " : "Không thể mở khóa Xref: ") + ex.Message;
+                var failureStatus = locked ? XrefInstanceLockFailureStatus : XrefInstanceUnlockFailureStatus;
+                _viewModel.Status = failureStatus;
                 try
                 {
                     RefreshDrawingsOnly();
                     ReloadLayers();
                 }
-                catch { }
+                catch (Exception)
+                {
+                    _viewModel.Status = failureStatus + RefreshWarningSuffix;
+                }
             }
         }
     }

@@ -34,7 +34,7 @@ namespace QS3D.BricsCAD.V25
                 document.Editor.WriteMessage("\nQS3D " + status);
 
                 if (issues.Count == 0) return;
-                var window = new ModelHealthWindow(document, issues, issue =>
+                ModelHealthWindowPresenter.Show(document, issues, issue =>
                 {
                     if (string.IsNullOrWhiteSpace(issue.ElementId)) return;
                     if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)) return;
@@ -43,7 +43,6 @@ namespace QS3D.BricsCAD.V25
                     PaletteCoordinator.SetStatus("HT_Phòng Health Locate " + issue.ElementId + " • " + count + " CAD object");
                     if (count > 0) document.SendStringToExecute("QS3DZOOMSELECTED ", true, false, false);
                 });
-                Application.ShowModelessWindow(IntPtr.Zero, window, true);
             }
             catch (System.Exception)
             {

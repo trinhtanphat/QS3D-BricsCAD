@@ -22,6 +22,7 @@ namespace QS3D.Core.Export
         private const string MarkupFileName = "markup.bcf";
         private const string OriginatingSystem = "QS3D";
         private static readonly DateTimeOffset DeterministicEntryTime = new DateTimeOffset(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         public static byte[] Write(BcfIssueExchange exchange)
         {
@@ -34,7 +35,8 @@ namespace QS3D.Core.Export
             }
 
             using var stream = new MemoryStream();
-            using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, true))
+            using var boundedStream = new BoundedArchiveWriteStream(stream, MaxArchiveBytes);
+            using (var archive = new ZipArchive(boundedStream, ZipArchiveMode.Create, true))
             {
                 WriteTextEntry(archive, VersionFileName, BuildVersion());
                 foreach (var topic in exchange.Topics)
@@ -150,14 +152,14 @@ namespace QS3D.Core.Export
         private static string ReadText(ZipArchiveEntry entry)
         {
             using var stream = entry.Open();
-            using var reader = new StreamReader(stream, new UTF8Encoding(false, true), true);
+            using var reader = new StreamReader(stream, StrictUtf8, false);
             return reader.ReadToEnd();
         }
 
         private static void WriteTextEntry(ZipArchive archive, string path, string text)
         {
             ValidateSafeEntryPath(path);
-            var bytes = new UTF8Encoding(false, true).GetBytes(text);
+            var bytes = StrictUtf8.GetBytes(text);
             if (bytes.Length > MaxEntryBytes) throw new InvalidDataException("BCF package entry exceeds the bounded size: " + path);
             var entry = archive.CreateEntry(path, CompressionLevel.NoCompression);
             entry.LastWriteTime = DeterministicEntryTime;
@@ -359,7 +361,28 @@ namespace QS3D.Core.Export
                 throw new InvalidDataException("BCF timestamp must use canonical UTC round-trip format.");
             return parsed;
         }
-        private static string Xml(XElement root) => new XDocument(new XDeclaration("1.0", "UTF-8", null), root).ToString(SaveOptions.DisableFormatting);
+
+        private static string Xml(XElement root)
+        {
+            using var stream = new MemoryStream();
+            using var boundedStream = new BoundedEntryWriteStream(stream, MaxEntryBytes);
+            var settings = new XmlWriterSettings
+            {
+                Encoding = StrictUtf8,
+                OmitXmlDeclaration = false,
+                Indent = false,
+                CloseOutput = false,
+                NewLineHandling = NewLineHandling.None
+            };
+            using (var writer = XmlWriter.Create(boundedStream, settings))
+            {
+                writer.WriteStartDocument();
+                root.WriteTo(writer);
+                writer.WriteEndDocument();
+                writer.Flush();
+            }
+            return StrictUtf8.GetString(stream.ToArray());
+        }
 
         private static XElement ParseRoot(string text, string expectedName)
         {
@@ -474,6 +497,103 @@ namespace QS3D.Core.Export
             var attribute = element.Attribute(name);
             if (attribute == null) throw new InvalidDataException("Missing required BCF XML attribute: " + name);
             return attribute.Value;
+        }
+
+        private sealed class BoundedEntryWriteStream : Stream
+        {
+            private readonly Stream _inner;
+            private readonly long _maxLength;
+
+            internal BoundedEntryWriteStream(Stream inner, long maxLength)
+            {
+                _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+                if (maxLength < 0) throw new ArgumentOutOfRangeException(nameof(maxLength));
+                _maxLength = maxLength;
+            }
+
+            public override bool CanRead => false;
+            public override bool CanSeek => false;
+            public override bool CanWrite => true;
+            public override long Length => _inner.Length;
+            public override long Position
+            {
+                get => _inner.Position;
+                set => throw new NotSupportedException();
+            }
+
+            public override void Flush() => _inner.Flush();
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                var projectedLength = checked(_inner.Position + count);
+                if (projectedLength > _maxLength) throw EntrySizeExceeded();
+                _inner.Write(buffer, offset, count);
+            }
+
+            public override void WriteByte(byte value)
+            {
+                var projectedLength = checked(_inner.Position + 1);
+                if (projectedLength > _maxLength) throw EntrySizeExceeded();
+                _inner.WriteByte(value);
+            }
+
+            private static InvalidDataException EntrySizeExceeded() => new InvalidDataException("BCF package entry exceeds the bounded size: XML serialization.");
+        }
+
+        private sealed class BoundedArchiveWriteStream : Stream
+        {
+            private readonly Stream _inner;
+            private readonly long _maxLength;
+
+            internal BoundedArchiveWriteStream(Stream inner, long maxLength)
+            {
+                _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+                if (maxLength < 0) throw new ArgumentOutOfRangeException(nameof(maxLength));
+                _maxLength = maxLength;
+            }
+
+            public override bool CanRead => _inner.CanRead;
+            public override bool CanSeek => _inner.CanSeek;
+            public override bool CanWrite => _inner.CanWrite;
+            public override long Length => _inner.Length;
+            public override long Position
+            {
+                get => _inner.Position;
+                set
+                {
+                    if (value > _maxLength) throw ArchiveSizeExceeded();
+                    _inner.Position = value;
+                }
+            }
+
+            public override void Flush() => _inner.Flush();
+            public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+            public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
+
+            public override void SetLength(long value)
+            {
+                if (value > _maxLength) throw ArchiveSizeExceeded();
+                _inner.SetLength(value);
+            }
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                var projectedLength = Math.Max(_inner.Length, checked(_inner.Position + count));
+                if (projectedLength > _maxLength) throw ArchiveSizeExceeded();
+                _inner.Write(buffer, offset, count);
+            }
+
+            public override void WriteByte(byte value)
+            {
+                var projectedLength = Math.Max(_inner.Length, checked(_inner.Position + 1));
+                if (projectedLength > _maxLength) throw ArchiveSizeExceeded();
+                _inner.WriteByte(value);
+            }
+
+            private static InvalidDataException ArchiveSizeExceeded() => new InvalidDataException("BCF package exceeds the bounded archive size.");
         }
 
         private sealed class ExtensionVocabularies

@@ -161,6 +161,7 @@ namespace QS3D.Core.Coordination
                     if (index == MaximumElements)
                         throw TooManyElements();
                     var element = enumerator.Current;
+                    RequireStableKnownCount(elements, expectedCount);
                     if (element == null)
                         throw new ArgumentException("Coordination input contains a null element at index " + index + ".", nameof(elements));
                     if (!ids.Add(element.ElementId))

@@ -12,12 +12,12 @@ namespace QS3D.BricsCAD.V25
 {
     /// <summary>
     /// Local-only approval boundary for desktop-wide MCP input/sensitive reads.
-    /// Consent is process-memory-only, expires after idle time and cannot be enabled through MCP.
+    /// Consent is process-memory-only, stays enabled for the current BricsCAD session once resumed,
+    /// and cannot be enabled through MCP. Pause/Emergency Stop/Esc x2/host shutdown still revoke it.
     /// </summary>
     internal static class McpDesktopControlSession
     {
         internal static readonly TimeSpan DoubleEscapeWindow = TimeSpan.FromMilliseconds(1200);
-        internal static readonly TimeSpan ConsentIdleTimeout = TimeSpan.FromMinutes(10);
         private const int WH_KEYBOARD_LL = 13;
         private const int WM_KEYDOWN = 0x0100;
         private const int WM_SYSKEYDOWN = 0x0104;
@@ -29,7 +29,6 @@ namespace QS3D.BricsCAD.V25
         private static bool _enabled;
         private static string _consentState = "OFF";
         private static long _consentGeneration;
-        private static DateTime _idleDeadlineUtc = DateTime.MinValue;
         private static IntPtr _keyboardHook;
         private static DateTime _lastPhysicalEscapeUtc = DateTime.MinValue;
         private static int _activeScopes;
@@ -56,18 +55,12 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        /// <summary>
+        /// Legacy compatibility surface. Idle expiry is disabled, so there is no countdown.
+        /// </summary>
         public static TimeSpan IdleRemaining
         {
-            get
-            {
-                ExpireConsentIfIdle();
-                lock (Sync)
-                {
-                    if (!_enabled || _idleDeadlineUtc == DateTime.MinValue) return TimeSpan.Zero;
-                    var remaining = _idleDeadlineUtc - DateTime.UtcNow;
-                    return remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
-                }
-            }
+            get { return TimeSpan.Zero; }
         }
 
         public static string ActiveTool { get { lock (Sync) return _activeTool; } }
@@ -93,7 +86,6 @@ namespace QS3D.BricsCAD.V25
                 _enabled = true;
                 _consentState = "ON";
                 unchecked { _consentGeneration++; }
-                _idleDeadlineUtc = DateTime.UtcNow + ConsentIdleTimeout;
                 _lastPhysicalEscapeUtc = DateTime.MinValue;
             }
 
@@ -113,7 +105,6 @@ namespace QS3D.BricsCAD.V25
                     {
                         _enabled = false;
                         _consentState = "PAUSED";
-                        _idleDeadlineUtc = DateTime.MinValue;
                         unchecked { _consentGeneration++; }
                     }
                     ReleaseKeyboardHook();
@@ -124,7 +115,7 @@ namespace QS3D.BricsCAD.V25
             McpAgentExperience.Success(
                 "desktop-control",
                 "User đã Resume desktop control cho phiên BricsCAD hiện tại.",
-                "Consent tự hết hạn sau 10 phút không có desktop action; Esc ×2 hoặc Pause để dừng ngay.");
+                "Consent tự giữ ON trong phiên (auto-renew, không còn timeout 10 phút); Esc ×2 hoặc Pause để dừng ngay.");
         }
 
         public static void PauseFromLocalUser(string reason)
@@ -135,6 +126,15 @@ namespace QS3D.BricsCAD.V25
         public static void DisableFromLocalUser(string reason)
         {
             StopSession(reason, true, false, "OFF");
+        }
+
+        /// <summary>
+        /// Revokes desktop-wide reads/input while leaving API-first CAD/background automation alive.
+        /// This is the normal OFF path for the foreground-access toggle.
+        /// </summary>
+        public static void DisableForegroundAccessFromLocalUser(string reason)
+        {
+            StopSession(reason, false, false, "OFF");
         }
 
         public static void RequireLocalConsent(string tool)
@@ -160,7 +160,6 @@ namespace QS3D.BricsCAD.V25
                 if (!_enabled)
                     throw new InvalidOperationException("Local desktop-control consent was disabled before the action started.");
                 consentGeneration = _consentGeneration;
-                _idleDeadlineUtc = DateTime.UtcNow + ConsentIdleTimeout;
                 _activeScopes++;
                 _activeTool = safeTool;
             }
@@ -174,33 +173,12 @@ namespace QS3D.BricsCAD.V25
             return new GuardedActionScope(safeTool, consentGeneration, IsSensitiveReadTool(safeTool), action);
         }
 
+        /// <summary>
+        /// Compatibility no-op. Desktop consent no longer expires because of idle time;
+        /// explicit local safety controls remain the revocation boundary.
+        /// </summary>
         public static void ExpireConsentIfIdle()
         {
-            var expired = false;
-            lock (Sync)
-            {
-                if (_enabled && _idleDeadlineUtc != DateTime.MinValue && DateTime.UtcNow >= _idleDeadlineUtc)
-                {
-                    _enabled = false;
-                    _consentState = "EXPIRED";
-                    _idleDeadlineUtc = DateTime.MinValue;
-                    unchecked { _consentGeneration++; }
-                    _activeScopes = 0;
-                    _activeTool = string.Empty;
-                    _activeActionId = string.Empty;
-                    _lastPhysicalEscapeUtc = DateTime.MinValue;
-                    expired = true;
-                }
-            }
-            if (!expired) return;
-
-            try { McpCadAgentRuntime.StopAutomation(); } catch { }
-            HideOverlay();
-            ReleaseKeyboardHook();
-            McpAgentExperience.Warning(
-                "desktop-control",
-                "Desktop consent đã EXPIRED sau 10 phút không có desktop action mới.",
-                "Kiểm tra drawing/backup nếu cần, sau đó Resume desktop từ Agent Center khi muốn tiếp tục.");
         }
 
         public static void Shutdown()
@@ -233,18 +211,12 @@ namespace QS3D.BricsCAD.V25
             if (hide) HideOverlay();
 
             var next = IsEnabled
-                ? "Desktop consent vẫn ON; Idle còn " + FormatRemaining(IdleRemaining) + ". Esc ×2 luôn có thể dừng."
+                ? "Desktop consent vẫn ON · auto-renew trong phiên. Esc ×2 luôn có thể dừng."
                 : "Desktop consent đang " + ConsentState + ". Kiểm tra drawing/backup rồi Resume local nếu muốn tiếp tục.";
             var message = terminalState == "failed" && !string.IsNullOrWhiteSpace(failureMessage)
                 ? "Desktop action thất bại: " + scope.Tool + " · " + BoundMessage(failureMessage)
                 : "Desktop action " + terminalState + ": " + scope.Tool;
             McpAgentExperience.CompleteDesktopAction(scope.Action, message, next, terminalState);
-        }
-
-        private static string FormatRemaining(TimeSpan remaining)
-        {
-            if (remaining <= TimeSpan.Zero) return "0:00";
-            return ((int)remaining.TotalMinutes).ToString() + ":" + remaining.Seconds.ToString("00");
         }
 
         private static string BoundMessage(string value)
@@ -261,7 +233,6 @@ namespace QS3D.BricsCAD.V25
                 hadSession = _enabled || _activeScopes > 0;
                 _enabled = false;
                 _consentState = string.IsNullOrWhiteSpace(state) ? "OFF" : state;
-                _idleDeadlineUtc = DateTime.MinValue;
                 unchecked { _consentGeneration++; }
                 _activeScopes = 0;
                 _activeTool = string.Empty;
@@ -358,7 +329,6 @@ namespace QS3D.BricsCAD.V25
                                 _lastPhysicalEscapeUtc = DateTime.MinValue;
                                 _enabled = false;
                                 _consentState = "PAUSED";
-                                _idleDeadlineUtc = DateTime.MinValue;
                                 unchecked { _consentGeneration++; }
                                 _activeScopes = 0;
                                 _activeTool = string.Empty;

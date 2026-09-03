@@ -28,8 +28,16 @@ namespace QS3D.Core.Cost
             var index = 0;
             using (var enumerator = lines.GetEnumerator())
             {
+                // GetEnumerator() itself is user code for arbitrary IEnumerable implementations.
+                // Re-admit a known Count before the first traversal call so an enumerator-induced
+                // drift is rejected with zero MoveNext/Current reads.
+                if (hasKnownCount)
+                    RequireStableKnownCount(lines, knownCount);
+
                 while (enumerator.MoveNext())
                 {
+                    if (hasKnownCount)
+                        RequireStableKnownCount(lines, knownCount);
                     if (hasKnownCount && index >= knownCount)
                         throw new InvalidOperationException("Frozen estimate projection source Count does not match source traversal.");
                     if (index >= MaxLines)
@@ -42,6 +50,8 @@ namespace QS3D.Core.Cost
 
                     rows.Add(FrozenEstimateProjectionRow.From(line));
                     index++;
+                    if (hasKnownCount)
+                        RequireStableKnownCount(lines, knownCount);
                 }
             }
 

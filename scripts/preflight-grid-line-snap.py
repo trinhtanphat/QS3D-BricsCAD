@@ -22,7 +22,7 @@ def main() -> None:
 
     require(text, "TryFindNearest(", "nearest snap API")
     require(text, "GridReferenceCurveKind.Line", "LINE-only policy")
-    require(text, "Take(MaxCurves + 1)", "bounded input cardinality")
+    require(text, "GridSnapInputMaterializer.Materialize(curves, MaxCurves, \"Grid line snap input\")", "shared bounded input admission")
     require(text, "new HashSet<string>(StringComparer.OrdinalIgnoreCase)", "duplicate identity rejection")
     require(text, "NearestOnFiniteSegment", "finite-segment projection")
     require(text, "if (along < 0.0) along = 0.0;", "start clamp")
@@ -31,6 +31,7 @@ def main() -> None:
     require(text, "Math.Abs(delta) <= ambiguityTolerance", "near-tie fail closed")
     require(text, "result = first;", "stable accepted result")
 
+    forbid(text, "Take(MaxCurves + 1)", "caller Current materialization before bounded admission")
     forbid(text, "GridSystemPlanner", "system planner takeover")
     forbid(text, "GridIntersectionPlanner", "intersection planner takeover")
     forbid(text, "Teigha.", "CAD/vendor dependency in Core")

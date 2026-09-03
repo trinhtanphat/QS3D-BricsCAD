@@ -19,9 +19,9 @@ namespace QS3D.BricsCAD.V25
             {
                 result = SourceReconcileService.ReconcileSelection(document);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                ReportOperationFailure(document, "QS3DSYNCSOURCE lỗi: " + ex.Message);
+                ReportOperationFailure(document, "QS3DSYNCSOURCE lỗi: không thể reconcile source CAD đã chọn.");
                 return;
             }
 
@@ -33,17 +33,13 @@ namespace QS3D.BricsCAD.V25
             var status = result.Elements == 0
                 ? "Sync Source: chọn source CAD đang được QS3D theo dõi rồi chạy lại QS3DSYNCSOURCE."
                 : "Sync Source: đã reconcile " + result.Elements + " semantic source • regenerate " + result.Regenerated + ". Generated host/rebar/curtain phụ thuộc đã được invalidate/remove an toàn; chạy QS3DBUILD3D hoặc workflow 3D tương ứng khi muốn dựng lại.";
-            try
-            {
-                PaletteCoordinator.RefreshProject();
-                document.Editor.Regen();
-                PaletteCoordinator.SetStatus(status);
-                document.Editor.WriteMessage("\nQS3D " + status);
-            }
-            catch (Exception ex)
-            {
-                TryWriteMessage(document, "\nQS3D " + status + " UI sync warning: " + ex.Message);
-            }
+            var uiSyncFailed = false;
+            try { PaletteCoordinator.RefreshProject(); } catch { uiSyncFailed = true; }
+            try { document.Editor.Regen(); } catch { uiSyncFailed = true; }
+            try { PaletteCoordinator.SetStatus(status); } catch { uiSyncFailed = true; }
+            try { document.Editor.WriteMessage("\nQS3D " + status); } catch { uiSyncFailed = true; }
+            if (uiSyncFailed)
+                TryWriteMessage(document, "\nQS3D Sync Source UI sync warning: reconcile đã hoàn tất; một phần UI không thể đồng bộ.");
         }
 
         private static void ReportOperationFailure(Document document, string message)

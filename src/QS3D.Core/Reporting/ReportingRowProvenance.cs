@@ -14,8 +14,10 @@ namespace QS3D.Core.Reporting
             if (target == null) throw new ArgumentNullException(nameof(target));
             if (sourceHandles == null) throw new ArgumentNullException(nameof(sourceHandles));
 
+            RequireTargetWithinBound(target);
+            var targetSnapshot = SnapshotTargetValues(target);
             var knownCount = ResolveKnownCount(sourceHandles);
-            var existingIdentities = SnapshotTargetIdentities(target);
+            var existingIdentities = SnapshotTargetIdentities(targetSnapshot);
             var stagedIdentities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var staged = new List<string>();
             var index = 0;
@@ -24,9 +26,12 @@ namespace QS3D.Core.Reporting
             {
                 while (true)
                 {
+                    RequireStableTarget(target, targetSnapshot);
                     RequireStableKnownCount(sourceHandles, knownCount);
-                    if (!enumerator.MoveNext()) break;
+                    var moved = enumerator.MoveNext();
+                    RequireStableTarget(target, targetSnapshot);
                     RequireStableKnownCount(sourceHandles, knownCount);
+                    if (!moved) break;
 
                     if (knownCount.HasValue && index >= knownCount.Value)
                         throw new InvalidOperationException(
@@ -36,6 +41,8 @@ namespace QS3D.Core.Reporting
                             "Report provenance SourceHandles cannot exceed " + MaxSourceHandleEntries + " input entries.");
 
                     var raw = enumerator.Current;
+                    RequireStableTarget(target, targetSnapshot);
+                    RequireStableKnownCount(sourceHandles, knownCount);
                     var handle = raw ?? string.Empty;
                     if (string.IsNullOrWhiteSpace(handle))
                         throw new InvalidOperationException("Report provenance contains an empty stored SourceHandles entry at index " + index + ". Repair source ownership before reporting.");
@@ -50,13 +57,57 @@ namespace QS3D.Core.Reporting
                 }
             }
 
+            RequireStableTarget(target, targetSnapshot);
             RequireStableKnownCount(sourceHandles, knownCount);
             if (knownCount.HasValue && index != knownCount.Value)
                 throw new InvalidOperationException(
                     "Report provenance SourceHandles known Count reported " + knownCount.Value +
                     " entries but traversal produced " + index + ".");
+            if (targetSnapshot.Length > MaxSourceHandleEntries - staged.Count)
+                throw TooManyPublishedSourceHandles();
 
+            RequireStableTarget(target, targetSnapshot);
             foreach (var handle in staged) target.Add(handle);
+        }
+
+        private static void RequireTargetWithinBound(IList<string> target)
+        {
+            if (target.Count > MaxSourceHandleEntries)
+                throw TooManyPublishedSourceHandles();
+        }
+
+        private static InvalidOperationException TooManyPublishedSourceHandles()
+        {
+            return new InvalidOperationException(
+                "Report provenance SourceHandles cannot exceed " + MaxSourceHandleEntries + " published entries.");
+        }
+
+        private static string[] SnapshotTargetValues(IList<string> target)
+        {
+            var count = target.Count;
+            var snapshot = new string[count];
+            for (var index = 0; index < count; index++)
+                snapshot[index] = target[index];
+
+            if (target.Count != count)
+                throw new InvalidOperationException("Report provenance target changed while its SourceHandles state was being snapshotted.");
+            for (var index = 0; index < count; index++)
+            {
+                if (!string.Equals(target[index], snapshot[index], StringComparison.Ordinal))
+                    throw new InvalidOperationException("Report provenance target changed while its SourceHandles state was being snapshotted.");
+            }
+            return snapshot;
+        }
+
+        private static void RequireStableTarget(IList<string> target, string[] expected)
+        {
+            if (target.Count != expected.Length)
+                throw new InvalidOperationException("Report provenance target SourceHandles changed during source traversal. Retry reporting against the current target state.");
+            for (var index = 0; index < expected.Length; index++)
+            {
+                if (!string.Equals(target[index], expected[index], StringComparison.Ordinal))
+                    throw new InvalidOperationException("Report provenance target SourceHandles changed during source traversal. Retry reporting against the current target state.");
+            }
         }
 
         private static HashSet<string> SnapshotTargetIdentities(IEnumerable<string> target)

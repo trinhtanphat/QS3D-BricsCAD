@@ -86,12 +86,19 @@ if plugin.exists():
         if needle not in text: errors.append(message)
 
 workflow_dir = ROOT / ".github/workflows"
+automatic_workflows = {
+    "ci.yml",
+    "dispatch-v25-cloud-after-main-integration.yml",
+    "hybrid-pr-coordinator.yml",
+}
 if workflow_dir.is_dir():
     workflow_files = sorted(
         path for path in workflow_dir.iterdir()
         if path.is_file() and path.suffix.casefold() in {".yml", ".yaml"}
     )
     for workflow in workflow_files:
+        if workflow.name in automatic_workflows:
+            continue
         text = workflow.read_text(encoding="utf-8")
         if "workflow_dispatch:" not in text: errors.append(f"{workflow.name}: must remain manual-only")
         if re.search(r"(?m)^\s*(push|pull_request)\s*:", text): errors.append(f"{workflow.name}: automatic trigger forbidden before real V25 runtime gate")
@@ -336,4 +343,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: structure, XML/XAML handlers, manual CI, proprietary/private-file guard with explicit synthetic sample provenance, QSDB v4/rules/audit/project mappings, template/recognition/revision workflow wiring, migration/persistence hardening, quantity/health/generated-solid guards, units, two-phase 3D geometry, document lifecycle, selection sync, compact palettes, Xref selection, family inheritance, finish safety, dark UI, BQ recalculation/preferences, canonical B4D generated-source exclusion and installer verification are present.")
+print("PASS: structure, XML/XAML handlers, bounded workflow trigger policy, proprietary/private-file guard with explicit synthetic sample provenance, QSDB v4/rules/audit/project mappings, template/recognition/revision workflow wiring, migration/persistence hardening, quantity/health/generated-solid guards, units, two-phase 3D geometry, document lifecycle, selection sync, compact palettes, Xref selection, family inheritance, finish safety, dark UI, BQ recalculation/preferences, canonical B4D generated-source exclusion and installer verification are present.")

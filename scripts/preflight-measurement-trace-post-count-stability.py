@@ -17,11 +17,28 @@ def require(text: str, token: str, label: str) -> None:
         fail(f"missing {label}: {token}")
 
 
-def require_order(text: str, first: str, second: str, label: str) -> None:
-    left = text.find(first)
-    right = text.find(second)
-    if left < 0 or right < 0 or left >= right:
-        fail(f"invalid {label}: expected {first!r} before {second!r}")
+def scope(text: str, start_token: str, end_token: str, label: str) -> str:
+    start = text.find(start_token)
+    end = text.find(end_token, start + 1)
+    if start < 0 or end <= start:
+        fail(f"missing {label} scope")
+    return text[start:end]
+
+
+def require_final_post_traversal_order(
+    text: str,
+    observed: str,
+    rebound: str,
+    publication: str,
+    label: str,
+) -> None:
+    observed_at = text.find(observed)
+    rebound_at = text.find(rebound, observed_at + len(observed))
+    publication_at = text.find(publication, rebound_at + len(rebound))
+    if observed_at < 0 or rebound_at < 0 or publication_at < 0:
+        fail(f"missing {label} final post-traversal boundary")
+    if not observed_at < rebound_at < publication_at:
+        fail(f"invalid {label}: observed count must precede the final Count rebound, which must precede publication")
 
 
 def main() -> None:
@@ -29,51 +46,63 @@ def main() -> None:
     smoke = SMOKE.read_text(encoding="utf-8")
 
     for token, label in (
-        ("RequireKnownCountStable(source, knownCount, parameterName, \"facts\");", "fact post-traversal Count rebind"),
-        ("RequireKnownCountStable(source, knownCount, parameterName, \"adjustments\");", "adjustment post-traversal Count rebind"),
-        ("RequireKnownCountStable(source, knownCount, nameof(source), \"messages\");", "message post-traversal Count rebind"),
         ("var finalCount = RequireSupportedCount(source, parameterName, collectionName);", "final deterministic Count sampling"),
         ("if (finalCount != admittedCount)", "admitted/final Count equality"),
         ("RequireSupportedCount(source, parameterName, collectionName)", "shared Count contract reuse"),
     ):
         require(source, token, label)
 
-    require_order(
+    facts = scope(
         source,
+        "internal static IReadOnlyList<MeasurementTraceFact> SnapshotFacts",
+        "internal static IReadOnlyList<MeasurementTraceAdjustment> SnapshotAdjustments",
+        "facts",
+    )
+    adjustments = scope(
+        source,
+        "internal static IReadOnlyList<MeasurementTraceAdjustment> SnapshotAdjustments",
+        "internal static IReadOnlyList<string> SnapshotMessages",
+        "adjustments",
+    )
+    messages = scope(
+        source,
+        "internal static IReadOnlyList<string> SnapshotMessages",
+        "private static int? RequireSupportedCount",
+        "messages",
+    )
+
+    require_final_post_traversal_order(
+        facts,
         "RequireObservedCount(knownCount, items.Count, parameterName, \"facts\");",
         "RequireKnownCountStable(source, knownCount, parameterName, \"facts\");",
-        "facts observed-count before Count stability rebind",
-    )
-    require_order(
-        source,
-        "RequireKnownCountStable(source, knownCount, parameterName, \"facts\");",
         "items.Sort(CompareFacts);",
-        "facts Count stability before canonical sorting",
+        "facts",
     )
-    require_order(
-        source,
+    require_final_post_traversal_order(
+        adjustments,
         "RequireObservedCount(knownCount, items.Count, parameterName, \"adjustments\");",
         "RequireKnownCountStable(source, knownCount, parameterName, \"adjustments\");",
-        "adjustment observed-count before Count stability rebind",
-    )
-    require_order(
-        source,
-        "RequireKnownCountStable(source, knownCount, parameterName, \"adjustments\");",
         "items.Sort(CompareAdjustments);",
-        "adjustment Count stability before canonical sorting",
+        "adjustments",
     )
-    require_order(
-        source,
+    require_final_post_traversal_order(
+        messages,
         "RequireObservedCount(knownCount, items.Count, nameof(source), \"messages\");",
         "RequireKnownCountStable(source, knownCount, nameof(source), \"messages\");",
-        "message observed-count before Count stability rebind",
-    )
-    require_order(
-        source,
-        "RequireKnownCountStable(source, knownCount, nameof(source), \"messages\");",
         "items.Sort(StringComparer.Ordinal);",
-        "message Count stability before canonical sorting",
+        "messages",
     )
+
+    # The historical post-traversal contract must coexist with stronger intra-traversal
+    # rebounds. Require at least one earlier rebound as evidence that the final check is not
+    # being mistaken for the only Count-stability boundary.
+    for body, rebound, label in (
+        (facts, "RequireKnownCountStable(source, knownCount, parameterName, \"facts\");", "facts"),
+        (adjustments, "RequireKnownCountStable(source, knownCount, parameterName, \"adjustments\");", "adjustments"),
+        (messages, "RequireKnownCountStable(source, knownCount, nameof(source), \"messages\");", "messages"),
+    ):
+        if body.count(rebound) < 2:
+            fail(f"{label} must retain both traversal and final Count-stability rebounds")
 
     for token in (
         "FactCountDriftAfterExactTraversalFailsClosed",

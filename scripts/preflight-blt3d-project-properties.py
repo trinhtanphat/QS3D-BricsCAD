@@ -28,9 +28,6 @@ def main():
     window = read("src/QS3D.BricsCAD.V25/UI/ProjectPropertiesWindow.cs")
     v26_project = read("src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj")
 
-    # The BLT3D reference exposes exactly three Project Setup entry points. Keep their
-    # production routes distinct: Info -> dedicated Project Information host, Floors -> Level UI,
-    # Properties -> the bounded Project Properties surface already landed by #2104.
     for token in (
         'new ButtonSpec("QS3D_PROJECT_INFO", "Thông tin\\ndự án", "QS3DPROJECTINFO",',
         'new ButtonSpec("QS3D_PROJECT_FLOORS", "Cài đặt\\ntầng", "QS3DLEVELS",',
@@ -44,13 +41,39 @@ def main():
 
     for token in (
         '[CommandMethod("QS3DPROJECTPROPERTIES", CommandFlags.Modal)]',
+        'private static ProjectPropertiesWindow? _pending;',
+        'private static ProjectPropertiesWindow? _published;',
+        'var pending = _pending;',
+        'CloseOwnerBeforeReplacement(pending, "pending");',
+        'var published = _published;',
+        'if (published.IsLoaded)',
+        'published.Activate();',
         'var window = new ProjectPropertiesWindow();',
+        'window.Closed += (_, __) =>',
+        'if (ReferenceEquals(_pending, window)) _pending = null;',
+        'if (ReferenceEquals(_published, window)) _published = null;',
+        '_pending = window;',
         'Application.ShowModelessWindow(IntPtr.Zero, window, true);',
+        'if (!window.IsLoaded)',
+        'if (!ReferenceEquals(_pending, window))',
+        '_published = window;',
+        'CloseOwnerBeforeReplacement(ProjectPropertiesWindow window, string state)',
+        'ex.GetType().Name',
     ):
         require(command, token, "Project Properties command")
 
-    # The supplied BLT3D screenshot explicitly marks this screen as not built. Preserve that
-    # visible contract without inventing unsupported persistence fields or mutating ProjectState.
+    try:
+        pending = command.index('_pending = window;')
+        show = command.index('Application.ShowModelessWindow(IntPtr.Zero, window, true);', pending)
+        loaded = command.index('if (!window.IsLoaded)', show)
+        exact = command.index('if (!ReferenceEquals(_pending, window))', loaded)
+        clear = command.index('_pending = null;', exact)
+        publish = command.index('_published = window;', clear)
+        if not (pending < show < loaded < exact < clear < publish):
+            fail("Project Properties must retain pending owner through host show/Loaded/exact-owner proof before publication")
+    except ValueError as exc:
+        fail("Project Properties publication ordering marker missing: " + str(exc))
+
     for token in (
         '(Chưa xây dựng — Thuộc tính dự án)',
         'Background = new SolidColorBrush(Color.FromRgb(20, 20, 20))',
@@ -71,10 +94,12 @@ def main():
         if token in window:
             fail(f"Project Properties placeholder must remain read-only: found {token}")
 
-    # V26 must continue consuming the same V25 command/window source automatically.
+    if "+ ex.Message" in command:
+        fail("Project Properties must not expose raw host exception messages")
+
     require(v26_project, '<Compile Include="..\\QS3D.BricsCAD.V25\\**\\*.cs"', "V26 shared adapter source")
 
-    print("PASS: BLT3D Project Properties stays dedicated while Project Information uses its own host.")
+    print("PASS: BLT3D Project Properties stays dedicated/read-only and uses exact pending-owned, Loaded-before-publication singleton lifecycle.")
     return 0
 
 

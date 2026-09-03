@@ -44,7 +44,6 @@ namespace QS3D.Core.Domain
                 .Where(x => ReferencesZone(x, zone.Id))
                 .ToList();
 
-            project.Touch();
             zone.Name = normalizedName;
             foreach (var element in referencedElements)
                 element.MarkDirty(ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
@@ -76,17 +75,25 @@ namespace QS3D.Core.Domain
 
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             var observedEntries = 0;
+            RequireStableAssignmentTargetKnownCount(elements, knownTargetCount);
             using (var enumerator = elements.GetEnumerator())
             {
-                while (enumerator.MoveNext())
+                RequireStableAssignmentTargetKnownCount(elements, knownTargetCount);
+                while (true)
                 {
-                    observedEntries++;
-                    if (observedEntries > MaxAssignmentTargetEntries)
-                        throw AssignmentTargetLimitExceeded();
-                    if (knownTargetCount.HasValue && observedEntries > knownTargetCount.Value)
+                    RequireStableAssignmentTargetKnownCount(elements, knownTargetCount);
+                    var moved = enumerator.MoveNext();
+                    RequireStableAssignmentTargetKnownCount(elements, knownTargetCount);
+                    if (!moved) break;
+
+                    if (knownTargetCount.HasValue && observedEntries >= knownTargetCount.Value)
                         throw new InvalidOperationException("Zone assignment target collection known count does not match the observed target traversal.");
+                    if (observedEntries >= MaxAssignmentTargetEntries)
+                        throw AssignmentTargetLimitExceeded();
 
                     var element = enumerator.Current;
+                    RequireStableAssignmentTargetKnownCount(elements, knownTargetCount);
+                    observedEntries++;
                     if (element == null)
                         throw new InvalidOperationException("Zone assignment target collection contains a null element.");
                     var elementId = RequiredIdentity(element.Id, "Zone assignment target element id", 128);
@@ -100,11 +107,9 @@ namespace QS3D.Core.Domain
             if (knownTargetCount.HasValue && observedEntries != knownTargetCount.Value)
                 throw new InvalidOperationException("Zone assignment target collection known count does not match the observed target traversal.");
 
-            var currentKnownTargetCount = SnapshotAssignmentTargetKnownCount(elements);
+            RequireStableAssignmentTargetKnownCount(elements, knownTargetCount);
             if (project.ChangeVersion != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Zone assignment target counts were being rebound. Retry assignment against the current project state.");
-            if (knownTargetCount != currentKnownTargetCount)
-                throw new InvalidOperationException("Zone assignment target collection known count changed during enumeration.");
 
             RequireCurrentAssignmentOwnership(project, zone, unique.Values);
 
@@ -158,6 +163,13 @@ namespace QS3D.Core.Domain
             if (elements is System.Collections.ICollection nonGenericCollection)
                 ValidateAssignmentTargetKnownCount(nonGenericCollection.Count, ref knownCount);
             return knownCount;
+        }
+
+        private static void RequireStableAssignmentTargetKnownCount(IEnumerable<ProjectElement> elements, int? admittedCount)
+        {
+            var reboundCount = SnapshotAssignmentTargetKnownCount(elements);
+            if (reboundCount != admittedCount)
+                throw new InvalidOperationException("Zone assignment target collection known count changed during enumeration.");
         }
 
         private static void ValidateAssignmentTargetKnownCount(int count, ref int? knownCount)
@@ -231,7 +243,7 @@ namespace QS3D.Core.Domain
                 var elementId = RequiredIdentity(element.Id, "Project semantic element id", 128);
                 OptionalIdentity(element.ZoneId, "Element ZoneId", 64);
                 if (!seenIds.Add(elementId))
-                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + elementId);
+                    throw new InvalidOperationException("Project contains duplicate semantic element id: " + elementId + ".");
                 resolved.Add(element);
             }
             return resolved;

@@ -45,11 +45,12 @@ def main():
         "private const int NetworkTimeoutMilliseconds = 30000;",
         "private const int MaxRedirects = 8;",
         "private const int MaxReleaseTagPrefixChars = 48;",
+        "IProgress<UpdateDownloadProgress>? progress = null",
         "EnsureAllowedUri(release.PackageUri);",
         "EnsureAllowedUri(release.PackageChecksumUri);",
         "var existingLength = new FileInfo(packagePath).Length;",
         "if (existingLength <= MaxPackageBytes)",
-        "await CopyBoundedAsync(source, buffer, MaxChecksumBytes)",
+        "await CopyBoundedAsync(source, buffer, MaxChecksumBytes, null, 0)",
         "private static async Task<HttpWebResponse> GetResponseFollowingRedirectsAsync(Uri uri)",
         "request.AllowAutoRedirect = false;",
         "request.Timeout = NetworkTimeoutMilliseconds;",
@@ -64,8 +65,9 @@ def main():
         'string.Equals(host, "github.com", StringComparison.OrdinalIgnoreCase)',
         'string.Equals(host, "api.github.com", StringComparison.OrdinalIgnoreCase)',
         'host.EndsWith(".githubusercontent.com", StringComparison.OrdinalIgnoreCase)',
-        "await DownloadBoundedAsync(release.PackageUri, partialPath, MaxPackageBytes)",
-        "await CopyBoundedAsync(source, target, maxBytes)",
+        "await DownloadBoundedAsync(release.PackageUri, partialPath, MaxPackageBytes, progress)",
+        "await CopyBoundedAsync(source, target, maxBytes, progress, totalBytes)",
+        "progress?.Report(new UpdateDownloadProgress",
         "if (total > maxBytes)",
         "var actualSha256 = ComputeSha256(partialPath);",
         "if (!string.Equals(actualSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))",
@@ -119,7 +121,8 @@ def main():
     for needle in (
         "if (current.Release.HasVerifiedPreviewPackage)",
         "await DownloadPreviewAsync(current.Release);",
-        "var verified = await new VerifiedReleaseDownloader().DownloadAsync(release);",
+        "var progress = new Progress<UpdateDownloadProgress>(ApplyDownloadProgress);",
+        "var verified = await new VerifiedReleaseDownloader().DownloadAsync(release, progress);",
         "VerifiedPreviewInstaller.TrySchedule(verified.Path, verified.Sha256, out var installError)",
         "SecureUpdateLauncher.TryRequestGracefulHostClose(out var closeError)",
         "await ScheduleUpdateAsync();",
@@ -151,11 +154,11 @@ def main():
 
     print(
         "PASS: V25 preview fallback discovers the exact package/checksum pair, bounds cached, declared and streamed network bytes before hashing, "
-        "uses bounded request/read-write timeouts, validates every bounded HTTPS GitHub redirect hop and final response URI, rejects URI user-info, "
-        "verifies SHA-256 before retaining the ZIP, escapes Windows reserved release-tag cache segments, bounds the readable cache prefix, appends a "
-        "SHA-256 identity of the exact release tag to prevent case/sanitization cache collisions, stages under LocalApplicationData, exposes the Update "
-        "Center directly from Start Center without command dispatch, and hands the verified preview to the bounded post-exit installer while the "
-        "existing signed-manifest scheduling path remains separate."
+        "uses progress-aware bounded transfer reporting, bounded request/read-write timeouts, validates every bounded HTTPS GitHub redirect hop and final "
+        "response URI, rejects URI user-info, verifies SHA-256 before retaining the ZIP, escapes Windows reserved release-tag cache segments, bounds "
+        "the readable cache prefix, appends a SHA-256 identity of the exact release tag to prevent case/sanitization cache collisions, stages under "
+        "LocalApplicationData, exposes the Update Center directly from Start Center without command dispatch, and hands the verified preview to the "
+        "bounded post-exit installer while the existing signed-manifest scheduling path remains separate."
     )
     return 0
 

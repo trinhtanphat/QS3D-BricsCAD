@@ -47,7 +47,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = Project();
             var curtain = new ProjectElement("CW", ElementCategory.GlassWall, string.Empty, string.Empty, string.Empty);
-            curtain.Properties["GeneratedCurtainFrameHandles"] = "C1; C2 ; C2";
+            curtain.Properties["GeneratedCurtainFrameHandles"] = "C1;C2";
             project.Elements.Add(curtain);
 
             var resolved = SemanticHandleOwnershipResolver.Resolve(project, new[] { "c2" });
@@ -59,7 +59,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = Project();
             var foundation = new ProjectElement("FND", ElementCategory.Foundation, string.Empty, string.Empty, string.Empty);
-            foundation.Properties["GeneratedFoundationMeshHandles"] = "F1; F2 ; F2";
+            foundation.Properties["GeneratedFoundationMeshHandles"] = "F1;F2";
             project.Elements.Add(foundation);
 
             var resolved = SemanticHandleOwnershipResolver.Resolve(project, new[] { "f2" });
@@ -98,7 +98,7 @@ namespace QS3D.Core.SmokeTests
             var project = Project();
             var element = new ProjectElement("OWN", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
             element.Properties["GeneratedSolidHandle"] = "S1";
-            element.Properties["GeneratedFutureHandles"] = "S1;S2;s2";
+            element.Properties["GeneratedFutureHandles"] = "S1;S2";
             element.Properties["PhysicalOpeningCutSolidHandle"] = "CUT1";
             project.Elements.Add(element);
 
@@ -115,10 +115,10 @@ namespace QS3D.Core.SmokeTests
             var left = new ProjectElement("LEFT", ElementCategory.Slab, string.Empty, string.Empty, string.Empty);
             left.Properties["GeneratedSlabMeshHandles"] = "DUP";
             var right = new ProjectElement("RIGHT", ElementCategory.Foundation, string.Empty, string.Empty, string.Empty);
-            right.Properties["GeneratedFoundationMeshHandles"] = "dup";
+            right.Properties["GeneratedFoundationMeshHandles"] = "DUP";
             project.Elements.Add(left);
             project.Elements.Add(right);
-            Throws<InvalidOperationException>(() => GeneratedHandleOwnershipPolicy.TryFindOwner(project, "DUP", out _, out _));
+            Throws<InvalidOperationException>(() => GeneratedHandleOwnershipPolicy.TryFindOwner(project, "dup", out _, out _));
         }
 
         private static void DuplicateGeneratedOwnerSemanticIdIsRejected()
@@ -127,11 +127,11 @@ namespace QS3D.Core.SmokeTests
             var left = new ProjectElement("DUP-ID", ElementCategory.Slab, string.Empty, string.Empty, string.Empty);
             var right = new ProjectElement("dup-id", ElementCategory.Slab, string.Empty, string.Empty, string.Empty);
             left.Properties["GeneratedSlabMeshHandles"] = "DUP";
-            right.Properties["GeneratedSlabMeshHandles"] = "dup";
+            right.Properties["GeneratedSlabMeshHandles"] = "DUP";
             project.Elements.Add(left);
             project.Elements.Add(right);
 
-            Throws<InvalidOperationException>(() => GeneratedHandleOwnershipPolicy.TryFindOwner(project, "DUP", out _, out _));
+            Throws<InvalidOperationException>(() => GeneratedHandleOwnershipPolicy.TryFindOwner(project, "dup", out _, out _));
         }
 
         private static void StableIdSourceOwnerIsReused()

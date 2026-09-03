@@ -31,6 +31,7 @@ namespace QS3D.Core.Revisions
             var preflight = Path.Combine(Path.GetTempPath(), "qs3d-revision-" + Guid.NewGuid().ToString("N") + ".tmp");
             string? temp = null;
             var backup = full + ".bak";
+            ValidateReplacementProjectIdentity(snapshot, full, backup);
             try
             {
                 using (var stream = new FileStream(preflight, FileMode.CreateNew, FileAccess.Write, FileShare.None))
@@ -205,6 +206,47 @@ namespace QS3D.Core.Revisions
         private void ValidateSerializedFile(string path)
         {
             Load(path);
+        }
+
+        private void ValidateReplacementProjectIdentity(RevisionSnapshot candidate, string primaryPath, string backupPath)
+        {
+            RevisionSnapshot? existing = null;
+            if (File.Exists(primaryPath))
+            {
+                try
+                {
+                    existing = Load(primaryPath);
+                }
+                catch (Exception error) when (IsRecoverableDataFailure(error))
+                {
+                    existing = null;
+                }
+
+                if (existing != null)
+                {
+                    RequireSameProjectIdentity(existing, candidate, "primary");
+                    return;
+                }
+            }
+
+            if (!File.Exists(backupPath)) return;
+            try
+            {
+                existing = Load(backupPath);
+            }
+            catch (Exception error) when (IsRecoverableDataFailure(error))
+            {
+                existing = null;
+            }
+
+            if (existing != null)
+                RequireSameProjectIdentity(existing, candidate, "backup");
+        }
+
+        private static void RequireSameProjectIdentity(RevisionSnapshot existing, RevisionSnapshot candidate, string generation)
+        {
+            if (!string.Equals(existing.ProjectId, candidate.ProjectId, StringComparison.Ordinal))
+                throw new InvalidDataException("Existing revision " + generation + " project identity does not match the revision being published.");
         }
 
         private bool ShouldPreserveValidatedBackup(string primaryPath, string backupPath)

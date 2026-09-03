@@ -28,16 +28,7 @@ namespace QS3D.Core.Domain
         public static ProjectFamily Create(ProjectState project, string id, string name, ElementCategory category)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            var normalizedId = Required(id, nameof(id), 80);
-            var normalizedName = Required(name, nameof(name), MaxNameLength);
-            if (project.Families.Any(x => x == null))
-                throw new InvalidOperationException("Project family collection contains a null family.");
-            ValidateUniqueFamilyIds(project);
-            if (project.Families.Count >= MaxFamilies) throw new InvalidOperationException("Project supports at most " + MaxFamilies + " families.");
-            if (project.Families.Any(x => string.Equals(x.Id, normalizedId, StringComparison.OrdinalIgnoreCase)))
-                throw new InvalidOperationException("Family id already exists: " + normalizedId);
-            EnsureUniqueName(project, normalizedName, category, string.Empty);
-            var family = new ProjectFamily(normalizedId, normalizedName, category);
+            var family = CreateDetached(project, id, name, category);
             project.Touch();
             project.Families.Add(family);
             return family;
@@ -49,8 +40,13 @@ namespace QS3D.Core.Domain
             var source = FindRequired(project, sourceFamilyId);
             var properties = SnapshotProperties(source, "Source", "duplication");
 
-            var clone = Create(project, newId, newName, source.Category);
+            // Populate the clone while detached. Property writes are persisted family
+            // mutations, but they must be part of the single logical project revision
+            // that admits the fully initialized duplicate into the project.
+            var clone = CreateDetached(project, newId, newName, source.Category);
             foreach (var pair in properties) clone.Properties[pair.Key] = pair.Value;
+            project.Touch();
+            project.Families.Add(clone);
             return clone;
         }
 
@@ -61,7 +57,6 @@ namespace QS3D.Core.Domain
             var normalized = Required(newName, nameof(newName), MaxNameLength);
             EnsureUniqueName(project, normalized, family.Category, family.Id);
             if (string.Equals(family.Name, normalized, StringComparison.Ordinal)) return family;
-            project.Touch();
             family.Name = normalized;
             return family;
         }
@@ -79,7 +74,9 @@ namespace QS3D.Core.Domain
             var members = ResolveFamilyMembers(project, family.Id);
             ValidateMemberPropertyKeysForMutation(members, "setting a property");
 
-            project.Touch();
+            // The owned family property store requests ProjectState freshness before
+            // committing the actual mutation. Do not pre-touch here or one logical
+            // service operation would advance ChangeVersion twice.
             family.Properties[normalizedKey] = normalizedValue;
             var result = new FamilyPropertyUpdateResult();
             foreach (var element in members)
@@ -107,7 +104,7 @@ namespace QS3D.Core.Domain
             var members = ResolveFamilyMembers(project, family.Id);
             ValidateMemberPropertyKeysForMutation(members, "removing a property");
 
-            project.Touch();
+            // The property store performs the single owning persistence request.
             family.Properties.Remove(normalizedKey);
             var result = new FamilyPropertyUpdateResult();
             foreach (var element in members)
@@ -286,19 +283,24 @@ namespace QS3D.Core.Domain
 
             var unique = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             var observedEntries = 0;
-            foreach (var element in elements)
+            using (var enumerator = elements.GetEnumerator())
             {
-                observedEntries++;
-                if (expectedKnownCount.HasValue && observedEntries > expectedKnownCount.Value)
-                    throw new InvalidOperationException("Family assignment target collection yielded more entries than its known Count.");
-                if (observedEntries > MaxAssignmentTargetEntries)
-                    throw AssignmentTargetLimitExceeded();
-                if (element == null) throw new ArgumentException("Family assignment elements cannot contain null entries.", nameof(elements));
-                if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
-                    throw new InvalidOperationException("Element does not belong to the project instance: " + element.Id);
-                if (owned.Category != target.Category)
-                    throw new InvalidOperationException("Family '" + target.Name + "' category " + target.Category + " cannot be assigned to element " + owned.Id + " category " + owned.Category + ".");
-                unique[owned.Id] = owned;
+                while (enumerator.MoveNext())
+                {
+                    if (expectedKnownCount.HasValue && observedEntries >= expectedKnownCount.Value)
+                        throw new InvalidOperationException("Family assignment target collection yielded more entries than its known Count.");
+                    if (observedEntries >= MaxAssignmentTargetEntries)
+                        throw AssignmentTargetLimitExceeded();
+
+                    var element = enumerator.Current;
+                    observedEntries++;
+                    if (element == null) throw new ArgumentException("Family assignment elements cannot contain null entries.", nameof(elements));
+                    if (!projectElements.TryGetValue(element.Id, out var owned) || !ReferenceEquals(owned, element))
+                        throw new InvalidOperationException("Element does not belong to the project instance: " + element.Id);
+                    if (owned.Category != target.Category)
+                        throw new InvalidOperationException("Family '" + target.Name + "' category " + target.Category + " cannot be assigned to element " + owned.Id + " category " + owned.Category + ".");
+                    unique[owned.Id] = owned;
+                }
             }
             if (project.ChangeVersion != targetEnumerationVersion)
                 throw new InvalidOperationException("Project changed while Family assignment targets were being enumerated. Retry the operation against the current project state.");
@@ -374,6 +376,21 @@ namespace QS3D.Core.Domain
                 if (element.Category != target.Category)
                     throw new InvalidOperationException("Family '" + target.Name + "' category " + target.Category + " cannot be assigned to element " + element.Id + " category " + element.Category + ".");
             }
+        }
+
+        private static ProjectFamily CreateDetached(ProjectState project, string id, string name, ElementCategory category)
+        {
+            var normalizedId = Required(id, nameof(id), 80);
+            var normalizedName = Required(name, nameof(name), MaxNameLength);
+            if (project.Families.Any(x => x == null))
+                throw new InvalidOperationException("Project family collection contains a null family.");
+            ValidateUniqueFamilyIds(project);
+            if (project.Families.Count >= MaxFamilies)
+                throw new InvalidOperationException("Project supports at most " + MaxFamilies + " families.");
+            if (project.Families.Any(x => string.Equals(x.Id, normalizedId, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Family id already exists: " + normalizedId);
+            EnsureUniqueName(project, normalizedName, category, string.Empty);
+            return new ProjectFamily(normalizedId, normalizedName, category);
         }
 
         private static string RequireCanonicalFamilyId(string familyId)

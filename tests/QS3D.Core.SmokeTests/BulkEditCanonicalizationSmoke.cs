@@ -18,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             IdBasedBulkEditsRejectIncompleteTargetSets();
             KnownCountContractsFailClosedBeforeEnumeration();
             KnownCountTraversalMismatchFailsClosed();
+            CurrentRebindsKnownCountBeforeAcceptance();
             HonestKnownAndStreamingInputsRemainAccepted();
             FamilyAssignmentRejectsIncompatibleBatch();
         }
@@ -161,6 +162,29 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Known Count traversal mismatch must fail before BulkEdit mutation.");
         }
 
+        private static void CurrentRebindsKnownCountBeforeAcceptance()
+        {
+            var project = ProjectWithTwoWalls(out var wall1, out var wall2);
+            var service = new BulkEditService();
+
+            var objectTargets = new CountReadCollection<ProjectElement>(new[] { wall1 });
+            var changed = service.SetProperty(project, objectTargets, "WidthM", "0.25");
+            if (changed.Count != 1 || changed[0] != wall1.Id || wall1.Properties["WidthM"] != "0.25")
+                throw new Exception("Count-instrumented BulkEdit object target must remain accepted.");
+            if (objectTargets.CurrentReads != 1)
+                throw new Exception("BulkEdit object target Current must be read exactly once.");
+            if (objectTargets.CountReads != 7)
+                throw new Exception("BulkEdit object target Count must rebound immediately after Current; expected 7 Count reads, got " + objectTargets.CountReads + ".");
+
+            var idTargets = new CountReadCollection<string>(new[] { wall2.Id });
+            if (service.SetProperty(project, idTargets, "WidthM", "0.35") != 1 || wall2.Properties["WidthM"] != "0.35")
+                throw new Exception("Count-instrumented BulkEdit id target must remain accepted.");
+            if (idTargets.CurrentReads != 1)
+                throw new Exception("BulkEdit id target Current must be read exactly once.");
+            if (idTargets.CountReads != 7)
+                throw new Exception("BulkEdit id target Count must rebound immediately after Current; expected 7 Count reads, got " + idTargets.CountReads + ".");
+        }
+
         private static void HonestKnownAndStreamingInputsRemainAccepted()
         {
             var project = ProjectWithTwoWalls(out var wall1, out var wall2);
@@ -238,6 +262,75 @@ namespace QS3D.Core.SmokeTests
                 return;
             }
             throw new Exception("Expected exception " + typeof(T).Name + ".");
+        }
+
+        private sealed class CountReadCollection<T> : ICollection<T>
+        {
+            private readonly T[] _items;
+
+            public CountReadCollection(T[] items)
+            {
+                _items = items;
+            }
+
+            public int Count
+            {
+                get
+                {
+                    CountReads++;
+                    return _items.Length;
+                }
+            }
+
+            public int CountReads { get; private set; }
+            public int CurrentReads { get; private set; }
+            public bool IsReadOnly => true;
+
+            public IEnumerator<T> GetEnumerator() => new CountingEnumerator(this, _items);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+            public bool Contains(T item) => Array.IndexOf(_items, item) >= 0;
+            public void CopyTo(T[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
+            public void Add(T item) => throw new NotSupportedException();
+            public void Clear() => throw new NotSupportedException();
+            public bool Remove(T item) => throw new NotSupportedException();
+
+            private sealed class CountingEnumerator : IEnumerator<T>
+            {
+                private readonly CountReadCollection<T> _owner;
+                private readonly T[] _items;
+                private int _index = -1;
+
+                public CountingEnumerator(CountReadCollection<T> owner, T[] items)
+                {
+                    _owner = owner;
+                    _items = items;
+                }
+
+                public T Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        return _items[_index];
+                    }
+                }
+
+                object IEnumerator.Current => Current!;
+
+                public bool MoveNext()
+                {
+                    if (_index + 1 >= _items.Length)
+                    {
+                        _index = _items.Length;
+                        return false;
+                    }
+                    _index++;
+                    return true;
+                }
+
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() { }
+            }
         }
 
         private sealed class MultiCountCollection<T> : ICollection<T>, IReadOnlyCollection<T>, ICollection

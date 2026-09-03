@@ -448,7 +448,6 @@ def _request_json(url: str, token: str) -> object:
     with urllib.request.urlopen(request, timeout=20) as response:
         return json.loads(response.read().decode("utf-8"))
 
-
 def _fetch_paged(api_url: str, repository: str, endpoint: str, token: str) -> list[dict]:
     owner_repo = urllib.parse.quote(repository, safe="/")
     collected: list[dict] = []
@@ -507,6 +506,20 @@ def _event_actor(event: dict) -> str:
     return str(sender.get("login") or os.environ.get("GITHUB_ACTOR") or "")
 
 
+def pull_request_is_terminal(current_number: int, open_prs: list[dict]) -> bool:
+    if current_number <= 0:
+        raise ValueError("pull request number is missing or invalid")
+    for candidate in open_prs:
+        if not isinstance(candidate, dict):
+            continue
+        try:
+            if int(candidate.get("number") or 0) == current_number:
+                return False
+        except (TypeError, ValueError):
+            continue
+    return True
+
+
 def validate_pull_request_event(
     event: dict,
     repository: str,
@@ -530,12 +543,35 @@ def validate_pull_request_event(
     except (TypeError, ValueError) as exc:
         raise ValueError("pull request number is missing or invalid") from exc
 
-    lane_key = extract_lane_key(pr.get("body"))
-    if lane_key is None:
-        raise ValueError(
-            f"PR #{number} head '{head_ref}' requires a Lane-Key in the PR body; "
-            "use 'Lane-Key: issue-<number>' or a stable integration batch key"
-        )
+    current_open = False
+    for candidate in open_prs:
+        if not isinstance(candidate, dict):
+            continue
+        try:
+            if int(candidate.get("number") or 0) == number:
+                current_open = True
+                break
+        except (TypeError, ValueError):
+            continue
+    if not current_open:
+        return None, []
+
+    explicit_lane_key = extract_lane_key(pr.get("body"))
+    issue_number = branch_issue_number(head_ref) if head_ref.startswith("agent/") else None
+    if issue_number is not None:
+        lane_key = f"issue-{issue_number}"
+        if explicit_lane_key is not None and explicit_lane_key != lane_key:
+            raise ValueError(
+                f"PR #{number} Lane-Key '{explicit_lane_key}' does not match "
+                f"branch-derived Lane-Key '{lane_key}'"
+            )
+    else:
+        lane_key = explicit_lane_key
+        if lane_key is None:
+            raise ValueError(
+                f"PR #{number} head '{head_ref}' requires a Lane-Key in the PR body; "
+                "use 'Lane-Key: issue-<number>' or a stable integration batch key"
+            )
     return lane_key, find_duplicate_carriers(number, lane_key, open_prs)
 
 
@@ -651,6 +687,12 @@ def main() -> int:
         open_prs = fetch_open_prs(api_url, repository, token)
 
         if event_name == "pull_request":
+            if pull_request_is_terminal(current_pr_number, open_prs):
+                print(
+                    "PASS: pull_request carrier is no longer open; "
+                    "terminal reservation validation is skipped before Issue/path collision checks."
+                )
+                return 0
             lane_key, lane_conflicts = validate_pull_request_event(event, repository, open_prs)
             if lane_conflicts:
                 print(f"ERROR: Lane-Key '{lane_key}' already has another open canonical carrier:")

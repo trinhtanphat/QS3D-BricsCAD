@@ -16,6 +16,8 @@ else:
         "private readonly long _changeVersionAtOpen;",
         "private readonly string _drawingFingerprintAtOpen;",
         "private bool _staleSnapshot;",
+        "private const string LocateFailureMessage =",
+        "private const string FreshnessFailureReason =",
         "_projectIdAtOpen = projectAtOpen.ProjectId;",
         "_changeVersionAtOpen = projectAtOpen.ChangeVersion;",
         "Activated += (_, __) => RefreshSnapshotFreshness();",
@@ -23,6 +25,7 @@ else:
         "ProjectContextCoordinator.TryGetReadOnly(_document, out var current)",
         "MatchesSnapshot(current)",
         "current.ChangeVersion == _changeVersionAtOpen",
+        "MarkSnapshotStale(FreshnessFailureReason);",
         "IssueGrid.IsEnabled = false;",
         "SNAPSHOT ĐÃ CŨ",
         "QS3DHEALTH hoặc QS3DHEALTHALL",
@@ -46,9 +49,27 @@ else:
     elif not locate_guard_pos < callback_pos:
         errors.append("Model Health locate callback must remain behind active-DWG/current-project validation")
 
+    locate_start = text.find("private void Locate()")
+    ensure_start = text.find("private void EnsureActiveAndCurrent()")
+    refresh_start = text.find("private void RefreshSnapshotFreshness()")
+    matches_start = text.find("private bool MatchesSnapshot(")
+    if min(locate_start, ensure_start, refresh_start, matches_start) < 0:
+        errors.append("Model Health method boundaries could not be verified for error-surface safety")
+    else:
+        locate_block = text[locate_start:ensure_start]
+        refresh_block = text[refresh_start:matches_start]
+        if "ex.Message" in locate_block:
+            errors.append("Model Health Locate must not surface raw exception messages")
+        if "ex.Message" in refresh_block:
+            errors.append("Model Health freshness stale reason must not surface raw exception messages")
+        if "MessageBox.Show(this, LocateFailureMessage" not in locate_block:
+            errors.append("Model Health Locate failure must use the stable redacted failure message")
+        if "MarkSnapshotStale(FreshnessFailureReason);" not in refresh_block:
+            errors.append("Model Health freshness exception must use the stable redacted stale reason")
+
 if errors:
     for error in errors:
         print("[FAIL] " + error)
     sys.exit(1)
 
-print("[PASS] Model Health stores immutable semantic snapshot stamps, rechecks current state read-only, and blocks stale Locate callbacks")
+print("[PASS] Model Health stores immutable semantic snapshot stamps, rechecks current state read-only, blocks stale Locate callbacks, and redacts failure details")

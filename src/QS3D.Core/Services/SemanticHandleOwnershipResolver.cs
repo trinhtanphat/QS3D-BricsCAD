@@ -9,6 +9,7 @@ namespace QS3D.Core.Services
     public static class SemanticHandleOwnershipResolver
     {
         private const int MaxSelectedHandleInputCount = 10000;
+        private const int MaxBoundarySourceHandleCount = 5000;
 
         public static ProjectElement? ResolveUniqueSourceOwner(ProjectState project, string sourceHandle)
         {
@@ -109,7 +110,7 @@ namespace QS3D.Core.Services
                     element.Properties.TryGetValue(AutoRoomLifecycle.BoundarySourceHandlesKey, out var boundaryHandles) &&
                     !string.IsNullOrWhiteSpace(boundaryHandles))
                 {
-                    foreach (var handle in boundaryHandles.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                    foreach (var handle in GetCanonicalBoundarySourceHandles(element, boundaryHandles))
                         Add(handle, element, AutoRoomLifecycle.BoundarySourceHandlesKey, selected, owners, channels);
                 }
             }
@@ -136,6 +137,24 @@ namespace QS3D.Core.Services
                 .AsReadOnly();
         }
 
+        private static IReadOnlyList<string> GetCanonicalBoundarySourceHandles(ProjectElement element, string boundaryHandles)
+        {
+            var tokens = boundaryHandles.Split(
+                new[] { ';' },
+                MaxBoundarySourceHandleCount + 1,
+                StringSplitOptions.None);
+            if (tokens.Length > MaxBoundarySourceHandleCount)
+                throw new InvalidOperationException(
+                    "Semantic Auto Room boundary source handles cannot exceed " + MaxBoundarySourceHandleCount + " entries.");
+
+            var canonical = AutoRoomLifecycle.NormalizeSourceHandles(tokens);
+            if (!string.Equals(boundaryHandles, canonical, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "Semantic element " + element.Id + " contains non-canonical " + AutoRoomLifecycle.BoundarySourceHandlesKey +
+                    ". Repair Auto Room boundary ownership before semantic selection.");
+            return Array.AsReadOnly(tokens);
+        }
+
         private static HashSet<string> MaterializeSelectedHandles(IEnumerable<string> selectedHandles)
         {
             var knownCount = TryGetKnownCount(selectedHandles, out var conflictingKnownCounts, out var negativeKnownCount);
@@ -148,15 +167,26 @@ namespace QS3D.Core.Services
 
             var selected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var inputCount = 0;
-            foreach (var rawHandle in selectedHandles)
+            using (var enumerator = selectedHandles.GetEnumerator())
             {
-                if (knownCount.HasValue && inputCount >= knownCount.Value)
-                    throw new InvalidOperationException("Semantic handle selection known Count does not match completed traversal cardinality.");
-                if (inputCount >= MaxSelectedHandleInputCount)
-                    throw new InvalidOperationException("Semantic handle selection cannot exceed " + MaxSelectedHandleInputCount + " input entries.");
-                inputCount++;
-                if (string.IsNullOrWhiteSpace(rawHandle)) continue;
-                selected.Add(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(rawHandle));
+                while (true)
+                {
+                    RequireStableKnownCountDuringTraversal(selectedHandles, knownCount);
+                    var moved = enumerator.MoveNext();
+                    RequireStableKnownCountDuringTraversal(selectedHandles, knownCount);
+                    if (!moved) break;
+
+                    if (knownCount.HasValue && inputCount >= knownCount.Value)
+                        throw new InvalidOperationException("Semantic handle selection known Count does not match completed traversal cardinality.");
+                    if (inputCount >= MaxSelectedHandleInputCount)
+                        throw new InvalidOperationException("Semantic handle selection cannot exceed " + MaxSelectedHandleInputCount + " input entries.");
+
+                    var rawHandle = enumerator.Current;
+                    RequireStableKnownCountDuringTraversal(selectedHandles, knownCount);
+                    inputCount++;
+                    if (string.IsNullOrWhiteSpace(rawHandle)) continue;
+                    selected.Add(GeneratedHandleOwnershipPolicy.NormalizeHandleIdentity(rawHandle));
+                }
             }
 
             if (knownCount.HasValue && inputCount != knownCount.Value)
@@ -164,6 +194,20 @@ namespace QS3D.Core.Services
 
             RevalidateKnownCountAfterTraversal(selectedHandles, knownCount);
             return selected;
+        }
+
+        private static void RequireStableKnownCountDuringTraversal(IEnumerable<string> selectedHandles, int? admittedCount)
+        {
+            if (!admittedCount.HasValue)
+                return;
+
+            var reboundCount = TryGetKnownCount(selectedHandles, out var conflictingKnownCounts, out var negativeKnownCount);
+            if (negativeKnownCount)
+                throw new InvalidOperationException("Semantic handle selection exposes an invalid negative known Count value during traversal.");
+            if (conflictingKnownCounts)
+                throw new InvalidOperationException("Semantic handle selection exposes conflicting known Count values during traversal.");
+            if (!reboundCount.HasValue || reboundCount.Value != admittedCount.Value)
+                throw new InvalidOperationException("Semantic handle selection known Count changed during traversal.");
         }
 
         private static void RevalidateKnownCountAfterTraversal(IEnumerable<string> selectedHandles, int? admittedCount)

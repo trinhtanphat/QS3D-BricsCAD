@@ -47,6 +47,7 @@ namespace QS3D.Core.Reporting
             var zones = zoneInstances.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
             var families = familyInstances.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
             var rows = new Dictionary<string, QuantityReportRow>(StringComparer.OrdinalIgnoreCase);
+            var accumulators = new Dictionary<string, QuantityReportAggregateState>(StringComparer.OrdinalIgnoreCase);
             var noteValues = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
             var order = new List<string>();
 
@@ -78,6 +79,7 @@ namespace QS3D.Core.Reporting
                     ? "ELEMENT\u001f" + elementId
                     : CanonicalGroupKey(floorId, zoneId, category, familyId, material, DensityKey(densityKgM3));
                 var created = false;
+                QuantityReportAggregateState aggregate;
                 if (!rows.TryGetValue(key, out var row))
                 {
                     row = new QuantityReportRow
@@ -91,10 +93,11 @@ namespace QS3D.Core.Reporting
                         Material = material,
                         Note = note,
                         DensityKgM3 = densityKgM3,
-                        MassKg = massKg,
                         DrawingFingerprint = drawingFingerprint
                     };
                     rows[key] = row;
+                    aggregate = new QuantityReportAggregateState();
+                    accumulators.Add(key, aggregate);
                     var distinctNotes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     if (note.Length != 0) distinctNotes.Add(note);
                     noteValues.Add(key, distinctNotes);
@@ -103,11 +106,12 @@ namespace QS3D.Core.Reporting
                 }
                 else
                 {
+                    aggregate = accumulators[key];
                     if (note.Length != 0 && noteValues[key].Add(note))
                         row.Note = AppendText(row.Note, note);
-                    row.MassKg = AddHomogeneousMass(row.MassKg, massKg, element.Id + "/MassKg");
                 }
 
+                aggregate.MassKg.Add(massKg, element.Id + "/MassKg");
                 row.Count = QuantityReportMath.AddCount(row.Count, 1);
                 row.ElementIds.Add(elementId);
                 AddHandles(row.SourceHandles, SourceHandleResolver.Resolve(project, new[] { elementId }));
@@ -165,42 +169,157 @@ namespace QS3D.Core.Reporting
                 var grossFormwork = Q(element, "GrossFormworkM2");
                 var formworkDeduction = QFirst(element, "ConcreteContactDeductionM2", "FormworkDeductionM2");
                 var netFormwork = QFirst(element, "NetFormworkM2", "FormworkM2");
-                row.GrossConcreteM3 = QuantityReportMath.Add(row.GrossConcreteM3, gross, element.Id + "/GrossConcreteM3");
-                row.NetConcreteM3 = QuantityReportMath.Add(row.NetConcreteM3, net, element.Id + "/NetConcreteM3");
-                row.DeductionM3 = QuantityReportMath.Add(row.DeductionM3, Q(element, "DeductionM3", Math.Max(0d, gross - net)), element.Id + "/DeductionM3");
-                row.GrossFormworkM2 = QuantityReportMath.Add(row.GrossFormworkM2, grossFormwork, element.Id + "/GrossFormworkM2");
-                row.ConcreteContactDeductionM2 = QuantityReportMath.Add(row.ConcreteContactDeductionM2, formworkDeduction, element.Id + "/ConcreteContactDeductionM2");
-                row.NetFormworkM2 = QuantityReportMath.Add(row.NetFormworkM2, netFormwork, element.Id + "/NetFormworkM2");
-                row.FormworkM2 = QuantityReportMath.Add(row.FormworkM2, netFormwork, element.Id + "/FormworkM2");
-                row.LengthM = QuantityReportMath.Add(row.LengthM, Q(element, "LengthM"), element.Id + "/LengthM");
-                row.WidthM = QuantityReportMath.Add(row.WidthM, Q(element, "WidthM"), element.Id + "/WidthM");
-                row.HeightM = QuantityReportMath.Add(row.HeightM, Q(element, "HeightM"), element.Id + "/HeightM");
-                row.OuterPerimeterM = QuantityReportMath.Add(row.OuterPerimeterM,
+                aggregate.GrossConcreteM3.Add(gross, element.Id + "/GrossConcreteM3");
+                aggregate.NetConcreteM3.Add(net, element.Id + "/NetConcreteM3");
+                aggregate.DeductionM3.Add(Q(element, "DeductionM3", Math.Max(0d, gross - net)), element.Id + "/DeductionM3");
+                aggregate.GrossFormworkM2.Add(grossFormwork, element.Id + "/GrossFormworkM2");
+                aggregate.ConcreteContactDeductionM2.Add(formworkDeduction, element.Id + "/ConcreteContactDeductionM2");
+                aggregate.NetFormworkM2.Add(netFormwork, element.Id + "/NetFormworkM2");
+                aggregate.FormworkM2.Add(netFormwork, element.Id + "/FormworkM2");
+                aggregate.LengthM.Add(Q(element, "LengthM"), element.Id + "/LengthM");
+                aggregate.WidthM.Add(Q(element, "WidthM"), element.Id + "/WidthM");
+                aggregate.HeightM.Add(Q(element, "HeightM"), element.Id + "/HeightM");
+                aggregate.OuterPerimeterM.Add(
                     element.Category == ElementCategory.Room ? QFirst(element, "OuterPerimeterM", "PerimeterM") : Q(element, "OuterPerimeterM"),
                     element.Id + "/OuterPerimeterM");
-                row.InnerPerimeterM = QuantityReportMath.Add(row.InnerPerimeterM,
+                aggregate.InnerPerimeterM.Add(
                     element.Category == ElementCategory.Skirting ? QFirst(element, "InnerPerimeterM", "PerimeterM") : Q(element, "InnerPerimeterM"),
                     element.Id + "/InnerPerimeterM");
-                row.DoorAreaM2 = QuantityReportMath.Add(row.DoorAreaM2,
+                aggregate.DoorAreaM2.Add(
                     element.Category == ElementCategory.Door || element.Category == ElementCategory.WallOpening ? Q(element, "OpeningAreaM2") : Q(element, "DoorAreaM2"),
                     element.Id + "/DoorAreaM2");
-                row.SideAreaM2 = QuantityReportMath.Add(row.SideAreaM2,
+                aggregate.SideAreaM2.Add(
                     element.Category == ElementCategory.WallFinish ? QFirst(element, "NetFinishAreaM2", "SideAreaM2") : Q(element, "SideAreaM2"),
                     element.Id + "/SideAreaM2");
-                row.BottomAreaM2 = QuantityReportMath.Add(row.BottomAreaM2,
+                aggregate.BottomAreaM2.Add(
                     element.Category == ElementCategory.FloorFinish || element.Category == ElementCategory.Waterproofing ? QFirst(element, "BottomAreaM2", "AreaM2") : Q(element, "BottomAreaM2"),
                     element.Id + "/BottomAreaM2");
-                row.TopAreaM2 = QuantityReportMath.Add(row.TopAreaM2,
+                aggregate.TopAreaM2.Add(
                     element.Category == ElementCategory.CeilingFinish ? QFirst(element, "TopAreaM2", "AreaM2") : Q(element, "TopAreaM2"),
                     element.Id + "/TopAreaM2");
-                row.OtherAreaM2 = QuantityReportMath.Add(row.OtherAreaM2, QFirst(element, "OtherAreaM2", "MeasuredSurfaceAreaM2"), element.Id + "/OtherAreaM2");
-                if (created && row.MassKg.HasValue)
-                    row.MassKg = QuantityReportMath.NonNegative(row.MassKg.Value, element.Id + "/MassKg");
+                aggregate.OtherAreaM2.Add(QFirst(element, "OtherAreaM2", "MeasuredSurfaceAreaM2"), element.Id + "/OtherAreaM2");
                 EnsureProjectRevision(project, reportVersion, elements, floorInstances, zoneInstances, familyInstances, drawingFingerprint);
             }
 
             EnsureProjectRevision(project, reportVersion, elements, floorInstances, zoneInstances, familyInstances, drawingFingerprint);
+            foreach (var key in order)
+            {
+                var row = rows[key];
+                var aggregate = accumulators[key];
+                row.GrossConcreteM3 = aggregate.GrossConcreteM3.Value("GrossConcreteM3");
+                row.DeductionM3 = aggregate.DeductionM3.Value("DeductionM3");
+                row.NetConcreteM3 = aggregate.NetConcreteM3.Value("NetConcreteM3");
+                row.GrossFormworkM2 = aggregate.GrossFormworkM2.Value("GrossFormworkM2");
+                row.ConcreteContactDeductionM2 = aggregate.ConcreteContactDeductionM2.Value("ConcreteContactDeductionM2");
+                row.NetFormworkM2 = aggregate.NetFormworkM2.Value("NetFormworkM2");
+                row.FormworkM2 = aggregate.FormworkM2.Value("FormworkM2");
+                row.LengthM = aggregate.LengthM.Value("LengthM");
+                row.WidthM = aggregate.WidthM.Value("WidthM");
+                row.HeightM = aggregate.HeightM.Value("HeightM");
+                row.OuterPerimeterM = aggregate.OuterPerimeterM.Value("OuterPerimeterM");
+                row.InnerPerimeterM = aggregate.InnerPerimeterM.Value("InnerPerimeterM");
+                row.DoorAreaM2 = aggregate.DoorAreaM2.Value("DoorAreaM2");
+                row.SideAreaM2 = aggregate.SideAreaM2.Value("SideAreaM2");
+                row.BottomAreaM2 = aggregate.BottomAreaM2.Value("BottomAreaM2");
+                row.TopAreaM2 = aggregate.TopAreaM2.Value("TopAreaM2");
+                row.OtherAreaM2 = aggregate.OtherAreaM2.Value("OtherAreaM2");
+                row.MassKg = aggregate.MassKg.Value("MassKg");
+            }
             return order.Select(x => rows[x]).ToList().AsReadOnly();
+        }
+
+        private sealed class QuantityReportAggregateState
+        {
+            internal CompensatedValue GrossConcreteM3 { get; } = new CompensatedValue();
+            internal CompensatedValue DeductionM3 { get; } = new CompensatedValue();
+            internal CompensatedValue NetConcreteM3 { get; } = new CompensatedValue();
+            internal CompensatedValue GrossFormworkM2 { get; } = new CompensatedValue();
+            internal CompensatedValue ConcreteContactDeductionM2 { get; } = new CompensatedValue();
+            internal CompensatedValue NetFormworkM2 { get; } = new CompensatedValue();
+            internal CompensatedValue FormworkM2 { get; } = new CompensatedValue();
+            internal CompensatedValue LengthM { get; } = new CompensatedValue();
+            internal CompensatedValue WidthM { get; } = new CompensatedValue();
+            internal CompensatedValue HeightM { get; } = new CompensatedValue();
+            internal CompensatedValue OuterPerimeterM { get; } = new CompensatedValue();
+            internal CompensatedValue InnerPerimeterM { get; } = new CompensatedValue();
+            internal CompensatedValue DoorAreaM2 { get; } = new CompensatedValue();
+            internal CompensatedValue SideAreaM2 { get; } = new CompensatedValue();
+            internal CompensatedValue BottomAreaM2 { get; } = new CompensatedValue();
+            internal CompensatedValue TopAreaM2 { get; } = new CompensatedValue();
+            internal CompensatedValue OtherAreaM2 { get; } = new CompensatedValue();
+            internal NullableCompensatedValue MassKg { get; } = new NullableCompensatedValue();
+        }
+
+        private sealed class NullableCompensatedValue
+        {
+            private readonly CompensatedValue _value = new CompensatedValue();
+            private bool _observed;
+            private bool _allPresent = true;
+
+            internal void Add(double? value, string label)
+            {
+                _observed = true;
+                if (!value.HasValue)
+                {
+                    _allPresent = false;
+                    return;
+                }
+                if (_allPresent) _value.Add(value.Value, label);
+            }
+
+            internal double? Value(string quantity)
+            {
+                return _observed && _allPresent ? _value.Value(quantity) : (double?)null;
+            }
+        }
+
+        private sealed class CompensatedValue
+        {
+            private double _sum;
+            private double _compensation;
+
+            internal void Add(double value, string label)
+            {
+                QuantityReportMath.Finite(_sum, label);
+                QuantityReportMath.Finite(_compensation, label + "/compensation");
+                var incoming = QuantityReportMath.NonNegative(value, label);
+                var result = _sum + incoming;
+                if (double.IsNaN(result) || double.IsInfinity(result))
+                    throw new OverflowException("Quantity report aggregate overflow: " + label);
+
+                var correction = Math.Abs(_sum) >= Math.Abs(incoming)
+                    ? (_sum - result) + incoming
+                    : (incoming - result) + _sum;
+                var nextCompensation = _compensation + correction;
+                if (double.IsNaN(nextCompensation) || double.IsInfinity(nextCompensation))
+                    throw new OverflowException("Quantity report aggregate compensation overflow: " + label);
+                _sum = result == 0d ? 0d : result;
+                _compensation = nextCompensation == 0d ? 0d : nextCompensation;
+            }
+
+            internal double Value(string quantity)
+            {
+                QuantityReportMath.Finite(_sum, "aggregate/" + quantity);
+                QuantityReportMath.Finite(_compensation, "aggregate/" + quantity + "/compensation");
+                var result = _sum + _compensation;
+                if (double.IsNaN(result) || double.IsInfinity(result))
+                    throw new OverflowException("Quantity report aggregate overflow: " + quantity);
+                if (_compensation != 0d && result == _sum && !IsStrictlyBelowHalfUlp(_sum, _compensation))
+                    throw new OverflowException("Quantity report aggregate lost a non-zero compensation at floating-point precision: " + quantity);
+                if (_sum != 0d && result == _compensation)
+                    throw new OverflowException("Quantity report aggregate lost a non-zero accumulated value at floating-point precision: " + quantity);
+                return result == 0d ? 0d : result;
+            }
+
+            private static bool IsStrictlyBelowHalfUlp(double current, double compensation)
+            {
+                if (current <= 0d || compensation == 0d) return false;
+                var currentBits = BitConverter.DoubleToInt64Bits(current);
+                var adjacentBits = compensation > 0d ? currentBits + 1L : currentBits - 1L;
+                var adjacent = BitConverter.Int64BitsToDouble(adjacentBits);
+                var spacing = Math.Abs(adjacent - current);
+                return Math.Abs(compensation) < spacing / 2d;
+            }
         }
 
         private static void EnsureProjectRevision(
@@ -242,12 +361,29 @@ namespace QS3D.Core.Reporting
             var selected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var selectedInstances = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
             var observedCount = 0;
-            foreach (var raw in elementIds)
+            using var enumerator = elementIds.GetEnumerator();
+            while (true)
             {
-                observedCount++;
-                if (observedCount > MaxSelectionElementIds)
+                if (knownCount.HasValue)
+                    RequireStableKnownSelectionCount(elementIds, knownCount.Value);
+
+                var moved = enumerator.MoveNext();
+
+                if (knownCount.HasValue)
+                    RequireStableKnownSelectionCount(elementIds, knownCount.Value);
+                if (!moved) break;
+
+                if (knownCount.HasValue && observedCount >= knownCount.Value)
+                    throw SelectionCountMismatch(knownCount.Value, observedCount + 1);
+                if (observedCount >= MaxSelectionElementIds)
                     throw SelectionTooLarge();
 
+                var raw = enumerator.Current;
+
+                if (knownCount.HasValue)
+                    RequireStableKnownSelectionCount(elementIds, knownCount.Value);
+
+                observedCount++;
                 if (string.IsNullOrWhiteSpace(raw))
                     throw new ArgumentException("Quantity report element ids must not be blank.", nameof(elementIds));
                 if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
@@ -261,8 +397,12 @@ namespace QS3D.Core.Reporting
 
             if (project.ChangeVersion != selectionVersion)
                 throw new InvalidOperationException("Project changed while quantity report element ids were being enumerated; recompute the selection against the current project state.");
-            if (knownCount.HasValue && observedCount != knownCount.Value)
-                throw SelectionCountMismatch(knownCount.Value, observedCount);
+            if (knownCount.HasValue)
+            {
+                RequireStableKnownSelectionCount(elementIds, knownCount.Value);
+                if (observedCount != knownCount.Value)
+                    throw SelectionCountMismatch(knownCount.Value, observedCount);
+            }
 
             ReportingProjectIdentityGuard.RequireUniqueElementIds(project, "Quantity report selection");
             foreach (var selectedInstance in selectedInstances)
@@ -284,6 +424,15 @@ namespace QS3D.Core.Reporting
             if (elementIds is ICollection nonGenericCollection)
                 ObserveKnownSelectionCount(nonGenericCollection.Count, ref knownCount);
             return knownCount;
+        }
+
+        private static void RequireStableKnownSelectionCount(IEnumerable<string> elementIds, int expectedCount)
+        {
+            var currentCount = SnapshotKnownSelectionCount(elementIds);
+            if (!currentCount.HasValue || currentCount.Value != expectedCount)
+                throw new InvalidOperationException(
+                    "Quantity report selection input changed during enumeration; Count changed from " + expectedCount +
+                    " to " + (currentCount.HasValue ? currentCount.Value.ToString(CultureInfo.InvariantCulture) : "<unavailable>") + ".");
         }
 
         private static void ObserveKnownSelectionCount(int count, ref int? knownCount)
@@ -401,12 +550,6 @@ namespace QS3D.Core.Reporting
                     var value = part ?? string.Empty;
                     return value.Length.ToString(CultureInfo.InvariantCulture) + ":" + value;
                 }));
-        }
-
-        private static double? AddHomogeneousMass(double? current, double? value, string label)
-        {
-            if (!current.HasValue || !value.HasValue) return null;
-            return QuantityReportMath.Add(current.Value, value.Value, label);
         }
 
         private static string AppendText(string current, string value)

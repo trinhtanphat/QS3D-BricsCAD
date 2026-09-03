@@ -28,7 +28,7 @@ namespace QS3D.BricsCAD.V25
         private const int MaxScreenshotWidth = 1280;
         private const int MaxScreenshotHeight = 900;
         private const int MaxScreenshotBytes = 3 * 1024 * 1024;
-        private const int MaxWaitMilliseconds = 15000;
+        private const int MaxWaitMilliseconds = 7000;
         private const int MinWaitPollMilliseconds = 50;
         private const int MaxWaitPollMilliseconds = 1000;
         private const int MinDragMilliseconds = 50;
@@ -36,7 +36,7 @@ namespace QS3D.BricsCAD.V25
         private const int DragStepMilliseconds = 25;
         private const int ClipboardTimeoutMilliseconds = 5000;
         private const int MaxSequenceSteps = 12;
-        private const int MaxSequenceMilliseconds = 30000;
+        private const int MaxSequenceMilliseconds = 7000;
         private const int MaxSequenceDelayMilliseconds = 2000;
         private const int MaxSequenceJsonCharacters = 32768;
         private const int MaxSequenceStepArgumentsCharacters = 8192;
@@ -59,14 +59,29 @@ namespace QS3D.BricsCAD.V25
         private const int SM_CXVIRTUALSCREEN = 78;
         private const int SM_CYVIRTUALSCREEN = 79;
         private const uint SRCCOPY = 0x00CC0020;
+        private const uint PW_RENDERFULLCONTENT = 0x00000002;
 
         private static readonly HashSet<string> Tools = new HashSet<string>(StringComparer.Ordinal)
         {
+            "diagnostics_log_tail",
+            "diagnostics_since",
+            "diagnostics_snapshot",
+            "diagnostics_wait",
+            "theme_get",
+            "theme_set",
+            "bricscad_interaction_policy_get",
+            "bricscad_interaction_policy_set",
+            "bricscad_ui_text_snapshot",
+            "bricscad_ui_invoke",
+            "bricscad_ui_set_text",
             "desktop_cursor_position",
             "desktop_window_list",
             "desktop_foreground_window",
             "desktop_wait_for_window",
             "desktop_window_focus",
+            "desktop_window_set_state",
+            "desktop_window_move_resize",
+            "desktop_ui_tree",
             "desktop_mouse_move",
             "desktop_mouse_click",
             "desktop_mouse_scroll",
@@ -81,7 +96,13 @@ namespace QS3D.BricsCAD.V25
 
         private static readonly HashSet<string> MutationTools = new HashSet<string>(StringComparer.Ordinal)
         {
+            "theme_set",
+            "bricscad_interaction_policy_set",
+            "bricscad_ui_invoke",
+            "bricscad_ui_set_text",
             "desktop_window_focus",
+            "desktop_window_set_state",
+            "desktop_window_move_resize",
             "desktop_mouse_move",
             "desktop_mouse_click",
             "desktop_mouse_scroll",
@@ -95,7 +116,8 @@ namespace QS3D.BricsCAD.V25
         private static readonly HashSet<string> SensitiveTools = new HashSet<string>(StringComparer.Ordinal)
         {
             "desktop_clipboard_read",
-            "desktop_screenshot"
+            "desktop_screenshot",
+            "desktop_ui_tree"
         };
 
         private static readonly HashSet<string> SequenceAllowedTools = new HashSet<string>(StringComparer.Ordinal)
@@ -124,14 +146,14 @@ namespace QS3D.BricsCAD.V25
 
         internal static IEnumerable<string> ToolDescriptors()
         {
-            return new[]
+            var descriptors = new List<string>
             {
                 Tool("desktop_cursor_position", "Read the current Windows desktop cursor position.", ""),
                 Tool("desktop_window_list", "List a bounded set of visible top-level windows in the current interactive Windows session.",
                     "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}"),
                 Tool("desktop_foreground_window", "Read metadata for the current foreground window when it belongs to this interactive Windows session.", ""),
-                Tool("desktop_wait_for_window", "Wait up to 15 seconds for a visible current-session top-level window matching an exact handle and/or bounded title substring. Read-only; never focuses or clicks.",
-                    WindowHandleProperty() + ",\"titleContains\":{\"type\":\"string\",\"maxLength\":160},\"timeoutMs\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":15000},\"pollIntervalMs\":{\"type\":\"integer\",\"minimum\":50,\"maximum\":1000}"),
+                Tool("desktop_wait_for_window", "Wait up to 7 seconds for a visible current-session top-level window matching an exact handle and/or bounded title substring. Read-only; never focuses or clicks.",
+                    WindowHandleProperty() + ",\"titleContains\":{\"type\":\"string\",\"maxLength\":160},\"timeoutMs\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":7000},\"pollIntervalMs\":{\"type\":\"integer\",\"minimum\":50,\"maximum\":1000}"),
                 Tool("desktop_window_focus", "Restore and focus one visible current-session window. Requires local QS3D desktop consent and confirmMutation=true.",
                     WindowHandleProperty() + "," + ConfirmMutationProperty(), "windowHandle", "confirmMutation"),
                 Tool("desktop_mouse_move", "Move the Windows cursor to absolute virtual-desktop coordinates. Requires local QS3D desktop consent and confirmMutation=true.",
@@ -160,13 +182,17 @@ namespace QS3D.BricsCAD.V25
                     + ",\"cropX\":{\"type\":\"integer\"},\"cropY\":{\"type\":\"integer\"},\"cropWidth\":{\"type\":\"integer\",\"minimum\":1},\"cropHeight\":{\"type\":\"integer\",\"minimum\":1}"
                     + ",\"maxWidth\":{\"type\":\"integer\",\"minimum\":160,\"maximum\":1280},\"maxHeight\":{\"type\":\"integer\",\"minimum\":120,\"maximum\":900},"
                     + ConfirmSensitiveReadProperty(), "scope", "confirmSensitiveRead"),
-                Tool("desktop_sequence", "Execute up to 12 fail-fast desktop UI steps against one exact visible current-session window for at most 30 seconds. Requires local consent and confirmMutation=true; target-window screenshots additionally require confirmSensitiveRead=true.",
+                Tool("desktop_sequence", "Execute up to 12 fail-fast desktop UI steps against one exact visible current-session window for at most 7 seconds. Requires local consent and confirmMutation=true; target-window screenshots additionally require confirmSensitiveRead=true.",
                     WindowHandleProperty()
                     + ",\"stepsJson\":{\"type\":\"string\",\"maxLength\":32768}"
-                    + ",\"maxDurationMs\":{\"type\":\"integer\",\"minimum\":1000,\"maximum\":30000},"
+                    + ",\"maxDurationMs\":{\"type\":\"integer\",\"minimum\":1000,\"maximum\":7000},"
                     + ConfirmMutationProperty() + "," + ConfirmSensitiveReadProperty(),
                     "windowHandle", "stepsJson", "confirmMutation")
             };
+            descriptors.AddRange(McpDesktopUiAutomationRuntime.ToolDescriptors());
+            descriptors.AddRange(McpDirectDiagnosticsThemeRuntime.ToolDescriptors());
+            descriptors.AddRange(McpBackgroundHostRuntime.ToolDescriptors());
+            return descriptors;
         }
 
         internal static string Call(string toolName, string arguments, Action? ensureMutationRunning, Action<string> audit)
@@ -174,9 +200,12 @@ namespace QS3D.BricsCAD.V25
             var tool = toolName ?? string.Empty;
             if (!IsTool(tool)) throw new InvalidOperationException("Unknown MCP desktop tool: " + tool);
             var args = string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments;
+            McpBackgroundHostRuntime.EnsureGlobalInteractionAllowed(tool);
 
             McpDesktopControlSession.GuardedActionScope? guardedAction = null;
-            if (MutationTools.Contains(tool) || SensitiveTools.Contains(tool))
+            var requiresDesktopConsent = tool.StartsWith("desktop_", StringComparison.Ordinal)
+                                         && (MutationTools.Contains(tool) || SensitiveTools.Contains(tool));
+            if (requiresDesktopConsent)
             {
                 McpDesktopControlSession.RequireLocalConsent(tool);
                 guardedAction = McpDesktopControlSession.BeginGuardedAction(tool);
@@ -187,6 +216,23 @@ namespace QS3D.BricsCAD.V25
                 string result;
                 switch (tool)
                 {
+                    case "diagnostics_log_tail":
+                    case "diagnostics_since":
+                    case "diagnostics_snapshot":
+                    case "diagnostics_wait":
+                    case "theme_get":
+                    case "theme_set":
+                        result = McpDirectDiagnosticsThemeRuntime.Call(tool, args, ensureMutationRunning, audit); break;
+                    case "bricscad_interaction_policy_get":
+                    case "bricscad_interaction_policy_set":
+                    case "bricscad_ui_text_snapshot":
+                    case "bricscad_ui_invoke":
+                    case "bricscad_ui_set_text":
+                        result = McpBackgroundHostRuntime.Call(tool, args, ensureMutationRunning, audit); break;
+                    case "desktop_window_set_state":
+                    case "desktop_window_move_resize":
+                    case "desktop_ui_tree":
+                        result = McpDesktopUiAutomationRuntime.Call(tool, args, ensureMutationRunning, audit); break;
                     case "desktop_cursor_position": result = CursorPositionJson(); break;
                     case "desktop_window_list": result = WindowListJson(Integer(args, "limit", 30, 1, MaxWindows)); break;
                     case "desktop_foreground_window": result = ForegroundWindowJson(); break;
@@ -316,7 +362,7 @@ namespace QS3D.BricsCAD.V25
             var hwnd = RequiredWindow(body);
             var steps = ParseSequenceSteps(body);
             if (steps.Count == 0) throw new InvalidOperationException("desktop_sequence requires at least one step.");
-            var maxDuration = StrictOptionalInteger(body, "maxDurationMs", 15000, 1000, MaxSequenceMilliseconds);
+            var maxDuration = StrictOptionalInteger(body, "maxDurationMs", 5000, 1000, MaxSequenceMilliseconds);
             var sensitiveConfirmed = McpTopLevelJson.ExtractBoolean(body, "confirmSensitiveRead");
             var screenshotCount = 0;
             foreach (var step in steps)
@@ -649,7 +695,7 @@ namespace QS3D.BricsCAD.V25
                 Thread.Sleep(slice);
                 remaining -= slice;
             }
-            EnsureSequenceRunning(hwnd, ensureMutationRunning, sequenceStarted, maxDuration);
+            EnsureSequenceRunning(hwnd, ensureMutationRunning, started: sequenceStarted, maxDuration: maxDuration);
         }
 
         private static void EnsureSequenceRunning(IntPtr hwnd, Action ensureMutationRunning, Stopwatch started, int maxDuration)
@@ -908,22 +954,35 @@ namespace QS3D.BricsCAD.V25
             var maxWidth = Integer(body, "maxWidth", MaxScreenshotWidth, 160, MaxScreenshotWidth);
             var maxHeight = Integer(body, "maxHeight", MaxScreenshotHeight, 120, MaxScreenshotHeight);
 
-            RECT sourceRect;
+            BitmapSource source;
             var handle = string.Empty;
             if (scope == "window")
             {
                 var hwnd = RequiredWindow(body);
+                RECT sourceRect;
                 if (!GetWindowRect(hwnd, out sourceRect)) throw new InvalidOperationException("Could not read the target window bounds.");
+                var fullWidth = sourceRect.Right - sourceRect.Left;
+                var fullHeight = sourceRect.Bottom - sourceRect.Top;
+                if (fullWidth <= 0 || fullHeight <= 0) throw new InvalidOperationException("Target window bounds are empty.");
+                var rect = ApplyScreenshotCrop(body, sourceRect);
+                var cropX = rect.Left - sourceRect.Left;
+                var cropY = rect.Top - sourceRect.Top;
+                var cropWidth = rect.Right - rect.Left;
+                var cropHeight = rect.Bottom - rect.Top;
+                var fullWindow = CaptureWindowBitmap(hwnd, fullWidth, fullHeight);
+                source = CropBitmap(fullWindow, cropX, cropY, cropWidth, cropHeight);
                 handle = HandleText(hwnd);
             }
-            else sourceRect = VirtualDesktopRect();
+            else
+            {
+                var sourceRect = VirtualDesktopRect();
+                var rect = ApplyScreenshotCrop(body, sourceRect);
+                var width = rect.Right - rect.Left;
+                var height = rect.Bottom - rect.Top;
+                if (width <= 0 || height <= 0) throw new InvalidOperationException("Screenshot bounds are empty.");
+                source = CaptureBitmap(rect.Left, rect.Top, width, height);
+            }
 
-            var rect = ApplyScreenshotCrop(body, sourceRect);
-            var width = rect.Right - rect.Left;
-            var height = rect.Bottom - rect.Top;
-            if (width <= 0 || height <= 0) throw new InvalidOperationException("Screenshot bounds are empty.");
-
-            var source = CaptureBitmap(rect.Left, rect.Top, width, height);
             source = ScaleBitmap(source, maxWidth, maxHeight);
             byte[] png;
             while (true)
@@ -968,6 +1027,46 @@ namespace QS3D.BricsCAD.V25
             if (right <= left || bottom <= top)
                 throw new InvalidOperationException("Screenshot crop does not intersect the selected source bounds.");
             return new RECT { Left = checked((int)left), Top = checked((int)top), Right = checked((int)right), Bottom = checked((int)bottom) };
+        }
+
+        private static BitmapSource CaptureWindowBitmap(IntPtr hwnd, int width, int height)
+        {
+            var screen = GetDC(IntPtr.Zero);
+            if (screen == IntPtr.Zero) throw new InvalidOperationException("Could not acquire a compatible device context for window capture.");
+            IntPtr memory = IntPtr.Zero;
+            IntPtr bitmap = IntPtr.Zero;
+            IntPtr previous = IntPtr.Zero;
+            try
+            {
+                memory = CreateCompatibleDC(screen);
+                if (memory == IntPtr.Zero) throw new InvalidOperationException("Could not create window screenshot memory context.");
+                bitmap = CreateCompatibleBitmap(screen, width, height);
+                if (bitmap == IntPtr.Zero) throw new InvalidOperationException("Could not create window screenshot bitmap.");
+                previous = SelectObject(memory, bitmap);
+                if (previous == IntPtr.Zero) throw new InvalidOperationException("Could not select window screenshot bitmap.");
+                if (!PrintWindow(hwnd, memory, PW_RENDERFULLCONTENT))
+                    throw new InvalidOperationException("Windows PrintWindow could not render the target window without foreground capture.");
+                var source = Imaging.CreateBitmapSourceFromHBitmap(bitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                source.Freeze();
+                return source;
+            }
+            finally
+            {
+                if (memory != IntPtr.Zero && previous != IntPtr.Zero) SelectObject(memory, previous);
+                if (bitmap != IntPtr.Zero) DeleteObject(bitmap);
+                if (memory != IntPtr.Zero) DeleteDC(memory);
+                ReleaseDC(IntPtr.Zero, screen);
+            }
+        }
+
+        private static BitmapSource CropBitmap(BitmapSource source, int x, int y, int width, int height)
+        {
+            if (x == 0 && y == 0 && width == source.PixelWidth && height == source.PixelHeight) return source;
+            if (x < 0 || y < 0 || width <= 0 || height <= 0 || x + width > source.PixelWidth || y + height > source.PixelHeight)
+                throw new InvalidOperationException("Window screenshot crop is outside the rendered window bounds.");
+            var cropped = new CroppedBitmap(source, new Int32Rect(x, y, width, height));
+            cropped.Freeze();
+            return cropped;
         }
 
         private static BitmapSource CaptureBitmap(int x, int y, int width, int height)
@@ -1430,6 +1529,7 @@ namespace QS3D.BricsCAD.V25
         [DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr hwnd);
         [DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr hwnd, IntPtr dc);
         [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, INPUT[] inputs, int size);
+        [DllImport("user32.dll", SetLastError = true)] private static extern bool PrintWindow(IntPtr hwnd, IntPtr destination, uint flags);
         [DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleDC(IntPtr dc);
         [DllImport("gdi32.dll")] private static extern bool DeleteDC(IntPtr dc);
         [DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleBitmap(IntPtr dc, int width, int height);

@@ -21,6 +21,7 @@ namespace QS3D.Core.SmokeTests
         {
             PackageIsByteDeterministicAndSchemaShaped();
             PackageRoundTripPreservesSemanticIdentity();
+            AlternateBomEncodingsFailClosed();
             StandardVocabularyPackageWithoutExtensionsIsAccepted();
             LegacyExtensionsRemainStrict();
             UnsafeMalformedAndUnsupportedPackagesFailClosed();
@@ -71,6 +72,30 @@ namespace QS3D.Core.SmokeTests
             var expected = BcfIssueExchangeSerializer.Serialize(exchange);
             var actual = BcfIssueExchangeSerializer.Serialize(roundTrip);
             if (!string.Equals(expected, actual, StringComparison.Ordinal)) throw new Exception("BCF package round-trip changed semantic topic/comment/viewpoint identity or camera data.");
+        }
+
+        private static void AlternateBomEncodingsFailClosed()
+        {
+            var canonical = BcfZipPackage.Write(BuildFixture());
+            ThrowsInvalidData(
+                () => BcfZipPackage.Read(RewriteEntryEncoding(canonical, "bcf.version", Encoding.Unicode)),
+                "BCF version entry encoded as UTF-16 LE with BOM must fail closed.");
+            ThrowsInvalidData(
+                () => BcfZipPackage.Read(RewriteEntryEncoding(canonical, TopicB + "/markup.bcf", Encoding.BigEndianUnicode)),
+                "BCF markup entry encoded as UTF-16 BE with BOM must fail closed.");
+            ThrowsInvalidData(
+                () => BcfZipPackage.Read(RewriteEntryEncoding(canonical, TopicB + "/" + Viewpoint + ".bcfv", new UTF32Encoding(false, true, true))),
+                "BCF viewpoint entry encoded as UTF-32 LE with BOM must fail closed.");
+
+            var legacy = BuildRawPackage(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["bcf.version"] = "<Version VersionId=\"3.0\" />",
+                ["extensions.xml"] = ExtensionsXml(),
+                [TopicA + "/markup.bcf"] = "<Markup><Topic Guid=\"" + TopicA + "\" TopicType=\"Coordination\" TopicStatus=\"Open\"><Title>Legacy package</Title><CreationDate>2026-08-14T09:00:00.0000000Z</CreationDate><CreationAuthor>qa@qs3d</CreationAuthor></Topic></Markup>"
+            });
+            ThrowsInvalidData(
+                () => BcfZipPackage.Read(RewriteEntryEncoding(legacy, "extensions.xml", new UTF32Encoding(true, true, true))),
+                "BCF extensions entry encoded as UTF-32 BE with BOM must fail closed.");
         }
 
         private static void StandardVocabularyPackageWithoutExtensionsIsAccepted()
@@ -280,6 +305,38 @@ namespace QS3D.Core.SmokeTests
                 }
             }
             return stream.ToArray();
+        }
+
+        private static byte[] RewriteEntryEncoding(byte[] package, string targetPath, Encoding encoding)
+        {
+            using var inputStream = new MemoryStream(package, false);
+            using var inputArchive = new ZipArchive(inputStream, ZipArchiveMode.Read, false);
+            using var outputStream = new MemoryStream();
+            using (var outputArchive = new ZipArchive(outputStream, ZipArchiveMode.Create, true))
+            {
+                var found = false;
+                foreach (var sourceEntry in inputArchive.Entries)
+                {
+                    var targetEntry = outputArchive.CreateEntry(sourceEntry.FullName, CompressionLevel.NoCompression);
+                    using var source = sourceEntry.Open();
+                    using var target = targetEntry.Open();
+                    if (!string.Equals(sourceEntry.FullName, targetPath, StringComparison.Ordinal))
+                    {
+                        source.CopyTo(target);
+                        continue;
+                    }
+
+                    found = true;
+                    using var reader = new StreamReader(source, new UTF8Encoding(false, true), false);
+                    var text = reader.ReadToEnd();
+                    var preamble = encoding.GetPreamble();
+                    target.Write(preamble, 0, preamble.Length);
+                    var body = encoding.GetBytes(text);
+                    target.Write(body, 0, body.Length);
+                }
+                if (!found) throw new Exception("Expected BCF package entry to rewrite: " + targetPath);
+            }
+            return outputStream.ToArray();
         }
 
         private static string ExtensionsXml()

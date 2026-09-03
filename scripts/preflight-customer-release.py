@@ -84,7 +84,7 @@ for label, text in (("plugin", plugin_project), ("core", core_project)):
 if len(versions) == 2 and versions[0] != versions[1]: errors.append("plugin/Core <Version> values differ exactly")
 
 for name, workflow, package_boundary, publish_markers in (
-    ("release-v25.yml", commercial, "package-v25-release.ps1", ("Create draft, verify uploaded bytes, then publish", "gh release edit $env:RELEASE_TAG")),
+    ("release-v25.yml", commercial, "package-v25-release.ps1", ("Create draft, verify uploaded bytes, then publish", "$published = Invoke-RestMethod -Method Patch -Uri $releaseUri")),
     ("release-v25-cloud.yml", cloud, "package-v25.ps1", ("Publish GitHub prerelease",)),
 ):
     preflight_index = workflow.find("python scripts/preflight-all.py")
@@ -93,9 +93,18 @@ for name, workflow, package_boundary, publish_markers in (
     if min(preflight_index, package_index, publish_index) < 0 or not preflight_index < package_index < publish_index:
         errors.append(name + " must aggregate-preflight -> package -> publish using its canonical release path")
 
+for token in (
+    "$tagCreatedByThisRun = $true",
+    "$releaseId = [long]$release.id",
+    "Assert-RemoteReleaseTagTargetsWorkflowSha",
+    "gh release download $env:RELEASE_TAG",
+    "rollback-v25-draft-release.ps1",
+):
+    require(commercial, token, "release-v25.yml")
+
 print("QS3D customer release preflight")
 if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: customer release identity stays strict/exact, runtime diagnostics use the complete host-major helper, commercial packaging is clean-source signed/provenance-bound, and both commercial/cloud workflows preflight before package and publish.")
+print("PASS: customer release identity stays strict/exact, runtime diagnostics use the complete host-major helper, commercial packaging is clean-source signed/provenance-bound, and both commercial/cloud workflows preflight before package and publish; commercial publication retains exact-tag ownership, exact-tag assertion, and rollback.")

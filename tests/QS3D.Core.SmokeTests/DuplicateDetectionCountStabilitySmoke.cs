@@ -24,7 +24,7 @@ namespace QS3D.Core.SmokeTests
         private static void CandidateGrowthRejectsBeforeSecondAdvance()
         {
             var source = HostileKnownCountEnumerable<DuplicateCandidate>.WithCounts(
-                new[] { Candidate("B", "shared"), Candidate("A", "shared") }, 2, 2, 2, 3);
+                new[] { Candidate("B", "shared"), Candidate("A", "shared") }, 2, 2, 2, 2, 3);
             ExpectCountDrift(() => new DuplicateDetectionService().Detect(source), "candidate growth");
             Equal(1, source.MoveNextCalls, "candidate growth MoveNext");
             Equal(1, source.CurrentReads, "candidate growth Current");
@@ -42,7 +42,7 @@ namespace QS3D.Core.SmokeTests
         private static void CandidateTerminalReboundRejects()
         {
             var source = HostileKnownCountEnumerable<DuplicateCandidate>.WithCounts(
-                new[] { Candidate("B", "shared"), Candidate("A", "shared") }, 2, 2, 2, 2, 2, 2, 3);
+                new[] { Candidate("B", "shared"), Candidate("A", "shared") }, 2, 2, 2, 2, 2, 2, 2, 2, 3);
             ExpectCountDrift(() => new DuplicateDetectionService().Detect(source), "candidate terminal rebound");
             Equal(3, source.MoveNextCalls, "candidate terminal rebound MoveNext");
             Equal(2, source.CurrentReads, "candidate terminal rebound Current");
@@ -51,7 +51,7 @@ namespace QS3D.Core.SmokeTests
         private static void ElementProjectionPreservesKnownCountBoundary()
         {
             var growth = HostileKnownCountEnumerable<CoordinationElement>.WithCounts(
-                new[] { Element("B"), Element("A") }, 2, 2, 2, 3);
+                new[] { Element("B"), Element("A") }, 2, 2, 2, 2, 3);
             ExpectCountDrift(() => new DuplicateDetectionService().Detect(growth), "element growth");
             Equal(1, growth.MoveNextCalls, "element growth MoveNext");
             Equal(1, growth.CurrentReads, "element growth Current");
@@ -62,7 +62,7 @@ namespace QS3D.Core.SmokeTests
             Equal(0, shrink.CurrentReads, "element shrink Current");
 
             var rebound = HostileKnownCountEnumerable<CoordinationElement>.WithCounts(
-                new[] { Element("B"), Element("A") }, 2, 2, 2, 2, 2, 2, 3);
+                new[] { Element("B"), Element("A") }, 2, 2, 2, 2, 2, 2, 2, 2, 3);
             ExpectCountDrift(() => new DuplicateDetectionService().Detect(rebound), "element terminal rebound");
             Equal(3, rebound.MoveNextCalls, "element terminal rebound MoveNext");
         }
@@ -70,14 +70,14 @@ namespace QS3D.Core.SmokeTests
         private static void StableKnownCountPreservesDuplicateSemantics()
         {
             var source = HostileKnownCountEnumerable<DuplicateCandidate>.WithCounts(
-                new[] { Candidate("B", "shared"), Candidate("A", "shared") }, 2, 2, 2, 2, 2, 2, 2);
+                new[] { Candidate("B", "shared"), Candidate("A", "shared") }, 2, 2, 2, 2, 2, 2, 2, 2, 2);
             var result = new DuplicateDetectionService().Detect(source);
             Equal(1, result.Pairs.Count, "stable pair count");
             Equal("A", result.Pairs[0].LeftElementId, "stable left id");
             Equal("B", result.Pairs[0].RightElementId, "stable right id");
             Equal(true, result.Pairs[0].IsExactGeometry, "stable exact geometry");
             Equal(true, result.Pairs[0].IsSemanticIdentity, "stable semantic identity");
-            Equal(7, source.CountReads, "stable Count reads");
+            Equal(9, source.CountReads, "stable Count reads");
         }
 
         private static void PureStreamingOverloadsRemainSupported()

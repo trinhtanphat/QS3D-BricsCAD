@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
         {
             FailedDurableReplaceRestoresPersistenceState();
             SuccessfulSaveRoundTripsChangeVersion();
+            MissingPrimaryReplacementRetiresStaleBackup();
+            RecoverySaveRejectsForeignProjectBackup();
             MissingCurrentChangeVersionIsRejected();
             InvalidPersistedChangeVersionIsRejected();
         }
@@ -83,6 +85,82 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private static void MissingPrimaryReplacementRetiresStaleBackup()
+        {
+            var path = TempProjectPath("missing-primary-stale-backup");
+            try
+            {
+                var store = new QsdbProjectStore();
+                store.Save(new ProjectState("generation", "First"), path);
+                store.Save(new ProjectState("generation", "Second"), path);
+                Require(File.Exists(path + ".bak"), "Replacement setup did not create the prior-generation backup.");
+                Require(store.Load(path + ".bak").Name == "First", "Replacement setup did not preserve the expected first generation in backup.");
+
+                File.Delete(path);
+                Require(!File.Exists(path) && File.Exists(path + ".bak"), "Missing-primary setup did not leave only the stale backup generation.");
+
+                store.Save(new ProjectState("generation", "Third"), path);
+                Require(store.Load(path).Name == "Third", "Missing-primary replacement did not publish the new primary generation.");
+                Require(!File.Exists(path + ".bak"), "Missing-primary replacement left the stale prior-generation backup eligible for fallback.");
+
+                File.WriteAllText(path, "<broken");
+                var rejected = false;
+                try
+                {
+                    store.LoadWithBackupFallback(path);
+                }
+                catch (Exception ex) when (ex is InvalidDataException || ex is System.Xml.XmlException)
+                {
+                    rejected = true;
+                }
+                Require(rejected, "Corrupt recreated primary resurrected a stale backup generation through fallback.");
+            }
+            finally
+            {
+                Cleanup(path);
+            }
+        }
+
+        private static void RecoverySaveRejectsForeignProjectBackup()
+        {
+            var path = TempProjectPath("foreign-backup");
+            try
+            {
+                var store = new QsdbProjectStore();
+                store.Save(new ProjectState("foreign-project", "Foreign first"), path);
+                store.Save(new ProjectState("foreign-project", "Foreign second"), path);
+                Require(File.Exists(path + ".bak"), "Foreign-backup setup did not produce a validated backup.");
+
+                var primaryBefore = File.ReadAllBytes(path);
+                var backupBefore = File.ReadAllBytes(path + ".bak");
+                var candidate = new ProjectState("candidate-project", "Candidate");
+                candidate.Touch();
+                var schemaBefore = candidate.SchemaVersion;
+                var updatedBefore = candidate.UpdatedUtc;
+                var changeBefore = candidate.ChangeVersion;
+
+                var rejected = false;
+                try
+                {
+                    store.SavePreservingValidatedBackup(candidate, path);
+                }
+                catch (InvalidDataException)
+                {
+                    rejected = true;
+                }
+
+                Require(rejected, "foreign validated backup was accepted for a different project identity.");
+                Require(BytesEqual(primaryBefore, File.ReadAllBytes(path)), "Foreign-backup rejection changed the existing primary bytes.");
+                Require(BytesEqual(backupBefore, File.ReadAllBytes(path + ".bak")), "Foreign-backup rejection changed the validated backup bytes.");
+                Require(candidate.SchemaVersion == schemaBefore && candidate.UpdatedUtc == updatedBefore && candidate.ChangeVersion == changeBefore,
+                    "candidate persistence state changed during foreign-backup rejection.");
+            }
+            finally
+            {
+                Cleanup(path);
+            }
+        }
+
         private static void MissingCurrentChangeVersionIsRejected()
         {
             var path = TempProjectPath("missing-current-version");
@@ -125,6 +203,14 @@ namespace QS3D.Core.SmokeTests
                     Cleanup(path);
                 }
             }
+        }
+
+        private static bool BytesEqual(byte[] left, byte[] right)
+        {
+            if (left.Length != right.Length) return false;
+            for (var i = 0; i < left.Length; i++)
+                if (left[i] != right[i]) return false;
+            return true;
         }
 
         private static string TempProjectPath(string prefix) =>

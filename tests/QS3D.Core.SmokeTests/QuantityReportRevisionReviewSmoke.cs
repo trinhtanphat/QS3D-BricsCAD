@@ -1,5 +1,8 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Revisions;
 
@@ -12,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             AddedRemovedChangedRowsUseStableElementKeys();
             FamilyIdentityCasingUsesSemanticIdentity();
             CaptureAndCompareDoNotMutateLiveProjects();
+            NestedMutationDuringCaptureFailsClosed();
             ProjectAndSnapshotIdentityFailClosed();
             NonFiniteAndInvalidMagnitudeFailClosed();
         }
@@ -82,6 +86,25 @@ namespace QS3D.Core.SmokeTests
             AssertState(afterProject, afterState);
         }
 
+        private static void NestedMutationDuringCaptureFailsClosed()
+        {
+            var project = ProjectWithFamilyId("quantity-review-nested-race", "family-before", ("E1", 2d));
+            project.Families.Add(new ProjectFamily("family-after", "Family after", ElementCategory.Beam));
+            var element = project.Elements.Single();
+            element.Properties["Trigger"] = "1";
+            var beforeProjectRevision = project.ChangeVersion;
+            ReplaceElementProperties(
+                element,
+                new MutatingDictionary(
+                    element.Properties,
+                    () => element.FamilyId = "family-after"));
+
+            Throws<InvalidOperationException>(() => new QuantityReportRevisionService().Capture(project, "RACE"));
+
+            Equal(beforeProjectRevision, project.ChangeVersion);
+            Equal("family-after", element.FamilyId);
+        }
+
         private static void ProjectAndSnapshotIdentityFailClosed()
         {
             var service = new QuantityReportRevisionService();
@@ -120,6 +143,13 @@ namespace QS3D.Core.SmokeTests
             return project;
         }
 
+        private static void ReplaceElementProperties(ProjectElement element, IDictionary<string, string> properties)
+        {
+            var field = typeof(ProjectElement).GetField("<Properties>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("ProjectElement Properties backing field was not found.");
+            field.SetValue(element, properties);
+        }
+
         private static LiveState State(ProjectState project)
         {
             var element = project.Elements.Single();
@@ -155,6 +185,46 @@ namespace QS3D.Core.SmokeTests
             public ElementDirtyFlags Dirty { get; }
             public DateTime ElementUpdatedUtc { get; }
             public double LengthM { get; }
+        }
+
+        private sealed class MutatingDictionary : IDictionary<string, string>
+        {
+            private readonly IDictionary<string, string> _inner;
+            private readonly Action _mutation;
+            private bool _mutated;
+
+            public MutatingDictionary(IDictionary<string, string> inner, Action mutation)
+            {
+                _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+                _mutation = mutation ?? throw new ArgumentNullException(nameof(mutation));
+            }
+
+            public string this[string key] { get => _inner[key]; set => _inner[key] = value; }
+            public ICollection<string> Keys => _inner.Keys;
+            public ICollection<string> Values => _inner.Values;
+            public int Count => _inner.Count;
+            public bool IsReadOnly => _inner.IsReadOnly;
+            public void Add(string key, string value) => _inner.Add(key, value);
+            public void Add(KeyValuePair<string, string> item) => _inner.Add(item);
+            public void Clear() => _inner.Clear();
+            public bool Contains(KeyValuePair<string, string> item) => _inner.Contains(item);
+            public bool ContainsKey(string key) => _inner.ContainsKey(key);
+            public void CopyTo(KeyValuePair<string, string>[] array, int arrayIndex) => _inner.CopyTo(array, arrayIndex);
+            public bool Remove(string key) => _inner.Remove(key);
+            public bool Remove(KeyValuePair<string, string> item) => _inner.Remove(item);
+            public bool TryGetValue(string key, out string value) => _inner.TryGetValue(key, out value!);
+
+            public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
+            {
+                if (!_mutated)
+                {
+                    _mutated = true;
+                    _mutation();
+                }
+                return _inner.GetEnumerator();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private static void Throws<T>(Action action) where T : Exception

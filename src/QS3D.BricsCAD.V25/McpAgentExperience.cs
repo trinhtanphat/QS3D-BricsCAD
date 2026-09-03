@@ -16,6 +16,7 @@ namespace QS3D.BricsCAD.V25
         NamedTunnelRequired,
         PublicEndpointReady,
         ChatGptRegistrationRequired,
+        ChatGptOAuthTrafficPending,
         Ready,
         ErrorRecovery
     }
@@ -121,6 +122,7 @@ namespace QS3D.BricsCAD.V25
     {
         internal const int MaxEvents = 120;
         private const int MaxFieldLength = 1200;
+        private static readonly TimeSpan OAuthMcpActivityFreshness = TimeSpan.FromMinutes(2);
         private static readonly object Sync = new object();
         private static readonly Queue<McpExperienceEvent> Events = new Queue<McpExperienceEvent>();
         private static string _currentAction = string.Empty;
@@ -285,8 +287,14 @@ namespace QS3D.BricsCAD.V25
                 return Snapshot(McpOnboardingPhase.ErrorRecovery, "Tunnel có cảnh báo",
                     Bounded(tunnelError), "Refresh hoặc mở Cloudflare setup để kiểm tra tunnel.", mcpRunning, true, true, namedTunnelRunning, publicUrl, true);
 
+            if (!IsRecentOAuthMcpActivity(publicUrl))
+                return Snapshot(McpOnboardingPhase.ChatGptOAuthTrafficPending, "Đã đăng ký · chờ ChatGPT OAuth traffic",
+                    "QS3D đã ghi nhận đăng ký MCP cho public URL hiện tại, nhưng chưa quan sát authenticated OAuth MCP request. Transport/public URL và registration không được coi là bằng chứng ChatGPT đã kết nối.",
+                    "Giữ ChatGPT Connector mở hoặc bấm Connect lại; chờ request /mcp được xác thực OAuth và tools/list/tool scan hoàn tất. Trạng thái sẽ tự chuyển khi traffic thật xuất hiện.",
+                    mcpRunning, true, true, true, publicUrl, true);
+
             return Snapshot(McpOnboardingPhase.Ready, "MCP sẵn sàng",
-                "Embedded MCP + Named Tunnel + đăng ký ChatGPT đã được người dùng xác nhận. Desktop-wide control vẫn mặc định OFF cho tới khi bật local consent.",
+                "Embedded MCP + Named Tunnel + đăng ký ChatGPT + authenticated OAuth MCP traffic gần đây đã được xác nhận. Desktop-wide control vẫn mặc định OFF cho tới khi bật local consent.",
                 "Prompt trong ChatGPT; bật quyền desktop trong tab Agent khi thật sự cần thao tác ngoài BricsCAD.", mcpRunning, true, true, true, publicUrl, true);
         }
 
@@ -297,7 +305,7 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("Chưa có public MCP URL để ghi nhận đăng ký ChatGPT.");
             Directory.CreateDirectory(StateDirectory);
             File.WriteAllText(RegistrationMarkerPath, RegistrationFingerprint(url), new UTF8Encoding(false));
-            Success("onboarding", "Đã ghi nhận user hoàn tất thêm MCP trong ChatGPT.", "Chạy protocol check hoặc bắt đầu prompt trong ChatGPT.");
+            Success("onboarding", "Đã ghi nhận user hoàn tất thêm MCP trong ChatGPT.", "Chờ authenticated OAuth MCP traffic; QS3D sẽ tự xác nhận live connectivity khi thấy request.");
         }
 
         public static void ForgetChatGptRegistrationAcknowledgement()
@@ -315,6 +323,16 @@ namespace QS3D.BricsCAD.V25
                 return string.Equals(saved, RegistrationFingerprint(publicUrl), StringComparison.Ordinal);
             }
             catch { return false; }
+        }
+
+        private static bool IsRecentOAuthMcpActivity(string publicUrl)
+        {
+            if (string.IsNullOrWhiteSpace(publicUrl)) return false;
+            var lastUtc = McpEmbeddedServer.LastOAuthMcpActivityUtc;
+            if (lastUtc == DateTime.MinValue) return false;
+            if (!string.Equals(McpEmbeddedServer.LastOAuthMcpPublicUrl, publicUrl, StringComparison.OrdinalIgnoreCase)) return false;
+            var age = DateTime.UtcNow - lastUtc;
+            return age >= TimeSpan.Zero && age <= OAuthMcpActivityFreshness;
         }
 
         private static string RegistrationFingerprint(string publicUrl)
@@ -340,8 +358,7 @@ namespace QS3D.BricsCAD.V25
             string publicUrl,
             bool registered)
         {
-            return new McpOnboardingSnapshot(phase, title, detail, nextStep, mcpRunning, cloudflaredInstalled,
-                authenticated, namedTunnelRunning, publicUrl, registered);
+            return new McpOnboardingSnapshot(phase, title, detail, nextStep, mcpRunning, cloudflaredInstalled, authenticated, namedTunnelRunning, publicUrl, registered);
         }
 
         private static void Publish(string level, string category, string message, string currentAction, string nextStep, bool error)

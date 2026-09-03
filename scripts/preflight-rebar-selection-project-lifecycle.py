@@ -25,7 +25,6 @@ def region(text, start_token, end_token, label):
 
 
 guard = read(GUARD)
-
 for token in (
     "public static ObjectId[] ReadImpliedSelection(Document document)",
     "public static ObjectId[] AcquireCurrentSelection(Document document)",
@@ -37,82 +36,22 @@ for token in (
     if token not in guard:
         errors.append("CadSelectionGuard missing selection lifecycle token: " + token)
 
-for forbidden in (
-    "ProjectContextCoordinator",
-    "ExistingProjectMutationContext",
-    "ProjectState",
-):
+for forbidden in ("ProjectContextCoordinator", "ExistingProjectMutationContext", "ProjectState"):
     if forbidden in guard:
         errors.append("CadSelectionGuard must remain project-agnostic: " + forbidden)
 
 interactive_cases = (
-    (
-        ADAPTER / "BeamRebarCommands.cs",
-        "public void BuildBeamRebar3D()",
-        "private static void FinalizeUi",
-        "Beam Rebar",
-        "ExistingProjectMutationContext.Require(document, \"Beam Rebar 3D\")",
-        "BeamRebarSolidBuilder.BuildSelected(document, project)",
-    ),
-    (
-        ADAPTER / "BeamStirrupCommands.cs",
-        "public void BuildBeamStirrups()",
-        "[CommandMethod(\"QS3DBEAMSTIRRUPHEALTH\"",
-        "Beam Stirrup",
-        "ExistingProjectMutationContext.Require(document, \"Beam Stirrup 3D\")",
-        "BeamStirrupSolidBuilder.BuildSelected(document, project)",
-    ),
-    (
-        ADAPTER / "SlabMeshCommands.cs",
-        "public void BuildSlabMesh3D()",
-        "[CommandMethod(\"QS3DSLABREBARHEALTH\"",
-        "Slab Mesh",
-        "ExistingProjectMutationContext.Require(document, \"Slab Mesh 3D\")",
-        "SlabMeshSolidBuilder.BuildSelected(document, project)",
-    ),
-    (
-        ADAPTER / "FoundationMeshCommands.cs",
-        "public void BuildFoundationMesh3D()",
-        "private static void FinalizeUi",
-        "Foundation Mesh",
-        "ExistingProjectMutationContext.Require(document, \"Foundation Rebar 3D\")",
-        "FoundationMeshSolidBuilder.BuildSelected(document, project)",
-    ),
-    (
-        ADAPTER / "StructuralWallMeshCommands.cs",
-        "public void BuildStructuralWallMesh3D()",
-        "private static void FinalizeUi",
-        "Structural Wall Mesh",
-        "ExistingProjectMutationContext.Require(document, \"Wall Mesh 3D\")",
-        "StructuralWallMeshSolidBuilder.BuildSelected(document, project)",
-    ),
-    (
-        ADAPTER / "ShapeRebarGeometryCommands.cs",
-        "public void BuildShapeRebar3D()",
-        "private static void FinalizeUi",
-        "Shape Rebar",
-        "ExistingProjectMutationContext.Require(document, \"Shape Rebar 3D\")",
-        "ShapeRebarSolidBuilder.BuildSelected(document, project)",
-    ),
+    (ADAPTER / "BeamRebarCommands.cs", "public void BuildBeamRebar3D()", "private static void FinalizeUi", "Beam Rebar", "ExistingProjectMutationContext.Require(document, \"Beam Rebar 3D\")", "BeamRebarSolidBuilder.BuildSelected(document, project, selectedIds)"),
+    (ADAPTER / "BeamStirrupCommands.cs", "public void BuildBeamStirrups()", "[CommandMethod(\"QS3DBEAMSTIRRUPHEALTH\"", "Beam Stirrup", "ExistingProjectMutationContext.Require(document, \"Beam Stirrup 3D\")", "BeamStirrupSolidBuilder.BuildSelected(document, project)"),
+    (ADAPTER / "SlabMeshCommands.cs", "public void BuildSlabMesh3D()", "[CommandMethod(\"QS3DSLABREBARHEALTH\"", "Slab Mesh", "ExistingProjectMutationContext.Require(document, \"Slab Mesh 3D\")", "SlabMeshSolidBuilder.BuildSelected(document, project)"),
+    (ADAPTER / "FoundationMeshCommands.cs", "public void BuildFoundationMesh3D()", "private static void FinalizeUi", "Foundation Mesh", "ExistingProjectMutationContext.Require(document, \"Foundation Rebar 3D\")", "FoundationMeshSolidBuilder.BuildSelected(document, project)"),
+    (ADAPTER / "StructuralWallMeshCommands.cs", "public void BuildStructuralWallMesh3D()", "private static void FinalizeUi", "Structural Wall Mesh", "ExistingProjectMutationContext.Require(document, \"Wall Mesh 3D\")", "StructuralWallMeshSolidBuilder.BuildSelected(document, project)"),
+    (ADAPTER / "ShapeRebarGeometryCommands.cs", "public void BuildShapeRebar3D()", "private static void FinalizeUi", "Shape Rebar", "ExistingProjectMutationContext.Require(document, \"Shape Rebar 3D\")", "ShapeRebarSolidBuilder.BuildSelected(document, project)"),
 )
 
 implied_only_cases = (
-    (
-        ADAPTER / "RebarGeometryCommands.cs",
-        "public void BuildRebar3D()",
-        "private static void FinalizeUi",
-        "Column Rebar",
-        "ExistingProjectMutationContext.Require(document, \"Rebar 3D\")",
-        "ColumnRebarSolidBuilder.BuildSelected(document, project)",
-    ),
-    (
-        ADAPTER / "ColumnTieCommands.cs",
-        "public void BuildColumnTies()",
-        "private static void FinalizeUi",
-        "Column Tie",
-        "ExistingProjectMutationContext.Require(document, \"Column Tie 3D\")",
-        "ColumnTieSolidBuilder.BuildSelected(document, project)",
-    ),
+    (ADAPTER / "RebarGeometryCommands.cs", "public void BuildRebar3D()", "private static void FinalizeUi", "Column Rebar", "ExistingProjectMutationContext.Require(document, \"Rebar 3D\")", "ColumnRebarSolidBuilder.BuildSelected(document, project, selectedIds)"),
+    (ADAPTER / "ColumnTieCommands.cs", "public void BuildColumnTies()", "private static void FinalizeUi", "Column Tie", "ExistingProjectMutationContext.Require(document, \"Column Tie 3D\")", "ColumnTieSolidBuilder.BuildSelected(document, project, selectedIds)"),
 )
 
 
@@ -142,10 +81,15 @@ for case in implied_only_cases:
     if "CadSelectionGuard.AcquireCurrentSelection(document)" in body:
         errors.append(case[3] + " must preserve PICKFIRST-only behavior and must not open a new interactive selection prompt")
 
+beam_builder = read(ADAPTER / "Cad" / "BeamRebarSolidBuilder.cs")
+for forbidden in ("document.Editor.SelectImplied()", "document.Editor.GetSelection()", "PromptStatus"):
+    if forbidden in beam_builder:
+        errors.append("Beam Rebar builder must consume the admitted command snapshot without editor re-selection: " + forbidden)
+
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: all guarded rebar 3D command families establish their existing PICKFIRST/interactive selection contract before binding the canonical project; empty/cancel paths fail closed without project creation/binding and PICKFIRST-only Column commands do not gain a new prompt.")
+print("PASS: guarded rebar 3D commands establish their existing selection contract before canonical project binding; Column stays PICKFIRST-only, and Beam Rebar carries its admitted interactive/PICKFIRST snapshot into native generation without a second editor selection.")

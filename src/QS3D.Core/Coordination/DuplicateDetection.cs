@@ -105,14 +105,33 @@ namespace QS3D.Core.Coordination
         private const int MaximumElements = 500;
         private const int MaximumResults = 10000;
 
+        private sealed class DuplicateDetectionPolicySnapshot
+        {
+            internal DuplicateDetectionPolicySnapshot(
+                double coordinateToleranceM,
+                bool requireSameDisciplineForGeometry,
+                bool requireSameCategoryForGeometry,
+                bool enableSemanticIdentity)
+            {
+                CoordinateToleranceM = coordinateToleranceM;
+                RequireSameDisciplineForGeometry = requireSameDisciplineForGeometry;
+                RequireSameCategoryForGeometry = requireSameCategoryForGeometry;
+                EnableSemanticIdentity = enableSemanticIdentity;
+            }
+
+            internal double CoordinateToleranceM { get; }
+            internal bool RequireSameDisciplineForGeometry { get; }
+            internal bool RequireSameCategoryForGeometry { get; }
+            internal bool EnableSemanticIdentity { get; }
+        }
+
         public DuplicateDetectionResult Detect(
             IEnumerable<CoordinationElement> elements,
             DuplicateDetectionOptions? options = null)
         {
             if (elements == null) throw new ArgumentNullException(nameof(elements));
-            var effective = options ?? new DuplicateDetectionOptions();
-            ValidateOptions(effective);
-            return DetectSnapshot(MaterializeElements(elements), effective);
+            var policy = CapturePolicy(options);
+            return DetectSnapshot(MaterializeElements(elements), policy);
         }
 
         public DuplicateDetectionResult Detect(
@@ -120,9 +139,20 @@ namespace QS3D.Core.Coordination
             DuplicateDetectionOptions? options = null)
         {
             if (candidates == null) throw new ArgumentNullException(nameof(candidates));
+            var policy = CapturePolicy(options);
+            return DetectSnapshot(MaterializeCandidates(candidates), policy);
+        }
+
+        private static DuplicateDetectionPolicySnapshot CapturePolicy(DuplicateDetectionOptions? options)
+        {
             var effective = options ?? new DuplicateDetectionOptions();
-            ValidateOptions(effective);
-            return DetectSnapshot(MaterializeCandidates(candidates), effective);
+            var policy = new DuplicateDetectionPolicySnapshot(
+                effective.CoordinateToleranceM,
+                effective.RequireSameDisciplineForGeometry,
+                effective.RequireSameCategoryForGeometry,
+                effective.EnableSemanticIdentity);
+            ValidateCoordinateTolerance(policy.CoordinateToleranceM);
+            return policy;
         }
 
         private static List<DuplicateCandidate> MaterializeElements(IEnumerable<CoordinationElement> elements)
@@ -141,6 +171,7 @@ namespace QS3D.Core.Coordination
 
                     if (index == MaximumElements) throw TooManyElements();
                     var element = enumerator.Current;
+                    RequireStableKnownCount(elements, expectedCount);
                     if (element == null)
                         throw new ArgumentException("Duplicate-detection input contains a null element at index " + index + ".", nameof(elements));
                     if (!elementIds.Add(element.ElementId))
@@ -171,6 +202,7 @@ namespace QS3D.Core.Coordination
 
                     if (index == MaximumElements) throw TooManyElements();
                     var candidate = enumerator.Current;
+                    RequireStableKnownCount(candidates, expectedCount);
                     if (candidate == null)
                         throw new ArgumentException("Duplicate-detection input contains a null candidate at index " + index + ".", nameof(candidates));
                     if (!elementIds.Add(candidate.Element.ElementId))
@@ -193,7 +225,7 @@ namespace QS3D.Core.Coordination
 
         private static DuplicateDetectionResult DetectSnapshot(
             List<DuplicateCandidate> snapshot,
-            DuplicateDetectionOptions effective)
+            DuplicateDetectionPolicySnapshot policy)
         {
             snapshot.Sort(CompareCandidates);
             var pairs = new List<DuplicatePair>();
@@ -205,7 +237,7 @@ namespace QS3D.Core.Coordination
             {
                 for (var j = i + 1; j < snapshot.Count; j++)
                 {
-                    var kinds = Evaluate(snapshot[i], snapshot[j], effective);
+                    var kinds = Evaluate(snapshot[i], snapshot[j], policy);
                     if (kinds == DuplicateMatchKind.None) continue;
                     if (pairs.Count == MaximumResults)
                         throw new InvalidOperationException("Duplicate detection supports at most " + MaximumResults + " results per operation.");
@@ -226,24 +258,24 @@ namespace QS3D.Core.Coordination
         private static DuplicateMatchKind Evaluate(
             DuplicateCandidate left,
             DuplicateCandidate right,
-            DuplicateDetectionOptions options)
+            DuplicateDetectionPolicySnapshot policy)
         {
             var kinds = DuplicateMatchKind.None;
 
-            if (options.EnableSemanticIdentity &&
+            if (policy.EnableSemanticIdentity &&
                 left.SourceId.Length > 0 &&
                 StringComparer.OrdinalIgnoreCase.Equals(left.SourceId, right.SourceId))
             {
                 kinds |= DuplicateMatchKind.SemanticIdentity;
             }
 
-            if (!GeometryClassificationMatches(left.Element, right.Element, options))
+            if (!GeometryClassificationMatches(left.Element, right.Element, policy))
                 return kinds;
 
             if (BoundsEqual(left.Element.Bounds, right.Element.Bounds))
                 return kinds | DuplicateMatchKind.ExactGeometry;
 
-            if (BoundsWithinTolerance(left.Element.Bounds, right.Element.Bounds, options.CoordinateToleranceM))
+            if (BoundsWithinTolerance(left.Element.Bounds, right.Element.Bounds, policy.CoordinateToleranceM))
                 kinds |= DuplicateMatchKind.NearGeometry;
 
             return kinds;
@@ -252,12 +284,12 @@ namespace QS3D.Core.Coordination
         private static bool GeometryClassificationMatches(
             CoordinationElement left,
             CoordinationElement right,
-            DuplicateDetectionOptions options)
+            DuplicateDetectionPolicySnapshot policy)
         {
-            if (options.RequireSameDisciplineForGeometry &&
+            if (policy.RequireSameDisciplineForGeometry &&
                 !StringComparer.OrdinalIgnoreCase.Equals(left.Discipline, right.Discipline))
                 return false;
-            if (options.RequireSameCategoryForGeometry &&
+            if (policy.RequireSameCategoryForGeometry &&
                 !StringComparer.OrdinalIgnoreCase.Equals(left.Category, right.Category))
                 return false;
             return true;
@@ -294,12 +326,12 @@ namespace QS3D.Core.Coordination
             return StringComparer.Ordinal.Compare(left.Element.ElementId, right.Element.ElementId);
         }
 
-        private static void ValidateOptions(DuplicateDetectionOptions options)
+        private static void ValidateCoordinateTolerance(double coordinateToleranceM)
         {
-            if (double.IsNaN(options.CoordinateToleranceM) ||
-                double.IsInfinity(options.CoordinateToleranceM) ||
-                options.CoordinateToleranceM < 0d)
-                throw new ArgumentOutOfRangeException(nameof(options.CoordinateToleranceM));
+            if (double.IsNaN(coordinateToleranceM) ||
+                double.IsInfinity(coordinateToleranceM) ||
+                coordinateToleranceM < 0d)
+                throw new ArgumentOutOfRangeException(nameof(DuplicateDetectionOptions.CoordinateToleranceM));
         }
 
         private static int? RequireKnownCountWithinLimit<T>(IEnumerable<T> source)

@@ -90,7 +90,10 @@ require("builder", (
     '"VolumeM3"',
     '"MeasuredVolumeM3"',
     "DensityKey(densityKgM3)",
-    "QuantityReportMath.Add(current.Value, value.Value, label)",
+    "QuantityReportAggregateState",
+    'aggregate.MassKg.Add(massKg, element.Id + "/MassKg")',
+    'row.MassKg = aggregate.MassKg.Value("MassKg")',
+    "QuantityReportMath.AddCount(row.Count, 1)",
     "row.ElementIds.Add(elementId)",
 ))
 if 'element.ZoneId + "\\u001f" + category' in texts.get("builder", "") or 'material + "\\u001f" + DensityKey(densityKgM3)' in texts.get("builder", ""):
@@ -151,7 +154,9 @@ require("reader", (
     "public bool IsEd2Detail { get; }",
     "ResolveWorksheet(archive)",
     'string.Equals(name, "CHI_TIET", StringComparison.OrdinalIgnoreCase)',
-    "targets.Count > 1",
+    "var targetMatches = 0;",
+    "targetMatches++;",
+    "targetMatches > 1",
     "result.ContainsKey(column)",
     "QS3D Excel row is missing its Element ID.",
     "QS3D Excel row is missing its CAD Handle provenance.",

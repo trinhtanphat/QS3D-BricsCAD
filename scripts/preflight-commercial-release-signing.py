@@ -51,11 +51,17 @@ required_workflow = (
     "QS3D-BricsCAD-V25.provenance.json",
     "Verify candidate after job boundary",
     "Create draft, verify uploaded bytes, then publish",
-    "'release', 'create'",
-    "--draft",
-    "gh release download",
-    "gh release edit",
-    "--draft=false",
+    '$tagRefUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/git/refs"',
+    "$tagCreatedByThisRun = $true",
+    "$releaseId = [long]$release.id",
+    "scripts/invoke-v25-held-release-upload.ps1",
+    "$admittedAssets = @(& .\\scripts\\invoke-v25-held-release-upload.ps1",
+    "$localAssets[$asset.Name] = $asset",
+    "gh release download $env:RELEASE_TAG",
+    "$published = Invoke-RestMethod -Method Patch -Uri $releaseUri",
+    "Assert-PublishedReleaseMatchesVerifiedTransaction",
+    "-ReleaseSnapshot $published",
+    "rollback-v25-draft-release.ps1",
 )
 for token in required_workflow:
     if token not in workflow:
@@ -67,9 +73,12 @@ for forbidden in (
     "unsigned prerelease",
     "if: ${{ inputs.sign_package",
     "!inputs.sign_package",
+    "& gh @createArgs",
+    "gh release edit $env:RELEASE_TAG",
+    "gh release upload $env:RELEASE_TAG $resolvedAsset --repo $env:GITHUB_REPOSITORY",
 ):
     if forbidden in workflow:
-        errors.append(f"commercial release workflow still exposes an unsigned fallback: {forbidden}")
+        errors.append(f"commercial release workflow exposes obsolete/unsafe publication shape: {forbidden}")
 
 build_index = workflow.find("  build_sign:")
 publish_index = workflow.find("  release:")
@@ -88,6 +97,21 @@ if workflow.find("Remove ephemeral signing certificate and private key") > workf
     errors.append("private signing key must be removed before final package verification")
 if workflow.find("Verify candidate after job boundary") > workflow.find("Create draft, verify uploaded bytes, then publish"):
     errors.append("release job must verify transferred candidate before creating a draft release")
+
+publication = workflow.find("Create draft, verify uploaded bytes, then publish")
+tag_create = workflow.find("$createdTag = Invoke-RestMethod -Method Post -Uri $tagRefUri", publication)
+tag_owned = workflow.find("$tagCreatedByThisRun = $true", tag_create)
+draft_id = workflow.find("$releaseId = [long]$release.id", tag_owned)
+held_upload = workflow.find("$admittedAssets = @(& .\\scripts\\invoke-v25-held-release-upload.ps1", draft_id)
+download = workflow.find("gh release download $env:RELEASE_TAG", held_upload)
+signature = workflow.find("verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT", download)
+publish = workflow.find("$published = Invoke-RestMethod -Method Patch -Uri $releaseUri", signature)
+publish_assert = workflow.find("Assert-PublishedReleaseMatchesVerifiedTransaction", publish)
+publish_snapshot = workflow.find("-ReleaseSnapshot $published", publish_assert)
+rollback = workflow.find("rollback-v25-draft-release.ps1", publish_snapshot)
+publication_order = (publication, tag_create, tag_owned, draft_id, held_upload, download, signature, publish, publish_assert, publish_snapshot, rollback)
+if any(index < 0 for index in publication_order) or list(publication_order) != sorted(publication_order):
+    errors.append("commercial publication must positively own exact tag -> capture exact draft -> upload held local generations -> verify downloaded signed bytes -> publish exact release -> verify successful response against exact transaction -> retain bounded rollback")
 
 required_signing = (
     "Get-SignTool",
@@ -154,4 +178,4 @@ if errors:
     print(f"FAILED with {len(errors)} commercial release signing hardening error(s).")
     sys.exit(1)
 
-print("PASS: commercial V25 release is signed-only, exact-version/source bound, RFC3161 PE timestamped, ephemeral-key cleaned, least-privilege published and draft-byte verified.")
+print("PASS: commercial V25 release remains signed-only, exact-version/source bound, RFC3161 PE timestamped, ephemeral-key cleaned, least-privilege published, exact-tag owned, held-generation draft-byte verified, exact publish response transaction-verified, and restart-safe under bounded rollback.")
