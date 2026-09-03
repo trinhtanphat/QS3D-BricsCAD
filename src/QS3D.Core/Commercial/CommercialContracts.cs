@@ -117,8 +117,72 @@ namespace QS3D.Core.Commercial
                 throw new InvalidOperationException(
                     "Commercial audit batch source known Count does not match completed traversal cardinality.");
             RequireStableKnownCount(records, knownCount);
+            RequireStableAuditBatchGeneration(records, knownCount, snapshot);
 
             _events.AddRange(snapshot);
+        }
+
+        private static void RequireStableAuditBatchGeneration(
+            IEnumerable<CommercialAuditRecord> records,
+            int? admittedCount,
+            IReadOnlyList<CommercialAuditRecord> snapshot)
+        {
+            if (!admittedCount.HasValue)
+                return;
+
+            var index = 0;
+            using (var enumerator = records.GetEnumerator())
+            {
+                while (true)
+                {
+                    RequireStableKnownCountDuringTraversal(records, admittedCount);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireStableKnownCountDuringTraversal(records, admittedCount);
+                    if (index >= snapshot.Count)
+                        throw new InvalidOperationException("Commercial audit batch content changed during enumeration.");
+
+                    var current = enumerator.Current;
+                    RequireStableKnownCountDuringTraversal(records, admittedCount);
+                    if (current == null || !CommercialAuditRecordStateEquals(snapshot[index], current))
+                        throw new InvalidOperationException("Commercial audit batch content changed during enumeration.");
+                    index++;
+                }
+            }
+
+            if (index != snapshot.Count)
+                throw new InvalidOperationException("Commercial audit batch content changed during enumeration.");
+            RequireStableKnownCount(records, admittedCount);
+        }
+
+        private static bool CommercialAuditRecordStateEquals(CommercialAuditRecord left, CommercialAuditRecord right)
+        {
+            if (left == null || right == null ||
+                !string.Equals(left.EventId, right.EventId, StringComparison.Ordinal) ||
+                !string.Equals(left.EntityType, right.EntityType, StringComparison.Ordinal) ||
+                !string.Equals(left.EntityId, right.EntityId, StringComparison.Ordinal) ||
+                !string.Equals(left.Action, right.Action, StringComparison.Ordinal) ||
+                !string.Equals(left.Actor, right.Actor, StringComparison.Ordinal) ||
+                left.OccurredUtc != right.OccurredUtc ||
+                !string.Equals(left.Reason, right.Reason, StringComparison.Ordinal) ||
+                !string.Equals(left.CorrelationId, right.CorrelationId, StringComparison.Ordinal) ||
+                !string.Equals(left.BeforeSummary, right.BeforeSummary, StringComparison.Ordinal) ||
+                !string.Equals(left.AfterSummary, right.AfterSummary, StringComparison.Ordinal) ||
+                left.SourceRevisions.Count != right.SourceRevisions.Count)
+                return false;
+
+            for (var i = 0; i < left.SourceRevisions.Count; i++)
+            {
+                var leftRevision = left.SourceRevisions[i];
+                var rightRevision = right.SourceRevisions[i];
+                if (leftRevision == null || rightRevision == null ||
+                    !string.Equals(leftRevision.SourceKind, rightRevision.SourceKind, StringComparison.Ordinal) ||
+                    !string.Equals(leftRevision.SourceId, rightRevision.SourceId, StringComparison.Ordinal) ||
+                    !string.Equals(leftRevision.RevisionId, rightRevision.RevisionId, StringComparison.Ordinal))
+                    return false;
+            }
+
+            return true;
         }
 
         private HashSet<string> ExistingEventIds()
