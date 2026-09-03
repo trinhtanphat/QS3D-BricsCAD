@@ -149,6 +149,7 @@ namespace QS3D.BricsCAD.V25
             else return null;
 
             if (command.Length == 0) return null;
+            RejectUnsafeNativeCommand(command);
             if (PreparedNativeCommand.Value != null)
                 throw new InvalidOperationException("Nested native-command preparation is not supported.");
             if (!MutationGate.Wait(MutationAcquireTimeoutMilliseconds))
@@ -175,6 +176,7 @@ namespace QS3D.BricsCAD.V25
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (enqueue == null) throw new ArgumentNullException(nameof(enqueue));
+            RejectUnsafeNativeCommand(command);
             if (!CurrentOperationId.Value.HasValue)
                 throw new InvalidOperationException("Native command queueing requires the active MCP DWG writer mutation scope.");
 
@@ -248,8 +250,10 @@ namespace QS3D.BricsCAD.V25
 
         private static NativeCommandReservation ArmNativeCommandInCadContext(string command, Action<string>? audit, bool ownsMutationGate)
         {
+            RejectUnsafeNativeCommand(command);
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) throw new InvalidOperationException("No active BricsCAD document is available for native command coordination.");
+            RequireNoModalCommandInCadContext();
             PendingNativeCommand pending;
             lock (Sync)
             {
@@ -402,6 +406,28 @@ namespace QS3D.BricsCAD.V25
             var index = 0;
             while (index < value.Length && (value[index] == '_' || value[index] == '.')) index++;
             return value.Substring(index).ToUpperInvariant();
+        }
+
+        private static void RejectUnsafeNativeCommand(string command)
+        {
+            var normalized = NormalizeCommand(command);
+            if (string.Equals(normalized, "REGENALL", StringComparison.Ordinal))
+                throw new InvalidOperationException("REGENALL is not permitted through MCP native command dispatch because BricsCAD can enter modal CMDACTIVE bit 8 and strand logical DWG writer ownership. Use bounded view/status operations or run REGENALL locally after MCP writer activity is idle.");
+        }
+
+        private static void RequireNoModalCommandInCadContext()
+        {
+            int commandActive;
+            try
+            {
+                commandActive = Convert.ToInt32(Application.GetSystemVariable("CMDACTIVE"), CultureInfo.InvariantCulture);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Could not read BricsCAD CMDACTIVE before native MCP command dispatch; command was not queued.", ex);
+            }
+            if ((commandActive & 8) != 0)
+                throw new InvalidOperationException("BricsCAD is in a modal command state (CMDACTIVE bit 8). Finish or cancel the modal command before retrying native MCP command dispatch.");
         }
 
         private static string SafeTool(string value)
