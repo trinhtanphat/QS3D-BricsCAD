@@ -8,6 +8,11 @@ TESTS = ROOT / "tests" / "QS3D.Core.SmokeTests"
 RUN_PATTERN = re.compile(r"\b(?:public|internal|private)?\s*static\s+void\s+Run\s*\(")
 CLASS_PATTERN = re.compile(r"\b(?:public|internal|private)?\s*(?:static\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)")
 RUN_CALL_PATTERN = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\.\s*Run\s*\(")
+MODULE_INITIALIZER_METHOD_PATTERN = re.compile(
+    r"\[\s*(?:System\.Runtime\.CompilerServices\.)?ModuleInitializer(?:Attribute)?\s*\]"
+    r"\s*(?:(?:public|internal|private)\s+)?static\s+void\s+[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)\s*\{"
+)
+UNQUALIFIED_RUN_CALL_PATTERN = re.compile(r"(?<![A-Za-z0-9_.])Run\s*\(")
 SYNTHETIC_SCALE_SMOKES = 2048
 
 
@@ -20,6 +25,32 @@ def build_run_reference_index(sources):
         for match in RUN_CALL_PATTERN.finditer(text):
             references.setdefault(match.group(1), set()).add(path)
     return references, source_scans
+
+
+def find_matching_brace(text, opening_index):
+    depth = 0
+    for index in range(opening_index, len(text)):
+        char = text[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return index
+    return None
+
+
+def has_module_initializer_run_call(text, class_name):
+    qualified_run = re.compile(r"\b" + re.escape(class_name) + r"\s*\.\s*Run\s*\(")
+    for match in MODULE_INITIALIZER_METHOD_PATTERN.finditer(text):
+        opening_index = match.end() - 1
+        closing_index = find_matching_brace(text, opening_index)
+        if closing_index is None:
+            continue
+        body = text[opening_index + 1 : closing_index]
+        if UNQUALIFIED_RUN_CALL_PATTERN.search(body) or qualified_run.search(body):
+            return True
+    return False
 
 
 def find_registration_errors(sources):
@@ -39,11 +70,9 @@ def find_registration_errors(sources):
         class_name = match.group(1)
         checked += 1
 
-        # Preserve the historical registration contract exactly: a smoke may
-        # self-register with ModuleInitializer, otherwise Class.Run() must be
-        # referenced by a different source file. Calls in the smoke's own file
-        # do not count as registration.
-        if "[ModuleInitializer]" in text:
+        # A self-registration exemption is valid only when a ModuleInitializer
+        # method in this source actually invokes the smoke Run() method.
+        if has_module_initializer_run_call(text, class_name):
             continue
         registration_paths = references.get(class_name, ())
         if not any(other_path != path for other_path in registration_paths):
