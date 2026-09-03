@@ -117,13 +117,21 @@ def main() -> int:
 
     require(oauth, "ConsumedAuthorizationCodes", "authorization-code replay cache")
     require(oauth, "ProcessNonce", "authorization-code process binding")
-    require(oauth, "TryAdd", "single-use authorization-code consumption")
+    require(oauth, "TryRememberConsumedCredential(ConsumedAuthorizationCodes", "single-use authorization-code consumption")
+    require(oauth, "ConsumedCredentialAdmission.Replay", "authorization-code replay rejection")
+    require(oauth, "ConsumedCredentialAdmission.CapacityExceeded", "authorization-code fail-closed replay capacity")
 
-    require(oauth, "ConsumedRefreshTokens", "refresh-token replay cache")
-    require(oauth, "CleanupConsumedRefreshTokens();", "bounded refresh-token replay-cache cleanup")
-    require(oauth, "ConsumedRefreshTokens.TryAdd(HashForCache(refresh), expiry)", "single-use refresh-token consumption")
+    # Refresh-token replay protection is family/generation based. Retaining one consumed
+    # cache entry per rotated token for the full 30-day lifetime self-DoSes legitimate
+    # clients, so the bounded family map carries the next accepted generation instead.
+    require(oauth, "RefreshTokenFamilies", "refresh-token replay family state")
+    require(oauth, "MaxRefreshTokenFamilies", "bounded refresh-token family state")
+    require(oauth, "TryAdvanceRefreshFamily(", "single-use refresh-token family advancement")
+    require(oauth, "refreshFamilyId", "refresh-token family binding")
+    require(oauth, "refreshGeneration", "refresh-token generation binding")
     require(oauth, '"refresh token was already used"', "refresh-token replay rejection")
-    require(oauth, "fields.Length != 7", "process-bound refresh-token payload")
+    require(oauth, "fields.Length != 9", "process/family-bound refresh-token payload")
+    reject(oauth, "ConsumedRefreshTokens", "obsolete per-consumed-refresh-token replay cache")
 
     require(oauth, "ParseFormEncoded", "strict query/form parser")
     require(oauth, "duplicate OAuth parameter", "duplicate parameter rejection")
