@@ -58,10 +58,78 @@ namespace QS3D.Core.Cost
             if (hasKnownCount && rows.Count != knownCount)
                 throw new InvalidOperationException("Frozen estimate projection source Count does not match source traversal.");
             if (hasKnownCount)
+            {
                 RequireStableKnownCount(lines, knownCount);
+                RequireStableProjectionGeneration(lines, knownCount, rows);
+            }
 
             rows.Sort(CompareRows);
             return new FrozenEstimateProjection(rows);
+        }
+
+        private static void RequireStableProjectionGeneration(
+            IEnumerable<EstimateLine> lines,
+            int knownCount,
+            IReadOnlyList<FrozenEstimateProjectionRow> admittedRows)
+        {
+            var index = 0;
+            using (var enumerator = lines.GetEnumerator())
+            {
+                // A replay enumerator is also caller code. Re-admit Count after acquisition,
+                // then surround every traversal observation with the existing Count contract.
+                RequireStableKnownCount(lines, knownCount);
+                while (true)
+                {
+                    RequireStableKnownCount(lines, knownCount);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireStableKnownCount(lines, knownCount);
+                    if (index >= admittedRows.Count)
+                        ThrowProjectionContentChanged();
+
+                    var line = enumerator.Current;
+                    RequireStableKnownCount(lines, knownCount);
+                    if (line == null)
+                        ThrowProjectionContentChanged();
+
+                    var replayedRow = FrozenEstimateProjectionRow.From(line);
+                    if (!FrozenProjectionRowStateEquals(admittedRows[index], replayedRow))
+                        ThrowProjectionContentChanged();
+                    index++;
+                }
+            }
+
+            if (index != admittedRows.Count)
+                ThrowProjectionContentChanged();
+            RequireStableKnownCount(lines, knownCount);
+        }
+
+        private static bool FrozenProjectionRowStateEquals(
+            FrozenEstimateProjectionRow left,
+            FrozenEstimateProjectionRow right)
+        {
+            return string.Equals(left.EstimateLineId, right.EstimateLineId, StringComparison.Ordinal) &&
+                   string.Equals(left.SemanticIdentity, right.SemanticIdentity, StringComparison.Ordinal) &&
+                   string.Equals(left.SourceIdentity, right.SourceIdentity, StringComparison.Ordinal) &&
+                   string.Equals(left.QuantityKey, right.QuantityKey, StringComparison.Ordinal) &&
+                   string.Equals(left.RateBookId, right.RateBookId, StringComparison.Ordinal) &&
+                   string.Equals(left.RateItemId, right.RateItemId, StringComparison.Ordinal) &&
+                   string.Equals(left.RateVersion, right.RateVersion, StringComparison.Ordinal) &&
+                   left.RateAsOfUtc == right.RateAsOfUtc &&
+                   string.Equals(left.CostCode, right.CostCode, StringComparison.Ordinal) &&
+                   string.Equals(left.Unit, right.Unit, StringComparison.Ordinal) &&
+                   string.Equals(left.Currency, right.Currency, StringComparison.Ordinal) &&
+                   left.MeasuredQuantity == right.MeasuredQuantity &&
+                   left.CommercialAdjustmentQuantity == right.CommercialAdjustmentQuantity &&
+                   string.Equals(left.CommercialAdjustmentReason, right.CommercialAdjustmentReason, StringComparison.Ordinal) &&
+                   left.EstimatingQuantity == right.EstimatingQuantity &&
+                   left.UnitRate == right.UnitRate &&
+                   left.FinalAmount == right.FinalAmount;
+        }
+
+        private static void ThrowProjectionContentChanged()
+        {
+            throw new InvalidOperationException("Frozen estimate projection content changed during enumeration.");
         }
 
         private static bool TryGetKnownCount(IEnumerable<EstimateLine> lines, out int count)
