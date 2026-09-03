@@ -33,14 +33,22 @@ if any(method.index(token) > success_publish_at for token in subscriptions):
 
 # Attachment must be transactional. If detach itself cannot be proven, the candidate must be
 # published as quarantine state before rethrow so outer gate release cannot admit a second writer.
+# Inspect the conditional body rather than requiring it to contain only the assignment: production
+# may emit redacted audit metadata while quarantining, and that must not turn this guard into a
+# false negative.
 rollback = re.search(
-    r"catch\s*\{\s*if\s*\(!TryDetachPendingLocked\(pending\)\)\s*\{?\s*_pending\s*=\s*pending;\s*\}?\s*throw;\s*\}",
+    r"catch\s*\{\s*if\s*\(!TryDetachPendingLocked\(pending\)\)\s*\{(?P<body>.*?)\}\s*throw;\s*\}",
     method,
     flags=re.DOTALL,
 )
 try_at = method.find("try", method.index(subscriptions[0]) - 200)
 if try_at < 0 or rollback is None:
     raise SystemExit("FAIL: native event attachment lacks rollback quarantine/rethrow")
+rollback_body = rollback.group("body")
+if rollback_body.count(publish) != 1:
+    raise SystemExit("FAIL: rollback failure must publish exactly one quarantine candidate")
+if "return" in rollback_body:
+    raise SystemExit("FAIL: rollback quarantine must not return instead of rethrowing the host failure")
 if not (try_at < method.index(subscriptions[0]) < method.index(subscriptions[-1]) < rollback.start() < success_publish_at):
     raise SystemExit("FAIL: rollback quarantine must cover every event add before success publication")
 
