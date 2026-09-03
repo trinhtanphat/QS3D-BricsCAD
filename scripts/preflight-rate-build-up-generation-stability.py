@@ -13,6 +13,11 @@ required_source = [
     "SameComponentState",
     '"Rate build-up component collection content changed during traversal."',
     "hasKnownComponentCount",
+    "left.ResourceCode",
+    "left.Description",
+    "left.Unit",
+    "left.QuantityPerBillUnit",
+    "left.UnitRate",
 ]
 for token in required_source:
     if token not in source:
@@ -20,6 +25,8 @@ for token in required_source:
 
 required_smoke = [
     "SameCountReplacementIsRejected",
+    "SameCountSemanticStateDriftIsRejected",
+    "SameCountReorderingIsRejected",
     "StableCountedSourceReplaysExactlyOnce",
     "StreamingSourceRemainsSinglePassCompatible",
     "GetEnumeratorCalls == 2",
