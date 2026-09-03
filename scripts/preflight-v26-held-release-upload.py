@@ -42,6 +42,7 @@ required_helper = [
     "[IO.FileShare]::Read",
     "[Security.Cryptography.SHA256]::Create()",
     "$held.Stream.Position = 0",
+    "Add-Type -AssemblyName System.Net.Http",
     "[System.Net.Http.StreamContent]::new($held.Stream)",
     "[System.Net.Http.HttpClient]::new()",
     "UploadedAssetId",
@@ -55,6 +56,11 @@ for token in required_helper:
         errors.append(f"V26 held-upload helper missing invariant token: {token}")
 
 if helper:
+    bootstrap_pos = helper.find("Add-Type -AssemblyName System.Net.Http")
+    first_http_type_pos = helper.find("[System.Net.Http.")
+    if bootstrap_pos < 0 or first_http_type_pos < 0 or bootstrap_pos >= first_http_type_pos:
+        errors.append("V26 held-upload helper must preload System.Net.Http before the first System.Net.Http type resolution")
+
     hash_pos = helper.find("ComputeHash($held.Stream)")
     rewind_pos = helper.find("$held.Stream.Position = 0")
     content_pos = helper.find("[System.Net.Http.StreamContent]::new($held.Stream)")
