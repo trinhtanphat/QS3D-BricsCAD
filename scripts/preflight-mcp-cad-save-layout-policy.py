@@ -4,20 +4,29 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 DIRECT = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCadDirectModelRuntime.cs"
+NATIVE_SAVE = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpNativeCurrentDocumentSave.cs"
 HOST = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpBackgroundHostRuntime.cs"
 RUNBOOK = ROOT / "docs" / "MCP-CANONICAL-RUNBOOK.md"
 
 errors = []
 
+
 def require(text, token, where):
     if token not in text:
         errors.append(f"{where} missing contract token: {token}")
+
 
 if not DIRECT.is_file():
     errors.append("missing McpCadDirectModelRuntime.cs")
     direct = ""
 else:
     direct = DIRECT.read_text(encoding="utf-8")
+
+if not NATIVE_SAVE.is_file():
+    errors.append("missing McpNativeCurrentDocumentSave.cs")
+    native_save = ""
+else:
+    native_save = NATIVE_SAVE.read_text(encoding="utf-8")
 
 if not HOST.is_file():
     errors.append("missing McpBackgroundHostRuntime.cs")
@@ -32,25 +41,23 @@ if direct:
     if not save:
         errors.append("cannot isolate McpCadDirectModelRuntime.Save")
     else:
-        require(save, "document.Database.Save();", "cad_save")
-        if "SaveAs(filename, DwgVersion.Current)" in save:
-            errors.append("cad_save must not SaveAs over the active drawing's current path")
-        if save.count("document.Database.Save();") != 1:
-            errors.append("cad_save must perform exactly one current-document Save attempt")
-        require(save, 'route=Database.Save-current-document', "cad_save")
-        require(save, "WaitForSavedContentDbmod()", "cad_save")
-        require(save, 'dbmodAfterSave=', "cad_save diagnostics")
+        require(save, "McpNativeCurrentDocumentSave.SaveCurrentDocument(", "cad_save")
+        require(save, "dbmodAfterSave", "cad_save diagnostics")
+        require(save, 'route\\\":\\\"native-QSAVE-current-document', "cad_save")
+        if "document.Database.Save();" in save or "document.Database.SaveAs(" in save:
+            errors.append("cad_save must not write the already-open active drawing through Database.Save/SaveAs")
+        if save.count("McpNativeCurrentDocumentSave.SaveCurrentDocument(") != 1:
+            errors.append("cad_save must invoke exactly one host-owned current-document save lifecycle")
 
-    # BricsCAD DBMOD is a bitmask. Persistent drawing state is represented by object
-    # database (1), database-variable (4), and field (32) bits. Window/view (8/16)
-    # state may change again after the native save and must not cause a false failure.
+    # SaveAs still uses the direct runtime's bounded persistent-content DBMOD confirmation.
+    # Window/view bits (8/16) may remain after publication and must not cause false failure.
     for token in (
         "private const int DbmodPersistentContentMask = 1 | 4 | 32;",
         "private static int WaitForSavedContentDbmod()",
         "(dbmod & DbmodPersistentContentMask) == 0",
         "window/view DBMOD bits may remain after save",
     ):
-        require(direct, token, "content-aware DBMOD save confirmation")
+        require(direct, token, "content-aware SaveAs DBMOD confirmation")
     if "dbmod == 0" in direct:
         errors.append("save completion must not require the entire DBMOD bitmask to become zero")
 
@@ -85,6 +92,28 @@ if direct:
     if layout and "SendStringToExecute" in layout:
         errors.append("direct layout completion route must not use asynchronous SendStringToExecute")
 
+if native_save:
+    for token in (
+        "McpCadMutationCoordinator.QueueNativeCommand",
+        "document.SendStringToExecute(",
+        "_.QSAVE",
+        "ManualResetEventSlim",
+        "CommandEnded",
+        "CommandCancelled",
+        "CommandFailed",
+        "document.IsReadOnly",
+        'Application.GetSystemVariable("CMDACTIVE")',
+        "DbmodPersistentContentMask = 1 | 4 | 32",
+        'Application.GetSystemVariable("DBMOD")',
+        "(dbmod & DbmodPersistentContentMask) == 0",
+        "Do not retry automatically",
+    ):
+        require(native_save, token, "native current-document QSAVE lifecycle")
+    if native_save.count("document.SendStringToExecute(") != 1:
+        errors.append("native current-document QSAVE must queue exactly one native attempt")
+    if "Database.Save();" in native_save or "Database.SaveAs(" in native_save:
+        errors.append("native current-document QSAVE helper must not write the active path through Database.Save/SaveAs")
+
 if host:
     require(host, '\\"processStartDefault\\":\\"background_only\\"', "foreground policy status")
     require(host, '\\"requiresLocalReenableAfterRestart\\":true', "foreground policy status")
@@ -106,4 +135,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: cad_save uses one current-document Save attempt, accepts successful saves when only window/view DBMOD bits remain, bounded layout operations are direct/deterministic, and foreground status preserves background_only startup while explaining consent vs policy.")
+print("PASS: cad_save uses one host-owned native QSAVE lifecycle with terminal-event and persistent-content DBMOD confirmation, SaveAs keeps its bounded DBMOD semantics, layout operations remain direct/deterministic, and foreground status preserves background_only startup while explaining consent vs policy.")
