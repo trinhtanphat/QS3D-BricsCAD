@@ -14,6 +14,16 @@ def require(errors: list[str], text: str, tokens: tuple[str, ...], label: str) -
             errors.append(f"{label} missing token: {token}")
 
 
+def ordered(errors: list[str], text: str, tokens: tuple[str, ...], label: str) -> None:
+    cursor = -1
+    for token in tokens:
+        found = text.find(token, cursor + 1)
+        if found < 0:
+            errors.append(f"{label} missing ordered token: {token}")
+            return
+        cursor = found
+
+
 def main() -> int:
     missing = [path for path in (CONSENT, AUTH) if not path.is_file()]
     if missing:
@@ -25,29 +35,65 @@ def main() -> int:
     auth = AUTH.read_text(encoding="utf-8")
     errors: list[str] = []
 
+    request_marker = "internal static McpOAuthConsentResult RequestApproval"
+    callback_marker = "private static void ShowConsentInCadContext"
+    request_at = consent.find(request_marker)
+    callback_at = consent.find(callback_marker)
+    if request_at < 0 or callback_at < 0 or request_at >= callback_at:
+        errors.append("OAuth consent methods missing or unexpectedly reordered")
+        request = consent
+        callback = consent
+    else:
+        request = consent[request_at:callback_at]
+        callback = consent[callback_at:]
+
     require(errors, consent, (
         "InteractionRequired = 3,",
-        'McpCadMutationCoordinator.EnterMutation(string.Empty, "oauth_interactive_consent", null)',
+    ), "OAuth interaction result")
+
+    require(errors, request, (
+        "if (!ConsentGate.Wait(0)) return McpOAuthConsentResult.InteractionRequired;",
+        "McpCadMutationCoordinator.EnterMutation(",
+        '"oauth_interactive_consent"',
         "catch (InvalidOperationException)",
         "return McpOAuthConsentResult.InteractionRequired;",
+        "ExecuteInApplicationContext(ShowConsentInCadContext, item)",
+        "item.Done.Wait(ConsentTimeoutMilliseconds)",
+        "ConsentCancelledBeforeStart",
         "item.Done.Wait();",
         "interactionAdmission.Dispose();",
+        "ConsentGate.Release();",
     ), "OAuth interactive CAD admission")
+
+    # Runtime ordering spans two methods: RequestApproval owns CAD admission while the
+    # application-context callback presents the modal and signals Done. Assert each method's
+    # causal ordering instead of comparing source offsets between separate method bodies.
+    ordered(errors, request, (
+        "McpCadMutationCoordinator.EnterMutation(",
+        "ExecuteInApplicationContext(ShowConsentInCadContext, item)",
+        "item.Done.Wait(ConsentTimeoutMilliseconds)",
+        "ConsentCancelledBeforeStart",
+        "item.Done.Wait();",
+        "interactionAdmission.Dispose();",
+        "ConsentGate.Release();",
+    ), "OAuth request admission/dispatch/wait/release ordering")
+
+    ordered(errors, callback, (
+        "Interlocked.CompareExchange(ref item.DispatchState, ConsentRunning, ConsentQueued)",
+        "MessageBox.Show(",
+        "item.Done.Set();",
+    ), "OAuth foreground callback modal/signal ordering")
 
     require(errors, auth, (
         "consent == McpOAuthConsentResult.InteractionRequired",
         '"interaction_required"',
     ), "OAuth interaction_required protocol mapping")
 
-    if 'MessageBox.Show(' not in consent:
-        errors.append("OAuth consent prompt unexpectedly disappeared; this guard expects the explicit foreground consent boundary")
-
-    admission_at = consent.find('McpCadMutationCoordinator.EnterMutation(string.Empty, "oauth_interactive_consent", null)')
-    dispatch_at = consent.find("ExecuteInApplicationContext(ShowConsentInCadContext, item)")
-    modal_at = consent.find("MessageBox.Show(")
-    dispose_at = consent.find("interactionAdmission.Dispose();")
-    if admission_at < 0 or dispatch_at < 0 or modal_at < 0 or dispose_at < 0 or not (admission_at < dispatch_at < modal_at < dispose_at):
-        errors.append("OAuth consent ordering must be CAD admission -> UI dispatch -> modal -> admission release")
+    authorize_at = auth.find("var consent = McpOAuthConsent.RequestApproval(resource, normalizedScope);")
+    interaction_at = auth.find("consent == McpOAuthConsentResult.InteractionRequired", authorize_at + 1)
+    denied_at = auth.find("consent == McpOAuthConsentResult.Denied", authorize_at + 1)
+    if authorize_at < 0 or interaction_at < 0 or denied_at < 0 or not (authorize_at < interaction_at < denied_at):
+        errors.append("OAuth authorization must map InteractionRequired before access-denied/fallback handling")
 
     if errors:
         print("ERROR: MCP OAuth/CAD interaction preflight failed:")
@@ -55,7 +101,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: OAuth interactive consent is admitted through the CAD mutation/writer gate before UI dispatch, maps busy CAD state to interaction_required, keeps single-flight foreground consent bounded against queued dispatch, and releases admission only after the modal path is complete.")
+    print("PASS: OAuth consent acquires CAD mutation/writer admission before UI dispatch, holds it until the foreground callback closes/signals, cancels queued dispatch before releasing admission, prevents concurrent modal storms, and maps CAD-busy admission failures to OAuth interaction_required.")
     return 0
 
 
