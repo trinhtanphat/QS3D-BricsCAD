@@ -53,11 +53,17 @@ else:
         if forbidden in text:
             errors.append("view runtime must not force refresh/regen: " + forbidden)
 
-    # View mutations must fail closed if command/modal state is already active before touching view state.
+    # View mutations must fail closed if command/modal state is already active before touching view state,
+    # and explicitly distinguish CMDACTIVE bit 8 so callers do not treat an undismissable dialog as ESC-cancellable command work.
     idle_start = text.find("private static void RequireViewMutationIdle(")
     idle_end = text.find("private static ", idle_start + 1) if idle_start >= 0 else -1
     idle = text[idle_start:idle_end] if idle_start >= 0 and idle_end > idle_start else ""
-    for token in ('Application.GetSystemVariable("CMDACTIVE")', "commandActive != 0"):
+    for token in (
+        'Application.GetSystemVariable("CMDACTIVE")',
+        "active == 0",
+        "(active & 8) != 0",
+        "modal/dialog state (CMDACTIVE bit 8)",
+    ):
         if token not in idle:
             errors.append("RequireViewMutationIdle missing modal/command gate token: " + token)
 
@@ -67,4 +73,4 @@ if errors:
         print(" -", error)
     sys.exit(1)
 
-print("PASS: cad_view_fit_entities skips only live entities with unusable extents, reports skipped handles/counts, fails only when no usable extents remain, and view mutations preserve fail-closed CMDACTIVE/no-forced-REGEN safety.")
+print("PASS: cad_view_fit_entities skips only live entities with unusable extents, reports skipped handles/counts, fails only when no usable extents remain, and view mutations preserve fail-closed CMDACTIVE/modal-bit/no-forced-REGEN safety.")
