@@ -93,8 +93,8 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining(
                 () => ProjectBrowserWorkspaceCoordinator.ApplySelection(project, state, Selection(), selected.Id),
-                "Project Browser query inputs changed while Project Browser selection ids were being enumerated");
-            Equal(beforeVersion, project.ChangeVersion, "catalog mutation revision");
+                "Project changed while Project Browser selection ids were being enumerated");
+            Equal(beforeVersion + 1, project.ChangeVersion, "catalog mutation revision");
             Equal("L02-renamed", project.Floors[0].Name, "catalog mutation fixture");
         }
 
