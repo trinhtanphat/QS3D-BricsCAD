@@ -174,7 +174,7 @@ namespace QS3D.Core.SmokeTests
             Equal(1, checkpoint.ElementIds.Count, "Consistent multi-contract Count evidence was rejected.");
             Equal("e1", checkpoint.ElementIds[0], "Consistent Count capture changed canonical caller identity text.");
             Equal(1, source.EnumerationCount, "Consistent Count source was not enumerated exactly once.");
-            AssertEachKnownCountReadOnce(source, "consistent Count evidence");
+            AssertEachKnownCountReadTwice(source, "consistent Count evidence");
             True(checkpoint.Matches(project), "Checkpoint from consistent Count evidence did not match its source project.");
         }
 
@@ -240,6 +240,13 @@ namespace QS3D.Core.SmokeTests
             Equal(1, source.GenericCountReads, scenario + " did not read ICollection<T>.Count exactly once.");
             Equal(1, source.ReadOnlyCountReads, scenario + " did not read IReadOnlyCollection<T>.Count exactly once.");
             Equal(1, source.NonGenericCountReads, scenario + " did not read ICollection.Count exactly once.");
+        }
+
+        private static void AssertEachKnownCountReadTwice(MultiContractCollection source, string scenario)
+        {
+            Equal(2, source.GenericCountReads, scenario + " did not read ICollection<T>.Count before and after traversal.");
+            Equal(2, source.ReadOnlyCountReads, scenario + " did not read IReadOnlyCollection<T>.Count before and after traversal.");
+            Equal(2, source.NonGenericCountReads, scenario + " did not read ICollection.Count before and after traversal.");
         }
 
         private sealed class ThrowingOversizeCollection : ICollection<string>
