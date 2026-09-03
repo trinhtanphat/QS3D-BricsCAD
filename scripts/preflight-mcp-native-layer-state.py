@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DIRECT = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCadDirectModelRuntime.cs"
 RUNTIME = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCadLayerStateRuntime.cs"
+V26_PROJECT = ROOT / "src" / "QS3D.BricsCAD.V26" / "QS3D.BricsCAD.V26.csproj"
 
 
 def require(text: str, needle: str, label: str) -> None:
@@ -19,6 +20,7 @@ def forbid(text: str, needle: str, label: str) -> None:
 def main() -> None:
     direct = DIRECT.read_text(encoding="utf-8")
     runtime = RUNTIME.read_text(encoding="utf-8")
+    v26_project = V26_PROJECT.read_text(encoding="utf-8")
 
     # Published direct-runtime extension: reads do not enter mutation admission, writes do.
     require(direct, "McpCadLayerStateRuntime.IsTool(tool)", "layer-state routing")
@@ -36,6 +38,11 @@ def main() -> None:
 
     require(runtime, '"cad_layer_set_state",\n            "cad_layer_restore"', "mutation-only tool set")
     forbid(runtime, '"cad_layer_state",\n            "cad_layer_snapshot"', "read tools in mutation-only tool set")
+
+    # V26 intentionally consumes the V25 adapter source tree. Lock that parity so the new
+    # layer-state runtime cannot silently disappear from V26 while V25 remains green.
+    require(v26_project, '<Compile Include="..\\QS3D.BricsCAD.V25\\**\\*.cs"', "V26 linked V25 source wildcard")
+    forbid(v26_project, "McpCadLayerStateRuntime.cs", "V26 layer-state source exclusion")
 
     # Native writes are document locked and transactional; complete restore validation occurs
     # before the first layer is opened for write, so stale snapshots cannot partially apply.
