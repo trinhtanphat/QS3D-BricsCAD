@@ -6,6 +6,7 @@ from __future__ import annotations
 import importlib.util
 import os
 from pathlib import Path
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,7 +18,14 @@ def load_runner():
     if spec is None or spec.loader is None:
         raise RuntimeError("could not load aggregate preflight runner")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # Match normal import semantics: decorators such as dataclass resolve the
+    # defining module through sys.modules while the module body executes.
+    sys.modules[spec.name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(spec.name, None)
+        raise
     return module
 
 
