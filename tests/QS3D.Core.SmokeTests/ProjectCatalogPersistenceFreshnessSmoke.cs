@@ -14,6 +14,8 @@ namespace QS3D.Core.SmokeTests
             OwnershipTracksRemovalReplacementAndSnapshotRestore();
             DuplicateCatalogReferencesHaveSingleOwnershipSubscription();
             ServiceRenameAdvancesProjectFreshnessExactlyOnce();
+            ServicePropertyMutationsAdvanceProjectFreshnessExactlyOnce();
+            ServiceDuplicateAdvancesProjectFreshnessExactlyOnce();
             ServiceZoneUpdateAdvancesProjectFreshnessExactlyOnce();
             ServiceFloorUpdateAdvancesProjectFreshnessOncePerLogicalUpdate();
         }
@@ -93,6 +95,7 @@ namespace QS3D.Core.SmokeTests
         private static void OwnershipTracksRemovalReplacementAndSnapshotRestore()
         {
             var project = CreateProject(out var zone, out var floor, out var family);
+            family.Properties["Captured"] = "yes";
             var snapshot = ProjectStateSnapshot.Capture(project);
             var capturedVersion = project.ChangeVersion;
             var capturedUpdatedUtc = project.UpdatedUtc;
@@ -108,21 +111,29 @@ namespace QS3D.Core.SmokeTests
 
             floor.ElevationM = 7d;
             family.Name = "Changed family";
+            family.Properties["Captured"] = "changed";
             snapshot.Restore(project);
 
             Equal(capturedVersion, project.ChangeVersion, "snapshot restore version");
             Equal(capturedUpdatedUtc, project.UpdatedUtc, "snapshot restore timestamp");
             if (!ReferenceEquals(zone, project.Zones[0]))
                 throw new Exception("Snapshot restore must preserve the captured Zone object identity.");
+            if (!ReferenceEquals(family, project.Families[0]))
+                throw new Exception("Snapshot restore must preserve the captured Family object identity.");
+            Equal("yes", family.Properties["Captured"], "snapshot restore family property");
 
             zone.Name = "Zone after restore";
             Equal(capturedVersion + 1L, project.ChangeVersion, "restored zone ownership");
+            family.Properties["Captured"] = "after restore";
+            Equal(capturedVersion + 2L, project.ChangeVersion, "restored family property ownership");
 
             var detachedCopy = ProjectStateSnapshot.CreateDetachedCopy(project);
             var copyVersion = detachedCopy.ChangeVersion;
             detachedCopy.Floors[0].ElevationM = 9d;
             Equal(copyVersion + 1L, detachedCopy.ChangeVersion, "detached snapshot copy ownership");
-            Equal(capturedVersion + 1L, project.ChangeVersion, "detached copy must not mutate source freshness");
+            detachedCopy.Families[0].Properties["Captured"] = "copy only";
+            Equal(copyVersion + 2L, detachedCopy.ChangeVersion, "detached snapshot copy family property ownership");
+            Equal(capturedVersion + 2L, project.ChangeVersion, "detached copy must not mutate source freshness");
         }
 
         private static void DuplicateCatalogReferencesHaveSingleOwnershipSubscription()
@@ -143,6 +154,18 @@ namespace QS3D.Core.SmokeTests
             project.Zones.RemoveAt(0);
             zone.Name = "Duplicate zone detached";
             Equal(baseline + 2L, project.ChangeVersion, "last duplicate removal must detach ownership");
+
+            var family = new ProjectFamily("PF-DUP", "Duplicate family", ElementCategory.ArchitecturalWall);
+            project.Families.Add(family);
+            project.Families.Add(family);
+            family.Properties["A"] = "1";
+            Equal(baseline + 3L, project.ChangeVersion, "duplicate family reference must request one project touch");
+            project.Families.RemoveAt(0);
+            family.Properties["A"] = "2";
+            Equal(baseline + 4L, project.ChangeVersion, "remaining duplicate family reference must stay attached once");
+            project.Families.RemoveAt(0);
+            family.Properties["A"] = "3";
+            Equal(baseline + 4L, project.ChangeVersion, "last duplicate family removal must detach ownership");
         }
 
         private static void ServiceRenameAdvancesProjectFreshnessExactlyOnce()
@@ -159,6 +182,47 @@ namespace QS3D.Core.SmokeTests
 
             ProjectFamilyService.Rename(project, family.Id, " Wall Type Renamed ");
             Equal(baseline + 1L, project.ChangeVersion, "normalized service rename no-op must not advance project freshness");
+        }
+
+        private static void ServicePropertyMutationsAdvanceProjectFreshnessExactlyOnce()
+        {
+            var project = CreateProject(out _, out _, out var family);
+            var baseline = project.ChangeVersion;
+
+            ProjectFamilyService.SetProperty(project, family.Id, "FireRating", "60");
+            Equal(baseline + 1L, project.ChangeVersion, "service set property must advance freshness exactly once");
+            Equal("60", family.Properties["FireRating"], "service set property value");
+
+            ProjectFamilyService.SetProperty(project, family.Id, "firerating", "60");
+            Equal(baseline + 1L, project.ChangeVersion, "service identical set property no-op");
+
+            ProjectFamilyService.SetProperty(project, family.Id, "FIRERATING", "90");
+            Equal(baseline + 2L, project.ChangeVersion, "service replace property must advance freshness exactly once");
+
+            ProjectFamilyService.RemoveProperty(project, family.Id, "missing");
+            Equal(baseline + 2L, project.ChangeVersion, "service missing remove no-op");
+
+            ProjectFamilyService.RemoveProperty(project, family.Id, "firerating");
+            Equal(baseline + 3L, project.ChangeVersion, "service remove property must advance freshness exactly once");
+        }
+
+        private static void ServiceDuplicateAdvancesProjectFreshnessExactlyOnce()
+        {
+            var project = CreateProject(out _, out _, out var family);
+            family.Properties["A"] = "1";
+            family.Properties["B"] = "2";
+            var baseline = project.ChangeVersion;
+
+            var duplicate = ProjectFamilyService.Duplicate(project, family.Id, "PF2", "Wall Type Copy");
+
+            Equal(baseline + 1L, project.ChangeVersion, "service duplicate with properties must advance freshness exactly once");
+            Equal("1", duplicate.Properties["A"], "duplicate property A");
+            Equal("2", duplicate.Properties["B"], "duplicate property B");
+            if (!ReferenceEquals(duplicate, project.FindFamily("PF2")))
+                throw new Exception("Duplicated family must be attached as the project-owned instance.");
+
+            duplicate.Properties["A"] = "3";
+            Equal(baseline + 2L, project.ChangeVersion, "duplicated family direct property edit must be owned");
         }
 
         private static void ServiceZoneUpdateAdvancesProjectFreshnessExactlyOnce()
