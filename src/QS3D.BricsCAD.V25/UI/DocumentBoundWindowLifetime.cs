@@ -331,7 +331,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 // The shared coordinator has already matched this registration to the destroying
                 // document by managed lifecycle reference or by the safe live-wrapper native fallback.
-                // Do not reopen e.Document here: native teardown may advance between coordinator
+                // Do not reopen the event's managed Document here: native teardown may advance between
                 // affinity proof and callback dispatch, turning a proven match into a false negative.
                 if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
 
