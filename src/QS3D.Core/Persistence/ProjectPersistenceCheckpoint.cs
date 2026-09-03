@@ -71,6 +71,10 @@ namespace QS3D.Core.Persistence
             if (expectedKnownCount.HasValue && observed != expectedKnownCount.Value)
                 throw new InvalidOperationException("Persistence checkpoint known element count does not match enumerated element count.");
 
+            var currentKnownCount = RejectMalformedKnownCounts(elementIds);
+            if (currentKnownCount != expectedKnownCount)
+                throw new InvalidOperationException("Persistence checkpoint known element count changed during enumeration.");
+
             if (!string.Equals(project.ProjectId, projectId, StringComparison.Ordinal) ||
                 project.UpdatedUtc != projectUpdatedUtc ||
                 project.ChangeVersion != projectChangeVersion)
