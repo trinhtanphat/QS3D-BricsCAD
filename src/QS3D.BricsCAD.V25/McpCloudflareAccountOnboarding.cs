@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -50,6 +52,9 @@ namespace QS3D.BricsCAD.V25
         private const string ArgoTokenEnd = "-----END ARGO TUNNEL TOKEN-----";
         private const int CommandTimeoutMs = 60000;
         private const int LoginTimeoutMs = 10 * 60 * 1000;
+        private const int PublicReadinessTimeoutMs = 30000;
+        private const int PublicProbeTimeoutMs = 4000;
+        private const int PublicProbeRetryDelayMs = 1000;
         private const int MaxCapturedOutput = 256 * 1024;
         private const int MaxCertificateBytes = 1024 * 1024;
         private static readonly object Sync = new object();
@@ -63,6 +68,10 @@ namespace QS3D.BricsCAD.V25
         private static Process? _process;
         private static string _lastMessage = string.Empty;
         private static string _lastError = string.Empty;
+        private static string _lastRouteState = "route=unknown";
+        private static string _lastDnsState = "dns=unknown";
+        private static string _lastHttpsState = "https=unknown";
+        private static bool _publicReady;
         private static bool _certificateImportNeeded;
         private static int _setupOperationActive;
 
@@ -72,6 +81,7 @@ namespace QS3D.BricsCAD.V25
         private static string HostnamePath => Path.Combine(SettingsDirectory, "hostname.txt");
         private static string ConfigPath => Path.Combine(SettingsDirectory, "config.yml");
         private static string AutoStartPath => Path.Combine(SettingsDirectory, "autostart.txt");
+        private static string RouteProofPath => Path.Combine(SettingsDirectory, "route-proof.txt");
 
         public static string CloudflaredPath => McpCloudflareTunnelManager.CloudflaredPath;
         public static string CloudflaredDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cloudflared");
@@ -80,7 +90,8 @@ namespace QS3D.BricsCAD.V25
         public static bool IsSetupBusy => Volatile.Read(ref _setupOperationActive) != 0;
         public static bool CertificateImportNeeded { get { lock (Sync) return _certificateImportNeeded; } }
         public static string SavedHostname => ReadText(HostnamePath);
-        public static string PublicMcpUrl => IsRunning && !string.IsNullOrWhiteSpace(SavedHostname) ? "https://" + SavedHostname + "/mcp" : string.Empty;
+        public static bool IsPublicReady { get { lock (Sync) return _publicReady; } }
+        public static string PublicMcpUrl => IsRunning && IsPublicReady && !string.IsNullOrWhiteSpace(SavedHostname) ? "https://" + SavedHostname + "/mcp" : string.Empty;
         public static string LastMessage { get { lock (Sync) return _lastMessage; } }
         public static string LastError { get { lock (Sync) return _lastError; } }
         public static bool IsConfigured => !string.IsNullOrWhiteSpace(CloudflaredPath) && !string.IsNullOrWhiteSpace(SavedHostname);
@@ -260,7 +271,7 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
-            SetState("Đang xác minh tunnel Cloudflare và DNS route...", string.Empty);
+            SetState("Đang xác minh tunnel Cloudflare, DNS và HTTPS public...", string.Empty);
             ThreadPool.QueueUserWorkItem(_ =>
             {
                 try
@@ -278,6 +289,7 @@ namespace QS3D.BricsCAD.V25
         public static bool StartSaved(out string error)
         {
             error = string.Empty;
+            SetPublicReady(false);
             McpEmbeddedServer.EnsureStarted();
             var executable = CloudflaredPath;
             var id = ReadText(TunnelIdPath);
@@ -294,6 +306,7 @@ namespace QS3D.BricsCAD.V25
                 error = "Named Tunnel credentials không còn tồn tại. Hãy cấu hình lại tunnel.";
                 return false;
             }
+            if (!EnsureDnsRoute(executable, id, hostname, out error)) return false;
             try
             {
                 WriteCanonicalConfig(id, hostname, credentials);
@@ -304,7 +317,7 @@ namespace QS3D.BricsCAD.V25
                 return false;
             }
             McpCloudflareTunnelManager.StopForHostShutdown();
-            return StartProcess(executable, "tunnel --config \"" + ConfigPath + "\" run " + id, out error);
+            return StartProcess(executable, "tunnel --config \"" + ConfigPath + "\" run " + id, hostname, out error);
         }
 
         internal static bool StartForSupervisor(out string error)
@@ -333,6 +346,8 @@ namespace QS3D.BricsCAD.V25
             return "running=" + IsRunning
                    + "; authenticated=" + IsAuthenticated
                    + "; setupBusy=" + IsSetupBusy
+                   + "; publicReady=" + IsPublicReady
+                   + "; " + ReadinessSummary()
                    + (CertificateImportNeeded ? "; certImportNeeded=true" : string.Empty)
                    + (string.IsNullOrWhiteSpace(McpPublicEndpointResolver.Resolve()) ? string.Empty : "; public=" + McpPublicEndpointResolver.Resolve())
                    + (string.IsNullOrWhiteSpace(LastError) ? string.Empty : "; error=" + LastError);
@@ -341,6 +356,7 @@ namespace QS3D.BricsCAD.V25
         private static bool Provision(string executable, string hostname, out string error)
         {
             error = string.Empty;
+            SetPublicReady(false);
             McpEmbeddedServer.EnsureStarted();
 
             string tunnelId;
@@ -352,14 +368,7 @@ namespace QS3D.BricsCAD.V25
                 return false;
             }
 
-            string output;
-            string routeError;
-            if (!RunCommand(executable, "tunnel route dns " + tunnelId + " " + hostname, CommandTimeoutMs, out output, out routeError))
-            {
-                error = "Không tạo được DNS route. QS3D không tự bỏ qua xung đột DNS vì hostname có thể đang trỏ sang tunnel khác. "
-                        + FirstUsefulError(routeError, output, "Hãy kiểm tra hostname trong Cloudflare Dashboard rồi thử lại.");
-                return false;
-            }
+            if (!EnsureDnsRoute(executable, tunnelId, hostname, out error)) return false;
 
             try
             {
@@ -376,7 +385,7 @@ namespace QS3D.BricsCAD.V25
 
             McpCloudflareTunnelManager.StopForHostShutdown();
             StopProcess();
-            return StartProcess(executable, "tunnel --config \"" + ConfigPath + "\" run " + tunnelId, out error);
+            return StartProcess(executable, "tunnel --config \"" + ConfigPath + "\" run " + tunnelId, hostname, out error);
         }
 
         private static void WriteCanonicalConfig(string tunnelId, string hostname, string credentials)
@@ -503,6 +512,209 @@ namespace QS3D.BricsCAD.V25
                    || combined.IndexOf("copy it to the following path", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
+        private static bool EnsureDnsRoute(string executable, string tunnelId, string hostname, out string error)
+        {
+            error = string.Empty;
+            string output;
+            string routeError;
+            if (RunCommand(executable, "tunnel route dns " + tunnelId + " " + hostname, CommandTimeoutMs, out output, out routeError))
+            {
+                SetRouteState("route=ready");
+                return true;
+            }
+
+            var existingConflict = LooksLikeExistingRouteConflict(output, routeError);
+            SetRouteState(existingConflict ? "route=conflict" : "route=error");
+            error = existingConflict
+                ? "DNS route bị xung đột với record hiện hữu. QS3D sẽ không ghi đè record đó và sẽ không coi endpoint là sẵn sàng."
+                : "Không re-assert được DNS route. " + FirstUsefulError(routeError, output, "Cloudflare tunnel route dns failed.");
+            return false;
+        }
+
+        private static bool WaitForPublicReadiness(string hostname, out string error)
+        {
+            error = string.Empty;
+            var watch = Stopwatch.StartNew();
+            var dnsState = "dns=pending";
+            var httpsState = "https=pending";
+            lock (Sync)
+            {
+                _publicReady = false;
+                _lastDnsState = dnsState;
+                _lastHttpsState = httpsState;
+            }
+
+            while (watch.ElapsedMilliseconds < PublicReadinessTimeoutMs)
+            {
+                if (!IsRunning)
+                {
+                    error = "Named Tunnel đã dừng trước khi public endpoint sẵn sàng (" + ReadinessSummary() + ").";
+                    return false;
+                }
+
+                var dnsReady = ProbePublicDns(hostname, out dnsState);
+                var httpsReady = false;
+                if (dnsReady)
+                    httpsReady = ProbePublicHttps(hostname, out httpsState);
+                else
+                    httpsState = "https=waiting-for-dns";
+
+                lock (Sync)
+                {
+                    _lastDnsState = dnsState;
+                    _lastHttpsState = httpsState;
+                }
+
+                if (dnsReady && httpsReady)
+                {
+                    lock (Sync) _publicReady = true;
+                    error = string.Empty;
+                    return true;
+                }
+
+                var remaining = PublicReadinessTimeoutMs - (int)Math.Min(PublicReadinessTimeoutMs, watch.ElapsedMilliseconds);
+                if (remaining <= 0) break;
+                Thread.Sleep(Math.Min(PublicProbeRetryDelayMs, remaining));
+            }
+
+            error = "Named Tunnel public readiness quá thời gian chờ (" + ReadinessSummary() + ").";
+            return false;
+        }
+
+        private static bool ProbePublicDns(string hostname, out string state)
+        {
+            state = "dns=error";
+            try
+            {
+                var task = Task.Factory.StartNew(
+                    () => Dns.GetHostAddresses(hostname),
+                    CancellationToken.None,
+                    TaskCreationOptions.DenyChildAttach,
+                    TaskScheduler.Default);
+                if (!task.Wait(PublicProbeTimeoutMs))
+                {
+                    state = "dns=timeout";
+                    return false;
+                }
+                var addresses = task.Result;
+                if (addresses == null || addresses.Length == 0)
+                {
+                    state = "dns=no-address";
+                    return false;
+                }
+                state = "dns=resolved";
+                return true;
+            }
+            catch (Exception)
+            {
+                state = "dns=error";
+                return false;
+            }
+        }
+
+        private static bool ProbePublicHttps(string hostname, out string state)
+        {
+            state = "https=error";
+            HttpWebResponse? response = null;
+            try
+            {
+                var uri = new Uri("https://" + hostname + "/mcp", UriKind.Absolute);
+                var request = (HttpWebRequest)WebRequest.Create(uri);
+                request.Method = "GET";
+                request.AllowAutoRedirect = false;
+                request.KeepAlive = false;
+                request.Timeout = PublicProbeTimeoutMs;
+                request.ReadWriteTimeout = PublicProbeTimeoutMs;
+                request.UserAgent = "QS3D-MCP-readiness";
+                request.Accept = "application/json, text/event-stream";
+                response = (HttpWebResponse)request.GetResponse();
+                var statusCode = (int)response.StatusCode;
+                if (statusCode >= 200 && statusCode < 500)
+                {
+                    state = "https=http-" + statusCode.ToString();
+                    return true;
+                }
+                state = "https=http-" + statusCode.ToString();
+                return false;
+            }
+            catch (WebException ex)
+            {
+                var httpResponse = ex.Response as HttpWebResponse;
+                if (httpResponse != null)
+                {
+                    try
+                    {
+                        var statusCode = (int)httpResponse.StatusCode;
+                        state = "https=http-" + statusCode.ToString();
+                        return statusCode >= 200 && statusCode < 500;
+                    }
+                    finally { httpResponse.Close(); }
+                }
+                state = ex.Status == WebExceptionStatus.Timeout ? "https=timeout" : "https=network-or-tls-error";
+                return false;
+            }
+            catch (Exception)
+            {
+                state = "https=error";
+                return false;
+            }
+            finally
+            {
+                try { response?.Close(); } catch { }
+            }
+        }
+
+        private static bool LooksLikeExistingRouteConflict(string output, string error)
+        {
+            var combined = (output ?? string.Empty) + "\n" + (error ?? string.Empty);
+            return combined.IndexOf("already exists", StringComparison.OrdinalIgnoreCase) >= 0
+                   || combined.IndexOf("exists with that host", StringComparison.OrdinalIgnoreCase) >= 0
+                   || combined.IndexOf("record with that host", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool HasExpectedLocalRouteProof(string tunnelId, string hostname)
+        {
+            var expected = BuildRouteProof(tunnelId, hostname);
+            if (string.Equals(ReadText(RouteProofPath), expected, StringComparison.OrdinalIgnoreCase)) return true;
+
+            var savedId = ReadText(TunnelIdPath);
+            var savedHostname = McpCloudflareTunnelManager.NormalizeHostname(ReadText(HostnamePath));
+            if (!string.Equals(savedId, tunnelId, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(savedHostname, hostname, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            try
+            {
+                if (!File.Exists(ConfigPath)) return false;
+                var config = File.ReadAllText(ConfigPath, Encoding.UTF8);
+                return config.IndexOf("tunnel: " + tunnelId, StringComparison.OrdinalIgnoreCase) >= 0
+                       && config.IndexOf("- hostname: " + hostname, StringComparison.OrdinalIgnoreCase) >= 0
+                       && config.IndexOf("credentials-file:", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            catch { return false; }
+        }
+
+        private static string BuildRouteProof(string tunnelId, string hostname)
+        {
+            return (tunnelId ?? string.Empty).Trim().ToLowerInvariant() + "|"
+                   + (hostname ?? string.Empty).Trim().ToLowerInvariant();
+        }
+
+        private static void SetRouteState(string state)
+        {
+            lock (Sync) _lastRouteState = state ?? "route=unknown";
+        }
+
+        private static void SetPublicReady(bool ready)
+        {
+            lock (Sync) _publicReady = ready;
+        }
+
+        private static string ReadinessSummary()
+        {
+            lock (Sync) return _lastRouteState + "; " + _lastDnsState + "; " + _lastHttpsState;
+        }
+
         private static bool RunCommand(string executable, string arguments, int timeoutMs, out string output, out string error)
         {
             output = string.Empty;
@@ -574,7 +786,7 @@ namespace QS3D.BricsCAD.V25
             };
         }
 
-        private static bool StartProcess(string executable, string arguments, out string error)
+        private static bool StartProcess(string executable, string arguments, string hostname, out string error)
         {
             error = string.Empty;
             StopProcess();
@@ -601,6 +813,9 @@ namespace QS3D.BricsCAD.V25
                 lock (Sync)
                 {
                     _process = process;
+                    _publicReady = false;
+                    _lastDnsState = "dns=pending";
+                    _lastHttpsState = "https=pending";
                     _lastMessage = "Named Tunnel đang kết nối...";
                     _lastError = string.Empty;
                 }
@@ -622,11 +837,22 @@ namespace QS3D.BricsCAD.V25
                     StopProcess();
                     return false;
                 }
-                return IsRunning;
+                if (!WaitForPublicReadiness(hostname, out error))
+                {
+                    StopProcess();
+                    SetState(error, error);
+                    return false;
+                }
+                SetState("Named Tunnel public endpoint sẵn sàng (" + ReadinessSummary() + ").", string.Empty);
+                return IsRunning && IsPublicReady;
             }
             catch (Exception ex)
             {
-                lock (Sync) { if (ReferenceEquals(_process, process)) _process = null; }
+                lock (Sync)
+                {
+                    if (ReferenceEquals(_process, process)) _process = null;
+                    _publicReady = false;
+                }
                 try { process?.Dispose(); } catch { }
                 error = ex.Message;
                 SetState(error, error);
@@ -645,6 +871,7 @@ namespace QS3D.BricsCAD.V25
                 {
                     owned = true;
                     _process = null;
+                    _publicReady = false;
                     if (exitCode.HasValue && exitCode.Value != 0 && string.IsNullOrWhiteSpace(_lastError))
                         _lastError = "Named Tunnel exited with code " + exitCode.Value.ToString() + ".";
                     _lastMessage = exitCode.HasValue
@@ -677,7 +904,12 @@ namespace QS3D.BricsCAD.V25
         private static void StopProcess()
         {
             Process? process;
-            lock (Sync) { process = _process; _process = null; }
+            lock (Sync)
+            {
+                process = _process;
+                _process = null;
+                _publicReady = false;
+            }
             if (process == null) return;
             var exitConfirmed = false;
             try { process.EnableRaisingEvents = false; } catch { }
@@ -1138,8 +1370,8 @@ namespace QS3D.BricsCAD.V25
                 if (!string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.SavedHostname)
                     && McpCloudflareAccountTunnelManager.StartSaved(out namedError))
                 {
-                    _lastUiDetail = "Named Tunnel started for " + McpCloudflareAccountTunnelManager.SavedHostname;
-                    Notify("Đã kết nối", "Đã dùng kết nối Cloudflare cố định đã lưu. ChatGPT ↔ QS3D ↔ BricsCAD sẵn sàng.");
+                    _lastUiDetail = "Named Tunnel ready for " + McpCloudflareAccountTunnelManager.SavedHostname;
+                    Notify("Đã kết nối", "Đã xác minh DNS và HTTPS cho kết nối Cloudflare cố định. ChatGPT ↔ QS3D ↔ BricsCAD sẵn sàng.");
                     EndConnectOperation();
                     return;
                 }
@@ -1266,7 +1498,7 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
-            Notify("Đang cấu hình", "QS3D đang tạo hoặc reuse Named Tunnel và DNS route...");
+            Notify("Đang cấu hình", "QS3D đang tạo/reuse Named Tunnel, re-assert DNS và kiểm tra HTTPS /mcp...");
             McpCloudflareAccountTunnelManager.BeginProvision(_hostname.Text, (ok, message) =>
             {
                 try
@@ -1392,6 +1624,7 @@ namespace QS3D.BricsCAD.V25
                    + "\nCertificate import needed: " + McpCloudflareAccountTunnelManager.CertificateImportNeeded
                    + "\nSetup busy: " + McpCloudflareAccountTunnelManager.IsSetupBusy
                    + "\nNamed tunnel: " + (McpCloudflareAccountTunnelManager.IsRunning ? "RUNNING" : "STOPPED")
+                   + "\nNamed public ready: " + McpCloudflareAccountTunnelManager.IsPublicReady
                    + "\nQuick/token tunnel: " + (McpCloudflareTunnelManager.IsRunning ? "RUNNING" : "STOPPED")
                    + "\nPublic MCP: " + (string.IsNullOrWhiteSpace(publicUrl) ? "chưa có" : publicUrl)
                    + (string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.LastMessage) ? string.Empty : "\nStatus: " + McpCloudflareAccountTunnelManager.LastMessage)
