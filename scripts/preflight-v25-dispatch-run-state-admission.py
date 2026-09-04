@@ -44,10 +44,11 @@ def main() -> int:
     source = DISPATCH.read_text(encoding="utf-8")
     failures: list[str] = []
 
-    # The active-release admission must consume the complete workflow-run collection.
     required_complete_scan = (
         'gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/workflows/release-v25-cloud.yml/runs?per_page=100"',
         'select(.status != "completed")',
+        "active_release_query_status=$?",
+        "Could not enumerate the complete V25 cloud release-run set",
         "A V25 cloud release is already queued or running",
     )
     for token in required_complete_scan:
@@ -56,38 +57,39 @@ def main() -> int:
     if 'release-v25-cloud.yml/runs?per_page=30' in source:
         failures.append("active release-run admission must not stop at the first 30 workflow runs")
 
-    # A durable numeric fence may control retry only after the referenced Actions run
-    # is rebound to the canonical dispatcher workflow/repository/source generation.
     required_identity = (
         "prior_dispatch_run_json=",
-        '".path"',
-        '".repository.full_name"',
-        '".event"',
-        '".head_branch"',
-        '".head_sha"',
+        "prior_dispatch_query_status=$?",
+        "'.status | strings'",
+        "'.conclusion // \"\" | strings'",
+        "'.path | strings'",
+        "'.repository.full_name | strings'",
+        "'.event | strings'",
+        "'.head_branch | strings'",
+        "'.head_sha | strings | ascii_downcase'",
         'dispatch-v25-cloud-after-main-integration.yml',
         "Prior dispatch fence does not reference the canonical dispatcher workflow",
         "Prior dispatch fence source provenance is not admissible",
         'git merge-base --is-ancestor',
+        "Prior completed dispatch-fence run has no terminal conclusion",
     )
     for token in required_identity:
         if token not in source:
             failures.append(f"prior dispatch-fence run identity is not fully rebound; missing: {token}")
 
-    if source.count('actions/runs/${exact_dispatch_fence_run_id}') > 1:
-        failures.append("prior dispatch-fence state must come from one admitted workflow-run snapshot, not repeated API reads")
+    if source.count('actions/runs/${exact_dispatch_fence_run_id}') != 1:
+        failures.append("prior dispatch-fence state must come from exactly one admitted workflow-run API snapshot")
 
-    # Ordering: identity admission must precede state-based retry suppression.
     fetch_index = source.find("prior_dispatch_run_json=")
     identity_index = source.find("Prior dispatch fence does not reference the canonical dispatcher workflow", fetch_index)
     provenance_index = source.find("Prior dispatch fence source provenance is not admissible", identity_index)
-    status_index = source.find('if [[ "${prior_dispatch_status}" != "completed" ]]; then', provenance_index)
-    if min(fetch_index, identity_index, provenance_index, status_index) < 0 or not (
-        fetch_index < identity_index < provenance_index < status_index
+    terminal_identity_index = source.find("Prior completed dispatch-fence run has no terminal conclusion", provenance_index)
+    status_index = source.find('if [[ "${prior_dispatch_status}" != "completed" ]]; then', terminal_identity_index)
+    if min(fetch_index, identity_index, provenance_index, terminal_identity_index, status_index) < 0 or not (
+        fetch_index < identity_index < provenance_index < terminal_identity_index < status_index
     ):
         failures.append("prior run must be fetched once, identity/provenance-admitted, then allowed to control retry state")
 
-    # Deterministic regressions for both current-main gaps.
     statuses = ("completed",) * 30 + ("in_progress",)
     if not has_active_release_run(statuses):
         failures.append("an active release run beyond the first 30 results must keep the release lane busy")
