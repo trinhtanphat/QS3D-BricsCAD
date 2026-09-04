@@ -50,6 +50,7 @@ def main() -> int:
         'runs?status=${active_release_status}&per_page=1',
         "active_release_query_status=$?",
         "'.total_count'",
+        "active_release_runs=$((active_release_runs + active_release_status_count))",
         "Could not query V25 cloud release runs in status",
         "A V25 cloud release is already queued or running",
     )
@@ -59,9 +60,10 @@ def main() -> int:
     for unsafe in (
         'release-v25-cloud.yml/runs?per_page=30',
         'release-v25-cloud.yml/runs?per_page=100',
+        "((active_release_runs += active_release_status_count))",
     ):
         if unsafe in source:
-            failures.append("active release-run admission must not scan a fixed first page or paginate unbounded release history")
+            failures.append("active release-run admission must not use stale paging or zero-valued errexit-sensitive arithmetic")
 
     required_identity = (
         "prior_dispatch_run_json=",
