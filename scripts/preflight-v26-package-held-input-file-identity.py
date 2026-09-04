@@ -11,7 +11,8 @@ def validate(text: str) -> list[str]:
     required = (
         "function Get-HeldFileIdentity",
         "function Assert-HeldFileIdentityMatchesPath",
-        "GetFileInformationByHandle",
+        "public static extern bool GetFileInformationByHandle(",
+        "[QS3D.V26.PackageNativeFileIdentity]::GetFileInformationByHandle(",
         "dwVolumeSerialNumber",
         "nFileIndexHigh",
         "nFileIndexLow",
@@ -101,7 +102,8 @@ def main() -> int:
     mutation_tokens = (
         "function Get-HeldFileIdentity",
         "function Assert-HeldFileIdentityMatchesPath",
-        "GetFileInformationByHandle",
+        "public static extern bool GetFileInformationByHandle(",
+        "[QS3D.V26.PackageNativeFileIdentity]::GetFileInformationByHandle(",
         "$admissionStream = [IO.File]::Open",
         "$admissionIdentity = Get-HeldFileIdentity -Stream $admissionStream",
         "Assert-HeldFileIdentityMatchesPath -Held $admissionHeld",
