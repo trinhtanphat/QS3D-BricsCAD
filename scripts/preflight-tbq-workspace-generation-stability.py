@@ -50,7 +50,7 @@ for token in [
     'RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount)',
     "enumerator.MoveNext()",
     "enumerator.Current",
-    "SameBillItemState(admittedItems[index], item)",
+    "SameBillItemState(admittedItems[index], replayItem)",
 ]:
     if token not in bill_helper_text:
         raise SystemExit(f"TBQ bill-item replay lost fail-closed traversal contract: {token}")
