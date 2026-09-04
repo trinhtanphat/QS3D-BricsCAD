@@ -17,8 +17,7 @@ block = text[start:end]
 
 required = (
     "var detached = CreateDetachedCopy(project);",
-    "var verification = CreateDetachedCopy(project);",
-    "RequireEquivalentDetachedState(detached, verification);",
+    "RequireEquivalentDetachedState(detached, project);",
     "ValidateCapturedReferenceGeneration(",
     "new ProjectStateSnapshot(",
 )
@@ -26,13 +25,15 @@ for marker in required:
     if marker not in block:
         fail(f"snapshot capture is missing nested-stability marker: {marker}")
 
-first_copy = block.index("var detached = CreateDetachedCopy(project);")
-second_copy = block.index("var verification = CreateDetachedCopy(project);")
-equivalence = block.index("RequireEquivalentDetachedState(detached, verification);")
+copy_pos = block.index("var detached = CreateDetachedCopy(project);")
+first_equivalence = block.index("RequireEquivalentDetachedState(detached, project);")
 reference_fence = block.index("ValidateCapturedReferenceGeneration(")
+second_equivalence = block.index("RequireEquivalentDetachedState(detached, project);", first_equivalence + 1)
 publish = block.index("new ProjectStateSnapshot(")
-if not (first_copy < second_copy < equivalence < reference_fence < publish):
-    fail("snapshot nested-state verification must compare two detached materializations before generation validation and publication")
+if not (copy_pos < first_equivalence < reference_fence < second_equivalence < publish):
+    fail("snapshot nested-state verification must fence the exact-reference check on both sides before publication")
+if block.count("CreateDetachedCopy(project)") != 1:
+    fail("snapshot nested-state stability must not allocate a second full detached project")
 
 helper_start = text.find("private static void RequireEquivalentDetachedState(")
 if helper_start < 0:
@@ -83,4 +84,4 @@ for marker in ("Count", "for", "InvalidOperationException"):
     if marker not in sequence_helper:
         fail(f"snapshot sequence equivalence is missing marker: {marker}")
 
-print("PASS: project snapshot capture rejects mixed-time nested persisted state before publication")
+print("PASS: project snapshot capture rejects mixed-time nested persisted state before publication without a second full clone")
