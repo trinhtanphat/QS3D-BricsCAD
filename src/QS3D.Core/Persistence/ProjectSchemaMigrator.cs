@@ -105,6 +105,8 @@ namespace QS3D.Core.Persistence
 
         private static void ValidatePrimaryIdentityCanonicality(XElement root)
         {
+            foreach (var item in root.Element("metadata")?.Elements("p") ?? Enumerable.Empty<XElement>())
+                RequireCanonicalAttribute(item, "name", "Project metadata key");
             foreach (var zone in root.Element("zones")?.Elements("zone") ?? Enumerable.Empty<XElement>())
                 RequireCanonicalAttribute(zone, "id", "Project zone id");
             foreach (var floor in root.Element("floors")?.Elements("floor") ?? Enumerable.Empty<XElement>())
