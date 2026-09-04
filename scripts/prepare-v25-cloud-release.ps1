@@ -244,18 +244,23 @@ try {
         }
 
         $finalStatus = @(Get-ReleaseStatusEntries)
-        if ($finalStatus.Count -ne $workspaceVersionPaths.Count) {
-            throw 'Workspace version synchronization did not produce exactly three bounded project modifications.'
+        if ($finalStatus.Count -ne 0 -and $finalStatus.Count -ne $workspaceVersionPaths.Count) {
+            throw 'Workspace version synchronization must either be a no-op or produce exactly three bounded project modifications.'
         }
         foreach ($entry in $finalStatus) {
             if ($entry.State -ne ' M' -or -not ($workspaceVersionPaths -contains $entry.Path)) {
                 throw "Unexpected release-preparation workspace change '$($entry.State)' at $($entry.Path)."
             }
         }
-        foreach ($relativePath in $workspaceVersionPaths) {
-            if (-not ($finalStatus.Path -contains $relativePath)) {
-                throw "Workspace version synchronization did not modify required project identity source: $relativePath"
+        if ($finalStatus.Count -eq $workspaceVersionPaths.Count) {
+            foreach ($relativePath in $workspaceVersionPaths) {
+                if (-not ($finalStatus.Path -contains $relativePath)) {
+                    throw "Workspace version synchronization did not modify required project identity source: $relativePath"
+                }
             }
+        }
+        else {
+            Write-Host "Workspace ProductVersion is already synchronized to '$expectedProductVersion'; no bounded project modifications are required."
         }
 
         $latestMain = Get-RemoteMain

@@ -71,7 +71,10 @@ def main() -> int:
             "Set-WorkspaceProductVersion -ReleaseTagValue $tag",
             "Runtime product-version identity preflight failed after workspace synchronization.",
             "$expectedProductVersion = $tag.Substring(1)",
-            "Workspace version synchronization did not produce exactly three bounded project modifications.",
+            "$finalStatus.Count -ne 0 -and $finalStatus.Count -ne $workspaceVersionPaths.Count",
+            "Workspace version synchronization must either be a no-op or produce exactly three bounded project modifications.",
+            "Workspace ProductVersion is already synchronized",
+            "if ($finalStatus.Count -eq $workspaceVersionPaths.Count)",
             "Unexpected release-preparation workspace change",
             "$releaseRelevantPathspecs = @(",
             "external/QS3D-Platform",
@@ -158,7 +161,7 @@ def main() -> int:
         return 1
 
     print("PASS: V25 preview release and pre-merge compile contracts are protected-main safe.")
-    print(" - manual preview identity is derived only in the bounded V25/V26/Core workspace; protected main is never mutated")
+    print(" - manual preview identity may already be synchronized or is derived only in the bounded V25/V26/Core workspace; protected main is never mutated")
     print(" - source HEAD/provenance remains an exact protected-main commit and release drift uses Git pathspec semantics")
     print(" - canonical core check compiles V25 through locked, held-verified reference generations with immutable Action refs")
     return 0

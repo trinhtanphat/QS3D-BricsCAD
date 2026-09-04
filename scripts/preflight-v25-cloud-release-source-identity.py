@@ -133,7 +133,10 @@ def main() -> int:
         "Set-WorkspaceProductVersion -ReleaseTagValue $tag",
         "$expectedProductVersion = $tag.Substring(1)",
         "Release workspace HEAD must remain the protected-main source commit",
-        "Workspace version synchronization did not produce exactly three bounded project modifications.",
+        "$finalStatus.Count -ne 0 -and $finalStatus.Count -ne $workspaceVersionPaths.Count",
+        "Workspace version synchronization must either be a no-op or produce exactly three bounded project modifications.",
+        "Workspace ProductVersion is already synchronized",
+        "if ($finalStatus.Count -eq $workspaceVersionPaths.Count)",
         "Unexpected release-preparation workspace change",
         "No commit, push, branch-protection bypass, or protected-main mutation was performed by release preparation.",
     )
@@ -204,7 +207,7 @@ def main() -> int:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
 
-    print("PASS: V25 manual release permits only bounded workspace preview identity while preserving exact protected-main source provenance and pathname-safe drift admission")
+    print("PASS: V25 manual release accepts an already-synchronized identity or permits only bounded workspace preview identity changes while preserving exact protected-main source provenance and pathname-safe drift admission")
     return 0
 
 
