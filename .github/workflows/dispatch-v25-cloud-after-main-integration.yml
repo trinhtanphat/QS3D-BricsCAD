@@ -233,9 +233,11 @@ jobs:
           dispatch_prefix="QS3D_V25_PREVIEW_DISPATCH_FENCE"
           dispatch_regex="^${dispatch_prefix} ordinal=([1-9][0-9]*) source_sha=([0-9a-f]{40}) run_id=([1-9][0-9]*)$"
           exact_reservation=0
-          reservation_conflict=0
+          reservation_owner_source=""
+          reservation_owner_conflict=0
           exact_dispatch_fence_run_id=0
-          dispatch_fence_conflict=0
+          dispatch_fence_owner_source=""
+          dispatch_fence_owner_conflict=0
           while IFS= read -r reservation; do
             [[ -n "${reservation}" ]] || continue
             if [[ "${reservation}" =~ ${reservation_regex} ]]; then
@@ -244,8 +246,10 @@ jobs:
               if (( reserved_ordinal == committed_preview_ordinal )); then
                 if [[ "${reserved_source}" == "${source_sha}" ]]; then
                   exact_reservation=1
-                elif [[ "${reserved_source}" != "${source_sha}" ]]; then
-                  reservation_conflict=1
+                elif [[ -z "${reservation_owner_source}" ]]; then
+                  reservation_owner_source="${reserved_source}"
+                elif [[ "${reservation_owner_source}" != "${reserved_source}" ]]; then
+                  reservation_owner_conflict=1
                 fi
               fi
             elif [[ "${reservation}" =~ ${dispatch_regex} ]]; then
@@ -257,21 +261,38 @@ jobs:
                   if (( reserved_dispatch_run_id > exact_dispatch_fence_run_id )); then
                     exact_dispatch_fence_run_id=${reserved_dispatch_run_id}
                   fi
-                elif [[ "${reserved_dispatch_source}" != "${source_sha}" ]]; then
-                  dispatch_fence_conflict=1
+                elif [[ -z "${dispatch_fence_owner_source}" ]]; then
+                  dispatch_fence_owner_source="${reserved_dispatch_source}"
+                elif [[ "${dispatch_fence_owner_source}" != "${reserved_dispatch_source}" ]]; then
+                  dispatch_fence_owner_conflict=1
                 fi
               fi
             fi
           done < <(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments" --jq '.[] | select(.user.login == "github-actions[bot]") | .body')
 
-          if (( reservation_conflict != 0 )); then
-            echo "Committed preview ordinal is already reserved for a different source SHA: ${committed_preview_ordinal}." >&2
+          if (( reservation_owner_conflict != 0 || dispatch_fence_owner_conflict != 0 )); then
+            echo "Committed preview ordinal has multiple prior owners/fences: ${committed_preview_ordinal}." >&2
             exit 1
           fi
-          if (( dispatch_fence_conflict != 0 )); then
-            echo "Committed preview ordinal already has a dispatch fence for a different source SHA: ${committed_preview_ordinal}." >&2
-            exit 1
+
+          if [[ -n "${reservation_owner_source}" || -n "${dispatch_fence_owner_source}" ]]; then
+            if (( exact_reservation != 0 )) || (( exact_dispatch_fence_run_id > 0 )); then
+              echo "Committed preview ordinal has conflicting exact and prior ownership: ${committed_preview_ordinal}." >&2
+              exit 1
+            fi
+            if [[ -z "${reservation_owner_source}" || -z "${dispatch_fence_owner_source}" || "${reservation_owner_source}" != "${dispatch_fence_owner_source}" ]]; then
+              echo "Committed preview ordinal has incomplete or mismatched prior reservation/fence ownership: ${committed_preview_ordinal}." >&2
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "${reservation_owner_source}" "${source_sha}"; then
+              echo "Committed preview ordinal prior owner is not an ancestor of the current source SHA: ${reservation_owner_source}." >&2
+              exit 1
+            fi
+            echo "Committed preview ordinal ${committed_preview_ordinal} already belongs to earlier protected-main source ${reservation_owner_source}; current source ${source_sha} will not reassign or duplicate-dispatch that ordinal."
+            echo "The protected main ProductVersion must advance before the next automatic preview dispatch."
+            exit 0
           fi
+
           if (( exact_dispatch_fence_run_id > 0 )); then
             set +e
             prior_dispatch_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${exact_dispatch_fence_run_id}")"
