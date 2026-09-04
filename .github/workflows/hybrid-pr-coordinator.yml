@@ -27,7 +27,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: qs3d-hybrid-pr-coordinator
+  group: qs3d-hybrid-pr-coordinator-${{ (github.event_name == 'pull_request' && github.event.pull_request.number) || (github.event_name == 'workflow_run' && github.event.workflow_run.pull_requests[0].number) || (github.event_name == 'push' && 'main-refresh') || github.run_id }}
   cancel-in-progress: false
 
 jobs:
