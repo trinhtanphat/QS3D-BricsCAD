@@ -301,9 +301,16 @@ namespace QS3D.BricsCAD.V25
                 if (!Matches(sender, e)) return;
                 if (Interlocked.CompareExchange(ref _terminalSet, 1, 0) != 0) return;
                 TerminalError = error;
-                DetachInCadContext();
-                _audit?.Invoke("native QSAVE " + state);
-                Done.Set();
+                try
+                {
+                    DetachInCadContext();
+                    try { _audit?.Invoke("native QSAVE " + state); }
+                    catch { }
+                }
+                finally
+                {
+                    Done.Set();
+                }
             }
 
             private bool Matches(object sender, CommandEventArgs e)
