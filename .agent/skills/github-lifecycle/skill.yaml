@@ -1,0 +1,13 @@
+id: github-lifecycle
+version: 1
+triggers:
+  - GithubCarrier
+prerequisites:
+  - repository-lifecycle
+required-docs:
+  - docs/MAIN-WRITE-AUTHORIZATION.md
+tool-classes:
+  - github.issue
+  - github.pr
+validation:
+  - protected-merge-gates
