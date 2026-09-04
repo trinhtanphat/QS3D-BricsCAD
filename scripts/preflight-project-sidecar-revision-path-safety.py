@@ -45,11 +45,19 @@ if open_start < 0 or open_end < 0:
     fail("sidecar revision member-open boundary could not be isolated")
 open_body = text[open_start:open_end]
 member_guard = 'PersistencePathSafety.RequireNonRedirected(path, "sidecar revision member read");'
+identity_guard = 'PersistencePathSafety.RequireExclusiveOpenStillBound(stream, path, "sidecar revision member read");'
 if open_body.count(member_guard) < 2:
     fail("sidecar revision member open must recheck the complete path graph before and after opening")
 if open_body.index(member_guard) > open_body.index("File.GetAttributes(path)"):
     fail("sidecar revision member path safety must precede first pathname attribute observation")
-if open_body.rindex(member_guard) > open_body.index("return new FileCapture(path, stream);"):
+if identity_guard not in open_body:
+    fail("sidecar revision member open must bind the opened stream generation to the admitted pathname")
+stream_open = open_body.index("new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read)")
+identity_check = open_body.index(identity_guard)
+return_authority = open_body.index("return new FileCapture(path, stream);")
+if not (stream_open < identity_check < return_authority):
+    fail("opened sidecar stream identity must be proven after open and before revision authority is returned")
+if open_body.rindex(member_guard) > return_authority:
     fail("sidecar revision post-open path recheck must complete before the stream gains revision authority")
 
 presence_start = text.find("public void EnsurePresenceUnchanged()")
@@ -59,10 +67,15 @@ if presence_start < 0 or presence_end < 0:
 presence = text[presence_start:presence_end]
 if member_guard not in presence:
     fail("sidecar revision final pair-presence fence must recheck redirected ancestors")
+final_identity_guard = 'PersistencePathSafety.RequireExclusiveOpenStillBound(_stream, _path, "sidecar revision member read");'
+if final_identity_guard not in presence:
+    fail("sidecar revision final pair fence must prove the held stream still names the current admitted pathname generation")
+if presence.index(final_identity_guard) > presence.index("return;", presence.index("if (_stream != null)")):
+    fail("final stream/path identity proof must complete before an existing member is accepted unchanged")
 
 if "RequireRegularSidecar(File.GetAttributes(path));" not in text:
     fail("sidecar revision capture lost its final-member regular-file/reparse check")
 if "MaxSidecarBytes" not in text or "CaptureStableRevision" not in text or "EnsurePresenceUnchanged" not in text:
     fail("sidecar revision capture lost bounded stable pair-revision safeguards")
 
-print("PASS: sidecar revision capture repeatedly rejects redirected ancestor paths for both pair members before digest authority")
+print("PASS: sidecar revision capture binds each opened stream to a non-redirected current pathname generation before and after digest capture")
