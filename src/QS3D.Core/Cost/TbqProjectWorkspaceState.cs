@@ -267,9 +267,9 @@ namespace QS3D.Core.Cost
                     RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);
                     if (index >= admittedItems.Count)
                         ThrowBillItemContentChanged();
-                    var item = enumerator.Current;
+                    var replayItem = enumerator.Current;
                     RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);
-                    if (item == null || !SameBillItemState(admittedItems[index], item))
+                    if (replayItem == null || !SameBillItemState(admittedItems[index], replayItem))
                         ThrowBillItemContentChanged();
                     index++;
                 }
