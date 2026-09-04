@@ -263,7 +263,7 @@ namespace QS3D.BricsCAD.V25
                     || index < 0 || index >= MaxNodes)
                     throw new InvalidOperationException("elementPath contains an invalid bounded child index.");
 
-                AutomationElement child;
+                AutomationElement? child;
                 try { child = TreeWalker.ControlViewWalker.GetFirstChild(current); }
                 catch { child = null; }
                 var cursor = 0;
