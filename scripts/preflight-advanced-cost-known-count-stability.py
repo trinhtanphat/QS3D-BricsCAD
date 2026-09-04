@@ -52,8 +52,8 @@ def main() -> int:
     require(smoke, "DriftingMultiCountCollection", "multi-interface Count drift regression")
     require(smoke, "PureStreamingInputRemainsAccepted", "streaming control")
 
-    # New contract: caller-controlled AdvancedCost materializers must rebind admitted
-    # Count immediately before MoveNext and after a successful move, before Current.
+    # Caller-controlled AdvancedCost materializers must rebind admitted Count
+    # immediately before MoveNext and after a successful move, before Current.
     require(
         advanced,
         "RequireKnownCountStableDuringTraversal<T>(",
@@ -92,6 +92,50 @@ def main() -> int:
             raise SystemExit(
                 f"{enumerator} must order Count rebound -> MoveNext -> Count rebound -> Current")
 
+    # Known-count snapshots must also prove semantic generation stability. Count-only
+    # fencing cannot detect a source that swaps values while preserving cardinality.
+    require(
+        advanced,
+        "RequireStableKnownGeneration<T>(",
+        "shared semantic generation replay helper")
+    for token in (
+        "SameHistoricalRecordState",
+        "SameTenderQuoteLineState",
+        "SameTenderRequirementState",
+        "SameTenderBidState",
+        "SameProgressContractState",
+        "SameProgressClaimState",
+    ):
+        require(advanced, token, "advanced-cost semantic state comparator")
+
+    for source_name in (
+        "records",
+        "lines",
+        "requirements",
+        "bids",
+        "contractItems",
+        "claimLines",
+    ):
+        require(
+            advanced,
+            "AdvancedCostCollectionContract.RequireStableKnownGeneration(\n                " + source_name + ",",
+            "advanced-cost semantic replay consumer")
+
+    for token in (
+        "HistoricalCatalogRejectsStableCountGenerationDrift",
+        "TenderQuoteLinesRejectStableCountGenerationDrift",
+        "TenderRequirementsRejectStableCountGenerationDrift",
+        "TenderBidsRejectStableCountGenerationDrift",
+        "ProgressContractsRejectStableCountGenerationDrift",
+        "ProgressClaimsRejectStableCountGenerationDrift",
+        "GenerationSwitchCollection<T>",
+        "AffectedKnownCountControlsRemainAccepted",
+        "AffectedStreamingInputRemainsSinglePass",
+        "EnumerationCount",
+        "semantic generation replay",
+    ):
+        require(smoke, token, "semantic generation replay regression")
+
     for token in (
         "[ModuleInitializer]",
         "RateBuildUpRejectsTransientCountBeforeCurrent",
@@ -104,8 +148,10 @@ def main() -> int:
         require(transient_smoke, token, "transient Count regression")
 
     require(runbook, "post-traversal", "runbook final-state Count contract")
+    require(runbook, "semantic generation", "runbook semantic generation contract")
+    require(runbook, "single-pass", "runbook streaming single-pass contract")
 
-    print("PASS advanced cost traversal-wide known Count stability preflight")
+    print("PASS advanced cost traversal-wide known Count and semantic generation stability preflight")
     return 0
 
 
