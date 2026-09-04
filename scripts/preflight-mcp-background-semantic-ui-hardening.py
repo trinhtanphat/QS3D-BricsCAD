@@ -27,10 +27,10 @@ runbook = RUNBOOK.read_text(encoding="utf-8")
 # introducing a second local idempotency/locking protocol.
 for token in (
     '"bricscad_ui_invoke"',
-    "McpMutationAckLedger.Reserve",
-    "McpCadMutationCoordinator.AcquireWriter",
+    "McpMutationAckLedger.ReserveOrReplay",
+    "McpCadMutationCoordinator.EnterMutation",
     "McpMutationAckLedger.MarkApplied",
-    "AbandonIfSafe",
+    "if (writerScope == null) McpMutationAckLedger.Abandon(reservation.ActionId)",
 ):
     if token not in agent:
         fail(f"generic mutation wrapper missing hardening dependency: {token}")
@@ -43,13 +43,13 @@ semantic_requirements = {
     "active document recheck": "RequireSameActiveDocument",
     "current BricsCAD document": "Application.DocumentManager.MdiActiveDocument",
     "same target UI thread rejection": "GetCurrentThreadId",
-    "provider-completed outcome": 'provider-completed',
-    "uncertain outcome": 'uncertain',
-    "provider error reason": 'provider-error',
-    "postcondition divergence reason": 'postcondition-diverged',
-    "CAD-state disclaimer": 'cadStateVerified',
-    "retry prohibition": 'retryAllowed',
-    "rediscovery requirement": 'requiresRediscovery',
+    "provider-completed outcome": "provider-completed",
+    "uncertain outcome": "uncertain",
+    "provider error reason": "provider-error",
+    "postcondition divergence reason": "postcondition-diverged",
+    "CAD-state disclaimer": "cadStateVerified",
+    "retry prohibition": "retryAllowed",
+    "rediscovery requirement": "requiresRediscovery",
 }
 for label, token in semantic_requirements.items():
     if token not in semantic:
