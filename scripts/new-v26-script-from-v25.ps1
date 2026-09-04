@@ -80,6 +80,12 @@ namespace Qs3dV26TemplateAdmission
 
     public static class NativeMethods
     {
+        public const uint FILE_SHARE_READ = 0x00000001;
+        public const uint FILE_SHARE_WRITE = 0x00000002;
+        public const uint OPEN_EXISTING = 3;
+        public const uint FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
+        public const uint FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000;
+
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool GetFileInformationByHandle(
@@ -92,6 +98,16 @@ namespace Qs3dV26TemplateAdmission
             StringBuilder lpszFilePath,
             uint cchFilePath,
             uint dwFlags);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern SafeFileHandle CreateFile(
+            string lpFileName,
+            uint dwDesiredAccess,
+            uint dwShareMode,
+            IntPtr lpSecurityAttributes,
+            uint dwCreationDisposition,
+            uint dwFlagsAndAttributes,
+            IntPtr hTemplateFile);
     }
 }
 '@
@@ -141,6 +157,71 @@ function Test-SameHandleIdentity {
 function Get-HandleLength {
     param([Parameter(Mandatory = $true)]$Information)
     return (([uint64]$Information.FileSizeHigh -shl 32) -bor [uint64]$Information.FileSizeLow)
+}
+
+function Open-AdmittedOutputParent {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $handle = [Qs3dV26TemplateAdmission.NativeMethods]::CreateFile(
+        $Path,
+        0,
+        [Qs3dV26TemplateAdmission.NativeMethods]::FILE_SHARE_READ -bor [Qs3dV26TemplateAdmission.NativeMethods]::FILE_SHARE_WRITE,
+        [IntPtr]::Zero,
+        [Qs3dV26TemplateAdmission.NativeMethods]::OPEN_EXISTING,
+        [Qs3dV26TemplateAdmission.NativeMethods]::FILE_FLAG_BACKUP_SEMANTICS -bor [Qs3dV26TemplateAdmission.NativeMethods]::FILE_FLAG_OPEN_REPARSE_POINT,
+        [IntPtr]::Zero)
+    if ($handle.IsInvalid) {
+        $errorCode = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        $handle.Dispose()
+        throw "Unable to open V26 output parent held generation. Win32=$errorCode"
+    }
+
+    try {
+        $info = Get-AdmittedHandleInformation -Handle $handle
+        if (($info.FileAttributes -band [uint32][IO.FileAttributes]::Directory) -eq 0) {
+            throw 'V26 output parent held generation must be a directory.'
+        }
+        if (($info.FileAttributes -band [uint32][IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw 'V26 output parent held generation must not be reparse-backed.'
+        }
+        $resolved = Get-AdmittedHandlePath -Handle $handle
+        $expected = [IO.Path]::GetFullPath($Path)
+        if (-not [string]::Equals($resolved.TrimEnd('\'), $expected.TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'V26 output parent held generation resolved to an unexpected path.'
+        }
+        return [pscustomobject]@{ Handle = $handle; Information = $info; Path = $resolved }
+    }
+    catch {
+        $handle.Dispose()
+        throw
+    }
+}
+
+function Assert-AdmittedOutputParentBinding {
+    param([Parameter(Mandatory = $true)]$Admission)
+
+    if ($Admission.Handle.IsClosed -or $Admission.Handle.IsInvalid) {
+        throw 'V26 output parent held generation is no longer available.'
+    }
+    $currentInfo = Get-AdmittedHandleInformation -Handle $Admission.Handle
+    if (-not (Test-SameHandleIdentity -Before $Admission.Information -After $currentInfo)) {
+        throw 'V26 output parent held generation identity changed before publication.'
+    }
+    $currentPath = Get-AdmittedHandlePath -Handle $Admission.Handle
+    if (-not [string]::Equals($currentPath.TrimEnd('\'), $Admission.Path.TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'V26 output parent held generation path changed before publication.'
+    }
+    $pathItem = Assert-OrdinaryPathItem -Path $Admission.Path -Label 'V26 output parent held generation' -Directory $true
+    $pathHandle = [IO.File]::OpenHandle($pathItem.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+    try {
+        $pathInfo = Get-AdmittedHandleInformation -Handle $pathHandle
+        if (-not (Test-SameHandleIdentity -Before $Admission.Information -After $pathInfo)) {
+            throw 'V26 output parent pathname no longer resolves to the admitted held generation.'
+        }
+    }
+    finally {
+        $pathHandle.Dispose()
+    }
 }
 
 $sourcePath = Join-Path $PSScriptRoot $SourceScript
@@ -222,16 +303,11 @@ if ($text.IndexOf('V25', [StringComparison]::Ordinal) -lt 0 -and $text.IndexOf('
     throw "V25 template contains no host-major token to transform: $SourceScript"
 }
 
-# The common transformation is intentionally narrow: only the host-major token changes.
-# V26 has one additional runtime requirement that V25 does not: the generated installer
-# must place the net8 runtimeconfig beside the managed plugin. Keep that delta explicit
-# here rather than weakening the V25 template or post-editing a packaged artifact.
 $generated = $text.Replace('V25', 'V26').Replace('v25', 'v26')
 if ($SourceScript -eq 'install-v25-autoload.ps1') {
     $payloadAnchor = "        'QS3D.BricsCAD.V26.dll',`r`n        'QS3D.Core.dll',"
     $payloadReplacement = "        'QS3D.BricsCAD.V26.dll',`r`n        'QS3D.BricsCAD.V26.runtimeconfig.json',`r`n        'QS3D.Core.dll',"
     if ($generated.IndexOf($payloadAnchor, [StringComparison]::Ordinal) -lt 0) {
-        # Source files are LF-only in some checkouts. Preserve the source newline form.
         $payloadAnchor = "        'QS3D.BricsCAD.V26.dll',`n        'QS3D.Core.dll',"
         $payloadReplacement = "        'QS3D.BricsCAD.V26.dll',`n        'QS3D.BricsCAD.V26.runtimeconfig.json',`n        'QS3D.Core.dll',"
     }
@@ -247,26 +323,11 @@ if ($generated.IndexOf('V25', [StringComparison]::Ordinal) -ge 0 -or
 }
 
 $requiredTokens = switch ($SourceScript) {
-    'install-v25-autoload.ps1' {
-        @('QS3D.BricsCAD.V26.dll', 'QS3D.BricsCAD.V26.runtimeconfig.json', 'BricsCAD V26 x64', 'BricsCAD-V26', '^V26', 'QS3D-BricsCAD-V26-Update-')
-        break
-    }
-    'uninstall-v25-autoload.ps1' {
-        @('QS3D.BricsCAD.V26.dll', 'BricsCAD V26 x64', 'BricsCAD-V26', '^V26', 'QS3D-BricsCAD-V26-Update-')
-        break
-    }
-    'update-v25.ps1' {
-        @('QS3D.BricsCAD.V26.dll', 'BricsCAD V26 x64', 'BricsCAD-V26', 'QS3D-BricsCAD-V26.update.json', 'QS3D-BricsCAD-V26.zip', 'install-v26-autoload.ps1', 'QS3D-BricsCAD-V26-Update-')
-        break
-    }
-    'finalize-v25-signed-package.ps1' {
-        @('QS3D.BricsCAD.V26.dll', 'BricsCAD V26 x64', 'QS3D-BricsCAD-V26.zip', 'install-v26-autoload.ps1', 'uninstall-v26-autoload.ps1', 'update-v26.ps1')
-        break
-    }
-    'new-v25-update-manifest.ps1' {
-        @('QS3D.BricsCAD.V26.dll', 'BricsCAD V26 x64', 'QS3D-BricsCAD-V26.zip', 'QS3D-BricsCAD-V26.update.json', 'install-v26-autoload.ps1', 'uninstall-v26-autoload.ps1', 'update-v26.ps1')
-        break
-    }
+    'install-v25-autoload.ps1' { @('QS3D.BricsCAD.V26.dll', 'QS3D.BricsCAD.V26.runtimeconfig.json', 'BricsCAD V26 x64', 'BricsCAD-V26', '^V26', 'QS3D-BricsCAD-V26-Update-'); break }
+    'uninstall-v25-autoload.ps1' { @('QS3D.BricsCAD.V26.dll', 'BricsCAD V26 x64', 'BricsCAD-V26', '^V26', 'QS3D-BricsCAD-V26-Update-'); break }
+    'update-v25.ps1' { @('QS3D.BricsCAD.V26.dll', 'BricsCAD V26 x64', 'BricsCAD-V26', 'QS3D-BricsCAD-V26.update.json', 'QS3D-BricsCAD-V26.zip', 'install-v26-autoload.ps1', 'QS3D-BricsCAD-V26-Update-'); break }
+    'finalize-v25-signed-package.ps1' { @('QS3D.BricsCAD.V26.dll', 'BricsCAD V26 x64', 'QS3D-BricsCAD-V26.zip', 'install-v26-autoload.ps1', 'uninstall-v26-autoload.ps1', 'update-v26.ps1'); break }
+    'new-v25-update-manifest.ps1' { @('QS3D.BricsCAD.V26.dll', 'BricsCAD V26 x64', 'QS3D-BricsCAD-V26.zip', 'QS3D-BricsCAD-V26.update.json', 'install-v26-autoload.ps1', 'uninstall-v26-autoload.ps1', 'update-v26.ps1'); break }
     default { throw "Unsupported V25 template: $SourceScript" }
 }
 
@@ -279,31 +340,34 @@ foreach ($token in $requiredTokens) {
 $parent = Split-Path -Parent $outputFull
 if ([string]::IsNullOrWhiteSpace($parent)) { throw "V26 generated script output requires a parent directory: $outputFull" }
 Assert-DirectoryAncestorChain -Path $parent -Label 'V26 output ancestor'
-Assert-SafeExistingOutputLeaf -Path $outputFull
-New-Item -ItemType Directory -Path $parent -Force | Out-Null
+if (-not (Test-Path -LiteralPath $parent)) {
+    [IO.Directory]::CreateDirectory($parent) | Out-Null
+}
 Assert-DirectoryAncestorChain -Path $parent -Label 'V26 output ancestor'
 Assert-OrdinaryPathItem -Path $parent -Label 'V26 output parent' -Directory $true | Out-Null
-Assert-SafeExistingOutputLeaf -Path $outputFull
+if (Test-Path -LiteralPath $outputFull) {
+    Assert-SafeExistingOutputLeaf -Path $outputFull
+    throw 'V26 generation output must be fresh; refusing to replace an existing destination generation.'
+}
 
+$outputParentHandle = Open-AdmittedOutputParent -Path $parent
 $stagePath = Join-Path $parent ('.' + [IO.Path]::GetFileName($outputFull) + '.' + [Guid]::NewGuid().ToString('N') + '.tmp')
 try {
+    Assert-AdmittedOutputParentBinding -Admission $outputParentHandle
+    if (Test-Path -LiteralPath $outputFull) { throw 'V26 generation output must be fresh; destination appeared before staging.' }
     [IO.File]::WriteAllText($stagePath, $generated, (New-Object Text.UTF8Encoding($false)))
     Assert-OrdinaryPathItem -Path $stagePath -Label 'V26 generated script staging file' -Directory $false | Out-Null
-    Assert-DirectoryAncestorChain -Path $parent -Label 'V26 output ancestor'
-    Assert-SafeExistingOutputLeaf -Path $outputFull
-
-    if (Test-Path -LiteralPath $outputFull) {
-        [IO.File]::Replace($stagePath, $outputFull, $null)
-    }
-    else {
-        [IO.File]::Move($stagePath, $outputFull)
-    }
+    Assert-AdmittedOutputParentBinding -Admission $outputParentHandle
+    if (Test-Path -LiteralPath $outputFull) { throw 'V26 generation output must be fresh; destination appeared before publication.' }
+    [IO.File]::Move($stagePath, $outputFull)
 }
 finally {
     if (Test-Path -LiteralPath $stagePath) {
+        Assert-AdmittedOutputParentBinding -Admission $outputParentHandle
         Assert-OrdinaryPathItem -Path $stagePath -Label 'V26 generated script staging file' -Directory $false | Out-Null
         Remove-Item -LiteralPath $stagePath -Force
     }
+    $outputParentHandle.Handle.Dispose()
 }
 Assert-OrdinaryPathItem -Path $outputFull -Label 'V26 generated script output' -Directory $false | Out-Null
 
