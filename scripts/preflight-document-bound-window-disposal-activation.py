@@ -2,7 +2,7 @@
 """Guard document-bound modeless activation against native document disposal races."""
 
 # Lane-Key: issue-3621 — H.3 routes native document lifecycle through one shared coordinator
-# while WPF registrations resolve live wrappers only by stable native identity.
+# while WPF registrations resolve live wrappers without dereferencing a stale retained wrapper.
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,7 +42,7 @@ require("private readonly object _documentAccessGate = new object();" in source,
 require("private readonly Document _document;" not in source,
         "WPF modeless affinity must not retain the managed Document wrapper used by the old crash path.")
 require("private readonly Document _lifecycleDocument;" in source,
-        "A lifecycle-only wrapper remains available only to the shared native coordinator at registration time.")
+        "A lifecycle-only wrapper remains available only to shared lifecycle ownership and identity comparison.")
 require("private int _hostQuitStarted;" not in source,
         "Host quit state must be plugin-global, not copied into every modeless registration.")
 require("private IDisposable? _nativeLifecycleSubscription;" in source,
@@ -95,8 +95,10 @@ for marker in (
     "document = candidate;",
 ):
     require(marker in resolve, f"Live managed-wrapper resolution is missing: {marker}")
-require("_lifecycleDocument" not in resolve,
-        "Live document resolution must not dereference the retained lifecycle wrapper.")
+require("_lifecycleDocument." not in resolve,
+        "Live document resolution may compare lifecycle-wrapper identity but must never dereference the retained wrapper.")
+require("ProjectContextCoordinator.TryGetReadOnly(_lifecycleDocument" not in resolve,
+        "Live document resolution must never route the retained lifecycle wrapper through project context.")
 
 ensure = method_block(source, "private bool EnsureProjectAffinity()")
 require("if (ModelessHostQuiescenceCoordinator.IsQuiescing) return false;" in ensure,
@@ -106,17 +108,38 @@ require("lock (_documentAccessGate)" in ensure,
 for marker in (
     "Volatile.Read(ref _invalidated) != 0",
     "TryResolveLiveDocument(out var document)",
-    "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
 ):
     require(marker in ensure, f"Disposal-safe affinity path is missing: {marker}")
+
+affinity_marker = (
+    "MatchesBoundDocumentAffinity(document)"
+    if "MatchesBoundDocumentAffinity(document)" in ensure
+    else "ProjectContextCoordinator.TryGetReadOnly(document, out var project)"
+)
+require(affinity_marker in ensure,
+        "Disposal-safe affinity path must revalidate the resolved live document before interaction.")
 require(
     ensure.index("if (ModelessHostQuiescenceCoordinator.IsQuiescing) return false;")
     < ensure.index("lock (_documentAccessGate)")
     < ensure.index("Volatile.Read(ref _invalidated) != 0")
     < ensure.index("TryResolveLiveDocument(out var document)")
-    < ensure.index("ProjectContextCoordinator.TryGetReadOnly(document, out var project)"),
-    "Host quiescence, invalidation, and live-wrapper resolution must precede project reads.",
+    < ensure.index(affinity_marker),
+    "Host quiescence, invalidation, and live-wrapper resolution must precede semantic project/drawing reads.",
 )
+
+if affinity_marker == "MatchesBoundDocumentAffinity(document)":
+    semantic = method_block(source, "private bool MatchesBoundDocumentAffinity(Document candidate)")
+    for marker in (
+        "ProjectContextCoordinator.TryGetReadOnly(candidate, out var project)",
+        "project.ProjectId ?? string.Empty",
+        "project.DrawingFingerprint ?? string.Empty",
+    ):
+        require(marker in semantic, f"Semantic wrapper-drift validation is missing: {marker}")
+    require("_lifecycleDocument." not in semantic,
+            "Semantic affinity validation must not dereference the retained lifecycle wrapper.")
+    require("ProjectContextCoordinator.GetOrCreate" not in semantic and "ProjectContextCoordinator.Get(" not in semantic,
+            "Semantic affinity validation must remain read-only.")
+
 require("ProjectContextCoordinator.TryGetReadOnly(_lifecycleDocument" not in source,
         "The lifecycle-only wrapper must never enter project/path affinity code.")
 
@@ -207,4 +230,4 @@ for forbidden in (
     require(forbidden not in detach,
             f"Per-window Detach must not release native reactors directly: {forbidden}")
 
-print("[OK] Modeless affinity resolves live wrappers by native identity and consumes shared document lifecycle ownership without per-window BricsCAD reactor roots.")
+print("[OK] Modeless affinity resolves a live wrapper under the document-access barrier and consumes shared native lifecycle ownership without stale-wrapper dereference.")

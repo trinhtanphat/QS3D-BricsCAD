@@ -89,11 +89,13 @@ def main() -> int:
             fail(f"preview sequence helper is missing required guard token: {token}")
 
     gate_call = "validate-preview-release-sequence.ps1"
-    sync_call = "sync-preview-release-version.ps1"
-    if gate_call not in prepare or sync_call not in prepare:
-        fail("release preparation lost the sequence or source-synchronization gate")
-    if prepare.index(gate_call) > prepare.index(sync_call):
-        fail("preview sequence validation must run before release source mutation")
+    committed_version_admission = "$committedProductVersion = Get-CommittedProductVersion"
+    if gate_call not in prepare or committed_version_admission not in prepare:
+        fail("release preparation lost the sequence or committed-source version admission call")
+    if prepare.index(gate_call) > prepare.index(committed_version_admission):
+        fail("preview sequence validation must run before committed-source version admission")
+    if "sync-preview-release-version.ps1" in prepare:
+        fail("release preparation must not reintroduce workspace-only preview version synchronization")
 
     workflow_prepare = "prepare-v25-cloud-release.ps1"
     publish_step = "- name: Publish GitHub prerelease"
@@ -102,21 +104,36 @@ def main() -> int:
     if workflow.index(workflow_prepare) > workflow.index(publish_step):
         fail("V25 release workflow publishes before guarded release preparation")
 
-    if "GITHUB_RUN_NUMBER" in dispatcher or "10000 +" in dispatcher:
-        fail("automatic dispatcher must not derive public preview ordinals from Actions run numbering")
-    for token in (
+    required_dispatcher_tokens = (
         PINNED_CHECKOUT_V7,
         "git fetch --force --tags origin",
         'series_prefix="v0.1.0-preview."',
-        'git tag --list "${series_prefix}*"',
-        "preview=$((max_preview + 1))",
-        "max_preview >= 65535",
+        'version_project="src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj"',
+        "committed_product_version=",
+        "committed_preview_ordinal=",
+        'tag="${series_prefix}${committed_preview_ordinal}"',
+        "committed_preview_ordinal <= published_preview_ordinal",
+        'git tag --list "${tag}"',
         'reservation_issue=1441',
         'reservation_prefix="QS3D_V25_PREVIEW_RESERVATION"',
+        'reservation="${reservation_prefix} ordinal=${committed_preview_ordinal} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"',
         '-f release_tag="${tag}"',
-    ):
+    )
+    for token in required_dispatcher_tokens:
         if token not in dispatcher:
-            fail(f"automatic preview dispatcher is missing required reservation/history token: {token}")
+            fail(f"automatic preview dispatcher is missing committed-version sequence token: {token}")
+
+    for forbidden in (
+        "GITHUB_RUN_NUMBER",
+        "10000 +",
+        "max_preview=",
+        "preview=$((max_preview + 1))",
+        'tag="${series_prefix}${preview}"',
+        'reservation="${reservation_prefix} ordinal=${preview}',
+        'git tag --list "${series_prefix}*"',
+    ):
+        if forbidden in dispatcher:
+            fail(f"automatic dispatcher reintroduced independent preview derivation: {forbidden}")
 
     expect_ok([], "v0.1.1-preview.1")
     expect_fail([], "v0.1.1-preview.2")
