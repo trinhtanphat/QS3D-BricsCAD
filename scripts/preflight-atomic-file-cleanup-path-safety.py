@@ -30,8 +30,17 @@ second_safe = block.find("RequireSafe(", first_safe + 1)
 if second_safe < 0 or not (exists_pos < second_safe < delete_pos):
     fail("cleanup path safety must be revalidated immediately before destructive deletion")
 
-for exception in ("InvalidDataException", "IOException", "UnauthorizedAccessException"):
+# TryDelete is deliberately best-effort cleanup. Introducing RequireSafe must not
+# turn malformed/unrepresentable cleanup paths into a new exception surface that
+# can mask the primary persistence failure from a finally block.
+for exception in (
+    "ArgumentException",
+    "NotSupportedException",
+    "InvalidDataException",
+    "IOException",
+    "UnauthorizedAccessException",
+):
     if f"catch ({exception})" not in block:
         fail(f"best-effort cleanup must refuse {exception} without masking the primary operation")
 
-print("PASS: atomic temp cleanup refuses redirected paths and rechecks before deletion")
+print("PASS: atomic temp cleanup refuses redirected/invalid paths and rechecks before deletion")
