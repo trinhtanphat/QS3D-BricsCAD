@@ -142,7 +142,7 @@ def main() -> int:
         "runtime started-work settlement": (runtime, "item.Done.Wait();"),
         "runtime no-auto-retry truth": (runtime, "never retry uncertain work"),
         "QS3D domain mutation stop recheck": (domain, "McpCadAgentRuntime.EnsureCurrentMutationRunning();"),
-        "QS3D domain command validation": (domain, "Regex.IsMatch(command, McpCadAgentAgentRuntime.Qs3dCommandPattern"),
+        "QS3D domain command validation": (domain, "Regex.IsMatch(command, McpCadAgentRuntime.Qs3dCommandPattern"),
         "QS3D domain command dispatch": (domain, 'document.SendStringToExecute(command + "\\n", true, false, true);'),
         "V25 legacy monolith exclusion": (v25_project, '<Compile Remove="McpEmbeddedServer.cs" />'),
         "V26 legacy monolith exclusion": (v26_project, "..\\QS3D.BricsCAD.V25\\McpEmbeddedServer.cs"),
