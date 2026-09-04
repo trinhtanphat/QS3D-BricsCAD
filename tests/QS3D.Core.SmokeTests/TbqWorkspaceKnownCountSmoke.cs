@@ -241,8 +241,10 @@ namespace QS3D.Core.SmokeTests
             Equal(1, workspace.Library.Entries.Count, "Exact counted library traversal must remain accepted.");
             Equal(12, billItems.CountReads, "Exact bill-item Count must be rebound across admission and semantic replay.");
             Equal(12, buildUps.CountReads, "Exact build-up Count must be rebound across admission and semantic replay.");
-            Equal(6, references.CountReads, "Exact rate-reference Count must be rebound throughout traversal.");
-            Equal(6, library.CountReads, "Exact library Count must be rebound throughout traversal.");
+            Equal(11, references.CountReads, "Exact rate-reference Count must be rebound across admission and semantic replay.");
+            Equal(11, library.CountReads, "Exact library Count must be rebound across admission and semantic replay.");
+            Equal(2, references.GetEnumeratorCalls, "Exact counted rate references must perform one admission traversal plus one semantic replay.");
+            Equal(2, library.GetEnumeratorCalls, "Exact counted library entries must perform one admission traversal plus one semantic replay.");
         }
 
         private static void PureStreamingSourcesRemainAccepted()
