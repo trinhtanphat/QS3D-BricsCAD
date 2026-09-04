@@ -116,6 +116,7 @@ namespace QS3D.BricsCAD.V25
                     }
                 }
 
+                RequireActiveDocument(document);
                 candidate = new CoordinationManagerWindow(document, project.ProjectId, project.DrawingFingerprint);
                 var publishedWindow = candidate;
                 published = new PublishedManager(
@@ -145,8 +146,7 @@ namespace QS3D.BricsCAD.V25
                         return;
                     }
 
-                    if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
-                        throw new InvalidOperationException("Active document changed during Coordination Manager publication.");
+                    RequireActiveDocument(document);
                     if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject) ||
                         !published.Matches(document, currentProject.ProjectId, currentProject.DrawingFingerprint))
                         throw new InvalidOperationException("Coordination Manager project/document identity changed during publication.");
@@ -239,6 +239,12 @@ namespace QS3D.BricsCAD.V25
                 _published = null;
             if (ReferenceEquals(_publicationInFlight, manager))
                 _publicationInFlight = null;
+        }
+
+        private static void RequireActiveDocument(Document document)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                throw new InvalidOperationException("Active document changed during Coordination Manager lifecycle.");
         }
 
         private static void ReportBlocked(Document document, string message)
