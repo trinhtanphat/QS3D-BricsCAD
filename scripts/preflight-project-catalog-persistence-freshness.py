@@ -36,9 +36,11 @@ for token in (
     "if (_inner.TryGetValue(key, out var current) && string.Equals(current, value, StringComparison.Ordinal)) return;",
     "if (_inner.Count == 0) return;",
     "internal sealed class CatalogOwnershipList<T> : IList<T>",
-    "Zones = new CatalogOwnershipList<ZoneDefinition>(AttachZone, DetachZone);",
-    "Floors = new CatalogOwnershipList<FloorDefinition>(AttachFloor, DetachFloor);",
-    "Families = new CatalogOwnershipList<ProjectFamily>(AttachFamily, DetachFamily);",
+    "private readonly Action _beforeMutation;",
+    "internal CatalogOwnershipList(Action<T> attach, Action<T> detach, Action beforeMutation)",
+    "Zones = new CatalogOwnershipList<ZoneDefinition>(AttachZone, DetachZone, Touch);",
+    "Floors = new CatalogOwnershipList<FloorDefinition>(AttachFloor, DetachFloor, Touch);",
+    "Families = new CatalogOwnershipList<ProjectFamily>(AttachFamily, DetachFamily, Touch);",
     "zone.PersistenceMutationRequested += Touch",
     "floor.PersistenceMutationRequested += Touch",
     "family.PersistenceMutationRequested += Touch",
@@ -96,4 +98,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: owned Zone/Floor/Family scalar and Family property changes advance ProjectState persistence freshness exactly once per logical catalog operation while no-op/materialization/snapshot semantics stay guarded.")
+print("PASS: owned Zone/Floor/Family scalar, Family property, and structural catalog changes advance ProjectState persistence freshness exactly once per logical catalog operation while no-op/materialization/snapshot semantics stay guarded.")
