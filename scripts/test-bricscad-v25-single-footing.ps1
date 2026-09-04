@@ -19,9 +19,9 @@ Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'v25-profile-sandbox.ps1')
 . (Join-Path $PSScriptRoot 'bricscad-runner-window-interop.ps1')
 
-$expectedProductSourceSha = '7c3fbeaf6e1f7f4048d9467a7be48330f9ed591f'
-$expectedPackageSha256 = '4e3e0a5a85f5e2188286093820f470a29529779324d7373531a051664119e27a'
-$expectedProductVersion = '0.1.0-preview.10304'
+$expectedProductSourceSha = '988998bd26c9d0da5915670d9b5adca14b93ecca'
+$expectedPackageSha256 = '8618feb76d523337d9a9ff5900520683a5807050dcd158e27f9b8b3c4bef3771'
+$expectedProductVersion = '0.1.0-preview.10308'
 
 function Get-Hash([string]$Path) {
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -48,6 +48,88 @@ function Write-Json([string]$Path, $Value) {
     # Refuse to overwrite any receipt from a consumed allocation.
     if (Test-Path -LiteralPath $Path) { throw 'Receipt already exists.' }
     [IO.File]::WriteAllText($Path, ($Value | ConvertTo-Json -Depth 12), [Text.UTF8Encoding]::new($false))
+}
+
+function Write-DurableJson([string]$Path, $Value, [switch]$ReplaceExisting) {
+    $directory = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($Path))
+    $tempPath = Join-Path $directory ('.' + [IO.Path]::GetFileName($Path) + '.' + [Guid]::NewGuid().ToString('N') + '.tmp')
+    $backupPath = $Path + '.replace-backup'
+    if ($ReplaceExisting) {
+        if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw 'Durable receipt replacement target is missing.' }
+        if (Test-Path -LiteralPath $backupPath) { throw 'Durable receipt replacement backup already exists.' }
+    } elseif (Test-Path -LiteralPath $Path) {
+        throw 'Durable receipt already exists.'
+    }
+    $bytes = [Text.UTF8Encoding]::new($false).GetBytes(($Value | ConvertTo-Json -Depth 12))
+    $stream = $null
+    try {
+        $stream = [IO.FileStream]::new(
+            $tempPath,
+            [IO.FileMode]::CreateNew,
+            [IO.FileAccess]::Write,
+            [IO.FileShare]::None,
+            4096,
+            [IO.FileOptions]::WriteThrough)
+        $stream.Write($bytes, 0, $bytes.Length)
+        $stream.Flush($true)
+        $stream.Dispose()
+        $stream = $null
+        if ($ReplaceExisting) {
+            # The prepared receipt remains present until this same-volume atomic
+            # replacement commits the exact allocated receipt.
+            [IO.File]::Replace($tempPath, $Path, $backupPath, $true)
+            if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw 'Atomic receipt replacement did not publish a file.' }
+            [IO.File]::Delete($backupPath)
+        } else {
+            [IO.File]::Move($tempPath, $Path)
+        }
+    }
+    finally {
+        if ($null -ne $stream) { $stream.Dispose() }
+        if (Test-Path -LiteralPath $tempPath -PathType Leaf) { [IO.File]::Delete($tempPath) }
+    }
+}
+
+function Test-ProfileSnapshotExact($Left, $Right) {
+    if ($Left.ProfileInventorySha256 -cne $Right.ProfileInventorySha256 -or
+        $Left.CurProfileExists -ne $Right.CurProfileExists) { return $false }
+    [string[]]$leftNames = @($Left.ProfileNames)
+    [string[]]$rightNames = @($Right.ProfileNames)
+    if ($leftNames.Length -ne $rightNames.Length) { return $false }
+    for ($i = 0; $i -lt $leftNames.Length; $i++) {
+        if ($leftNames[$i] -cne $rightNames[$i]) { return $false }
+    }
+    if (-not $Left.CurProfileExists) { return $true }
+    return $Left.CurProfileKind -eq $Right.CurProfileKind -and
+        (Test-Qs3dRegistryValueEqual -Left $Left.CurProfileValue -Right $Right.CurProfileValue -Kind $Left.CurProfileKind)
+}
+
+function Assert-ProfileRecoveryReceipt([string]$Path, [string]$ExpectedHash, $Expected) {
+    if ([string]::IsNullOrWhiteSpace($ExpectedHash) -or $null -eq $Expected) {
+        throw 'Committed profile recovery identity is unavailable.'
+    }
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf) -or (Get-Hash $Path) -cne $ExpectedHash) {
+        throw 'Profile recovery receipt is missing or changed.'
+    }
+    $actual = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    $actualKeys = @($actual.PSObject.Properties.Name)
+    $expectedKeys = @($Expected.Keys)
+    if ($actualKeys.Count -ne $expectedKeys.Count) { throw 'Profile recovery receipt field count changed.' }
+    for ($i = 0; $i -lt $expectedKeys.Count; $i++) {
+        if ($actualKeys[$i] -cne $expectedKeys[$i]) { throw 'Profile recovery receipt schema changed.' }
+    }
+    if ($actual.schema -cne 'QS3D_V25_PROFILE_RECOVERY_V1' -or $actual.state -cne 'ALLOCATED' -or
+        $actual.run_id -cne $runId -or $actual.source_profile -cne $Expected.source_profile -or
+        $actual.nonce_prefix -cne 'QS3D-AUTO-' -or $actual.nonce_profile -cne $Expected.nonce_profile -or
+        $actual.profile_inventory_before_sha256 -cne $Expected.profile_inventory_before_sha256) {
+        throw 'Profile recovery receipt identity changed.'
+    }
+    [string[]]$actualNames = @($actual.profile_names_before)
+    [string[]]$expectedNames = @($Expected.profile_names_before)
+    if ($actualNames.Length -ne $expectedNames.Length) { throw 'Profile recovery inventory changed.' }
+    for ($i = 0; $i -lt $actualNames.Length; $i++) {
+        if ($actualNames[$i] -cne $expectedNames[$i]) { throw 'Profile recovery inventory changed.' }
+    }
 }
 
 function Assert-ChildPath([string]$Root, [string]$Path) {
@@ -155,6 +237,13 @@ function Invoke-NativePhase([string]$Phase, [string[]]$Commands) {
     }
     $process.Refresh()
     if (-not $process.HasExited) { throw ('Native host did not exit cleanly: ' + $Phase) }
+    if (-not (Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 15)) {
+        throw ('Exact native host remained after phase exit: ' + $Phase)
+    }
+    $allHostDeadline = [DateTime]::UtcNow.AddSeconds(15)
+    while ([DateTime]::UtcNow -lt $allHostDeadline -and @(Get-Process -Name bricscad -ErrorAction SilentlyContinue).Count -gt 0) {
+        Start-Sleep -Milliseconds 250
+    }
     Assert-Qs3dNoBricsCadProcess
     $phaseMarker = Read-Phase $Phase
     Write-Host ('LOCAL-022 native phase verified: ' + $Phase)
@@ -167,7 +256,7 @@ if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT -or -not [Enviro
 }
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 if ($ProductSourceSha -cne $expectedProductSourceSha -or $PackageSha256.ToLowerInvariant() -cne $expectedPackageSha256) {
-    throw 'This LOCAL-022 allocation is pinned to the official published V25 .10304 candidate.'
+    throw 'This LOCAL-022 allocation is pinned to the official published V25 .10308 candidate.'
 }
 $artifactBase = Join-Path $repoRoot 'artifacts\issue-5718-local022'
 $ArtifactDir = Assert-ChildPath $artifactBase $ArtifactDir
@@ -276,7 +365,6 @@ $freeze = [ordered]@{
     host_sha256 = Get-Hash $bricscadExe; pre_existing_host_count = 0
     mcp_test_executed = $false; mcp_requests_issued_by_runner = $false
 }
-Write-Json (Join-Path $ArtifactDir 'allocation.json') $freeze
 $ownedProcesses = [Collections.Generic.List[Diagnostics.Process]]::new()
 $envNames = @('QS3D_LOCAL022_RUN_ID', 'QS3D_LOCAL022_ROOT', 'QS3D_LOCAL022_DRAWING', 'QS3D_LOCAL022_PRODUCT_DLL',
     'QS3D_LOCAL022_PROBE_DLL', 'QS3D_LOCAL022_PHASE')
@@ -286,6 +374,10 @@ $sandbox = $null
 $failure = $null
 $cleanupFailure = $null
 $profileReceipt = $null
+$profileRecoveryPath = Join-Path $ArtifactDir 'profile-recovery.private.json'
+$profileRecoveryExpected = $null
+$profileRecoveryHash = $null
+$profileRecoveryValidated = $false
 $markers = @()
 $cleanupOk = $false
 $protectedStateOk = $false
@@ -293,7 +385,46 @@ $cleanupErrors = [Collections.Generic.List[string]]::new()
 try {
     Copy-Item -LiteralPath $fixture -Destination $drawing
     if ((Get-Hash $drawing) -cne $fixtureHash) { throw 'Disposable copy is not exact.' }
+    $profileSnapshotBefore = Get-Qs3dV25ProfileSnapshot
+    $profileRecoveryPrepared = [ordered]@{
+        schema = 'QS3D_V25_PROFILE_RECOVERY_V1'
+        state = 'PREPARED'
+        run_id = $runId
+        source_profile = $Profile
+        nonce_prefix = 'QS3D-AUTO-'
+        nonce_profile = $null
+        profile_names_before = $profileSnapshotBefore.ProfileNames
+        profile_inventory_before_sha256 = $profileSnapshotBefore.ProfileInventorySha256
+        cur_profile_exists = $profileSnapshotBefore.CurProfileExists
+        cur_profile_kind = if ($profileSnapshotBefore.CurProfileExists) { [int]$profileSnapshotBefore.CurProfileKind } else { $null }
+        cur_profile_value = $profileSnapshotBefore.CurProfileValue
+    }
+    # Publish a durable recovery snapshot before the first profile mutation. If
+    # the process stops before allocation commits, one new nonce can still be
+    # derived safely from the exact pre-allocation inventory and prefix.
+    Write-DurableJson -Path $profileRecoveryPath -Value $profileRecoveryPrepared
     $sandbox = New-Qs3dV25ProfileSandbox -SourceProfile $Profile
+    if (-not (Test-ProfileSnapshotExact -Left $profileSnapshotBefore -Right $sandbox.Snapshot)) {
+        throw 'Profile snapshot changed across sandbox allocation.'
+    }
+    $profileRecoveryExpected = [ordered]@{
+        schema = 'QS3D_V25_PROFILE_RECOVERY_V1'
+        state = 'ALLOCATED'
+        run_id = $runId
+        source_profile = $sandbox.SourceProfile
+        nonce_prefix = 'QS3D-AUTO-'
+        nonce_profile = $sandbox.NonceProfile
+        profile_names_before = $sandbox.Snapshot.ProfileNames
+        profile_inventory_before_sha256 = $sandbox.Snapshot.ProfileInventorySha256
+        cur_profile_exists = $sandbox.Snapshot.CurProfileExists
+        cur_profile_kind = if ($sandbox.Snapshot.CurProfileExists) { [int]$sandbox.Snapshot.CurProfileKind } else { $null }
+        cur_profile_value = $sandbox.Snapshot.CurProfileValue
+    }
+    Write-DurableJson -Path $profileRecoveryPath -Value $profileRecoveryExpected -ReplaceExisting
+    $profileRecoveryHash = Get-Hash $profileRecoveryPath
+    Assert-ProfileRecoveryReceipt -Path $profileRecoveryPath -ExpectedHash $profileRecoveryHash -Expected $profileRecoveryExpected
+    $freeze.profile_recovery_sha256 = $profileRecoveryHash
+    Write-Json (Join-Path $ArtifactDir 'allocation.json') $freeze
     $env:QS3D_LOCAL022_RUN_ID = $runId
     $env:QS3D_LOCAL022_ROOT = $ArtifactDir
     $env:QS3D_LOCAL022_DRAWING = $drawing
@@ -320,11 +451,21 @@ try {
     }
     $zeroHosts = $false
     try {
+        $globalHostDeadline = [DateTime]::UtcNow.AddSeconds(15)
+        while ([DateTime]::UtcNow -lt $globalHostDeadline -and @(Get-Process -Name bricscad -ErrorAction SilentlyContinue).Count -gt 0) {
+            Start-Sleep -Milliseconds 250
+        }
         Assert-Qs3dNoBricsCadProcess
         $zeroHosts = $true
     } catch { $cleanupErrors.Add('HOST_ZERO:' + $_.Exception.Message) }
     if ($null -ne $sandbox) {
         if ($zeroHosts) {
+            try {
+                Assert-ProfileRecoveryReceipt -Path $profileRecoveryPath -ExpectedHash $profileRecoveryHash -Expected $profileRecoveryExpected
+                $profileRecoveryValidated = $true
+            } catch { $cleanupErrors.Add('PROFILE_RECOVERY_VALIDATE:' + $_.Exception.Message) }
+            # Restore protected machine state even when recovery evidence was
+            # altered, but fail the qualification and retain that evidence.
             try { $profileReceipt = Restore-Qs3dV25ProfileSandbox -Sandbox $sandbox }
             catch { $cleanupErrors.Add('PROFILE:' + $_.Exception.Message) }
         } else { $cleanupErrors.Add('PROFILE:SKIPPED_WHILE_HOST_ACTIVE') }
@@ -374,6 +515,12 @@ try {
         } catch { $cleanupErrors.Add('PRIVATE_ROOT:' + $_.Exception.Message) }
     } else {
         $cleanupErrors.Add('PRIVATE_ROOT:SKIPPED_WHILE_HOST_ACTIVE')
+    }
+    if ($null -ne $profileReceipt -and $profileRecoveryValidated) {
+        try {
+            Remove-Item -LiteralPath $profileRecoveryPath -Force
+            if (Test-Path -LiteralPath $profileRecoveryPath) { throw 'Profile recovery receipt cleanup failed.' }
+        } catch { $cleanupErrors.Add('PROFILE_RECOVERY:' + $_.Exception.Message) }
     }
     if ($cleanupErrors.Count -gt 0) {
         $cleanupFailure = [string]::Join(' | ', $cleanupErrors)
