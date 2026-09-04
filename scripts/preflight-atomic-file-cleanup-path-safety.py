@@ -20,16 +20,31 @@ def require_safe_before_delete(block: str, delete_expression: str, role: str) ->
     delete_pos = block.find(delete_expression)
     if delete_pos < 0:
         fail(f"{role} must retain its rollback delete")
-    safe_pos = block.rfind('RequireSafe(', 0, delete_pos)
+    safe_pos = block.rfind("RequireSafe(", 0, delete_pos)
     if safe_pos < 0:
         fail(f"{role} must revalidate path safety before rollback deletion")
     between = block[safe_pos:delete_pos]
-    # A destructive rollback must use a safety observation immediately in the same
-    # rollback path; another filesystem observation after the safety fence would
-    # reopen a pathname TOCTOU window before delete.
     for observation in ("File.Exists(", "Directory.Exists(", "File.Move(", "File.Replace("):
         if observation in between:
             fail(f"{role} must not perform another filesystem observation/mutation between its final safety fence and rollback delete")
+
+
+def require_safe_pair_after_observation(
+    block: str,
+    mutation_expression: str,
+    first_safe: str,
+    second_safe: str,
+    role: str,
+) -> None:
+    mutation_pos = block.find(mutation_expression)
+    if mutation_pos < 0:
+        fail(f"{role} must retain its recovery mutation")
+    last_exists = block.rfind("File.Exists(", 0, mutation_pos)
+    if last_exists < 0:
+        fail(f"{role} must retain its recovery existence observation")
+    fenced_tail = block[last_exists:mutation_pos]
+    if first_safe not in fenced_tail or second_safe not in fenced_tail:
+        fail(f"{role} must revalidate both source and destination after the final existence observation")
 
 
 text = SOURCE.read_text(encoding="utf-8")
@@ -54,9 +69,6 @@ second_safe = try_delete.find("RequireSafe(", first_safe + 1)
 if second_safe < 0 or not (exists_pos < second_safe < delete_pos):
     fail("cleanup path safety must be revalidated immediately before destructive deletion")
 
-# TryDelete is deliberately best-effort cleanup. Introducing RequireSafe must not
-# turn malformed/unrepresentable cleanup paths into a new exception surface that
-# can mask the primary persistence failure from a finally block.
 for exception in (
     "ArgumentException",
     "NotSupportedException",
@@ -81,4 +93,30 @@ recreate = method_block(
 )
 require_safe_before_delete(recreate, "File.Delete(destinationPath)", "missing-primary backup-race rollback")
 
-print("PASS: atomic cleanup and rollback deletion paths revalidate non-redirected safety")
+move_recovery = method_block(
+    text,
+    "private static void MoveWithRecovery",
+    "private static void RestorePreviousBackup",
+)
+require_safe_pair_after_observation(
+    move_recovery,
+    "File.Move(backupPath, destinationPath)",
+    'RequireSafe(backupPath, "backup")',
+    'RequireSafe(destinationPath, "destination")',
+    "fallback destination restore",
+)
+
+restore_backup = method_block(
+    text,
+    "private static void RestorePreviousBackup",
+    "private static void Validate",
+)
+require_safe_pair_after_observation(
+    restore_backup,
+    "File.Move(previousBackupPath, backupPath)",
+    'RequireSafe(previousBackupPath, "previous-backup safety")',
+    'RequireSafe(backupPath, "backup")',
+    "previous-backup restore",
+)
+
+print("PASS: atomic cleanup, rollback delete, and recovery moves revalidate non-redirected safety")
