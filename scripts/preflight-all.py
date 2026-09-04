@@ -36,7 +36,7 @@ _GATE_EXEC_WRAPPER = (
     "import os, sys\n"
     "source = sys.stdin.buffer.read()\n"
     "filename = sys.argv[1]\n"
-    "sys.argv[0] = filename\n"
+    "sys.argv[:] = [filename]\n"
     "sys.path[0] = os.path.dirname(os.path.abspath(filename))\n"
     "namespace = {'__name__': '__main__', '__file__': filename, '__package__': None, '__cached__': None, '__spec__': None}\n"
     "exec(compile(source, filename, 'exec'), namespace, namespace)\n"
