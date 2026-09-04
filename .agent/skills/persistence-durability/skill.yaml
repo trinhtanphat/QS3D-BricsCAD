@@ -1,0 +1,13 @@
+id: persistence-durability
+version: 1
+triggers:
+  - PersistenceDurability
+prerequisites:
+  - mcp-transport
+required-docs: []
+tool-classes:
+  - mcp.inspect
+  - process.test
+validation:
+  - durable-operation-identity
+  - save-reopen-evidence
