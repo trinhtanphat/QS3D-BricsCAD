@@ -60,13 +60,21 @@ def main() -> int:
     for unsafe in (
         'release-v25-cloud.yml/runs?per_page=30',
         'release-v25-cloud.yml/runs?per_page=100',
-        "--paginate",
         "((active_release_runs += active_release_status_count))",
     ):
         if unsafe in source:
             failures.append(
-                "active release-run admission must not use stale paging, paginated total_count output, or zero-valued errexit-sensitive arithmetic"
+                "active release-run admission must not use stale paging or zero-valued errexit-sensitive arithmetic"
             )
+
+    active_scan_start = source.find("active_release_statuses=( requested queued in_progress waiting pending )")
+    active_scan_end = source.find("if (( active_release_runs > 0 )); then", active_scan_start)
+    if active_scan_start < 0 or active_scan_end < 0:
+        failures.append("active release-run admission block could not be bounded for pagination review")
+    else:
+        active_scan = source[active_scan_start:active_scan_end]
+        if "--paginate" in active_scan:
+            failures.append("active release-run total_count admission must consume one bounded API response, not paginated scalar output")
 
     required_identity = (
         "prior_dispatch_run_json=",
