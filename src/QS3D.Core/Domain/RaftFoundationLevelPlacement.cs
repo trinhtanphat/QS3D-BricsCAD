@@ -36,7 +36,6 @@ namespace QS3D.Core.Domain
             if (!RaftFoundationPropertySet.IsRaftFamily(family))
                 throw new InvalidOperationException("Family không phải Móng Bè.");
 
-            ValidateUniqueFloorIds(project);
             var thicknessM = RequirePositive(family.Properties, RaftFoundationPropertySet.ThicknessKey, "Dày Móng Bè");
             var mode = RaftFoundationPropertySet.NormalizeElevationMode(Property(family.Properties, RaftFoundationPropertySet.ElevationModeKey));
             var activeKey = RaftFoundationPropertySet.ActiveLevelKey(mode);
@@ -47,6 +46,7 @@ namespace QS3D.Core.Domain
             if (levelId.Length == 0)
                 throw new InvalidOperationException("Móng Bè cần một Tầng/Level đang hoạt động trước khi Add Family.");
             var floor = FindFloor(project, levelId, "Cao độ đầu Móng Bè");
+            ValidateUniqueFloorIds(project);
 
             var before = Snapshot(family.Properties);
             var candidate = Snapshot(family.Properties);
