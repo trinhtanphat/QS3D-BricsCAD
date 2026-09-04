@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             RejectsPostTraversalInterfaceConflict();
             RejectsPostTraversalNegativeCount();
             RejectsPostTraversalOversizedCount();
+            RejectsTransientCountDriftThatReturnsBeforeTraversalEnds();
             StableCountedInputRemainsAccepted();
             UnknownCountStreamingInputRemainsSinglePass();
         }
@@ -45,6 +46,21 @@ namespace QS3D.Core.SmokeTests
             var project = CreateProject();
             var source = new DriftingReadOnlyCollection<string>(2, 10001, "E1", "E2");
             AssertInvalid(() => ProjectPersistenceCheckpoint.Capture(project, source), "post-traversal oversized Count");
+        }
+
+        private static void RejectsTransientCountDriftThatReturnsBeforeTraversalEnds()
+        {
+            var project = CreateProject();
+            var source = new TransientMoveNextDriftCollection<string>("E1", "E2");
+
+            AssertInvalid(
+                () => ProjectPersistenceCheckpoint.Capture(project, source),
+                "transient Count drift after MoveNext that returns before traversal ends");
+
+            Equal(1, source.MoveNextCalls,
+                "Transient Count drift was not rejected immediately after the first MoveNext observation.");
+            Equal(0, source.CurrentReads,
+                "Transient Count drift consumed Current before failing closed.");
         }
 
         private static void StableCountedInputRemainsAccepted()
@@ -152,6 +168,61 @@ namespace QS3D.Core.SmokeTests
             void ICollection<T>.CopyTo(T[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
             bool ICollection<T>.Remove(T item) => throw new NotSupportedException();
             void ICollection.CopyTo(Array array, int index) => _items.CopyTo(array, index);
+        }
+
+        private sealed class TransientMoveNextDriftCollection<T> : IReadOnlyCollection<T>
+        {
+            private readonly T[] _items;
+            private bool _drifting;
+
+            internal TransientMoveNextDriftCollection(params T[] items)
+            {
+                _items = items ?? throw new ArgumentNullException(nameof(items));
+            }
+
+            public int Count => _drifting ? _items.Length + 1 : _items.Length;
+            internal int MoveNextCalls { get; private set; }
+            internal int CurrentReads { get; private set; }
+
+            public IEnumerator<T> GetEnumerator() => new Enumerator(this);
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private sealed class Enumerator : IEnumerator<T>
+            {
+                private readonly TransientMoveNextDriftCollection<T> _owner;
+                private int _index = -1;
+
+                internal Enumerator(TransientMoveNextDriftCollection<T> owner)
+                {
+                    _owner = owner;
+                }
+
+                public T Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        return _owner._items[_index];
+                    }
+                }
+
+                object IEnumerator.Current => Current!;
+
+                public bool MoveNext()
+                {
+                    _owner.MoveNextCalls++;
+                    _owner._drifting = false;
+                    var next = _index + 1;
+                    if (next >= _owner._items.Length)
+                        return false;
+                    _index = next;
+                    _owner._drifting = true;
+                    return true;
+                }
+
+                public void Reset() => throw new NotSupportedException();
+                public void Dispose() => _owner._drifting = false;
+            }
         }
 
         private sealed class SinglePassEnumerable<T> : IEnumerable<T>

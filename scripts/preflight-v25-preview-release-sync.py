@@ -15,12 +15,11 @@ def fail(message):
 def require_tokens(text, tokens, label):
     for token in tokens:
         if token not in text:
-            raise ValueError(f"{label} lost required committed-source guard: {token}")
+            raise ValueError(f"{label} lost required guard: {token}")
 
 
 def contains_executable_line(text, token):
-    """Match a source token only on non-comment PowerShell lines."""
-    return any(token in line for line in text.splitlines() if not line.lstrip().startswith("#"))
+    return any(token.lower() in line.lower() for line in text.splitlines() if not line.lstrip().startswith("#"))
 
 
 def main():
@@ -72,50 +71,64 @@ def main():
                 "git reset --hard",
                 "git checkout --detach $releaseBase",
                 "preflight-runtime-product-version-identity.py",
-                "function Get-CommittedProductVersion",
-                "Committed V25 project must contain exactly one unambiguous Version value",
-                "requires tag '$expectedReleaseTag'",
+                "$workspaceVersionPaths = @(",
+                "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj",
+                "src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj",
+                "src/QS3D.Core/QS3D.Core.csproj",
+                "function Set-WorkspaceProductVersion",
+                "$productVersion = $tag.Substring(1)",
+                "Set-ProjectVersionValue -Name 'Version' -Value $productVersion",
+                "Set-ProjectVersionValue -Name 'FileVersion' -Value $fileVersion",
+                "Set-ProjectVersionValue -Name 'InformationalVersion' -Value $productVersion",
+                "Set-WorkspaceProductVersion -ReleaseTagValue $tag",
+                "Runtime product-version identity preflight failed after workspace synchronization.",
+                "$expectedProductVersion = $tag.Substring(1)",
+                "Workspace version synchronization did not produce exactly three bounded project modifications.",
+                "Unexpected release-preparation workspace change",
                 "git diff --check",
                 "git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'",
                 "main moved after dispatch with release-relevant changes",
                 "Release workspace HEAD must remain the protected-main source commit",
                 "$latestMain = Get-RemoteMain",
-                "main advanced through additional non-release paths while validating committed release source",
-                "No commit, push, branch-protection bypass, workspace-only version rewrite, or main mutation was performed by release preparation.",
+                "main advanced through additional non-release paths while validating release source",
+                "No commit, push, branch-protection bypass, or protected-main mutation was performed by release preparation.",
                 "Write-Output $releaseBase",
             ],
             "V25 release preparation helper",
         )
+        for stale in (
+            "function Get-CommittedProductVersion",
+            "Merge the version update to protected main before publishing.",
+            "No commit, push, branch-protection bypass, workspace-only version rewrite, or main mutation was performed by release preparation.",
+        ):
+            if stale in prepare:
+                raise ValueError(f"V25 release preparation retained stale committed-version contract: {stale}")
         if "sync-preview-release-version.ps1" in prepare:
-            raise ValueError("V25 release preparation must not rewrite preview identity only in the workspace")
+            raise ValueError("V25 release preparation must keep workspace synchronization bounded inside prepare helper")
         if contains_executable_line(prepare, "git diff --name-only"):
             raise ValueError("V25 release preparation must not classify release drift from line-oriented pathname output")
         if "Test-IsExpectedNuGetCachePath" in prepare:
             raise ValueError("V25 release preparation must exclude NuGet cache before status parsing")
-        for forbidden in (
-            "git add",
-            "git commit",
-            "git push",
-            "HEAD:refs/heads/main",
-        ):
-            if forbidden.lower() in prepare.lower():
-                raise ValueError(
-                    f"V25 release preparation must keep protected main read-only; forbidden primitive: {forbidden}"
-                )
+        for forbidden in ("git add", "git commit", "git push", "HEAD:refs/heads/main"):
+            if contains_executable_line(prepare, forbidden):
+                raise ValueError(f"V25 release preparation must keep protected main read-only: {forbidden}")
 
         anchors = [
             prepare.find("$initialStatus = @(Get-ReleaseStatusEntries)"),
             prepare.find("git checkout --detach $releaseBase"),
             prepare.find("preflight-runtime-product-version-identity.py"),
-            prepare.find("$committedProductVersion = Get-CommittedProductVersion"),
+            prepare.find("Set-WorkspaceProductVersion -ReleaseTagValue $tag"),
+            prepare.find("Runtime product-version identity preflight failed after workspace synchronization."),
+            prepare.find("$expectedProductVersion = $tag.Substring(1)"),
             prepare.find("git diff --check"),
             prepare.find("Release workspace HEAD must remain the protected-main source commit"),
+            prepare.find("$finalStatus = @(Get-ReleaseStatusEntries)"),
             prepare.find("$latestMain = Get-RemoteMain"),
             prepare.find("Write-Output $releaseBase"),
         ]
         if min(anchors) < 0 or anchors != sorted(anchors):
             raise ValueError(
-                "V25 release preparation must start clean, select protected main, validate committed identity, preserve HEAD, recheck main, then return source SHA"
+                "V25 release preparation must start clean, select protected main, synchronize bounded workspace identity, validate it, preserve HEAD, bound dirty paths, recheck main, then return source SHA"
             )
 
         require_tokens(
@@ -131,8 +144,7 @@ def main():
         return fail(str(exc))
 
     print(
-        "PASS: V25 preview release requires a clean committed product identity on an exact protected-main HEAD, "
-        "uses pathname-safe release-drift admission, and publishes exact release-source provenance without workspace-only version rewriting"
+        "PASS: V25 preview release derives requested preview identity only in the bounded V25/V26/Core workspace, preserves exact protected-main HEAD provenance, and packages only the synchronized tag identity"
     )
     return 0
 
