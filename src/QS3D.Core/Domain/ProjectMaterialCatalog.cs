@@ -147,6 +147,8 @@ namespace QS3D.Core.Domain
             var renaming = previousName != null && !string.IsNullOrWhiteSpace(previousName) && !string.Equals(previousName, material.Name, StringComparison.Ordinal);
             if (renaming)
                 referenceScope = ResolveReferenceScope(project);
+            if (renaming)
+                RequireRenameRevisionCapacity(project, referenceScope!, previousName!, material.Name);
 
             WriteCustom(project, custom);
             if (renaming)
@@ -179,6 +181,27 @@ namespace QS3D.Core.Domain
             foreach (var element in scope.Elements)
                 AddMaterial(element.Properties, names);
             return names.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly();
+        }
+
+        private static void RequireRenameRevisionCapacity(ProjectState project, MaterialReferenceScope scope, string previousName, string nextName)
+        {
+            long requiredProjectTouches = 1L;
+            foreach (var family in scope.Families)
+            {
+                var properties = family.Properties;
+                if (properties.TryGetValue("Material", out var material) && WillMutateReference(material, previousName, nextName))
+                    requiredProjectTouches++;
+                if (properties.TryGetValue("CurtainFrameMaterial", out var frame) && WillMutateReference(frame, previousName, nextName))
+                    requiredProjectTouches++;
+            }
+
+            _ = checked(project.ChangeVersion + requiredProjectTouches);
+        }
+
+        private static bool WillMutateReference(string value, string previousName, string nextName)
+        {
+            return string.Equals((value ?? string.Empty).Trim(), previousName, StringComparison.OrdinalIgnoreCase) &&
+                   !string.Equals(value, nextName, StringComparison.Ordinal);
         }
 
         private static void RenameReferences(MaterialReferenceScope scope, string previousName, string nextName)
