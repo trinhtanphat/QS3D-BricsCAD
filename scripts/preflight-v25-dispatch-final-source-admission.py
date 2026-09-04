@@ -15,7 +15,7 @@ def main() -> int:
     failures: list[str] = []
 
     required = (
-        'final_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq \' .sha\')"'.replace("' .sha'", "'.sha'"),
+        "final_main=\"$(gh api \"repos/${GITHUB_REPOSITORY}/commits/main\" --jq '.sha')\"",
         'final_main="${final_main,,}"',
         'if [[ ! "${final_main}" =~ ^[0-9a-f]{40}$ ]]; then',
         'if [[ "${final_main}" != "${source_sha}" ]]; then',
@@ -48,8 +48,10 @@ def main() -> int:
             failures.append("release-relevant final drift must stop the superseded dispatcher before side effects")
         if 'exit "${final_release_drift_status}"' not in final_block:
             failures.append("ambiguous final drift inspection must fail closed")
-        if '[[ "${final_main}" != "${source_sha}" ]]' in final_block and 'exit 0' in final_block.split('[[ "${final_main}" != "${source_sha}" ]]', 1)[0]:
-            failures.append("final admission must not reject all main movement before classifying release-relevant drift")
+        if '[[ "${final_main}" != "${source_sha}" ]]' in final_block:
+            pre_movement = final_block.split('[[ "${final_main}" != "${source_sha}" ]]', 1)[0]
+            if 'exit 0' in pre_movement:
+                failures.append("final admission must not reject all main movement before classifying release-relevant drift")
 
     if "continue-on-error" in source:
         failures.append("final source admission must not become fail-open through continue-on-error")
