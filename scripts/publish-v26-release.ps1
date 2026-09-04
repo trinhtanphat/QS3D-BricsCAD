@@ -298,6 +298,7 @@ try {
   $finalReleaseRelevantPaths = @(
     '.github/workflows/',
     'scripts/',
+    'src/QS3D.BricsCAD.V25/',
     'src/QS3D.BricsCAD.V26/',
     'src/QS3D.Core/',
     'Directory.Build.props',
