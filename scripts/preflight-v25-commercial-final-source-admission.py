@@ -44,24 +44,43 @@ def main() -> int:
 
     semantic_verification = publish.find("$downloadedIdentity = & .\\scripts\\assert-v25-commercial-draft-identity.ps1")
     semantic_success = publish.find("Downloaded V25 draft semantic admission returned no identity.")
+    tag_assert = publish.find("Assert-RemoteReleaseTagTargetsWorkflowSha", semantic_success + 1)
     final_api = publish.find("$finalMainResponse = Invoke-RestMethod -Method Get -Uri")
+    final_fetch = publish.find("& git fetch --no-tags --force origin \"+refs/heads/main:$finalMainRef\"")
+    fetched_identity = publish.find("$fetchedFinalMain =")
+    api_fetch_equality = publish.find("$fetchedFinalMain -ne $finalMain")
+    ancestry = publish.find("git merge-base --is-ancestor $env:GITHUB_SHA $finalMain")
+    release_diff = publish.find("git diff --quiet --no-ext-diff \"$env:GITHUB_SHA..$finalMain\" -- @finalReleaseRelevantPaths")
+    drift_status = publish.find("$finalReleaseDriftStatus = $LASTEXITCODE")
+    confirmed_api = publish.find("$confirmedMainResponse = Invoke-RestMethod -Method Get -Uri")
+    confirmed_identity = publish.find("$confirmedFinalMain =")
+    confirmed_equality = publish.find("$confirmedFinalMain -ne $finalMain")
     publish_attempt = publish.find("$publishPatchAttempted = $true")
     release_patch = publish.find("Invoke-RestMethod -Method Patch -Uri $releaseUri")
-    if min(semantic_verification, semantic_success, final_api, publish_attempt, release_patch) < 0:
-        failures.append("could not bound final commercial source admission and draft-to-published transition")
-    elif not (semantic_verification < semantic_success < final_api < publish_attempt < release_patch):
-        failures.append(
-            "final protected-main admission must run after downloaded draft semantic verification "
-            "and immediately before the commercial draft-to-published PATCH"
-        )
 
-    tag_assert = publish.find("Assert-RemoteReleaseTagTargetsWorkflowSha", semantic_success + 1)
-    if tag_assert < 0:
-        failures.append("final remote release-tag identity assertion is missing after downloaded draft verification")
-    elif final_api >= 0 and tag_assert > final_api:
+    ordered = (
+        semantic_verification,
+        semantic_success,
+        tag_assert,
+        final_api,
+        final_fetch,
+        fetched_identity,
+        api_fetch_equality,
+        ancestry,
+        release_diff,
+        drift_status,
+        confirmed_api,
+        confirmed_identity,
+        confirmed_equality,
+        publish_attempt,
+        release_patch,
+    )
+    if min(ordered) < 0:
+        failures.append("could not bound the complete final commercial source-admission ordering")
+    elif list(ordered) != sorted(ordered):
         failures.append(
-            "final remote release-tag identity must be asserted before protected-main admission so no "
-            "release-side operation remains between the main fence and publish transition"
+            "final commercial admission must order semantic verification -> tag identity -> main API/fetch equality -> "
+            "ancestry -> release-relevant drift -> confirming API snapshot -> publish attempt -> PATCH"
         )
 
     if "exit 0" in publish[final_api:publish_attempt] if final_api >= 0 and publish_attempt >= 0 else False:
