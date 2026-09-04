@@ -133,7 +133,7 @@ namespace QS3D.Core.Domain
     {
         private sealed class PersistenceAwarePropertyDictionary : IDictionary<string, string>
         {
-            private readonly Dictionary<string, string> _inner = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            private Dictionary<string, string> _inner = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             private readonly Action _beforeMutation;
 
             internal PersistenceAwarePropertyDictionary(Action beforeMutation)
@@ -198,9 +198,15 @@ namespace QS3D.Core.Domain
                 return collection.Remove(item);
             }
 
+            internal void ReplaceSnapshotState(Dictionary<string, string> replacement)
+            {
+                _inner = replacement ?? throw new ArgumentNullException(nameof(replacement));
+            }
+
             public bool TryGetValue(string key, out string value) => _inner.TryGetValue(key, out value!);
         }
 
+        private readonly PersistenceAwarePropertyDictionary _properties;
         private string _name;
         private ElementCategory _category;
 
@@ -209,7 +215,8 @@ namespace QS3D.Core.Domain
             Id = RequireId(id);
             _name = RequireName(name);
             _category = RequireCategory(category);
-            Properties = new PersistenceAwarePropertyDictionary(() => PersistenceMutationRequested?.Invoke());
+            _properties = new PersistenceAwarePropertyDictionary(() => PersistenceMutationRequested?.Invoke());
+            Properties = _properties;
         }
 
         public string Id { get; }
@@ -243,6 +250,24 @@ namespace QS3D.Core.Domain
 
         public event PropertyChangedEventHandler? PropertyChanged;
         internal event Action? PersistenceMutationRequested;
+
+        internal void RestoreSnapshotState(
+            string name,
+            ElementCategory category,
+            IReadOnlyList<KeyValuePair<string, string>> properties)
+        {
+            var nextName = RequireName(name);
+            var nextCategory = RequireCategory(category);
+            if (properties == null) throw new ArgumentNullException(nameof(properties));
+
+            var nextProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var property in properties)
+                nextProperties.Add(property.Key, property.Value);
+
+            _name = nextName;
+            _category = nextCategory;
+            _properties.ReplaceSnapshotState(nextProperties);
+        }
 
         private static string RequireId(string value)
         {
