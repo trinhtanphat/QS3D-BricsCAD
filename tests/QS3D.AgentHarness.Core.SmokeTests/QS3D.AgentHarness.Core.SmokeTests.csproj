@@ -5,6 +5,6 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\QS3D.Core\QS3D.Core.csproj" />
+    <Compile Include="..\..\src\QS3D.Core\Agent\Harness\*.cs" Link="Harness\%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>
