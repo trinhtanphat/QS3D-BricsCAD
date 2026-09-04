@@ -216,7 +216,11 @@ namespace QS3D.Core.Persistence
                             RequireSafe(destinationPath, "destination");
                             RequireSafe(backupPath, "backup");
                             if (!File.Exists(destinationPath) && File.Exists(backupPath))
+                            {
+                                RequireSafe(backupPath, "backup");
+                                RequireSafe(destinationPath, "destination");
                                 File.Move(backupPath, destinationPath);
+                            }
                         }
                         catch (IOException) { }
                         catch (UnauthorizedAccessException) { }
@@ -241,7 +245,12 @@ namespace QS3D.Core.Persistence
             {
                 RequireSafe(previousBackupPath, "previous-backup safety");
                 RequireSafe(backupPath, "backup");
-                if (!File.Exists(backupPath)) File.Move(previousBackupPath, backupPath);
+                if (!File.Exists(backupPath))
+                {
+                    RequireSafe(previousBackupPath, "previous-backup safety");
+                    RequireSafe(backupPath, "backup");
+                    File.Move(previousBackupPath, backupPath);
+                }
             }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
