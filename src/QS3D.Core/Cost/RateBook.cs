@@ -283,8 +283,6 @@ namespace QS3D.Core.Cost
                 ObserveKnownCount(nonGenericCollection.Count, ref hasKnownCount, ref firstKnownCount, ref maximumKnownCount, ref hasNegativeKnownCount, ref conflictingKnownCounts);
 
             count = maximumKnownCount;
-            if (maximumKnownCount > MaxItems)
-                return true;
             if (hasNegativeKnownCount)
                 throw new InvalidOperationException("Rate book item source reports an invalid negative known count.");
             if (conflictingKnownCounts)
