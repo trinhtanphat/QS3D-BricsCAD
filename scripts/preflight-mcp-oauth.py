@@ -57,6 +57,11 @@ def main() -> int:
     ):
         require(oauth, needle, "OAuth discovery/DCR contract")
 
+    require(oauth, '\\"authorization_response_iss_parameter_supported\\":true', "RFC 9207 metadata support")
+    require(oauth, "Authorize(query, resource, issuer, signingSecret)", "RFC 9207 issuer handoff")
+    require(oauth, 'location += "&iss=" + Uri.EscapeDataString(issuer);', "RFC 9207 authorization response issuer")
+    require(oauth, "RedirectOAuthError(redirect, values, issuer,", "RFC 9207 redirect-error issuer binding")
+
     require(oauth, 'TokenEndpointAuthMethod = "none"', "public-client token authentication")
     require(oauth, 'AuthorizationCodeGrant = "authorization_code"', "authorization-code grant")
     require(oauth, 'RefreshTokenGrant = "refresh_token"', "refresh-token grant")

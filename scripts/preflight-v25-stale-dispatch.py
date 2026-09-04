@@ -89,7 +89,10 @@ prepare_tokens = (
     "Set-WorkspaceProductVersion -ReleaseTagValue $tag",
     "Runtime product-version identity preflight failed after workspace synchronization.",
     "$expectedProductVersion = $tag.Substring(1)",
-    "Workspace version synchronization did not produce exactly three bounded project modifications.",
+    "$finalStatus.Count -ne 0 -and $finalStatus.Count -ne $workspaceVersionPaths.Count",
+    "Workspace version synchronization must either be a no-op or produce exactly three bounded project modifications.",
+    "Workspace ProductVersion is already synchronized",
+    "if ($finalStatus.Count -eq $workspaceVersionPaths.Count)",
     "Unexpected release-preparation workspace change",
     "Release workspace HEAD must remain the protected-main source commit",
     "$latestMain = Get-RemoteMain",
@@ -186,5 +189,5 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: V25 automation preserves triggering source provenance and pathname-safe drift handling; automatic dispatch keeps committed reservation identity while manual release derives the requested preview identity only in the bounded workspace without writing protected main."
+    "PASS: V25 automation preserves triggering source provenance and pathname-safe drift handling; automatic dispatch keeps committed reservation identity while manual release accepts an already-synchronized preview identity or derives the requested preview identity only in the bounded workspace without writing protected main."
 )
