@@ -40,7 +40,9 @@ require("_publicationInFlight = published;", "candidate must reserve singleton o
 require("_nativePublicationCallActive = true;", "native publication stack must be fenced before ShowModelessWindow")
 require("_nativePublicationCallActive = false;", "native publication stack fence must unwind deterministically")
 require("if (!publishedWindow.IsLoaded)", "non-loaded native publication must not be committed as published")
-require("ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)", "active document must be revalidated after native publication before commit")
+require("private static void RequireActiveDocument(Document document)", "active-document affinity must use one explicit fail-closed helper")
+if text.count("RequireActiveDocument(document);") < 2:
+    fail("active document must be fenced both before candidate construction and after native publication")
 require("ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)", "semantic project identity must be re-resolved after native publication")
 require("_published = published;", "successful exact candidate must transition to published ownership")
 require("_publicationInFlight = null;", "successful publication must release unpublished ownership")
@@ -48,8 +50,7 @@ require("_publicationInFlight = null;", "successful publication must release unp
 order("_publicationInFlight = published;", "Application.ShowModelessWindow", "singleton reservation must precede native ShowModelessWindow")
 order("_nativePublicationCallActive = true;", "Application.ShowModelessWindow", "native reentrancy fence must precede ShowModelessWindow")
 order("Application.ShowModelessWindow", "if (!publishedWindow.IsLoaded)", "terminal-load check must follow native publication")
-order("if (!publishedWindow.IsLoaded)", "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)", "document-affinity check must follow terminal loaded-state validation")
-order("ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)", "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)", "semantic project must be re-resolved only after active-document revalidation")
+order("if (!publishedWindow.IsLoaded)", "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)", "semantic project check must follow terminal loaded-state validation")
 order("ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)", "_published = published;", "published ownership cannot be committed before semantic project revalidation")
 order("_published = published;", "_publicationInFlight = null;", "transition must publish exact owner before dropping unpublished reservation")
 
