@@ -1,0 +1,12 @@
+id: bricscad-host
+version: 1
+triggers:
+  - BricsCadHost
+prerequisites:
+  - repository-lifecycle
+required-docs:
+  - docs/REMOTE-AGENT-SCOPE.md
+tool-classes:
+  - cad.inspect
+validation:
+  - licensed-runtime-local-only
