@@ -148,6 +148,15 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        internal static IDisposable DetachMutationForDeferredCompletion(IDisposable mutationScope)
+        {
+            if (mutationScope == null) throw new ArgumentNullException(nameof(mutationScope));
+            var scope = mutationScope as MutationScope;
+            if (scope == null)
+                throw new InvalidOperationException("Only an active MCP mutation scope can transfer writer ownership to terminal completion.");
+            return scope.DetachForDeferredCompletion();
+        }
+
         /// <summary>
         /// Acquires the same process-global serialization boundary used by CAD mutations for a
         /// plugin-owned foreground modal. The returned scope must live for the entire modal
@@ -533,7 +542,7 @@ namespace QS3D.BricsCAD.V25
             for (var i = 0; i < token.Length; i++)
             {
                 var c = token[i];
-                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))
+                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))
                     throw new InvalidOperationException("writerToken must be hexadecimal.");
             }
         }
@@ -772,11 +781,38 @@ namespace QS3D.BricsCAD.V25
                 _audit = audit;
             }
 
+            internal IDisposable DetachForDeferredCompletion()
+            {
+                if (Interlocked.CompareExchange(ref _disposed, 1, 0) != 0)
+                    throw new InvalidOperationException("MCP mutation writer scope was already released or detached.");
+                if (CurrentOperationId.Value == _operationId) CurrentOperationId.Value = _previousOperationId;
+                SafeAudit(_audit, "writer mutation detached for deferred terminal release");
+                return new DeferredMutationRelease(_audit);
+            }
+
             public void Dispose()
             {
                 if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
                 if (CurrentOperationId.Value == _operationId) CurrentOperationId.Value = _previousOperationId;
                 SafeAudit(_audit, "writer mutation exited");
+                MutationGate.Release();
+            }
+        }
+
+        private sealed class DeferredMutationRelease : IDisposable
+        {
+            private readonly Action<string>? _audit;
+            private int _disposed;
+
+            internal DeferredMutationRelease(Action<string>? audit)
+            {
+                _audit = audit;
+            }
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+                SafeAudit(_audit, "writer mutation exited after deferred terminal completion");
                 MutationGate.Release();
             }
         }
