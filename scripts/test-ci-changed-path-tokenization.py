@@ -249,6 +249,9 @@ def prove_workflow_contract() -> None:
         "python scripts/ci-validation-scope.py --all --github-output $env:GITHUB_OUTPUT",
         'python scripts/ci-validation-scope.py --base "origin/$baseBranch" --head HEAD --github-output $env:GITHUB_OUTPUT',
         'git fetch --no-tags origin "+refs/heads/$baseBranch`:refs/remotes/origin/$baseBranch"',
+        "$classificationExitCode = 0",
+        "$classificationExitCode = $LASTEXITCODE",
+        "if ($classificationExitCode -ne 0) { throw 'Validation scope classification failed.' }",
     )
     for snippet in required:
         if snippet not in text:
@@ -259,10 +262,11 @@ def prove_workflow_contract() -> None:
         "Git returned a C-quoted changed path",
         "$path = $path.Replace('\\', '/')",
         "foreach ($rawPath in $changed)",
+        "if ($LASTEXITCODE -ne 0) { throw 'Validation scope classification failed.' }",
     )
     for snippet in forbidden:
         if snippet in text:
-            fail(f"Shared CI still contains line/C-quote changed-path parsing: {snippet}")
+            fail(f"Shared CI still contains line/C-quote or stale-exit changed-path handling: {snippet}")
 
     source = CLASSIFIER.read_text(encoding="utf-8")
     production_required = (
