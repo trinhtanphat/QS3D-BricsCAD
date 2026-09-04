@@ -54,12 +54,14 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("Hai điểm của đường thẳng không được trùng nhau.");
 
                 RequireFreshContext(document, context, promptUcs, "QS3DDRAWLINE");
+                var start = ToPromptUcsPoint(startResult.Value, promptUcs);
+                var end = ToPromptUcsPoint(endResult.Value, promptUcs);
                 var id = AppendEntity(
                     document,
                     promptUcs,
                     context,
                     BasicPrimitiveKind.Line,
-                    () => new Line(startResult.Value, endResult.Value));
+                    () => new Line(start, end));
                 FinalizeSuccess(document, id, context, "Đường");
             });
         }
@@ -85,13 +87,13 @@ namespace QS3D.BricsCAD.V25
                 var oppositeResult = editor.GetPoint(oppositeOptions);
                 if (oppositeResult.Status != PromptStatus.OK) return;
 
-                var first = firstResult.Value;
-                var opposite = oppositeResult.Value;
+                RequireFreshContext(document, context, promptUcs, "QS3DDRAWRECT");
+                var first = ToPromptUcsPoint(firstResult.Value, promptUcs);
+                var opposite = ToPromptUcsPoint(oppositeResult.Value, promptUcs);
                 if (Math.Abs(first.X - opposite.X) <= CoordinateTolerance ||
                     Math.Abs(first.Y - opposite.Y) <= CoordinateTolerance)
                     throw new InvalidOperationException("Hình chữ nhật phải có chiều rộng và chiều cao khác 0 trong UCS hiện tại.");
 
-                RequireFreshContext(document, context, promptUcs, "QS3DDRAWRECT");
                 var id = AppendEntity(
                     document,
                     promptUcs,
@@ -129,13 +131,14 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("Bán kính hình tròn phải là số hữu hạn > 0.");
 
                 RequireFreshContext(document, context, promptUcs, "QS3DDRAWCIRCLE");
+                var center = ToPromptUcsPoint(centerResult.Value, promptUcs);
                 var radius = radiusResult.Value;
                 var id = AppendEntity(
                     document,
                     promptUcs,
                     context,
                     BasicPrimitiveKind.Circle,
-                    () => new Circle(centerResult.Value, Vector3d.ZAxis, radius));
+                    () => new Circle(center, Vector3d.ZAxis, radius));
                 FinalizeSuccess(document, id, context, "Hình tròn");
             });
         }
@@ -224,6 +227,11 @@ namespace QS3D.BricsCAD.V25
             if (!string.Equals(project.ActiveFloorId ?? string.Empty, expected.FloorId, StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(project.ActiveZoneId ?? string.Empty, expected.ZoneId, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException(operation + ": Zone/Tầng làm việc đã thay đổi trong lúc vẽ. Hãy chạy lại lệnh.");
+        }
+
+        private static Point3d ToPromptUcsPoint(Point3d worldPoint, Matrix3d promptUcs)
+        {
+            return worldPoint.TransformBy(promptUcs.Inverse());
         }
 
         private static Polyline CreateRectangle(Point3d first, Point3d opposite)
