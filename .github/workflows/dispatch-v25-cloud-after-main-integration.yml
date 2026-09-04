@@ -118,6 +118,17 @@ jobs:
             exit 0
           fi
 
+          release_workflow='.github/workflows/release-v25-cloud.yml'
+          for release_safety_token in \
+            'group: qs3d-cloud-v25-preview-release' \
+            'cancel-in-progress: false' \
+            'if (git tag --list $env:RELEASE_TAG)'; do
+            if ! grep -Fq -- "${release_safety_token}" "${release_workflow}"; then
+              echo "Downstream release duplicate-admission safety contract is missing: ${release_safety_token}" >&2
+              exit 1
+            fi
+          done
+
           series_prefix="v0.1.0-preview."
           published_preview_tag=""
           published_preview_ordinal=0
@@ -206,8 +217,12 @@ jobs:
           reservation_issue=1441
           reservation_prefix="QS3D_V25_PREVIEW_RESERVATION"
           reservation_regex="^${reservation_prefix} ordinal=([1-9][0-9]*) source_sha=([0-9a-f]{40}) run_id=([1-9][0-9]*)$"
+          dispatch_prefix="QS3D_V25_PREVIEW_DISPATCH_FENCE"
+          dispatch_regex="^${dispatch_prefix} ordinal=([1-9][0-9]*) source_sha=([0-9a-f]{40}) run_id=([1-9][0-9]*)$"
           exact_reservation=0
           reservation_conflict=0
+          exact_dispatch_fence_run_id=0
+          dispatch_fence_conflict=0
           while IFS= read -r reservation; do
             [[ -n "${reservation}" ]] || continue
             if [[ "${reservation}" =~ ${reservation_regex} ]]; then
@@ -220,12 +235,38 @@ jobs:
                   reservation_conflict=1
                 fi
               fi
+            elif [[ "${reservation}" =~ ${dispatch_regex} ]]; then
+              reserved_dispatch_ordinal=$((10#${BASH_REMATCH[1]}))
+              reserved_dispatch_source="${BASH_REMATCH[2]}"
+              reserved_dispatch_run_id=$((10#${BASH_REMATCH[3]}))
+              if (( reserved_dispatch_ordinal == committed_preview_ordinal )); then
+                if [[ "${reserved_dispatch_source}" == "${source_sha}" ]]; then
+                  if (( reserved_dispatch_run_id > exact_dispatch_fence_run_id )); then
+                    exact_dispatch_fence_run_id=${reserved_dispatch_run_id}
+                  fi
+                elif [[ "${reserved_dispatch_source}" != "${source_sha}" ]]; then
+                  dispatch_fence_conflict=1
+                fi
+              fi
             fi
           done < <(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments" --jq '.[] | select(.user.login == "github-actions[bot]") | .body')
 
           if (( reservation_conflict != 0 )); then
             echo "Committed preview ordinal is already reserved for a different source SHA: ${committed_preview_ordinal}." >&2
             exit 1
+          fi
+          if (( dispatch_fence_conflict != 0 )); then
+            echo "Committed preview ordinal already has a dispatch fence for a different source SHA: ${committed_preview_ordinal}." >&2
+            exit 1
+          fi
+          if (( exact_dispatch_fence_run_id > 0 )); then
+            prior_dispatch_status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${exact_dispatch_fence_run_id}" --jq '.status')"
+            prior_dispatch_conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${exact_dispatch_fence_run_id}" --jq '.conclusion // ""')"
+            if [[ "${prior_dispatch_status}" != "completed" ]]; then
+              echo "Exact automatic preview dispatch attempt ${exact_dispatch_fence_run_id} is still ${prior_dispatch_status}; replacement run will not dispatch concurrently."
+              exit 0
+            fi
+            echo "Exact prior dispatcher attempt ${exact_dispatch_fence_run_id} completed with ${prior_dispatch_conclusion:-unknown}. Dispatcher completion proves only that the dispatch request attempt ended, not that downstream publication succeeded; this terminal attempt does not suppress a safe retry. The serialized downstream release lane and existing-tag admission prevent duplicate publication."
           fi
 
           if (( exact_reservation == 0 )); then
@@ -237,6 +278,12 @@ jobs:
           else
             echo "Reusing exact committed preview reservation ${committed_preview_ordinal} for ${source_sha}."
           fi
+
+          dispatch_fence="${dispatch_prefix} ordinal=${committed_preview_ordinal} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"
+          gh api --method POST \
+            "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments" \
+            -f body="${dispatch_fence}" >/dev/null
+          echo "Persisted automatic preview dispatch attempt fence for ordinal ${committed_preview_ordinal} and ${source_sha} before downstream dispatch."
 
           echo "Dispatching release-v25-cloud.yml for ${source_sha} as committed tag ${tag}"
           gh workflow run release-v25-cloud.yml \
