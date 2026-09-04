@@ -160,6 +160,9 @@ jobs:
         if: ${{ !cancelled() && steps.scope.outputs.source_validation == 'true' }}
         shell: pwsh
         run: .\scripts\test-v25-package-verifier.ps1
+      - name: Source-validation terminal marker
+        if: ${{ !cancelled() && steps.scope.outputs.source_validation == 'true' }}
+        run: echo "Independent source-validation safety gates completed."
 
   core:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request' }}
