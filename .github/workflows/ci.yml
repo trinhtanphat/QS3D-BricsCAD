@@ -119,6 +119,10 @@ jobs:
           QS3D_AGENT_LANE_COLLISION_RUNTIME: "1"
           GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/preflight-agent-lane-collision.py
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        if: ${{ steps.scope.outputs.source_validation == 'true' }}
+        with:
+          dotnet-version: "8.0.x"
       - name: Generic source guard
         if: ${{ steps.scope.outputs.source_validation == 'true' }}
         run: python scripts/preflight.py
