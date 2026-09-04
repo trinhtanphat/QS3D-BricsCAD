@@ -60,10 +60,13 @@ def main() -> int:
     for unsafe in (
         'release-v25-cloud.yml/runs?per_page=30',
         'release-v25-cloud.yml/runs?per_page=100',
+        "--paginate",
         "((active_release_runs += active_release_status_count))",
     ):
         if unsafe in source:
-            failures.append("active release-run admission must not use stale paging or zero-valued errexit-sensitive arithmetic")
+            failures.append(
+                "active release-run admission must not use stale paging, paginated total_count output, or zero-valued errexit-sensitive arithmetic"
+            )
 
     required_identity = (
         "prior_dispatch_run_json=",
