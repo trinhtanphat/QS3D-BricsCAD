@@ -296,6 +296,132 @@ function Assert-ZipMatchesPackage {
     }
 }
 
+function Assert-ZipManifestIntegrity {
+    param([string]$ZipPath)
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop
+    $archive = $null
+    try {
+        $archive = [IO.Compression.ZipFile]::OpenRead($ZipPath)
+        $seenArchivePaths = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
+        $archivePayloadPaths = [Collections.Generic.List[string]]::new()
+        $manifestEntries = [Collections.Generic.List[object]]::new()
+
+        foreach ($entry in $archive.Entries) {
+            if ([string]::IsNullOrEmpty($entry.Name)) { continue }
+            $name = $entry.FullName.Replace('\', '/')
+            if ($name.StartsWith('/') -or $name.Contains(':') -or $name.Contains('\')) {
+                throw "Staged ZIP contains an unsafe entry while validating checksum manifest: $name"
+            }
+            $segments = @($name.Split('/'))
+            if (@($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) {
+                throw "Staged ZIP contains an unsafe entry while validating checksum manifest: $name"
+            }
+            if ($seenArchivePaths.ContainsKey($name)) {
+                throw "Staged ZIP contains a case-insensitive duplicate entry while validating checksum manifest: $name"
+            }
+            $seenArchivePaths.Add($name, $entry)
+            if ([string]::Equals($name, 'SHA256SUMS.txt', [StringComparison]::Ordinal)) {
+                $manifestEntries.Add($entry)
+            }
+            else {
+                $archivePayloadPaths.Add($name)
+            }
+        }
+
+        if ($manifestEntries.Count -ne 1) {
+            throw "Staged ZIP must contain exactly one canonical SHA256SUMS.txt entry; found $($manifestEntries.Count)."
+        }
+        $manifestEntry = $manifestEntries[0]
+        if ($manifestEntry.Length -lt 1 -or $manifestEntry.Length -gt 4MB -or $manifestEntry.Length -gt [int]::MaxValue) {
+            throw "Staged ZIP checksum manifest has an invalid bounded size: $($manifestEntry.Length) bytes."
+        }
+
+        $manifestStream = $null
+        $manifestBytes = $null
+        try {
+            $manifestStream = $manifestEntry.Open()
+            $manifestBytes = New-Object byte[] ([int]$manifestEntry.Length)
+            $offset = 0
+            while ($offset -lt $manifestBytes.Length) {
+                $read = $manifestStream.Read($manifestBytes, $offset, $manifestBytes.Length - $offset)
+                if ($read -le 0) { throw 'Staged ZIP checksum manifest ended before its declared length.' }
+                $offset += $read
+            }
+            if ($manifestStream.ReadByte() -ne -1) { throw 'Staged ZIP checksum manifest exceeds its declared length.' }
+            if (@($manifestBytes | Where-Object { $_ -gt 0x7F }).Count -gt 0) {
+                throw 'Staged ZIP checksum manifest must contain ASCII only.'
+            }
+            $manifestText = [Text.Encoding]::ASCII.GetString($manifestBytes)
+        }
+        finally {
+            if ($manifestStream) { $manifestStream.Dispose() }
+            if ($manifestBytes) { [Array]::Clear($manifestBytes, 0, $manifestBytes.Length) }
+        }
+
+        $lines = @([Text.RegularExpressions.Regex]::Split($manifestText, "\r?\n"))
+        while ($lines.Count -gt 0 -and $lines[$lines.Count - 1] -eq '') {
+            if ($lines.Count -eq 1) { $lines = @(); break }
+            $lines = @($lines[0..($lines.Count - 2)])
+        }
+        if ($lines.Count -eq 0) { throw 'Staged ZIP checksum manifest contains no payload records.' }
+
+        $seenManifestPaths = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+        $manifestPayloadPaths = [Collections.Generic.List[string]]::new()
+        foreach ($line in $lines) {
+            if ($line -notmatch '^([0-9A-F]{64})  (.+)$') {
+                throw "Staged ZIP checksum manifest contains a malformed record: $line"
+            }
+            $expectedHash = $Matches[1]
+            $name = $Matches[2]
+            if ($name.StartsWith('/') -or $name.Contains(':') -or $name.Contains('\')) {
+                throw "Staged ZIP checksum manifest contains an unsafe path: $name"
+            }
+            $segments = @($name.Split('/'))
+            if (@($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) {
+                throw "Staged ZIP checksum manifest contains an unsafe path: $name"
+            }
+            if ([string]::Equals($name, 'SHA256SUMS.txt', [StringComparison]::OrdinalIgnoreCase)) {
+                throw 'Staged ZIP checksum manifest must not hash itself.'
+            }
+            if ($seenManifestPaths.ContainsKey($name)) {
+                throw "Staged ZIP checksum manifest contains a case-insensitive duplicate path: $name"
+            }
+            $seenManifestPaths.Add($name, $expectedHash)
+            $manifestPayloadPaths.Add($name)
+        }
+
+        if ($archivePayloadPaths.Count -ne $manifestPayloadPaths.Count) {
+            throw "Staged ZIP checksum manifest coverage mismatch. Archive payload count=$($archivePayloadPaths.Count), manifest count=$($manifestPayloadPaths.Count)."
+        }
+
+        foreach ($name in $archivePayloadPaths) {
+            if (-not $seenManifestPaths.ContainsKey($name)) {
+                throw "Staged ZIP checksum manifest coverage mismatch; missing payload: $name"
+            }
+            $entry = $seenArchivePaths[$name]
+            $stream = $null
+            $hash = $null
+            try {
+                $stream = $entry.Open()
+                $hash = [Security.Cryptography.SHA256]::Create()
+                $digest = $hash.ComputeHash($stream)
+                $actualHash = -join ($digest | ForEach-Object { $_.ToString('X2') })
+                if (-not [string]::Equals($actualHash, $seenManifestPaths[$name], [StringComparison]::Ordinal)) {
+                    throw "Staged ZIP checksum mismatch for payload: $name"
+                }
+            }
+            finally {
+                if ($hash) { $hash.Dispose() }
+                if ($stream) { $stream.Dispose() }
+            }
+        }
+    }
+    finally {
+        if ($archive) { $archive.Dispose() }
+    }
+}
+
 function Assert-AuthenticodeSigner {
     param([string]$Path, [string]$ExpectedSigner, [string]$Label)
     $signature = Get-AuthenticodeSignature -FilePath $Path
@@ -461,6 +587,7 @@ try {
         throw 'Staged ZIP is empty.'
     }
     Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package
+    Assert-ZipManifestIntegrity -ZipPath $tempZip
     $stagedZipHash = (Get-FileHash -LiteralPath $tempZip -Algorithm SHA256).Hash.ToUpperInvariant()
 
     if (Test-Path -LiteralPath $zip) {
