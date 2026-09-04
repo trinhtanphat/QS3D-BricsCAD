@@ -11,57 +11,43 @@ namespace QS3D.Core.SmokeTests
 
         internal static void Run()
         {
-            RejectsNullZoneAcrossTargetOperations();
+            RejectsNullZoneAtCatalogBoundaryWithoutMutation();
             PreservesValidTargetOperations();
         }
 
-        private static void RejectsNullZoneAcrossTargetOperations()
+        private static void RejectsNullZoneAtCatalogBoundaryWithoutMutation()
         {
             var project = new ProjectState("ZONE-GLOBAL-NULL", "Zone global null");
             var source = new ZoneDefinition("Z1", "Zone 1");
             var target = new ZoneDefinition("Z2", "Zone 2");
             project.Zones.Add(source);
             project.Zones.Add(target);
-            project.Zones.Add(null!);
             project.ActiveZoneId = source.Id;
-            var element = new ProjectElement("E1", ElementCategory.Beam, string.Empty, string.Empty, source.Id);
-            project.Elements.Add(element);
 
-            AssertRejectedWithoutMutation(project, target, element, () => ProjectZoneService.Update(project, target.Id, "Zone 2 renamed"));
-            AssertRejectedWithoutMutation(project, target, element, () => ProjectZoneService.SetActive(project, target.Id));
-            AssertRejectedWithoutMutation(project, target, element, () => ProjectZoneService.Assign(project, target.Id, new[] { element }));
-            AssertRejectedWithoutMutation(project, target, element, () => ProjectZoneService.Delete(project, target.Id));
-            AssertRejectedWithoutMutation(project, target, element, () => ProjectZoneService.ReferenceCount(project, target.Id));
-        }
-
-        private static void AssertRejectedWithoutMutation(ProjectState project, ZoneDefinition target, ProjectElement element, Action action)
-        {
             var zoneCount = project.Zones.Count;
-            var targetName = target.Name;
             var activeZoneId = project.ActiveZoneId;
-            var elementZoneId = element.ZoneId;
             var changeVersion = project.ChangeVersion;
             var updatedUtc = project.UpdatedUtc;
 
             try
             {
-                action();
+                project.Zones.Add(null!);
             }
-            catch (InvalidOperationException ex)
+            catch (ArgumentNullException ex)
             {
-                if (!string.Equals(ex.Message, "Project zone collection contains a null zone.", StringComparison.Ordinal))
-                    throw new InvalidOperationException("Zone target operation returned an unexpected null-integrity error.", ex);
+                if (!string.Equals(ex.ParamName, "item", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Null Zone admission failed for the wrong parameter.", ex);
                 if (project.Zones.Count != zoneCount ||
-                    !string.Equals(target.Name, targetName, StringComparison.Ordinal) ||
                     !string.Equals(project.ActiveZoneId, activeZoneId, StringComparison.Ordinal) ||
-                    !string.Equals(element.ZoneId, elementZoneId, StringComparison.Ordinal) ||
                     project.ChangeVersion != changeVersion ||
-                    project.UpdatedUtc != updatedUtc)
-                    throw new InvalidOperationException("Rejected Zone target operation mutated project state.");
+                    project.UpdatedUtc != updatedUtc ||
+                    !ReferenceEquals(project.FindZone(source.Id), source) ||
+                    !ReferenceEquals(project.FindZone(target.Id), target))
+                    throw new InvalidOperationException("Rejected null-Zone admission mutated project state.");
                 return;
             }
 
-            throw new InvalidOperationException("Zone target operation must reject a null Zone collection entry.");
+            throw new InvalidOperationException("Zone catalog must reject null entries at the admission boundary.");
         }
 
         private static void PreservesValidTargetOperations()

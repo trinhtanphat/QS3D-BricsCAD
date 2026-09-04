@@ -23,7 +23,7 @@ namespace QS3D.Core.SmokeTests
             var project = CreateProject(out var family, out var element);
             var beforeVersion = project.ChangeVersion;
 
-            ThrowsStructuralFreshness(() => SemanticSelectionInspector.Inspect(
+            ThrowsStructuralOwnershipFreshness(() => SemanticSelectionInspector.Inspect(
                 project,
                 ReplaceElementAndYield(project, family, element)));
 
@@ -37,11 +37,11 @@ namespace QS3D.Core.SmokeTests
             var project = CreateProject(out var family, out var element);
             var beforeVersion = project.ChangeVersion;
 
-            ThrowsStructuralFreshness(() => SemanticSelectionInspector.Inspect(
+            ThrowsProjectGenerationFreshness(() => SemanticSelectionInspector.Inspect(
                 project,
                 ReplaceFamilyAndYield(project, family, element.Id)));
 
-            Equal(beforeVersion, project.ChangeVersion, "family replacement change version");
+            Equal(checked(beforeVersion + 2L), project.ChangeVersion, "family replacement change version");
             Equal(1, project.Families.Count, "family replacement count");
             False(ReferenceEquals(project.Families[0], family), "family replacement ownership");
         }
@@ -104,7 +104,7 @@ namespace QS3D.Core.SmokeTests
             throw new InvalidOperationException("Missing semantic selection property: " + name + ".");
         }
 
-        private static void ThrowsStructuralFreshness(Action action)
+        private static void ThrowsStructuralOwnershipFreshness(Action action)
         {
             try
             {
@@ -114,9 +114,24 @@ namespace QS3D.Core.SmokeTests
             {
                 const string expected = "Project semantic ownership changed while inspecting semantic selection; retry the inspection.";
                 if (string.Equals(ex.Message, expected, StringComparison.Ordinal)) return;
-                throw new InvalidOperationException("Unexpected semantic selection structural freshness error.", ex);
+                throw new InvalidOperationException("Unexpected semantic selection structural ownership error.", ex);
             }
-            throw new InvalidOperationException("Expected semantic selection structural freshness rejection.");
+            throw new InvalidOperationException("Expected semantic selection structural ownership rejection.");
+        }
+
+        private static void ThrowsProjectGenerationFreshness(Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (InvalidOperationException ex)
+            {
+                const string expected = "Project state changed while materializing semantic selection ids.";
+                if (string.Equals(ex.Message, expected, StringComparison.Ordinal)) return;
+                throw new InvalidOperationException("Unexpected semantic selection project-generation freshness error.", ex);
+            }
+            throw new InvalidOperationException("Expected semantic selection project-generation freshness rejection.");
         }
 
         private static void False(bool value, string label)

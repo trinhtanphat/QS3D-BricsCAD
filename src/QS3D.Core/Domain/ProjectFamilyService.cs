@@ -29,7 +29,6 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var family = CreateDetached(project, id, name, category);
-            project.Touch();
             project.Families.Add(family);
             return family;
         }
@@ -45,7 +44,6 @@ namespace QS3D.Core.Domain
             // that admits the fully initialized duplicate into the project.
             var clone = CreateDetached(project, newId, newName, source.Category);
             foreach (var pair in properties) clone.Properties[pair.Key] = pair.Value;
-            project.Touch();
             project.Families.Add(clone);
             return clone;
         }
@@ -185,7 +183,6 @@ namespace QS3D.Core.Domain
                 throw new InvalidOperationException("Family '" + family.Name + "' is referenced by " + references + " semantic element(s). Reassign them before deletion.");
             if (project.Metadata.TryGetValue("ActiveFamilyId", out var active) && string.Equals((active ?? string.Empty).Trim(), family.Id, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Cannot delete the active Family. Activate another Family first.");
-            project.Touch();
             return project.Families.Remove(family);
         }
 

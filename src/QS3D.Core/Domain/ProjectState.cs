@@ -297,11 +297,13 @@ namespace QS3D.Core.Domain
         private readonly List<T> _items = new List<T>();
         private readonly Action<T> _attach;
         private readonly Action<T> _detach;
+        private readonly Action _beforeMutation;
 
-        internal CatalogOwnershipList(Action<T> attach, Action<T> detach)
+        internal CatalogOwnershipList(Action<T> attach, Action<T> detach, Action beforeMutation)
         {
             _attach = attach ?? throw new ArgumentNullException(nameof(attach));
             _detach = detach ?? throw new ArgumentNullException(nameof(detach));
+            _beforeMutation = beforeMutation ?? throw new ArgumentNullException(nameof(beforeMutation));
         }
 
         public T this[int index]
@@ -309,15 +311,17 @@ namespace QS3D.Core.Domain
             get => _items[index];
             set
             {
+                if (value == null) throw new ArgumentNullException(nameof(value));
                 var previous = _items[index];
                 if (ReferenceEquals(previous, value)) return;
 
-                var previousWasLastReference = previous != null && CountReferences(previous) == 1;
-                var valueAlreadyOwned = value != null && ContainsReference(value);
-                _items[index] = value!;
+                var previousWasLastReference = CountReferences(previous) == 1;
+                var valueAlreadyOwned = ContainsReference(value);
+                _beforeMutation();
+                _items[index] = value;
 
-                if (previousWasLastReference) _detach(previous!);
-                if (value != null && !valueAlreadyOwned) _attach(value);
+                if (previousWasLastReference) _detach(previous);
+                if (!valueAlreadyOwned) _attach(value);
             }
         }
 
@@ -326,15 +330,34 @@ namespace QS3D.Core.Domain
 
         public void Add(T item)
         {
-            var alreadyOwned = item != null && ContainsReference(item);
-            _items.Add(item!);
-            if (item != null && !alreadyOwned) _attach(item);
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            var alreadyOwned = ContainsReference(item);
+            _beforeMutation();
+            _items.Add(item);
+            if (!alreadyOwned) _attach(item);
         }
 
         public void Clear()
         {
-            while (_items.Count > 0)
-                RemoveAt(_items.Count - 1);
+            if (_items.Count == 0) return;
+            _beforeMutation();
+
+            var owned = new List<T>();
+            for (var index = 0; index < _items.Count; index++)
+            {
+                var item = _items[index];
+                var seen = false;
+                for (var ownedIndex = 0; ownedIndex < owned.Count; ownedIndex++)
+                {
+                    if (!ReferenceEquals(owned[ownedIndex], item)) continue;
+                    seen = true;
+                    break;
+                }
+                if (!seen) owned.Add(item);
+            }
+
+            _items.Clear();
+            for (var index = 0; index < owned.Count; index++) _detach(owned[index]);
         }
 
         public bool Contains(T item) => _items.Contains(item);
@@ -345,9 +368,12 @@ namespace QS3D.Core.Domain
 
         public void Insert(int index, T item)
         {
-            var alreadyOwned = item != null && ContainsReference(item);
-            _items.Insert(index, item!);
-            if (item != null && !alreadyOwned) _attach(item);
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            if (index < 0 || index > _items.Count) throw new ArgumentOutOfRangeException(nameof(index));
+            var alreadyOwned = ContainsReference(item);
+            _beforeMutation();
+            _items.Insert(index, item);
+            if (!alreadyOwned) _attach(item);
         }
 
         public bool Remove(T item)
@@ -361,9 +387,10 @@ namespace QS3D.Core.Domain
         public void RemoveAt(int index)
         {
             var item = _items[index];
-            var detach = item != null && CountReferences(item) == 1;
+            var detach = CountReferences(item) == 1;
+            _beforeMutation();
             _items.RemoveAt(index);
-            if (detach) _detach(item!);
+            if (detach) _detach(item);
         }
 
         private bool ContainsReference(T item)
@@ -396,9 +423,9 @@ namespace QS3D.Core.Domain
         {
             ProjectId = RequireProjectId(projectId);
             _name = string.IsNullOrWhiteSpace(name) ? "QS3D Project" : RequireProjectName(name);
-            Zones = new CatalogOwnershipList<ZoneDefinition>(AttachZone, DetachZone);
-            Floors = new CatalogOwnershipList<FloorDefinition>(AttachFloor, DetachFloor);
-            Families = new CatalogOwnershipList<ProjectFamily>(AttachFamily, DetachFamily);
+            Zones = new CatalogOwnershipList<ZoneDefinition>(AttachZone, DetachZone, Touch);
+            Floors = new CatalogOwnershipList<FloorDefinition>(AttachFloor, DetachFloor, Touch);
+            Families = new CatalogOwnershipList<ProjectFamily>(AttachFamily, DetachFamily, Touch);
             Elements = new List<ProjectElement>();
             QuantityRules = new List<QuantityRule>();
             Metadata = new ProjectMetadataDictionary();

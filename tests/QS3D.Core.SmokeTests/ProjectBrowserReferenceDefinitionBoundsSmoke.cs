@@ -18,8 +18,7 @@ namespace QS3D.Core.SmokeTests
         private static void OversizedFloorsFailBeforeIndexing()
         {
             var project = new ProjectState("P-BROWSER-FLOOR-BOUND", "Browser floor bound");
-            project.Floors.Add(null!);
-            AddFloors(project, MaxReferenceDefinitions);
+            AddFloors(project, MaxReferenceDefinitions + 1);
 
             var error = ThrowsInvalidOperation(() => ProjectBrowserPlanner.Build(project, ProjectBrowserGrouping.FloorThenCategory));
             Equal("Project browser supports at most 2000 floor definitions.", error.Message);
@@ -28,8 +27,7 @@ namespace QS3D.Core.SmokeTests
         private static void OversizedZonesFailBeforeIndexing()
         {
             var project = new ProjectState("P-BROWSER-ZONE-BOUND", "Browser zone bound");
-            project.Zones.Add(null!);
-            AddZones(project, MaxReferenceDefinitions);
+            AddZones(project, MaxReferenceDefinitions + 1);
 
             var error = ThrowsInvalidOperation(() => ProjectBrowserPlanner.Build(project, ProjectBrowserGrouping.ZoneThenCategory));
             Equal("Project browser supports at most 2000 zone definitions.", error.Message);
