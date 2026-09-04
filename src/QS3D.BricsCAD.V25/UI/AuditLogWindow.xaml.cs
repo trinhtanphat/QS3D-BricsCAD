@@ -83,6 +83,7 @@ namespace QS3D.BricsCAD.V25.UI
                         if (lifecycleDocument != null && ReferenceEquals(candidate, lifecycleDocument))
                         {
                             if (database.UnmanagedObject != _nativeDatabaseIdentity) continue;
+                            if (HasBoundProjectAffinity && !MatchesBoundProjectAffinity(candidate)) continue;
                             document = candidate;
                             return true;
                         }
@@ -108,12 +109,15 @@ namespace QS3D.BricsCAD.V25.UI
             return false;
         }
 
+        private bool HasBoundProjectAffinity =>
+            !string.IsNullOrWhiteSpace(_boundProjectId) &&
+            !string.IsNullOrWhiteSpace(_boundDrawingFingerprint);
+
         private bool MatchesBoundProjectAffinity(Document candidate)
         {
             // A window opened before a QS3D project exists has no semantic token with which to prove
             // wrapper drift. In that case only the exact original managed wrapper is admissible.
-            if (string.IsNullOrWhiteSpace(_boundProjectId) ||
-                string.IsNullOrWhiteSpace(_boundDrawingFingerprint))
+            if (!HasBoundProjectAffinity)
                 return false;
 
             try
