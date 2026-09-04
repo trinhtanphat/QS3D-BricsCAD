@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from dataclasses import dataclass
 from pathlib import Path
 import os
 import signal
@@ -33,20 +32,27 @@ PYTHON_ENVIRONMENT_CONTROLS = (
     "PYTHONWARNINGS",
 )
 _GATE_EXEC_WRAPPER = (
-    "import os, sys\n"
+    "import os, sys, types\n"
     "source = sys.stdin.buffer.read()\n"
     "filename = sys.argv[1]\n"
     "sys.argv[:] = [filename]\n"
     "sys.path[0] = os.path.dirname(os.path.abspath(filename))\n"
-    "namespace = {'__name__': '__main__', '__file__': filename, '__package__': None, '__cached__': None, '__spec__': None}\n"
-    "exec(compile(source, filename, 'exec'), namespace, namespace)\n"
+    "main = types.ModuleType('__main__')\n"
+    "main.__file__ = filename\n"
+    "main.__package__ = None\n"
+    "main.__cached__ = None\n"
+    "main.__spec__ = None\n"
+    "sys.modules['__main__'] = main\n"
+    "exec(compile(source, filename, 'exec'), main.__dict__, main.__dict__)\n"
 )
 
 
-@dataclass(frozen=True)
 class AdmittedGate:
-    path: Path
-    source: bytes
+    __slots__ = ("path", "source")
+
+    def __init__(self, path, source):
+        self.path = Path(path)
+        self.source = bytes(source)
 
 
 class GateTimeoutError(TimeoutError):
@@ -66,19 +72,22 @@ class GateInputError(RuntimeError):
     pass
 
 
+_ADMITTED_GATES = {}
+
+
+def _relative_candidate(path):
+    try:
+        return Path(path).relative_to(ROOT)
+    except ValueError as exc:
+        raise RuntimeError("feature preflight gate is outside repository root: " + str(path)) from exc
+
+
 def _is_within(candidate, root):
     try:
         candidate.relative_to(root)
         return True
     except ValueError:
         return False
-
-
-def _relative_candidate(path):
-    try:
-        return path.relative_to(ROOT)
-    except ValueError as exc:
-        raise RuntimeError("feature preflight gate is outside repository root: " + str(path)) from exc
 
 
 def _metadata_type_error(metadata):
@@ -103,13 +112,19 @@ def _same_opened_file(before, opened):
     )
 
 
-def admit_gate(path, allowed_root=ROOT):
+def admit_gate(path, allowed_root=None):
     path = Path(path)
-    root = Path(allowed_root).resolve(strict=True)
+    root_source = ROOT if allowed_root is None else Path(allowed_root)
+    try:
+        root = root_source.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise RuntimeError("cannot resolve feature preflight root " + str(root_source) + ": " + str(exc)) from exc
+
     try:
         metadata = os.lstat(path)
     except OSError as exc:
         raise RuntimeError("cannot inspect feature preflight gate " + str(path) + ": " + str(exc)) from exc
+
     type_error = _metadata_type_error(metadata)
     if type_error is not None:
         raise RuntimeError("feature preflight gate " + str(path) + " is " + type_error)
@@ -118,6 +133,7 @@ def admit_gate(path, allowed_root=ROOT):
             "feature preflight gate " + str(path) + " source size " + str(metadata.st_size)
             + " bytes exceeds maximum " + str(MAX_FEATURE_GATE_SOURCE_BYTES)
         )
+
     try:
         resolved = path.resolve(strict=True)
     except (OSError, RuntimeError) as exc:
@@ -140,6 +156,7 @@ def admit_gate(path, allowed_root=ROOT):
                 "feature preflight gate " + str(path) + " source exceeds maximum "
                 + str(MAX_FEATURE_GATE_SOURCE_BYTES) + " bytes"
             )
+
         chunks = []
         total = 0
         while total <= MAX_FEATURE_GATE_SOURCE_BYTES:
@@ -159,31 +176,58 @@ def admit_gate(path, allowed_root=ROOT):
     finally:
         if fd is not None:
             os.close(fd)
-    return AdmittedGate(path=path, source=source)
+
+    return AdmittedGate(path, source)
 
 
 def validate_candidates(candidates):
     candidates = list(candidates)
     if len(candidates) > MAX_FEATURE_GATES:
         raise RuntimeError(
-            "feature preflight discovery count " + str(len(candidates)) + " exceeds maximum " + str(MAX_FEATURE_GATES)
+            "feature preflight discovery count "
+            + str(len(candidates))
+            + " exceeds maximum "
+            + str(MAX_FEATURE_GATES)
         )
 
+    unsafe = []
     by_casefold = {}
     for path in candidates:
-        _relative_candidate(path)
+        path = Path(path)
+        rel = _relative_candidate(path)
+        try:
+            file_stat = os.lstat(path)
+        except OSError as exc:
+            raise RuntimeError("cannot inspect feature preflight gate " + str(rel) + ": " + str(exc)) from exc
+
+        mode = file_stat.st_mode
+        if path.is_symlink():
+            unsafe.append((str(rel), "symlink"))
+        elif not stat.S_ISREG(mode):
+            unsafe.append((str(rel), "non-regular"))
+        elif file_stat.st_size > MAX_FEATURE_GATE_SOURCE_BYTES:
+            unsafe.append(
+                (
+                    str(rel),
+                    "source size " + str(file_stat.st_size) + " bytes exceeds maximum "
+                    + str(MAX_FEATURE_GATE_SOURCE_BYTES),
+                )
+            )
+
         key = path.name.casefold()
         by_casefold.setdefault(key, []).append(path)
+
     collisions = [paths for paths in by_casefold.values() if len(paths) > 1]
-    if collisions:
+    if unsafe or collisions:
         messages = []
+        for rel, reason in sorted(unsafe):
+            messages.append(rel + " is " + reason)
         for paths in sorted(collisions, key=lambda group: (group[0].name.casefold(), group[0].name)):
             names = ", ".join(sorted(str(_relative_candidate(path)) for path in paths))
             messages.append("case-insensitive preflight filename collision: " + names)
         raise RuntimeError("unsafe or ambiguous feature preflight discovery: " + "; ".join(messages))
 
-    ordered = sorted(candidates, key=lambda path: (path.name.casefold(), path.name))
-    return [admit_gate(path, allowed_root=ROOT) for path in ordered]
+    return sorted(candidates, key=lambda path: (path.name.casefold(), path.name))
 
 
 def _is_feature_gate_name(name):
@@ -213,7 +257,14 @@ def discover():
                     )
     except OSError as exc:
         raise RuntimeError("cannot scan feature preflight directory " + str(SCRIPTS) + ": " + str(exc)) from exc
-    return validate_candidates(candidates)
+
+    ordered = validate_candidates(candidates)
+    admitted = {}
+    for path in ordered:
+        admitted[path] = admit_gate(path, allowed_root=ROOT)
+    _ADMITTED_GATES.clear()
+    _ADMITTED_GATES.update(admitted)
+    return ordered
 
 
 def build_child_env(source=None):
@@ -255,11 +306,14 @@ def _wait_after_tree_cleanup(process):
 def _terminate_process_tree(process, platform_name=None):
     platform = os.name if platform_name is None else platform_name
     cleanup_error = None
+
     if platform == "nt":
         try:
             completed = subprocess.run(
-                ["taskkill", "/PID", str(process.pid), "/T", "/F"], check=False,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 timeout=PROCESS_TREE_CLEANUP_TIMEOUT_SECONDS,
             )
             if completed.returncode != 0:
@@ -275,11 +329,13 @@ def _terminate_process_tree(process, platform_name=None):
             pass
         except OSError:
             cleanup_error = "process-tree-cleanup-signal-error"
+
     if cleanup_error is not None:
         try:
             process.kill()
         except OSError:
             pass
+
     wait_error = _wait_after_tree_cleanup(process)
     if cleanup_error is None:
         cleanup_error = wait_error
@@ -307,12 +363,14 @@ def copy_bounded_output(stream, target=None, limit_bytes=MAX_FEATURE_GATE_OUTPUT
     output = sys.stdout if target is None else target
     emitted = 0
     truncated = False
+
     while True:
         chunk = stream.read(OUTPUT_READ_CHUNK_BYTES)
         if not chunk:
             break
         if not isinstance(chunk, bytes):
             raise GateOutputError("feature preflight output stream returned non-bytes data")
+
         remaining = max(0, limit_bytes - emitted)
         if remaining:
             visible = chunk[:remaining]
@@ -320,6 +378,7 @@ def copy_bounded_output(stream, target=None, limit_bytes=MAX_FEATURE_GATE_OUTPUT
             emitted += len(visible)
         if len(chunk) > remaining:
             truncated = True
+
     return emitted, truncated
 
 
@@ -371,32 +430,50 @@ def _finish_input_feed(thread, state):
 
 
 def run_gate(gate, child_env, timeout_seconds):
-    if not isinstance(gate, AdmittedGate):
-        raise GateInputError("feature preflight execution requires an admitted gate")
-    process = subprocess.Popen(
-        [sys.executable, "-c", _GATE_EXEC_WRAPPER, str(gate.path)],
-        cwd=str(ROOT), env=child_env, stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **_process_group_launch_kwargs(),
-    )
-    if process.stdout is None or process.stdin is None:
+    admitted = gate if isinstance(gate, AdmittedGate) else _ADMITTED_GATES.get(Path(gate))
+    path = admitted.path if admitted is not None else Path(gate)
+
+    command = [sys.executable, str(path)]
+    popen_kwargs = {
+        "cwd": str(ROOT),
+        "env": child_env,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.STDOUT,
+        **_process_group_launch_kwargs(),
+    }
+    if admitted is not None:
+        command = [sys.executable, "-c", _GATE_EXEC_WRAPPER, str(path)]
+        popen_kwargs["stdin"] = subprocess.PIPE
+
+    process = subprocess.Popen(command, **popen_kwargs)
+    if process.stdout is None or (admitted is not None and process.stdin is None):
         try:
             process.kill()
         except OSError:
             pass
-        raise GateOutputError("feature preflight input/output pipe was not created")
+        if admitted is not None:
+            raise GateInputError("feature preflight input/output pipe was not created")
+        raise GateOutputError("feature preflight output pipe was not created")
 
     output_state = {}
     output_thread = threading.Thread(
-        target=_drain_gate_output, args=(process.stdout, output_state),
-        name="preflight-output-" + str(process.pid), daemon=True,
-    )
-    input_state = {}
-    input_thread = threading.Thread(
-        target=_feed_gate_source, args=(process.stdin, gate.source, input_state),
-        name="preflight-input-" + str(process.pid), daemon=True,
+        target=_drain_gate_output,
+        args=(process.stdout, output_state),
+        name="preflight-output-" + str(process.pid),
+        daemon=True,
     )
     output_thread.start()
-    input_thread.start()
+
+    input_state = {}
+    input_thread = None
+    if admitted is not None:
+        input_thread = threading.Thread(
+            target=_feed_gate_source,
+            args=(process.stdin, admitted.source, input_state),
+            name="preflight-input-" + str(process.pid),
+            daemon=True,
+        )
+        input_thread.start()
 
     timed_out = False
     timeout_exception = None
@@ -409,15 +486,16 @@ def run_gate(gate, child_env, timeout_seconds):
         timeout_exception = exc
         cleanup_error = _terminate_process_tree(process)
 
-    input_error = _finish_input_feed(input_thread, input_state)
+    input_error = None if input_thread is None else _finish_input_feed(input_thread, input_state)
     output_error = _finish_output_drain(output_thread, output_state)
     if output_state.get("truncated"):
-        label = str(gate.path)
+        label = str(path)
         try:
-            label = str(gate.path.relative_to(ROOT))
+            label = str(path.relative_to(ROOT))
         except ValueError:
             pass
         print("\n[aggregate output truncated after", MAX_FEATURE_GATE_OUTPUT_BYTES, "bytes for", label, "]")
+
     if timed_out:
         raise GateTimeoutError(timeout_seconds, cleanup_error, output_error, input_error) from timeout_exception
     if input_error is not None:
@@ -451,27 +529,29 @@ def main():
     except RuntimeError as exc:
         print("ERROR:", exc)
         return 1
+
     if not gates:
         print("ERROR: no feature preflight gates were discovered.")
         return 1
 
     print("QS3D aggregate feature preflight")
     print("Discovered", len(gates), "feature gate(s):")
-    for gate in gates:
-        print(" -", gate.path.relative_to(ROOT))
+    for path in gates:
+        print(" -", path.relative_to(ROOT))
 
     failed = []
     child_env = build_child_env()
-    for gate in gates:
-        rel = gate.path.relative_to(ROOT)
+    for path in gates:
+        rel = path.relative_to(ROOT)
         child_timeout = remaining_child_timeout(aggregate_started_at)
         if child_timeout <= 0:
             print("ERROR: aggregate preflight exceeded", AGGREGATE_TIMEOUT_SECONDS, "seconds before launching", rel)
             failed.append((str(rel), "aggregate-timeout"))
             break
+
         print("\n===", rel, "===")
         try:
-            returncode = run_gate(gate, child_env, child_timeout)
+            returncode = run_gate(path, child_env, child_timeout)
         except GateTimeoutError as exc:
             timeout_reason = "aggregate-timeout" if remaining_child_timeout(aggregate_started_at) <= 0 else "timeout"
             reason = timeout_reason
@@ -489,7 +569,12 @@ def main():
             if exc.input_error is not None:
                 print("ERROR:", rel, "source feed failed:", exc.input_error)
             failed.append((str(rel), reason))
-            if timeout_reason == "aggregate-timeout" or exc.cleanup_error is not None or exc.output_error is not None or exc.input_error is not None:
+            if (
+                timeout_reason == "aggregate-timeout"
+                or exc.cleanup_error is not None
+                or exc.output_error is not None
+                or exc.input_error is not None
+            ):
                 break
             continue
         except (GateOutputError, GateInputError) as exc:
@@ -500,6 +585,7 @@ def main():
             print("ERROR: failed to start", rel, "-", exc)
             failed.append((str(rel), "launch"))
             continue
+
         if returncode != 0:
             failed.append((str(rel), "exit=" + str(returncode)))
 
@@ -510,6 +596,7 @@ def main():
             emit_failure_annotation(path, reason)
         print("FAILED with", len(failed), "feature gate failure(s).")
         return 1
+
     print("\nPASS: all", len(gates), "discovered feature preflight gates passed.")
     return 0
 
