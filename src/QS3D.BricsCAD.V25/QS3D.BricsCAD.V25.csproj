@@ -29,7 +29,7 @@
     <Reference Include="TD_Mgd"><HintPath>$(BRICSCAD_V25_DIR)\TD_Mgd.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="TD_MgdBrep"><HintPath>$(BRICSCAD_V25_DIR)\TD_MgdBrep.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
-  <Target Name="SetQS3DBuildProvenance" BeforeTargets="GenerateAssemblyInfo">
+  <Target Name="SetQS3DBuildProvenance" BeforeTargets="GenerateAssemblyInfo" DependsOnTargets="InitializeSourceControlInformation">
     <PropertyGroup>
       <QS3DBuildSha Condition="'$(QS3DBuildSha)' == '' and '$(QS3D_BUILD_SHA)' != ''">$(QS3D_BUILD_SHA)</QS3DBuildSha>
       <QS3DBuildSha Condition="'$(QS3DBuildSha)' == '' and '$(GITHUB_SHA)' != ''">$(GITHUB_SHA)</QS3DBuildSha>
