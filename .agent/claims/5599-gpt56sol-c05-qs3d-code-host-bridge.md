@@ -2,7 +2,7 @@
 
 - Lane-Key: `issue-5599`
 - Reservation-Protocol: `v2`
-- Canonical owner/session: `account:longnguyentuan2107-maker|session:gpt56sol-c05-20260904-0913-hostbridge`
+- Canonical owner/session: `account:trinhtanphat|session:gpt56sol-chat-20260904T1116Z-hostbridge`
 - Canonical carrier: `agent/gpt56sol-c05-20260904-0913-hostbridge/issue-5599-qs3d-code-host-bridge`
 - Ownership-Key: `qs3d-code.bricscad-host-bridge-v1`
 - Baseline protected main: `0fa476669b2c07854d10f60555b319055aaaa847`
@@ -22,4 +22,4 @@
 
 ## Runtime boundary
 
-Remote/source/static and available V25/V26 compile evidence are admissible. Licensed interactive BricsCAD, real named-pipe lifecycle, document switching, bounded CAD mutation and shutdown cleanup remain `LOCAL_ONLY`; no hosted evidence is a native runtime PASS.
+Remote/source/static and available V25/V26 compile evidence are admissible. Licensed interactive BricsCAD, real named-pipe lifecycle, drawing switching, bounded CAD mutation and shutdown cleanup remain `LOCAL_ONLY`; no hosted evidence is a native runtime PASS.
