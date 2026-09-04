@@ -42,7 +42,8 @@ def _run_behavioral_fixtures(verifier: str, failures: list[str]) -> None:
         temp = Path(temp_dir)
         harness = temp / "verify.ps1"
         harness.write_text(
-            verifier
+            "function Assert-SafeFile { param([string]$Path, [string]$Label) return [IO.Path]::GetFullPath($Path) }\n"
+            + verifier
             + "\ntry { $null = Assert-ZipManifestIntegrity -ZipPath $env:QS3D_TEST_ZIP; exit 0 } "
             + "catch { [Console]::Error.WriteLine($_.Exception.Message); exit 23 }\n",
             encoding="utf-8",
