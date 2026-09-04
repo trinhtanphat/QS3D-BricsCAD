@@ -63,8 +63,12 @@ def main() -> int:
         "reserved_dispatch_run_id=$((10#${BASH_REMATCH[3]}))",
         "reserved_dispatch_run_id > exact_dispatch_fence_run_id",
         "Committed preview ordinal already has a dispatch fence for a different source SHA",
-        'prior_dispatch_status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${exact_dispatch_fence_run_id}" --jq \'.status\')"',
-        'prior_dispatch_conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${exact_dispatch_fence_run_id}" --jq \'.conclusion // ""\')"',
+        'prior_dispatch_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${exact_dispatch_fence_run_id}")"',
+        "prior_dispatch_query_status=$?",
+        "Prior dispatch fence does not reference the canonical dispatcher workflow",
+        "Prior dispatch fence source provenance is not admissible",
+        'prior_dispatch_status="$(jq -er \'.status | strings\' <<< "${prior_dispatch_run_json}")"',
+        'prior_dispatch_conclusion="$(jq -er \'.conclusion // "" | strings\' <<< "${prior_dispatch_run_json}")"',
         'if [[ "${prior_dispatch_status}" != "completed" ]]; then',
         "Dispatcher completion proves only that the dispatch request attempt ended, not that downstream publication succeeded",
         "this terminal attempt does not suppress a safe retry",
@@ -79,6 +83,9 @@ def main() -> int:
         failures.append(
             "dispatcher lacks recoverable exact tag/source dispatch-attempt fencing; missing: " + ", ".join(missing)
         )
+
+    if source.count('actions/runs/${exact_dispatch_fence_run_id}') != 1:
+        failures.append("dispatcher must admit prior attempt state from exactly one workflow-run API snapshot")
 
     for token in (
         "group: qs3d-cloud-v25-preview-release",
@@ -97,8 +104,11 @@ def main() -> int:
 
     scan_index = source.find("exact_dispatch_fence_run_id=0")
     conflict_index = source.find("if (( dispatch_fence_conflict != 0 )); then", scan_index)
-    prior_status_index = source.find("prior_dispatch_status=", conflict_index)
-    active_index = source.find('if [[ "${prior_dispatch_status}" != "completed" ]]; then', prior_status_index)
+    prior_snapshot_index = source.find("prior_dispatch_run_json=", conflict_index)
+    prior_identity_index = source.find("Prior dispatch fence does not reference the canonical dispatcher workflow", prior_snapshot_index)
+    prior_provenance_index = source.find("Prior dispatch fence source provenance is not admissible", prior_identity_index)
+    prior_status_index = source.find("prior_dispatch_status=", prior_snapshot_index)
+    active_index = source.find('if [[ "${prior_dispatch_status}" != "completed" ]]; then', prior_provenance_index)
     retry_index = source.find(
         "Dispatcher completion proves only that the dispatch request attempt ended, not that downstream publication succeeded",
         active_index,
@@ -109,6 +119,9 @@ def main() -> int:
     indexes = (
         scan_index,
         conflict_index,
+        prior_snapshot_index,
+        prior_identity_index,
+        prior_provenance_index,
         prior_status_index,
         active_index,
         retry_index,
@@ -119,7 +132,10 @@ def main() -> int:
     if min(indexes) < 0 or not (
         scan_index
         < conflict_index
+        < prior_snapshot_index
         < prior_status_index
+        < prior_identity_index
+        < prior_provenance_index
         < active_index
         < retry_index
         < reservation_write_index
@@ -127,7 +143,7 @@ def main() -> int:
         < dispatch_index
     ):
         failures.append(
-            "dispatcher must scan the ledger, reject conflicts, inspect the latest exact attempt, stop active attempts, permit terminal recovery, reserve, fence the new attempt, then dispatch"
+            "dispatcher must scan the ledger, reject conflicts, admit one prior-run snapshot, bind its identity/provenance, stop active attempts, permit terminal recovery, reserve, fence the new attempt, then dispatch"
         )
 
     if "continue-on-error" in source:
@@ -219,7 +235,7 @@ def main() -> int:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
 
-    print("PASS: automatic V25 preview dispatch is attempt-fenced, terminal-retryable, and duplicate-publication safe")
+    print("PASS: automatic V25 preview dispatch is attempt-fenced, identity-bound, terminal-retryable, and duplicate-publication safe")
     return 0
 
 
