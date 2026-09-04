@@ -16,6 +16,41 @@ $generator = Join-Path $PSScriptRoot 'new-v26-script-from-v25.ps1'
 $script:MaxPackageTextBytes = 8MB
 $script:StrictUtf8 = [Text.UTF8Encoding]::new($false, $true)
 
+if (-not ('QS3D.V26.PackageNativeFileIdentity' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+
+namespace QS3D.V26
+{
+    [StructLayout(LayoutKind.Sequential)]
+    public struct BY_HANDLE_FILE_INFORMATION
+    {
+        public uint dwFileAttributes;
+        public System.Runtime.InteropServices.ComTypes.FILETIME ftCreationTime;
+        public System.Runtime.InteropServices.ComTypes.FILETIME ftLastAccessTime;
+        public System.Runtime.InteropServices.ComTypes.FILETIME ftLastWriteTime;
+        public uint dwVolumeSerialNumber;
+        public uint nFileSizeHigh;
+        public uint nFileSizeLow;
+        public uint nNumberOfLinks;
+        public uint nFileIndexHigh;
+        public uint nFileIndexLow;
+    }
+
+    public static class PackageNativeFileIdentity
+    {
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetFileInformationByHandle(
+            SafeFileHandle hFile,
+            out BY_HANDLE_FILE_INFORMATION fileInformation);
+    }
+}
+'@
+}
+
 function Get-CanonicalFullPath {
     param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Label)
     if ([string]::IsNullOrWhiteSpace($Path)) { throw "$Label path is required." }
@@ -99,6 +134,39 @@ function Assert-SafeInputFile {
     return $fullPath
 }
 
+function Get-HeldFileIdentity {
+    param(
+        [Parameter(Mandatory = $true)][IO.FileStream]$Stream,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    if (-not [Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([Runtime.InteropServices.OSPlatform]::Windows)) {
+        throw "$Label native held file identity requires Windows."
+    }
+    $info = New-Object 'QS3D.V26.BY_HANDLE_FILE_INFORMATION'
+    if (-not [QS3D.V26.PackageNativeFileIdentity]::GetFileInformationByHandle($Stream.SafeFileHandle, [ref]$info)) {
+        $errorCode = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        throw "$Label native held file identity could not be obtained. Win32Error=$errorCode"
+    }
+    return ('{0:X8}:{1:X8}:{2:X8}' -f [uint32]$info.dwVolumeSerialNumber, [uint32]$info.nFileIndexHigh, [uint32]$info.nFileIndexLow)
+}
+
+function Assert-HeldFileIdentityMatchesPath {
+    param(
+        [Parameter(Mandatory = $true)][pscustomobject]$Held,
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    $path = Assert-SafeInputFile -Path $Held.Path -RepositoryRoot $RepositoryRoot -Label $Label
+    $verifier = [IO.File]::Open($path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        $currentIdentity = Get-HeldFileIdentity -Stream $verifier -Label ("$Label current pathname")
+        if (-not [string]::Equals([string]$Held.FileIdentity, $currentIdentity, [StringComparison]::Ordinal)) {
+            throw "$Label held file identity no longer matches the current admitted pathname."
+        }
+    }
+    finally { $verifier.Dispose() }
+}
+
 function Open-HeldPackageInput {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -116,12 +184,15 @@ function Open-HeldPackageInput {
             $initial.LastWriteTimeUtc.Ticks -ne $rebound.LastWriteTimeUtc.Ticks) {
             throw "$Label changed while its held generation was being admitted."
         }
-        return [pscustomobject]@{
+        $held = [pscustomobject]@{
             Path = $rebound.FullName
             Length = [int64]$stream.Length
             LastWriteUtcTicks = [int64]$rebound.LastWriteTimeUtc.Ticks
             Stream = $stream
+            FileIdentity = Get-HeldFileIdentity -Stream $stream -Label $Label
         }
+        Assert-HeldFileIdentityMatchesPath -Held $held -RepositoryRoot $RepositoryRoot -Label $Label
+        return $held
     }
     catch {
         $stream.Dispose()
@@ -142,6 +213,7 @@ function Assert-HeldPathBinding {
         $Held.LastWriteUtcTicks -ne $item.LastWriteTimeUtc.Ticks) {
         throw "$Label pathname no longer resolves to the held admitted generation."
     }
+    Assert-HeldFileIdentityMatchesPath -Held $Held -RepositoryRoot $RepositoryRoot -Label $Label
 }
 
 function Read-HeldPackageText {
