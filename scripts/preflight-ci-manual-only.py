@@ -496,9 +496,9 @@ for path, text in workflow_sources:
                 errors.append(f"{path.name}: unexpected automatic dispatcher job: {job_name}")
 
     elif path.name == HYBRID_COORDINATOR:
-        expected = {"pull_request", "push", "workflow_run"}
+        expected = {"pull_request", "push"}
         if trigger_names != expected:
-            errors.append(f"{path.name}: hybrid coordinator must expose exactly pull_request + push + workflow_run; got {sorted(trigger_names)}")
+            errors.append(f"{path.name}: hybrid coordinator must expose exactly pull_request + push; got {sorted(trigger_names)}")
 
         pr_block = "\n".join(trigger_blocks.get("pull_request", []))
         require_tokens(
@@ -508,12 +508,6 @@ for path, text in workflow_sources:
         )
         push_block = "\n".join(trigger_blocks.get("push", []))
         require_tokens(push_block, ("branches:", "- main"), f"{path.name} push")
-        workflow_run_block = "\n".join(trigger_blocks.get("workflow_run", []))
-        require_tokens(
-            workflow_run_block,
-            ("workflows:", '"QS3D Shared Branch and Integration CI"', "types:", "- completed"),
-            f"{path.name} workflow_run",
-        )
         if "paths:" in pr_block or "paths-ignore:" in pr_block or "paths:" in push_block or "paths-ignore:" in push_block:
             errors.append(f"{path.name}: coordinator PR/main-push triggers must not use path filters")
 
@@ -521,17 +515,17 @@ for path, text in workflow_sources:
             "name: QS3D Hybrid PR Coordinator",
             "contents: read", "actions: read", "pull-requests: write",
             "group: qs3d-hybrid-pr-coordinator", "cancel-in-progress: false",
-            "arm-native-automerge:", "promote-green-draft:", "refresh-branches:",
-            "github.event_name == 'pull_request'", "github.event_name == 'push'", "github.event_name == 'workflow_run'",
-            "github.event.workflow_run.conclusion == 'success'", "github.event.workflow_run.event == 'pull_request'",
+            "arm-native-automerge:", "refresh-branches:",
+            "github.event_name == 'pull_request'", "github.event_name == 'push'",
             "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}",
-            "markPullRequestReadyForReview", "enablePullRequestAutoMerge", "disablePullRequestAutoMerge", "autoMergeRequest",
+            "enablePullRequestAutoMerge", "disablePullRequestAutoMerge", "autoMergeRequest",
             "no-automerge", "head.repo.full_name", "base.ref", "draft", "dependabot[bot]",
-            "event_head_sha", "api_head_sha", "github.event.workflow_run.head_sha", "github.event.workflow_run.pull_requests",
+            "event_head_sha", "api_head_sha",
             "/update-branch", "expected_head_sha",
         ), path.name)
         for forbidden in (
-            "workflow_dispatch", "pull_request_target", "contents: write", "actions: write", "issues: write",
+            "workflow_dispatch", "workflow_run", "pull_request_target", "contents: write", "actions: write", "issues: write",
+            "promote-green-draft:", "markPullRequestReadyForReview", "QS3D-GREEN-PROMOTION",
             "gh pr merge", "git push", "git reset", "--force", "gh workflow run", "gh release",
         ):
             if forbidden in text:
@@ -539,16 +533,14 @@ for path, text in workflow_sources:
         if re.search(r"repos/[^\s\"']+/pulls/[^\s\"']+/merge(?:[\s\"']|$)", text, re.IGNORECASE):
             errors.append(f"{path.name}: direct pull-request merge endpoint remains forbidden")
 
-        expected_jobs = {"arm-native-automerge", "promote-green-draft", "refresh-branches"}
+        expected_jobs = {"arm-native-automerge", "refresh-branches"}
         if {name for name, _ in job_blocks} != expected_jobs:
             errors.append(f"{path.name}: coordinator jobs must be exactly {sorted(expected_jobs)}")
         arm_block = next(("\n".join(block) for name, block in job_blocks if name == "arm-native-automerge"), "")
-        promote_block = next(("\n".join(block) for name, block in job_blocks if name == "promote-green-draft"), "")
         refresh_block = next(("\n".join(block) for name, block in job_blocks if name == "refresh-branches"), "")
         require_tokens(arm_block, ("github.event_name == 'pull_request'", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "enablePullRequestAutoMerge", "disablePullRequestAutoMerge", "autoMergeRequest"), f"{path.name}/arm-native-automerge")
-        require_tokens(promote_block, ("github.event_name == 'workflow_run'", "github.event.workflow_run.conclusion == 'success'", "github.event.workflow_run.event == 'pull_request'", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "github.event.workflow_run.head_sha", "github.event.workflow_run.pull_requests", "markPullRequestReadyForReview", "enablePullRequestAutoMerge", "/update-branch", "expected_head_sha"), f"{path.name}/promote-green-draft")
         require_tokens(refresh_block, ("github.event_name == 'push'", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "/update-branch", "expected_head_sha"), f"{path.name}/refresh-branches")
-        if "github.token" in arm_block or "github.token" in promote_block or "github.token" in refresh_block:
+        if "github.token" in arm_block or "github.token" in refresh_block:
             errors.append(f"{path.name}: coordinator mutations must not fall back to github.token")
 
     else:
@@ -603,5 +595,5 @@ if errors:
 
 print(
     "PASS: every agent/integration push produces exact-head branch CI, every PR emits stable required contexts, governance/docs-only candidates remain lightweight through internal scope classification, "
-    "build-relevant candidates run Core plus V25 compile, main owns exact-source V25 dispatch with a bounded successful-release wakeup, the named hybrid coordinator may promote exact-head GREEN drafts, arm protected native auto-merge/refresh, and releases retain explicit confirmation."
+    "build-relevant candidates run Core plus V25 compile, main owns exact-source V25 dispatch with a bounded successful-release wakeup, the named hybrid coordinator arms protected native auto-merge/refresh without workflow_run noise, and releases retain explicit confirmation."
 )
