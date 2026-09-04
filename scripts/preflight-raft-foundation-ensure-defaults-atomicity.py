@@ -11,13 +11,11 @@ first_live_mutation = method.index("family.Properties[")
 unique_floor_validation = method.index("ValidateUniqueFloorIds(project);")
 candidate_creation = method.index("var candidate = Snapshot(family.Properties);")
 candidate_validation = method.index("ResolveCore(project, candidate, null, family.Name);")
-revision_admission = method.index("RequireRevisionHeadroom(project, family, before, candidate);")
 
 for label, position in [
     ("unique Floor identity validation", unique_floor_validation),
     ("detached candidate creation", candidate_creation),
     ("detached candidate validation", candidate_validation),
-    ("revision headroom admission", revision_admission),
 ]:
     if position >= first_live_mutation:
         raise SystemExit(label + " must occur before the first live raft Family property mutation.")
@@ -37,17 +35,20 @@ for token in candidate_tokens:
 if "Resolve(project, family);" in method:
     raise SystemExit("EnsureDefaults must not defer final validation until after live Family publication.")
 
-helper_tokens = [
-    "private static void RequireRevisionHeadroom(",
-    "if (!project.Families.Any(x => ReferenceEquals(x, family))) return;",
-    "var requiredMutations = CountPropertyMutations(before, candidate);",
-    "requiredMutations > long.MaxValue - project.ChangeVersion",
-    "private static long CountPropertyMutations(",
-    "StringComparison.Ordinal",
-]
-for token in helper_tokens:
-    if token not in source:
-        raise SystemExit("Missing raft defaults revision atomicity contract token: " + token)
+# ProjectFamily mutation notifications can have more than one ProjectState subscriber.
+# A local check against only the supplied project's ChangeVersion therefore cannot prove
+# batch revision atomicity. Do not retain a misleading single-owner admission helper here;
+# global ownership/revision atomicity belongs at the catalog ownership boundary.
+for forbidden in [
+    "RequireRevisionHeadroom(",
+    "CountPropertyMutations(",
+    "long.MaxValue - project.ChangeVersion",
+]:
+    if forbidden in source:
+        raise SystemExit(
+            "Raft defaults must not claim cross-project revision atomicity with a single-project headroom check: "
+            + forbidden
+        )
 
 apply_start = source.index("public static RaftFoundationVerticalPlacement ApplyFamilyPlacementToElement")
 apply_end = source.index("public static string ResolveMode", apply_start)
@@ -87,4 +88,4 @@ if "element.Properties.Remove(" in apply_method:
 if "var copied = Resolve(project, element, family);" in apply_method:
     raise SystemExit("Raft element placement must validate the detached candidate before publication, not Resolve after mutation.")
 
-print("Raft Foundation defaults and element handoff failure atomicity preflight passed.")
+print("Raft Foundation validation-publication atomicity and element handoff preflight passed.")
