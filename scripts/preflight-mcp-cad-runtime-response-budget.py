@@ -27,14 +27,17 @@ def main() -> int:
     invoke = source[invoke_start:execute_start] if invoke_start >= 0 and execute_start > invoke_start else ""
     for token in (
         "item.Done.Wait(CadDispatchTimeoutMilliseconds)",
-        "Interlocked.Exchange(ref item.Abandoned, 1)",
-        "CadWorkCancelledBeforeStart",
+        "Interlocked.CompareExchange(ref item.DispatchState, CadWorkCancelledBeforeStart, CadWorkQueued)",
         "queued work was cancelled before start",
-        "completion is uncertain",
-        "Do not retry automatically",
+        "item.Done.Wait();",
+        "never retry uncertain work",
+        "item.Done.Dispose();",
     ):
         if token not in invoke:
             errors.append(f"InvokeCad must preserve bounded fail-closed semantics: {token}")
+
+    if "item.Abandoned" in invoke or "Interlocked.Exchange(ref item.Abandoned" in invoke:
+        errors.append("InvokeCad must not restore the racy abandoned completion-handle handoff")
 
     if "Thread.Sleep(" in invoke:
         errors.append("InvokeCad timeout path must not extend the response deadline with Thread.Sleep")
