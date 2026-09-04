@@ -139,8 +139,11 @@ def main() -> int:
         "runtime cancelled-before-start state": (runtime, "CadWorkCancelledBeforeStart = 2"),
         "runtime atomic start claim": (runtime, "Interlocked.CompareExchange(ref item.DispatchState, CadWorkRunning, CadWorkQueued)"),
         "runtime atomic timeout cancellation": (runtime, "Interlocked.CompareExchange(ref item.DispatchState, CadWorkCancelledBeforeStart, CadWorkQueued)"),
-        "runtime started-work settlement": (runtime, "item.Done.Wait();"),
-        "runtime no-auto-retry truth": (runtime, "never retry uncertain work"),
+        "runtime started-work bounded handoff": (runtime, "item.DetachAfterStartedTimeout();"),
+        "runtime started-work response deadline": (runtime, "throw new CadStartedTimeoutException(item);"),
+        "runtime mutation writer detachment": (runtime, "McpCadMutationCoordinator.DetachMutationForDeferredCompletion(writerScope)"),
+        "runtime terminal writer handoff": (runtime, "timeout.TransferWriterScope(deferredWriterScope);"),
+        "runtime no-replay truth": (runtime, "completion continues without replay"),
         "QS3D domain mutation stop recheck": (domain, "McpCadAgentRuntime.EnsureCurrentMutationRunning();"),
         "QS3D domain command validation": (domain, "Regex.IsMatch(command, McpCadAgentRuntime.Qs3dCommandPattern"),
         "QS3D domain command dispatch": (domain, 'document.SendStringToExecute(command + "\\n", true, false, true);'),
@@ -153,6 +156,8 @@ def main() -> int:
 
     if "item.Abandoned" in runtime or "public int Abandoned" in runtime:
         errors.append("runtime restored the racy abandoned completion-handle handoff")
+    if "item.Done.Wait();" in runtime:
+        errors.append("runtime restored an unbounded started-work completion wait")
 
     handle_request_start = server.find("private static void HandleRequest(")
     origin_check = server.find("if (!IsAllowedOrigin(request.Headers, publicMcpUrl))", handle_request_start)
