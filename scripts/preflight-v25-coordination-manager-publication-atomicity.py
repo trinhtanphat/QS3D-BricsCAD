@@ -27,6 +27,10 @@ def order(first: str, second: str, message: str) -> None:
 require("private static PublishedManager? _publicationInFlight;", "missing exact unpublished publication reservation")
 require("private static PublishedManager? _cleanupInFlight;", "missing exact modeless cleanup reservation")
 require("private static bool _nativePublicationCallActive;", "missing native publication-stack reentrancy fence")
+require("public string ProjectId { get; }", "published manager must retain canonical project identity")
+require("public string DrawingFingerprint { get; }", "published manager must retain drawing fingerprint identity")
+require("string.Equals(ProjectId, projectId, StringComparison.Ordinal)", "same-document reuse must compare exact ProjectId")
+require("string.Equals(DrawingFingerprint, drawingFingerprint, StringComparison.Ordinal)", "same-document reuse must compare exact drawing fingerprint")
 require("PrepareUnpublishedCandidate()", "stale unpublished candidates must be terminally reconciled before a new publication")
 require("TryCloseManager(", "manager cleanup must use one exact-instance helper")
 require("ReferenceEquals(_cleanupInFlight, manager)", "cleanup release must be exact-instance bound")
@@ -47,9 +51,10 @@ order("if (!publishedWindow.IsLoaded)", "ReferenceEquals(Application.DocumentMan
 order("ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)", "_published = published;", "published ownership cannot be committed before active-document revalidation")
 order("_published = published;", "_publicationInFlight = null;", "transition must publish exact owner before dropping unpublished reservation")
 
-# Existing defect signature: native show followed immediately by first singleton assignment.
-defect = "Application.ShowModelessWindow(IntPtr.Zero, publishedWindow, true);\n                _published = published;"
-if defect in text:
+# Existing defect signatures must not return.
+if "Application.ShowModelessWindow(IntPtr.Zero, publishedWindow, true);\n                _published = published;" in text:
     fail("native publication still has an unreserved singleton gap")
+if "public bool Matches(Document document)" in text:
+    fail("same-document reuse still ignores canonical project identity")
 
-print("PASS: Coordination Manager modeless publication/cleanup ownership is reentrancy-safe, document-affine, and exact-instance bound")
+print("PASS: Coordination Manager modeless publication/cleanup ownership is reentrancy-safe, project/document-affine, and exact-instance bound")
