@@ -57,7 +57,9 @@ required_smoke = (
     'StableMultiInterfaceCountsRemainAccepted();',
     'DriftingReadOnlyCollection<T>',
     'MultiCountSequence<T>',
-    'Exact bill-item Count must be rebound throughout traversal.',
+    'Exact bill-item Count must be rebound across admission and semantic replay.',
+    'Exact build-up Count must be rebound across admission and semantic replay.',
+    'Stable counted TBQ source must perform one admission traversal plus one semantic replay.',
     'Exact rate-reference Count must be rebound throughout traversal.',
 )
 missing_smoke = [token for token in required_smoke if token not in smoke]
