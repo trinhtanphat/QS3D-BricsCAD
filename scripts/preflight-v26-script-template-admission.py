@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
@@ -51,7 +52,6 @@ def main() -> None:
     # Preserve existing V26 parity/output safety architecture while hardening
     # template admission.
     for token, label in (
-        ("$text.Replace('V25', 'V26').Replace('v25', 'v26')", "narrow host-major transform"),
         ("QS3D.BricsCAD.V26.runtimeconfig.json", "V26 runtimeconfig delta"),
         ("Assert-DirectoryAncestorChain -Path $parent", "output ancestor containment"),
         ("Assert-SafeExistingOutputLeaf -Path $outputFull", "output leaf safety"),
@@ -60,10 +60,21 @@ def main() -> None:
     ):
         require(source, token, label)
 
+    transform_match = re.search(
+        r"\$generated\s*=\s*\$text\.Replace\(\s*['\"]V25['\"]\s*,\s*['\"]V26['\"]\s*\)"
+        r"\.Replace\(\s*['\"]v25['\"]\s*,\s*['\"]v26['\"]\s*\)",
+        source,
+    )
+    if transform_match is None:
+        raise SystemExit(
+            "ERROR: V26 template admission guard missing structural "
+            "V25/v25 -> V26/v26 transform assignment"
+        )
+
     open_index = source.index("[IO.File]::Open($sourceFull")
     capture_index = source.index("$sourceStream.CopyTo($memory)")
     decode_index = source.index("$utf8.GetString($sourceBytes")
-    transform_index = source.index("$text.Replace('V25', 'V26')")
+    transform_index = transform_match.start()
     publish_index = source.index("[IO.File]::WriteAllText($stagePath")
     if not open_index < capture_index < decode_index < transform_index < publish_index:
         raise SystemExit("ERROR: V26 template admission ordering is not open -> capture -> strict decode -> transform -> publish")
