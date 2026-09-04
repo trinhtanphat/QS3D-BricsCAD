@@ -52,6 +52,15 @@ namespace QS3D.BricsCAD.V25
                         "Timed out waiting for native BricsCAD QSAVE to reach a terminal event; save completion is uncertain. "
                         + "Do not retry automatically. Inspect the drawing, DBMOD, audit state and filesystem before another save attempt.");
 
+                // A terminal event alone is not a truthful success boundary. The callback attempts
+                // to unsubscribe in CAD context, but native event removal can fail. Re-enter CAD
+                // context as a serialization barrier and require all handler ownership to be
+                // proven released before interpreting terminal state or DBMOD as a successful save.
+                if (!operation.DetachBestEffort())
+                    throw new InvalidOperationException(
+                        "Native BricsCAD QSAVE reached a terminal event but terminal handler cleanup could not be confirmed; "
+                        + "save completion is uncertain. Do not retry automatically. Inspect the drawing, DBMOD, audit state and filesystem before another save attempt.");
+
                 if (!string.IsNullOrEmpty(operation.TerminalError))
                     throw new InvalidOperationException(operation.TerminalError);
 
