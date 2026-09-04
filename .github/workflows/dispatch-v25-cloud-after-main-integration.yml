@@ -53,7 +53,7 @@ jobs:
           fetch-tags: true
           persist-credentials: false
 
-      - name: Gate batch, reserve preview ordinal and dispatch exact main SHA
+      - name: Gate batch, bind committed preview and dispatch exact main SHA
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -169,68 +169,67 @@ jobs:
             exit "${gate_status}"
           fi
 
+          version_project="src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj"
+          mapfile -t committed_versions < <(
+            sed -nE 's|^[[:space:]]*<Version>([^<]+)</Version>[[:space:]]*$|\1|p' "${version_project}"
+          )
+          if (( ${#committed_versions[@]} != 1 )); then
+            echo "Protected-main V25 project must contain exactly one committed Version value; found ${#committed_versions[@]}." >&2
+            exit 1
+          fi
+          committed_product_version="${committed_versions[0]}"
+          if [[ ! "${committed_product_version}" =~ ^0\.1\.0-preview\.([1-9][0-9]*)$ ]]; then
+            echo "Protected-main V25 ProductVersion is not a canonical automatic preview identity: ${committed_product_version}" >&2
+            exit 1
+          fi
+          committed_preview_text="${BASH_REMATCH[1]}"
+          if (( ${#committed_preview_text} > 5 )); then
+            echo "Committed preview ordinal exceeds the FileVersion 0..65535 range: ${committed_product_version}" >&2
+            exit 1
+          fi
+          committed_preview_ordinal=$((10#${committed_preview_text}))
+          if (( committed_preview_ordinal > 65535 )); then
+            echo "Committed preview ordinal exceeds the FileVersion 0..65535 range: ${committed_product_version}" >&2
+            exit 1
+          fi
+          tag="${series_prefix}${committed_preview_ordinal}"
+
+          if (( committed_preview_ordinal <= published_preview_ordinal )); then
+            echo "Batch is eligible, but protected main ProductVersion must be advanced before automatic preview dispatch. Committed=${committed_product_version} published=${published_preview_tag:-'(none)'}. Refusing to reserve or dispatch an uncommitted preview tag."
+            exit 0
+          fi
+          if [[ -n "$(git tag --list "${tag}")" ]]; then
+            echo "Committed ProductVersion ${committed_product_version} already has Git tag ${tag}; refusing duplicate automatic dispatch." >&2
+            exit 1
+          fi
+
           reservation_issue=1441
           reservation_prefix="QS3D_V25_PREVIEW_RESERVATION"
-          max_preview=0
-          found_preview=0
-
-          consider_preview() {
-            local ordinal_text="$1"
-            local source_label="$2"
-            if [[ ! "${ordinal_text}" =~ ^[1-9][0-9]*$ ]]; then
-              echo "${source_label} preview ordinal is non-canonical: ${ordinal_text}" >&2
-              exit 1
-            fi
-            if (( ${#ordinal_text} > 5 )); then
-              echo "${source_label} preview ordinal exceeds the FileVersion 0..65535 range: ${ordinal_text}" >&2
-              exit 1
-            fi
-            local ordinal=$((10#${ordinal_text}))
-            if (( ordinal > 65535 )); then
-              echo "${source_label} preview ordinal exceeds the FileVersion 0..65535 range: ${ordinal_text}" >&2
-              exit 1
-            fi
-            found_preview=1
-            if (( ordinal > max_preview )); then
-              max_preview=${ordinal}
-            fi
-          }
-
-          while IFS= read -r existing_tag; do
-            [[ -n "${existing_tag}" ]] || continue
-            if [[ ! "${existing_tag}" =~ ^v0\.1\.0-preview\.([1-9][0-9]*)$ ]]; then
-              echo "Matching-series tag is non-canonical and blocks automatic preview derivation: ${existing_tag}" >&2
-              exit 1
-            fi
-            consider_preview "${BASH_REMATCH[1]}" "Existing tag"
-          done < <(git tag --list "${series_prefix}*")
-
           reservation_regex="^${reservation_prefix} ordinal=([1-9][0-9]*) source_sha=([0-9a-f]{40}) run_id=([1-9][0-9]*)$"
+          exact_reservation=0
           while IFS= read -r reservation; do
             [[ -n "${reservation}" ]] || continue
             if [[ "${reservation}" =~ ${reservation_regex} ]]; then
-              consider_preview "${BASH_REMATCH[1]}" "Reserved"
+              reserved_ordinal=$((10#${BASH_REMATCH[1]}))
+              reserved_source="${BASH_REMATCH[2]}"
+              if (( reserved_ordinal == committed_preview_ordinal )) && [[ "${reserved_source}" == "${source_sha}" ]]; then
+                exact_reservation=1
+                break
+              fi
             fi
           done < <(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments" --jq '.[] | select(.user.login == "github-actions[bot]") | .body')
 
-          if (( found_preview == 0 )); then
-            preview=1
+          if (( exact_reservation == 0 )); then
+            reservation="${reservation_prefix} ordinal=${committed_preview_ordinal} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"
+            gh api --method POST \
+              "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments" \
+              -f body="${reservation}" >/dev/null
+            echo "Reserved committed preview ordinal ${committed_preview_ordinal} for ${source_sha}."
           else
-            if (( max_preview >= 65535 )); then
-              echo "No automatic preview number remains inside the FileVersion 0..65535 range." >&2
-              exit 1
-            fi
-            preview=$((max_preview + 1))
+            echo "Reusing exact committed preview reservation ${committed_preview_ordinal} for ${source_sha}."
           fi
-          tag="${series_prefix}${preview}"
 
-          reservation="${reservation_prefix} ordinal=${preview} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"
-          gh api --method POST \
-            "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments" \
-            -f body="${reservation}" >/dev/null
-          echo "Reserved automatic preview ordinal ${preview} for ${source_sha}."
-
-          echo "Dispatching release-v25-cloud.yml for ${source_sha} as ${tag}"
+          echo "Dispatching release-v25-cloud.yml for ${source_sha} as committed tag ${tag}"
           gh workflow run release-v25-cloud.yml \
             --repo "${GITHUB_REPOSITORY}" \
             --ref main \
