@@ -227,6 +227,27 @@ namespace QS3D.BricsCAD.V25
                     });
                 }
             }
+            catch (CadStartedTimeoutException timeout)
+            {
+                // Work already crossed the application-context start boundary. Keep the retry
+                // identity accepted and transfer the global writer to the callback's terminal
+                // completion; abandoning here could replay a mutation that is still executing.
+                if (writerScope != null)
+                {
+                    var deferredWriterScope = McpCadMutationCoordinator.DetachMutationForDeferredCompletion(writerScope);
+                    try
+                    {
+                        timeout.TransferWriterScope(deferredWriterScope);
+                        writerScope = null;
+                    }
+                    catch
+                    {
+                        deferredWriterScope.Dispose();
+                        throw;
+                    }
+                }
+                throw;
+            }
             catch
             {
                 // If writer ownership was never acquired, no CAD mutation could have started and
@@ -880,13 +901,103 @@ namespace QS3D.BricsCAD.V25
             catch { return false; }
         }
 
+        private sealed class CadStartedTimeoutException : TimeoutException
+        {
+            private readonly CadWorkItem _item;
+
+            public CadStartedTimeoutException(CadWorkItem item)
+                : base("BricsCAD work started but exceeded the MCP response deadline; completion continues without replay.")
+            {
+                _item = item ?? throw new ArgumentNullException(nameof(item));
+            }
+
+            public void TransferWriterScope(IDisposable deferredWriterScope)
+            {
+                _item.AttachWriterScope(deferredWriterScope);
+            }
+        }
+
         private sealed class CadWorkItem
         {
+            private readonly object _completionSync = new object();
+            private bool _callerOwnsCompletion = true;
+            private bool _completionDisposed;
+            private bool _completed;
+            private IDisposable? _writerScope;
+
             public Func<string> Action = null!;
             public string Result = string.Empty;
             public Exception? Error;
             public readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
             public int DispatchState = CadWorkQueued;
+
+            public void DetachAfterStartedTimeout()
+            {
+                var disposeCompletion = false;
+                lock (_completionSync)
+                {
+                    if (!_callerOwnsCompletion) return;
+                    _callerOwnsCompletion = false;
+                    if (_completed && !_completionDisposed)
+                    {
+                        _completionDisposed = true;
+                        disposeCompletion = true;
+                    }
+                }
+                if (disposeCompletion) Done.Dispose();
+            }
+
+            public void AttachWriterScope(IDisposable writerScope)
+            {
+                if (writerScope == null) throw new ArgumentNullException(nameof(writerScope));
+                IDisposable? releaseNow = null;
+                lock (_completionSync)
+                {
+                    if (_writerScope != null)
+                        throw new InvalidOperationException("Deferred CAD writer scope is already attached.");
+                    if (_completed) releaseNow = writerScope;
+                    else _writerScope = writerScope;
+                }
+                if (releaseNow != null) releaseNow.Dispose();
+            }
+
+            public void Complete()
+            {
+                IDisposable? writerScope = null;
+                var disposeCompletion = false;
+                lock (_completionSync)
+                {
+                    if (_completed) return;
+                    _completed = true;
+                    writerScope = _writerScope;
+                    _writerScope = null;
+                    if (!_callerOwnsCompletion && !_completionDisposed)
+                    {
+                        _completionDisposed = true;
+                        disposeCompletion = true;
+                    }
+                }
+
+                try { Done.Set(); }
+                catch (ObjectDisposedException) { }
+                if (disposeCompletion) Done.Dispose();
+                if (writerScope != null) writerScope.Dispose();
+            }
+
+            public void DisposeCallerCompletionIfOwned()
+            {
+                var disposeCompletion = false;
+                lock (_completionSync)
+                {
+                    if (_callerOwnsCompletion && !_completionDisposed)
+                    {
+                        _callerOwnsCompletion = false;
+                        _completionDisposed = true;
+                        disposeCompletion = true;
+                    }
+                }
+                if (disposeCompletion) Done.Dispose();
+            }
         }
 
         private static string InvokeCadMutation(Func<string> action)
@@ -914,11 +1025,11 @@ namespace QS3D.BricsCAD.V25
                     if (cancelled)
                         throw new TimeoutException("Timed out waiting for BricsCAD application context; queued work was cancelled before start.");
 
-                    // Once ExecuteCadWork has claimed CadWorkRunning, native/database work may
-                    // already be executing. Retain this caller (and therefore the enclosing
-                    // process-global writer scope) until that callback reaches its terminal state.
-                    // Propagate the callback's real result/error below; never retry uncertain work.
-                    item.Done.Wait();
+                    // ExecuteCadWork already owns the operation. Transfer completion ownership
+                    // before returning a bounded timeout; the callback will publish terminal state
+                    // and, for mutations, release the detached process-global writer.
+                    item.DetachAfterStartedTimeout();
+                    throw new CadStartedTimeoutException(item);
                 }
 
                 if (item.Error != null) throw new InvalidOperationException(item.Error.Message, item.Error);
@@ -926,11 +1037,7 @@ namespace QS3D.BricsCAD.V25
             }
             finally
             {
-                // If queued work was cancelled before start, a subsequently delivered callback
-                // may observe the cancelled state after this caller has returned. ExecuteCadWork
-                // treats notification on an already-disposed completion handle as benign because
-                // the cancelled callback is forbidden from invoking item.Action().
-                item.Done.Dispose();
+                item.DisposeCallerCompletionIfOwned();
             }
         }
 
@@ -945,12 +1052,7 @@ namespace QS3D.BricsCAD.V25
             catch (Exception ex) { item.Error = ex; }
             finally
             {
-                try { item.Done.Set(); }
-                catch (ObjectDisposedException)
-                {
-                    // Only cancel-before-start may dispose Done before the queued callback is
-                    // eventually delivered. The CAS above guarantees item.Action() did not run.
-                }
+                item.Complete();
             }
         }
 
