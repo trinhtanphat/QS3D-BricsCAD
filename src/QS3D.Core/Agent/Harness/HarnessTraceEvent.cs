@@ -11,7 +11,7 @@ namespace QS3D.Core.Agent.Harness
             string kind,
             DateTime timestampUtc,
             string summary,
-            string sourceIdentity,
+            string? sourceIdentity,
             IReadOnlyDictionary<string, string> metadata)
         {
             SessionId = sessionId;
@@ -28,7 +28,7 @@ namespace QS3D.Core.Agent.Harness
         public string Kind { get; }
         public DateTime TimestampUtc { get; }
         public string Summary { get; }
-        public string SourceIdentity { get; }
+        public string? SourceIdentity { get; }
         public IReadOnlyDictionary<string, string> Metadata { get; }
     }
 }
