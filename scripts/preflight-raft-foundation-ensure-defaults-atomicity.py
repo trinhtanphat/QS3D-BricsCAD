@@ -53,13 +53,38 @@ apply_start = source.index("public static RaftFoundationVerticalPlacement ApplyF
 apply_end = source.index("public static string ResolveMode", apply_start)
 apply_method = source[apply_start:apply_end]
 first_element_mutation = apply_method.index("element.SetProperty(")
-target_validation = apply_method.index("if (!RaftFoundationPropertySet.IsRaftElement(element, family))")
 source_validation = apply_method.index("var placement = Resolve(project, family);")
-if source_validation >= target_validation:
-    raise SystemExit("Raft source Family validation must remain before target element admission.")
-if target_validation >= first_element_mutation:
-    raise SystemExit("Raft target element admission must occur before the first element property mutation.")
-if "throw new InvalidOperationException(\"Cấu kiện không phải Móng Bè.\");" not in apply_method:
-    raise SystemExit("Missing fail-closed invalid raft target rejection before element handoff publication.")
+target_validation = apply_method.index("if (!RaftFoundationPropertySet.IsRaftElement(element, family))")
+element_candidate = apply_method.index("var candidate = Snapshot(element.Properties);")
+element_candidate_validation = apply_method.index("var copied = ResolveCore(project, candidate, family.Properties, element.Id);")
+placement_match_validation = apply_method.index("if (!NearlyEqual(copied.BottomElevationM, placement.BottomElevationM)")
+
+ordered_prepublication = [
+    ("source Family validation", source_validation),
+    ("target element admission", target_validation),
+    ("detached target candidate", element_candidate),
+    ("detached target candidate validation", element_candidate_validation),
+    ("detached placement parity validation", placement_match_validation),
+]
+for label, position in ordered_prepublication:
+    if position >= first_element_mutation:
+        raise SystemExit(label + " must occur before the first raft element mutation.")
+for (left_label, left), (right_label, right) in zip(ordered_prepublication, ordered_prepublication[1:]):
+    if left >= right:
+        raise SystemExit(left_label + " must occur before " + right_label + ".")
+
+apply_tokens = [
+    "element.RemoveProperty(oppositeKey);",
+    "element.RemoveProperty(ProjectFloorService.BottomLevelOffsetKey);",
+    "element.RemoveProperty(ProjectFloorService.TopLevelOffsetKey);",
+    "return copied;",
+]
+for token in apply_tokens:
+    if token not in apply_method:
+        raise SystemExit("Missing failure-atomic raft element publication token: " + token)
+if "element.Properties.Remove(" in apply_method:
+    raise SystemExit("Raft element placement must use ProjectElement.RemoveProperty so persisted removals update dirty/timestamp state.")
+if "var copied = Resolve(project, element, family);" in apply_method:
+    raise SystemExit("Raft element placement must validate the detached candidate before publication, not Resolve after mutation.")
 
 print("Raft Foundation defaults and element handoff failure atomicity preflight passed.")
