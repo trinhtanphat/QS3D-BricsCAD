@@ -25,7 +25,7 @@ def main() -> int:
         "SHA256SUMS.txt",
         "$entry.Open()",
         "[Security.Cryptography.SHA256]::Create()",
-        "^[0-9A-F]{64}  ",
+        "^([0-9A-F]{64})  (.+)$",
         "case-insensitive duplicate",
         "checksum manifest coverage mismatch",
         "checksum mismatch",
@@ -51,6 +51,8 @@ def main() -> int:
             "$archivePayloadPaths",
             "$manifestPayloadPaths",
             "$hash.ComputeHash($stream)",
+            "$manifestEntry.Length -gt 4MB",
+            "must not hash itself",
         )
         for token in verifier_required:
             if token not in verifier:
