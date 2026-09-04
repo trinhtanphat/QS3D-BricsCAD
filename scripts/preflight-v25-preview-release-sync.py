@@ -83,7 +83,10 @@ def main():
                 "Set-WorkspaceProductVersion -ReleaseTagValue $tag",
                 "Runtime product-version identity preflight failed after workspace synchronization.",
                 "$expectedProductVersion = $tag.Substring(1)",
-                "Workspace version synchronization did not produce exactly three bounded project modifications.",
+                "$finalStatus.Count -ne 0 -and $finalStatus.Count -ne $workspaceVersionPaths.Count",
+                "Workspace version synchronization must either be a no-op or produce exactly three bounded project modifications.",
+                "Workspace ProductVersion is already synchronized",
+                "if ($finalStatus.Count -eq $workspaceVersionPaths.Count)",
                 "Unexpected release-preparation workspace change",
                 "git diff --check",
                 "git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'",
@@ -144,7 +147,7 @@ def main():
         return fail(str(exc))
 
     print(
-        "PASS: V25 preview release derives requested preview identity only in the bounded V25/V26/Core workspace, preserves exact protected-main HEAD provenance, and packages only the synchronized tag identity"
+        "PASS: V25 preview release accepts an already-synchronized requested preview identity or derives it only in the bounded V25/V26/Core workspace, preserves exact protected-main HEAD provenance, and packages only the synchronized tag identity"
     )
     return 0
 
