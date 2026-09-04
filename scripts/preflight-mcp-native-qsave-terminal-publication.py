@@ -1,6 +1,5 @@
 from pathlib import Path
 import re
-import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.BricsCAD.V25/McpNativeCurrentDocumentSave.cs"
