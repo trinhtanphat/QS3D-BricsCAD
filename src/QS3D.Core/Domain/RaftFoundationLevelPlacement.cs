@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 
 namespace QS3D.Core.Domain
 {
@@ -59,9 +58,9 @@ namespace QS3D.Core.Domain
                 RaftFoundationPropertySet.ResolveBottomOffsetM(mode, thicknessM).ToString("R", CultureInfo.InvariantCulture);
 
             // Validate the complete intended state while it is still detached from the live Family.
-            // No Family/project mutation may occur before both this validation and revision admission.
+            // Project revision-capacity atomicity is owned by the catalog ownership boundary because
+            // one Family can currently have more than one ProjectState mutation subscriber.
             ResolveCore(project, candidate, null, family.Name);
-            RequireRevisionHeadroom(project, family, before, candidate);
 
             family.Properties[RaftFoundationPropertySet.ElevationModeKey] = mode;
             family.Properties[activeKey] = floor.Id;
@@ -199,38 +198,6 @@ namespace QS3D.Core.Domain
                 if (!ids.Add(floor.Id))
                     throw new InvalidOperationException("Project có Floor/Level id trùng: " + floor.Id + ".");
             }
-        }
-
-        private static void RequireRevisionHeadroom(
-            ProjectState project,
-            ProjectFamily family,
-            IDictionary<string, string> before,
-            IDictionary<string, string> candidate)
-        {
-            if (!project.Families.Any(x => ReferenceEquals(x, family))) return;
-            var requiredMutations = CountPropertyMutations(before, candidate);
-            if (requiredMutations > long.MaxValue - project.ChangeVersion)
-                throw new InvalidOperationException(
-                    "Móng Bè defaults require " + requiredMutations +
-                    " project revision advance(s), but the project revision has insufficient remaining capacity.");
-        }
-
-        private static long CountPropertyMutations(
-            IDictionary<string, string> before,
-            IDictionary<string, string> candidate)
-        {
-            long requiredMutations = 0L;
-            foreach (var pair in before)
-            {
-                if (!candidate.TryGetValue(pair.Key, out var candidateValue) ||
-                    !string.Equals(pair.Value, candidateValue, StringComparison.Ordinal))
-                    requiredMutations++;
-            }
-            foreach (var pair in candidate)
-            {
-                if (!before.ContainsKey(pair.Key)) requiredMutations++;
-            }
-            return requiredMutations;
         }
 
         private static string RequiredText(IDictionary<string, string> properties, string key, string caption)
