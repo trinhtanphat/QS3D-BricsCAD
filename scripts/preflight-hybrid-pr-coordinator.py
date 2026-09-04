@@ -73,6 +73,9 @@ if text:
         "name: QS3D Hybrid PR Coordinator",
         '  "pull_request":',
         '  "push":',
+        '  "workflow_run":',
+        '      - "QS3D Shared Branch and Integration CI"',
+        "      - completed",
         "      - opened",
         "      - reopened",
         "      - ready_for_review",
@@ -89,7 +92,9 @@ if text:
         "  group: qs3d-hybrid-pr-coordinator",
         "  cancel-in-progress: false",
         "arm-native-automerge:",
+        "promote-green-draft:",
         "refresh-branches:",
+        "markPullRequestReadyForReview",
         "enablePullRequestAutoMerge",
         "disablePullRequestAutoMerge",
         "pullRequestId",
@@ -127,13 +132,17 @@ if text:
         fail("hybrid coordinator contains a direct pull-request merge endpoint")
 
     arm = job_block(text, "arm-native-automerge")
+    promote = job_block(text, "promote-green-draft")
     refresh = job_block(text, "refresh-branches")
     if not arm:
         fail("hybrid coordinator missing arm-native-automerge job block")
+    if not promote:
+        fail("hybrid coordinator missing promote-green-draft job block")
     if not refresh:
         fail("hybrid coordinator missing refresh-branches job block")
 
     arm_secret_error = "QS3D_AUTOMERGE_TOKEN is required; native auto-merge coordination cannot run."
+    promote_secret_error = "QS3D_AUTOMERGE_TOKEN is required; green-draft promotion cannot run."
     refresh_secret_error = "QS3D_AUTOMERGE_TOKEN is required; branch refresh cannot run."
 
     for token in (
@@ -155,6 +164,30 @@ if text:
         require(arm, token, "arm-native-automerge")
 
     for token in (
+        "github.event_name == 'workflow_run'",
+        "github.event.workflow_run.conclusion == 'success'",
+        "github.event.workflow_run.event == 'pull_request'",
+        "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}",
+        "github.event.workflow_run.head_sha",
+        "github.event.workflow_run.pull_requests",
+        "api_head_sha",
+        "event_head_sha",
+        "head.repo.full_name",
+        "base.ref",
+        "draft",
+        "no-automerge",
+        "dependabot[bot]",
+        "mergeable_state",
+        "/update-branch",
+        "expected_head_sha",
+        "markPullRequestReadyForReview",
+        "enablePullRequestAutoMerge",
+        "autoMergeRequest",
+        promote_secret_error,
+    ):
+        require(promote, token, "promote-green-draft")
+
+    for token in (
         "github.event_name == 'push'",
         "github.ref == 'refs/heads/main'",
         "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}",
@@ -172,17 +205,23 @@ if text:
     ):
         require(refresh, token, "refresh-branches")
 
-    # Main-push refresh is allowed to re-arm native auto-merge after a successful
-    # optimistic update. Disarming remains exclusively owned by PR-event handling.
+    # Main-push refresh and successful Shared-CI promotion may re-arm native auto-merge.
+    # Disarming remains exclusively owned by PR-event handling.
+    reject(promote, "disablePullRequestAutoMerge", "promote-green-draft")
     reject(refresh, "disablePullRequestAutoMerge", "refresh-branches")
 
     require_fail_closed_secret_gate(arm, "arm-native-automerge", arm_secret_error)
+    require_fail_closed_secret_gate(promote, "promote-green-draft", promote_secret_error)
     require_fail_closed_secret_gate(refresh, "refresh-branches", refresh_secret_error)
 
     if "github.token" in arm:
         fail("arm-native-automerge must not use github.token for GraphQL auto-merge mutation")
     if "secrets.QS3D_AUTOMERGE_TOKEN" not in arm:
         fail("arm-native-automerge must use QS3D_AUTOMERGE_TOKEN")
+    if "github.token" in promote:
+        fail("promote-green-draft must not use github.token for PR mutation")
+    if "secrets.QS3D_AUTOMERGE_TOKEN" not in promote:
+        fail("promote-green-draft must use QS3D_AUTOMERGE_TOKEN")
     if "github.token" in refresh:
         fail("refresh-branches must not fall back to github.token for branch mutation")
     if "secrets.QS3D_AUTOMERGE_TOKEN" not in refresh:
@@ -195,4 +234,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: hybrid coordinator keeps PR-event disarm isolated while main-push refresh may re-arm native auto-merge after exact-head branch refresh.")
+print("PASS: successful exact-head Shared CI may safely promote an eligible draft, refresh stale ancestry, and arm protected native auto-merge without direct merging.")
