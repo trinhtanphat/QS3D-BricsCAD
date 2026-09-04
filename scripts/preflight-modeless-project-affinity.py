@@ -39,8 +39,6 @@ def main():
         "TryResolveLiveDocument(out var document)",
         "MatchesBoundDocumentAffinity(document)",
         "ProjectContextCoordinator.TryGetReadOnly(candidate, out var project)",
-        "string.Equals(project.ProjectId ?? string.Empty,",
-        "string.Equals(project.DrawingFingerprint ?? string.Empty,",
         "_window.Activated += OnWindowActivated",
         "_window.PreviewMouseDown += OnPreviewMouseDown",
         "_window.PreviewKeyDown += OnPreviewKeyDown",
@@ -85,6 +83,12 @@ def main():
         "StringComparison.OrdinalIgnoreCase",
     ):
         require(marker in semantic_match, f"MatchesBoundDocumentAffinity is missing: {marker}")
+    require(
+        semantic_match.index("ProjectContextCoordinator.TryGetReadOnly(candidate, out var project)")
+        < semantic_match.index("project.ProjectId ?? string.Empty")
+        < semantic_match.index("project.DrawingFingerprint ?? string.Empty"),
+        "Wrapper-drift affinity proof must read ProjectId and DrawingFingerprint from the admitted read-only project context.",
+    )
     require(
         "ProjectContextCoordinator.GetOrCreate" not in semantic_match
         and "ProjectContextCoordinator.Get(" not in semantic_match,
