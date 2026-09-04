@@ -9,11 +9,12 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DISPATCH = ROOT / ".github" / "workflows" / "dispatch-v25-cloud-after-main-integration.yml"
 DISPATCH_PATH = ".github/workflows/dispatch-v25-cloud-after-main-integration.yml"
+ACTIVE_STATUSES = ("requested", "queued", "in_progress", "waiting", "pending")
 
 
-def has_active_release_run(statuses: tuple[str, ...]) -> bool:
-    """All pages must participate; any non-completed release run keeps the lane busy."""
-    return any(status != "completed" for status in statuses)
+def has_active_release_run(status_counts: dict[str, int]) -> bool:
+    """Every non-terminal workflow-run status participates in bounded admission."""
+    return any(status_counts.get(status, 0) > 0 for status in ACTIVE_STATUSES)
 
 
 def prior_attempt_identity_is_admissible(
@@ -45,17 +46,22 @@ def main() -> int:
     failures: list[str] = []
 
     required_complete_scan = (
-        'gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/workflows/release-v25-cloud.yml/runs?per_page=100"',
-        'select(.status != "completed")',
+        "active_release_statuses=( requested queued in_progress waiting pending )",
+        'runs?status=${active_release_status}&per_page=1',
         "active_release_query_status=$?",
-        "Could not enumerate the complete V25 cloud release-run set",
+        "'.total_count'",
+        "Could not query V25 cloud release runs in status",
         "A V25 cloud release is already queued or running",
     )
     for token in required_complete_scan:
         if token not in source:
-            failures.append(f"active release-run admission is not complete; missing: {token}")
-    if 'release-v25-cloud.yml/runs?per_page=30' in source:
-        failures.append("active release-run admission must not stop at the first 30 workflow runs")
+            failures.append(f"active release-run admission is not complete and bounded; missing: {token}")
+    for unsafe in (
+        'release-v25-cloud.yml/runs?per_page=30',
+        'release-v25-cloud.yml/runs?per_page=100',
+    ):
+        if unsafe in source:
+            failures.append("active release-run admission must not scan a fixed first page or paginate unbounded release history")
 
     required_identity = (
         "prior_dispatch_run_json=",
@@ -90,11 +96,14 @@ def main() -> int:
     ):
         failures.append("prior run must be fetched once, identity/provenance-admitted, then allowed to control retry state")
 
-    statuses = ("completed",) * 30 + ("in_progress",)
-    if not has_active_release_run(statuses):
-        failures.append("an active release run beyond the first 30 results must keep the release lane busy")
-    if has_active_release_run(("completed",) * 50):
-        failures.append("an all-terminal complete release-run fleet must not be reported active")
+    all_terminal = {status: 0 for status in ACTIVE_STATUSES}
+    if has_active_release_run(all_terminal):
+        failures.append("an all-terminal release-run fleet must not be reported active")
+    for status in ACTIVE_STATUSES:
+        counts = dict(all_terminal)
+        counts[status] = 1
+        if not has_active_release_run(counts):
+            failures.append(f"active workflow-run status {status} must keep the release lane busy")
 
     sha_a = "a" * 40
     sha_b = "b" * 40
@@ -151,7 +160,7 @@ def main() -> int:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
 
-    print("PASS: automatic V25 dispatch run-state admission is complete and identity-bound")
+    print("PASS: automatic V25 dispatch run-state admission is bounded, complete, and identity-bound")
     return 0
 
 
