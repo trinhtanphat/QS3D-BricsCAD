@@ -63,6 +63,23 @@ def main() -> None:
         "reentrant invocation must fail closed before reading singleton state while terminal Close is in flight",
     )
 
+    published_start = source.find("private static bool PreparePublishedWindow")
+    published_end = source.find("private static bool CloseUnpublishedCandidate", published_start)
+    require(published_start >= 0 and published_end > published_start, "cannot bound published-window preparation helper")
+    published = source[published_start:published_end]
+    published_close_index = published.find("published.Close();")
+    published_set_index = published.find("_cleanupInFlightCandidate = published;")
+    published_finally_index = published.find("finally", published_close_index)
+    published_clear_index = published.find("ReferenceEquals(_cleanupInFlightCandidate, published)", published_finally_index)
+    require(
+        published_set_index >= 0 and published_set_index < published_close_index,
+        "cross-document published-window cleanup must reserve the exact window before Close can synchronously reenter",
+    )
+    require(
+        published_finally_index > published_close_index and published_clear_index > published_finally_index,
+        "cross-document published-window cleanup must retain its reservation until Close unwinds",
+    )
+
     require(
         "if (!candidate.IsLoaded)" in source and "CloseUnpublishedCandidate(candidate)" in source,
         "non-loaded modeless candidate must be terminally cleaned before return",
@@ -96,7 +113,7 @@ def main() -> None:
     require("candidate.Close();" in helper, "cleanup helper must attempt terminal Close")
     cleanup_set_index = helper.find("_cleanupInFlightCandidate = candidate;")
     cleanup_close_index = helper.find("candidate.Close();")
-    cleanup_finally_index = helper.find("finally")
+    cleanup_finally_index = helper.find("finally", cleanup_close_index)
     cleanup_clear_index = helper.find("ReferenceEquals(_cleanupInFlightCandidate, candidate)", cleanup_finally_index)
     require(
         cleanup_set_index >= 0 and cleanup_set_index < cleanup_close_index,
