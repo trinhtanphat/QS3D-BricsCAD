@@ -68,7 +68,7 @@ namespace QS3D.Core.SmokeTests
             Require(second.Properties.Count == 1 && second.Properties["ThicknessM"] == "0.2", "Rollback did not restore the removed family properties exactly.");
             Require(project.ChangeVersion == projectChangeVersion, "Rollback did not restore project ChangeVersion.");
             Require(project.UpdatedUtc == projectUpdatedUtc, "Rollback did not restore project UpdatedUtc.");
-            Require(propertyChangedCount >= 2, "Rollback did not notify existing ProjectFamily subscribers while restoring changed Name/Category.");
+            Require(propertyChangedCount == 0, "Rollback must restore ProjectFamily state without publishing PropertyChanged callbacks.");
 
             var afterRollbackEvents = propertyChangedCount;
             first.Name = "AfterRollback";

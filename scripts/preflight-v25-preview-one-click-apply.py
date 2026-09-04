@@ -50,7 +50,7 @@ def main():
         "currentProcess.MainModule?.FileName",
         'startInfo.EnvironmentVariables["QS3D_PREVIEW_BRICSCAD"]',
         "WaitForExit",
-        "File.Copy(sourcePath, backupPath, true)",
+        "File.Copy(destinationPath, backupPath, false)",
         "File.Replace",
         "Rollback",
         "Restart-BricsCAD",
