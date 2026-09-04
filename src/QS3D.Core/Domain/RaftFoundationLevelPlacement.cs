@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 
 namespace QS3D.Core.Domain
 {
@@ -35,6 +36,7 @@ namespace QS3D.Core.Domain
             if (!RaftFoundationPropertySet.IsRaftFamily(family))
                 throw new InvalidOperationException("Family không phải Móng Bè.");
 
+            ValidateUniqueFloorIds(project);
             var thicknessM = RequirePositive(family.Properties, RaftFoundationPropertySet.ThicknessKey, "Dày Móng Bè");
             var mode = RaftFoundationPropertySet.NormalizeElevationMode(Property(family.Properties, RaftFoundationPropertySet.ElevationModeKey));
             var activeKey = RaftFoundationPropertySet.ActiveLevelKey(mode);
@@ -47,6 +49,20 @@ namespace QS3D.Core.Domain
             var floor = FindFloor(project, levelId, "Cao độ đầu Móng Bè");
 
             var before = Snapshot(family.Properties);
+            var candidate = Snapshot(family.Properties);
+            candidate[RaftFoundationPropertySet.ElevationModeKey] = mode;
+            candidate[activeKey] = floor.Id;
+            candidate.Remove(oppositeKey);
+            candidate.Remove(ProjectFloorService.BottomLevelOffsetKey);
+            candidate.Remove(ProjectFloorService.TopLevelOffsetKey);
+            candidate[RaftFoundationPropertySet.BottomOffsetKey] =
+                RaftFoundationPropertySet.ResolveBottomOffsetM(mode, thicknessM).ToString("R", CultureInfo.InvariantCulture);
+
+            // Validate the complete intended state while it is still detached from the live Family.
+            // No Family/project mutation may occur before both this validation and revision admission.
+            ResolveCore(project, candidate, null, family.Name);
+            RequireRevisionHeadroom(project, family, before, candidate);
+
             family.Properties[RaftFoundationPropertySet.ElevationModeKey] = mode;
             family.Properties[activeKey] = floor.Id;
             family.Properties.Remove(oppositeKey);
@@ -54,7 +70,6 @@ namespace QS3D.Core.Domain
             family.Properties.Remove(ProjectFloorService.TopLevelOffsetKey);
             family.Properties[RaftFoundationPropertySet.BottomOffsetKey] =
                 RaftFoundationPropertySet.ResolveBottomOffsetM(mode, thicknessM).ToString("R", CultureInfo.InvariantCulture);
-            Resolve(project, family);
             return !DictionaryEqual(before, family.Properties);
         }
 
@@ -172,6 +187,38 @@ namespace QS3D.Core.Domain
                 if (!ids.Add(floor.Id))
                     throw new InvalidOperationException("Project có Floor/Level id trùng: " + floor.Id + ".");
             }
+        }
+
+        private static void RequireRevisionHeadroom(
+            ProjectState project,
+            ProjectFamily family,
+            IDictionary<string, string> before,
+            IDictionary<string, string> candidate)
+        {
+            if (!project.Families.Any(x => ReferenceEquals(x, family))) return;
+            var requiredMutations = CountPropertyMutations(before, candidate);
+            if (requiredMutations > long.MaxValue - project.ChangeVersion)
+                throw new InvalidOperationException(
+                    "Móng Bè defaults require " + requiredMutations +
+                    " project revision advance(s), but the project revision has insufficient remaining capacity.");
+        }
+
+        private static long CountPropertyMutations(
+            IDictionary<string, string> before,
+            IDictionary<string, string> candidate)
+        {
+            long requiredMutations = 0L;
+            foreach (var pair in before)
+            {
+                if (!candidate.TryGetValue(pair.Key, out var candidateValue) ||
+                    !string.Equals(pair.Value, candidateValue, StringComparison.Ordinal))
+                    requiredMutations++;
+            }
+            foreach (var pair in candidate)
+            {
+                if (!before.ContainsKey(pair.Key)) requiredMutations++;
+            }
+            return requiredMutations;
         }
 
         private static string RequiredText(IDictionary<string, string> properties, string key, string caption)
