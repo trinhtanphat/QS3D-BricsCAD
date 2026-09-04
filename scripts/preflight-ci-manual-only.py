@@ -381,7 +381,7 @@ if not workflow_sources:
     errors.append("no GitHub Actions workflows found")
 
 workflow_names = {path.name for path, _ in workflow_sources}
-for required_workflow in (VALIDATION_WORKFLOW, AUTO_DISPATCHER, HYBRID_COORDINATOR):
+for required_workflow in (VALIDATION_WORKFLOW, AUTO_DISPATCHER):
     if required_workflow not in workflow_names:
         errors.append(f"missing owner-approved workflow: {required_workflow}")
 
@@ -496,31 +496,7 @@ for path, text in workflow_sources:
                 errors.append(f"{path.name}: unexpected automatic dispatcher job: {job_name}")
 
     elif path.name == HYBRID_COORDINATOR:
-        if trigger_names != {"workflow_dispatch"}:
-            errors.append(f"{path.name}: disabled hybrid coordinator must be manual-only; got {sorted(trigger_names)}")
-
-        require_tokens(text, (
-            "name: QS3D Hybrid PR Coordinator",
-            "contents: read",
-            "coordinator-disabled:",
-            "github.event_name == 'workflow_dispatch'",
-            "QS3D Hybrid PR Coordinator automatic runs are disabled.",
-        ), path.name)
-        for forbidden in (
-            "pull_request:", "push:", "workflow_run:", "pull_request_target:",
-            "pull-requests: write", "actions: write", "GH_TOKEN:",
-            "enablePullRequestAutoMerge", "disablePullRequestAutoMerge", "markPullRequestReadyForReview",
-            "/update-branch", "gh pr merge", "git push", "gh workflow run", "gh release",
-        ):
-            if forbidden in text:
-                errors.append(f"{path.name}: disabled coordinator contains forbidden automatic/mutating token: {forbidden}")
-
-        expected_jobs = {"coordinator-disabled"}
-        if {name for name, _ in job_blocks} != expected_jobs:
-            errors.append(f"{path.name}: disabled coordinator jobs must be exactly {sorted(expected_jobs)}")
-        for job_name, job_lines in job_blocks:
-            if not is_hard_manual_dispatch_guard(extract_job_if_expression(job_lines)):
-                errors.append(f"{path.name}/{job_name}: disabled coordinator job must hard-guard github.event_name == 'workflow_dispatch'")
+        errors.append(f"{path.name}: retired Hybrid PR Coordinator workflow must remain removed")
 
     else:
         if trigger_names != {"workflow_dispatch"}:
@@ -548,7 +524,7 @@ policy_path = ROOT / "CI_POLICY.md"
 policy = policy_path.read_text(encoding="utf-8") if policy_path.is_file() else ""
 for token in (
     "automatic branch/PR validation", VALIDATION_WORKFLOW, "integration/<batch-id>", "exact-main release",
-    AUTO_DISPATCHER, HYBRID_COORDINATOR, "release-v25-cloud.yml", "ALL MERGED TO MAIN",
+    AUTO_DISPATCHER, "release-v25-cloud.yml", "ALL MERGED TO MAIN",
 ):
     if token not in policy:
         errors.append("CI_POLICY.md missing staged CI policy token: " + token)
@@ -560,7 +536,6 @@ for token in (
     "Only an agent/session explicitly authorized by the repository owner as an integration/merge coordinator may change `main`.",
     "shared branch/PR CI", "combined-tree CI", "exact-main release CI",
     "merge to `main` only within the owner's explicit authorization", "ALL MERGED TO MAIN", AUTO_DISPATCHER,
-    HYBRID_COORDINATOR,
 ):
     if token not in registration:
         errors.append("AGENT-WORK-REGISTRATION.md missing staged integration token: " + token)
@@ -574,5 +549,5 @@ if errors:
 
 print(
     "PASS: every agent/integration push produces exact-head branch CI, every PR emits stable required contexts, governance/docs-only candidates remain lightweight through internal scope classification, "
-    "build-relevant candidates run Core plus V25 compile, main owns exact-source V25 dispatch with a bounded successful-release wakeup, the named hybrid coordinator is manual-only/disabled for automatic runs, and releases retain explicit confirmation."
+    "build-relevant candidates run Core plus V25 compile, main owns exact-source V25 dispatch with a bounded successful-release wakeup, the Hybrid PR Coordinator workflow remains retired, and releases retain explicit confirmation."
 )
