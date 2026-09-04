@@ -45,7 +45,19 @@ namespace QS3D.Core.Commercial
             CorrelationId = CommercialGuard.RequireOptionalToken(correlationId, nameof(correlationId));
             BeforeSummary = CommercialGuard.RequireOptionalCanonicalText(beforeSummary, nameof(beforeSummary));
             AfterSummary = CommercialGuard.RequireOptionalCanonicalText(afterSummary, nameof(afterSummary));
-            SourceRevisions = CommercialGuard.Snapshot(sourceRevisions, nameof(sourceRevisions), 64);
+            SourceRevisions = CommercialGuard.Snapshot(
+                sourceRevisions,
+                nameof(sourceRevisions),
+                64,
+                CommercialRevisionStateEquals);
+        }
+
+        private static bool CommercialRevisionStateEquals(CommercialRevisionRef left, CommercialRevisionRef right)
+        {
+            return left != null && right != null &&
+                string.Equals(left.SourceKind, right.SourceKind, StringComparison.Ordinal) &&
+                string.Equals(left.SourceId, right.SourceId, StringComparison.Ordinal) &&
+                string.Equals(left.RevisionId, right.RevisionId, StringComparison.Ordinal);
         }
 
         public string EventId { get; }
@@ -339,7 +351,11 @@ namespace QS3D.Core.Commercial
             return value;
         }
 
-        internal static IReadOnlyList<T> Snapshot<T>(IEnumerable<T> source, string paramName, int maximum)
+        internal static IReadOnlyList<T> Snapshot<T>(
+            IEnumerable<T> source,
+            string paramName,
+            int maximum,
+            Func<T, T, bool> semanticEquals = null)
             where T : class
         {
             if (source == null) throw new ArgumentNullException(paramName);
@@ -371,6 +387,7 @@ namespace QS3D.Core.Commercial
             if (knownCount.HasValue && result.Count != knownCount.Value)
                 throw new InvalidOperationException(paramName + " known Count does not match completed traversal cardinality.");
             RequireStableSnapshotKnownCount(source, knownCount, paramName, maximum);
+            RequireStableSnapshotGeneration(source, knownCount, result, semanticEquals, paramName, maximum);
 
             return new ReadOnlyCollection<T>(result.ToArray());
         }
@@ -379,6 +396,43 @@ namespace QS3D.Core.Commercial
         {
             if (knownCount.HasValue && observedCount >= knownCount.Value)
                 throw new InvalidOperationException(label + " known Count was exceeded during traversal.");
+        }
+
+        private static void RequireStableSnapshotGeneration<T>(
+            IEnumerable<T> source,
+            int? admittedCount,
+            IReadOnlyList<T> snapshot,
+            Func<T, T, bool> semanticEquals,
+            string paramName,
+            int maximum)
+            where T : class
+        {
+            if (!admittedCount.HasValue || semanticEquals == null)
+                return;
+
+            var index = 0;
+            using (var enumerator = source.GetEnumerator())
+            {
+                while (true)
+                {
+                    RequireStableSnapshotKnownCountDuringTraversal(source, admittedCount, paramName, maximum);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireStableSnapshotKnownCountDuringTraversal(source, admittedCount, paramName, maximum);
+                    if (index >= snapshot.Count)
+                        throw new InvalidOperationException(paramName + " content changed during enumeration.");
+
+                    var current = enumerator.Current;
+                    RequireStableSnapshotKnownCountDuringTraversal(source, admittedCount, paramName, maximum);
+                    if (current == null || !semanticEquals(snapshot[index], current))
+                        throw new InvalidOperationException(paramName + " content changed during enumeration.");
+                    index++;
+                }
+            }
+
+            if (index != snapshot.Count)
+                throw new InvalidOperationException(paramName + " content changed during enumeration.");
+            RequireStableSnapshotKnownCount(source, admittedCount, paramName, maximum);
         }
 
         private static void RequireStableSnapshotKnownCountDuringTraversal<T>(
