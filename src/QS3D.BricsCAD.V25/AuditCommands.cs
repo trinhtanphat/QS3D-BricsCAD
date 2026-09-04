@@ -142,6 +142,12 @@ namespace QS3D.BricsCAD.V25
             }
             catch
             {
+                if (!published.IsLoaded)
+                {
+                    ReleaseCandidate(published);
+                    return true;
+                }
+
                 return false;
             }
             finally
