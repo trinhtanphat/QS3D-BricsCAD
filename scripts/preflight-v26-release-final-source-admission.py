@@ -25,6 +25,7 @@ def main() -> int:
         "$finalReleaseRelevantPaths = @(",
         "'src/QS3D.BricsCAD.V25/'",
         "'src/QS3D.BricsCAD.V26/'",
+        "'samples/generated/'",
         "git diff --quiet --no-ext-diff \"$env:GITHUB_SHA..$finalMain\" -- @finalReleaseRelevantPaths",
         "$finalReleaseDriftStatus = $LASTEXITCODE",
         "newer release-relevant protected main supersedes this V26 publication",
