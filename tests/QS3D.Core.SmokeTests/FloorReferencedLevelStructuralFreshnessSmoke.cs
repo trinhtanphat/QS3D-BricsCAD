@@ -32,8 +32,8 @@ namespace QS3D.Core.SmokeTests
             var version = project.ChangeVersion;
             Throws<InvalidOperationException>(() =>
                 ProjectFloorService.AssignBottomLevel(project, "B", ReplaceFloorThenYield(project, top, 3d, element)));
-            if (project.ChangeVersion != version)
-                throw new InvalidOperationException("Direct Top Level replacement unexpectedly advanced ProjectState.ChangeVersion.");
+            if (project.ChangeVersion != version + 1L)
+                throw new InvalidOperationException("Direct Top Level replacement did not advance ProjectState.ChangeVersion exactly once.");
             AssertNoBottomMutation(element);
         }
 
@@ -43,8 +43,8 @@ namespace QS3D.Core.SmokeTests
             var version = project.ChangeVersion;
             Throws<InvalidOperationException>(() =>
                 ProjectFloorService.AssignTopLevel(project, "T", ReplaceFloorThenYield(project, bottom, 0d, element)));
-            if (project.ChangeVersion != version)
-                throw new InvalidOperationException("Direct Bottom Level replacement unexpectedly advanced ProjectState.ChangeVersion.");
+            if (project.ChangeVersion != version + 1L)
+                throw new InvalidOperationException("Direct Bottom Level replacement did not advance ProjectState.ChangeVersion exactly once.");
             if (element.Properties.ContainsKey(ProjectFloorService.TopLevelIdKey) ||
                 element.Properties.ContainsKey(ProjectFloorService.TopLevelOffsetKey))
                 throw new InvalidOperationException("Top Level assignment mutated the element before rejecting Bottom Level replacement.");
@@ -56,8 +56,8 @@ namespace QS3D.Core.SmokeTests
             var version = project.ChangeVersion;
             Throws<InvalidOperationException>(() =>
                 ProjectFloorService.AssignBottomLevel(project, "B", RemoveFloorThenYield(project, top, element)));
-            if (project.ChangeVersion != version)
-                throw new InvalidOperationException("Direct Top Level removal unexpectedly advanced ProjectState.ChangeVersion.");
+            if (project.ChangeVersion != version + 1L)
+                throw new InvalidOperationException("Direct Top Level removal did not advance ProjectState.ChangeVersion exactly once.");
             AssertNoBottomMutation(element);
         }
 
