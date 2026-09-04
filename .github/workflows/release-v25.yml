@@ -682,6 +682,7 @@ jobs:
               'scripts/',
               'src/QS3D.BricsCAD.V25/',
               'src/QS3D.Core/',
+              'samples/generated/',
               'Directory.Build.props',
               'Directory.Build.targets',
               'VERSION',
@@ -743,7 +744,8 @@ jobs:
                   Write-Host 'V25 publish acknowledgement was ambiguous, but authoritative release state confirms the exact qualified release is already published; treating publication as committed.'
                   return
                 }
-                if ($reconciledRelease.draft -ne $true) { throw 'V25 release draft state is ambiguous during acknowledgement reconciliation.' }
+                if ($reconciledRelease.draft -ne $true) { throw 'V25 release draft state is ambiguous during acknowledgement reconciliation.'
+                }
               }
               catch {
                 $reconciliationError = $_
