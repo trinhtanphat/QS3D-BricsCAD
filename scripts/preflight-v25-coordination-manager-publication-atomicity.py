@@ -36,7 +36,7 @@ require("TryCloseManager(", "manager cleanup must use one exact-instance helper"
 require("ReferenceEquals(_cleanupInFlight, manager)", "cleanup release must be exact-instance bound")
 require("ReferenceEquals(_publicationInFlight, manager)", "publication release must be exact-instance bound")
 require("if (_nativePublicationCallActive || _cleanupInFlight != null)", "reentrant invocation must fail closed while native show/close stack is active")
-require("_publicationInFlight = published;", "candidate must reserve singleton ownership before native modeless publication")
+require("_publicationInFlight = exactPublished;", "candidate must reserve singleton ownership before native modeless publication")
 require("_nativePublicationCallActive = true;", "native publication stack must be fenced before ShowModelessWindow")
 require("_nativePublicationCallActive = false;", "native publication stack fence must unwind deterministically")
 require("if (!publishedWindow.IsLoaded)", "non-loaded native publication must not be committed as published")
@@ -44,15 +44,25 @@ require("private static void RequireActiveDocument(Document document)", "active-
 if text.count("RequireActiveDocument(document);") < 2:
     fail("active document must be fenced both before candidate construction and after native publication")
 require("ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)", "semantic project identity must be re-resolved after native publication")
-require("_published = published;", "successful exact candidate must transition to published ownership")
+require("_published = exactPublished;", "successful exact candidate must transition to published ownership")
 require("_publicationInFlight = null;", "successful publication must release unpublished ownership")
 
-order("_publicationInFlight = published;", "Application.ShowModelessWindow", "singleton reservation must precede native ShowModelessWindow")
+order("_publicationInFlight = exactPublished;", "Application.ShowModelessWindow", "singleton reservation must precede native ShowModelessWindow")
 order("_nativePublicationCallActive = true;", "Application.ShowModelessWindow", "native reentrancy fence must precede ShowModelessWindow")
 order("Application.ShowModelessWindow", "if (!publishedWindow.IsLoaded)", "terminal-load check must follow native publication")
 order("if (!publishedWindow.IsLoaded)", "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)", "semantic project check must follow terminal loaded-state validation")
-order("ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)", "_published = published;", "published ownership cannot be committed before semantic project revalidation")
-order("_published = published;", "_publicationInFlight = null;", "transition must publish exact owner before dropping unpublished reservation")
+order("ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)", "_published = exactPublished;", "published ownership cannot be committed before semantic project revalidation")
+order("_published = exactPublished;", "_publicationInFlight = null;", "transition must publish exact owner before dropping unpublished reservation")
+
+close_start = text.find("private static bool TryCloseManager(PublishedManager manager)")
+close_end = text.find("private static void ReleaseClosedManager", close_start)
+if close_start < 0 or close_end < 0:
+    fail("unable to isolate exact manager cleanup helper")
+cleanup = text[close_start:close_end]
+close_call = cleanup.find("manager.Window.Close();")
+loaded_check = cleanup.find("if (manager.Window.IsLoaded)")
+if close_call < 0 or loaded_check < 0 or close_call >= loaded_check:
+    fail("cleanup must attempt Close even for an attached candidate that never reached IsLoaded; IsLoaded is terminal evidence after Close, not admission to Close")
 
 # Existing defect signatures must not return.
 if "Application.ShowModelessWindow(IntPtr.Zero, publishedWindow, true);\n                _published = published;" in text:
@@ -60,4 +70,4 @@ if "Application.ShowModelessWindow(IntPtr.Zero, publishedWindow, true);\n       
 if "public bool Matches(Document document)" in text:
     fail("same-document reuse still ignores canonical project identity")
 
-print("PASS: Coordination Manager modeless publication/cleanup ownership is reentrancy-safe, project/document-affine, and exact-instance bound")
+print("PASS: Coordination Manager modeless publication/cleanup ownership is reentrancy-safe, leak-safe, project/document-affine, and exact-instance bound")
