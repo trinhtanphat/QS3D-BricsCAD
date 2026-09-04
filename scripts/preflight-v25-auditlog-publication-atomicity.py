@@ -79,6 +79,14 @@ def main() -> None:
         published_finally_index > published_close_index and published_clear_index > published_finally_index,
         "cross-document published-window cleanup must retain its reservation until Close unwinds",
     )
+    published_catch_index = published.find("catch", published_close_index)
+    published_terminal_index = published.find("if (!published.IsLoaded)", published_catch_index, published_finally_index)
+    published_terminal_release_index = published.find("ReleaseCandidate(published);", published_terminal_index, published_finally_index)
+    published_terminal_success_index = published.find("return true;", published_terminal_release_index, published_finally_index)
+    require(
+        published_catch_index >= 0 and published_terminal_index > published_catch_index and published_terminal_release_index > published_terminal_index and published_terminal_success_index > published_terminal_release_index,
+        "a Close exception after terminal Published-window closure must reconcile exact state and succeed instead of reporting a false UI failure",
+    )
 
     require(
         "if (!candidate.IsLoaded)" in source and "CloseUnpublishedCandidate(candidate)" in source,
@@ -139,7 +147,7 @@ def main() -> None:
     )
     require("ProjectContextCoordinator.GetOrCreate" not in source, "Audit Log command must keep project reads non-creating")
 
-    print("PASS: Audit Log publication and terminal cleanup are atomic, reentrancy-safe, and failed cleanup remains quarantined")
+    print("PASS: Audit Log publication and terminal cleanup are atomic, reentrancy-safe, and terminal Close state is reconciled")
 
 
 if __name__ == "__main__":
