@@ -105,6 +105,8 @@ namespace QS3D.Core.Persistence
 
         private static void ValidatePrimaryIdentityCanonicality(XElement root)
         {
+            RequireCanonicalOptionalAttribute(root, "activeZoneId", "Project active zone id");
+            RequireCanonicalOptionalAttribute(root, "activeFloorId", "Project active floor id");
             foreach (var item in root.Element("metadata")?.Elements("p") ?? Enumerable.Empty<XElement>())
                 RequireCanonicalAttribute(item, "name", "Project metadata key");
             foreach (var zone in root.Element("zones")?.Elements("zone") ?? Enumerable.Empty<XElement>())
@@ -125,10 +127,37 @@ namespace QS3D.Core.Persistence
             foreach (var element in root.Element("elements")?.Elements("element") ?? Enumerable.Empty<XElement>())
             {
                 RequireCanonicalAttribute(element, "id", "Project element id");
+                RequireCanonicalOptionalAttribute(element, "familyId", "Project element family id");
+                RequireCanonicalOptionalAttribute(element, "floorId", "Project element floor id");
+                RequireCanonicalOptionalAttribute(element, "zoneId", "Project element zone id");
+                RequireCanonicalElementValues(element.Element("handles"), "h", "Project element source handle");
+                RequireCanonicalElementValues(element.Element("dependencies"), "d", "Project element dependency id");
                 foreach (var property in element.Element("properties")?.Elements("p") ?? Enumerable.Empty<XElement>())
                     RequireCanonicalAttribute(property, "name", "Project element property key");
                 foreach (var quantity in element.Element("quantities")?.Elements("q") ?? Enumerable.Empty<XElement>())
                     RequireCanonicalAttribute(quantity, "name", "Project element quantity name");
+            }
+        }
+
+        private static void RequireCanonicalOptionalAttribute(XElement element, string attributeName, string owner)
+        {
+            var attribute = element.Attribute(attributeName);
+            var value = attribute?.Value;
+            if (value == null || value.Length == 0) return;
+            if (string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException(owner + " must be empty or canonical without leading/trailing whitespace.");
+        }
+
+        private static void RequireCanonicalElementValues(XElement? container, string itemName, string owner)
+        {
+            if (container == null) return;
+            foreach (var item in container.Elements(itemName))
+            {
+                var value = item.Value;
+                if (string.IsNullOrWhiteSpace(value))
+                    throw new InvalidDataException(owner + " must not be empty.");
+                if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                    throw new InvalidDataException(owner + " must not contain leading/trailing whitespace.");
             }
         }
 
