@@ -398,10 +398,13 @@ namespace QS3D.BricsCAD.V25
                     try
                     {
                         var record = transaction.GetObject(entry.Value, OpenMode.ForRead, false) as Xrecord;
-                        if (record != null && record.Data != null)
+                        if (record != null)
                         {
                             using (var data = record.Data)
-                                PutTypedValues(snapshot, prefix + ".Data", data.AsArray());
+                            {
+                                if (data != null)
+                                    PutTypedValues(snapshot, prefix + ".Data", data.AsArray());
+                            }
                         }
                     }
                     catch { }
