@@ -28,6 +28,10 @@ for token in [
 ]:
     if token not in mutation_body:
         raise SystemExit(f"mutation timeout must transfer writer ownership before caller unwind: {token}")
+if "deferredWriterScope.Dispose()" in mutation_body:
+    raise SystemExit("started-work writer handoff must fail closed; detached writer ownership must never be released on transfer uncertainty")
+if mutation_body.index("writerScope = null") > mutation_body.index("timeout.TransferWriterScope(deferredWriterScope)"):
+    raise SystemExit("caller writer ownership must be cleared before transfer so unexpected transfer failure cannot release the detached writer during unwind")
 
 invoke_start = runtime.index("private static string InvokeCad(Func<string> action)")
 invoke_end = runtime.index("private static void ExecuteCadWork(object state)", invoke_start)
