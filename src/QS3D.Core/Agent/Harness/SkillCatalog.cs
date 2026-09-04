@@ -33,8 +33,7 @@ namespace QS3D.Core.Agent.Harness
             if (string.IsNullOrWhiteSpace(id))
                 throw new ArgumentException("Skill id is required.", nameof(id));
 
-            SkillDescriptor skill;
-            if (!_byId.TryGetValue(id, out skill))
+            if (!_byId.TryGetValue(id, out var skill) || skill == null)
                 throw new InvalidOperationException("Unknown prerequisite skill: " + id + ".");
             return skill;
         }
