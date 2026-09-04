@@ -16,6 +16,10 @@ def validate(text: str) -> list[str]:
         "nFileIndexHigh",
         "nFileIndexLow",
         "SafeFileHandle",
+        "$admissionStream = [IO.File]::Open",
+        "$admissionIdentity = Get-HeldFileIdentity -Stream $admissionStream",
+        "$heldIdentity = Get-HeldFileIdentity -Stream $stream",
+        "Assert-HeldFileIdentityMatchesPath -Held $admissionHeld",
         "Assert-HeldFileIdentityMatchesPath -Held $held",
     )
     for token in required:
@@ -23,14 +27,42 @@ def validate(text: str) -> list[str]:
             errors.append(f"V26 package held-input native identity marker missing: {token}")
 
     open_fn = text.find("function Open-HeldPackageInput")
-    stream_open = text.find("[IO.File]::Open(", open_fn)
-    held_record = text.find("FileIdentity = Get-HeldFileIdentity", stream_open)
-    first_identity = text.find("Assert-HeldFileIdentityMatchesPath -Held $held", stream_open)
-    return_pos = text.find("return $held", stream_open)
-    if min(open_fn, stream_open, held_record, first_identity, return_pos) < 0 or not (
-        open_fn < stream_open < held_record < first_identity < return_pos
+    initial_safety = text.find("Assert-SafeInputFile -Path $Path", open_fn)
+    admission_open = text.find("$admissionStream = [IO.File]::Open", initial_safety)
+    admission_identity = text.find("$admissionIdentity = Get-HeldFileIdentity -Stream $admissionStream", admission_open)
+    rebound_safety = text.find("Assert-SafeInputFile -Path $fullPath", admission_identity)
+    admission_path_proof = text.find("Assert-HeldFileIdentityMatchesPath -Held $admissionHeld", rebound_safety)
+    held_open = text.find("$stream = [IO.File]::Open", admission_path_proof)
+    held_identity = text.find("$heldIdentity = Get-HeldFileIdentity -Stream $stream", held_open)
+    bridge_compare = text.find("$admissionIdentity", held_identity)
+    held_record = text.find("FileIdentity = $heldIdentity", bridge_compare)
+    first_identity = text.find("Assert-HeldFileIdentityMatchesPath -Held $held", held_record)
+    return_pos = text.find("return $held", first_identity)
+    admission_dispose = text.find("$admissionStream.Dispose()", return_pos)
+    ordered = (
+        open_fn,
+        initial_safety,
+        admission_open,
+        admission_identity,
+        rebound_safety,
+        admission_path_proof,
+        held_open,
+        held_identity,
+        bridge_compare,
+        held_record,
+        first_identity,
+        return_pos,
+        admission_dispose,
+    )
+    if min(ordered) < 0 or not (
+        open_fn < initial_safety < admission_open < admission_identity < rebound_safety <
+        admission_path_proof < held_open < held_identity < bridge_compare < held_record <
+        first_identity < return_pos < admission_dispose
     ):
-        errors.append("Open-HeldPackageInput must capture native identity and prove current-path identity before granting the held input")
+        errors.append(
+            "Open-HeldPackageInput must hold an admission handle, prove its current-path identity, "
+            "bridge that identity to the long-lived stream, and keep admission locked until authority is established"
+        )
 
     bind_fn = text.find("function Assert-HeldPathBinding")
     bind_identity = text.find("Assert-HeldFileIdentityMatchesPath -Held $Held", bind_fn)
@@ -70,9 +102,14 @@ def main() -> int:
         "function Get-HeldFileIdentity",
         "function Assert-HeldFileIdentityMatchesPath",
         "GetFileInformationByHandle",
-        "FileIdentity = Get-HeldFileIdentity",
+        "$admissionStream = [IO.File]::Open",
+        "$admissionIdentity = Get-HeldFileIdentity -Stream $admissionStream",
+        "Assert-HeldFileIdentityMatchesPath -Held $admissionHeld",
+        "$heldIdentity = Get-HeldFileIdentity -Stream $stream",
+        "FileIdentity = $heldIdentity",
         "Assert-HeldFileIdentityMatchesPath -Held $held",
         "Assert-HeldFileIdentityMatchesPath -Held $Held",
+        "$admissionStream.Dispose()",
     )
     for token in mutation_tokens:
         if token not in source:
@@ -87,9 +124,9 @@ def main() -> int:
             print(" -", failure)
         return 1
 
-    print("PASS: V26 package held inputs are bound to current admitted pathnames by Windows native file identity.")
-    print(" - held stream identity is captured before authority is granted")
-    print(" - current pathname is independently opened and identity-compared")
+    print("PASS: V26 package held inputs bridge an admission-handle identity to the long-lived held generation.")
+    print(" - admission handle stays open while current pathname safety/identity is re-proved")
+    print(" - long-lived stream must match the locked admission identity before authority is granted")
     print(" - later path-binding checks repeat the native identity proof")
     print(" - inability to prove identity remains fail-closed")
     return 0
