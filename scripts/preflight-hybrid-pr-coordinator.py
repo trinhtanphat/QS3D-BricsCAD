@@ -123,6 +123,7 @@ if text:
         "QS3D_AUTOMERGE_TOKEN",
         "/update-branch",
         "expected_head_sha",
+        "QS3D-GREEN-PROMOTION:",
     )
     for token in required_tokens:
         require(text, token, "hybrid coordinator")
@@ -170,6 +171,7 @@ if text:
     for token in (
         "github.event_name == 'pull_request'",
         "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}",
+        "PR_ACTION: ${{ github.event.action }}",
         "event_head_sha",
         "api_head_sha",
         "enablePullRequestAutoMerge",
@@ -181,6 +183,7 @@ if text:
         "base.ref",
         "draft",
         "dependabot[bot]",
+        "QS3D-GREEN-PROMOTION:",
         arm_secret_error,
     ):
         require(arm, token, "arm-native-automerge")
@@ -191,6 +194,8 @@ if text:
         "github.event.workflow_run.conclusion == 'success'",
         "github.event.workflow_run.event == 'pull_request'",
         "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}",
+        "PROMOTION_RUN_ID: ${{ github.run_id }}",
+        "SOURCE_CI_RUN_ID: ${{ github.event.workflow_run.id }}",
         "github.event.workflow_run.head_sha",
         "github.event.workflow_run.pull_requests",
         "event_head_sha",
@@ -203,9 +208,14 @@ if text:
         "/compare/",
         "/update-branch",
         "expected_head_sha",
+        "QS3D-GREEN-PROMOTION:",
+        "--method PATCH",
+        "actions/runs?event=pull_request&head_sha=",
         "markPullRequestReadyForReview",
         "enablePullRequestAutoMerge",
         "autoMergeRequest",
+        "clean status",
+        "unstable status",
         promote_secret_error,
     ):
         require(promote, token, "promote-green-draft")
@@ -248,4 +258,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: draft promotion is gated by successful exact-head Shared CI, while PR events only reconcile native auto-merge and main pushes refresh eligible branches.")
+print("PASS: draft promotion is gated by successful exact-head Shared CI and uses an edited-metadata required-check window before native auto-merge; PR events never promote Drafts.")
