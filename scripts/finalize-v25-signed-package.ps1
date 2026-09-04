@@ -538,8 +538,9 @@ $manifestStage = New-SiblingTempPath -TargetPath $hashManifest -Suffix '.stage.t
 $manifestBackup = New-SiblingTempPath -TargetPath $zip -Suffix '.manifest.backup.txt'
 $tempZip = New-SiblingTempPath -TargetPath $zip -Suffix '.stage.zip'
 $zipBackup = New-SiblingTempPath -TargetPath $zip -Suffix '.backup.zip'
+$zipRollbackDiscard = New-SiblingTempPath -TargetPath $zip -Suffix '.zip.rollback-discard'
 
-foreach ($transactionBackup in @($metadataBackup, $manifestBackup, $metadataRollbackDiscard, $zipBackup)) {
+foreach ($transactionBackup in @($metadataBackup, $manifestBackup, $metadataRollbackDiscard, $zipBackup, $zipRollbackDiscard)) {
     if (Test-PathEqualOrContained -Path $transactionBackup -Container $package) {
         throw "Signed-package transaction backup must stay outside PackageDirectory: $transactionBackup"
     }
@@ -548,6 +549,8 @@ foreach ($transactionBackup in @($metadataBackup, $manifestBackup, $metadataRoll
 $metadataPublished = $false
 $manifestDetached = $false
 $manifestPublished = $false
+$zipPublished = $false
+$zipExistedBeforePublish = $false
 $transactionCommitted = $false
 
 try {
@@ -594,10 +597,18 @@ try {
 
     if (Test-Path -LiteralPath $zip) {
         $zip = Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip'
+        $zipExistedBeforePublish = $true
         [IO.File]::Replace($tempZip, $zip, $zipBackup, $true)
     }
     else {
         [IO.File]::Move($tempZip, $zip)
+    }
+    $zipPublished = $true
+
+    $zip = Assert-SafeFile -Path $zip -Label 'finalized PackageZip'
+    $installedZipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToUpperInvariant()
+    if (-not [string]::Equals($installedZipHash, $stagedZipHash, [StringComparison]::Ordinal)) {
+        throw "Finalized ZIP generation mismatch. Expected $stagedZipHash, got $installedZipHash."
     }
     $transactionCommitted = $true
 
@@ -610,6 +621,29 @@ try {
 catch {
     $originalError = $_
     $rollbackErrors = New-Object 'System.Collections.Generic.List[string]'
+
+    if ($zipPublished) {
+        try {
+            if ($zipExistedBeforePublish) {
+                if (-not (Test-Path -LiteralPath $zipBackup -PathType Leaf)) {
+                    throw "original PackageZip backup is unavailable: $zipBackup"
+                }
+                if (Test-Path -LiteralPath $zip -PathType Leaf) {
+                    [IO.File]::Replace($zipBackup, $zip, $zipRollbackDiscard, $true)
+                    if (Test-Path -LiteralPath $zipRollbackDiscard) {
+                        Remove-Item -LiteralPath $zipRollbackDiscard -Force -ErrorAction Stop
+                    }
+                }
+                else {
+                    [IO.File]::Move($zipBackup, $zip)
+                }
+            }
+            elseif (Test-Path -LiteralPath $zip) {
+                Remove-Item -LiteralPath $zip -Force -ErrorAction Stop
+            }
+        }
+        catch { $rollbackErrors.Add("restore original finalized ZIP: $($_.Exception.Message)") }
+    }
 
     if ($manifestPublished -and (Test-Path -LiteralPath $hashManifest)) {
         try { Remove-Item -LiteralPath $hashManifest -Force -ErrorAction Stop }
@@ -635,7 +669,7 @@ catch {
     throw $originalError
 }
 finally {
-    foreach ($temporary in @($metadataStage, $manifestStage, $tempZip, $metadataRollbackDiscard)) {
+    foreach ($temporary in @($metadataStage, $manifestStage, $tempZip, $metadataRollbackDiscard, $zipRollbackDiscard)) {
         if (Test-Path -LiteralPath $temporary) {
             Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
         }
