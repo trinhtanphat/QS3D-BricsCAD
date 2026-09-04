@@ -33,6 +33,28 @@ def main() -> None:
     )
 
     require(
+        "_publicationInFlightCandidate" in source,
+        "Audit Log must distinguish an in-flight native publication from a failed unpublished cleanup quarantine",
+    )
+    inflight_set_index = source.find("_publicationInFlightCandidate = candidate;", reservation_index, show_index)
+    require(
+        inflight_set_index > reservation_index,
+        "Audit Log must mark the exact candidate in-flight before entering native ShowModelessWindow",
+    )
+    prepare_start = source.find("private static bool PrepareUnpublishedCandidate")
+    prepare_end = source.find("private static bool PreparePublishedWindow", prepare_start)
+    require(prepare_start >= 0 and prepare_end > prepare_start, "cannot bound unpublished-candidate preparation helper")
+    prepare = source[prepare_start:prepare_end]
+    require(
+        "ReferenceEquals(_publicationInFlightCandidate, candidate)" in prepare and "return false;" in prepare,
+        "reentrant invocation must fail closed without closing a candidate while native publication is in flight",
+    )
+    require(
+        prepare.find("ReferenceEquals(_publicationInFlightCandidate, candidate)") < prepare.find("CloseUnpublishedCandidate(candidate)"),
+        "in-flight publication guard must run before any Close attempt",
+    )
+
+    require(
         "if (!candidate.IsLoaded)" in source and "CloseUnpublishedCandidate(candidate)" in source,
         "non-loaded modeless candidate must be terminally cleaned before return",
     )
@@ -65,9 +87,17 @@ def main() -> None:
     require("candidate.Close();" in helper, "cleanup helper must attempt terminal Close")
     require("_unpublishedCandidate = candidate;" in helper, "failed cleanup must quarantine the exact candidate")
     require("_window = candidate" not in helper, "cleanup helper must never publish an unproven candidate")
+
+    release_start = source.find("private static void ReleaseCandidate")
+    release_end = source.find("private static IntPtr GetNativeDatabaseIdentity", release_start)
+    release = source[release_start:release_end]
+    require(
+        "ReferenceEquals(_publicationInFlightCandidate, candidate)" in release,
+        "terminal candidate release must identity-clear any matching in-flight publication marker",
+    )
     require("ProjectContextCoordinator.GetOrCreate" not in source, "Audit Log command must keep project reads non-creating")
 
-    print("PASS: Audit Log modeless publication is atomic, reentrancy-safe, and unresolved unpublished candidates remain quarantined")
+    print("PASS: Audit Log publication is atomic, reentrancy-safe, in-flight candidates are never closed by reentrant commands, and failed cleanup remains quarantined")
 
 
 if __name__ == "__main__":
