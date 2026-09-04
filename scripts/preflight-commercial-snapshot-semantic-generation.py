@@ -14,17 +14,31 @@ for path in (source, smoke, runbook):
 
 if source.is_file():
     text = source.read_text(encoding="utf-8")
-    constructor = text[text.find("public CommercialAuditRecord("):text.find("public string EventId", text.find("public CommercialAuditRecord("))]
+    constructor_start = text.find("public CommercialAuditRecord(")
+    constructor_end = text.find("public string EventId", constructor_start)
+    constructor = text[constructor_start:constructor_end] if constructor_start >= 0 and constructor_end > constructor_start else ""
     snapshot_start = text.find("internal static IReadOnlyList<T> Snapshot<T>(")
     snapshot_end = text.find("internal static void RequireCanProcessNext", snapshot_start)
     snapshot = text[snapshot_start:snapshot_end] if snapshot_start >= 0 and snapshot_end > snapshot_start else ""
 
-    for token in (
-        "CommercialRevisionStateEquals",
-        "CommercialGuard.Snapshot(sourceRevisions, nameof(sourceRevisions), 64, CommercialRevisionStateEquals)",
-    ):
-        if token not in constructor and token not in text:
-            errors.append("CommercialAuditRecord must bind source-revision snapshots to semantic equality: " + token)
+    constructor_required = (
+        "SourceRevisions = CommercialGuard.Snapshot(",
+        "sourceRevisions,",
+        "nameof(sourceRevisions),",
+        "64,",
+        "CommercialRevisionStateEquals);",
+        "private static bool CommercialRevisionStateEquals",
+        "string.Equals(left.SourceKind, right.SourceKind, StringComparison.Ordinal)",
+        "string.Equals(left.SourceId, right.SourceId, StringComparison.Ordinal)",
+        "string.Equals(left.RevisionId, right.RevisionId, StringComparison.Ordinal)",
+    )
+    cursor = 0
+    for token in constructor_required:
+        position = constructor.find(token, cursor)
+        if position < 0:
+            errors.append("CommercialAuditRecord must bind source-revision snapshots to exact semantic equality: " + token)
+            break
+        cursor = position + len(token)
 
     required = (
         "Func<T, T, bool> semanticEquals",
@@ -43,19 +57,27 @@ if source.is_file():
     helper_start = text.find("private static void RequireStableSnapshotGeneration<T>(")
     helper_end = text.find("private static void RequireStableSnapshotKnownCountDuringTraversal<T>(", helper_start)
     helper = text[helper_start:helper_end] if helper_start >= 0 and helper_end > helper_start else ""
-    for token in (
+    helper_required = (
         "if (!admittedCount.HasValue || semanticEquals == null)",
         "using (var enumerator = source.GetEnumerator())",
         "RequireStableSnapshotKnownCountDuringTraversal(source, admittedCount, paramName, maximum);",
         "if (!enumerator.MoveNext())",
+        "RequireStableSnapshotKnownCountDuringTraversal(source, admittedCount, paramName, maximum);",
         "if (index >= snapshot.Count)",
         "var current = enumerator.Current;",
+        "RequireStableSnapshotKnownCountDuringTraversal(source, admittedCount, paramName, maximum);",
         "if (current == null || !semanticEquals(snapshot[index], current))",
+        "index++;",
         "if (index != snapshot.Count)",
         "RequireStableSnapshotKnownCount(source, admittedCount, paramName, maximum);",
-    ):
-        if token not in helper:
-            errors.append("Commercial snapshot replay helper missing token: " + token)
+    )
+    cursor = 0
+    for token in helper_required:
+        position = helper.find(token, cursor)
+        if position < 0:
+            errors.append("Commercial snapshot replay helper missing ordered token: " + token)
+            break
+        cursor = position + len(token)
 
 if smoke.is_file():
     text = smoke.read_text(encoding="utf-8")
@@ -66,6 +88,8 @@ if smoke.is_file():
         "StreamingSourceRemainsSinglePass",
         "EnumerationCount",
         "ReplayCollection",
+        "counted semantic drift must be detected by replaying the admitted generation",
+        "pure streaming source must not be replayed",
     ):
         if token not in text:
             errors.append("Commercial snapshot semantic-generation smoke missing token: " + token)
