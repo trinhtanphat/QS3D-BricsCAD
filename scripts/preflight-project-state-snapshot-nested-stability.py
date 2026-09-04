@@ -57,8 +57,13 @@ helper_markers = (
     "Families",
     "QuantityRules",
     "Elements",
+    "SourceHandles",
+    "DependsOn",
+    "Properties",
+    "Quantities",
     "AuditEvents",
     "RequireEquivalentMap(",
+    "RequireEquivalentDoubleMap(",
     "RequireEquivalentSequence(",
     "InvalidOperationException",
 )
@@ -75,10 +80,20 @@ for marker in ("Count", "TryGetValue", "StringComparison.Ordinal", "InvalidOpera
     if marker not in map_helper:
         fail(f"snapshot map equivalence is missing marker: {marker}")
 
-sequence_start = text.find("private static void RequireEquivalentSequence(")
+double_map_start = text.find("private static void RequireEquivalentDoubleMap(")
+if double_map_start < 0:
+    fail("snapshot nested-state validation is missing quantity-map equivalence")
+double_map_end = text.find("private static", double_map_start + len("private static void RequireEquivalentDoubleMap("))
+double_map_helper = text[double_map_start:double_map_end if double_map_end >= 0 else len(text)]
+for marker in ("Count", "TryGetValue", "Equals", "InvalidOperationException"):
+    if marker not in double_map_helper:
+        fail(f"snapshot quantity-map equivalence is missing marker: {marker}")
+
+sequence_signature = "private static void RequireEquivalentSequence<T>("
+sequence_start = text.find(sequence_signature)
 if sequence_start < 0:
     fail("snapshot nested-state validation is missing ordered-sequence equivalence")
-sequence_end = text.find("private static", sequence_start + len("private static void RequireEquivalentSequence("))
+sequence_end = text.find("private static", sequence_start + len(sequence_signature))
 sequence_helper = text[sequence_start:sequence_end if sequence_end >= 0 else len(text)]
 for marker in ("Count", "for", "InvalidOperationException"):
     if marker not in sequence_helper:
