@@ -1,4 +1,4 @@
-[CmdletBinding()]
+[CmdletBinding()
 param(
     [Parameter(Mandatory = $true)]
     [ValidateNotNullOrEmpty()]
@@ -277,7 +277,7 @@ elseif (-not [string]::IsNullOrWhiteSpace($StatePath)) {
             Name = $name
             Path = [string]$states[$name].Path
             Length = [long]$states[$name].Length
-            LastWriteUtcTicks = [long]$states[$name].LastWriteTimeUtc.Ticks
+            LastWriteUtcTicks = [long]$states[$name].LastWriteUtcTicks
             Sha256 = [string]$states[$name].Sha256
         }
     }
