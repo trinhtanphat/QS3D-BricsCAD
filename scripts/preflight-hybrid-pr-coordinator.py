@@ -45,6 +45,19 @@ def job_block(text: str, job_name: str) -> str:
     return "\n".join(block)
 
 
+def require_exact_job_if(block: str, purpose: str, expected: str) -> None:
+    matches = re.findall(r"(?m)^    if:\s*(.*?)\s*$", block)
+    if len(matches) != 1:
+        fail(f"{purpose} must expose exactly one top-level job if guard")
+        return
+    expression = matches[0].strip()
+    if expression.startswith("${{") and expression.endswith("}}"):
+        expression = expression[3:-2].strip()
+    expression = re.sub(r"\s+", " ", expression)
+    if expression != expected:
+        fail(f"{purpose} must use the exact fail-closed event guard: {expected}")
+
+
 def require_fail_closed_secret_gate(block: str, purpose: str, message: str) -> None:
     pattern = (
         r'if \[\[ -z "\$\{GH_TOKEN:-\}" \]\]; then\s*\n'
@@ -73,6 +86,9 @@ if text:
         "name: QS3D Hybrid PR Coordinator",
         '  "pull_request":',
         '  "push":',
+        '  "workflow_run":',
+        '      - "QS3D Shared Branch and Integration CI"',
+        "      - completed",
         "      - opened",
         "      - reopened",
         "      - ready_for_review",
@@ -89,9 +105,11 @@ if text:
         "  group: qs3d-hybrid-pr-coordinator",
         "  cancel-in-progress: false",
         "arm-native-automerge:",
+        "promote-green-draft:",
         "refresh-branches:",
         "enablePullRequestAutoMerge",
         "disablePullRequestAutoMerge",
+        "markPullRequestReadyForReview",
         "pullRequestId",
         "autoMergeRequest",
         "no-automerge",
@@ -127,13 +145,25 @@ if text:
         fail("hybrid coordinator contains a direct pull-request merge endpoint")
 
     arm = job_block(text, "arm-native-automerge")
+    promote = job_block(text, "promote-green-draft")
     refresh = job_block(text, "refresh-branches")
     if not arm:
         fail("hybrid coordinator missing arm-native-automerge job block")
+    if not promote:
+        fail("hybrid coordinator missing promote-green-draft job block")
     if not refresh:
         fail("hybrid coordinator missing refresh-branches job block")
 
+    require_exact_job_if(arm, "arm-native-automerge", "github.event_name == 'pull_request'")
+    require_exact_job_if(
+        promote,
+        "promote-green-draft",
+        "github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request'",
+    )
+    require_exact_job_if(refresh, "refresh-branches", "github.event_name == 'push' && github.ref == 'refs/heads/main'")
+
     arm_secret_error = "QS3D_AUTOMERGE_TOKEN is required; native auto-merge coordination cannot run."
+    promote_secret_error = "QS3D_AUTOMERGE_TOKEN is required; GREEN draft promotion cannot run."
     refresh_secret_error = "QS3D_AUTOMERGE_TOKEN is required; branch refresh cannot run."
 
     for token in (
@@ -153,6 +183,32 @@ if text:
         arm_secret_error,
     ):
         require(arm, token, "arm-native-automerge")
+    reject(arm, "markPullRequestReadyForReview", "arm-native-automerge")
+
+    for token in (
+        "github.event_name == 'workflow_run'",
+        "github.event.workflow_run.conclusion == 'success'",
+        "github.event.workflow_run.event == 'pull_request'",
+        "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}",
+        "github.event.workflow_run.head_sha",
+        "github.event.workflow_run.pull_requests",
+        "event_head_sha",
+        "api_head_sha",
+        "head.repo.full_name",
+        "base.ref",
+        "draft",
+        "no-automerge",
+        "dependabot[bot]",
+        "/compare/",
+        "/update-branch",
+        "expected_head_sha",
+        "markPullRequestReadyForReview",
+        "enablePullRequestAutoMerge",
+        "autoMergeRequest",
+        promote_secret_error,
+    ):
+        require(promote, token, "promote-green-draft")
+    reject(promote, "disablePullRequestAutoMerge", "promote-green-draft")
 
     for token in (
         "github.event_name == 'push'",
@@ -171,22 +227,18 @@ if text:
         refresh_secret_error,
     ):
         require(refresh, token, "refresh-branches")
-
-    # Main-push refresh is allowed to re-arm native auto-merge after a successful
-    # optimistic update. Disarming remains exclusively owned by PR-event handling.
     reject(refresh, "disablePullRequestAutoMerge", "refresh-branches")
+    reject(refresh, "markPullRequestReadyForReview", "refresh-branches")
 
     require_fail_closed_secret_gate(arm, "arm-native-automerge", arm_secret_error)
+    require_fail_closed_secret_gate(promote, "promote-green-draft", promote_secret_error)
     require_fail_closed_secret_gate(refresh, "refresh-branches", refresh_secret_error)
 
-    if "github.token" in arm:
-        fail("arm-native-automerge must not use github.token for GraphQL auto-merge mutation")
-    if "secrets.QS3D_AUTOMERGE_TOKEN" not in arm:
-        fail("arm-native-automerge must use QS3D_AUTOMERGE_TOKEN")
-    if "github.token" in refresh:
-        fail("refresh-branches must not fall back to github.token for branch mutation")
-    if "secrets.QS3D_AUTOMERGE_TOKEN" not in refresh:
-        fail("refresh-branches must use QS3D_AUTOMERGE_TOKEN")
+    for job_name, block in (("arm-native-automerge", arm), ("promote-green-draft", promote), ("refresh-branches", refresh)):
+        if "github.token" in block:
+            fail(f"{job_name} must not fall back to github.token")
+        if "secrets.QS3D_AUTOMERGE_TOKEN" not in block:
+            fail(f"{job_name} must use QS3D_AUTOMERGE_TOKEN")
 
 print("QS3D hybrid PR coordinator preflight")
 if errors:
@@ -195,4 +247,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: hybrid coordinator keeps PR-event disarm isolated while main-push refresh may re-arm native auto-merge after exact-head branch refresh.")
+print("PASS: draft promotion is gated by successful exact-head Shared CI, while PR events only reconcile native auto-merge and main pushes refresh eligible branches.")
