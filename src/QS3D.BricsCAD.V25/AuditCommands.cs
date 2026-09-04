@@ -9,6 +9,7 @@ namespace QS3D.BricsCAD.V25
     {
         private static AuditLogWindow? _window;
         private static AuditLogWindow? _unpublishedCandidate;
+        private static AuditLogWindow? _publicationInFlightCandidate;
         private static IntPtr _nativeDatabaseIdentity;
 
         [CommandMethod("QS3DAUDIT", CommandFlags.Modal)]
@@ -49,6 +50,7 @@ namespace QS3D.BricsCAD.V25
                 var candidate = new AuditLogWindow(document);
                 candidate.Closed += (_, __) => ReleaseCandidate(candidate);
                 _unpublishedCandidate = candidate;
+                _publicationInFlightCandidate = candidate;
                 try
                 {
                     Application.ShowModelessWindow(IntPtr.Zero, candidate, true);
@@ -67,6 +69,11 @@ namespace QS3D.BricsCAD.V25
                     try { document.Editor.WriteMessage("\nQS3DAUDIT error: không thể mở nhật ký thay đổi."); } catch { }
                     try { PaletteCoordinator.SetStatus(showFailure); } catch { }
                     return;
+                }
+                finally
+                {
+                    if (ReferenceEquals(_publicationInFlightCandidate, candidate))
+                        _publicationInFlightCandidate = null;
                 }
 
                 if (!candidate.IsLoaded)
@@ -105,6 +112,8 @@ namespace QS3D.BricsCAD.V25
         {
             var candidate = _unpublishedCandidate;
             if (candidate == null) return true;
+            if (ReferenceEquals(_publicationInFlightCandidate, candidate))
+                return false;
             return CloseUnpublishedCandidate(candidate);
         }
 
@@ -176,6 +185,9 @@ namespace QS3D.BricsCAD.V25
 
             if (ReferenceEquals(_unpublishedCandidate, candidate))
                 _unpublishedCandidate = null;
+
+            if (ReferenceEquals(_publicationInFlightCandidate, candidate))
+                _publicationInFlightCandidate = null;
         }
 
         private static IntPtr GetNativeDatabaseIdentity(Document document)
