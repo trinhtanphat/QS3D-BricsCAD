@@ -27,6 +27,8 @@ def main() -> None:
     require(source, "[IO.File]::Open($generatedItem.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)", "held generated-script open")
     require(source, "$generatedStream", "held generated-script stream")
     require(source, "Read-HeldStrictUtf8", "bounded strict UTF-8 held read")
+    require(source, "$maxGeneratedScriptBytes = 1MB", "generated-script byte bound")
+    require(source, "[Text.UTF8Encoding]::new($false, $true)", "strict generated-script UTF-8 decoder")
     require(source, "$generated = Read-HeldStrictUtf8 -Stream $generatedStream", "validation from held generation")
     forbid(source, "Get-Content -LiteralPath $tempScript -Raw", "pathname validation reopen")
 
