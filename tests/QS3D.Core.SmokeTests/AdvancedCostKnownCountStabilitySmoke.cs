@@ -13,8 +13,16 @@ namespace QS3D.Core.SmokeTests
             RateBuildUpRejectsPostTraversalCountDrift();
             BuildUpAnalysisRejectsPostTraversalInterfaceConflict();
             BqLibraryRejectsPostTraversalNonGenericCountDrift();
+            HistoricalCatalogRejectsStableCountGenerationDrift();
+            TenderQuoteLinesRejectStableCountGenerationDrift();
+            TenderRequirementsRejectStableCountGenerationDrift();
+            TenderBidsRejectStableCountGenerationDrift();
+            ProgressContractsRejectStableCountGenerationDrift();
+            ProgressClaimsRejectStableCountGenerationDrift();
             HonestMultiInterfaceCountRemainsAccepted();
+            AffectedKnownCountControlsRemainAccepted();
             PureStreamingInputRemainsAccepted();
+            AffectedStreamingInputRemainsSinglePass();
         }
 
         private static void RateBuildUpRejectsPostTraversalCountDrift()
@@ -65,6 +73,73 @@ namespace QS3D.Core.SmokeTests
                 "BQ library must reject non-generic deterministic Count drift after traversal.");
         }
 
+        private static void HistoricalCatalogRejectsStableCountGenerationDrift()
+        {
+            var source = new GenerationSwitchCollection<HistoricalCostRecord>(
+                HistoricalRecord("REC-GEN", 10m),
+                HistoricalRecord("REC-GEN", 11m));
+
+            AssertGenerationFailure(
+                () => new HistoricalCostCatalog(source),
+                "Historical cost catalog must reject same-Count semantic generation drift.");
+        }
+
+        private static void TenderQuoteLinesRejectStableCountGenerationDrift()
+        {
+            var source = new GenerationSwitchCollection<TenderQuoteLine>(
+                new TenderQuoteLine("ITEM-GEN", 10m),
+                new TenderQuoteLine("ITEM-GEN", 11m));
+
+            AssertGenerationFailure(
+                () => new TenderBid("BID-LINE-GEN", "Bidder", "USD", source),
+                "Tender quote lines must reject same-Count semantic generation drift.");
+        }
+
+        private static void TenderRequirementsRejectStableCountGenerationDrift()
+        {
+            var source = new GenerationSwitchCollection<TenderRequirement>(
+                new TenderRequirement("ITEM-REQ-GEN", "Item", "ea", 1m),
+                new TenderRequirement("ITEM-REQ-GEN", "Item", "ea", 2m));
+
+            AssertGenerationFailure(
+                () => new TenderEvaluationService().Evaluate(source, Array.Empty<TenderBid>()),
+                "Tender requirements must reject same-Count semantic generation drift.");
+        }
+
+        private static void TenderBidsRejectStableCountGenerationDrift()
+        {
+            var source = new GenerationSwitchCollection<TenderBid>(
+                new TenderBid("BID-GEN", "Bidder A", "USD", Array.Empty<TenderQuoteLine>()),
+                new TenderBid("BID-GEN", "Bidder B", "USD", Array.Empty<TenderQuoteLine>()));
+
+            AssertGenerationFailure(
+                () => new TenderEvaluationService().Evaluate(Array.Empty<TenderRequirement>(), source),
+                "Tender bids must reject same-Count semantic generation drift.");
+        }
+
+        private static void ProgressContractsRejectStableCountGenerationDrift()
+        {
+            var source = new GenerationSwitchCollection<ProgressContractItem>(
+                new ProgressContractItem("ITEM-PROG-GEN", "ea", 10m, 2m),
+                new ProgressContractItem("ITEM-PROG-GEN", "ea", 10m, 3m));
+
+            AssertGenerationFailure(
+                () => new ProgressClaimService().Evaluate(source, Array.Empty<ProgressClaimLine>()),
+                "Progress contracts must reject same-Count semantic generation drift.");
+        }
+
+        private static void ProgressClaimsRejectStableCountGenerationDrift()
+        {
+            var contracts = new[] { new ProgressContractItem("ITEM-CLAIM-GEN", "ea", 10m, 2m) };
+            var source = new GenerationSwitchCollection<ProgressClaimLine>(
+                new ProgressClaimLine("ITEM-CLAIM-GEN", 0m, 1m),
+                new ProgressClaimLine("ITEM-CLAIM-GEN", 0m, 2m));
+
+            AssertGenerationFailure(
+                () => new ProgressClaimService().Evaluate(contracts, source),
+                "Progress claims must reject same-Count semantic generation drift.");
+        }
+
         private static void HonestMultiInterfaceCountRemainsAccepted()
         {
             var source = new DriftingMultiCountCollection<TradeCostItem>(
@@ -81,10 +156,39 @@ namespace QS3D.Core.SmokeTests
             Equal(2, result.Count, "Stable multi-interface deterministic Count evidence must remain accepted.");
         }
 
+        private static void AffectedKnownCountControlsRemainAccepted()
+        {
+            var historical = new HistoricalCostCatalog(new[] { HistoricalRecord("REC-OK", 10m) });
+            Equal(1, historical.Records.Count, "Stable historical known-count source changed.");
+
+            var bid = new TenderBid(
+                "BID-OK",
+                "Bidder",
+                "USD",
+                new[] { new TenderQuoteLine("ITEM-OK", 2m) });
+            var tender = new TenderEvaluationService().Evaluate(
+                new[] { new TenderRequirement("ITEM-OK", "Item", "ea", 3m) },
+                new[] { bid });
+            Equal(6m, tender[0].EvaluatedTotal, "Stable tender known-count source changed.");
+
+            var progress = new ProgressClaimService().Evaluate(
+                new[] { new ProgressContractItem("ITEM-OK", "ea", 3m, 2m) },
+                new[] { new ProgressClaimLine("ITEM-OK", 0m, 3m) });
+            Equal(6m, progress.GrossCertifiedThisPeriod, "Stable progress known-count source changed.");
+        }
+
         private static void PureStreamingInputRemainsAccepted()
         {
             var result = new TradeCostAnalysisService().Analyze(Stream(TradeItem(0), TradeItem(1)), 1m);
             Equal(2, result.Count, "Pure streaming sources without deterministic Count evidence must remain accepted.");
+        }
+
+        private static void AffectedStreamingInputRemainsSinglePass()
+        {
+            var source = new SinglePassEnumerable<HistoricalCostRecord>(HistoricalRecord("REC-STREAM", 10m));
+            var catalog = new HistoricalCostCatalog(source);
+            Equal(1, catalog.Records.Count, "Streaming historical source changed.");
+            Equal(1, source.EnumerationCount, "Unknown-count source must remain single-pass.");
         }
 
         private static void AssertStabilityFailure(Action action, string message)
@@ -95,6 +199,25 @@ namespace QS3D.Core.SmokeTests
             {
                 throw new InvalidOperationException(message + " Actual: " + error.Message);
             }
+        }
+
+        private static void AssertGenerationFailure(Action action, string message)
+        {
+            var error = Capture<InvalidOperationException>(action);
+            if (error.Message.IndexOf("semantic generation replay", StringComparison.OrdinalIgnoreCase) < 0)
+                throw new InvalidOperationException(message + " Actual: " + error.Message);
+        }
+
+        private static HistoricalCostRecord HistoricalRecord(string id, decimal totalCost)
+        {
+            return new HistoricalCostRecord(
+                id,
+                "BENCH-GEN",
+                "DIM-GEN",
+                1m,
+                totalCost,
+                "USD",
+                new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
         }
 
         private static CostResourceComponent Component(int index)
@@ -142,6 +265,52 @@ namespace QS3D.Core.SmokeTests
         {
             if (!EqualityComparer<T>.Default.Equals(expected, actual))
                 throw new InvalidOperationException(message + " Expected=" + expected + ", actual=" + actual + ".");
+        }
+
+        private sealed class GenerationSwitchCollection<T> : IReadOnlyCollection<T>
+        {
+            private readonly T[] _firstGeneration;
+            private readonly T[] _secondGeneration;
+            private int _enumerationCount;
+
+            internal GenerationSwitchCollection(T firstGeneration, T secondGeneration)
+            {
+                _firstGeneration = new[] { firstGeneration };
+                _secondGeneration = new[] { secondGeneration };
+            }
+
+            public int Count => _firstGeneration.Length;
+
+            public IEnumerator<T> GetEnumerator()
+            {
+                var generation = _enumerationCount++ == 0 ? _firstGeneration : _secondGeneration;
+                for (var i = 0; i < generation.Length; i++)
+                    yield return generation[i];
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class SinglePassEnumerable<T> : IEnumerable<T>
+        {
+            private readonly T[] _items;
+
+            internal SinglePassEnumerable(params T[] items)
+            {
+                _items = items ?? throw new ArgumentNullException(nameof(items));
+            }
+
+            internal int EnumerationCount { get; private set; }
+
+            public IEnumerator<T> GetEnumerator()
+            {
+                EnumerationCount++;
+                if (EnumerationCount > 1)
+                    throw new InvalidOperationException("Streaming source was enumerated more than once.");
+                return ((IEnumerable<T>)_items).GetEnumerator();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private sealed class DriftingReadOnlyCollection<T> : IReadOnlyCollection<T>
