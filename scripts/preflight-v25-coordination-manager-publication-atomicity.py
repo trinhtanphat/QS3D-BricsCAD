@@ -36,13 +36,15 @@ require("_publicationInFlight = published;", "candidate must reserve singleton o
 require("_nativePublicationCallActive = true;", "native publication stack must be fenced before ShowModelessWindow")
 require("_nativePublicationCallActive = false;", "native publication stack fence must unwind deterministically")
 require("if (!publishedWindow.IsLoaded)", "non-loaded native publication must not be committed as published")
+require("ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)", "active document must be revalidated after native publication before commit")
 require("_published = published;", "successful exact candidate must transition to published ownership")
 require("_publicationInFlight = null;", "successful publication must release unpublished ownership")
 
 order("_publicationInFlight = published;", "Application.ShowModelessWindow", "singleton reservation must precede native ShowModelessWindow")
 order("_nativePublicationCallActive = true;", "Application.ShowModelessWindow", "native reentrancy fence must precede ShowModelessWindow")
 order("Application.ShowModelessWindow", "if (!publishedWindow.IsLoaded)", "terminal-load check must follow native publication")
-order("if (!publishedWindow.IsLoaded)", "_published = published;", "published ownership cannot be committed before terminal loaded-state validation")
+order("if (!publishedWindow.IsLoaded)", "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)", "document-affinity check must follow terminal loaded-state validation")
+order("ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)", "_published = published;", "published ownership cannot be committed before active-document revalidation")
 order("_published = published;", "_publicationInFlight = null;", "transition must publish exact owner before dropping unpublished reservation")
 
 # Existing defect signature: native show followed immediately by first singleton assignment.
@@ -50,4 +52,4 @@ defect = "Application.ShowModelessWindow(IntPtr.Zero, publishedWindow, true);\n 
 if defect in text:
     fail("native publication still has an unreserved singleton gap")
 
-print("PASS: Coordination Manager modeless publication/cleanup ownership is reentrancy-safe and exact-instance bound")
+print("PASS: Coordination Manager modeless publication/cleanup ownership is reentrancy-safe, document-affine, and exact-instance bound")
