@@ -88,6 +88,7 @@ namespace QS3D.Core.Persistence
             RequireSafe(destination, "destination");
             RequireSafe(backup, "backup");
             File.Move(temp, destination);
+            RequireSafe(backup, "backup");
             if (!File.Exists(backup) && !Directory.Exists(backup)) return;
 
             try
@@ -153,6 +154,7 @@ namespace QS3D.Core.Persistence
                 // primary generation. When the primary was already missing, an old
                 // .bak cannot satisfy that contract and must never remain eligible
                 // for LoadWithBackupFallback beside the newly published generation.
+                RequireSafe(backupPath, "backup");
                 if (File.Exists(backupPath) || Directory.Exists(backupPath))
                 {
                     try
