@@ -42,8 +42,15 @@ namespace QS3D.Core.Persistence
             var capturedFloors = CaptureFloorReferences(project);
             var capturedFamilies = CaptureFamilyReferences(project);
             var capturedElements = CaptureElementReferences(project);
+            var detached = CreateDetachedCopy(project);
+            ValidateCapturedReferenceGeneration(
+                project,
+                capturedZones,
+                capturedFloors,
+                capturedFamilies,
+                capturedElements);
             return new ProjectStateSnapshot(
-                CreateDetachedCopy(project),
+                detached,
                 project,
                 capturedZones,
                 capturedFloors,
@@ -131,6 +138,62 @@ namespace QS3D.Core.Persistence
                 result.Add(element.Id, element);
             }
             return result;
+        }
+
+        private static void ValidateCapturedReferenceGeneration(
+            ProjectState project,
+            IReadOnlyDictionary<string, ZoneDefinition> capturedZones,
+            IReadOnlyDictionary<string, FloorDefinition> capturedFloors,
+            IReadOnlyDictionary<string, ProjectFamily> capturedFamilies,
+            IReadOnlyDictionary<string, ProjectElement> capturedElements)
+        {
+            if (project.Zones.Count != capturedZones.Count
+                || project.Floors.Count != capturedFloors.Count
+                || project.Families.Count != capturedFamilies.Count
+                || project.Elements.Count != capturedElements.Count)
+                throw new InvalidOperationException("Cannot capture a project whose collection generation changed during snapshot materialization.");
+
+            foreach (var zone in project.Zones)
+            {
+                if (zone == null
+                    || string.IsNullOrWhiteSpace(zone.Id)
+                    || !capturedZones.TryGetValue(zone.Id, out var captured)
+                    || !ReferenceEquals(zone, captured))
+                    throw new InvalidOperationException("Cannot capture a project whose zone generation changed during snapshot materialization.");
+            }
+
+            foreach (var floor in project.Floors)
+            {
+                if (floor == null
+                    || string.IsNullOrWhiteSpace(floor.Id)
+                    || !capturedFloors.TryGetValue(floor.Id, out var captured)
+                    || !ReferenceEquals(floor, captured))
+                    throw new InvalidOperationException("Cannot capture a project whose floor generation changed during snapshot materialization.");
+            }
+
+            foreach (var family in project.Families)
+            {
+                if (family == null
+                    || string.IsNullOrWhiteSpace(family.Id)
+                    || !capturedFamilies.TryGetValue(family.Id, out var captured)
+                    || !ReferenceEquals(family, captured))
+                    throw new InvalidOperationException("Cannot capture a project whose family generation changed during snapshot materialization.");
+            }
+
+            foreach (var element in project.Elements)
+            {
+                if (element == null
+                    || string.IsNullOrWhiteSpace(element.Id)
+                    || !capturedElements.TryGetValue(element.Id, out var captured)
+                    || !ReferenceEquals(element, captured))
+                    throw new InvalidOperationException("Cannot capture a project whose element generation changed during snapshot materialization.");
+            }
+
+            if (project.Zones.Count != capturedZones.Count
+                || project.Floors.Count != capturedFloors.Count
+                || project.Families.Count != capturedFamilies.Count
+                || project.Elements.Count != capturedElements.Count)
+                throw new InvalidOperationException("Cannot capture a project whose collection generation changed during snapshot validation.");
         }
 
         private static void CopyInto(
