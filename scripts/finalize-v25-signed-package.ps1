@@ -308,15 +308,17 @@ function Assert-ZipManifestIntegrity {
         $manifestEntries = [Collections.Generic.List[object]]::new()
 
         foreach ($entry in $archive.Entries) {
-            if ([string]::IsNullOrEmpty($entry.Name)) { continue }
-            $name = $entry.FullName.Replace('\', '/')
-            if ($name.StartsWith('/') -or $name.Contains(':') -or $name.Contains('\')) {
-                throw "Staged ZIP contains an unsafe entry while validating checksum manifest: $name"
+            $rawName = $entry.FullName.Replace('\', '/')
+            $isDirectory = [string]::IsNullOrEmpty($entry.Name)
+            $name = if ($isDirectory) { $rawName.TrimEnd('/') } else { $rawName }
+            if ([string]::IsNullOrWhiteSpace($name) -or $name.StartsWith('/') -or $name.Contains(':') -or $name.Contains('\')) {
+                throw "Staged ZIP contains an unsafe entry while validating checksum manifest: $rawName"
             }
             $segments = @($name.Split('/'))
             if (@($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) {
-                throw "Staged ZIP contains an unsafe entry while validating checksum manifest: $name"
+                throw "Staged ZIP contains an unsafe entry while validating checksum manifest: $rawName"
             }
+            if ($isDirectory) { continue }
             if ($seenArchivePaths.ContainsKey($name)) {
                 throw "Staged ZIP contains a case-insensitive duplicate entry while validating checksum manifest: $name"
             }
