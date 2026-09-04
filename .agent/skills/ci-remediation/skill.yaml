@@ -1,0 +1,14 @@
+id: ci-remediation
+version: 1
+triggers:
+  - ContinuousIntegration
+prerequisites:
+  - repository-lifecycle
+  - tdd-source
+required-docs:
+  - CI_POLICY.md
+tool-classes:
+  - github.ci
+  - process.test
+validation:
+  - exact-head-evidence
