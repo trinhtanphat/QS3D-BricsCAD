@@ -538,37 +538,7 @@ jobs:
           if ($finalAncestorStatus -ne 0) {
             throw "Release SOURCE_SHA is no longer an ancestor of protected main during final publication admission: $env:SOURCE_SHA"
           }
-          $finalReleaseRelevantPaths = @(
-            '.github/workflows/',
-            'scripts/',
-            'src/QS3D.BricsCAD.V25/',
-            'src/QS3D.Core/',
-            'Directory.Build.props',
-            'Directory.Build.targets',
-            'VERSION',
-            'installer/',
-            'external/'
-          )
-          & git diff --quiet --no-ext-diff "$env:SOURCE_SHA..$finalMain" -- @finalReleaseRelevantPaths
-          $finalReleaseDriftStatus = $LASTEXITCODE
-          if ($finalReleaseDriftStatus -eq 1) {
-            Write-Host '::notice::newer release-relevant main integration supersedes this publication; leaving the verified release as draft.'
-            exit 0
-          }
-          if ($finalReleaseDriftStatus -ne 0) {
-            throw "Could not classify protected-main release drift. git diff exit=$finalReleaseDriftStatus"
-          }
-          if ($finalMain -ne $env:SOURCE_SHA.ToLowerInvariant()) {
-            Write-Host 'main advanced only through non-release paths during final publication admission; published provenance remains pinned to SOURCE_SHA.'
-          }
-          $confirmedMainResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers
-          $confirmedFinalMain = ([string]$confirmedMainResponse.sha).Trim().ToLowerInvariant()
-          if ($confirmedFinalMain -notmatch '^[0-9a-f]{40}$') {
-            throw "Protected main confirmation returned an invalid SHA: $confirmedFinalMain"
-          }
-          if ($confirmedFinalMain -ne $finalMain) {
-            throw "Protected main moved during final release admission. Before=$finalMain after=$confirmedFinalMain"
-          }
+          Write-Host 'Release SOURCE_SHA remains an ancestor of protected main; publication stays pinned to the already verified SOURCE_SHA even if newer main integrations landed.'
 
           $publishBody = @{ draft = $false } | ConvertTo-Json
           $publishedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body $publishBody
