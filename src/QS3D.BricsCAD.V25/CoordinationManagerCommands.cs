@@ -119,15 +119,15 @@ namespace QS3D.BricsCAD.V25
                 RequireActiveDocument(document);
                 candidate = new CoordinationManagerWindow(document, project.ProjectId, project.DrawingFingerprint);
                 var publishedWindow = candidate;
-                published = new PublishedManager(
+                var exactPublished = new PublishedManager(
                     publishedWindow,
                     document,
                     project.ProjectId,
                     project.DrawingFingerprint);
-                var exactPublished = published;
+                published = exactPublished;
                 publishedWindow.Closed += (_, __) => ReleaseClosedManager(exactPublished);
 
-                _publicationInFlight = published;
+                _publicationInFlight = exactPublished;
                 _nativePublicationCallActive = true;
                 try
                 {
@@ -140,7 +140,7 @@ namespace QS3D.BricsCAD.V25
 
                     if (!publishedWindow.IsLoaded)
                     {
-                        ReleaseTerminalManager(published);
+                        ReleaseTerminalManager(exactPublished);
                         candidate = null;
                         try { PaletteCoordinator.SetStatus("Coordination Manager không được publish; candidate đã đóng an toàn."); } catch { }
                         return;
@@ -148,12 +148,12 @@ namespace QS3D.BricsCAD.V25
 
                     RequireActiveDocument(document);
                     if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject) ||
-                        !published.Matches(document, currentProject.ProjectId, currentProject.DrawingFingerprint))
+                        !exactPublished.Matches(document, currentProject.ProjectId, currentProject.DrawingFingerprint))
                         throw new InvalidOperationException("Coordination Manager project/document identity changed during publication.");
-                    if (!ReferenceEquals(_publicationInFlight, published))
+                    if (!ReferenceEquals(_publicationInFlight, exactPublished))
                         throw new InvalidOperationException("Coordination Manager publication ownership changed unexpectedly.");
 
-                    _published = published;
+                    _published = exactPublished;
                     _publicationInFlight = null;
                     candidate = null;
                 }
