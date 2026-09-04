@@ -62,7 +62,8 @@ workflow_tokens = (
     "if (( release_drift_status != 0 )); then",
     "superseded dispatcher ${source_sha} exits before reservation/dispatch",
     "main advanced only through non-release paths",
-    'reservation="${reservation_prefix} ordinal=${preview} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"',
+    "committed_preview_ordinal=",
+    'reservation="${reservation_prefix} ordinal=${committed_preview_ordinal} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"',
     "gh workflow run release-v25-cloud.yml",
     '-f source_sha="${source_sha}"',
 )
@@ -106,6 +107,14 @@ for forbidden in (
     if contains_executable_line(prepare, forbidden):
         errors.append("protected-main release preparation must not contain write/line-parser primitive: " + forbidden)
 
+for forbidden in (
+    "max_preview=",
+    "preview=$((max_preview + 1))",
+    'reservation="${reservation_prefix} ordinal=${preview}',
+):
+    if forbidden in workflow:
+        errors.append("dispatcher stale-drift path must not reintroduce independent preview allocation: " + forbidden)
+
 if workflow:
     drift_guard = workflow.find('if [[ "${current_main}" != "${source_sha}" ]]; then')
     pathspecs = workflow.find("release_relevant_pathspecs=(", drift_guard)
@@ -114,14 +123,35 @@ if workflow:
     exit_index = workflow.find("exit 0", relevant_exit_guard)
     error_guard = workflow.find("if (( release_drift_status != 0 )); then", exit_index)
     inert_continue = workflow.find("main advanced only through non-release paths", error_guard)
-    reservation = workflow.find('reservation="${reservation_prefix} ordinal=${preview} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"')
-    dispatch = workflow.find("gh workflow run release-v25-cloud.yml")
-    indexes = (drift_guard, pathspecs, diff_guard, relevant_exit_guard, exit_index, error_guard, inert_continue, reservation, dispatch)
+    committed_identity = workflow.find("committed_preview_ordinal=", inert_continue)
+    reservation = workflow.find('reservation="${reservation_prefix} ordinal=${committed_preview_ordinal} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"', committed_identity)
+    dispatch = workflow.find("gh workflow run release-v25-cloud.yml", reservation)
+    indexes = (
+        drift_guard,
+        pathspecs,
+        diff_guard,
+        relevant_exit_guard,
+        exit_index,
+        error_guard,
+        inert_continue,
+        committed_identity,
+        reservation,
+        dispatch,
+    )
     if min(indexes) < 0 or not (
-        drift_guard < pathspecs < diff_guard < relevant_exit_guard < exit_index < error_guard < inert_continue < reservation < dispatch
+        drift_guard
+        < pathspecs
+        < diff_guard
+        < relevant_exit_guard
+        < exit_index
+        < error_guard
+        < inert_continue
+        < committed_identity
+        < reservation
+        < dispatch
     ):
         errors.append(
-            "dispatcher ordering must classify drift with Git pathspecs, exit only for release-relevant drift, fail on Git errors, continue inert drift, then reserve and dispatch"
+            "dispatcher ordering must classify drift with Git pathspecs, exit only for release-relevant drift, fail on Git errors, continue inert drift, bind committed identity, then reserve and dispatch"
         )
     if contains_executable_line(workflow, "git diff --name-only"):
         errors.append("dispatcher must not classify release drift from line-oriented pathname output")
@@ -153,5 +183,6 @@ if errors:
 
 print(
     "PASS: V25 automation preserves triggering source provenance, uses pathname-safe Git drift classification, "
-    "skips superseded release-relevant dispatches, absorbs only non-release main drift, and retries clean committed-source release preparation without writing protected main."
+    "skips superseded release-relevant dispatches, absorbs only non-release main drift, binds release identity to committed ProductVersion, "
+    "and retries clean committed-source release preparation without writing protected main."
 )

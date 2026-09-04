@@ -120,27 +120,47 @@ def validate_dispatcher_contract() -> None:
         'gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100"',
         'if [[ "${release_draft}" != "false" || -z "${release_published_at}" ]]',
         'if [[ ! "${release_tag}" =~ ^v0\\.1\\.0-preview\\.([1-9][0-9]*)$ ]]',
-        'if (( ordinal > published_preview_ordinal ))',
+        'if (( ordinal > published_preview_ordinal )); then',
         '--previous-published-tag "${published_preview_tag}"',
-        'consider_preview "${BASH_REMATCH[1]}" "Existing tag"',
+        'version_project="src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj"',
+        "committed_preview_ordinal=",
+        'tag="${series_prefix}${committed_preview_ordinal}"',
+        'if (( committed_preview_ordinal <= published_preview_ordinal )); then',
+        'git tag --list "${tag}"',
     )
     for fragment in required:
         if fragment not in source:
             raise RegressionError(f"dispatcher publication-baseline contract missing source fragment: {fragment}")
 
-    if 'consider_preview "${BASH_REMATCH[1]}" "Published"' in source:
-        raise RegressionError("dispatcher still labels arbitrary local preview tags as published")
+    for forbidden in (
+        'consider_preview "${BASH_REMATCH[1]}" "Published"',
+        'consider_preview "${BASH_REMATCH[1]}" "Existing tag"',
+        'git tag --list "${series_prefix}*"',
+        "max_preview=",
+        "preview=$((max_preview + 1))",
+    ):
+        if forbidden in source:
+            raise RegressionError(
+                "dispatcher must not derive publication baseline or release identity from arbitrary local tags/reservations: "
+                + forbidden
+            )
 
     release_query = source.index('releases?per_page=100')
     gate_call = source.index('--previous-published-tag "${published_preview_tag}"')
-    if release_query >= gate_call:
-        raise RegressionError("dispatcher must derive the published Release baseline before invoking the batch gate")
+    committed_version = source.index('version_project="src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj"')
+    published_guard = source.index('if (( committed_preview_ordinal <= published_preview_ordinal )); then')
+    reservation = source.index("reservation_issue=1441")
+    dispatch = source.index("gh workflow run release-v25-cloud.yml")
+    if not (release_query < gate_call < committed_version < published_guard < reservation < dispatch):
+        raise RegressionError(
+            "dispatcher must derive published Release baseline, run batch admission, validate committed identity against that baseline, then reserve and dispatch"
+        )
 
 
 def main() -> int:
     validate_gate_behavior()
     validate_dispatcher_contract()
-    print("PASS: V25 preview batch baseline is publication-based and regression-covered.")
+    print("PASS: V25 preview batch baseline is publication-based and committed-version dispatch is regression-covered.")
     return 0
 
 
