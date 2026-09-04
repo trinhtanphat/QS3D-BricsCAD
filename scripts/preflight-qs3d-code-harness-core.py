@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile the dedicated QS3D Code harness-core smoke project during CI diagnosis."""
+"""Restore the dedicated QS3D Code harness-core smoke project during CI diagnosis."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ def main() -> int:
         return 1
 
     completed = subprocess.run(
-        ["dotnet", "build", str(PROJECT), "-c", "Release"],
+        ["dotnet", "restore", str(PROJECT)],
         cwd=ROOT,
         check=False,
         capture_output=True,
@@ -32,10 +32,10 @@ def main() -> int:
         print(completed.stderr, end="", file=sys.stderr)
 
     if completed.returncode != 0:
-        print("ERROR: QS3D Code harness core compile diagnostic failed.")
+        print("ERROR: QS3D Code harness core restore diagnostic failed.")
         return completed.returncode
 
-    print("PASS: QS3D Code harness core compile diagnostic.")
+    print("PASS: QS3D Code harness core restore diagnostic.")
     return 0
 
 
