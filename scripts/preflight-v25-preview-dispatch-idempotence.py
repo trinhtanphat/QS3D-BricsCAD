@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed if automatic V25 preview dispatch can repeat one tag/source tuple."""
+"""Fail closed if automatic V25 preview dispatch can repeat unsafe publication side effects."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DISPATCH = ROOT / ".github" / "workflows" / "dispatch-v25-cloud-after-main-integration.yml"
+RELEASE = ROOT / ".github" / "workflows" / "release-v25-cloud.yml"
 
 
 def decide_dispatch(
@@ -15,103 +16,193 @@ def decide_dispatch(
     ordinal: int,
     source_sha: str,
     reservation_rows: tuple[tuple[int, str], ...],
-    dispatch_rows: tuple[tuple[int, str], ...],
+    dispatch_rows: tuple[tuple[int, str, int], ...],
+    run_states: dict[int, tuple[str, str]],
 ) -> str:
-    """Model the durable ledger decision required before downstream dispatch."""
+    """Model durable attempt fencing plus terminal recovery for one tag/source tuple."""
     if any(item_ordinal == ordinal and item_source != source_sha for item_ordinal, item_source in reservation_rows):
         return "reservation-conflict"
-    if any(item_ordinal == ordinal and item_source != source_sha for item_ordinal, item_source in dispatch_rows):
+    if any(
+        item_ordinal == ordinal and item_source != source_sha
+        for item_ordinal, item_source, _ in dispatch_rows
+    ):
         return "dispatch-conflict"
-    if any(item_ordinal == ordinal and item_source == source_sha for item_ordinal, item_source in dispatch_rows):
+
+    exact_run_ids = [
+        run_id
+        for item_ordinal, item_source, run_id in dispatch_rows
+        if item_ordinal == ordinal and item_source == source_sha
+    ]
+    if not exact_run_ids:
+        return "dispatch"
+
+    latest_run_id = max(exact_run_ids)
+    state = run_states.get(latest_run_id)
+    if state is None:
+        return "status-unknown"
+    status, conclusion = state
+    if status != "completed":
+        return "attempt-active"
+    if conclusion == "success":
         return "already-dispatched"
-    return "dispatch"
+    return "retry"
 
 
 def main() -> int:
     source = DISPATCH.read_text(encoding="utf-8")
+    release = RELEASE.read_text(encoding="utf-8")
     failures: list[str] = []
 
     required = (
         "cancel-in-progress: true",
+        "release_workflow='.github/workflows/release-v25-cloud.yml'",
+        "Downstream release duplicate-admission safety contract is missing",
         'dispatch_prefix="QS3D_V25_PREVIEW_DISPATCH_FENCE"',
         'dispatch_regex="^${dispatch_prefix} ordinal=([1-9][0-9]*) source_sha=([0-9a-f]{40}) run_id=([1-9][0-9]*)$"',
-        "exact_dispatch_fence=0",
+        "exact_dispatch_fence_run_id=0",
         "dispatch_fence_conflict=0",
         "reserved_dispatch_ordinal == committed_preview_ordinal",
-        'if [[ "${reserved_dispatch_source}" == "${source_sha}" ]]; then',
+        "reserved_dispatch_run_id=$((10#${BASH_REMATCH[3]}))",
+        "reserved_dispatch_run_id > exact_dispatch_fence_run_id",
         "Committed preview ordinal already has a dispatch fence for a different source SHA",
-        "Exact automatic preview dispatch fence already exists",
+        'prior_dispatch_status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${exact_dispatch_fence_run_id}" --jq \'.status\')"',
+        'prior_dispatch_conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${exact_dispatch_fence_run_id}" --jq \'.conclusion // ""\')"',
+        'if [[ "${prior_dispatch_status}" != "completed" ]]; then',
+        'if [[ "${prior_dispatch_conclusion}" == "success" ]]; then',
+        "retry is permitted because the downstream release lane is serialized and rejects an existing tag before publication",
         'dispatch_fence="${dispatch_prefix} ordinal=${committed_preview_ordinal} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"',
         '-f body="${dispatch_fence}"',
-        "Persisted automatic preview dispatch fence",
+        "Persisted automatic preview dispatch attempt fence",
         "gh workflow run release-v25-cloud.yml",
     )
     missing = [token for token in required if token not in source]
     if missing:
         failures.append(
-            "dispatcher lacks a durable exact tag/source dispatch fence; missing: " + ", ".join(missing)
+            "dispatcher lacks recoverable exact tag/source dispatch-attempt fencing; missing: " + ", ".join(missing)
         )
 
-    scan_index = source.find("exact_dispatch_fence=0")
-    dispatch_conflict_index = source.find("if (( dispatch_fence_conflict != 0 )); then", scan_index)
-    exact_fence_index = source.find("if (( exact_dispatch_fence != 0 )); then", dispatch_conflict_index)
-    reservation_write_index = source.find('-f body="${reservation}"', exact_fence_index)
-    fence_write_index = source.find('-f body="${dispatch_fence}"', max(exact_fence_index, reservation_write_index))
+    for token in (
+        "group: qs3d-cloud-v25-preview-release",
+        "cancel-in-progress: false",
+        "if (git tag --list $env:RELEASE_TAG)",
+    ):
+        if token not in release:
+            failures.append(f"downstream release duplicate-admission contract missing: {token}")
+        if token not in source:
+            failures.append(f"dispatcher does not pin downstream retry safety token: {token}")
+
+    scan_index = source.find("exact_dispatch_fence_run_id=0")
+    conflict_index = source.find("if (( dispatch_fence_conflict != 0 )); then", scan_index)
+    prior_status_index = source.find("prior_dispatch_status=", conflict_index)
+    active_index = source.find('if [[ "${prior_dispatch_status}" != "completed" ]]; then', prior_status_index)
+    success_index = source.find('if [[ "${prior_dispatch_conclusion}" == "success" ]]; then', active_index)
+    retry_index = source.find("retry is permitted because the downstream release lane is serialized", success_index)
+    reservation_write_index = source.find('-f body="${reservation}"', retry_index)
+    fence_write_index = source.find('-f body="${dispatch_fence}"', max(retry_index, reservation_write_index))
     dispatch_index = source.find("gh workflow run release-v25-cloud.yml", fence_write_index)
     indexes = (
         scan_index,
-        dispatch_conflict_index,
-        exact_fence_index,
+        conflict_index,
+        prior_status_index,
+        active_index,
+        success_index,
+        retry_index,
         reservation_write_index,
         fence_write_index,
         dispatch_index,
     )
     if min(indexes) < 0 or not (
         scan_index
-        < dispatch_conflict_index
-        < exact_fence_index
+        < conflict_index
+        < prior_status_index
+        < active_index
+        < success_index
+        < retry_index
         < reservation_write_index
         < fence_write_index
         < dispatch_index
     ):
         failures.append(
-            "dispatcher must scan the durable ledger, reject dispatch conflicts, stop on an exact prior fence, reserve, persist the dispatch fence, then invoke the release workflow"
+            "dispatcher must scan the ledger, reject conflicts, inspect the latest exact attempt, stop active/successful attempts, permit only terminal-non-success recovery, reserve, fence the new attempt, then dispatch"
         )
 
     if "continue-on-error" in source:
         failures.append("dispatcher idempotence must not use continue-on-error")
 
-    # Deterministic replacement/cancellation controls. The first admitted run may dispatch;
-    # a replacement seeing its durable fence must not dispatch the same tuple again.
     ordinal = 10304
     source_sha = "a" * 40
     other_sha = "b" * 40
+    exact_reservation = ((ordinal, source_sha),)
+
     if decide_dispatch(
         ordinal=ordinal,
         source_sha=source_sha,
-        reservation_rows=((ordinal, source_sha),),
+        reservation_rows=exact_reservation,
         dispatch_rows=(),
+        run_states={},
     ) != "dispatch":
-        failures.append("an exact reservation without a dispatch fence must admit the first dispatch")
+        failures.append("an exact reservation without a dispatch-attempt fence must admit the first dispatch")
+
     if decide_dispatch(
         ordinal=ordinal,
         source_sha=source_sha,
-        reservation_rows=((ordinal, source_sha),),
-        dispatch_rows=((ordinal, source_sha),),
+        reservation_rows=exact_reservation,
+        dispatch_rows=((ordinal, source_sha, 100),),
+        run_states={100: ("in_progress", "")},
+    ) != "attempt-active":
+        failures.append("a replacement must stop while the latest exact dispatch attempt is active")
+
+    if decide_dispatch(
+        ordinal=ordinal,
+        source_sha=source_sha,
+        reservation_rows=exact_reservation,
+        dispatch_rows=((ordinal, source_sha, 100),),
+        run_states={100: ("completed", "success")},
     ) != "already-dispatched":
-        failures.append("a replacement run must stop when the exact tag/source dispatch fence already exists")
+        failures.append("a replacement must stop after the latest exact dispatcher attempt succeeded")
+
     if decide_dispatch(
         ordinal=ordinal,
         source_sha=source_sha,
-        reservation_rows=((ordinal, source_sha),),
-        dispatch_rows=((ordinal, other_sha),),
+        reservation_rows=exact_reservation,
+        dispatch_rows=((ordinal, source_sha, 100),),
+        run_states={100: ("completed", "cancelled")},
+    ) != "retry":
+        failures.append("a cancelled attempt fence must not permanently suppress a legitimate never-dispatched retry")
+
+    if decide_dispatch(
+        ordinal=ordinal,
+        source_sha=source_sha,
+        reservation_rows=exact_reservation,
+        dispatch_rows=((ordinal, source_sha, 100), (ordinal, source_sha, 101)),
+        run_states={100: ("completed", "cancelled"), 101: ("completed", "success")},
+    ) != "already-dispatched":
+        failures.append("the newest exact attempt fence must govern recovery after older cancelled attempts")
+
+    if decide_dispatch(
+        ordinal=ordinal,
+        source_sha=source_sha,
+        reservation_rows=exact_reservation,
+        dispatch_rows=((ordinal, source_sha, 100),),
+        run_states={},
+    ) != "status-unknown":
+        failures.append("missing prior-run status must remain fail closed")
+
+    if decide_dispatch(
+        ordinal=ordinal,
+        source_sha=source_sha,
+        reservation_rows=exact_reservation,
+        dispatch_rows=((ordinal, other_sha, 100),),
+        run_states={100: ("completed", "failure")},
     ) != "dispatch-conflict":
         failures.append("same ordinal with a different dispatch-fence source must fail closed")
+
     if decide_dispatch(
         ordinal=ordinal,
         source_sha=source_sha,
         reservation_rows=((ordinal, other_sha),),
         dispatch_rows=(),
+        run_states={},
     ) != "reservation-conflict":
         failures.append("same ordinal with a different reservation source must remain fail closed")
 
@@ -120,7 +211,7 @@ def main() -> int:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
 
-    print("PASS: automatic V25 preview dispatch is idempotent for one committed tag/source tuple")
+    print("PASS: automatic V25 preview dispatch is retry-safe across cancelled replacements without duplicate publication")
     return 0
 
 
