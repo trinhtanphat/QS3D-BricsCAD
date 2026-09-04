@@ -52,10 +52,14 @@ namespace QS3D.Core.Persistence
         private static void ValidateMap(XElement container, string owner)
         {
             ValidateElement(container, container.Name.LocalName, Array.Empty<string>(), new[] { "p" });
+            var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var property in container.Elements("p"))
             {
                 ValidateElement(property, "p", new[] { "name", "value" }, Array.Empty<string>());
                 ValidateCanonicalMapKey(property, owner);
+                var key = property.Attribute("name")?.Value ?? string.Empty;
+                if (!seenKeys.Add(key))
+                    throw new InvalidDataException("QSDB " + owner + " contains duplicate map key: " + key + ".");
             }
         }
 
@@ -259,42 +263,46 @@ namespace QS3D.Core.Persistence
 
         private static HashSet<string> ReadCatalogIds(XElement container, string itemName)
         {
-            if (container == null) throw new InvalidDataException("QSDB is missing the " + itemName + " catalog.");
-            return new HashSet<string>(
-                container.Elements(itemName).Select(x => x.Attribute("id")?.Value ?? string.Empty),
-                StringComparer.OrdinalIgnoreCase);
+            var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in container.Elements(itemName))
+            {
+                var id = item.Attribute("id")?.Value ?? string.Empty;
+                if (!ids.Add(id))
+                    throw new InvalidDataException("QSDB contains duplicate " + itemName + " id: " + id + ".");
+            }
+            return ids;
         }
 
         private static void ValidateOptionalReference(
             XElement element,
             string attributeName,
-            ISet<string> validIds,
-            string targetName,
+            HashSet<string> catalogIds,
+            string targetKind,
             string elementId)
         {
-            var reference = element.Attribute(attributeName)?.Value;
-            if (reference == null || reference.Length == 0) return;
-            if (!validIds.Contains(reference))
+            var value = element.Attribute(attributeName)?.Value;
+            if (value == null || value.Length == 0) return;
+            if (!catalogIds.Contains(value))
                 throw new InvalidDataException(
-                    "QSDB element " + elementId + " " + attributeName + " does not reference an existing " + targetName + ": " + reference + ".");
+                    "QSDB element " + elementId + " references missing " + targetKind + " id: " + value + ".");
         }
 
         private static void ValidateNamedCategoryAttribute(XElement element, string owner)
         {
-            ValidateRequiredCanonicalAttribute(element, "category", owner);
-            var token = element.Attribute("category")?.Value ?? string.Empty;
+            var token = element.Attribute("category")?.Value;
+            if (token == null || string.IsNullOrWhiteSpace(token))
+                throw new InvalidDataException("QSDB " + owner + " is required.");
+            if (!string.Equals(token, token.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("QSDB " + owner + " must not contain leading/trailing whitespace.");
             if (!Enum.TryParse(token, true, out ElementCategory category) || !Enum.IsDefined(typeof(ElementCategory), category))
                 throw new InvalidDataException("QSDB " + owner + " is invalid: " + token + ".");
-            var name = Enum.GetName(typeof(ElementCategory), category);
-            if (name == null || !string.Equals(token, name, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException("QSDB " + owner + " must use a named ElementCategory token.");
         }
 
         private static void ValidateRequiredCanonicalAttribute(XElement element, string attributeName, string owner)
         {
             var value = element.Attribute(attributeName)?.Value;
             if (value == null || string.IsNullOrWhiteSpace(value))
-                throw new InvalidDataException("QSDB " + owner + " must not be empty.");
+                throw new InvalidDataException("QSDB " + owner + " is required.");
             if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
                 throw new InvalidDataException("QSDB " + owner + " must not contain leading/trailing whitespace.");
         }
@@ -303,7 +311,7 @@ namespace QS3D.Core.Persistence
         {
             var value = element.Attribute(attributeName)?.Value;
             if (value == null || value.Length == 0) return;
-            if (string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
                 throw new InvalidDataException("QSDB " + owner + " must not contain leading/trailing whitespace.");
         }
 
@@ -311,13 +319,8 @@ namespace QS3D.Core.Persistence
         {
             var value = element.Attribute(attributeName)?.Value;
             if (value == null || value.Length == 0) return;
-            if (string.IsNullOrWhiteSpace(value) ||
-                !string.Equals(value, value.Trim(), StringComparison.Ordinal) ||
-                value.Any(char.IsControl))
-            {
-                throw new InvalidDataException(
-                    "QSDB " + owner + " must be empty or canonical without surrounding whitespace or control characters.");
-            }
+            if (string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException("QSDB " + owner + " must be empty or canonical without surrounding whitespace.");
         }
 
         private static void ValidateCanonicalText(XElement element, string owner)
@@ -331,13 +334,26 @@ namespace QS3D.Core.Persistence
 
         private static void ValidateNonNegativeQuantityValue(XElement quantity, string elementId)
         {
-            var raw = quantity.Attribute("value")?.Value;
-            if (raw == null || !double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)) return;
-            if (value < 0d)
+            var token = quantity.Attribute("value")?.Value ?? string.Empty;
+            if (!double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
+                double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
             {
-                var quantityName = quantity.Attribute("name")?.Value ?? string.Empty;
-                throw new InvalidDataException("QSDB element quantity must not be negative: " + elementId + "/" + quantityName + ".");
+                throw new InvalidDataException(
+                    "QSDB element " + elementId + " quantity value must be a finite non-negative number: " + token + ".");
             }
+        }
+
+        private static void RequireExactlyOne(XElement parent, string childName)
+        {
+            var count = parent.Elements(childName).Take(2).Count();
+            if (count != 1)
+                throw new InvalidDataException("QSDB root must contain exactly one " + childName + " section.");
+        }
+
+        private static void RequireAtMostOne(XElement parent, string childName)
+        {
+            if (parent.Elements(childName).Skip(1).Any())
+                throw new InvalidDataException("QSDB " + parent.Name.LocalName + " contains duplicate " + childName + " sections.");
         }
 
         private static void ValidateElement(
@@ -346,59 +362,40 @@ namespace QS3D.Core.Persistence
             IEnumerable<string> allowedAttributes,
             IEnumerable<string> allowedChildren,
             bool allowText = false,
-            bool ignoreRootNameCase = false)
+            bool rejectDuplicateAttributes = true)
         {
-            if (element == null) throw new InvalidDataException("QSDB is missing a required XML section.");
-            if (element.Name.Namespace != XNamespace.None ||
-                !(ignoreRootNameCase
-                    ? string.Equals(element.Name.LocalName, expectedName, StringComparison.OrdinalIgnoreCase)
-                    : string.Equals(element.Name.LocalName, expectedName, StringComparison.Ordinal)))
-            {
-                throw new InvalidDataException("Unsupported QSDB element or namespace: " + element.Name);
-            }
+            if (element == null) throw new InvalidDataException("QSDB is missing required " + expectedName + " element.");
+            if (!string.Equals(element.Name.LocalName, expectedName, StringComparison.Ordinal) || element.Name.NamespaceName.Length != 0)
+                throw new InvalidDataException("QSDB contains unexpected element: " + element.Name + ".");
 
-            var attributes = new HashSet<XName>(allowedAttributes.Select(XName.Get));
+            var allowedAttributeSet = new HashSet<string>(allowedAttributes, StringComparer.Ordinal);
+            var seenAttributes = new HashSet<string>(StringComparer.Ordinal);
             foreach (var attribute in element.Attributes())
             {
-                if (attribute.IsNamespaceDeclaration || attribute.Name.Namespace != XNamespace.None || !attributes.Contains(attribute.Name))
-                    throw new InvalidDataException("Unsupported QSDB attribute: " + element.Name.LocalName + "/" + attribute.Name);
+                if (attribute.IsNamespaceDeclaration || attribute.Name.NamespaceName.Length != 0 || !allowedAttributeSet.Contains(attribute.Name.LocalName))
+                    throw new InvalidDataException("QSDB " + expectedName + " contains unexpected attribute: " + attribute.Name + ".");
+                if (rejectDuplicateAttributes && !seenAttributes.Add(attribute.Name.LocalName))
+                    throw new InvalidDataException("QSDB " + expectedName + " contains duplicate attribute: " + attribute.Name.LocalName + ".");
             }
 
-            var children = new HashSet<XName>(allowedChildren.Select(XName.Get));
+            foreach (var required in allowedAttributeSet)
+                if (element.Attribute(required) == null)
+                    throw new InvalidDataException("QSDB " + expectedName + " is missing required attribute: " + required + ".");
+
+            var allowedChildSet = new HashSet<string>(allowedChildren, StringComparer.Ordinal);
             foreach (var node in element.Nodes())
             {
-                if (node is XCData)
-                    throw new InvalidDataException("Unsupported QSDB CDATA content in " + element.Name.LocalName + ".");
-
-                if (node is XText text)
-                {
-                    if (!allowText && !string.IsNullOrWhiteSpace(text.Value))
-                        throw new InvalidDataException("Unsupported QSDB text content in " + element.Name.LocalName + ".");
-                    continue;
-                }
-
                 if (node is XElement child)
                 {
-                    if (child.Name.Namespace != XNamespace.None || !children.Contains(child.Name))
-                        throw new InvalidDataException("Unsupported QSDB child element: " + element.Name.LocalName + "/" + child.Name);
+                    if (child.Name.NamespaceName.Length != 0 || !allowedChildSet.Contains(child.Name.LocalName))
+                        throw new InvalidDataException("QSDB " + expectedName + " contains unexpected child: " + child.Name + ".");
                     continue;
                 }
 
-                throw new InvalidDataException("Unsupported QSDB XML content in " + element.Name.LocalName + ".");
+                if (node is XText text && (allowText || string.IsNullOrWhiteSpace(text.Value))) continue;
+                if (node is XComment) continue;
+                throw new InvalidDataException("QSDB " + expectedName + " contains unexpected content.");
             }
-        }
-
-        private static void RequireExactlyOne(XElement parent, string childName)
-        {
-            var count = parent.Elements(XName.Get(childName)).Take(2).Count();
-            if (count != 1)
-                throw new InvalidDataException("QSDB requires exactly one " + childName + " section.");
-        }
-
-        private static void RequireAtMostOne(XElement parent, string childName)
-        {
-            if (parent.Elements(XName.Get(childName)).Skip(1).Any())
-                throw new InvalidDataException("Duplicate QSDB singleton element: " + parent.Name.LocalName + "/" + childName);
         }
     }
 }
