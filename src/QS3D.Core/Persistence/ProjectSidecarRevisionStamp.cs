@@ -127,10 +127,12 @@ namespace QS3D.Core.Persistence
                     var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
                     try
                     {
-                        // Recheck the complete path graph and final member after opening so
-                        // a redirected ancestor or member cannot gain digest authority via
-                        // an admission/open race.
+                        // A pathname-only recheck cannot prove that the stream opened the
+                        // same filesystem generation if an ancestor was redirected only
+                        // during the open. Bind the held stream to the current admitted
+                        // pathname generation before granting digest authority.
                         PersistencePathSafety.RequireNonRedirected(path, "sidecar revision member read");
+                        PersistencePathSafety.RequireExclusiveOpenStillBound(stream, path, "sidecar revision member read");
                         RequireRegularSidecar(File.GetAttributes(path));
                         if (stream.Length > MaxSidecarBytes)
                             throw new InvalidDataException("QS3D sidecar exceeds the bounded revision-check size.");
@@ -176,6 +178,7 @@ namespace QS3D.Core.Persistence
                     RequireRegularSidecar(attributes);
                     if (_stream.Length > MaxSidecarBytes)
                         throw new IOException("QS3D sidecar changed while its pair revision was being captured.");
+                    PersistencePathSafety.RequireExclusiveOpenStillBound(_stream, _path, "sidecar revision member read");
                     return;
                 }
 
