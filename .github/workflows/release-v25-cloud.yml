@@ -516,6 +516,60 @@ jobs:
             throw 'Final draft release asset IDs changed after byte verification; refusing publication.'
           }
 
+          $finalMainResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers
+          $finalMain = ([string]$finalMainResponse.sha).Trim().ToLowerInvariant()
+          if ($finalMain -notmatch '^[0-9a-f]{40}$') {
+            throw "Protected main API returned an invalid final SHA: $finalMain"
+          }
+          $finalMainRef = 'refs/remotes/origin/qs3d-release-final-main'
+          & git fetch --no-tags --force origin "+refs/heads/main:$finalMainRef"
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not fetch protected main for final release admission.'
+          }
+          $fetchedFinalMain = ([string](& git rev-parse --verify $finalMainRef)).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $fetchedFinalMain -notmatch '^[0-9a-f]{40}$') {
+            throw 'Could not resolve fetched protected-main SHA for final release admission.'
+          }
+          if ($fetchedFinalMain -ne $finalMain) {
+            throw "Protected-main API/fetch identity mismatch during final publication admission. API=$finalMain fetched=$fetchedFinalMain"
+          }
+          & git merge-base --is-ancestor $env:SOURCE_SHA $finalMain
+          $finalAncestorStatus = $LASTEXITCODE
+          if ($finalAncestorStatus -ne 0) {
+            throw "Release SOURCE_SHA is no longer an ancestor of protected main during final publication admission: $env:SOURCE_SHA"
+          }
+          $finalReleaseRelevantPaths = @(
+            '.github/workflows/',
+            'scripts/',
+            'src/QS3D.BricsCAD.V25/',
+            'src/QS3D.Core/',
+            'Directory.Build.props',
+            'Directory.Build.targets',
+            'VERSION',
+            'installer/',
+            'external/'
+          )
+          & git diff --quiet --no-ext-diff "$env:SOURCE_SHA..$finalMain" -- @finalReleaseRelevantPaths
+          $finalReleaseDriftStatus = $LASTEXITCODE
+          if ($finalReleaseDriftStatus -eq 1) {
+            Write-Host '::notice::newer release-relevant main integration supersedes this publication; leaving the verified release as draft.'
+            exit 0
+          }
+          if ($finalReleaseDriftStatus -ne 0) {
+            throw "Could not classify protected-main release drift. git diff exit=$finalReleaseDriftStatus"
+          }
+          if ($finalMain -ne $env:SOURCE_SHA.ToLowerInvariant()) {
+            Write-Host 'main advanced only through non-release paths during final publication admission; published provenance remains pinned to SOURCE_SHA.'
+          }
+          $confirmedMainResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers
+          $confirmedFinalMain = ([string]$confirmedMainResponse.sha).Trim().ToLowerInvariant()
+          if ($confirmedFinalMain -notmatch '^[0-9a-f]{40}$') {
+            throw "Protected main confirmation returned an invalid SHA: $confirmedFinalMain"
+          }
+          if ($confirmedFinalMain -ne $finalMain) {
+            throw "Protected main moved during final release admission. Before=$finalMain after=$confirmedFinalMain"
+          }
+
           $publishBody = @{ draft = $false } | ConvertTo-Json
           $publishedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body $publishBody
           if ($publishedRelease.draft -ne $false -or $publishedRelease.prerelease -ne $true) {
