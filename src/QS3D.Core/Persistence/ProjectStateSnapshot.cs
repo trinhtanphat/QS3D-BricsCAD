@@ -405,6 +405,8 @@ namespace QS3D.Core.Persistence
                     throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with quantity names that collapse to the same canonical identity: " + canonicalName + ".");
                 if (double.IsNaN(quantity.Value) || double.IsInfinity(quantity.Value) || quantity.Value < 0d)
                     throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a non-finite or negative quantity: " + canonicalName + ".");
+                if (quantity.Value == 0d && BitConverter.DoubleToInt64Bits(quantity.Value) < 0)
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a non-canonical negative-zero quantity: " + canonicalName + ".");
             }
         }
 
