@@ -22,8 +22,8 @@ namespace QS3D.Core.Agent.Harness
         public HarnessTraceEvent AppendTrace(
             string kind,
             string summary,
-            string sourceIdentity,
-            IDictionary<string, string> metadata)
+            string? sourceIdentity,
+            IDictionary<string, string>? metadata)
         {
             if (string.IsNullOrWhiteSpace(kind))
                 throw new ArgumentException("Trace kind is required.", nameof(kind));
