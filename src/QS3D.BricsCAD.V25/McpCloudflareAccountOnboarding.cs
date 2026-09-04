@@ -645,7 +645,9 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var uri = new Uri("https://" + hostname + "/mcp", UriKind.Absolute);
+#pragma warning disable SYSLIB0014
                 var request = (HttpWebRequest)WebRequest.Create(uri);
+#pragma warning restore SYSLIB0014
                 request.Method = "GET";
                 request.AllowAutoRedirect = false;
                 request.KeepAlive = false;
