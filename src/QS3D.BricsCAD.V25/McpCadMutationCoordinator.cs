@@ -50,7 +50,7 @@ namespace QS3D.BricsCAD.V25
                     var now = DateTime.UtcNow;
                     var token = Guid.NewGuid().ToString("N");
                     _lease = new WriterLease(token, now, now.AddSeconds(seconds), seconds);
-                    audit?.Invoke("writer lease acquired; leaseSeconds=" + seconds.ToString(CultureInfo.InvariantCulture));
+                    SafeAudit(audit, "writer lease acquired; leaseSeconds=" + seconds.ToString(CultureInfo.InvariantCulture));
                     return "{\"acquired\":true,\"writerToken\":\"" + Escape(token)
                            + "\",\"leaseSeconds\":" + seconds.ToString(CultureInfo.InvariantCulture)
                            + ",\"expiresUtc\":\"" + _lease.ExpiresUtc.ToString("o", CultureInfo.InvariantCulture) + "\"}";
@@ -75,11 +75,11 @@ namespace QS3D.BricsCAD.V25
                     if (_pending != null)
                     {
                         _lease.ReleaseWhenIdle = true;
-                        audit?.Invoke("writer lease release deferred until queued native command terminates");
+                        SafeAudit(audit, "writer lease release deferred until queued native command terminates");
                         return "{\"released\":false,\"releaseWhenIdle\":true,\"pendingNativeCommand\":true}";
                     }
                     _lease = null;
-                    audit?.Invoke("writer lease released");
+                    SafeAudit(audit, "writer lease released");
                     return "{\"released\":true}";
                 }
             }
@@ -136,7 +136,7 @@ namespace QS3D.BricsCAD.V25
                     var operationId = Interlocked.Increment(ref _operationSequence);
                     CurrentOperationId.Value = operationId;
                     if (prepared != null) prepared.TransferMutationGate();
-                    audit?.Invoke("writer mutation entered; tool=" + SafeTool(tool)
+                    SafeAudit(audit, "writer mutation entered; tool=" + SafeTool(tool)
                         + "; lease=" + (_lease == null ? "ephemeral" : "explicit"));
                     return new MutationScope(operationId, previous, audit);
                 }
@@ -189,7 +189,7 @@ namespace QS3D.BricsCAD.V25
                 CurrentInteractiveModalId.Value = modalId;
                 try
                 {
-                    audit?.Invoke("interactive modal entered; interaction=" + SafeTool(interaction));
+                    SafeAudit(audit, "interactive modal entered; interaction=" + SafeTool(interaction));
                     return new InteractiveModalScope(modalId, previous, interaction, audit);
                 }
                 catch
@@ -286,7 +286,7 @@ namespace QS3D.BricsCAD.V25
                 reservation.BeginDispatch();
                 enqueue();
                 reservation.Commit();
-                audit?.Invoke("native command queued; command=" + SafeTool(command));
+                SafeAudit(audit, "native command queued; command=" + SafeTool(command));
             }
             catch
             {
@@ -334,8 +334,10 @@ namespace QS3D.BricsCAD.V25
                 // second DWG writer while the previous native command can still be mutating.
                 if (_pending != null && !_pending.Dispatching)
                 {
-                    DetachPendingLocked(_pending);
-                    _pending = null;
+                    if (TryDetachPendingLocked(_pending))
+                        _pending = null;
+                    else
+                        SafeAudit(_pending.Audit, "native command handler cleanup failed during reset; writer remains quarantined");
                 }
                 _lease = null;
                 CurrentOperationId.Value = null;
@@ -362,13 +364,25 @@ namespace QS3D.BricsCAD.V25
                 pending.EndedHandler = OnCommandEnded;
                 pending.CancelledHandler = OnCommandCancelled;
                 pending.FailedHandler = OnCommandFailed;
-                document.CommandWillStart += pending.WillStartHandler;
-                document.CommandEnded += pending.EndedHandler;
-                document.CommandCancelled += pending.CancelledHandler;
-                document.CommandFailed += pending.FailedHandler;
+                try
+                {
+                    document.CommandWillStart += pending.WillStartHandler;
+                    document.CommandEnded += pending.EndedHandler;
+                    document.CommandCancelled += pending.CancelledHandler;
+                    document.CommandFailed += pending.FailedHandler;
+                }
+                catch
+                {
+                    if (!TryDetachPendingLocked(pending))
+                    {
+                        _pending = pending;
+                        SafeAudit(pending.Audit, "native command handler rollback failed; writer remains quarantined");
+                    }
+                    throw;
+                }
                 _pending = pending;
             }
-            audit?.Invoke("native command barrier armed; command=" + SafeTool(command));
+            SafeAudit(audit, "native command barrier armed; command=" + SafeTool(command));
             return new NativeCommandReservation(pending, ownsMutationGate);
         }
 
@@ -412,7 +426,7 @@ namespace QS3D.BricsCAD.V25
             {
                 if (_pending == null || !PendingMatchesLocked(sender, e)) return;
                 _pending.Started = true;
-                _pending.Audit?.Invoke("native command started; command=" + SafeTool(_pending.Command));
+                SafeAudit(_pending.Audit, "native command started; command=" + SafeTool(_pending.Command));
             }
         }
 
@@ -427,13 +441,19 @@ namespace QS3D.BricsCAD.V25
             {
                 if (_pending == null || !PendingMatchesLocked(sender, e)) return;
                 completed = _pending;
-                DetachPendingLocked(completed);
-                _pending = null;
-                completed.Audit?.Invoke("native command " + terminalState + "; command=" + SafeTool(completed.Command));
-                if (_lease != null && _lease.ReleaseWhenIdle)
-                    _lease = null;
+                if (TryDetachPendingLocked(completed))
+                {
+                    _pending = null;
+                    if (_lease != null && _lease.ReleaseWhenIdle)
+                        _lease = null;
+                    else
+                        CleanupExpiredLeaseLocked(DateTime.UtcNow);
+                }
                 else
-                    CleanupExpiredLeaseLocked(DateTime.UtcNow);
+                {
+                    SafeAudit(completed.Audit, "native command terminal handler cleanup failed; writer remains quarantined");
+                }
+                SafeAudit(completed.Audit, "native command " + terminalState + "; command=" + SafeTool(completed.Command));
             }
 
             // Ledger synchronization is intentionally outside coordinator Sync. Mutation setup
@@ -479,12 +499,14 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void DetachPendingLocked(PendingNativeCommand pending)
+        private static bool TryDetachPendingLocked(PendingNativeCommand pending)
         {
-            try { pending.Document.CommandWillStart -= pending.WillStartHandler; } catch { }
-            try { pending.Document.CommandEnded -= pending.EndedHandler; } catch { }
-            try { pending.Document.CommandCancelled -= pending.CancelledHandler; } catch { }
-            try { pending.Document.CommandFailed -= pending.FailedHandler; } catch { }
+            var detached = true;
+            try { pending.Document.CommandWillStart -= pending.WillStartHandler; } catch { detached = false; }
+            try { pending.Document.CommandEnded -= pending.EndedHandler; } catch { detached = false; }
+            try { pending.Document.CommandCancelled -= pending.CancelledHandler; } catch { detached = false; }
+            try { pending.Document.CommandFailed -= pending.FailedHandler; } catch { detached = false; }
+            return detached;
         }
 
         private static string NormalizeRequiredToken(string value)
@@ -553,6 +575,13 @@ namespace QS3D.BricsCAD.V25
             }
             if ((commandActive & 8) != 0)
                 throw new InvalidOperationException("interaction_required: BricsCAD is in a modal command state (CMDACTIVE bit 8). Finish or cancel the modal interaction in the foreground before retrying; MCP will not acquire or retain the CAD writer while this state is active.");
+        }
+
+        private static void SafeAudit(Action<string>? audit, string message)
+        {
+            if (audit == null) return;
+            try { audit(message); }
+            catch { }
         }
 
         private static string SafeTool(string value)
@@ -684,8 +713,10 @@ namespace QS3D.BricsCAD.V25
                     {
                         if (ReferenceEquals(_pending, McpCadMutationCoordinator._pending))
                         {
-                            DetachPendingLocked(_pending);
-                            McpCadMutationCoordinator._pending = null;
+                            if (TryDetachPendingLocked(_pending))
+                                McpCadMutationCoordinator._pending = null;
+                            else
+                                SafeAudit(_pending.Audit, "native command reservation cleanup failed; writer remains quarantined");
                         }
                     }
                 }
@@ -718,7 +749,7 @@ namespace QS3D.BricsCAD.V25
                 {
                     if (CurrentInteractiveModalId.Value == _modalId)
                         CurrentInteractiveModalId.Value = _previousModalId;
-                    _audit?.Invoke("interactive modal exited; interaction=" + SafeTool(_interaction));
+                    SafeAudit(_audit, "interactive modal exited; interaction=" + SafeTool(_interaction));
                 }
                 finally
                 {
@@ -745,7 +776,7 @@ namespace QS3D.BricsCAD.V25
             {
                 if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
                 if (CurrentOperationId.Value == _operationId) CurrentOperationId.Value = _previousOperationId;
-                _audit?.Invoke("writer mutation exited");
+                SafeAudit(_audit, "writer mutation exited");
                 MutationGate.Release();
             }
         }
