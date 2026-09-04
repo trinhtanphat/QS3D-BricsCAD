@@ -25,7 +25,6 @@ def main() -> int:
         "reserved_ordinal == committed_preview_ordinal",
         'reserved_source != "${source_sha}"',
         "Committed preview ordinal is already reserved for a different source SHA",
-        "Next free preview candidate (diagnostic only)",
     )
     missing = [token for token in required if token not in source]
     if missing:
@@ -45,17 +44,20 @@ def main() -> int:
             "dispatcher must validate committed ProductVersion and reservation conflicts before workflow dispatch"
         )
 
-    forbidden_preview_uses = (
+    forbidden_preview_derivation = (
+        "max_preview",
+        "preview=$((max_preview + 1))",
         'tag="${series_prefix}${preview}"',
         'reservation="${reservation_prefix} ordinal=${preview}',
         '-f release_tag="${series_prefix}${preview}"',
         '-f release_tag="${preview}"',
+        "Next free preview candidate (diagnostic only)",
     )
-    for token in forbidden_preview_uses:
+    for token in forbidden_preview_derivation:
         if token in source:
             failures.append(
-                "dispatcher may calculate a next-free preview only for legacy-policy diagnostics; "
-                f"it must never drive tag/reservation/dispatch identity: {token}"
+                "dispatcher must not derive a next-free preview identity outside committed protected-main ProductVersion: "
+                + token
             )
 
     conflict_guard = source.find("if (( reservation_conflict != 0 )); then")
