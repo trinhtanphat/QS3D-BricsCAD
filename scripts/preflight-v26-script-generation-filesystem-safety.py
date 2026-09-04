@@ -40,8 +40,8 @@ def validate(generator: str, wrapper: str) -> list[str]:
     before(
         generator,
         "Assert-OrdinaryPathItem -Path $sourceFull -Label 'V25 template script' -Directory $false",
-        "$text = Get-Content -LiteralPath $sourceFull -Raw",
-        "source ordinary-file validation",
+        "[IO.File]::Open($sourceFull",
+        "source ordinary-file validation before admitted handle open",
         errors,
     )
     before(
