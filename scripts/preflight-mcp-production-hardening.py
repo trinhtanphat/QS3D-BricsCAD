@@ -139,8 +139,8 @@ def main() -> int:
         "runtime cancelled-before-start state": (runtime, "CadWorkCancelledBeforeStart = 2"),
         "runtime atomic start claim": (runtime, "Interlocked.CompareExchange(ref item.DispatchState, CadWorkRunning, CadWorkQueued)"),
         "runtime atomic timeout cancellation": (runtime, "Interlocked.CompareExchange(ref item.DispatchState, CadWorkCancelledBeforeStart, CadWorkQueued)"),
-        "runtime uncertain timeout truth": (runtime, "completion is uncertain"),
-        "runtime no-auto-retry truth": (runtime, "Do not retry automatically"),
+        "runtime started-work settlement": (runtime, "item.Done.Wait();"),
+        "runtime no-auto-retry truth": (runtime, "never retry uncertain work"),
         "QS3D domain mutation stop recheck": (domain, "McpCadAgentRuntime.EnsureCurrentMutationRunning();"),
         "QS3D domain command validation": (domain, "Regex.IsMatch(command, McpCadAgentRuntime.Qs3dCommandPattern"),
         "QS3D domain command dispatch": (domain, 'document.SendStringToExecute(command + "\\n", true, false, true);'),
@@ -150,6 +150,9 @@ def main() -> int:
     for label, (text, token) in required.items():
         if token not in text:
             errors.append(f"missing {label}: {token}")
+
+    if "item.Abandoned" in runtime or "public int Abandoned" in runtime:
+        errors.append("runtime restored the racy abandoned completion-handle handoff")
 
     handle_request_start = server.find("private static void HandleRequest(")
     origin_check = server.find("if (!IsAllowedOrigin(request.Headers, publicMcpUrl))", handle_request_start)
