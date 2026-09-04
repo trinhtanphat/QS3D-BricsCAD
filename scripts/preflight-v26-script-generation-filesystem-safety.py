@@ -143,11 +143,11 @@ def main() -> int:
             wrapper,
         ),
         "held parent binding": (
-            generator.replace("Assert-AdmittedOutputParentBinding -Admission $outputParentHandle", "# binding removed", 1),
+            generator.replace("Assert-AdmittedOutputParentBinding -Admission $outputParentHandle", "# binding removed"),
             wrapper,
         ),
         "fresh-only publication": (
-            generator.replace("V26 generation output must be fresh", "V26 existing output may be replaced", 1),
+            generator.replace("V26 generation output must be fresh", "V26 existing output may be replaced"),
             wrapper,
         ),
         "atomic final publication": (
