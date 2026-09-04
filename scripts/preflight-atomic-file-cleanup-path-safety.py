@@ -47,6 +47,13 @@ def require_safe_pair_after_observation(
         fail(f"{role} must revalidate both source and destination after the final existence observation")
 
 
+def require_best_effort_redirect_refusal(block: str, role: str) -> None:
+    # These helpers run from rollback/finally paths. A reparse-point refusal is a
+    # safety decision, not a reason to replace the original persistence failure.
+    if "ex is InvalidDataException" not in block and "catch (InvalidDataException)" not in block:
+        fail(f"{role} must preserve the primary operation when path safety refuses a redirected recovery path")
+
+
 text = SOURCE.read_text(encoding="utf-8")
 try_delete = method_block(
     text,
@@ -105,6 +112,7 @@ require_safe_pair_after_observation(
     'RequireSafe(destinationPath, "destination")',
     "fallback destination restore",
 )
+require_best_effort_redirect_refusal(move_recovery, "fallback destination restore")
 
 restore_backup = method_block(
     text,
@@ -118,5 +126,6 @@ require_safe_pair_after_observation(
     'RequireSafe(backupPath, "backup")',
     "previous-backup restore",
 )
+require_best_effort_redirect_refusal(restore_backup, "previous-backup restore")
 
-print("PASS: atomic cleanup, rollback delete, and recovery moves revalidate non-redirected safety")
+print("PASS: atomic cleanup, rollback delete, and recovery paths fail closed without masking primary failures")
