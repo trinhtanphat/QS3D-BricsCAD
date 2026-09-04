@@ -323,4 +323,5 @@ jobs:
               -ExpectedReleaseTag $env:RELEASE_TAG `
               -AdmittedScript '.\scripts\publish-v26-release.ps1'
           }
-          if ($null -eq $candidateIdentity) { throw 'V26 candidate semantic admission/publication returned no identity.' }
+          if ($null -eq $candidateIdentity) { throw 'V26 candidate semantic admission returned no identity.' }
+          & .\scripts\publish-v26-release.ps1
