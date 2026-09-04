@@ -887,7 +887,6 @@ namespace QS3D.BricsCAD.V25
             public Exception? Error;
             public readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
             public int DispatchState = CadWorkQueued;
-            public int Abandoned;
         }
 
         private static string InvokeCadMutation(Func<string> action)
@@ -906,21 +905,33 @@ namespace QS3D.BricsCAD.V25
         {
             if (action == null) throw new ArgumentNullException(nameof(action));
             var item = new CadWorkItem { Action = action };
-            Application.DocumentManager.ExecuteInApplicationContext(ExecuteCadWork, item);
-            if (!item.Done.Wait(CadDispatchTimeoutMilliseconds))
-            {
-                Interlocked.Exchange(ref item.Abandoned, 1);
-                var cancelled = Interlocked.CompareExchange(ref item.DispatchState, CadWorkCancelledBeforeStart, CadWorkQueued) == CadWorkQueued;
-                if (cancelled)
-                    throw new TimeoutException("Timed out waiting for BricsCAD application context; queued work was cancelled before start.");
-                throw new TimeoutException("Timed out after CAD work started; completion is uncertain. Do not retry automatically; inspect drawing/audit state first.");
-            }
             try
             {
+                Application.DocumentManager.ExecuteInApplicationContext(ExecuteCadWork, item);
+                if (!item.Done.Wait(CadDispatchTimeoutMilliseconds))
+                {
+                    var cancelled = Interlocked.CompareExchange(ref item.DispatchState, CadWorkCancelledBeforeStart, CadWorkQueued) == CadWorkQueued;
+                    if (cancelled)
+                        throw new TimeoutException("Timed out waiting for BricsCAD application context; queued work was cancelled before start.");
+
+                    // Once ExecuteCadWork has claimed CadWorkRunning, native/database work may
+                    // already be executing. Retain this caller (and therefore the enclosing
+                    // process-global writer scope) until that callback reaches its terminal state.
+                    // Propagate the callback's real result/error below; never retry uncertain work.
+                    item.Done.Wait();
+                }
+
                 if (item.Error != null) throw new InvalidOperationException(item.Error.Message, item.Error);
                 return item.Result;
             }
-            finally { item.Done.Dispose(); }
+            finally
+            {
+                // If queued work was cancelled before start, a subsequently delivered callback
+                // may observe the cancelled state after this caller has returned. ExecuteCadWork
+                // treats notification on an already-disposed completion handle as benign because
+                // the cancelled callback is forbidden from invoking item.Action().
+                item.Done.Dispose();
+            }
         }
 
         private static void ExecuteCadWork(object state)
@@ -935,12 +946,10 @@ namespace QS3D.BricsCAD.V25
             finally
             {
                 try { item.Done.Set(); }
-                finally
+                catch (ObjectDisposedException)
                 {
-                    if (Volatile.Read(ref item.Abandoned) != 0)
-                    {
-                        try { item.Done.Dispose(); } catch (ObjectDisposedException) { }
-                    }
+                    // Only cancel-before-start may dispose Done before the queued callback is
+                    // eventually delivered. The CAS above guarantees item.Action() did not run.
                 }
             }
         }

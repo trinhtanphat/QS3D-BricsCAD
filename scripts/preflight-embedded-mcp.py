@@ -111,8 +111,9 @@ def main() -> int:
     require(runtime, "CadWorkCancelledBeforeStart = 2", errors, "CAD dispatch cancelled-before-start state")
     require(runtime, "Interlocked.CompareExchange(ref item.DispatchState, CadWorkRunning, CadWorkQueued)", errors, "atomic CAD start claim")
     require(runtime, "Interlocked.CompareExchange(ref item.DispatchState, CadWorkCancelledBeforeStart, CadWorkQueued)", errors, "atomic timeout cancellation")
-    require(runtime, "completion is uncertain", errors, "timeout completion uncertainty")
-    require(runtime, "Do not retry automatically", errors, "timeout no-auto-retry contract")
+    require(runtime, "item.Done.Wait();", errors, "started CAD callback settlement")
+    require(runtime, "never retry uncertain work", errors, "timeout no-auto-retry contract")
+    forbid(runtime, "item.Abandoned", errors, "racy CAD completion abandoned handoff")
 
     for text, surface in ((server, "network MCP transport"), (runtime, "CAD runtime"), (domain, "QS3D domain runtime")):
         forbid(text, "Process.Start(", errors, f"arbitrary process launch from {surface}")
