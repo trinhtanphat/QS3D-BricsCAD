@@ -48,7 +48,10 @@ namespace QS3D.Core.Domain
                 throw new ArgumentException("Family name is required.", nameof(value));
 
             ValidatePersistedText(value, nameof(value), "Family name");
-            return value.Trim();
+            var canonical = value.Trim();
+            if (!string.Equals(value, canonical, StringComparison.Ordinal))
+                throw new ArgumentException("Family name must not contain leading or trailing whitespace.", nameof(value));
+            return value;
         }
 
         private static string NormalizeMaterial(string value)
