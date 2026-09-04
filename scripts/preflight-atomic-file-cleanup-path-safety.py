@@ -10,23 +10,47 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
-text = SOURCE.read_text(encoding="utf-8")
-start = text.index("public static void TryDelete(string? path)")
-end = text.index("private static void PublishMissingDestinationWithoutStaleBackup", start)
-block = text[start:end]
+def method_block(text: str, signature: str, next_signature: str) -> str:
+    start = text.index(signature)
+    end = text.index(next_signature, start)
+    return text[start:end]
 
-if "RequireSafe(" not in block:
+
+def require_safe_before_delete(block: str, delete_expression: str, role: str) -> None:
+    delete_pos = block.find(delete_expression)
+    if delete_pos < 0:
+        fail(f"{role} must retain its rollback delete")
+    safe_pos = block.rfind('RequireSafe(', 0, delete_pos)
+    if safe_pos < 0:
+        fail(f"{role} must revalidate path safety before rollback deletion")
+    between = block[safe_pos:delete_pos]
+    # A destructive rollback must use a safety observation immediately in the same
+    # rollback path; another filesystem observation after the safety fence would
+    # reopen a pathname TOCTOU window before delete.
+    for observation in ("File.Exists(", "Directory.Exists(", "File.Move(", "File.Replace("):
+        if observation in between:
+            fail(f"{role} must not perform another filesystem observation/mutation between its final safety fence and rollback delete")
+
+
+text = SOURCE.read_text(encoding="utf-8")
+try_delete = method_block(
+    text,
+    "public static void TryDelete(string? path)",
+    "private static void PublishMissingDestinationWithoutStaleBackup",
+)
+
+if "RequireSafe(" not in try_delete:
     fail("AtomicFileCommit.TryDelete must apply persistence path safety before cleanup deletion")
 
-exists_pos = block.find("File.Exists(")
-delete_pos = block.find("File.Delete(")
-first_safe = block.find("RequireSafe(")
+exists_pos = try_delete.find("File.Exists(")
+delete_pos = try_delete.find("File.Delete(")
+first_safe = try_delete.find("RequireSafe(")
 if exists_pos < 0 or delete_pos < 0:
     fail("AtomicFileCommit.TryDelete must retain bounded existence/delete cleanup semantics")
 if not (first_safe < exists_pos < delete_pos):
     fail("cleanup path safety must be established before observing or deleting the cleanup member")
 
-second_safe = block.find("RequireSafe(", first_safe + 1)
+second_safe = try_delete.find("RequireSafe(", first_safe + 1)
 if second_safe < 0 or not (exists_pos < second_safe < delete_pos):
     fail("cleanup path safety must be revalidated immediately before destructive deletion")
 
@@ -40,7 +64,21 @@ for exception in (
     "IOException",
     "UnauthorizedAccessException",
 ):
-    if f"catch ({exception})" not in block:
+    if f"catch ({exception})" not in try_delete:
         fail(f"best-effort cleanup must refuse {exception} without masking the primary operation")
 
-print("PASS: atomic temp cleanup refuses redirected/invalid paths and rechecks before deletion")
+publish_new = method_block(
+    text,
+    "public static void PublishNew(string tempPath, string destinationPath, string backupPath)",
+    "public static void TryDelete(string? path)",
+)
+require_safe_before_delete(publish_new, "File.Delete(destination)", "PublishNew backup-race rollback")
+
+recreate = method_block(
+    text,
+    "private static void PublishMissingDestinationWithoutStaleBackup",
+    "private static void MoveWithRecovery",
+)
+require_safe_before_delete(recreate, "File.Delete(destinationPath)", "missing-primary backup-race rollback")
+
+print("PASS: atomic cleanup and rollback deletion paths revalidate non-redirected safety")
