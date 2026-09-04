@@ -23,6 +23,8 @@ def main() -> int:
         "$fetchedFinalMain -ne $finalMain",
         "git merge-base --is-ancestor $env:GITHUB_SHA $finalMain",
         "$finalReleaseRelevantPaths = @(",
+        "'src/QS3D.BricsCAD.V25/'",
+        "'src/QS3D.BricsCAD.V26/'",
         "git diff --quiet --no-ext-diff \"$env:GITHUB_SHA..$finalMain\" -- @finalReleaseRelevantPaths",
         "$finalReleaseDriftStatus = $LASTEXITCODE",
         "newer release-relevant protected main supersedes this V26 publication",
