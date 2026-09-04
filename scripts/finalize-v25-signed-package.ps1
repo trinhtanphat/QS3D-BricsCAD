@@ -300,9 +300,18 @@ function Assert-ZipManifestIntegrity {
     param([string]$ZipPath)
 
     Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop
+    $safeZipPath = Assert-SafeFile -Path $ZipPath -Label 'staged PackageZip manifest input'
+    $fileStream = $null
     $archive = $null
+    $outerHash = $null
     try {
-        $archive = [IO.Compression.ZipFile]::OpenRead($ZipPath)
+        $fileStream = [IO.FileStream]::new(
+            $safeZipPath,
+            [IO.FileMode]::Open,
+            [IO.FileAccess]::Read,
+            [IO.FileShare]::Read
+        )
+        $archive = [IO.Compression.ZipArchive]::new($fileStream, [IO.Compression.ZipArchiveMode]::Read, $true)
         $seenArchivePaths = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
         $archivePayloadPaths = [Collections.Generic.List[string]]::new()
         $manifestEntries = [Collections.Generic.List[object]]::new()
@@ -418,9 +427,18 @@ function Assert-ZipManifestIntegrity {
                 if ($stream) { $stream.Dispose() }
             }
         }
+
+        $archive.Dispose()
+        $archive = $null
+        $fileStream.Position = 0
+        $outerHash = [Security.Cryptography.SHA256]::Create()
+        $outerDigest = $outerHash.ComputeHash($fileStream)
+        return (-join ($outerDigest | ForEach-Object { $_.ToString('X2') }))
     }
     finally {
+        if ($outerHash) { $outerHash.Dispose() }
         if ($archive) { $archive.Dispose() }
+        if ($fileStream) { $fileStream.Dispose() }
     }
 }
 
@@ -592,8 +610,7 @@ try {
         throw 'Staged ZIP is empty.'
     }
     Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package
-    Assert-ZipManifestIntegrity -ZipPath $tempZip
-    $stagedZipHash = (Get-FileHash -LiteralPath $tempZip -Algorithm SHA256).Hash.ToUpperInvariant()
+    $stagedZipHash = Assert-ZipManifestIntegrity -ZipPath $tempZip
 
     if (Test-Path -LiteralPath $zip) {
         $zip = Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip'
@@ -624,6 +641,7 @@ catch {
 
     if ($zipPublished) {
         try {
+            $zip = Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip rollback target'
             if ($zipExistedBeforePublish) {
                 if (-not (Test-Path -LiteralPath $zipBackup -PathType Leaf)) {
                     throw "original PackageZip backup is unavailable: $zipBackup"
