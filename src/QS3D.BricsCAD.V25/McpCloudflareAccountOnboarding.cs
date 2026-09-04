@@ -515,45 +515,18 @@ namespace QS3D.BricsCAD.V25
         private static bool EnsureDnsRoute(string executable, string tunnelId, string hostname, out string error)
         {
             error = string.Empty;
-            var hadExpectedLocalProof = HasExpectedLocalRouteProof(tunnelId, hostname);
             string output;
             string routeError;
             if (RunCommand(executable, "tunnel route dns " + tunnelId + " " + hostname, CommandTimeoutMs, out output, out routeError))
             {
-                try
-                {
-                    WriteText(RouteProofPath, BuildRouteProof(tunnelId, hostname));
-                }
-                catch (Exception ex)
-                {
-                    SetRouteState("route=error");
-                    error = "DNS route đã tạo nhưng không lưu được local route proof: " + ex.GetType().Name + ".";
-                    return false;
-                }
                 SetRouteState("route=ready");
                 return true;
             }
 
             var existingConflict = LooksLikeExistingRouteConflict(output, routeError);
-            if (existingConflict && hadExpectedLocalProof)
-            {
-                try
-                {
-                    WriteText(RouteProofPath, BuildRouteProof(tunnelId, hostname));
-                }
-                catch (Exception ex)
-                {
-                    SetRouteState("route=error");
-                    error = "DNS route hiện hữu khớp local proof nhưng không thể lưu proof: " + ex.GetType().Name + ".";
-                    return false;
-                }
-                SetRouteState("route=ready(existing-local-proof)");
-                return true;
-            }
-
             SetRouteState(existingConflict ? "route=conflict" : "route=error");
             error = existingConflict
-                ? "DNS route bị xung đột với record hiện hữu không có local ownership proof. QS3D sẽ không ghi đè record đó."
+                ? "DNS route bị xung đột với record hiện hữu. QS3D sẽ không ghi đè record đó và sẽ không coi endpoint là sẵn sàng."
                 : "Không re-assert được DNS route. " + FirstUsefulError(routeError, output, "Cloudflare tunnel route dns failed.");
             return false;
         }
