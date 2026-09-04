@@ -149,33 +149,6 @@ jobs:
           )
           echo "Published V25 preview baseline: ${published_preview_tag:-'(none)'}"
 
-          # Keep the generic publishing-policy audit's bounded next-free calculation as
-          # diagnostics only. Release identity below is never sourced from `preview`;
-          # it is bound exclusively to the ProductVersion committed in protected main.
-          max_preview=${published_preview_ordinal}
-          while IFS= read -r existing_tag; do
-            [[ "${existing_tag}" =~ ^v0\.1\.0-preview\.([1-9][0-9]*)$ ]] || continue
-            ordinal_text="${BASH_REMATCH[1]}"
-            if (( ${#ordinal_text} > 5 )); then
-              echo "Tagged preview ordinal exceeds the FileVersion 0..65535 range: ${existing_tag}" >&2
-              exit 1
-            fi
-            ordinal=$((10#${ordinal_text}))
-            if (( ordinal > 65535 )); then
-              echo "Tagged preview ordinal exceeds the FileVersion 0..65535 range: ${existing_tag}" >&2
-              exit 1
-            fi
-            if (( ordinal > max_preview )); then
-              max_preview=${ordinal}
-            fi
-          done < <(git tag --list "${series_prefix}*")
-          if (( max_preview >= 65535 )); then
-            echo "Preview series exhausted the FileVersion 0..65535 range at ${max_preview}." >&2
-            exit 1
-          fi
-          preview=$((max_preview + 1))
-          echo "Next free preview candidate (diagnostic only): ${series_prefix}${preview}"
-
           gate_args=(
             scripts/v25-release-batch-gate.py
             --source-sha "${source_sha}"
