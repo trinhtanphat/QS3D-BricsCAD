@@ -30,6 +30,7 @@ namespace QS3D.Core.SmokeTests
                 WallFormworkContactSmoke.Run();
                 CommercialSubtractionPrecisionSmoke.Run();
                 BeamCoreFormworkRegeneratorSmoke.Run();
+                ProjectQuantityCanonicalTraversalSmoke.Run();
 
                 var legacyMain = typeof(Program).GetMethod(
                     "Main",
