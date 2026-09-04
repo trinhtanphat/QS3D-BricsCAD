@@ -78,6 +78,23 @@ require(
     "V25 project must bind embedded SHA to CI or MSBuild source revision identity",
     failures,
 )
+provenance_target_match = re.search(
+    r'<Target\s+Name="SetQS3DBuildProvenance"\s+([^>]+)>',
+    project,
+)
+require(provenance_target_match is not None, "V25 provenance target could not be bounded", failures)
+if provenance_target_match is not None:
+    target_attributes = provenance_target_match.group(1)
+    require(
+        'BeforeTargets="GenerateAssemblyInfo"' in target_attributes,
+        "V25 provenance target must run before GenerateAssemblyInfo",
+        failures,
+    )
+    require(
+        'DependsOnTargets="InitializeSourceControlInformation"' in target_attributes,
+        "V25 provenance target must initialize SourceRevisionId before reading it",
+        failures,
+    )
 
 if failures:
     for failure in failures:
