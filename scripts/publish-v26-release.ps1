@@ -301,6 +301,7 @@ try {
     'src/QS3D.BricsCAD.V25/',
     'src/QS3D.BricsCAD.V26/',
     'src/QS3D.Core/',
+    'samples/generated/',
     'Directory.Build.props',
     'Directory.Build.targets',
     'VERSION',
