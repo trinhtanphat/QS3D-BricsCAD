@@ -1,0 +1,21 @@
+id: repository-lifecycle
+version: 1
+triggers:
+  - Source
+  - ContinuousIntegration
+  - GithubCarrier
+  - McpTransport
+  - PersistenceDurability
+  - BricsCadHost
+  - ReleasePackage
+  - CadInspect
+  - CadMutate
+prerequisites: []
+required-docs:
+  - AGENTS.md
+  - docs/AGENT-RESERVATION-V2.md
+  - docs/AGENT-WORK-REGISTRATION.md
+tool-classes: []
+validation:
+  - canonical-carrier
+  - exact-head-evidence

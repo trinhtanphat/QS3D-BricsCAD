@@ -1,0 +1,14 @@
+id: cad-safety
+version: 1
+triggers:
+  - CadInspect
+  - CadMutate
+prerequisites:
+  - bricscad-host
+required-docs: []
+tool-classes:
+  - cad.inspect
+  - cad.mutate
+validation:
+  - typed-mutation-admission
+  - confirm-before-mutation
