@@ -26,6 +26,8 @@ PROJECTS = [
     ROOT / "src" / "QS3D.BricsCAD.V26" / "QS3D.BricsCAD.V26.csproj",
     ROOT / "src" / "QS3D.Core" / "QS3D.Core.csproj",
 ]
+PLUGIN_PROJECTS = PROJECTS[:2]
+CORE_PROJECT = PROJECTS[2]
 
 
 def fail(message):
@@ -56,9 +58,12 @@ def main():
     except (OSError, ET.ParseError, ValueError) as exc:
         return fail(str(exc))
 
-    product_versions = {identity["Version"] for identity in identities.values()}
-    if len(product_versions) != 1:
-        return fail("V25, V26 and Core product versions must stay identical: " + repr(sorted(product_versions)))
+    # Protected-main preview ordinals are committed on the V25/V26 plugin projects
+    # before Core is synchronized in the release workspace. Runtime-facing V25/V26
+    # identities must still advance together exactly.
+    plugin_product_versions = {identities[path]["Version"] for path in PLUGIN_PROJECTS}
+    if len(plugin_product_versions) != 1:
+        return fail("V25 and V26 product versions must stay identical: " + repr(sorted(plugin_product_versions)))
 
     assembly_versions = {identity["AssemblyVersion"] for identity in identities.values()}
     if len(assembly_versions) != 1:
@@ -167,10 +172,12 @@ def main():
         if "productVersion" not in package or "version = $assemblyVersion.ToString()" not in package:
             return fail(f"{package_path} must persist product and assembly identities separately")
 
-    version = next(iter(product_versions))
+    plugin_version = next(iter(plugin_product_versions))
+    core_version = identities[CORE_PROJECT]["Version"]
     assembly = next(iter(assembly_versions))
     print("PASS: runtime product-version identity is guarded")
-    print("Product version:", version)
+    print("V25/V26 product version:", plugin_version)
+    print("Core product version:", core_version)
     print("Assembly version:", assembly)
     print("V25/V26 QS3DVERSION/QS3DRUNTIMECHECK detect stale same-path DLL replacement by semantic version and startup SHA-256 fingerprint.")
     print("Update Center displays the semantic product version from AssemblyInformationalVersion.")
