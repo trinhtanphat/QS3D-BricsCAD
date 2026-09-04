@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
@@ -25,6 +26,11 @@ namespace QS3D.BricsCAD.V25
     {
         internal const int MaxMetadataBytes = 64 * 1024;
         private const string MetadataFileName = "PACKAGE-METADATA.json";
+        private const string BuildShaMetadataKey = "QS3D.BuildSha";
+        private const string BuildUtcMetadataKey = "QS3D.BuildUtc";
+        private static readonly Regex ExactGitCommitRegex = new Regex(
+            "^[0-9a-fA-F]{40}$",
+            RegexOptions.CultureInvariant | RegexOptions.Compiled);
         private static readonly Regex GitCommitRegex = new Regex(
             "\\\"gitCommit\\\"\\s*:\\s*\\\"(?<value>[0-9a-fA-F]{40})\\\"",
             RegexOptions.CultureInvariant | RegexOptions.Compiled);
@@ -42,41 +48,84 @@ namespace QS3D.BricsCAD.V25
             var buildId = SafeModuleVersionId(assembly);
             try
             {
+                var embedded = ReadAssemblyMetadata(assembly);
+                var buildSha = NormalizeGitCommit(GetMetadataValue(embedded, BuildShaMetadataKey));
+                var buildUtc = NormalizeUtc(GetMetadataValue(embedded, BuildUtcMetadataKey));
+
                 var assemblyPath = assembly.Location;
-                if (string.IsNullOrWhiteSpace(assemblyPath))
-                    return new McpRuntimeBuildIdentity(string.Empty, buildId, string.Empty);
+                if (!string.IsNullOrWhiteSpace(assemblyPath))
+                {
+                    var directory = Path.GetDirectoryName(Path.GetFullPath(assemblyPath));
+                    if (!string.IsNullOrWhiteSpace(directory))
+                    {
+                        var metadata = ReadBoundedMetadata(Path.Combine(directory, MetadataFileName));
+                        if (!string.IsNullOrEmpty(metadata))
+                        {
+                            if (string.IsNullOrEmpty(buildSha))
+                            {
+                                var commitMatch = GitCommitRegex.Match(metadata);
+                                if (commitMatch.Success)
+                                    buildSha = NormalizeGitCommit(commitMatch.Groups["value"].Value);
+                            }
+                            if (string.IsNullOrEmpty(buildUtc))
+                            {
+                                var utcMatch = GeneratedUtcRegex.Match(metadata);
+                                if (utcMatch.Success)
+                                    buildUtc = NormalizeUtc(utcMatch.Groups["value"].Value);
+                            }
+                        }
+                    }
+                }
 
-                var directory = Path.GetDirectoryName(Path.GetFullPath(assemblyPath));
-                if (string.IsNullOrWhiteSpace(directory))
-                    return new McpRuntimeBuildIdentity(string.Empty, buildId, string.Empty);
-
-                var metadataPath = Path.Combine(directory, MetadataFileName);
-                var metadata = ReadBoundedMetadata(metadataPath);
-                if (string.IsNullOrEmpty(metadata))
-                    return new McpRuntimeBuildIdentity(string.Empty, buildId, string.Empty);
-
-                var commitMatch = GitCommitRegex.Match(metadata);
-                var utcMatch = GeneratedUtcRegex.Match(metadata);
-                if (!commitMatch.Success || !utcMatch.Success)
-                    return new McpRuntimeBuildIdentity(string.Empty, buildId, string.Empty);
-
-                DateTime parsedUtc;
-                if (!DateTime.TryParse(
-                        utcMatch.Groups["value"].Value,
-                        CultureInfo.InvariantCulture,
-                        DateTimeStyles.RoundtripKind,
-                        out parsedUtc))
-                    return new McpRuntimeBuildIdentity(string.Empty, buildId, string.Empty);
-
-                return new McpRuntimeBuildIdentity(
-                    commitMatch.Groups["value"].Value.ToLowerInvariant(),
-                    buildId,
-                    parsedUtc.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture));
+                return new McpRuntimeBuildIdentity(buildSha, buildId, buildUtc);
             }
             catch
             {
                 return new McpRuntimeBuildIdentity(string.Empty, buildId, string.Empty);
             }
+        }
+
+        private static IDictionary<string, string> ReadAssemblyMetadata(Assembly assembly)
+        {
+            var result = new Dictionary<string, string>(StringComparer.Ordinal);
+            try
+            {
+                foreach (var attribute in assembly.GetCustomAttributes(typeof(AssemblyMetadataAttribute), false))
+                {
+                    var metadata = attribute as AssemblyMetadataAttribute;
+                    if (metadata == null || string.IsNullOrWhiteSpace(metadata.Key)) continue;
+                    if (!result.ContainsKey(metadata.Key)) result[metadata.Key] = metadata.Value ?? string.Empty;
+                }
+            }
+            catch
+            {
+                return new Dictionary<string, string>(StringComparer.Ordinal);
+            }
+            return result;
+        }
+
+        private static string GetMetadataValue(IDictionary<string, string> metadata, string key)
+        {
+            string value;
+            return metadata != null && metadata.TryGetValue(key, out value) ? value : string.Empty;
+        }
+
+        private static string NormalizeGitCommit(string value)
+        {
+            var candidate = (value ?? string.Empty).Trim();
+            return ExactGitCommitRegex.IsMatch(candidate) ? candidate.ToLowerInvariant() : string.Empty;
+        }
+
+        private static string NormalizeUtc(string value)
+        {
+            DateTime parsedUtc;
+            if (!DateTime.TryParse(
+                    (value ?? string.Empty).Trim(),
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind,
+                    out parsedUtc))
+                return string.Empty;
+            return parsedUtc.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture);
         }
 
         private static string SafeModuleVersionId(Assembly assembly)
