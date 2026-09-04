@@ -210,6 +210,8 @@ namespace QS3D.Core.Cost
             }
             RequireKnownCountMatchesTraversal("bill items", knownCount, index);
             RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);
+            if (knownCount.HasValue)
+                RequireStableBillItemGeneration(items, knownCount.Value, snapshot);
             snapshot.Sort(CompareBillItems);
             return new ReadOnlyCollection<TbqBillItem>(snapshot.ToArray());
         }
@@ -242,8 +244,95 @@ namespace QS3D.Core.Cost
             }
             RequireKnownCountMatchesTraversal("build-up rates", knownCount, index);
             RequireKnownCountStable(rates, MaxBuildUpRates, "build-up rates", knownCount);
+            if (knownCount.HasValue)
+                RequireStableBuildUpRateGeneration(rates, knownCount.Value, snapshot);
             snapshot.Sort(CompareBuildUps);
             return new ReadOnlyCollection<BuildUpRateSnapshot>(snapshot.ToArray());
+        }
+
+        private static void RequireStableBillItemGeneration(
+            IEnumerable<TbqBillItem> items,
+            int knownCount,
+            IReadOnlyList<TbqBillItem> admittedItems)
+        {
+            var index = 0;
+            using (var enumerator = items.GetEnumerator())
+            {
+                RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);
+                while (true)
+                {
+                    RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);
+                    if (index >= admittedItems.Count)
+                        ThrowBillItemContentChanged();
+                    var replayItem = enumerator.Current;
+                    RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);
+                    if (replayItem == null || !SameBillItemState(admittedItems[index], replayItem))
+                        ThrowBillItemContentChanged();
+                    index++;
+                }
+            }
+            if (index != admittedItems.Count)
+                ThrowBillItemContentChanged();
+            RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);
+        }
+
+        private static bool SameBillItemState(TbqBillItem left, TbqBillItem right)
+        {
+            return string.Equals(left.ItemCode, right.ItemCode, StringComparison.Ordinal) &&
+                   string.Equals(left.Description, right.Description, StringComparison.Ordinal) &&
+                   string.Equals(left.Unit, right.Unit, StringComparison.Ordinal) &&
+                   string.Equals(left.TradeCode, right.TradeCode, StringComparison.Ordinal) &&
+                   left.Quantity == right.Quantity &&
+                   left.UnitRate == right.UnitRate &&
+                   string.Equals(left.RateCode, right.RateCode, StringComparison.Ordinal);
+        }
+
+        private static void RequireStableBuildUpRateGeneration(
+            IEnumerable<BuildUpRateSnapshot> rates,
+            int knownCount,
+            IReadOnlyList<BuildUpRateSnapshot> admittedRates)
+        {
+            var index = 0;
+            using (var enumerator = rates.GetEnumerator())
+            {
+                RequireKnownCountStable(rates, MaxBuildUpRates, "build-up rates", knownCount);
+                while (true)
+                {
+                    RequireKnownCountStable(rates, MaxBuildUpRates, "build-up rates", knownCount);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireKnownCountStable(rates, MaxBuildUpRates, "build-up rates", knownCount);
+                    if (index >= admittedRates.Count)
+                        ThrowBuildUpRateContentChanged();
+                    var rate = enumerator.Current;
+                    RequireKnownCountStable(rates, MaxBuildUpRates, "build-up rates", knownCount);
+                    if (rate == null || !SameBuildUpRateState(admittedRates[index], rate))
+                        ThrowBuildUpRateContentChanged();
+                    index++;
+                }
+            }
+            if (index != admittedRates.Count)
+                ThrowBuildUpRateContentChanged();
+            RequireKnownCountStable(rates, MaxBuildUpRates, "build-up rates", knownCount);
+        }
+
+        private static bool SameBuildUpRateState(BuildUpRateSnapshot left, BuildUpRateSnapshot right)
+        {
+            return string.Equals(left.RateCode, right.RateCode, StringComparison.Ordinal) &&
+                   left.UnitRate == right.UnitRate;
+        }
+
+        private static void ThrowBillItemContentChanged()
+        {
+            throw new InvalidOperationException("TBQ workspace bill item source content changed during traversal.");
+        }
+
+        private static void ThrowBuildUpRateContentChanged()
+        {
+            throw new InvalidOperationException("TBQ workspace build-up rate source content changed during traversal.");
         }
 
         private static int? ValidateKnownCount<T>(IEnumerable<T> source, int maximum, string label)
