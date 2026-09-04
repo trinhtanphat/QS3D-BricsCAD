@@ -174,30 +174,42 @@ function Open-HeldPackageInput {
         [Parameter(Mandatory = $true)][string]$Label
     )
     $fullPath = Assert-SafeInputFile -Path $Path -RepositoryRoot $RepositoryRoot -Label $Label
-    $initial = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop
-    $stream = [IO.File]::Open($fullPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    $admissionStream = [IO.File]::Open($fullPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
     try {
+        $admissionIdentity = Get-HeldFileIdentity -Stream $admissionStream -Label ("$Label admission")
         $reboundPath = Assert-SafeInputFile -Path $fullPath -RepositoryRoot $RepositoryRoot -Label $Label
-        $rebound = Get-Item -LiteralPath $reboundPath -Force -ErrorAction Stop
-        if (-not [string]::Equals($initial.FullName, $rebound.FullName, [StringComparison]::OrdinalIgnoreCase) -or
-            $initial.Length -ne $stream.Length -or $rebound.Length -ne $stream.Length -or
-            $initial.LastWriteTimeUtc.Ticks -ne $rebound.LastWriteTimeUtc.Ticks) {
-            throw "$Label changed while its held generation was being admitted."
+        $admissionHeld = [pscustomobject]@{ Path = $reboundPath; FileIdentity = $admissionIdentity }
+        Assert-HeldFileIdentityMatchesPath -Held $admissionHeld -RepositoryRoot $RepositoryRoot -Label $Label
+        $initial = Get-Item -LiteralPath $reboundPath -Force -ErrorAction Stop
+        $stream = [IO.File]::Open($reboundPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+        try {
+            $heldIdentity = Get-HeldFileIdentity -Stream $stream -Label ("$Label held generation")
+            if (-not [string]::Equals($admissionIdentity, $heldIdentity, [StringComparison]::Ordinal)) {
+                throw "$Label held generation does not match the locked admission file identity."
+            }
+            $finalPath = Assert-SafeInputFile -Path $reboundPath -RepositoryRoot $RepositoryRoot -Label $Label
+            $rebound = Get-Item -LiteralPath $finalPath -Force -ErrorAction Stop
+            if (-not [string]::Equals($initial.FullName, $rebound.FullName, [StringComparison]::OrdinalIgnoreCase) -or
+                $initial.Length -ne $stream.Length -or $rebound.Length -ne $stream.Length -or
+                $initial.LastWriteTimeUtc.Ticks -ne $rebound.LastWriteTimeUtc.Ticks) {
+                throw "$Label changed while its held generation was being admitted."
+            }
+            $held = [pscustomobject]@{
+                Path = $rebound.FullName
+                Length = [int64]$stream.Length
+                LastWriteUtcTicks = [int64]$rebound.LastWriteTimeUtc.Ticks
+                Stream = $stream
+                FileIdentity = $heldIdentity
+            }
+            Assert-HeldFileIdentityMatchesPath -Held $held -RepositoryRoot $RepositoryRoot -Label $Label
+            return $held
         }
-        $held = [pscustomobject]@{
-            Path = $rebound.FullName
-            Length = [int64]$stream.Length
-            LastWriteUtcTicks = [int64]$rebound.LastWriteTimeUtc.Ticks
-            Stream = $stream
-            FileIdentity = Get-HeldFileIdentity -Stream $stream -Label $Label
+        catch {
+            if ($null -ne $stream) { $stream.Dispose() }
+            throw
         }
-        Assert-HeldFileIdentityMatchesPath -Held $held -RepositoryRoot $RepositoryRoot -Label $Label
-        return $held
     }
-    catch {
-        $stream.Dispose()
-        throw
-    }
+    finally { $admissionStream.Dispose() }
 }
 
 function Assert-HeldPathBinding {
