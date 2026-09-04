@@ -11,12 +11,12 @@ def fail(message: str) -> None:
 
 def require(text: str, needle: str) -> None:
     if needle not in text:
-        fail(f"{INSTALLER_REL} missing preview-worker lifetime contract: {needle}")
+        fail(f"{INSTALLER_REL} missing preview-worker lifetime/full-package contract: {needle}")
 
 
 def forbid(text: str, needle: str) -> None:
     if needle in text:
-        fail(f"{INSTALLER_REL} still contains unsafe preview-worker launch: {needle}")
+        fail(f"{INSTALLER_REL} still contains unsafe/incomplete preview apply behavior: {needle}")
 
 
 def main() -> int:
@@ -46,11 +46,37 @@ def main() -> int:
     # if breakaway creation is denied, staging fails closed while BricsCAD stays up.
     forbid(text, "using (var worker = Process.Start(startInfo))")
 
-    # Existing safety boundaries must remain present while the launch primitive changes.
+    # A preview ZIP is the install payload, not merely a carrier for two DLLs. Every
+    # safe file and child directory must be staged with its relative path, hashed,
+    # backed up when it would overwrite an installed file, then mirrored into the
+    # exact directory that contains the running adapter. Rollback must restore every
+    # overwritten file and remove files/directories created by the failed apply.
     for needle in (
+        "PreviewPayloadManifestFileName",
+        "WritePayloadManifest(",
         "StageVerifiedPayload(",
+        "QS3D_PREVIEW_MANIFEST",
+        "QS3D_PREVIEW_INSTALL_ROOT",
+        "QS3D_PREVIEW_PAYLOAD_ROOT",
+        "QS3D_PREVIEW_BACKUP_ROOT",
+        "Mirror-Payload",
+        "Restore-MirroredPayload",
+        "Decode-RelativePath",
+        "Assert-SafeDestination",
+        "ENTRY_FILE",
+        "ENTRY_DIRECTORY",
+        "createdBeforeApply",
+        "backupSha256",
+    ):
+        require(text, needle)
+
+    # Existing safety boundaries must remain present while full-package mirroring is added.
+    for needle in (
         "ComputeSha256(packagePath)",
-        "File.Copy(sourcePath, backupPath, true)",
+        "MaxArchiveUncompressedBytes",
+        "MaxPayloadFileBytes",
+        "seenCanonicalPaths",
+        "path traversal",
         "WaitForExit",
         "File.Replace",
         "Rollback",
@@ -60,7 +86,11 @@ def main() -> int:
     ):
         require(text, needle)
 
-    print("PASS: V25 verified-preview worker uses an explicit fail-closed Windows breakaway launch and preserves hash/backup/replace/rollback/restart contracts.")
+    # The old implementation extracted only RequiredPayload entries. That would
+    # silently discard package folders/resources/configuration and must not return.
+    forbid(text, "result[fileName] = stagedPath")
+
+    print("PASS: V25 preview updater uses a breakaway worker and mirrors the complete verified ZIP tree into the running adapter directory with whole-tree rollback.")
     return 0
 
 
