@@ -54,7 +54,7 @@ namespace QS3D.Core.Persistence
             while (enumerator.MoveNext())
             {
                 if (expectedKnownCount.HasValue && observed >= expectedKnownCount.Value)
-                    throw new InvalidOperationException("Persistence checkpoint known element count was exceeded during enumeration.");
+                    throw new InvalidOperationException("Persistence checkpoint known element count does not match enumerated element count.");
 
                 var rawId = enumerator.Current;
                 observed++;
