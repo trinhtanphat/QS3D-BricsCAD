@@ -9,10 +9,10 @@
     <PlatformTarget>x64</PlatformTarget>
     <Prefer32Bit>false</Prefer32Bit>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
-    <Version>0.1.0-preview.10306</Version>
+    <Version>0.1.0-preview.10307</Version>
     <AssemblyVersion>0.1.0.0</AssemblyVersion>
-    <FileVersion>0.1.0.10306</FileVersion>
-    <InformationalVersion>0.1.0-preview.10306</InformationalVersion>
+    <FileVersion>0.1.0.10307</FileVersion>
+    <InformationalVersion>0.1.0-preview.10307</InformationalVersion>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="..\QS3D.Core\QS3D.Core.csproj" /></ItemGroup>
   <ItemGroup>
@@ -29,6 +29,19 @@
     <Reference Include="TD_Mgd"><HintPath>$(BRICSCAD_V25_DIR)\TD_Mgd.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="TD_MgdBrep"><HintPath>$(BRICSCAD_V25_DIR)\TD_MgdBrep.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
+  <Target Name="SetQS3DBuildProvenance" BeforeTargets="GenerateAssemblyInfo" DependsOnTargets="InitializeSourceControlInformation">
+    <PropertyGroup>
+      <QS3DBuildSha Condition="'$(QS3DBuildSha)' == '' and '$(QS3D_BUILD_SHA)' != ''">$(QS3D_BUILD_SHA)</QS3DBuildSha>
+      <QS3DBuildSha Condition="'$(QS3DBuildSha)' == '' and '$(GITHUB_SHA)' != ''">$(GITHUB_SHA)</QS3DBuildSha>
+      <QS3DBuildSha Condition="'$(QS3DBuildSha)' == '' and '$(SourceRevisionId)' != ''">$(SourceRevisionId)</QS3DBuildSha>
+      <QS3DBuildUtc Condition="'$(QS3DBuildUtc)' == '' and '$(QS3D_BUILD_UTC)' != ''">$(QS3D_BUILD_UTC)</QS3DBuildUtc>
+      <QS3DBuildUtc Condition="'$(QS3DBuildUtc)' == ''">$([System.DateTime]::UtcNow.ToString('o'))</QS3DBuildUtc>
+    </PropertyGroup>
+    <ItemGroup>
+      <AssemblyMetadata Include="QS3D.BuildSha" Value="$(QS3DBuildSha)" Condition="'$(QS3DBuildSha)' != ''" />
+      <AssemblyMetadata Include="QS3D.BuildUtc" Value="$(QS3DBuildUtc)" Condition="'$(QS3DBuildUtc)' != ''" />
+    </ItemGroup>
+  </Target>
   <Target Name="ValidateBricsCadReferences" BeforeTargets="ResolveReferences">
     <Error Condition="'$(BRICSCAD_V25_DIR)' == ''" Text="BRICSCAD_V25_DIR is not set. Point it to the licensed BricsCAD V25 installation directory." />
     <Error Condition="!Exists('$(BRICSCAD_V25_DIR)\BrxMgd.dll')" Text="BrxMgd.dll not found under BRICSCAD_V25_DIR." />

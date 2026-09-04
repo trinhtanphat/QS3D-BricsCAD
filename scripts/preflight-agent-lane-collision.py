@@ -28,6 +28,10 @@ VALID_BRANCH_OWNER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/+~-]{5,160}$")
 VALID_OWNER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/|+~-]{5,200}$")
 AGENT_BRANCH_RE = re.compile(r"^agent/([^/]+)/(.+)$")
 ISSUE_IN_BRANCH_RE = re.compile(r"(?:^|[/_-])issue[-_]?(\d+)(?:$|[/_-])", re.IGNORECASE)
+PENDING_ISSUE_SCOPE_RE = re.compile(
+    r"^issue-pending-[A-Za-z0-9][A-Za-z0-9._-]{2,160}$",
+    re.IGNORECASE,
+)
 GENERIC_OWNER_RE = re.compile(
     r"^(?:agent|ai|chatgpt|gpt(?:[-_.]?\d+(?:[-_.]\d+)*)?(?:[-_.]?(?:sol|thinking))?|"
     r"claude|codex|controller|worker|runner|bot|"
@@ -214,6 +218,52 @@ def validate_owner_token(token: str) -> str:
             "schedule/model labels such as C01/C02/worker/controller are display metadata only"
         )
     return value
+
+
+def is_pending_issue_bootstrap(head_ref: str) -> bool:
+    match = AGENT_BRANCH_RE.fullmatch(head_ref)
+    return bool(match and PENDING_ISSUE_SCOPE_RE.fullmatch(match.group(2)))
+
+
+def validate_pending_issue_bootstrap(
+    event_name: str,
+    head_ref: str,
+    open_prs: list[dict],
+    repository: str,
+    changed_paths: list[str],
+) -> bool:
+    if event_name != "push" or not is_pending_issue_bootstrap(head_ref):
+        return False
+
+    branch_token = branch_owner_token(head_ref)
+    if branch_token is None:
+        raise ValueError(f"agent branch '{head_ref}' does not match agent/<owner>/<scope>")
+    validate_owner_token(branch_token)
+
+    for candidate in open_prs:
+        if not isinstance(candidate, dict):
+            continue
+        head = candidate.get("head") or {}
+        peer_ref = str(head.get("ref") or "")
+        peer_repo = str((head.get("repo") or {}).get("full_name") or "")
+        if peer_ref != head_ref or (peer_repo and peer_repo != repository):
+            continue
+        try:
+            peer_number = int(candidate.get("number") or 0)
+        except (TypeError, ValueError):
+            peer_number = 0
+        raise ValueError(
+            f"issue-pending bootstrap branch '{head_ref}' has open PR #{peer_number}; "
+            "create/use the canonical issue-<number> carrier before PR validation"
+        )
+
+    if changed_paths:
+        detail = ", ".join(changed_paths[:20])
+        raise ValueError(
+            f"issue-pending bootstrap branch '{head_ref}' has repository mutation(s): {detail}; "
+            "issue-pending-* is no-mutation bootstrap only; create/use the canonical issue-<number> carrier"
+        )
+    return True
 
 
 def parse_iso8601(raw: str) -> datetime:
@@ -706,6 +756,21 @@ def main() -> int:
 
         if head_ref.startswith("integration/"):
             print("PASS: integration carrier passed PR Lane-Key uniqueness; reservation v2 binds agent/**.")
+            return 0
+
+        if validate_pending_issue_bootstrap(
+            event_name,
+            head_ref,
+            open_prs,
+            repository,
+            current_changed_paths("main")
+            if event_name == "push" and is_pending_issue_bootstrap(head_ref)
+            else [],
+        ):
+            print(
+                f"PASS: zero-diff issue-pending bootstrap branch '{head_ref}' has no open PR; "
+                "numbered Reservation-v2 validation begins on the canonical issue-<number> carrier."
+            )
             return 0
 
         issue_number = branch_issue_number(head_ref)
