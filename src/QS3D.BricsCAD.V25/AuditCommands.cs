@@ -10,6 +10,7 @@ namespace QS3D.BricsCAD.V25
         private static AuditLogWindow? _window;
         private static AuditLogWindow? _unpublishedCandidate;
         private static AuditLogWindow? _publicationInFlightCandidate;
+        private static AuditLogWindow? _cleanupInFlightCandidate;
         private static IntPtr _nativeDatabaseIdentity;
 
         [CommandMethod("QS3DAUDIT", CommandFlags.Modal)]
@@ -110,6 +111,9 @@ namespace QS3D.BricsCAD.V25
 
         private static bool PrepareUnpublishedCandidate()
         {
+            if (_cleanupInFlightCandidate != null)
+                return false;
+
             var candidate = _unpublishedCandidate;
             if (candidate == null) return true;
             if (ReferenceEquals(_publicationInFlightCandidate, candidate))
@@ -131,6 +135,7 @@ namespace QS3D.BricsCAD.V25
             if (_nativeDatabaseIdentity == requestedNativeDatabaseIdentity)
                 return true;
 
+            _cleanupInFlightCandidate = published;
             try
             {
                 published.Close();
@@ -138,6 +143,11 @@ namespace QS3D.BricsCAD.V25
             catch
             {
                 return false;
+            }
+            finally
+            {
+                if (ReferenceEquals(_cleanupInFlightCandidate, published))
+                    _cleanupInFlightCandidate = null;
             }
 
             if (published.IsLoaded)
@@ -149,6 +159,7 @@ namespace QS3D.BricsCAD.V25
 
         private static bool CloseUnpublishedCandidate(AuditLogWindow candidate)
         {
+            _cleanupInFlightCandidate = candidate;
             try
             {
                 candidate.Close();
@@ -163,6 +174,11 @@ namespace QS3D.BricsCAD.V25
 
                 _unpublishedCandidate = candidate;
                 return false;
+            }
+            finally
+            {
+                if (ReferenceEquals(_cleanupInFlightCandidate, candidate))
+                    _cleanupInFlightCandidate = null;
             }
 
             if (!candidate.IsLoaded)
