@@ -165,10 +165,11 @@ function Read-BoundedStrictUtf8 {
 
     Assert-NoExistingReparseComponent -Path $Path -Label $Label
     $file = Get-RequiredOrdinaryFile -Path $Path -Label $Label
-    if ([long]$file.Length -gt $MaxBytes) {
+    $stream = [IO.File]::Open($file.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    if ([long]$stream.Length -gt $MaxBytes) {
+        $stream.Dispose()
         throw "$Label exceeds the bounded read limit of $MaxBytes bytes."
     }
-    $stream = [IO.File]::Open($file.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
     $reader = [IO.StreamReader]::new($stream, [Text.UTF8Encoding]::new($false, $true), $true)
     try {
         return $reader.ReadToEnd()
@@ -276,7 +277,7 @@ elseif (-not [string]::IsNullOrWhiteSpace($StatePath)) {
             Name = $name
             Path = [string]$states[$name].Path
             Length = [long]$states[$name].Length
-            LastWriteUtcTicks = [long]$states[$name].LastWriteUtcTicks
+            LastWriteUtcTicks = [long]$states[$name].LastWriteTimeUtc.Ticks
             Sha256 = [string]$states[$name].Sha256
         }
     }
