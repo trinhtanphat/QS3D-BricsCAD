@@ -18,7 +18,7 @@ required = (
     "github.event_name == 'workflow_run'",
     "github.event.workflow_run.conclusion == 'success'",
     "github.event.workflow_run.head_branch == 'main'",
-    'current_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq \' .sha\')"'.replace("' .sha'", "'.sha'"),
+    "current_main=\"$(gh api \"repos/${GITHUB_REPOSITORY}/commits/main\" --jq '.sha')\"",
     'source_sha="${current_main,,}"',
     'active_release_statuses=( requested queued in_progress waiting pending )',
     'runs?status=${active_release_status}&per_page=1',
