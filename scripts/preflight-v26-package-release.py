@@ -316,14 +316,13 @@ for token in (
     "Updates\\UpdateCoordinator.cs",
 ):
     require(v26_project, token, "V26 project")
+# Source preflight runs before release-workspace synchronization. Validate V26's
+# own declared product identity here; package-v26.ps1 still fail-closes on exact
+# V26/Core identity when an actual package is produced from the synchronized workspace.
 plugin_version = property_value("src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj", "Version")
 plugin_info = property_value("src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj", "InformationalVersion")
-core_version = property_value("src/QS3D.Core/QS3D.Core.csproj", "Version")
-core_info = property_value("src/QS3D.Core/QS3D.Core.csproj", "InformationalVersion")
-if plugin_version and core_version and plugin_version != core_version:
-    errors.append(f"V26/Core Version identity differs: {plugin_version} vs {core_version}")
-if plugin_info and core_info and plugin_info != core_info:
-    errors.append(f"V26/Core InformationalVersion identity differs: {plugin_info} vs {core_info}")
+if plugin_version and plugin_info and plugin_version != plugin_info:
+    errors.append(f"V26 Version/InformationalVersion identity differs: {plugin_version} vs {plugin_info}")
 
 print("QS3D BricsCAD V26 package/release preflight")
 if errors:
@@ -332,4 +331,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: V26 packaging preserves current hardened V25 transaction/security logic under guarded major transformation; .NET 8 update networking is HttpClient-only; discovery is manifest-channel isolated; split publication revalidates remote tag identity and binds upload plus remote verification to one admitted held local generation before publish while self-hosted qualification remains read-only.")
+print("PASS: V26 packaging preserves current hardened V25 transaction/security logic under guarded major transformation; source preflight allows committed V26 preview identity to precede Core workspace synchronization; .NET 8 update networking is HttpClient-only; discovery is manifest-channel isolated; split publication revalidates remote tag identity and binds upload plus remote verification to one admitted held local generation before publish while self-hosted qualification remains read-only.")
