@@ -11,29 +11,32 @@ def fail(message: str) -> None:
 
 
 text = SOURCE.read_text(encoding="utf-8")
-start = text.find("private static void MigrateV3ToV4(XElement root)")
-end = text.find("private static void ValidatePrimaryIdentityCanonicality", start)
-if start < 0 or end < 0:
-    fail("cannot isolate v3-to-v4 migration")
+validation_start = text.find("private static void ValidatePrimaryIdentityCanonicality(XElement root)")
+validation_end = text.find("private static void RequireCanonicalAttribute", validation_start)
+if validation_start < 0 or validation_end < 0:
+    fail("cannot isolate persisted identity canonicality validation")
 
-block = text[start:end]
-metadata_loop = "foreach (var item in metadata.Elements(\"p\"))"
-loop_pos = block.find(metadata_loop)
+validation = text[validation_start:validation_end]
+metadata_loop = 'foreach (var item in root.Element("metadata")?.Elements("p") ?? Enumerable.Empty<XElement>())'
+metadata_pos = validation.find(metadata_loop)
 canonical = 'RequireCanonicalAttribute(item, "name", "Project metadata key");'
-canonical_pos = block.find(canonical)
-reserved = "StartsWith(ProjectMeasurementWorkItemMappingCodec.Prefix, StringComparison.OrdinalIgnoreCase)"
-reserved_pos = block.find(reserved)
+canonical_pos = validation.find(canonical, metadata_pos)
+if metadata_pos < 0 or canonical_pos < 0 or canonical_pos < metadata_pos:
+    fail("current-schema and migrated documents must reject padded project metadata keys before hydration")
 
-if loop_pos < 0:
-    fail("v3-to-v4 migration must inspect every persisted metadata entry before migration")
-if canonical_pos < 0:
-    fail("v3-to-v4 migration must reject non-canonical persisted metadata names")
-if reserved_pos < 0:
+migration_start = text.find("private static void MigrateV3ToV4(XElement root)")
+migration_end = text.find("private static void ValidatePrimaryIdentityCanonicality", migration_start)
+if migration_start < 0 or migration_end < 0:
+    fail("cannot isolate v3-to-v4 migration")
+migration = text[migration_start:migration_end]
+if "StartsWith(ProjectMeasurementWorkItemMappingCodec.Prefix, StringComparison.OrdinalIgnoreCase)" not in migration:
     fail("v3-to-v4 migration must preserve the reserved measurement/work-item namespace guard")
-if not (loop_pos < canonical_pos < reserved_pos):
-    fail("metadata canonicality must be admitted before reserved-prefix semantics are evaluated")
 
+if "ValidatePrimaryIdentityCanonicality(callerRoot);" not in text:
+    fail("current-schema documents must run persisted identity canonicality validation")
+if "ValidatePrimaryIdentityCanonicality(root);" not in text:
+    fail("migrated documents must run persisted identity canonicality validation before publication")
 if "callerRoot.ReplaceWith(new XElement(root));" not in text:
     fail("migration must retain atomic caller-root replacement after validation")
 
-print("PASS: schema migration rejects padded metadata identities before reserved-namespace admission")
+print("PASS: QSDB schema admission rejects padded project metadata keys for current and migrated documents")
