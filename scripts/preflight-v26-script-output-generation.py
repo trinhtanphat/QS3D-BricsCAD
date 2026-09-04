@@ -24,6 +24,9 @@ def validate(text: str) -> list[str]:
         "V26 output parent held generation",
         "V26 generation output must be fresh",
         "$outputParentHandle = Open-AdmittedOutputParent",
+        "$pathAdmission = Open-AdmittedOutputParent -Path $Admission.Path",
+        "Test-SameHandleIdentity -Before $Admission.Information -After $pathAdmission.Information",
+        "$pathAdmission.Handle.Dispose()",
         "Assert-AdmittedOutputParentBinding -Admission $outputParentHandle",
         "[IO.File]::WriteAllText($stagePath, $generated",
         "[IO.File]::Move($stagePath, $outputFull)",
@@ -36,6 +39,7 @@ def validate(text: str) -> list[str]:
     forbidden = (
         "[IO.File]::Replace($stagePath, $outputFull, $null)",
         "New-Item -ItemType Directory -Path $parent -Force",
+        "[IO.File]::OpenHandle(",
     )
     for token in forbidden:
         if token in text:
@@ -57,6 +61,13 @@ def validate(text: str) -> list[str]:
     )
     before(
         text,
+        "$pathAdmission = Open-AdmittedOutputParent -Path $Admission.Path",
+        "Test-SameHandleIdentity -Before $Admission.Information -After $pathAdmission.Information",
+        "native pathname re-admission before identity comparison",
+        errors,
+    )
+    before(
+        text,
         "Assert-AdmittedOutputParentBinding -Admission $outputParentHandle",
         "[IO.File]::Move($stagePath, $outputFull)",
         "held parent binding before publication",
@@ -73,6 +84,11 @@ def main() -> int:
 
     probes = {
         "parent handle admission": text.replace("$outputParentHandle = Open-AdmittedOutputParent", "$outputParentHandle = $null", 1),
+        "native pathname re-admission": text.replace(
+            "$pathAdmission = Open-AdmittedOutputParent -Path $Admission.Path",
+            "$pathAdmission = $Admission",
+            1,
+        ),
         "fresh destination refusal": text.replace("V26 generation output must be fresh", "V26 output may be reused"),
         "binding before publish": text.replace("Assert-AdmittedOutputParentBinding -Admission $outputParentHandle", "# binding removed"),
         "atomic move": text.replace("[IO.File]::Move($stagePath, $outputFull)", "Move-Item -LiteralPath $stagePath -Destination $outputFull -Force", 1),
