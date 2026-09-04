@@ -39,11 +39,16 @@ def main() -> int:
     require(aggregate_source, "Platform gitlink must keep aggregate source validation enabled")
     require(aggregate_build, "Platform gitlink must keep aggregate build validation enabled")
 
-    unrelated_source, unrelated_build = module.classify_path("external/README.md")
-    require(
-        (unrelated_source, unrelated_build) == (False, False),
-        "Do not broaden every external/ path into managed build validation",
-    )
+    for lookalike in (
+        "external/README.md",
+        "external/QS3D-Platform-copy",
+        "external/QS3D-Platform/README.md",
+    ):
+        unrelated_source, unrelated_build = module.classify_path(lookalike)
+        require(
+            (unrelated_source, unrelated_build) == (False, False),
+            f"Do not broaden non-gitlink external path into validation: {lookalike}",
+        )
 
     print("PASS ci validation scope Platform gitlink build admission")
     return 0
