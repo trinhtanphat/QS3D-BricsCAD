@@ -14,8 +14,13 @@ def main() -> int:
     source = FINALIZER.read_text(encoding="utf-8")
     failures: list[str] = []
 
-    manifest_verify = source.find("Assert-ZipManifestIntegrity -ZipPath $tempZip")
-    staged_hash = source.find("$stagedZipHash = (Get-FileHash -LiteralPath $tempZip -Algorithm SHA256).Hash.ToUpperInvariant()")
+    verifier_start = source.find("function Assert-ZipManifestIntegrity")
+    verifier_end = source.find("\nfunction ", verifier_start + 1) if verifier_start >= 0 else -1
+    if verifier_start >= 0 and verifier_end < 0:
+        verifier_end = len(source)
+    verifier = source[verifier_start:verifier_end] if verifier_start >= 0 else ""
+
+    manifest_verify = source.find("$stagedZipHash = Assert-ZipManifestIntegrity -ZipPath $tempZip")
     replace_call = source.find("[IO.File]::Replace($tempZip, $zip, $zipBackup, $true)")
     move_call = source.find("[IO.File]::Move($tempZip, $zip)")
     installed_hash = source.find("$installedZipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToUpperInvariant()")
@@ -26,6 +31,7 @@ def main() -> int:
         "$zipPublished = $false",
         "$zipExistedBeforePublish = $false",
         "$zipRollbackDiscard",
+        "$stagedZipHash = Assert-ZipManifestIntegrity -ZipPath $tempZip",
         "$installedZipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToUpperInvariant()",
         "[string]::Equals($installedZipHash, $stagedZipHash, [StringComparison]::Ordinal)",
         "Finalized ZIP generation mismatch",
@@ -34,13 +40,31 @@ def main() -> int:
         if token not in source:
             failures.append(f"final ZIP generation-binding contract is incomplete; missing: {token}")
 
-    if min(manifest_verify, staged_hash, replace_call, move_call, installed_hash, mismatch_check, committed) < 0:
-        failures.append("could not bound verify/hash/install/reverify/commit sequence")
+    verifier_required = (
+        "$fileStream = [IO.FileStream]::new(",
+        "[IO.FileMode]::Open",
+        "[IO.FileAccess]::Read",
+        "[IO.FileShare]::Read",
+        "[IO.Compression.ZipArchive]::new($fileStream",
+        "$fileStream.Position = 0",
+        "$outerHash = [Security.Cryptography.SHA256]::Create()",
+        "$outerDigest = $outerHash.ComputeHash($fileStream)",
+        "return (-join ($outerDigest | ForEach-Object { $_.ToString('X2') }))",
+    )
+    for token in verifier_required:
+        if token not in verifier:
+            failures.append(f"manifest validation must return the outer digest from the same locked file handle; missing: {token}")
+
+    if "Get-FileHash -LiteralPath $tempZip" in source:
+        failures.append("staged ZIP must not be reopened by pathname for its admitted digest after manifest verification")
+
+    if min(manifest_verify, replace_call, move_call, installed_hash, mismatch_check, committed) < 0:
+        failures.append("could not bound same-handle verify/install/reverify/commit sequence")
     else:
-        if not (manifest_verify < staged_hash < replace_call < installed_hash < mismatch_check < committed):
-            failures.append("existing-target finalization must verify staged bytes, hash them, replace, rehash destination, compare, then commit")
-        if not (manifest_verify < staged_hash < move_call < installed_hash < mismatch_check < committed):
-            failures.append("new-target finalization must verify staged bytes, hash them, move, rehash destination, compare, then commit")
+        if not (manifest_verify < replace_call < installed_hash < mismatch_check < committed):
+            failures.append("existing-target finalization must obtain same-handle verified digest, replace, rehash destination, compare, then commit")
+        if not (manifest_verify < move_call < installed_hash < mismatch_check < committed):
+            failures.append("new-target finalization must obtain same-handle verified digest, move, rehash destination, compare, then commit")
 
     catch_start = source.find("catch {", source.find("try {", source.find("$transactionCommitted = $false")))
     finally_start = source.find("\nfinally {", catch_start)
@@ -48,6 +72,7 @@ def main() -> int:
     rollback_required = (
         "if ($zipPublished)",
         "if ($zipExistedBeforePublish",
+        "$zip = Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip rollback target'",
         "[IO.File]::Replace($zipBackup, $zip, $zipRollbackDiscard, $true)",
         "Remove-Item -LiteralPath $zip -Force -ErrorAction Stop",
     )
@@ -63,7 +88,7 @@ def main() -> int:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
 
-    print("PASS: finalized V25 ZIP destination is rebound to the verified staged digest before transaction commit with rollback on mismatch")
+    print("PASS: finalized V25 ZIP uses one locked generation for manifest verification+digest, then rebinds destination before transaction commit")
     return 0
 
 
