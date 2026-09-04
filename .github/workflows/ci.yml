@@ -119,6 +119,11 @@ jobs:
           QS3D_AGENT_LANE_COLLISION_RUNTIME: "1"
           GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/preflight-agent-lane-collision.py
+      - name: Setup .NET 8 for feature source guards
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        if: ${{ steps.scope.outputs.source_validation == 'true' }}
+        with:
+          dotnet-version: "8.0.x"
       - name: Generic source guard
         if: ${{ steps.scope.outputs.source_validation == 'true' }}
         run: python scripts/preflight.py
@@ -156,6 +161,9 @@ jobs:
         if: ${{ !cancelled() && steps.scope.outputs.source_validation == 'true' }}
         shell: pwsh
         run: .\scripts\test-v25-package-verifier.ps1
+      - name: Source-validation terminal marker
+        if: ${{ !cancelled() && steps.scope.outputs.source_validation == 'true' }}
+        run: echo "Independent source-validation safety gates completed."
 
   core:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request' }}
