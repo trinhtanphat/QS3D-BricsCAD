@@ -7,10 +7,13 @@ text = SOURCE.read_text(encoding="utf-8")
 
 
 def method_body(name: str) -> str:
-    marker = f"private static void {name}("
-    start = text.find(marker)
-    if start < 0:
+    method = re.search(
+        rf"(?m)^\s*(?:(?:private|internal|public|protected)\s+)?static\s+void\s+{re.escape(name)}\s*\(",
+        text,
+    )
+    if not method:
         raise SystemExit(f"FAIL: {name} method not found")
+    start = method.start()
     brace = text.find("{", start)
     if brace < 0:
         raise SystemExit(f"FAIL: {name} body not found")
