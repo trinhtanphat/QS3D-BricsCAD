@@ -221,10 +221,10 @@ namespace QS3D.Core.SmokeTests
             var error = Capture<InvalidOperationException>(() =>
                 ProjectFloorService.Assign(fixture.Project, fixture.TargetFloor.Id, targets));
 
-            Contains("10000 element limit", error.Message, "Dishonest Count must not bypass the streaming Floor target bound.");
-            Equal(MaximumTargets + 1, targets.ObservedEntries, "Streaming enforcement must stop at entry 10001 and not consume entry 10002.");
-            Equal(beforeVersion, fixture.Project.ChangeVersion, "Streaming-bound rejection must occur before project mutation.");
-            Equal(beforeFloor, fixture.Element.FloorId, "Streaming-bound rejection must preserve target FloorId.");
+            Contains("known count", error.Message, "Dishonest authoritative Count must fail closed at the first N+1 target.");
+            Equal(2, targets.ObservedEntries, "Known Count=1 must stop after observing the first disallowed second entry.");
+            Equal(beforeVersion, fixture.Project.ChangeVersion, "Known-count rejection must occur before project mutation.");
+            Equal(beforeFloor, fixture.Element.FloorId, "Known-count rejection must preserve target FloorId.");
         }
 
         private static void ExactBoundaryRemainsAcceptedAndDeduplicated()
