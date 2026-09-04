@@ -71,7 +71,7 @@ def main() -> int:
         "live Cloudflare tunnel list": (account, 'RunCommand(executable, "tunnel list"'),
         "exact tunnel-name comparison": (account, "string.Equals(parts[1], name, StringComparison.OrdinalIgnoreCase)"),
         "missing tunnel credential fail-closed": (account, "máy này thiếu credential"),
-        "DNS conflict fail-closed": (account, "QS3D không tự bỏ qua xung đột DNS"),
+        "DNS conflict fail-closed": (account, 'SetRouteState(existingConflict ? "route=conflict" : "route=error")'),
         "hostname-scoped ingress": (account, '"ingress:\\r\\n"'),
         "canonical named config writer": (account, "WriteCanonicalConfig"),
         "saved tunnel rewrites canonical config": (account, "WriteCanonicalConfig(id, hostname, credentials)"),
@@ -317,8 +317,20 @@ def main() -> int:
         errors.append("MCP JSON parser accepts non-RFC Unicode whitespace via char.IsWhiteSpace")
     if ".Trim()" in top_level_json:
         errors.append("MCP JSON parser must not normalize non-RFC Unicode whitespace via string.Trim")
-    if 'IndexOf("already exists"' in account:
-        errors.append("Cloudflare DNS conflict must not be silently accepted via 'already exists'")
+
+    ensure_dns_route = method_block(account, "private static bool EnsureDnsRoute(")
+    if not ensure_dns_route:
+        errors.append("cannot inspect Cloudflare DNS route re-assertion")
+    else:
+        if "LooksLikeExistingRouteConflict(output, routeError)" not in ensure_dns_route:
+            errors.append("Cloudflare DNS route re-assertion does not classify existing-record conflicts")
+        if 'SetRouteState(existingConflict ? "route=conflict" : "route=error")' not in ensure_dns_route:
+            errors.append("Cloudflare DNS route conflicts do not remain distinguishable from generic route errors")
+        if "HasExpectedLocalRouteProof" in ensure_dns_route or "hadExpectedLocalProof" in ensure_dns_route:
+            errors.append("Cloudflare DNS route conflict can still be bypassed by stale local route/config proof")
+        if "return false;" not in ensure_dns_route:
+            errors.append("Cloudflare DNS route failure path no longer fails closed")
+
     if '"Bearer token: " + McpEmbeddedServer.GetBearerToken()' in connector:
         errors.append("legacy settings must not render the raw bearer token; use explicit copy action")
     if '"1. Run QS3DMCPACCOUNTSETUP.' in connector:
