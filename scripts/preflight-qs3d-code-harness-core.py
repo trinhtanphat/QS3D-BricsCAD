@@ -1,41 +1,52 @@
 #!/usr/bin/env python3
-"""Restore the dedicated QS3D Code harness-core smoke project during CI diagnosis."""
+"""Probe the repo-local .NET 8 restore boundary for the harness smoke project."""
 
 from __future__ import annotations
 
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT = ROOT / "tests" / "QS3D.AgentHarness.Core.SmokeTests" / "QS3D.AgentHarness.Core.SmokeTests.csproj"
+TESTS = ROOT / "tests"
 
 
 def main() -> int:
-    if not PROJECT.is_file():
-        print(f"ERROR: missing harness smoke project: {PROJECT.relative_to(ROOT)}")
-        return 1
+    with tempfile.TemporaryDirectory(prefix="qs3d-harness-restore-probe-", dir=TESTS) as temp_dir:
+        probe_dir = Path(temp_dir)
+        project = probe_dir / "Probe.csproj"
+        project.write_text(
+            """<Project Sdk=\"Microsoft.NET.Sdk\">\n"
+            "  <PropertyGroup>\n"
+            "    <OutputType>Exe</OutputType>\n"
+            "    <TargetFramework>net8.0</TargetFramework>\n"
+            "    <Nullable>enable</Nullable>\n"
+            "  </PropertyGroup>\n"
+            "</Project>\n""",
+            encoding="utf-8",
+        )
 
-    completed = subprocess.run(
-        ["dotnet", "restore", str(PROJECT)],
-        cwd=ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+        completed = subprocess.run(
+            ["dotnet", "restore", str(project)],
+            cwd=probe_dir,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
 
-    if completed.stdout:
-        print(completed.stdout, end="")
-    if completed.stderr:
-        print(completed.stderr, end="", file=sys.stderr)
+        if completed.stdout:
+            print(completed.stdout, end="")
+        if completed.stderr:
+            print(completed.stderr, end="", file=sys.stderr)
 
-    if completed.returncode != 0:
-        print("ERROR: QS3D Code harness core restore diagnostic failed.")
-        return completed.returncode
+        if completed.returncode != 0:
+            print("ERROR: repo-local .NET 8 restore probe failed.")
+            return completed.returncode
 
-    print("PASS: QS3D Code harness core restore diagnostic.")
+    print("PASS: repo-local .NET 8 restore probe.")
     return 0
 
 
