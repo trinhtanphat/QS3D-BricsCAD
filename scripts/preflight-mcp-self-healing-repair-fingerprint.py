@@ -60,11 +60,19 @@ for needle in [
     if needle not in helper:
         fail(f"stable source-repair identity is missing required normalization: {needle}")
 
-# Do not weaken the existing circuit threshold or source-repair-only circuit semantics.
+# Do not weaken the existing threshold or source-repair participation in the circuit.
+# Repeated transient failures now share the same bounded fail-closed threshold, while
+# caller/policy failures remain excluded by transientFailure classification.
 if "private const int CircuitOpenOccurrence = 4;" not in source:
     fail("repair circuit threshold drifted")
-if "var circuitOpen = sourceRepairEligible && occurrenceCount >= CircuitOpenOccurrence;" not in source:
-    fail("repair circuit is no longer scoped to source-repair failures")
+if "var transientFailure = !callerOrPolicyFailure && IsTransientFailure(code, message);" not in record:
+    fail("transient circuit classification no longer excludes caller/policy failures")
+if "var circuitOpen = (sourceRepairEligible || transientFailure)" not in record:
+    fail("source-repair failures no longer participate in the bounded repair circuit")
+if "&& occurrenceCount >= CircuitOpenOccurrence;" not in record:
+    fail("repair circuit no longer uses the bounded occurrence threshold")
+if "var circuitOpen = sourceRepairEligible && occurrenceCount >= CircuitOpenOccurrence;" in record:
+    fail("repair circuit regressed to source-repair-only topology")
 
 print("MCP self-healing repair fingerprint preflight passed.")
 sys.exit(0)

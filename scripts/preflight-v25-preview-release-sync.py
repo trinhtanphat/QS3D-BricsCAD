@@ -4,7 +4,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "release-v25-cloud.yml"
 PREPARE = ROOT / "scripts" / "prepare-v25-cloud-release.ps1"
-SYNC = ROOT / "scripts" / "sync-preview-release-version.ps1"
 PACKAGE = ROOT / "scripts" / "package-v25.ps1"
 
 
@@ -16,14 +15,18 @@ def fail(message):
 def require_tokens(text, tokens, label):
     for token in tokens:
         if token not in text:
-            raise ValueError(f"{label} lost required release-sync guard: {token}")
+            raise ValueError(f"{label} lost required committed-source guard: {token}")
+
+
+def contains_executable_line(text, token):
+    """Match a source token only on non-comment PowerShell lines."""
+    return any(token in line for line in text.splitlines() if not line.lstrip().startswith("#"))
 
 
 def main():
     try:
         workflow = WORKFLOW.read_text(encoding="utf-8")
         prepare = PREPARE.read_text(encoding="utf-8")
-        sync = SYNC.read_text(encoding="utf-8")
         package = PACKAGE.read_text(encoding="utf-8")
     except OSError as exc:
         return fail(str(exc))
@@ -63,24 +66,30 @@ def main():
                 "Get-ReleaseStatusEntries",
                 "git status --porcelain=v1 --untracked-files=all -- . ':(exclude).nuget/packages/**'",
                 "Release preparation must start from a clean checkout/index",
+                "$releaseRelevantPathspecs = @(",
+                "external/QS3D-Platform",
+                "git diff --quiet --no-ext-diff $range -- @releaseRelevantPathspecs",
                 "git reset --hard",
                 "git checkout --detach $releaseBase",
-                "sync-preview-release-version.ps1",
                 "preflight-runtime-product-version-identity.py",
-                "Preview synchronization produced an unexpected Git status",
-                "if ($entry.State -ne ' M')",
-                "if ($entry.Path -notin $allowed)",
+                "function Get-CommittedProductVersion",
+                "Committed V25 project must contain exactly one unambiguous Version value",
+                "requires tag '$expectedReleaseTag'",
                 "git diff --check",
                 "git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'",
                 "main moved after dispatch with release-relevant changes",
                 "Release workspace HEAD must remain the protected-main source commit",
                 "$latestMain = Get-RemoteMain",
-                "main advanced through additional non-release paths while preparing the workspace",
-                "No commit, push, branch-protection bypass, or main mutation was performed by release preparation.",
+                "main advanced through additional non-release paths while validating committed release source",
+                "No commit, push, branch-protection bypass, workspace-only version rewrite, or main mutation was performed by release preparation.",
                 "Write-Output $releaseBase",
             ],
             "V25 release preparation helper",
         )
+        if "sync-preview-release-version.ps1" in prepare:
+            raise ValueError("V25 release preparation must not rewrite preview identity only in the workspace")
+        if contains_executable_line(prepare, "git diff --name-only"):
+            raise ValueError("V25 release preparation must not classify release drift from line-oriented pathname output")
         if "Test-IsExpectedNuGetCachePath" in prepare:
             raise ValueError("V25 release preparation must exclude NuGet cache before status parsing")
         for forbidden in (
@@ -91,14 +100,14 @@ def main():
         ):
             if forbidden.lower() in prepare.lower():
                 raise ValueError(
-                    f"V25 release preparation must keep preview synchronization workspace-only; forbidden primitive: {forbidden}"
+                    f"V25 release preparation must keep protected main read-only; forbidden primitive: {forbidden}"
                 )
 
         anchors = [
             prepare.find("$initialStatus = @(Get-ReleaseStatusEntries)"),
             prepare.find("git checkout --detach $releaseBase"),
-            prepare.find("sync-preview-release-version.ps1"),
-            prepare.find("$status = @(Get-ReleaseStatusEntries)"),
+            prepare.find("preflight-runtime-product-version-identity.py"),
+            prepare.find("$committedProductVersion = Get-CommittedProductVersion"),
             prepare.find("git diff --check"),
             prepare.find("Release workspace HEAD must remain the protected-main source commit"),
             prepare.find("$latestMain = Get-RemoteMain"),
@@ -106,30 +115,9 @@ def main():
         ]
         if min(anchors) < 0 or anchors != sorted(anchors):
             raise ValueError(
-                "V25 release preparation must start clean, select protected main, sync workspace-only identity, validate dirty allowlist, preserve HEAD, recheck main, then return source SHA"
+                "V25 release preparation must start clean, select protected main, validate committed identity, preserve HEAD, recheck main, then return source SHA"
             )
 
-        expected_projects = [
-            "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj",
-            "src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj",
-            "src/QS3D.Core/QS3D.Core.csproj",
-        ]
-        for path in expected_projects:
-            if path not in prepare or path not in sync:
-                raise ValueError(f"preview release synchronization lost project path: {path}")
-
-        require_tokens(
-            sync,
-            [
-                "(?<preview>[1-9][0-9]*)$",
-                "Replace-SingleProjectValue",
-                "-Element 'Version'",
-                "-Element 'FileVersion'",
-                "-Element 'InformationalVersion'",
-                "New-Object Text.UTF8Encoding($false)",
-            ],
-            "preview version sync helper",
-        )
         require_tokens(
             package,
             [
@@ -143,8 +131,8 @@ def main():
         return fail(str(exc))
 
     print(
-        "PASS: V25 preview release sync requires a positive preview ordinal, excludes NuGet cache before status parsing, "
-        "keeps version changes workspace-only on an exact protected-main HEAD, and publishes exact release-source provenance"
+        "PASS: V25 preview release requires a clean committed product identity on an exact protected-main HEAD, "
+        "uses pathname-safe release-drift admission, and publishes exact release-source provenance without workspace-only version rewriting"
     )
     return 0
 

@@ -54,7 +54,7 @@ namespace QS3D.Core.SmokeTests
             var checkpoint = ProjectPersistenceCheckpoint.Capture(project, source);
 
             Equal(2, checkpoint.ElementIds.Count, "Honest Count source did not capture both elements.");
-            Equal(1, source.CountReads, "Honest known Count was not snapshotted exactly once.");
+            Equal(2, source.CountReads, "Honest known Count was not observed before and after traversal.");
             Equal(1, source.EnumerationCount, "Honest Count source was not traversed exactly once.");
         }
 
