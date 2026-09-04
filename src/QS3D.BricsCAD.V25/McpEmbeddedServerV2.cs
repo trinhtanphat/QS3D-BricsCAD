@@ -969,7 +969,7 @@ namespace QS3D.BricsCAD.V25
                     return ToolSuccess("{\"protocol\":\"" + ModernProtocolVersion + "\",\"legacyProtocol\":\"" + ProtocolVersion + "\",\"serverVersion\":\"" + ServerVersion
                         + "\",\"endpoint\":\"" + JsonEscape(Endpoint.ToString())
                         + "\",\"publicUrl\":\"" + JsonEscape(publicUrl) + "\",\"auth\":\"oauth2.1+legacy_bearer\",\"singleRepository\":true,"
-                        + "\"fullCadAgent\":true,\"structuredContent\":true,\"modernMetaEnvelope\":true,\"toolAnnotations\":true,\"automationStopped\":"
+                        + "\"fullCadAgent\":true,\"supportsStructuredContent\":true,\"modernMetaEnvelope\":true,\"toolAnnotations\":true,\"automationStopped\":"
                         + (McpCadAgentRuntime.AutomationStopped ? "true" : "false") + "}");
                 }
                 if (string.Equals(tool, "cad_writer_acquire", StringComparison.Ordinal))
