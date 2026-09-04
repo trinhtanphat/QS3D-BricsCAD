@@ -3,7 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BLT_REL = "src/QS3D.BricsCAD.V25/BltLegacyCommands.cs"
-ELEMENT_REL = "src/QS3D.Core/Domain/ProjectElement.cs"
+REMOVE_REL = "src/QS3D.Core/Domain/ProjectElementQuantityLifecycleExtensions.cs"
 
 
 def fail(message: str) -> None:
@@ -19,14 +19,14 @@ def require(source: str, needle: str, message: str) -> int:
 
 def main() -> int:
     blt_path = ROOT / BLT_REL
-    element_path = ROOT / ELEMENT_REL
+    remove_path = ROOT / REMOVE_REL
     if not blt_path.exists():
         fail(f"missing required source: {BLT_REL}")
-    if not element_path.exists():
-        fail(f"missing required source: {ELEMENT_REL}")
+    if not remove_path.exists():
+        fail(f"missing required source: {REMOVE_REL}")
 
     blt_source = blt_path.read_text(encoding="utf-8")
-    element_source = element_path.read_text(encoding="utf-8")
+    remove_source = remove_path.read_text(encoding="utf-8")
 
     method_start = require(blt_source, "private static void ApplyLegacyEvidence", "missing BLT legacy evidence mutation path")
     method_end = require(blt_source, "private static void WriteSummary", "missing BLT legacy evidence method boundary")
@@ -56,25 +56,27 @@ def main() -> int:
     if remove_pos > pending_pos:
         fail("stale exact Formwork quantity must be removed before publishing pending evidence status")
 
-    set_quantity_start = require(element_source, "public void SetQuantity", "missing canonical quantity setter")
-    remove_quantity_start = require(element_source, "public bool RemoveQuantity", "missing symmetric quantity removal lifecycle API")
-    stale_start = require(element_source, "public void MarkGeneratedGeometryStale", "missing ProjectElement quantity-method boundary")
-    if not (set_quantity_start < remove_quantity_start < stale_start):
-        fail("RemoveQuantity must remain adjacent to canonical quantity mutation lifecycle")
-
-    remove_quantity = element_source[remove_quantity_start:stale_start]
     for needle, message in (
+        ("public static bool RemoveQuantity(this ProjectElement element, string name)", "missing shared ProjectElement quantity-removal extension"),
+        ("element == null", "RemoveQuantity must reject a null element"),
         ("string.IsNullOrWhiteSpace(name)", "RemoveQuantity must reject missing quantity names"),
         ("name.Any(char.IsControl)", "RemoveQuantity must reject control characters in quantity names"),
-        ("RequireXmlText", "RemoveQuantity must enforce XML-safe canonical quantity keys"),
-        ("Quantities.Remove(key)", "RemoveQuantity must remove only the canonical quantity key"),
-        ("MarkDirtyCore(ElementDirtyFlags.Quantity, false)", "RemoveQuantity must mark element quantity lifecycle dirty when removal occurs"),
+        ("XmlConvert.VerifyXmlChars(key)", "RemoveQuantity must enforce XML-safe canonical quantity keys"),
+        ("element.Quantities.Remove(key)", "RemoveQuantity must remove only the canonical quantity key"),
+        ("element.MarkDirty(ElementDirtyFlags.Quantity)", "RemoveQuantity must mark element quantity lifecycle dirty when removal occurs"),
         ("return false", "RemoveQuantity must preserve no-op semantics when the quantity is absent"),
         ("return true", "RemoveQuantity must report a successful lifecycle mutation"),
     ):
-        require(remove_quantity, needle, message)
+        require(remove_source, needle, message)
 
-    print("PASS: BLT legacy evidence mutations use ProjectElement property/quantity lifecycle APIs without direct persisted-dictionary bypass.")
+    remove_pos = require(remove_source, "element.Quantities.Remove(key)", "missing quantity removal")
+    dirty_pos = require(remove_source, "element.MarkDirty(ElementDirtyFlags.Quantity)", "missing quantity dirty lifecycle")
+    if remove_pos > dirty_pos:
+        pass
+    else:
+        fail("quantity lifecycle must mark dirty only after a successful removal")
+
+    print("PASS: BLT legacy evidence mutations use canonical property lifecycle plus bounded Core quantity-removal lifecycle without direct persisted-dictionary bypass.")
     return 0
 
 
