@@ -90,8 +90,12 @@ namespace QS3D.Core.Persistence
             File.Move(temp, destination);
             if (!File.Exists(backup) && !Directory.Exists(backup)) return;
 
-            try { File.Delete(destination); }
-            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            try
+            {
+                RequireSafe(destination, "destination");
+                File.Delete(destination);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException)
             {
                 throw new IOException("A QS3D backup appeared during create-new publication and the new primary could not be rolled back.", ex);
             }
@@ -151,8 +155,12 @@ namespace QS3D.Core.Persistence
                 // for LoadWithBackupFallback beside the newly published generation.
                 if (File.Exists(backupPath) || Directory.Exists(backupPath))
                 {
-                    try { File.Delete(destinationPath); }
-                    catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+                    try
+                    {
+                        RequireSafe(destinationPath, "destination");
+                        File.Delete(destinationPath);
+                    }
+                    catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException)
                     {
                         throw new IOException("A QS3D backup appeared during primary recreation and the new primary could not be rolled back.", ex);
                     }
