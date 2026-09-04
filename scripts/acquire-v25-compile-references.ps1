@@ -275,24 +275,28 @@ if (Test-CanonicalPathEqual -Left $extract -Right $extractRoot) {
     throw "ExtractDir must not be a filesystem root: $extract"
 }
 if (Test-CanonicalPathWithin -Candidate $msi -Parent $extract) {
-    throw 'ExtractDir must not equal or contain MsiPath because extraction cleanup is recursive.'
+    throw 'ExtractDir must not equal or contain MsiPath because extraction output must remain disjoint from the pinned installer.'
 }
 if (Test-CanonicalPathWithin -Candidate $cacheDir -Parent $extract) {
-    throw 'ExtractDir must not equal or contain the MSI cache directory because extraction cleanup is recursive.'
+    throw 'ExtractDir must not equal or contain the MSI cache directory because extraction output must remain disjoint from the cache.'
 }
 
-# Existing filesystem aliases must be rejected before any recursive cleanup or
-# cache mutation. This keeps lexical overlap checks from being bypassed by a
-# junction/symlink that redirects an apparently safe path elsewhere.
+# Existing filesystem aliases must be rejected before cache mutation or fresh
+# extraction-root creation. This keeps lexical overlap checks from being
+# bypassed by a junction/symlink that redirects an apparently safe path elsewhere.
 Assert-NoExistingReparseComponent -Path $cacheDir -Label 'MSI cache directory'
 Assert-NoExistingReparseComponent -Path $msi -Label 'MsiPath'
 Assert-NoExistingReparseComponent -Path $extract -Label 'ExtractDir'
 
-# No destructive filesystem mutation may occur before the path-overlap and
-# reparse-component guards above.
+# The extraction root is single-use. Never recursively delete or reuse a path
+# admitted by an earlier sample: if it exists now, fail closed; if another
+# actor races creation after this check, non-Force New-Item fails rather than
+# following/reusing that new generation.
 New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
-Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Path $extract -Force | Out-Null
+if (Test-Path -LiteralPath $extract) {
+    throw "ExtractDir unexpectedly already exists; refusing pathname reuse: $extract"
+}
+New-Item -ItemType Directory -Path $extract | Out-Null
 
 $sourceName = $null
 if (Test-PinnedMsiGeneration -Path $msi -Label 'Cached BricsCAD V25 MSI') {
