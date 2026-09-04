@@ -43,12 +43,14 @@ namespace QS3D.Core.Persistence
             var capturedFamilies = CaptureFamilyReferences(project);
             var capturedElements = CaptureElementReferences(project);
             var detached = CreateDetachedCopy(project);
+            RequireEquivalentDetachedState(detached, project);
             ValidateCapturedReferenceGeneration(
                 project,
                 capturedZones,
                 capturedFloors,
                 capturedFamilies,
                 capturedElements);
+            RequireEquivalentDetachedState(detached, project);
             return new ProjectStateSnapshot(
                 detached,
                 project,
@@ -194,6 +196,121 @@ namespace QS3D.Core.Persistence
                 || project.Families.Count != capturedFamilies.Count
                 || project.Elements.Count != capturedElements.Count)
                 throw new InvalidOperationException("Cannot capture a project whose collection generation changed during snapshot validation.");
+        }
+
+        private static void RequireEquivalentDetachedState(ProjectState expected, ProjectState actual)
+        {
+            if (expected.SchemaVersion != actual.SchemaVersion
+                || !string.Equals(expected.ProjectId, actual.ProjectId, StringComparison.Ordinal)
+                || !string.Equals(expected.Name, actual.Name, StringComparison.Ordinal)
+                || !string.Equals(expected.DrawingPath, actual.DrawingPath, StringComparison.Ordinal)
+                || !string.Equals(expected.DrawingFingerprint, actual.DrawingFingerprint, StringComparison.Ordinal)
+                || !string.Equals(expected.ActiveZoneId, actual.ActiveZoneId, StringComparison.Ordinal)
+                || !string.Equals(expected.ActiveFloorId, actual.ActiveFloorId, StringComparison.Ordinal)
+                || expected.UpdatedUtc != actual.UpdatedUtc
+                || expected.ChangeVersion != actual.ChangeVersion)
+                throw new InvalidOperationException("Cannot capture a project whose persisted scalar state changed during snapshot materialization.");
+
+            RequireEquivalentMap(expected.Metadata, actual.Metadata, "project metadata");
+            RequireEquivalentSequence(expected.Zones, actual.Zones,
+                (left, right) => string.Equals(left.Id, right.Id, StringComparison.Ordinal)
+                    && string.Equals(left.Name, right.Name, StringComparison.Ordinal),
+                "zones");
+            RequireEquivalentSequence(expected.Floors, actual.Floors,
+                (left, right) => string.Equals(left.Id, right.Id, StringComparison.Ordinal)
+                    && string.Equals(left.Name, right.Name, StringComparison.Ordinal)
+                    && left.ElevationM.Equals(right.ElevationM),
+                "floors");
+            RequireEquivalentSequence(expected.Families, actual.Families,
+                (left, right) => string.Equals(left.Id, right.Id, StringComparison.Ordinal)
+                    && string.Equals(left.Name, right.Name, StringComparison.Ordinal)
+                    && left.Category == right.Category,
+                "families");
+            for (var i = 0; i < expected.Families.Count; i++)
+                RequireEquivalentMap(expected.Families[i].Properties, actual.Families[i].Properties, "family properties");
+
+            RequireEquivalentSequence(expected.QuantityRules, actual.QuantityRules,
+                (left, right) => string.Equals(left.Id, right.Id, StringComparison.Ordinal)
+                    && left.Category == right.Category
+                    && string.Equals(left.OutputName, right.OutputName, StringComparison.Ordinal)
+                    && string.Equals(left.Expression, right.Expression, StringComparison.Ordinal)
+                    && string.Equals(left.Version, right.Version, StringComparison.Ordinal),
+                "quantity rules");
+
+            RequireEquivalentSequence(expected.Elements, actual.Elements,
+                (left, right) => string.Equals(left.Id, right.Id, StringComparison.Ordinal)
+                    && left.Category == right.Category
+                    && string.Equals(left.FamilyId, right.FamilyId, StringComparison.Ordinal)
+                    && string.Equals(left.FloorId, right.FloorId, StringComparison.Ordinal)
+                    && string.Equals(left.ZoneId, right.ZoneId, StringComparison.Ordinal)
+                    && string.Equals(left.DrawingFingerprint, right.DrawingFingerprint, StringComparison.Ordinal)
+                    && left.Dirty == right.Dirty
+                    && left.UpdatedUtc == right.UpdatedUtc,
+                "elements");
+            for (var i = 0; i < expected.Elements.Count; i++)
+            {
+                var left = expected.Elements[i];
+                var right = actual.Elements[i];
+                RequireEquivalentSequence(left.SourceHandles, right.SourceHandles,
+                    (a, b) => string.Equals(a, b, StringComparison.Ordinal), "element source handles");
+                RequireEquivalentSequence(left.DependsOn, right.DependsOn,
+                    (a, b) => string.Equals(a, b, StringComparison.Ordinal), "element dependencies");
+                RequireEquivalentMap(left.Properties, right.Properties, "element properties");
+                RequireEquivalentDoubleMap(left.Quantities, right.Quantities, "element quantities");
+            }
+
+            RequireEquivalentSequence(expected.AuditEvents, actual.AuditEvents,
+                (left, right) => left.Utc == right.Utc
+                    && string.Equals(left.Action, right.Action, StringComparison.Ordinal)
+                    && string.Equals(left.ElementId, right.ElementId, StringComparison.Ordinal)
+                    && string.Equals(left.Detail, right.Detail, StringComparison.Ordinal)
+                    && string.Equals(left.Actor, right.Actor, StringComparison.Ordinal)
+                    && string.Equals(left.CorrelationId, right.CorrelationId, StringComparison.Ordinal),
+                "audit events");
+        }
+
+        private static void RequireEquivalentMap(
+            IDictionary<string, string> expected,
+            IDictionary<string, string> actual,
+            string label)
+        {
+            if (expected.Count != actual.Count)
+                throw new InvalidOperationException("Cannot capture a project whose " + label + " changed during snapshot materialization.");
+            foreach (var item in expected)
+            {
+                if (!actual.TryGetValue(item.Key, out var actualValue)
+                    || !string.Equals(item.Value, actualValue, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Cannot capture a project whose " + label + " changed during snapshot materialization.");
+            }
+        }
+
+        private static void RequireEquivalentDoubleMap(
+            IDictionary<string, double> expected,
+            IDictionary<string, double> actual,
+            string label)
+        {
+            if (expected.Count != actual.Count)
+                throw new InvalidOperationException("Cannot capture a project whose " + label + " changed during snapshot materialization.");
+            foreach (var item in expected)
+            {
+                if (!actual.TryGetValue(item.Key, out var actualValue) || !item.Value.Equals(actualValue))
+                    throw new InvalidOperationException("Cannot capture a project whose " + label + " changed during snapshot materialization.");
+            }
+        }
+
+        private static void RequireEquivalentSequence<T>(
+            IList<T> expected,
+            IList<T> actual,
+            Func<T, T, bool> equivalent,
+            string label)
+        {
+            if (expected.Count != actual.Count)
+                throw new InvalidOperationException("Cannot capture a project whose " + label + " changed during snapshot materialization.");
+            for (var i = 0; i < expected.Count; i++)
+            {
+                if (!equivalent(expected[i], actual[i]))
+                    throw new InvalidOperationException("Cannot capture a project whose " + label + " changed during snapshot materialization.");
+            }
         }
 
         private static void CopyInto(
