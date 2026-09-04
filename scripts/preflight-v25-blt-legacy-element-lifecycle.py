@@ -69,11 +69,9 @@ def main() -> int:
     ):
         require(remove_source, needle, message)
 
-    remove_pos = require(remove_source, "element.Quantities.Remove(key)", "missing quantity removal")
+    remove_impl_pos = require(remove_source, "element.Quantities.Remove(key)", "missing quantity removal")
     dirty_pos = require(remove_source, "element.MarkDirty(ElementDirtyFlags.Quantity)", "missing quantity dirty lifecycle")
-    if remove_pos > dirty_pos:
-        pass
-    else:
+    if not remove_impl_pos < dirty_pos:
         fail("quantity lifecycle must mark dirty only after a successful removal")
 
     print("PASS: BLT legacy evidence mutations use canonical property lifecycle plus bounded Core quantity-removal lifecycle without direct persisted-dictionary bypass.")
