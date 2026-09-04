@@ -70,10 +70,11 @@ def main() -> int:
             "expected = os.environ['QS3D_EXPECTED_GATE']\n"
             "checks = [\n"
             "    sys.argv[0] == expected,\n"
+            "    len(sys.argv) == 1,\n"
             "    __file__ == expected,\n"
             "    identity_peer.VALUE == 'peer-import-ok',\n"
             "]\n"
-            "Path(os.environ['QS3D_SEMANTICS_MARKER']).write_text('ok' if all(checks) else repr((sys.argv[0], __file__, sys.path[0])), encoding='utf-8')\n"
+            "Path(os.environ['QS3D_SEMANTICS_MARKER']).write_text('ok' if all(checks) else repr((sys.argv, __file__, sys.path[0])), encoding='utf-8')\n"
             "raise SystemExit(0 if all(checks) else 23)\n",
             encoding="utf-8",
         )
