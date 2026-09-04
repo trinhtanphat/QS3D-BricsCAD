@@ -109,6 +109,8 @@ namespace QS3D.Core.Persistence
                 RequireSafe(cleanupPath, "cleanup");
                 File.Delete(cleanupPath);
             }
+            catch (ArgumentException) { }
+            catch (NotSupportedException) { }
             catch (InvalidDataException) { }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
