@@ -17,13 +17,13 @@ def main() -> int:
         probe_dir = Path(temp_dir)
         project = probe_dir / "Probe.csproj"
         project.write_text(
-            """<Project Sdk=\"Microsoft.NET.Sdk\">\n"
+            "<Project Sdk=\"Microsoft.NET.Sdk\">\n"
             "  <PropertyGroup>\n"
             "    <OutputType>Exe</OutputType>\n"
             "    <TargetFramework>net8.0</TargetFramework>\n"
             "    <Nullable>enable</Nullable>\n"
             "  </PropertyGroup>\n"
-            "</Project>\n""",
+            "</Project>\n",
             encoding="utf-8",
         )
 
