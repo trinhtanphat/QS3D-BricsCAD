@@ -20,8 +20,8 @@ if end < 0:
 block = text[start:end]
 
 required = (
-    "room.SetProperty(BoundaryStateKey, BoundaryStateActive);",
     "room.SetProperty(BoundarySourceSignatureKey, normalizedSourceSignature);",
+    "room.SetProperty(BoundaryStateKey, BoundaryStateActive);",
     'room.RemoveProperty("BoundaryStaleUtc");',
     'room.RemoveProperty("BoundaryStaleReason");',
 )
@@ -39,9 +39,9 @@ for forbidden in (
         fail(f"Auto Room activation still performs raw persisted-property mutation: {forbidden}")
 
 normalize_pos = block.find("NormalizeSourceHandleText(sourceSignature)")
-state_pos = block.find("room.SetProperty(BoundaryStateKey, BoundaryStateActive);")
 signature_pos = block.find("room.SetProperty(BoundarySourceSignatureKey, normalizedSourceSignature);")
-if min(normalize_pos, state_pos, signature_pos) < 0 or not (normalize_pos < state_pos < signature_pos):
-    fail("Auto Room source signature must be validated before activation property publication")
+state_pos = block.find("room.SetProperty(BoundaryStateKey, BoundaryStateActive);")
+if min(normalize_pos, signature_pos, state_pos) < 0 or not (normalize_pos < signature_pos < state_pos):
+    fail("Auto Room source signature must be normalized and lifecycle-admitted before activation-state publication")
 
-print("PASS: Auto Room activation uses ProjectElement persisted-property lifecycle APIs")
+print("PASS: Auto Room activation uses ProjectElement persisted-property lifecycle APIs with failure-atomic admission ordering")
