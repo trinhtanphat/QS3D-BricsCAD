@@ -222,8 +222,7 @@ namespace QS3D.Core.Persistence
                                 File.Move(backupPath, destinationPath);
                             }
                         }
-                        catch (IOException) { }
-                        catch (UnauthorizedAccessException) { }
+                        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException) { }
                     }
                     RestorePreviousBackup(previousBackupSafety, backupPath);
                 }
@@ -252,8 +251,7 @@ namespace QS3D.Core.Persistence
                     File.Move(previousBackupPath, backupPath);
                 }
             }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException) { }
         }
 
         private static void Validate(string tempPath, string destinationPath, out string temp, out string destination)
