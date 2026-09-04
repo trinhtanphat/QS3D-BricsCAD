@@ -227,7 +227,8 @@ namespace QS3D.BricsCAD.V25
 
     internal static class BltLegacyCadInspector
     {
-        private const int MaxCurrentSpaceEntities = 250000;
+        private const int MaxScannedEntities = 250000;
+        private const int MaxProxyExplodedParts = 4096;
         private const int MaxMetadataValues = 512;
         private const int MaxTypedValues = 256;
         private const int MaxMetadataValueLength = 512;
@@ -243,8 +244,8 @@ namespace QS3D.BricsCAD.V25
                 var scanned = 0;
                 foreach (ObjectId id in space)
                 {
-                    if (scanned++ >= MaxCurrentSpaceEntities)
-                        throw new InvalidOperationException("BLT legacy scan exceeds guarded Current Space limit of " + MaxCurrentSpaceEntities + " entities.");
+                    if (scanned++ >= MaxScannedEntities)
+                        throw new InvalidOperationException("BLT legacy scan exceeds guarded Current Space limit of " + MaxScannedEntities + " entities.");
                     TryAdd(transaction, id, result);
                 }
                 transaction.Commit();
@@ -262,6 +263,8 @@ namespace QS3D.BricsCAD.V25
                 selection = document.Editor.GetSelection();
             }
             if (selection.Status != PromptStatus.OK || selection.Value == null) return Array.Empty<EntitySnapshot>();
+            if (selection.Value.Count > MaxScannedEntities)
+                throw new InvalidOperationException("BLT legacy selection exceeds guarded limit of " + MaxScannedEntities + " entities.");
 
             var result = new List<EntitySnapshot>();
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
@@ -433,6 +436,11 @@ namespace QS3D.BricsCAD.V25
                 entity.Explode(exploded);
                 Put(snapshot, "LegacyProbe.ProxyExplodedPartCount", exploded.Count.ToString(CultureInfo.InvariantCulture));
                 if (exploded.Count == 0) return;
+                if (exploded.Count > MaxProxyExplodedParts)
+                {
+                    Put(snapshot, "LegacyProbe.ProxyExplodeLimitExceeded", "true");
+                    return;
+                }
 
                 var allSolids = true;
                 var volume = 0d;
