@@ -29,15 +29,22 @@ def main() -> int:
 
     exact_wrapper = require(resolver, "if (lifecycleDocument != null && ReferenceEquals(candidate, lifecycleDocument))", "missing exact managed-wrapper branch")
     native_check = require(resolver[exact_wrapper:], "if (database.UnmanagedObject != _nativeDatabaseIdentity) continue;", "exact-wrapper branch must retain native database identity check") + exact_wrapper
-    semantic_check = require(resolver[exact_wrapper:], "if (HasBoundProjectAffinity && !MatchesBoundProjectAffinity(candidate)) continue;", "exact-wrapper branch must revalidate captured project affinity") + exact_wrapper
+    semantic_check = require(resolver[exact_wrapper:], "if (HasBoundProjectContext && !MatchesBoundProjectAffinity(candidate)) continue;", "exact-wrapper branch must revalidate any captured project context") + exact_wrapper
     publish = require(resolver[exact_wrapper:], "document = candidate;", "exact-wrapper branch must resolve the proven candidate") + exact_wrapper
 
     if not (native_check < semantic_check < publish):
         fail("same-wrapper resolution must prove native identity and captured project affinity before publishing the document")
 
-    require(text, "private bool HasBoundProjectAffinity =>", "missing explicit captured-project-affinity predicate")
-    require(text, "!string.IsNullOrWhiteSpace(_boundProjectId)", "captured project affinity must require ProjectId")
-    require(text, "!string.IsNullOrWhiteSpace(_boundDrawingFingerprint)", "captured project affinity must require drawing fingerprint")
+    context_start = require(text, "private bool HasBoundProjectContext =>", "missing captured-project-context predicate")
+    context_block = text[context_start:require(text[context_start:], "private bool MatchesBoundProjectAffinity", "missing affinity verifier after context predicate") + context_start]
+    require(context_block, "!string.IsNullOrWhiteSpace(_boundProjectId) ||", "any captured ProjectId must force semantic validation")
+    require(context_block, "!string.IsNullOrWhiteSpace(_boundDrawingFingerprint);", "any captured drawing fingerprint must force semantic validation")
+
+    matches_start = require(text, "private bool MatchesBoundProjectAffinity(Document candidate)", "missing project-affinity verifier")
+    matches_end = require(text[matches_start:], "private static void CaptureBoundProjectAffinity", "missing capture boundary") + matches_start
+    matches = text[matches_start:matches_end]
+    require(matches, "if (string.IsNullOrWhiteSpace(_boundProjectId) ||", "affinity match must reject a missing ProjectId")
+    require(matches, "string.IsNullOrWhiteSpace(_boundDrawingFingerprint))", "affinity match must reject a missing drawing fingerprint")
 
     wrapper_drift = require(resolver, "if (database.UnmanagedObject != _nativeDatabaseIdentity) continue;\n                        if (!MatchesBoundProjectAffinity(candidate)) continue;", "wrapper-drift path must remain project-affine")
     if wrapper_drift <= exact_wrapper:
@@ -52,7 +59,7 @@ def main() -> int:
     if not (resolve < read_only < audit_read):
         fail("Reload ordering must remain resolve-affinity -> read-only project -> audit read")
 
-    print("PASS: AuditLogWindow refresh remains native- and project-affine without auto-rebinding no-project windows")
+    print("PASS: AuditLogWindow refresh remains native- and project-affine; partial identity fails closed and true no-project stays exact-wrapper-only")
     return 0
 
 
