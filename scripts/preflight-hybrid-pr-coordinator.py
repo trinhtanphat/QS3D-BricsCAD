@@ -45,6 +45,19 @@ def job_block(text: str, job_name: str) -> str:
     return "\n".join(block)
 
 
+def require_exact_job_if(block: str, purpose: str, expected: str) -> None:
+    matches = re.findall(r"(?m)^    if:\s*(.*?)\s*$", block)
+    if len(matches) != 1:
+        fail(f"{purpose} must expose exactly one top-level job if guard")
+        return
+    expression = matches[0].strip()
+    if expression.startswith("${{") and expression.endswith("}}"):
+        expression = expression[3:-2].strip()
+    expression = re.sub(r"\s+", " ", expression)
+    if expression != expected:
+        fail(f"{purpose} must use the exact fail-closed event guard: {expected}")
+
+
 def require_fail_closed_secret_gate(block: str, purpose: str, message: str) -> None:
     pattern = (
         r'if \[\[ -z "\$\{GH_TOKEN:-\}" \]\]; then\s*\n'
@@ -140,6 +153,18 @@ if text:
         fail("hybrid coordinator missing promote-green-draft job block")
     if not refresh:
         fail("hybrid coordinator missing refresh-branches job block")
+
+    require_exact_job_if(arm, "arm-native-automerge", "github.event_name == 'pull_request'")
+    require_exact_job_if(
+        promote,
+        "promote-green-draft",
+        "github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request'",
+    )
+    require_exact_job_if(
+        refresh,
+        "refresh-branches",
+        "github.event_name == 'push' && github.ref == 'refs/heads/main'",
+    )
 
     arm_secret_error = "QS3D_AUTOMERGE_TOKEN is required; native auto-merge coordination cannot run."
     promote_secret_error = "QS3D_AUTOMERGE_TOKEN is required; green-draft promotion cannot run."
