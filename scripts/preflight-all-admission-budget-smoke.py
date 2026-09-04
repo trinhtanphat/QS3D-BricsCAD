@@ -57,7 +57,23 @@ def main() -> int:
             runner.SELF = temp / "preflight-all.py"
             runner.MAX_FEATURE_GATES = 10
             runner.MAX_FEATURE_GATE_SOURCE_BYTES = 32
-            runner.MAX_TOTAL_FEATURE_GATE_SOURCE_BYTES = 12
+
+            # The exact cumulative cap is valid and must publish the complete admitted fleet.
+            runner.MAX_TOTAL_FEATURE_GATE_SOURCE_BYTES = 16
+            runner._ADMITTED_GATES.clear()
+            exact = runner.discover()
+            require(exact == [first, second], f"exact-cap discovery order changed: {exact!r}")
+            require(
+                list(runner._ADMITTED_GATES) == [first, second],
+                "exact-cap admission must publish the complete ordered fleet atomically",
+            )
+            require(
+                sum(len(gate.source) for gate in runner._ADMITTED_GATES.values()) == 16,
+                "exact-cap admitted source accounting changed",
+            )
+
+            # The first byte beyond the cumulative cap must fail closed and publish nothing.
+            runner.MAX_TOTAL_FEATURE_GATE_SOURCE_BYTES = 15
             stale_path = temp / "stale.py"
             runner._ADMITTED_GATES.clear()
             runner._ADMITTED_GATES[stale_path] = object()
