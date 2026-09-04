@@ -56,10 +56,12 @@ def main() -> int:
         )
 
     tag_assert = publish.find("Assert-RemoteReleaseTagTargetsWorkflowSha", semantic_success + 1)
-    if tag_assert >= 0 and final_api >= 0 and tag_assert > final_api:
+    if tag_assert < 0:
+        failures.append("final remote release-tag identity assertion is missing after downloaded draft verification")
+    elif final_api >= 0 and tag_assert > final_api:
         failures.append(
-            "final protected-main admission must not be followed by a long release operation; "
-            "only the final tag assertion and publish transition may remain"
+            "final remote release-tag identity must be asserted before protected-main admission so no "
+            "release-side operation remains between the main fence and publish transition"
         )
 
     if "exit 0" in publish[final_api:publish_attempt] if final_api >= 0 and publish_attempt >= 0 else False:
