@@ -24,8 +24,8 @@ def main() -> int:
         "exact_reservation=0",
         "reservation_conflict=0",
         "reserved_ordinal == committed_preview_ordinal",
-        'reserved_source == "${source_sha}"',
-        'reserved_source != "${source_sha}"',
+        'if [[ "${reserved_source}" == "${source_sha}" ]]; then',
+        'elif [[ "${reserved_source}" != "${source_sha}" ]]; then',
         "Committed preview ordinal is already reserved for a different source SHA",
         'reservation="${reservation_prefix} ordinal=${committed_preview_ordinal} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"',
     )
