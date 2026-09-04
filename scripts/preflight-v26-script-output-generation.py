@@ -73,8 +73,8 @@ def main() -> int:
 
     probes = {
         "parent handle admission": text.replace("$outputParentHandle = Open-AdmittedOutputParent", "$outputParentHandle = $null", 1),
-        "fresh destination refusal": text.replace("V26 generation output must be fresh", "V26 output may be reused", 1),
-        "binding before publish": text.replace("Assert-AdmittedOutputParentBinding -Admission $outputParentHandle", "# binding removed", 1),
+        "fresh destination refusal": text.replace("V26 generation output must be fresh", "V26 output may be reused"),
+        "binding before publish": text.replace("Assert-AdmittedOutputParentBinding -Admission $outputParentHandle", "# binding removed"),
         "atomic move": text.replace("[IO.File]::Move($stagePath, $outputFull)", "Move-Item -LiteralPath $stagePath -Destination $outputFull -Force", 1),
     }
     for label, mutated in probes.items():
