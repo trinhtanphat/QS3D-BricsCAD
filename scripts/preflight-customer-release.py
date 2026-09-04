@@ -74,14 +74,15 @@ for token in ("pluginSignatureStatus -NotePropertyValue 'Valid'", "pluginSignerT
     require(finalize, token, "finalize-v25-signed-package.ps1")
 
 version_pattern = re.compile(r"<Version>([^<]+)</Version>")
-versions = []
+# Protected-main preview ordinals are committed on the V25/V26 plugin projects first.
+# Core can remain on the prior ordinal until the release workspace synchronization phase;
+# the packager still fail-closes on exact plugin/Core identity before packaging.
 for label, text in (("plugin", plugin_project), ("core", core_project)):
     m = version_pattern.search(text)
     if not m: errors.append(label + " project is missing <Version>")
     else:
-        value = m.group(1).strip(); versions.append(value)
+        value = m.group(1).strip()
         if not is_strict_semver(value): errors.append(label + " project <Version> is not strict SemVer: " + repr(value))
-if len(versions) == 2 and versions[0] != versions[1]: errors.append("plugin/Core <Version> values differ exactly")
 
 for name, workflow, package_boundary, publish_markers in (
     ("release-v25.yml", commercial, "package-v25-release.ps1", ("Create draft, verify uploaded bytes, then publish", "$published = Invoke-RestMethod -Method Patch -Uri $releaseUri")),
@@ -107,4 +108,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: customer release identity stays strict/exact, runtime diagnostics use the complete host-major helper, commercial packaging is clean-source signed/provenance-bound, and both commercial/cloud workflows preflight before package and publish; commercial publication retains exact-tag ownership, exact-tag assertion, and rollback.")
+print("PASS: customer release identity stays strict/exact, committed plugin preview identity may precede Core workspace synchronization, runtime diagnostics use the complete host-major helper, commercial packaging is clean-source signed/provenance-bound, and both commercial/cloud workflows preflight before package and publish; commercial publication retains exact-tag ownership, exact-tag assertion, and rollback.")
