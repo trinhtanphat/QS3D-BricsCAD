@@ -272,6 +272,60 @@ try {
   }
 
   Assert-RemoteReleaseTagTargetsWorkflowSha
+
+  $finalMainResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers
+  $finalMain = ([string]$finalMainResponse.sha).Trim().ToLowerInvariant()
+  if ($finalMain -notmatch '^[0-9a-f]{40}$') {
+    throw "Protected main API returned an invalid final V26-release SHA: $finalMain"
+  }
+  $finalMainRef = 'refs/remotes/origin/qs3d-v26-release-final-main'
+  & git fetch --no-tags --force origin "+refs/heads/main:$finalMainRef"
+  if ($LASTEXITCODE -ne 0) {
+    throw 'Could not fetch protected main for final V26 release admission.'
+  }
+  $fetchedFinalMain = ([string](& git rev-parse --verify $finalMainRef)).Trim().ToLowerInvariant()
+  if ($LASTEXITCODE -ne 0 -or $fetchedFinalMain -notmatch '^[0-9a-f]{40}$') {
+    throw 'Could not resolve fetched protected-main SHA for final V26 release admission.'
+  }
+  if ($fetchedFinalMain -ne $finalMain) {
+    throw "Protected-main API/fetch identity mismatch during final V26 publication admission. API=$finalMain fetched=$fetchedFinalMain"
+  }
+  & git merge-base --is-ancestor $env:GITHUB_SHA $finalMain
+  $finalAncestorStatus = $LASTEXITCODE
+  if ($finalAncestorStatus -ne 0) {
+    throw "V26 release workflow SHA is no longer an ancestor of protected main during final publication admission: $env:GITHUB_SHA"
+  }
+  $finalReleaseRelevantPaths = @(
+    '.github/workflows/',
+    'scripts/',
+    'src/QS3D.BricsCAD.V26/',
+    'src/QS3D.Core/',
+    'Directory.Build.props',
+    'Directory.Build.targets',
+    'VERSION',
+    'installer/',
+    'external/'
+  )
+  & git diff --quiet --no-ext-diff "$env:GITHUB_SHA..$finalMain" -- @finalReleaseRelevantPaths
+  $finalReleaseDriftStatus = $LASTEXITCODE
+  if ($finalReleaseDriftStatus -eq 1) {
+    throw 'newer release-relevant protected main supersedes this V26 publication; refusing stale V26 publication'
+  }
+  if ($finalReleaseDriftStatus -ne 0) {
+    throw "Could not classify protected-main V26 release drift. git diff exit=$finalReleaseDriftStatus"
+  }
+  if ($finalMain -ne $env:GITHUB_SHA.ToLowerInvariant()) {
+    Write-Host 'main advanced only through non-release paths during final V26 publication admission; published provenance remains pinned to GITHUB_SHA.'
+  }
+  $confirmedMainResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers
+  $confirmedFinalMain = ([string]$confirmedMainResponse.sha).Trim().ToLowerInvariant()
+  if ($confirmedFinalMain -notmatch '^[0-9a-f]{40}$') {
+    throw "Protected main confirmation returned an invalid V26-release SHA: $confirmedFinalMain"
+  }
+  if ($confirmedFinalMain -ne $finalMain) {
+    throw "Protected main moved during final V26 release admission. Before=$finalMain after=$confirmedFinalMain"
+  }
+
   $publishPatchAttempted = $true
   $published = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body (@{ draft = $false } | ConvertTo-Json)
   Assert-PublishedReleaseMatchesVerifiedTransaction `
