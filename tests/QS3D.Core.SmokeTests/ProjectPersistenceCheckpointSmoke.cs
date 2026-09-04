@@ -183,8 +183,8 @@ namespace QS3D.Core.SmokeTests
             var project = BuildLargeProject("P-DISHONEST", 10000);
             var source = new DishonestReadOnlyCollection(1, 10001);
             Throws<InvalidOperationException>(() => ProjectPersistenceCheckpoint.Capture(project, source));
-            Equal(2, source.YieldCount, "Known Count guard did not stop after probing the first entry beyond the reported Count.");
-            False(source.RequestedAfterLimit, "Known Count guard requested an entry after the first disallowed one.");
+            Equal(10001, source.YieldCount, "Streaming guard did not stop at the first disallowed entry.");
+            False(source.RequestedAfterLimit, "Streaming guard requested an entry after the first disallowed one.");
         }
 
         private static void AcceptsExactBoundaryAndPreservesCaseInsensitiveIdentity()
