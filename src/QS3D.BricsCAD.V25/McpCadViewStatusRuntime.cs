@@ -24,6 +24,8 @@ namespace QS3D.BricsCAD.V25
         private const double MinViewSize = 1e-6;
         private const double MaxViewSize = 1e12;
         private const double MinDirectionLength = 1e-9;
+        private const double ViewAspectRelativeTolerance = 1e-6;
+        private const double ViewDirectionComponentTolerance = 1e-9;
         private const double TwoPi = Math.PI * 2d;
         private static readonly object CommandGate = new object();
         private static readonly Dictionary<Document, CommandTracker> CommandTrackers =
@@ -69,7 +71,7 @@ namespace QS3D.BricsCAD.V25
                 "handlesCsv", "confirmMutation");
             yield return Tool(
                 "cad_view_set",
-                "Directly set active BricsCAD view center/width/height and optionally a bounded view direction/twist. Requires confirmMutation=true.",
+                "Directly set active BricsCAD view center/width/height and optionally twist. Width/height must match the active viewport aspect. Direction fields may verify the current direction, but direction transitions are rejected to keep this direct path modal-free. Requires confirmMutation=true.",
                 "\"centerX\":{\"type\":\"number\"},\"centerY\":{\"type\":\"number\"},\"width\":{\"type\":\"number\",\"exclusiveMinimum\":0},\"height\":{\"type\":\"number\",\"exclusiveMinimum\":0},"
                 + "\"directionX\":{\"type\":\"number\"},\"directionY\":{\"type\":\"number\"},\"directionZ\":{\"type\":\"number\"},\"twistRadians\":{\"type\":\"number\",\"minimum\":-6.283185307179586,\"maximum\":6.283185307179586},"
                 + ConfirmMutationProperty(),
@@ -111,7 +113,6 @@ namespace QS3D.BricsCAD.V25
             using (document.LockDocument())
             {
                 RequireViewMutationIdle();
-                document.Database.UpdateExt(false);
                 var extents = RequireFiniteExtents(
                     new Extents3d(document.Database.Extmin, document.Database.Extmax),
                     "drawing extents");
@@ -211,10 +212,11 @@ namespace QS3D.BricsCAD.V25
             using (document.LockDocument())
             using (var view = document.Editor.GetCurrentView())
             {
+                RequireCompatibleViewAspect(view, width, height);
+                RequireNoDirectionTransition(view, direction);
                 view.CenterPoint = new Point2d(centerX, centerY);
                 view.Width = width;
                 view.Height = height;
-                if (direction.HasValue) view.ViewDirection = direction.Value;
                 if (hasTwist) view.ViewTwist = twist;
                 RequireViewMutationIdle();
                 document.Editor.SetCurrentView(view);
@@ -454,6 +456,37 @@ namespace QS3D.BricsCAD.V25
                     + minimum.ToString("R", CultureInfo.InvariantCulture) + " and "
                     + maximum.ToString("R", CultureInfo.InvariantCulture) + ".");
             return value;
+        }
+
+        private static void RequireCompatibleViewAspect(ViewTableRecord view, double width, double height)
+        {
+            var currentWidth = PositiveViewSize(view.Width, "current view width");
+            var currentHeight = PositiveViewSize(view.Height, "current view height");
+            var activeAspect = currentWidth / currentHeight;
+            var requestedAspect = width / height;
+            var scale = Math.Max(1d, Math.Max(Math.Abs(activeAspect), Math.Abs(requestedAspect)));
+            if (Math.Abs(requestedAspect - activeAspect) <= ViewAspectRelativeTolerance * scale) return;
+            throw new InvalidOperationException(
+                "cad_view_set width/height aspect ratio must match the active viewport aspect ratio. Requested "
+                + requestedAspect.ToString("R", CultureInfo.InvariantCulture) + ", active "
+                + activeAspect.ToString("R", CultureInfo.InvariantCulture)
+                + ". This request was rejected before changing view state so BricsCAD cannot silently normalize one dimension.");
+        }
+
+        private static void RequireNoDirectionTransition(ViewTableRecord view, Vector3d? requestedDirection)
+        {
+            if (!requestedDirection.HasValue) return;
+            var current = view.ViewDirection;
+            if (!IsFinite(current.X) || !IsFinite(current.Y) || !IsFinite(current.Z) || current.Length < MinDirectionLength)
+                throw new InvalidOperationException("Current BricsCAD view direction is invalid or unavailable.");
+            var normalized = current.GetNormal();
+            var requested = requestedDirection.Value;
+            if (Math.Abs(normalized.X - requested.X) <= ViewDirectionComponentTolerance
+                && Math.Abs(normalized.Y - requested.Y) <= ViewDirectionComponentTolerance
+                && Math.Abs(normalized.Z - requested.Z) <= ViewDirectionComponentTolerance)
+                return;
+            throw new InvalidOperationException(
+                "cad_view_set direction transition was rejected before changing view state because direct ViewDirection assignment can invoke BricsCAD LookFrom/modal UI. Omit direction fields or pass the current direction.");
         }
 
         private static void RequireViewMutationIdle()
