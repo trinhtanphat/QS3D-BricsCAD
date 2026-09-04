@@ -4,7 +4,16 @@ param(
 
     [string]$ChecksumPath,
 
-    [string[]]$RequiredEntries = @()
+    [string[]]$RequiredEntries = @(),
+
+    [ValidateRange(1, 4096)]
+    [int]$MaxArchiveEntries = 4096,
+
+    [ValidateRange(1, 67108864)]
+    [long]$MaxEntryUncompressedBytes = 67108864,
+
+    [ValidateRange(1, 268435456)]
+    [long]$MaxTotalUncompressedBytes = 268435456
 )
 
 $ErrorActionPreference = 'Stop'
@@ -231,10 +240,15 @@ Add-Type -AssemblyName System.IO.Compression
 $zipStream = Open-StableReadStream -State $zipState -Label 'V25 package ZIP'
 $archive = [IO.Compression.ZipArchive]::new($zipStream, [IO.Compression.ZipArchiveMode]::Read, $false)
 try {
+    if ($archive.Entries.Count -gt $MaxArchiveEntries) {
+        throw "V25 package archive entry count exceeds the maximum of $MaxArchiveEntries. Actual=$($archive.Entries.Count)."
+    }
+
     $caseInsensitivePaths = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $entriesByPath = [System.Collections.Generic.Dictionary[string,System.IO.Compression.ZipArchiveEntry]]::new([StringComparer]::Ordinal)
     $filePaths = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $manifestEntry = $null
+    $totalUncompressedBytes = 0L
 
     foreach ($entry in $archive.Entries) {
         $safePath = Convert-ToSafeArchivePath -Path $entry.FullName
@@ -245,6 +259,16 @@ try {
 
         $isDirectory = [string]::IsNullOrEmpty($entry.Name)
         if (-not $isDirectory) {
+            $entryUncompressedBytes = [long]$entry.Length
+            if ($entryUncompressedBytes -lt 0 -or $entryUncompressedBytes -gt $MaxEntryUncompressedBytes) {
+                throw "V25 package entry exceeds the maximum uncompressed size of $MaxEntryUncompressedBytes bytes: '$safePath' ($entryUncompressedBytes bytes)."
+            }
+            $remainingUncompressedBytes = $MaxTotalUncompressedBytes - $totalUncompressedBytes
+            if ($remainingUncompressedBytes -lt 0 -or $entryUncompressedBytes -gt $remainingUncompressedBytes) {
+                throw "V25 package total uncompressed size exceeds the maximum of $MaxTotalUncompressedBytes bytes while admitting '$safePath'."
+            }
+            $totalUncompressedBytes += $entryUncompressedBytes
+
             [void]$filePaths.Add($safePath)
             if ([string]::Equals($safePath, 'SHA256SUMS.txt', [StringComparison]::Ordinal)) {
                 if ($null -ne $manifestEntry) {
@@ -358,4 +382,3 @@ if ($null -ne $checksumState) {
 
 Write-Host "Verified V25 package integrity: $($zipState.Path)"
 Write-Host "Archive bytes: $($zipState.Length)"
-Write-Host "Manifest-covered files: $($manifestRecords.Count)"
