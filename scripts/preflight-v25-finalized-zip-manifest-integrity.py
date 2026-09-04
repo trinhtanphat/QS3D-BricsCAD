@@ -53,6 +53,10 @@ def main() -> int:
             "$hash.ComputeHash($stream)",
             "$manifestEntry.Length -gt 4MB",
             "must not hash itself",
+            "$rawName = $entry.FullName.Replace",
+            "$isDirectory = [string]::IsNullOrEmpty($entry.Name)",
+            "$rawName.TrimEnd('/')",
+            "if ($isDirectory) { continue }",
         )
         for token in verifier_required:
             if token not in verifier:
