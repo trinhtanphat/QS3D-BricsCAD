@@ -85,6 +85,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          $classificationExitCode = 0
           # scripts/ci-validation-scope.py owns the exact path classes: src/, tests/, scripts/,
           # samples/generated/, .github/workflows/, build roots, and watched policy Markdown.
           # An edited PR may reuse source/build evidence only after the preceding step proves a
@@ -96,6 +97,7 @@ jobs:
           }
           elseif ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
             & python scripts/ci-validation-scope.py --all --github-output $env:GITHUB_OUTPUT
+            $classificationExitCode = $LASTEXITCODE
           }
           else {
             $baseBranch = if ($env:GITHUB_EVENT_NAME -eq 'pull_request') { $env:GITHUB_BASE_REF } else { 'main' }
@@ -105,8 +107,9 @@ jobs:
             & git fetch --no-tags origin "+refs/heads/$baseBranch`:refs/remotes/origin/$baseBranch"
             if ($LASTEXITCODE -ne 0) { throw "Could not fetch validation base $baseBranch." }
             & python scripts/ci-validation-scope.py --base "origin/$baseBranch" --head HEAD --github-output $env:GITHUB_OUTPUT
+            $classificationExitCode = $LASTEXITCODE
           }
-          if ($LASTEXITCODE -ne 0) { throw 'Validation scope classification failed.' }
+          if ($classificationExitCode -ne 0) { throw 'Validation scope classification failed.' }
       - name: PR branch CI admission gate
         if: ${{ github.event_name == 'pull_request' && github.event.action == 'opened' && github.actor != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository && steps.scope.outputs.source_validation == 'true' }}
         env:
