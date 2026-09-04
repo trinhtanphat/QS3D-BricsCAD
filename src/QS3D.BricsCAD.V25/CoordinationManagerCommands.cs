@@ -196,17 +196,18 @@ namespace QS3D.BricsCAD.V25
             _cleanupInFlight = manager;
             try
             {
-                if (manager.Window.IsLoaded)
+                try
                 {
-                    try
-                    {
-                        manager.Window.Close();
-                    }
-                    catch
-                    {
-                        if (manager.Window.IsLoaded)
-                            return false;
-                    }
+                    // Close is required even when IsLoaded is false: an unpublished candidate
+                    // may already own WPF/global review subscriptions that only terminal Close
+                    // can release. IsLoaded is terminal evidence after the Close attempt, not
+                    // permission to skip that attempt.
+                    manager.Window.Close();
+                }
+                catch
+                {
+                    if (manager.Window.IsLoaded)
+                        return false;
                 }
 
                 if (manager.Window.IsLoaded)
