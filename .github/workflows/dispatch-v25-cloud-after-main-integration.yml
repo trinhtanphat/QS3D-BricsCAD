@@ -71,6 +71,19 @@ jobs:
             exit 1
           fi
 
+          release_relevant_pathspecs=(
+            'src/'
+            'tests/'
+            'scripts/'
+            'external/QS3D-Platform'
+            '.gitmodules'
+            'Directory.Build.props'
+            'QS3D.sln'
+            'QS3D.V26.sln'
+            '.github/workflows/release-v25-cloud.yml'
+            '.github/workflows/dispatch-v25-cloud-after-main-integration.yml'
+          )
+
           echo "Triggering integration source: ${source_sha}"
           echo "Current main at dispatch time: ${current_main}"
           if [[ "${current_main}" != "${source_sha}" ]]; then
@@ -79,18 +92,6 @@ jobs:
               echo "Triggering source is no longer an ancestor of current main; refusing ambiguous automatic dispatch." >&2
               exit 1
             fi
-            release_relevant_pathspecs=(
-              'src/'
-              'tests/'
-              'scripts/'
-              'external/QS3D-Platform'
-              '.gitmodules'
-              'Directory.Build.props'
-              'QS3D.sln'
-              'QS3D.V26.sln'
-              '.github/workflows/release-v25-cloud.yml'
-              '.github/workflows/dispatch-v25-cloud-after-main-integration.yml'
-            )
             set +e
             git diff --quiet --no-ext-diff "${source_sha}..${current_main}" -- "${release_relevant_pathspecs[@]}"
             release_drift_status=$?
@@ -108,11 +109,23 @@ jobs:
 
           git fetch --force --tags origin
 
-          active_release_runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/release-v25-cloud.yml/runs?per_page=30" --jq '[.workflow_runs[] | select(.status != "completed")] | length')"
-          if [[ ! "${active_release_runs}" =~ ^[0-9]+$ ]]; then
-            echo "Could not determine active V25 cloud release-run count: ${active_release_runs}" >&2
-            exit 1
-          fi
+          active_release_statuses=( requested queued in_progress waiting pending )
+          active_release_runs=0
+          for active_release_status in "${active_release_statuses[@]}"; do
+            set +e
+            active_release_status_count="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/release-v25-cloud.yml/runs?status=${active_release_status}&per_page=1" --jq '.total_count')"
+            active_release_query_status=$?
+            set -e
+            if (( active_release_query_status != 0 )); then
+              echo "Could not query V25 cloud release runs in status ${active_release_status}; gh api exit ${active_release_query_status}." >&2
+              exit "${active_release_query_status}"
+            fi
+            if [[ ! "${active_release_status_count}" =~ ^[0-9]+$ ]]; then
+              echo "V25 cloud release-run admission returned malformed ${active_release_status} count: ${active_release_status_count}" >&2
+              exit 1
+            fi
+            active_release_runs=$((active_release_runs + active_release_status_count))
+          done
           if (( active_release_runs > 0 )); then
             echo "A V25 cloud release is already queued or running; this landing stays pending for the next batch decision."
             exit 0
@@ -260,13 +273,103 @@ jobs:
             exit 1
           fi
           if (( exact_dispatch_fence_run_id > 0 )); then
-            prior_dispatch_status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${exact_dispatch_fence_run_id}" --jq '.status')"
-            prior_dispatch_conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${exact_dispatch_fence_run_id}" --jq '.conclusion // ""')"
+            set +e
+            prior_dispatch_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${exact_dispatch_fence_run_id}")"
+            prior_dispatch_query_status=$?
+            set -e
+            if (( prior_dispatch_query_status != 0 )); then
+              echo "Could not resolve prior dispatch-fence run ${exact_dispatch_fence_run_id}; gh api exit ${prior_dispatch_query_status}." >&2
+              exit "${prior_dispatch_query_status}"
+            fi
+
+            prior_dispatch_status="$(jq -er '.status | strings' <<< "${prior_dispatch_run_json}")"
+            prior_dispatch_conclusion="$(jq -er '.conclusion // "" | strings' <<< "${prior_dispatch_run_json}")"
+            prior_dispatch_path="$(jq -er '.path | strings' <<< "${prior_dispatch_run_json}")"
+            prior_dispatch_repository="$(jq -er '.repository.full_name | strings' <<< "${prior_dispatch_run_json}")"
+            prior_dispatch_event="$(jq -er '.event | strings' <<< "${prior_dispatch_run_json}")"
+            prior_dispatch_head_branch="$(jq -er '.head_branch | strings' <<< "${prior_dispatch_run_json}")"
+            prior_dispatch_head_sha="$(jq -er '.head_sha | strings | ascii_downcase' <<< "${prior_dispatch_run_json}")"
+
+            if [[ -z "${prior_dispatch_status}" || ! "${prior_dispatch_head_sha}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Prior dispatch fence references malformed workflow-run state or source identity." >&2
+              exit 1
+            fi
+            if [[ "${prior_dispatch_repository}" != "${GITHUB_REPOSITORY}" || "${prior_dispatch_path}" != ".github/workflows/dispatch-v25-cloud-after-main-integration.yml" || "${prior_dispatch_head_branch}" != "main" ]]; then
+              echo "Prior dispatch fence does not reference the canonical dispatcher workflow for this repository/main branch." >&2
+              exit 1
+            fi
+
+            prior_dispatch_source_admissible=0
+            case "${prior_dispatch_event}" in
+              push|workflow_dispatch)
+                if [[ "${prior_dispatch_head_sha}" == "${source_sha}" ]]; then
+                  prior_dispatch_source_admissible=1
+                fi
+                ;;
+              workflow_run)
+                if git merge-base --is-ancestor "${prior_dispatch_head_sha}" "${source_sha}"; then
+                  prior_dispatch_source_admissible=1
+                fi
+                ;;
+              *)
+                ;;
+            esac
+            if (( prior_dispatch_source_admissible == 0 )); then
+              echo "Prior dispatch fence source provenance is not admissible for ${source_sha}." >&2
+              exit 1
+            fi
+            if [[ "${prior_dispatch_status}" == "completed" && -z "${prior_dispatch_conclusion}" ]]; then
+              echo "Prior completed dispatch-fence run has no terminal conclusion; refusing ambiguous retry admission." >&2
+              exit 1
+            fi
             if [[ "${prior_dispatch_status}" != "completed" ]]; then
               echo "Exact automatic preview dispatch attempt ${exact_dispatch_fence_run_id} is still ${prior_dispatch_status}; replacement run will not dispatch concurrently."
               exit 0
             fi
-            echo "Exact prior dispatcher attempt ${exact_dispatch_fence_run_id} completed with ${prior_dispatch_conclusion:-unknown}. Dispatcher completion proves only that the dispatch request attempt ended, not that downstream publication succeeded; this terminal attempt does not suppress a safe retry. The serialized downstream release lane and existing-tag admission prevent duplicate publication."
+            echo "Exact prior dispatcher attempt ${exact_dispatch_fence_run_id} completed with ${prior_dispatch_conclusion}. Dispatcher completion proves only that the dispatch request attempt ended, not that downstream publication succeeded; this terminal attempt does not suppress a safe retry. The serialized downstream release lane and existing-tag admission prevent duplicate publication."
+          fi
+
+          # Rebind protected main immediately before the first durable side effect.
+          # The API view and fetched ref must agree; ambiguity fails closed rather
+          # than allowing a stale dispatcher to reserve or launch a release.
+          final_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          final_main="${final_main,,}"
+          if [[ ! "${final_main}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Final protected-main admission returned a malformed SHA: ${final_main}" >&2
+            exit 1
+          fi
+          final_main_ref='refs/remotes/origin/qs3d-final-main-admission'
+          git fetch --no-tags origin "+refs/heads/main:${final_main_ref}"
+          fetched_final_main="$(git rev-parse "${final_main_ref}^{commit}")"
+          fetched_final_main="${fetched_final_main,,}"
+          if [[ ! "${fetched_final_main}" =~ ^[0-9a-f]{40}$ || "${fetched_final_main}" != "${final_main}" ]]; then
+            echo "Final protected-main API/fetch identity mismatch: api=${final_main} fetched=${fetched_final_main}. Refusing ambiguous dispatch." >&2
+            exit 1
+          fi
+          confirmed_final_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          confirmed_final_main="${confirmed_final_main,,}"
+          if [[ ! "${confirmed_final_main}" =~ ^[0-9a-f]{40}$ || "${confirmed_final_main}" != "${final_main}" ]]; then
+            echo "Protected main moved during final dispatch admission: first=${final_main} confirmed=${confirmed_final_main}. Refusing stale side effects." >&2
+            exit 1
+          fi
+          if [[ "${final_main}" != "${source_sha}" ]]; then
+            if ! git merge-base --is-ancestor "${source_sha}" "${final_main}"; then
+              echo "Final protected-main source is no longer descended from ${source_sha}; refusing ambiguous automatic dispatch." >&2
+              exit 1
+            fi
+            set +e
+            git diff --quiet --no-ext-diff "${source_sha}..${final_main}" -- "${release_relevant_pathspecs[@]}"
+            final_release_drift_status=$?
+            set -e
+            if (( final_release_drift_status == 1 )); then
+              echo "newer release-relevant main integration owns the next release decision; superseded dispatcher ${source_sha} exits before durable side effects."
+              exit 0
+            fi
+            if (( final_release_drift_status != 0 )); then
+              echo "Could not inspect final release-relevant main drift between ${source_sha} and ${final_main}; git diff exit ${final_release_drift_status}." >&2
+              exit "${final_release_drift_status}"
+            fi
+            echo "main advanced only through non-release paths during final admission; dispatch remains pinned to ${source_sha}."
           fi
 
           if (( exact_reservation == 0 )); then
