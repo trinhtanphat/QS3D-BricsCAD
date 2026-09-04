@@ -542,7 +542,7 @@ namespace QS3D.BricsCAD.V25
             for (var i = 0; i < token.Length; i++)
             {
                 var c = token[i];
-                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))
+                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')))
                     throw new InvalidOperationException("writerToken must be hexadecimal.");
             }
         }
