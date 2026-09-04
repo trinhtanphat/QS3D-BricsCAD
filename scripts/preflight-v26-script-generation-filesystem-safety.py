@@ -26,6 +26,9 @@ def validate(generator: str, wrapper: str) -> list[str]:
         "function Open-AdmittedOutputParent",
         "function Assert-AdmittedOutputParentBinding",
         "$outputParentHandle = Open-AdmittedOutputParent -Path $parent",
+        "$pathAdmission = Open-AdmittedOutputParent -Path $Admission.Path",
+        "Test-SameHandleIdentity -Before $Admission.Information -After $pathAdmission.Information",
+        "$pathAdmission.Handle.Dispose()",
         "V26 generation output must be fresh",
         "$stagePath = Join-Path $parent",
         "[IO.File]::WriteAllText($stagePath, $generated",
@@ -41,6 +44,7 @@ def validate(generator: str, wrapper: str) -> list[str]:
         "[IO.File]::WriteAllText($outputFull",
         "[IO.File]::Replace($stagePath, $outputFull, $null)",
         "New-Item -ItemType Directory -Path $parent -Force",
+        "[IO.File]::OpenHandle(",
     )
     for token in forbidden:
         if token in generator:
@@ -65,6 +69,13 @@ def validate(generator: str, wrapper: str) -> list[str]:
         "$outputParentHandle = Open-AdmittedOutputParent -Path $parent",
         "[IO.File]::WriteAllText($stagePath, $generated",
         "held-parent admission before staging",
+        errors,
+    )
+    before(
+        generator,
+        "$pathAdmission = Open-AdmittedOutputParent -Path $Admission.Path",
+        "Test-SameHandleIdentity -Before $Admission.Information -After $pathAdmission.Information",
+        "native pathname re-admission before held-generation identity comparison",
         errors,
     )
     before(
@@ -144,6 +155,14 @@ def main() -> int:
         ),
         "held parent binding": (
             generator.replace("Assert-AdmittedOutputParentBinding -Admission $outputParentHandle", "# binding removed"),
+            wrapper,
+        ),
+        "native pathname re-admission": (
+            generator.replace(
+                "$pathAdmission = Open-AdmittedOutputParent -Path $Admission.Path",
+                "$pathAdmission = $Admission",
+                1,
+            ),
             wrapper,
         ),
         "fresh-only publication": (
