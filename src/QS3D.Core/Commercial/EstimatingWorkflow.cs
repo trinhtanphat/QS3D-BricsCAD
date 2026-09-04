@@ -199,6 +199,12 @@ namespace QS3D.Core.Commercial
             return line;
         }
 
+        internal bool TryGetLine(string lineId, out EstimatingLine line)
+        {
+            lineId = CommercialGuard.RequireToken(lineId, nameof(lineId));
+            return _byId.TryGetValue(lineId, out line);
+        }
+
         public decimal PricedTotal
         {
             get
@@ -562,7 +568,12 @@ namespace QS3D.Core.Commercial
 
             for (var i = 0; i < request.LineIds.Count; i++)
             {
-                var line = portfolio.GetLine(request.LineIds[i]);
+                var selectedLineId = request.LineIds[i];
+                if (!portfolio.TryGetLine(selectedLineId, out var line))
+                {
+                    unmatched.Add(selectedLineId);
+                    continue;
+                }
                 sourceLines.Add(line);
                 if (!units.TryGetValue(line.Unit, out var aggregate))
                 {
