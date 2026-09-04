@@ -35,6 +35,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_ACTION: ${{ github.event.action }}
           EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
@@ -71,15 +72,15 @@ jobs:
 
           ineligible="false"
           reason=""
-          if [[ "$draft" != "false" ]]; then
-            ineligible="true"
-            reason="draft"
-          elif [[ "$opted_out" == "true" ]]; then
+          if [[ "$opted_out" == "true" ]]; then
             ineligible="true"
             reason="no-automerge"
           elif [[ "$author_login" == "dependabot[bot]" ]]; then
             ineligible="true"
             reason="dependabot[bot]"
+          elif [[ "$draft" == "true" && "$PR_ACTION" == "converted_to_draft" ]]; then
+            ineligible="true"
+            reason="draft"
           fi
 
           if [[ "$ineligible" == "true" ]]; then
@@ -93,6 +94,23 @@ jobs:
               echo "PR #${PR_NUMBER} is ineligible (${reason}) and native auto-merge is not armed."
             fi
             exit 0
+          fi
+
+          if [[ "$draft" == "true" ]]; then
+            ready_json="$(gh api graphql \
+              -f query='mutation($pullRequestId:ID!){markPullRequestReadyForReview(input:{pullRequestId:$pullRequestId}){pullRequest{number isDraft headRefOid}}}' \
+              -f pullRequestId="$node_id")"
+            ready_is_draft="$(jq -r '.data.markPullRequestReadyForReview.pullRequest.isDraft' <<<"$ready_json")"
+            ready_head_sha="$(jq -r '.data.markPullRequestReadyForReview.pullRequest.headRefOid' <<<"$ready_json")"
+            if [[ "$ready_is_draft" != "false" || "$ready_head_sha" != "$event_head_sha" ]]; then
+              echo "::error::PR #${PR_NUMBER} ready transition was not bound to exact head ${event_head_sha}."
+              exit 1
+            fi
+            draft="false"
+            echo "Promoted PR #${PR_NUMBER} to ready; protected required checks still gate native auto-merge."
+          elif [[ "$draft" != "false" ]]; then
+            echo "::error::PR #${PR_NUMBER} returned invalid draft state: ${draft}."
+            exit 1
           fi
 
           if [[ -n "$existing" ]]; then
