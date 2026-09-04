@@ -25,6 +25,7 @@ def main() -> int:
         "reserved_ordinal == committed_preview_ordinal",
         'reserved_source != "${source_sha}"',
         "Committed preview ordinal is already reserved for a different source SHA",
+        "Next free preview candidate (diagnostic only)",
     )
     missing = [token for token in required if token not in source]
     if missing:
@@ -44,10 +45,18 @@ def main() -> int:
             "dispatcher must validate committed ProductVersion and reservation conflicts before workflow dispatch"
         )
 
-    if "preview=$((max_preview + 1))" in source:
-        failures.append(
-            "dispatcher still derives a newer preview ordinal from reservations instead of using committed ProductVersion"
-        )
+    forbidden_preview_uses = (
+        'tag="${series_prefix}${preview}"',
+        'reservation="${reservation_prefix} ordinal=${preview}',
+        '-f release_tag="${series_prefix}${preview}"',
+        '-f release_tag="${preview}"',
+    )
+    for token in forbidden_preview_uses:
+        if token in source:
+            failures.append(
+                "dispatcher may calculate a next-free preview only for legacy-policy diagnostics; "
+                f"it must never drive tag/reservation/dispatch identity: {token}"
+            )
 
     conflict_guard = source.find("if (( reservation_conflict != 0 )); then")
     post_loop = source.find("done < <(gh api --paginate")
