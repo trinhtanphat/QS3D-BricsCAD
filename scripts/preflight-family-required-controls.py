@@ -8,9 +8,17 @@ text = SOURCE.read_text(encoding="utf-8")
 method_start = text.find("private static string Required(string value, string parameterName, int maxLength)")
 if method_start < 0:
     raise SystemExit("FAIL: ProjectFamilyService.Required(...) not found")
-method_end = text.find("private static string Value(string value, string parameterName, int maxLength)", method_start)
-if method_end < 0:
-    raise SystemExit("FAIL: cannot bound ProjectFamilyService.Required(...)")
+
+value_signatures = (
+    "private static string Value(string value, string parameterName, int maxLength)",
+    "private static string Value(string? value, string parameterName, int maxLength)",
+)
+value_positions = [text.find(signature, method_start) for signature in value_signatures]
+value_positions = [position for position in value_positions if position >= 0]
+if not value_positions:
+    raise SystemExit("FAIL: ProjectFamilyService.Value(...) not found")
+
+method_end = min(value_positions)
 required = text[method_start:method_end]
 
 raw_capture = "var raw = value ?? string.Empty;"
@@ -33,9 +41,7 @@ if required.find(raw_control) >= required.find(trim):
 if legacy in required:
     raise SystemExit("FAIL: legacy trim-before-control-validation Family Required path has returned")
 
-value_start = text.find("private static string Value(string value, string parameterName, int maxLength)")
-if value_start < 0:
-    raise SystemExit("FAIL: ProjectFamilyService.Value(...) not found")
+value_start = method_end
 value_method = text[value_start:]
 if "var text = value ?? string.Empty;" not in value_method:
     raise SystemExit("FAIL: Family property-value boundary changed unexpectedly")
@@ -44,5 +50,5 @@ if "var text = (value ?? string.Empty).Trim();" in value_method:
 
 print("PASS: Family Required rejects raw control characters before Trim normalization")
 print("PASS: ordinary surrounding-space normalization and XML validation remain explicit")
-print("PASS: Family property-value boundary remains untrimmed")
+print("PASS: Family property-value boundary remains untrimmed for string and string? annotations")
 print("NOTE: Core/source guard only; no licensed BricsCAD runtime PASS is claimed")
