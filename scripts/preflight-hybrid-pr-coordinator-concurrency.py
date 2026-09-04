@@ -41,8 +41,6 @@ required_group_tokens = (
     "qs3d-hybrid-pr-coordinator-${{",
     "github.event_name == 'pull_request'",
     "github.event.pull_request.number",
-    "github.event_name == 'workflow_run'",
-    "github.event.workflow_run.pull_requests[0].number",
     "github.event_name == 'push'",
     "'main-refresh'",
     "github.run_id",
@@ -50,6 +48,13 @@ required_group_tokens = (
 for token in required_group_tokens:
     if token not in group:
         errors.append(f"hybrid coordinator concurrency group missing token: {token}")
+
+for forbidden in (
+    "github.event_name == 'workflow_run'",
+    "github.event.workflow_run",
+):
+    if forbidden in group:
+        errors.append(f"hybrid coordinator concurrency retains removed workflow_run path: {forbidden}")
 
 if not re.search(r"(?m)^\s{2}cancel-in-progress:\s*false\s*(?:#.*)?$", concurrency):
     errors.append("hybrid coordinator concurrency must keep cancel-in-progress: false")
@@ -61,4 +66,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: coordinator concurrency is scoped per PR, main refreshes supersede only main refreshes, and unrelated fallback events remain isolated.")
+print("PASS: coordinator concurrency is scoped per PR, main refresh events share only the main-refresh key, fallback events remain isolated, and no removed workflow_run path remains.")
