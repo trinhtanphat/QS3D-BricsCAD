@@ -20,6 +20,7 @@ MAX_FEATURE_GATE_OUTPUT_BYTES = 1024 * 1024
 OUTPUT_READ_CHUNK_BYTES = 64 * 1024
 MAX_FEATURE_GATES = 2048
 MAX_FEATURE_GATE_SOURCE_BYTES = 512 * 1024
+MAX_TOTAL_FEATURE_GATE_SOURCE_BYTES = 64 * 1024 * 1024
 WINDOWS_CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
 PYTHON_ENVIRONMENT_CONTROLS = (
     "PYTHONBREAKPOINT",
@@ -236,6 +237,7 @@ def _is_feature_gate_name(name):
 
 
 def discover():
+    _ADMITTED_GATES.clear()
     candidates = []
     try:
         with os.scandir(SCRIPTS) as entries:
@@ -260,9 +262,16 @@ def discover():
 
     ordered = validate_candidates(candidates)
     admitted = {}
+    total_source_bytes = 0
     for path in ordered:
-        admitted[path] = admit_gate(path, allowed_root=ROOT)
-    _ADMITTED_GATES.clear()
+        gate = admit_gate(path, allowed_root=ROOT)
+        total_source_bytes += len(gate.source)
+        if total_source_bytes > MAX_TOTAL_FEATURE_GATE_SOURCE_BYTES:
+            raise RuntimeError(
+                "aggregate feature preflight source bytes " + str(total_source_bytes)
+                + " exceeds maximum " + str(MAX_TOTAL_FEATURE_GATE_SOURCE_BYTES)
+            )
+        admitted[path] = gate
     _ADMITTED_GATES.update(admitted)
     return ordered
 
