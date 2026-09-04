@@ -40,11 +40,9 @@ def decide_dispatch(
     state = run_states.get(latest_run_id)
     if state is None:
         return "status-unknown"
-    status, conclusion = state
+    status, _conclusion = state
     if status != "completed":
         return "attempt-active"
-    if conclusion == "success":
-        return "already-dispatched"
     return "retry"
 
 
@@ -68,8 +66,9 @@ def main() -> int:
         'prior_dispatch_status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${exact_dispatch_fence_run_id}" --jq \'.status\')"',
         'prior_dispatch_conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${exact_dispatch_fence_run_id}" --jq \'.conclusion // ""\')"',
         'if [[ "${prior_dispatch_status}" != "completed" ]]; then',
-        'if [[ "${prior_dispatch_conclusion}" == "success" ]]; then',
-        "retry is permitted because the downstream release lane is serialized and rejects an existing tag before publication",
+        "Dispatcher completion proves only that the dispatch request attempt ended, not that downstream publication succeeded",
+        "this terminal attempt does not suppress a safe retry",
+        "The serialized downstream release lane and existing-tag admission prevent duplicate publication",
         'dispatch_fence="${dispatch_prefix} ordinal=${committed_preview_ordinal} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"',
         '-f body="${dispatch_fence}"',
         "Persisted automatic preview dispatch attempt fence",
@@ -91,12 +90,19 @@ def main() -> int:
         if token not in source:
             failures.append(f"dispatcher does not pin downstream retry safety token: {token}")
 
+    if 'if [[ "${prior_dispatch_conclusion}" == "success" ]]; then' in source:
+        failures.append(
+            "dispatcher success must not be treated as durable publication success; downstream release may fail after request acceptance"
+        )
+
     scan_index = source.find("exact_dispatch_fence_run_id=0")
     conflict_index = source.find("if (( dispatch_fence_conflict != 0 )); then", scan_index)
     prior_status_index = source.find("prior_dispatch_status=", conflict_index)
     active_index = source.find('if [[ "${prior_dispatch_status}" != "completed" ]]; then', prior_status_index)
-    success_index = source.find('if [[ "${prior_dispatch_conclusion}" == "success" ]]; then', active_index)
-    retry_index = source.find("retry is permitted because the downstream release lane is serialized", success_index)
+    retry_index = source.find(
+        "Dispatcher completion proves only that the dispatch request attempt ended, not that downstream publication succeeded",
+        active_index,
+    )
     reservation_write_index = source.find('-f body="${reservation}"', retry_index)
     fence_write_index = source.find('-f body="${dispatch_fence}"', max(retry_index, reservation_write_index))
     dispatch_index = source.find("gh workflow run release-v25-cloud.yml", fence_write_index)
@@ -105,7 +111,6 @@ def main() -> int:
         conflict_index,
         prior_status_index,
         active_index,
-        success_index,
         retry_index,
         reservation_write_index,
         fence_write_index,
@@ -116,14 +121,13 @@ def main() -> int:
         < conflict_index
         < prior_status_index
         < active_index
-        < success_index
         < retry_index
         < reservation_write_index
         < fence_write_index
         < dispatch_index
     ):
         failures.append(
-            "dispatcher must scan the ledger, reject conflicts, inspect the latest exact attempt, stop active/successful attempts, permit only terminal-non-success recovery, reserve, fence the new attempt, then dispatch"
+            "dispatcher must scan the ledger, reject conflicts, inspect the latest exact attempt, stop active attempts, permit terminal recovery, reserve, fence the new attempt, then dispatch"
         )
 
     if "continue-on-error" in source:
@@ -143,41 +147,45 @@ def main() -> int:
     ) != "dispatch":
         failures.append("an exact reservation without a dispatch-attempt fence must admit the first dispatch")
 
-    if decide_dispatch(
-        ordinal=ordinal,
-        source_sha=source_sha,
-        reservation_rows=exact_reservation,
-        dispatch_rows=((ordinal, source_sha, 100),),
-        run_states={100: ("in_progress", "")},
-    ) != "attempt-active":
-        failures.append("a replacement must stop while the latest exact dispatch attempt is active")
+    for status in ("queued", "in_progress"):
+        if decide_dispatch(
+            ordinal=ordinal,
+            source_sha=source_sha,
+            reservation_rows=exact_reservation,
+            dispatch_rows=((ordinal, source_sha, 100),),
+            run_states={100: (status, "")},
+        ) != "attempt-active":
+            failures.append(f"a replacement must stop while the latest exact dispatch attempt is {status}")
 
-    if decide_dispatch(
-        ordinal=ordinal,
-        source_sha=source_sha,
-        reservation_rows=exact_reservation,
-        dispatch_rows=((ordinal, source_sha, 100),),
-        run_states={100: ("completed", "success")},
-    ) != "already-dispatched":
-        failures.append("a replacement must stop after the latest exact dispatcher attempt succeeded")
-
-    if decide_dispatch(
-        ordinal=ordinal,
-        source_sha=source_sha,
-        reservation_rows=exact_reservation,
-        dispatch_rows=((ordinal, source_sha, 100),),
-        run_states={100: ("completed", "cancelled")},
-    ) != "retry":
-        failures.append("a cancelled attempt fence must not permanently suppress a legitimate never-dispatched retry")
+    for conclusion in ("success", "cancelled", "failure", "timed_out"):
+        if decide_dispatch(
+            ordinal=ordinal,
+            source_sha=source_sha,
+            reservation_rows=exact_reservation,
+            dispatch_rows=((ordinal, source_sha, 100),),
+            run_states={100: ("completed", conclusion)},
+        ) != "retry":
+            failures.append(
+                f"a terminal dispatcher attempt with conclusion {conclusion} must remain retryable because dispatcher completion is not downstream publication evidence"
+            )
 
     if decide_dispatch(
         ordinal=ordinal,
         source_sha=source_sha,
         reservation_rows=exact_reservation,
         dispatch_rows=((ordinal, source_sha, 100), (ordinal, source_sha, 101)),
-        run_states={100: ("completed", "cancelled"), 101: ("completed", "success")},
-    ) != "already-dispatched":
-        failures.append("the newest exact attempt fence must govern recovery after older cancelled attempts")
+        run_states={100: ("completed", "cancelled"), 101: ("in_progress", "")},
+    ) != "attempt-active":
+        failures.append("the newest exact attempt fence must govern recovery when an older attempt is terminal")
+
+    if decide_dispatch(
+        ordinal=ordinal,
+        source_sha=source_sha,
+        reservation_rows=exact_reservation,
+        dispatch_rows=((ordinal, source_sha, 100), (ordinal, source_sha, 101)),
+        run_states={100: ("in_progress", ""), 101: ("completed", "success")},
+    ) != "retry":
+        failures.append("the newest exact terminal attempt must permit recovery even if an older stale attempt record appears active")
 
     if decide_dispatch(
         ordinal=ordinal,
@@ -211,7 +219,7 @@ def main() -> int:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
 
-    print("PASS: automatic V25 preview dispatch is retry-safe across cancelled replacements without duplicate publication")
+    print("PASS: automatic V25 preview dispatch is attempt-fenced, terminal-retryable, and duplicate-publication safe")
     return 0
 
 
