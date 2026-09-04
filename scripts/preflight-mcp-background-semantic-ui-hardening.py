@@ -5,6 +5,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "QS3D.BricsCAD.V25"
+BACKGROUND = SRC / "McpBackgroundHostRuntime.cs"
 SEMANTIC = SRC / "McpBackgroundSemanticUiRuntime.cs"
 AGENT = SRC / "McpCadAgentRuntime.cs"
 RUNBOOK = ROOT / "docs" / "FEATURE-RUNBOOKS" / "mcp-background-semantic-ui.md"
@@ -15,10 +16,11 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
-for path in (SEMANTIC, AGENT, RUNBOOK):
+for path in (BACKGROUND, SEMANTIC, AGENT, RUNBOOK):
     if not path.is_file():
         fail(f"missing {path.relative_to(ROOT)}")
 
+background = BACKGROUND.read_text(encoding="utf-8")
 semantic = SEMANTIC.read_text(encoding="utf-8")
 agent = AGENT.read_text(encoding="utf-8")
 runbook = RUNBOOK.read_text(encoding="utf-8")
@@ -35,10 +37,15 @@ for token in (
     if token not in agent:
         fail(f"generic mutation wrapper missing hardening dependency: {token}")
 
+if "expectedDiscoveryGeneration" not in background:
+    fail("background semantic invoke schema must expose expectedDiscoveryGeneration")
+
 semantic_requirements = {
     "fresh semantic discovery recording": "RecordSemanticDiscovery",
     "fresh semantic discovery requirement": "RequireFreshSemanticDiscovery",
     "semantic discovery invalidation": "InvalidateSemanticDiscovery",
+    "discovery generation output": "discoveryGeneration",
+    "expected discovery generation": "expectedDiscoveryGeneration",
     "active document capture": "ActiveDocumentSnapshot",
     "active document recheck": "RequireSameActiveDocument",
     "current BricsCAD document": "Application.DocumentManager.MdiActiveDocument",
@@ -79,6 +86,7 @@ for phrase in (
     "ack ledger",
     "process-global writer",
     "fresh semantic discovery",
+    "expectedDiscoveryGeneration",
     "same target UI thread",
     "active document",
     "provider-completed",
