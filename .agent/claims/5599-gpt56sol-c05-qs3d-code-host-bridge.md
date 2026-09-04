@@ -2,7 +2,7 @@
 
 - Lane-Key: `issue-5599`
 - Reservation-Protocol: `v2`
-- Canonical owner/session: `account:trinhtanphat|session:gpt56sol-chat-20260904T1116Z-hostbridge`
+- Canonical owner/session: `account:trinhtanphat|session:gpt56sol-c05-20260904-0913-hostbridge`
 - Canonical carrier: `agent/gpt56sol-c05-20260904-0913-hostbridge/issue-5599-qs3d-code-host-bridge`
 - Ownership-Key: `qs3d-code.bricscad-host-bridge-v1`
 - Baseline protected main: `0fa476669b2c07854d10f60555b319055aaaa847`
