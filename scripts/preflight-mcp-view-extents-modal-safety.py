@@ -14,9 +14,21 @@ def require(token: str, label: str) -> None:
         errors.append(f"{label} missing token: {token}")
 
 
+def method_slice(start_token: str, end_token: str) -> str:
+    start = text.find(start_token)
+    end = text.find(end_token, start + 1) if start >= 0 else -1
+    return text[start:end] if start >= 0 and end > start else ""
+
+
 if not text:
     errors.append("missing McpCadViewStatusRuntime.cs")
 else:
+    zoom = method_slice("private static string ZoomExtents(", "private static string FitEntities(")
+    if not zoom:
+        errors.append("unable to isolate ZoomExtents")
+    elif "Database.UpdateExt(" in zoom:
+        errors.append("ZoomExtents must remain view-only and must not mutate persistent database extents via Database.UpdateExt")
+
     fit_start = text.find("private static string FitEntities(")
     fit_end = text.find("private static string SetView(", fit_start)
     fit = text[fit_start:fit_end] if fit_start >= 0 and fit_end > fit_start else ""
@@ -38,6 +50,23 @@ else:
         if "ApplyExtents(document, combined, padding, \"entities\", handles.Count)" in fit:
             errors.append("FitEntities must report fitted entities rather than treating skipped invalid-extents handles as fitted")
 
+    set_view = method_slice("private static string SetView(", "private static string ApplyExtents(")
+    if not set_view:
+        errors.append("unable to isolate SetView")
+    else:
+        for token in (
+            "RequireCompatibleViewAspect(view, width, height);",
+            "RequireNoDirectionTransition(view, direction);",
+        ):
+            if token not in set_view:
+                errors.append("SetView missing deterministic/modal-free guard: " + token)
+        if "view.ViewDirection = direction.Value;" in set_view:
+            errors.append("SetView must not assign ViewDirection directly because BricsCAD may route that transition through LookFrom/modal UI")
+        guard_pos = set_view.find("RequireCompatibleViewAspect(view, width, height);")
+        center_pos = set_view.find("view.CenterPoint =")
+        if guard_pos < 0 or center_pos < 0 or guard_pos > center_pos:
+            errors.append("SetView must validate viewport aspect before touching view state")
+
     for token in (
         "private static string AppendFitWarnings(",
         '\\"requestedEntityCount\\"',
@@ -45,6 +74,8 @@ else:
         '\\"skippedHandles\\"',
         "RequireViewMutationIdle();",
         "document.Editor.SetCurrentView(view);",
+        "private static void RequireCompatibleViewAspect(",
+        "private static void RequireNoDirectionTransition(",
     ):
         require(token, "view/extents safety")
 
@@ -73,4 +104,4 @@ if errors:
         print(" -", error)
     sys.exit(1)
 
-print("PASS: cad_view_fit_entities skips only live entities with unusable extents, reports skipped handles/counts, fails only when no usable extents remain, and view mutations preserve fail-closed CMDACTIVE/modal-bit/no-forced-REGEN safety.")
+print("PASS: direct view mutations stay database-clean and modal-free; cad_view_set validates active viewport aspect before mutation, rejects direction transitions instead of invoking LookFrom, and extents fitting preserves bounded fail-closed safety.")
