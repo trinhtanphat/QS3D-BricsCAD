@@ -58,7 +58,9 @@ def main() -> int:
             runner.MAX_FEATURE_GATES = 10
             runner.MAX_FEATURE_GATE_SOURCE_BYTES = 32
             runner.MAX_TOTAL_FEATURE_GATE_SOURCE_BYTES = 12
+            stale_path = temp / "stale.py"
             runner._ADMITTED_GATES.clear()
+            runner._ADMITTED_GATES[stale_path] = object()
 
             try:
                 runner.discover()
@@ -73,7 +75,7 @@ def main() -> int:
 
             require(
                 not runner._ADMITTED_GATES,
-                "failed aggregate admission must not publish a partial admitted-gate fleet",
+                "failed aggregate admission must clear stale/partial admitted-gate state",
             )
         finally:
             runner.ROOT = original_root
