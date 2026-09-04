@@ -55,6 +55,15 @@ def main() -> None:
     )
 
     require(
+        "_cleanupInFlightCandidate" in source,
+        "Audit Log must reserve the exact candidate while terminal Close is executing",
+    )
+    require(
+        "if (_cleanupInFlightCandidate != null)" in prepare and prepare.find("if (_cleanupInFlightCandidate != null)") < prepare.find("var candidate = _unpublishedCandidate;"),
+        "reentrant invocation must fail closed before reading singleton state while terminal Close is in flight",
+    )
+
+    require(
         "if (!candidate.IsLoaded)" in source and "CloseUnpublishedCandidate(candidate)" in source,
         "non-loaded modeless candidate must be terminally cleaned before return",
     )
@@ -85,6 +94,18 @@ def main() -> None:
     require(helper_end > helper_start, "cannot bound cleanup helper")
     helper = source[helper_start:helper_end]
     require("candidate.Close();" in helper, "cleanup helper must attempt terminal Close")
+    cleanup_set_index = helper.find("_cleanupInFlightCandidate = candidate;")
+    cleanup_close_index = helper.find("candidate.Close();")
+    cleanup_finally_index = helper.find("finally")
+    cleanup_clear_index = helper.find("ReferenceEquals(_cleanupInFlightCandidate, candidate)", cleanup_finally_index)
+    require(
+        cleanup_set_index >= 0 and cleanup_set_index < cleanup_close_index,
+        "terminal cleanup must reserve the exact candidate before Close can synchronously reenter",
+    )
+    require(
+        cleanup_finally_index > cleanup_close_index and cleanup_clear_index > cleanup_finally_index,
+        "terminal cleanup must identity-release its reentrancy reservation only after Close unwinds",
+    )
     require("_unpublishedCandidate = candidate;" in helper, "failed cleanup must quarantine the exact candidate")
     require("_window = candidate" not in helper, "cleanup helper must never publish an unproven candidate")
 
@@ -95,9 +116,13 @@ def main() -> None:
         "ReferenceEquals(_publicationInFlightCandidate, candidate)" in release,
         "terminal candidate release must identity-clear any matching in-flight publication marker",
     )
+    require(
+        "_cleanupInFlightCandidate" not in release,
+        "Closed handler must not clear cleanup reentrancy reservation before Close returns",
+    )
     require("ProjectContextCoordinator.GetOrCreate" not in source, "Audit Log command must keep project reads non-creating")
 
-    print("PASS: Audit Log publication is atomic, reentrancy-safe, in-flight candidates are never closed by reentrant commands, and failed cleanup remains quarantined")
+    print("PASS: Audit Log publication and terminal cleanup are atomic, reentrancy-safe, and failed cleanup remains quarantined")
 
 
 if __name__ == "__main__":
