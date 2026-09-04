@@ -140,7 +140,11 @@ def discover_workflow_sources(workflows):
     except OSError as exc:
         raise ValueError(f"workflow directory cannot be enumerated: {exc}") from exc
 
-    return [(path, _read_validated_workflow_source(path, root)) for path in candidates]
+    discovered = []
+    for path in candidates:
+        text = _read_validated_workflow_source(path, root)
+        discovered.append((path, text))
+    return discovered
 
 
 def parse_block_mapping_key(line, indentation):
@@ -265,19 +269,6 @@ def is_hard_validation_guard(expression):
     )
 
 
-def is_hard_hybrid_merge_guard(expression):
-    return normalize_expression(expression) == (
-        "github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && "
-        "github.event.workflow_run.event == 'pull_request'"
-    )
-
-
-def is_hard_hybrid_refresh_guard(expression):
-    return normalize_expression(expression) == (
-        "github.event_name == 'push' && github.ref == 'refs/heads/main'"
-    )
-
-
 def parse_trigger_name(line):
     match = re.match(r"^\s{2}(?:\"([A-Za-z0-9_-]+)\"|'([A-Za-z0-9_-]+)'|([A-Za-z0-9_-]+))\s*:", line)
     if not match:
@@ -336,21 +327,6 @@ def validate_guard_parser():
     ])
     if not is_hard_auto_dispatch_guard(auto_good) or is_hard_auto_dispatch_guard(auto_bad):
         errors.append("automatic dispatcher guard parser regression")
-
-    hybrid_merge_good = extract_job_if_expression([
-        "    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' }}"
-    ])
-    hybrid_merge_bad = extract_job_if_expression([
-        "    if: ${{ github.event_name == 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}"
-    ])
-    if not is_hard_hybrid_merge_guard(hybrid_merge_good) or is_hard_hybrid_merge_guard(hybrid_merge_bad):
-        errors.append("hybrid merge guard parser regression")
-
-    hybrid_refresh_good = extract_job_if_expression([
-        "    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
-    ])
-    if not is_hard_hybrid_refresh_guard(hybrid_refresh_good):
-        errors.append("hybrid refresh guard parser regression")
 
     if parse_trigger_name('  "push":') != "push" or parse_trigger_name('  "pull_request":') != "pull_request":
         errors.append("trigger parser must support quoted automatic validation keys")
@@ -487,7 +463,11 @@ for path, text in workflow_sources:
             errors.append(f"{path.name}: docs/claim-only changes must not trigger automatic V25 cloud CI")
 
         workflow_run_block = "\n".join(trigger_blocks.get("workflow_run", []))
-        require_tokens(workflow_run_block, ("workflows:", '"QS3D Cloud V25 Preview Build & Release"', "types:", "- completed"), f"{path.name} workflow_run")
+        require_tokens(
+            workflow_run_block,
+            ("workflows:", '"QS3D Cloud V25 Preview Build & Release"', "types:", "- completed"),
+            f"{path.name} workflow_run",
+        )
 
         require_tokens(text, (
             "contents: read", "actions: write", "cancel-in-progress: true",
@@ -516,64 +496,49 @@ for path, text in workflow_sources:
                 errors.append(f"{path.name}: unexpected automatic dispatcher job: {job_name}")
 
     elif path.name == HYBRID_COORDINATOR:
-        expected = {"push", "workflow_run"}
+        expected = {"pull_request", "push"}
         if trigger_names != expected:
-            errors.append(f"{path.name}: hybrid coordinator must expose exactly push + workflow_run; got {sorted(trigger_names)}")
+            errors.append(f"{path.name}: hybrid coordinator must expose exactly pull_request + push; got {sorted(trigger_names)}")
 
+        pr_block = "\n".join(trigger_blocks.get("pull_request", []))
+        require_tokens(
+            pr_block,
+            ("types:", "- opened", "- reopened", "- ready_for_review", "- converted_to_draft", "- synchronize", "- labeled", "- unlabeled", "branches:", "- main"),
+            f"{path.name} pull_request",
+        )
         push_block = "\n".join(trigger_blocks.get("push", []))
         require_tokens(push_block, ("branches:", "- main"), f"{path.name} push")
-        workflow_run_block = "\n".join(trigger_blocks.get("workflow_run", []))
-        require_tokens(
-            workflow_run_block,
-            ("workflows:", '"QS3D Shared Branch and Integration CI"', "types:", "- completed"),
-            f"{path.name} workflow_run",
-        )
-        if "paths:" in push_block or "paths-ignore:" in push_block or "paths:" in workflow_run_block or "paths-ignore:" in workflow_run_block:
+        if "paths:" in pr_block or "paths-ignore:" in pr_block or "paths:" in push_block or "paths-ignore:" in push_block:
             errors.append(f"{path.name}: coordinator triggers must not use path filters")
 
         require_tokens(text, (
             "name: QS3D Hybrid PR Coordinator",
             "contents: read", "actions: read", "pull-requests: write",
             "group: qs3d-hybrid-pr-coordinator", "cancel-in-progress: false",
-            "merge-green-pr:", "refresh-branches:",
-            "github.event_name == 'push'", "github.event_name == 'workflow_run'",
-            "github.event.workflow_run.conclusion == 'success'", "github.event.workflow_run.event == 'pull_request'",
+            "arm-native-automerge:", "refresh-branches:",
+            "github.event_name == 'pull_request'", "github.event_name == 'push'",
             "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}",
-            "markPullRequestReadyForReview", "no-automerge", "head.repo.full_name", "base.ref", "draft", "dependabot[bot]",
-            "event_head_sha", "api_head_sha", "github.event.workflow_run.head_sha", "github.event.workflow_run.pull_requests",
-            "/compare/", "/update-branch", "expected_head_sha", 'pulls/${PR_NUMBER}/merge', '-f sha="$event_head_sha"', "-f merge_method=merge",
+            "enablePullRequestAutoMerge", "disablePullRequestAutoMerge", "autoMergeRequest",
+            "no-automerge", "head.repo.full_name", "base.ref", "draft", "dependabot[bot]",
+            "event_head_sha", "api_head_sha", "/update-branch", "expected_head_sha",
         ), path.name)
         for forbidden in (
             "workflow_dispatch", "pull_request_target", "contents: write", "actions: write", "issues: write",
-            "enablePullRequestAutoMerge", "disablePullRequestAutoMerge", "gh pr merge", "git push", "git reset", "--force", "gh workflow run", "gh release",
+            "gh pr merge", "git push", "git reset", "--force", "gh workflow run", "gh release",
         ):
             if forbidden in text:
                 errors.append(f"{path.name}: hybrid coordinator contains forbidden token: {forbidden}")
+        if re.search(r"repos/[^\s\"']+/pulls/[^\s\"']+/merge(?:[\s\"']|$)", text, re.IGNORECASE):
+            errors.append(f"{path.name}: direct pull-request merge endpoint remains forbidden")
 
-        expected_jobs = {"merge-green-pr", "refresh-branches"}
+        expected_jobs = {"arm-native-automerge", "refresh-branches"}
         if {name for name, _ in job_blocks} != expected_jobs:
             errors.append(f"{path.name}: coordinator jobs must be exactly {sorted(expected_jobs)}")
-        merge_block = next(("\n".join(block) for name, block in job_blocks if name == "merge-green-pr"), "")
+        arm_block = next(("\n".join(block) for name, block in job_blocks if name == "arm-native-automerge"), "")
         refresh_block = next(("\n".join(block) for name, block in job_blocks if name == "refresh-branches"), "")
-        if not is_hard_hybrid_merge_guard(extract_job_if_expression(next((block for name, block in job_blocks if name == "merge-green-pr"), None))):
-            errors.append(f"{path.name}/merge-green-pr: job must require successful pull_request Shared-CI workflow_run")
-        if not is_hard_hybrid_refresh_guard(extract_job_if_expression(next((block for name, block in job_blocks if name == "refresh-branches"), None))):
-            errors.append(f"{path.name}/refresh-branches: job must require main push")
-        require_tokens(merge_block, (
-            "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "github.event.workflow_run.head_sha", "github.event.workflow_run.pull_requests",
-            "head.repo.full_name", "base.ref", "draft", "no-automerge", "dependabot[bot]", "mergeable_state",
-            "/compare/", "/update-branch", "expected_head_sha", "markPullRequestReadyForReview",
-            'pulls/${PR_NUMBER}/merge', '-f sha="$event_head_sha"', "-f merge_method=merge",
-        ), f"{path.name}/merge-green-pr")
-        require_tokens(refresh_block, (
-            "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "/update-branch", "expected_head_sha",
-            "no-automerge", "head.repo.full_name", "dependabot[bot]",
-        ), f"{path.name}/refresh-branches")
-        if merge_block.count('pulls/${PR_NUMBER}/merge') != 1:
-            errors.append(f"{path.name}/merge-green-pr: must expose exactly one direct exact-head PR merge endpoint")
-        if "/merge" in refresh_block or "markPullRequestReadyForReview" in refresh_block:
-            errors.append(f"{path.name}/refresh-branches: refresh job must not merge or promote PRs")
-        if "github.token" in merge_block or "github.token" in refresh_block:
+        require_tokens(arm_block, ("github.event_name == 'pull_request'", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "enablePullRequestAutoMerge", "disablePullRequestAutoMerge", "autoMergeRequest"), f"{path.name}/arm-native-automerge")
+        require_tokens(refresh_block, ("github.event_name == 'push'", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "/update-branch", "expected_head_sha"), f"{path.name}/refresh-branches")
+        if "github.token" in arm_block or "github.token" in refresh_block:
             errors.append(f"{path.name}: coordinator mutations must not fall back to github.token")
 
     else:
@@ -628,5 +593,5 @@ if errors:
 
 print(
     "PASS: every agent/integration push produces exact-head branch CI, every PR emits stable required contexts, governance/docs-only candidates remain lightweight through internal scope classification, "
-    "build-relevant candidates run Core plus V25 compile, main owns exact-source V25 dispatch with a bounded successful-release wakeup, the named hybrid coordinator may refresh stale ancestry and merge only successful exact-head GREEN PRs through protected main, and releases retain explicit confirmation."
+    "build-relevant candidates run Core plus V25 compile, main owns exact-source V25 dispatch with a bounded successful-release wakeup, the named hybrid coordinator may arm protected native auto-merge/refresh, and releases retain explicit confirmation."
 )
