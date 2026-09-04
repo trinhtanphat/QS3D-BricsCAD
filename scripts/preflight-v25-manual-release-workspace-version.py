@@ -34,11 +34,18 @@ for label, needle in forbidden.items():
     if needle in text:
         errors.append(f"stale {label} remains: {needle}")
 
-# The intentional dirty workspace must be bounded to the V25/V26/Core identity trio.
+# The release workspace may already carry the requested identity (0 changes), otherwise
+# the intentional dirty workspace must contain exactly the V25/V26/Core identity trio.
 if "Unexpected release-preparation workspace change" not in text:
     errors.append("missing fail-closed rejection for workspace changes outside the project identity trio")
-if "Workspace version synchronization did not produce exactly three bounded project modifications." not in text:
-    errors.append("missing exact-three intentional workspace modification assertion")
+if "$finalStatus.Count -ne 0 -and $finalStatus.Count -ne $workspaceVersionPaths.Count" not in text:
+    errors.append("missing 0-or-all-three bounded workspace modification assertion")
+if "Workspace version synchronization must either be a no-op or produce exactly three bounded project modifications." not in text:
+    errors.append("missing 0-or-all-three workspace synchronization failure contract")
+if "Workspace ProductVersion is already synchronized" not in text:
+    errors.append("missing explicit already-synchronized no-op contract")
+if "if ($finalStatus.Count -eq $workspaceVersionPaths.Count)" not in text:
+    errors.append("missing all-three identity path completeness guard")
 
 # Keep source identity and drift admission before any workspace mutation.
 try:
@@ -54,4 +61,4 @@ if errors:
         print(f"ERROR: {error}")
     raise SystemExit(1)
 
-print("PASS: V25 manual release synchronizes the coherent V25/V26/Core preview identity only in the bounded workspace while preserving protected-main source identity.")
+print("PASS: V25 manual release accepts an already-synchronized preview identity or synchronizes the coherent V25/V26/Core identity only in the bounded workspace while preserving protected-main source identity.")
