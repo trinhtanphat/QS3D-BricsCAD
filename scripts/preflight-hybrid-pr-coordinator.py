@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# TDD RED: require successful Shared-CI workflow_run before Draft promotion.
 from pathlib import Path
 import re
 import sys
