@@ -43,7 +43,7 @@ def _run_behavioral_fixtures(verifier: str, failures: list[str]) -> None:
         harness = temp / "verify.ps1"
         harness.write_text(
             verifier
-            + "\ntry { Assert-ZipManifestIntegrity -ZipPath $env:QS3D_TEST_ZIP; exit 0 } "
+            + "\ntry { $null = Assert-ZipManifestIntegrity -ZipPath $env:QS3D_TEST_ZIP; exit 0 } "
             + "catch { [Console]::Error.WriteLine($_.Exception.Message); exit 23 }\n",
             encoding="utf-8",
         )
@@ -169,13 +169,15 @@ def main() -> int:
     failures: list[str] = []
 
     function_start = source.find("function Assert-ZipManifestIntegrity")
-    call_site = source.find("Assert-ZipManifestIntegrity -ZipPath $tempZip")
+    call_site = source.find("$stagedZipHash = Assert-ZipManifestIntegrity -ZipPath $tempZip")
     zip_shape_check = source.find("Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package")
-    zip_hash = source.find("$stagedZipHash = (Get-FileHash -LiteralPath $tempZip -Algorithm SHA256)")
+    replace_call = source.find("[IO.File]::Replace($tempZip, $zip, $zipBackup, $true)")
 
     required = (
         "function Assert-ZipManifestIntegrity",
-        "[IO.Compression.ZipFile]::OpenRead($ZipPath)",
+        "$fileStream = [IO.FileStream]::new(",
+        "[IO.FileShare]::Read",
+        "[IO.Compression.ZipArchive]::new($fileStream",
         "SHA256SUMS.txt",
         "$entry.Open()",
         "[Security.Cryptography.SHA256]::Create()",
@@ -183,17 +185,19 @@ def main() -> int:
         "case-insensitive duplicate",
         "checksum manifest coverage mismatch",
         "checksum mismatch",
-        "Assert-ZipManifestIntegrity -ZipPath $tempZip",
+        "$fileStream.Position = 0",
+        "$outerDigest = $outerHash.ComputeHash($fileStream)",
+        "$stagedZipHash = Assert-ZipManifestIntegrity -ZipPath $tempZip",
     )
     for token in required:
         if token not in source:
             failures.append(f"finalized ZIP byte-integrity contract is incomplete; missing: {token}")
 
     verifier = ""
-    if min(function_start, call_site, zip_shape_check, zip_hash) < 0:
-        failures.append("could not bound finalized ZIP shape/manifest/hash validation")
-    elif not (zip_shape_check < call_site < zip_hash):
-        failures.append("completed ZIP must pass shape then manifest-entry byte validation before its outer digest is admitted")
+    if min(function_start, call_site, zip_shape_check, replace_call) < 0:
+        failures.append("could not bound finalized ZIP shape/manifest/generation validation")
+    elif not (zip_shape_check < call_site < replace_call):
+        failures.append("completed ZIP must pass shape then same-handle manifest-entry byte validation/digest admission before publication")
 
     if function_start >= 0:
         function_end = source.find("\nfunction ", function_start + 1)
@@ -212,10 +216,15 @@ def main() -> int:
             "$isDirectory = [string]::IsNullOrEmpty($entry.Name)",
             "$rawName.TrimEnd('/')",
             "if ($isDirectory) { continue }",
+            "$fileStream.Position = 0",
+            "$outerHash.ComputeHash($fileStream)",
         )
         for token in verifier_required:
             if token not in verifier:
                 failures.append(f"ZIP manifest verifier is not fail-closed enough; missing: {token}")
+
+    if "Get-FileHash -LiteralPath $tempZip" in source:
+        failures.append("outer digest must come from the same locked stream as manifest verification, not a pathname reopen")
 
     if not failures and verifier:
         _run_behavioral_fixtures(verifier, failures)
@@ -225,7 +234,7 @@ def main() -> int:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
 
-    print("PASS: finalized V25 ZIP validates actual entry bytes against exact embedded SHA256SUMS coverage and adversarial fixtures")
+    print("PASS: finalized V25 ZIP validates actual entry bytes and admits its outer digest from one locked generation with adversarial fixtures")
     return 0
 
 
