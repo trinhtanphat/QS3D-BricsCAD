@@ -17,6 +17,7 @@ block = text[start:end]
 
 canonical = "var canonicalName = quantity.Key.Trim();"
 reject = "if (!string.Equals(canonicalName, quantity.Key, StringComparison.Ordinal))"
+negative_zero = "quantity.Value == 0d && BitConverter.DoubleToInt64Bits(quantity.Value) < 0"
 collision = "if (!canonicalNames.Add(canonicalName))"
 materialize = "foreach (var quantity in source.Quantities) target.SetQuantity(quantity.Key, quantity.Value);"
 
@@ -26,9 +27,11 @@ if reject not in block:
     fail("quantity snapshot validation must reject stored keys whose spelling is not already canonical")
 if block.index(reject) < block.index(canonical):
     fail("quantity canonical-spelling rejection must occur after deriving the canonical identity")
+if negative_zero not in block:
+    fail("quantity snapshot validation must reject negative zero before SetQuantity can silently canonicalize it")
 if collision not in block or block.index(collision) < block.index(reject):
     fail("canonical collision detection must remain after canonical-spelling rejection")
 if materialize not in text:
     fail("snapshot materialization must still flow quantity keys through ProjectElement.SetQuantity")
 
-print("PASS: project snapshots reject non-canonical quantity keys before materialization can silently normalize them")
+print("PASS: project snapshots reject non-canonical quantity keys and negative zero before materialization can silently normalize them")
