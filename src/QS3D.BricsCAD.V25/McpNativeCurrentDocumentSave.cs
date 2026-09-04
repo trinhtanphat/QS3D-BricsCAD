@@ -209,7 +209,13 @@ namespace QS3D.BricsCAD.V25
                     // callback is a serialization barrier proving that handler has returned before
                     // the worker thread disposes Done. Per-handler ownership remains published
                     // until the matching native unsubscribe actually succeeds.
-                    return McpDiagnosticHub.InvokeInCadContext(() => DetachInCadContext());
+                    var detached = false;
+                    McpDiagnosticHub.InvokeInCadContext(() =>
+                    {
+                        detached = DetachInCadContext();
+                        return string.Empty;
+                    });
+                    return detached;
                 }
                 catch
                 {
