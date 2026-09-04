@@ -14,10 +14,16 @@ namespace QS3D.BricsCAD.V25
 
         private sealed class PublishedManager
         {
-            public PublishedManager(CoordinationManagerWindow window, Document document)
+            public PublishedManager(
+                CoordinationManagerWindow window,
+                Document document,
+                string projectId,
+                string drawingFingerprint)
             {
                 Window = window ?? throw new ArgumentNullException(nameof(window));
                 if (document == null) throw new ArgumentNullException(nameof(document));
+                ProjectId = RequireCanonicalIdentity(projectId, nameof(projectId));
+                DrawingFingerprint = RequireCanonicalIdentity(drawingFingerprint, nameof(drawingFingerprint));
 
                 var database = document.Database;
                 if (database == null || database.UnmanagedObject == IntPtr.Zero)
@@ -28,21 +34,39 @@ namespace QS3D.BricsCAD.V25
 
             public CoordinationManagerWindow Window { get; }
             public IntPtr NativeDatabaseIdentity { get; }
+            public string ProjectId { get; }
+            public string DrawingFingerprint { get; }
 
-            public bool Matches(Document document)
+            public bool Matches(Document document, string projectId, string drawingFingerprint)
             {
-                if (document == null) return false;
+                if (document == null || string.IsNullOrWhiteSpace(projectId) || string.IsNullOrWhiteSpace(drawingFingerprint))
+                    return false;
                 try
                 {
                     var database = document.Database;
                     return database != null &&
                            database.UnmanagedObject != IntPtr.Zero &&
-                           database.UnmanagedObject == NativeDatabaseIdentity;
+                           database.UnmanagedObject == NativeDatabaseIdentity &&
+                           string.Equals(ProjectId, projectId, StringComparison.Ordinal) &&
+                           string.Equals(DrawingFingerprint, drawingFingerprint, StringComparison.Ordinal);
                 }
                 catch
                 {
                     return false;
                 }
+            }
+
+            private static string RequireCanonicalIdentity(string value, string parameterName)
+            {
+                if (string.IsNullOrWhiteSpace(value) ||
+                    !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                    throw new ArgumentException("Canonical identity is required.", parameterName);
+                foreach (var ch in value)
+                {
+                    if (char.IsControl(ch))
+                        throw new ArgumentException("Canonical identity must not contain control characters.", parameterName);
+                }
+                return value;
             }
         }
 
@@ -76,7 +100,7 @@ namespace QS3D.BricsCAD.V25
                 {
                     if (previous.Window.IsLoaded)
                     {
-                        if (previous.Matches(document))
+                        if (previous.Matches(document, project.ProjectId, project.DrawingFingerprint))
                         {
                             try { previous.Window.Activate(); } catch { }
                             try { PaletteCoordinator.SetStatus("Coordination Manager đã mở cho project hiện hành."); } catch { }
@@ -94,7 +118,11 @@ namespace QS3D.BricsCAD.V25
 
                 candidate = new CoordinationManagerWindow(document, project.ProjectId, project.DrawingFingerprint);
                 var publishedWindow = candidate;
-                published = new PublishedManager(publishedWindow, document);
+                published = new PublishedManager(
+                    publishedWindow,
+                    document,
+                    project.ProjectId,
+                    project.DrawingFingerprint);
                 var exactPublished = published;
                 publishedWindow.Closed += (_, __) => ReleaseClosedManager(exactPublished);
 
@@ -119,8 +147,9 @@ namespace QS3D.BricsCAD.V25
 
                     if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
                         throw new InvalidOperationException("Active document changed during Coordination Manager publication.");
-                    if (!published.Matches(document))
-                        throw new InvalidOperationException("Coordination Manager document identity changed during publication.");
+                    if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject) ||
+                        !published.Matches(document, currentProject.ProjectId, currentProject.DrawingFingerprint))
+                        throw new InvalidOperationException("Coordination Manager project/document identity changed during publication.");
                     if (!ReferenceEquals(_publicationInFlight, published))
                         throw new InvalidOperationException("Coordination Manager publication ownership changed unexpectedly.");
 
