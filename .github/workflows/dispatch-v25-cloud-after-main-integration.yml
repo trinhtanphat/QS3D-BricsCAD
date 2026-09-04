@@ -71,6 +71,19 @@ jobs:
             exit 1
           fi
 
+          release_relevant_pathspecs=(
+            'src/'
+            'tests/'
+            'scripts/'
+            'external/QS3D-Platform'
+            '.gitmodules'
+            'Directory.Build.props'
+            'QS3D.sln'
+            'QS3D.V26.sln'
+            '.github/workflows/release-v25-cloud.yml'
+            '.github/workflows/dispatch-v25-cloud-after-main-integration.yml'
+          )
+
           echo "Triggering integration source: ${source_sha}"
           echo "Current main at dispatch time: ${current_main}"
           if [[ "${current_main}" != "${source_sha}" ]]; then
@@ -79,18 +92,6 @@ jobs:
               echo "Triggering source is no longer an ancestor of current main; refusing ambiguous automatic dispatch." >&2
               exit 1
             fi
-            release_relevant_pathspecs=(
-              'src/'
-              'tests/'
-              'scripts/'
-              'external/QS3D-Platform'
-              '.gitmodules'
-              'Directory.Build.props'
-              'QS3D.sln'
-              'QS3D.V26.sln'
-              '.github/workflows/release-v25-cloud.yml'
-              '.github/workflows/dispatch-v25-cloud-after-main-integration.yml'
-            )
             set +e
             git diff --quiet --no-ext-diff "${source_sha}..${current_main}" -- "${release_relevant_pathspecs[@]}"
             release_drift_status=$?
@@ -326,6 +327,49 @@ jobs:
               exit 0
             fi
             echo "Exact prior dispatcher attempt ${exact_dispatch_fence_run_id} completed with ${prior_dispatch_conclusion}. Dispatcher completion proves only that the dispatch request attempt ended, not that downstream publication succeeded; this terminal attempt does not suppress a safe retry. The serialized downstream release lane and existing-tag admission prevent duplicate publication."
+          fi
+
+          # Rebind protected main immediately before the first durable side effect.
+          # The API view and fetched ref must agree; ambiguity fails closed rather
+          # than allowing a stale dispatcher to reserve or launch a release.
+          final_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          final_main="${final_main,,}"
+          if [[ ! "${final_main}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Final protected-main admission returned a malformed SHA: ${final_main}" >&2
+            exit 1
+          fi
+          final_main_ref='refs/remotes/origin/qs3d-final-main-admission'
+          git fetch --no-tags origin "+refs/heads/main:${final_main_ref}"
+          fetched_final_main="$(git rev-parse "${final_main_ref}^{commit}")"
+          fetched_final_main="${fetched_final_main,,}"
+          if [[ ! "${fetched_final_main}" =~ ^[0-9a-f]{40}$ || "${fetched_final_main}" != "${final_main}" ]]; then
+            echo "Final protected-main API/fetch identity mismatch: api=${final_main} fetched=${fetched_final_main}. Refusing ambiguous dispatch." >&2
+            exit 1
+          fi
+          confirmed_final_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          confirmed_final_main="${confirmed_final_main,,}"
+          if [[ ! "${confirmed_final_main}" =~ ^[0-9a-f]{40}$ || "${confirmed_final_main}" != "${final_main}" ]]; then
+            echo "Protected main moved during final dispatch admission: first=${final_main} confirmed=${confirmed_final_main}. Refusing stale side effects." >&2
+            exit 1
+          fi
+          if [[ "${final_main}" != "${source_sha}" ]]; then
+            if ! git merge-base --is-ancestor "${source_sha}" "${final_main}"; then
+              echo "Final protected-main source is no longer descended from ${source_sha}; refusing ambiguous automatic dispatch." >&2
+              exit 1
+            fi
+            set +e
+            git diff --quiet --no-ext-diff "${source_sha}..${final_main}" -- "${release_relevant_pathspecs[@]}"
+            final_release_drift_status=$?
+            set -e
+            if (( final_release_drift_status == 1 )); then
+              echo "newer release-relevant main integration owns the next release decision; superseded dispatcher ${source_sha} exits before durable side effects."
+              exit 0
+            fi
+            if (( final_release_drift_status != 0 )); then
+              echo "Could not inspect final release-relevant main drift between ${source_sha} and ${final_main}; git diff exit ${final_release_drift_status}." >&2
+              exit "${final_release_drift_status}"
+            fi
+            echo "main advanced only through non-release paths during final admission; dispatch remains pinned to ${source_sha}."
           fi
 
           if (( exact_reservation == 0 )); then
