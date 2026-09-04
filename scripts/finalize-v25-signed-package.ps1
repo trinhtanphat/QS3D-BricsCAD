@@ -646,6 +646,7 @@ catch {
                 if (-not (Test-Path -LiteralPath $zipBackup -PathType Leaf)) {
                     throw "original PackageZip backup is unavailable: $zipBackup"
                 }
+                $zipBackup = Assert-SafeFile -Path $zipBackup -Label 'original PackageZip rollback backup'
                 if (Test-Path -LiteralPath $zip -PathType Leaf) {
                     [IO.File]::Replace($zipBackup, $zip, $zipRollbackDiscard, $true)
                     if (Test-Path -LiteralPath $zipRollbackDiscard) {
