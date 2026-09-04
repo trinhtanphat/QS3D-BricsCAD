@@ -116,9 +116,9 @@ for forbidden in (
         errors.append("dispatcher stale-drift path must not reintroduce independent preview allocation: " + forbidden)
 
 if workflow:
+    pathspecs = workflow.find("release_relevant_pathspecs=(")
     drift_guard = workflow.find('if [[ "${current_main}" != "${source_sha}" ]]; then')
-    pathspecs = workflow.find("release_relevant_pathspecs=(", drift_guard)
-    diff_guard = workflow.find('git diff --quiet --no-ext-diff "${source_sha}..${current_main}" -- "${release_relevant_pathspecs[@]}"', pathspecs)
+    diff_guard = workflow.find('git diff --quiet --no-ext-diff "${source_sha}..${current_main}" -- "${release_relevant_pathspecs[@]}"', drift_guard)
     relevant_exit_guard = workflow.find("if (( release_drift_status == 1 )); then", diff_guard)
     exit_index = workflow.find("exit 0", relevant_exit_guard)
     error_guard = workflow.find("if (( release_drift_status != 0 )); then", exit_index)
@@ -127,8 +127,8 @@ if workflow:
     reservation = workflow.find('reservation="${reservation_prefix} ordinal=${committed_preview_ordinal} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"', committed_identity)
     dispatch = workflow.find("gh workflow run release-v25-cloud.yml", reservation)
     indexes = (
-        drift_guard,
         pathspecs,
+        drift_guard,
         diff_guard,
         relevant_exit_guard,
         exit_index,
@@ -139,8 +139,8 @@ if workflow:
         dispatch,
     )
     if min(indexes) < 0 or not (
-        drift_guard
-        < pathspecs
+        pathspecs
+        < drift_guard
         < diff_guard
         < relevant_exit_guard
         < exit_index
@@ -151,7 +151,7 @@ if workflow:
         < dispatch
     ):
         errors.append(
-            "dispatcher ordering must classify drift with Git pathspecs, exit only for release-relevant drift, fail on Git errors, continue inert drift, bind committed identity, then reserve and dispatch"
+            "dispatcher ordering must initialize shared release-relevant Git pathspecs before drift classification, exit only for release-relevant drift, fail on Git errors, continue inert drift, bind committed identity, then reserve and dispatch"
         )
     if contains_executable_line(workflow, "git diff --name-only"):
         errors.append("dispatcher must not classify release drift from line-oriented pathname output")
