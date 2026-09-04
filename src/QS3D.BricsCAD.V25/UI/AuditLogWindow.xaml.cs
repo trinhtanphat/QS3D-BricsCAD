@@ -83,6 +83,7 @@ namespace QS3D.BricsCAD.V25.UI
                         if (lifecycleDocument != null && ReferenceEquals(candidate, lifecycleDocument))
                         {
                             if (database.UnmanagedObject != _nativeDatabaseIdentity) continue;
+                            if (HasBoundProjectContext && !MatchesBoundProjectAffinity(candidate)) continue;
                             document = candidate;
                             return true;
                         }
@@ -108,10 +109,15 @@ namespace QS3D.BricsCAD.V25.UI
             return false;
         }
 
+        private bool HasBoundProjectContext =>
+            !string.IsNullOrWhiteSpace(_boundProjectId) ||
+            !string.IsNullOrWhiteSpace(_boundDrawingFingerprint);
+
         private bool MatchesBoundProjectAffinity(Document candidate)
         {
             // A window opened before a QS3D project exists has no semantic token with which to prove
-            // wrapper drift. In that case only the exact original managed wrapper is admissible.
+            // wrapper drift. A partially captured token is not equivalent to no project: it must fail
+            // closed because the original semantic identity can no longer be proven completely.
             if (string.IsNullOrWhiteSpace(_boundProjectId) ||
                 string.IsNullOrWhiteSpace(_boundDrawingFingerprint))
                 return false;
