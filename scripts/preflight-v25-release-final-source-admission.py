@@ -41,12 +41,17 @@ def main() -> int:
             failures.append(f"final V25 publication admission is incomplete; missing: {token}")
 
     final_api = publish.find("repos/$env:GITHUB_REPOSITORY/commits/main")
-    release_post = publish.find("Invoke-RestMethod -Method Post -Uri \"https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases\"")
-    asset_check = publish.find("foreach ($spec in $assetSpecs)")
-    if min(final_api, asset_check, release_post) < 0:
-        failures.append("could not bound final source admission and release creation")
-    elif not (asset_check < final_api < release_post):
-        failures.append("final protected-main admission must run after held-asset identity verification and before release creation")
+    final_asset_identity = publish.find("$assetIdentityDrift = @(")
+    publish_body = publish.find("$publishBody = @{ draft = $false }")
+    release_patch = publish.find("Invoke-RestMethod -Method Patch -Uri $releaseUri")
+    if min(final_api, final_asset_identity, publish_body, release_patch) < 0:
+        failures.append("could not bound final source admission and draft-to-published transition")
+    elif not (final_asset_identity < final_api < publish_body < release_patch):
+        failures.append("final protected-main admission must run after final draft/asset identity verification and immediately before the draft-to-published PATCH")
+
+    draft_creation = publish.find("Invoke-RestMethod -Method Post -Uri \"https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases\"")
+    if draft_creation >= 0 and final_api >= 0 and final_api < draft_creation:
+        failures.append("final publication admission must not run only before draft creation; upload and round-trip verification time must remain inside the TOCTOU fence")
 
     if "continue-on-error" in source:
         failures.append("release source admission must not become fail-open through continue-on-error")
