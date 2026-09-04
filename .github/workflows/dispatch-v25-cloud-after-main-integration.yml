@@ -123,7 +123,7 @@ jobs:
               echo "V25 cloud release-run admission returned malformed ${active_release_status} count: ${active_release_status_count}" >&2
               exit 1
             fi
-            ((active_release_runs += active_release_status_count))
+            active_release_runs=$((active_release_runs + active_release_status_count))
           done
           if (( active_release_runs > 0 )); then
             echo "A V25 cloud release is already queued or running; this landing stays pending for the next batch decision."
