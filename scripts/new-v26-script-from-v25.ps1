@@ -211,16 +211,15 @@ function Assert-AdmittedOutputParentBinding {
     if (-not [string]::Equals($currentPath.TrimEnd('\'), $Admission.Path.TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase)) {
         throw 'V26 output parent held generation path changed before publication.'
     }
-    $pathItem = Assert-OrdinaryPathItem -Path $Admission.Path -Label 'V26 output parent held generation' -Directory $true
-    $pathHandle = [IO.File]::OpenHandle($pathItem.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+
+    $pathAdmission = Open-AdmittedOutputParent -Path $Admission.Path
     try {
-        $pathInfo = Get-AdmittedHandleInformation -Handle $pathHandle
-        if (-not (Test-SameHandleIdentity -Before $Admission.Information -After $pathInfo)) {
+        if (-not (Test-SameHandleIdentity -Before $Admission.Information -After $pathAdmission.Information)) {
             throw 'V26 output parent pathname no longer resolves to the admitted held generation.'
         }
     }
     finally {
-        $pathHandle.Dispose()
+        $pathAdmission.Handle.Dispose()
     }
 }
 
