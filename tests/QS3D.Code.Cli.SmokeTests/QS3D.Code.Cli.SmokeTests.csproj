@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>QS3D.Code.Cli.SmokeTests</AssemblyName>
+    <RootNamespace>QS3D.Code.Cli.SmokeTests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\QS3D.Code.Cli\QS3D.Code.Cli.csproj" />
+  </ItemGroup>
+</Project>

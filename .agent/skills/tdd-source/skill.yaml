@@ -1,0 +1,13 @@
+id: tdd-source
+version: 1
+triggers:
+  - Source
+prerequisites:
+  - repository-lifecycle
+required-docs: []
+tool-classes:
+  - source.read
+  - source.edit
+  - process.test
+validation:
+  - red-before-green
