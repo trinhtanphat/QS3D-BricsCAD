@@ -108,23 +108,23 @@ jobs:
 
           git fetch --force --tags origin
 
-          set +e
-          active_release_run_ids="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/workflows/release-v25-cloud.yml/runs?per_page=100" --jq '.workflow_runs[] | select(.status != "completed") | .id')"
-          active_release_query_status=$?
-          set -e
-          if (( active_release_query_status != 0 )); then
-            echo "Could not enumerate the complete V25 cloud release-run set; gh api exit ${active_release_query_status}." >&2
-            exit "${active_release_query_status}"
-          fi
+          active_release_statuses=( requested queued in_progress waiting pending )
           active_release_runs=0
-          while IFS= read -r active_release_run_id; do
-            [[ -n "${active_release_run_id}" ]] || continue
-            if [[ ! "${active_release_run_id}" =~ ^[1-9][0-9]*$ ]]; then
-              echo "V25 cloud release-run admission returned a malformed run id: ${active_release_run_id}" >&2
+          for active_release_status in "${active_release_statuses[@]}"; do
+            set +e
+            active_release_status_count="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/release-v25-cloud.yml/runs?status=${active_release_status}&per_page=1" --jq '.total_count')"
+            active_release_query_status=$?
+            set -e
+            if (( active_release_query_status != 0 )); then
+              echo "Could not query V25 cloud release runs in status ${active_release_status}; gh api exit ${active_release_query_status}." >&2
+              exit "${active_release_query_status}"
+            fi
+            if [[ ! "${active_release_status_count}" =~ ^[0-9]+$ ]]; then
+              echo "V25 cloud release-run admission returned malformed ${active_release_status} count: ${active_release_status_count}" >&2
               exit 1
             fi
-            ((active_release_runs += 1))
-          done <<< "${active_release_run_ids}"
+            ((active_release_runs += active_release_status_count))
+          done
           if (( active_release_runs > 0 )); then
             echo "A V25 cloud release is already queued or running; this landing stays pending for the next batch decision."
             exit 0
