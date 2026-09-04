@@ -104,6 +104,7 @@ namespace QS3D.BricsCAD.V25
                     + "\"authorization_endpoint\":\"" + JsonEscape(issuer + "/oauth/authorize") + "\","
                     + "\"token_endpoint\":\"" + JsonEscape(issuer + "/oauth/token") + "\","
                     + "\"registration_endpoint\":\"" + JsonEscape(issuer + "/oauth/register") + "\","
+                    + "\"authorization_response_iss_parameter_supported\":true,"
                     + "\"response_types_supported\":[\"code\"],"
                     + "\"grant_types_supported\":[\"" + AuthorizationCodeGrant + "\",\"" + RefreshTokenGrant + "\"],"
                     + "\"token_endpoint_auth_methods_supported\":[\"" + TokenEndpointAuthMethod + "\"],"
@@ -137,7 +138,7 @@ namespace QS3D.BricsCAD.V25
                     response.Headers["Allow"] = "GET";
                     return true;
                 }
-                response = Authorize(query, resource, signingSecret);
+                response = Authorize(query, resource, issuer, signingSecret);
                 return true;
             }
 
@@ -277,7 +278,7 @@ namespace QS3D.BricsCAD.V25
                 + "\"response_types\":[\"code\"]}");
         }
 
-        private static McpOAuthHttpResponse Authorize(string query, string resource, string signingSecret)
+        private static McpOAuthHttpResponse Authorize(string query, string resource, string issuer, string signingSecret)
         {
             Dictionary<string, string> values;
             string error;
@@ -303,23 +304,23 @@ namespace QS3D.BricsCAD.V25
             if (!IsValidClient(clientId, resource, signingSecret, redirect))
                 return OAuthError(400, "Bad Request", "invalid_request", "client registration is invalid for this resource");
             if (!string.Equals(responseType, "code", StringComparison.Ordinal))
-                return RedirectOAuthError(redirect, values, "unsupported_response_type", "only authorization code is supported");
+                return RedirectOAuthError(redirect, values, issuer, "unsupported_response_type", "only authorization code is supported");
             if (!ConstantTimeEquals(requestedResource, resource))
-                return RedirectOAuthError(redirect, values, "invalid_target", "resource does not match the active QS3D MCP endpoint");
+                return RedirectOAuthError(redirect, values, issuer, "invalid_target", "resource does not match the active QS3D MCP endpoint");
             string normalizedScope;
             if (!TryNormalizeAuthorizationScope(scope, out normalizedScope))
-                return RedirectOAuthError(redirect, values, "invalid_scope", "requested scope is not supported");
+                return RedirectOAuthError(redirect, values, issuer, "invalid_scope", "requested scope is not supported");
             if (!string.Equals(challengeMethod, "S256", StringComparison.Ordinal)
                 || !IsValidPkceChallenge(challenge))
-                return RedirectOAuthError(redirect, values, "invalid_request", "PKCE S256 is required");
+                return RedirectOAuthError(redirect, values, issuer, "invalid_request", "PKCE S256 is required");
 
             var consent = McpOAuthConsent.RequestApproval(resource, normalizedScope);
             if (consent == McpOAuthConsentResult.InteractionRequired)
-                return RedirectOAuthError(redirect, values, "interaction_required", "local QS3D authorization requires foreground interaction after CAD writer activity completes");
+                return RedirectOAuthError(redirect, values, issuer, "interaction_required", "local QS3D authorization requires foreground interaction after CAD writer activity completes");
             if (consent == McpOAuthConsentResult.Denied)
-                return RedirectOAuthError(redirect, values, "access_denied", "local QS3D authorization was denied");
+                return RedirectOAuthError(redirect, values, issuer, "access_denied", "local QS3D authorization was denied");
             if (consent != McpOAuthConsentResult.Approved)
-                return RedirectOAuthError(redirect, values, "temporarily_unavailable", "local QS3D authorization is unavailable");
+                return RedirectOAuthError(redirect, values, issuer, "temporarily_unavailable", "local QS3D authorization is unavailable");
 
             var expires = UnixNow() + (long)AuthorizationCodeLifetime.TotalSeconds;
             var code = CreateSignedToken(
@@ -332,6 +333,7 @@ namespace QS3D.BricsCAD.V25
             var location = redirect + "?code=" + Uri.EscapeDataString(code);
             string state;
             if (values.TryGetValue("state", out state)) location += "&state=" + Uri.EscapeDataString(state);
+            location += "&iss=" + Uri.EscapeDataString(issuer);
             return Redirect(location);
         }
 
@@ -675,7 +677,7 @@ namespace QS3D.BricsCAD.V25
                         continue;
                     }
                     if (ch > 0x7f) return false;
-                    bytes.Add((byte)ch);
+                    bytes.Add((byte)ch;
                 }
                 decoded = StrictUtf8.GetString(bytes.ToArray());
                 return decoded.IndexOf('\0') < 0;
@@ -874,6 +876,7 @@ namespace QS3D.BricsCAD.V25
         private static McpOAuthHttpResponse RedirectOAuthError(
             string redirect,
             IDictionary<string, string> values,
+            string issuer,
             string code,
             string description)
         {
@@ -883,6 +886,7 @@ namespace QS3D.BricsCAD.V25
                            + "&error_description=" + Uri.EscapeDataString(description);
             string state;
             if (values != null && values.TryGetValue("state", out state)) location += "&state=" + Uri.EscapeDataString(state);
+            location += "&iss=" + Uri.EscapeDataString(issuer);
             return Redirect(location);
         }
 
