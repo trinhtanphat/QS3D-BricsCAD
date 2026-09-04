@@ -15,6 +15,11 @@ name: QS3D Hybrid PR Coordinator
   "push":
     branches:
       - main
+  "workflow_run":
+    workflows:
+      - "QS3D Shared Branch and Integration CI"
+    types:
+      - completed
 
 permissions:
   contents: read
@@ -105,6 +110,135 @@ jobs:
             -f pullRequestId="$node_id" \
             --silent
           echo "Armed GitHub native auto-merge for PR #${PR_NUMBER} at api_head_sha=${api_head_sha}."
+
+  promote-green-draft:
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Promote exact-head GREEN drafts and arm native auto-merge
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}
+          EVENT_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_PULL_REQUESTS_JSON: ${{ toJson(github.event.workflow_run.pull_requests) }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::error::QS3D_AUTOMERGE_TOKEN is required; green-draft promotion cannot run."
+            exit 1
+          fi
+
+          event_head_sha="$EVENT_HEAD_SHA"
+          mapfile -t pr_numbers < <(jq -r '.[].number' <<<"$RUN_PULL_REQUESTS_JSON")
+          if (( ${#pr_numbers[@]} == 0 )); then
+            echo "Successful Shared CI run has no associated pull request; nothing to promote."
+            exit 0
+          fi
+
+          for PR_NUMBER in "${pr_numbers[@]}"; do
+            pr_json="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
+            api_head_sha="$(jq -r '.head.sha' <<<"$pr_json")"
+            state="$(jq -r '.state' <<<"$pr_json")"
+            draft="$(jq -r '.draft' <<<"$pr_json")"
+            base_ref="$(jq -r '.base.ref' <<<"$pr_json")"
+            head_repo="$(jq -r '.head.repo.full_name // ""' <<<"$pr_json")"
+            author_login="$(jq -r '.user.login // ""' <<<"$pr_json")"
+            mergeable="$(jq -r '.mergeable' <<<"$pr_json")"
+            mergeable_state="$(jq -r '.mergeable_state' <<<"$pr_json")"
+            opted_out="$(jq -r '[.labels[].name] | any(. == "no-automerge")' <<<"$pr_json")"
+
+            if [[ "$state" != "open" || "$base_ref" != "main" || "$head_repo" != "$GITHUB_REPOSITORY" ]]; then
+              echo "PR #${PR_NUMBER} is outside the open/main/same-repository promotion boundary; skipping."
+              continue
+            fi
+            if [[ "$api_head_sha" != "$event_head_sha" ]]; then
+              echo "PR #${PR_NUMBER} head moved from event_head_sha=${event_head_sha} to api_head_sha=${api_head_sha}; skipping stale GREEN evidence."
+              continue
+            fi
+            if [[ "$author_login" == "dependabot[bot]" ]]; then
+              echo "Skipping PR #${PR_NUMBER}: dependabot[bot]."
+              continue
+            fi
+            if [[ "$opted_out" == "true" ]]; then
+              echo "Skipping PR #${PR_NUMBER}: no-automerge."
+              continue
+            fi
+            if [[ "$mergeable" == "false" || "$mergeable_state" == "dirty" ]]; then
+              echo "Skipping PR #${PR_NUMBER}: conflict/dirty merge state."
+              continue
+            fi
+
+            current_main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+            compare_status="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${current_main_sha}...${api_head_sha}" --jq '.status')"
+            if [[ "$compare_status" != "ahead" && "$compare_status" != "identical" ]]; then
+              if output="$(gh api --method PUT "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/update-branch" -f expected_head_sha="$api_head_sha" 2>&1)"; then
+                echo "Refreshed PR #${PR_NUMBER} from current main; a fresh exact-head Shared CI run is required before promotion."
+                continue
+              elif grep -Eq 'HTTP (409|422)' <<<"$output"; then
+                refreshed_json="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
+                refreshed_head_sha="$(jq -r '.head.sha' <<<"$refreshed_json")"
+                latest_main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+                latest_compare_status="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${latest_main_sha}...${refreshed_head_sha}" --jq '.status')"
+                if [[ "$refreshed_head_sha" != "$api_head_sha" ]]; then
+                  echo "PR #${PR_NUMBER} changed during refresh reconciliation; a fresh exact-head Shared CI run is required."
+                  continue
+                fi
+                if [[ "$latest_compare_status" != "ahead" && "$latest_compare_status" != "identical" ]]; then
+                  echo "::notice::PR #${PR_NUMBER} is still behind/diverged after a safely declined refresh: ${output}"
+                  continue
+                fi
+                pr_json="$refreshed_json"
+              else
+                echo "::error::Unexpected refresh failure for GREEN draft PR #${PR_NUMBER}: ${output}"
+                exit 1
+              fi
+            fi
+
+            node_id="$(jq -r '.node_id' <<<"$pr_json")"
+            draft="$(jq -r '.draft' <<<"$pr_json")"
+            if [[ "$draft" == "true" ]]; then
+              ready_json="$(gh api graphql \
+                -f query='mutation($pullRequestId:ID!){markPullRequestReadyForReview(input:{pullRequestId:$pullRequestId}){pullRequest{number isDraft headRefOid}}}' \
+                -f pullRequestId="$node_id")"
+              ready_is_draft="$(jq -r '.data.markPullRequestReadyForReview.pullRequest.isDraft' <<<"$ready_json")"
+              ready_head_sha="$(jq -r '.data.markPullRequestReadyForReview.pullRequest.headRefOid' <<<"$ready_json")"
+              if [[ "$ready_is_draft" != "false" || "$ready_head_sha" != "$event_head_sha" ]]; then
+                echo "::error::PR #${PR_NUMBER} ready transition was not bound to exact GREEN head ${event_head_sha}."
+                exit 1
+              fi
+              echo "Promoted exact-head GREEN PR #${PR_NUMBER} from draft to ready for review."
+            elif [[ "$draft" != "false" ]]; then
+              echo "::error::PR #${PR_NUMBER} returned an invalid draft state: ${draft}."
+              exit 1
+            fi
+
+            latest_json="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
+            latest_head_sha="$(jq -r '.head.sha' <<<"$latest_json")"
+            latest_state="$(jq -r '.state' <<<"$latest_json")"
+            latest_base_ref="$(jq -r '.base.ref' <<<"$latest_json")"
+            latest_draft="$(jq -r '.draft' <<<"$latest_json")"
+            if [[ "$latest_head_sha" != "$event_head_sha" || "$latest_state" != "open" || "$latest_base_ref" != "main" || "$latest_draft" != "false" ]]; then
+              echo "PR #${PR_NUMBER} changed after promotion; native auto-merge will not be armed from stale GREEN evidence."
+              continue
+            fi
+
+            node_id="$(jq -r '.node_id' <<<"$latest_json")"
+            auto_merge_json="$(gh api graphql \
+              -f query='query($pullRequestId:ID!){node(id:$pullRequestId){... on PullRequest{autoMergeRequest{enabledAt}}}}' \
+              -f pullRequestId="$node_id")"
+            existing="$(jq -r '.data.node.autoMergeRequest.enabledAt // ""' <<<"$auto_merge_json")"
+            if [[ -n "$existing" ]]; then
+              echo "Native auto-merge already armed for GREEN PR #${PR_NUMBER}."
+              continue
+            fi
+
+            gh api graphql \
+              -f query='mutation($pullRequestId:ID!){enablePullRequestAutoMerge(input:{pullRequestId:$pullRequestId,mergeMethod:MERGE}){pullRequest{number autoMergeRequest{enabledAt}}}}' \
+              -f pullRequestId="$node_id" \
+              --silent
+            echo "Armed native auto-merge for exact-head GREEN PR #${PR_NUMBER}."
+          done
 
   refresh-branches:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
