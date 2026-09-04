@@ -134,8 +134,11 @@ def main() -> int:
         "CAD dispatch cancelled-before-start state": "CadWorkCancelledBeforeStart = 2",
         "CAD dispatch atomic start claim": "Interlocked.CompareExchange(ref item.DispatchState, CadWorkRunning, CadWorkQueued)",
         "CAD dispatch atomic timeout cancellation": "Interlocked.CompareExchange(ref item.DispatchState, CadWorkCancelledBeforeStart, CadWorkQueued)",
-        "CAD dispatch started-work settlement": "item.Done.Wait();",
-        "CAD dispatch no-auto-retry truth": "never retry uncertain work",
+        "CAD dispatch started-work bounded handoff": "item.DetachAfterStartedTimeout();",
+        "CAD dispatch started-work response deadline": "throw new CadStartedTimeoutException(item);",
+        "CAD dispatch mutation writer detachment": "McpCadMutationCoordinator.DetachMutationForDeferredCompletion(writerScope)",
+        "CAD dispatch terminal writer handoff": "timeout.TransferWriterScope(deferredWriterScope);",
+        "CAD dispatch no-replay truth": "completion continues without replay",
         "transactional native entities": "transaction.Commit()",
         "mutation audit": "mcp-agent-audit.jsonl",
         "bounded audit rotation": "MaxAuditBytes",
@@ -195,6 +198,8 @@ def main() -> int:
         errors.append("CAD dispatch still uses a check-then-act cancellation flag")
     if "item.Abandoned" in runtime or "public int Abandoned" in runtime:
         errors.append("CAD dispatch restored the racy abandoned completion-handle handoff")
+    if "item.Done.Wait();" in runtime:
+        errors.append("CAD dispatch restored an unbounded started-work completion wait")
     if "databaseHandleSeed" in runtime:
         errors.append("MCP runtime leaks database handle seed")
     if '"fileName"' in runtime and "document.Database.Filename" in runtime:
