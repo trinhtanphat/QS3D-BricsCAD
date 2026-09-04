@@ -7,40 +7,28 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "dispatch-v25-cloud-after-main-integration.yml"
 RESERVATION_PREFIX = "QS3D_V25_PREVIEW_RESERVATION"
 RESERVATION_ISSUE = 1441
-TAG_RE = re.compile(r"^v0\.1\.0-preview\.([1-9][0-9]*)$")
 RESERVATION_RE = re.compile(
     rf"^{RESERVATION_PREFIX} ordinal=([1-9][0-9]*) source_sha=([0-9a-f]{{40}}) run_id=([1-9][0-9]*)$"
 )
 errors = []
 
 
-def parse_ordinal(text, source):
-    if not re.fullmatch(r"[1-9][0-9]*", text):
-        raise ValueError(source + " ordinal is non-canonical: " + text)
-    if len(text) > 5:
-        raise ValueError(source + " ordinal exceeds FileVersion width: " + text)
-    value = int(text, 10)
-    if value > 65535:
-        raise ValueError(source + " ordinal exceeds FileVersion range: " + text)
-    return value
-
-
-def next_preview(tags, reservation_comments):
-    values = []
-    for tag in tags:
-        match = TAG_RE.fullmatch(tag)
-        if not match:
-            raise ValueError("published tag is non-canonical: " + tag)
-        values.append(parse_ordinal(match.group(1), "published"))
-    for body in reservation_comments:
+def reservation_state(comments, committed_ordinal, source_sha):
+    exact = False
+    conflict = False
+    for body in comments:
         match = RESERVATION_RE.fullmatch(body)
         if not match:
             continue
-        values.append(parse_ordinal(match.group(1), "reserved"))
-    current = max(values, default=0)
-    if current >= 65535:
-        raise OverflowError("preview ordinal exhausted")
-    return current + 1
+        ordinal = int(match.group(1), 10)
+        owner = match.group(2)
+        if ordinal != committed_ordinal:
+            continue
+        if owner == source_sha:
+            exact = True
+        else:
+            conflict = True
+    return exact, conflict
 
 
 def expect(label, actual, expected):
@@ -48,44 +36,50 @@ def expect(label, actual, expected):
         errors.append(f"{label}: expected {expected}, got {actual}")
 
 
-expect("published-only sequence", next_preview(["v0.1.0-preview.10015"], []), 10016)
+source = "a" * 40
+expect("empty ledger", reservation_state([], 10303, source), (False, False))
 expect(
-    "in-flight reservation advances sequence",
-    next_preview(
-        ["v0.1.0-preview.10015"],
-        [RESERVATION_PREFIX + " ordinal=10016 source_sha=" + "a" * 40 + " run_id=31856129239"],
+    "exact reservation is reusable",
+    reservation_state(
+        [f"{RESERVATION_PREFIX} ordinal=10303 source_sha={source} run_id=1"],
+        10303,
+        source,
     ),
-    10017,
+    (True, False),
 )
 expect(
-    "failed reservation remains consumed",
-    next_preview(
-        ["v0.1.0-preview.10014"],
+    "same ordinal different source conflicts",
+    reservation_state(
+        [f"{RESERVATION_PREFIX} ordinal=10303 source_sha={'b' * 40} run_id=2"],
+        10303,
+        source,
+    ),
+    (False, True),
+)
+expect(
+    "complete ledger preserves conflict even with exact entry",
+    reservation_state(
         [
-            RESERVATION_PREFIX + " ordinal=10015 source_sha=" + "b" * 40 + " run_id=1",
-            RESERVATION_PREFIX + " ordinal=10016 source_sha=" + "c" * 40 + " run_id=2",
+            f"{RESERVATION_PREFIX} ordinal=10303 source_sha={source} run_id=1",
+            f"{RESERVATION_PREFIX} ordinal=10303 source_sha={'c' * 40} run_id=2",
         ],
+        10303,
+        source,
     ),
-    10017,
+    (True, True),
 )
 expect(
-    "unrelated issue comments are ignored",
-    next_preview(["v0.1.0-preview.9"], ["human note", "ordinal=50000"]),
-    10,
+    "other ordinals and human notes are ignored",
+    reservation_state(
+        [
+            "human note",
+            f"{RESERVATION_PREFIX} ordinal=10302 source_sha={'d' * 40} run_id=3",
+        ],
+        10303,
+        source,
+    ),
+    (False, False),
 )
-
-for bad in ("v0.1.0-preview.0", "v0.1.0-preview.01", "v0.1.0-preview.65536"):
-    try:
-        next_preview([bad], [])
-        errors.append("non-canonical/out-of-range tag was accepted: " + bad)
-    except ValueError:
-        pass
-
-try:
-    next_preview(["v0.1.0-preview.65535"], [])
-    errors.append("preview exhaustion at 65535 was not rejected")
-except OverflowError:
-    pass
 
 if not WORKFLOW.is_file():
     errors.append("missing V25 post-main dispatcher workflow")
@@ -97,8 +91,15 @@ else:
         "issues: write",
         f"reservation_issue={RESERVATION_ISSUE}",
         f'reservation_prefix="{RESERVATION_PREFIX}"',
+        "committed_preview_ordinal=",
+        "exact_reservation=0",
+        "reservation_conflict=0",
+        "reserved_ordinal == committed_preview_ordinal",
+        'reserved_source == "${source_sha}"',
+        'reserved_source != "${source_sha}"',
         'gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments"',
-        'reservation="${reservation_prefix} ordinal=${preview} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"',
+        'if (( reservation_conflict != 0 )); then',
+        'reservation="${reservation_prefix} ordinal=${committed_preview_ordinal} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"',
         'gh api --method POST',
         '"repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments"',
         '-f body="${reservation}"',
@@ -109,15 +110,29 @@ else:
     )
     for token in required:
         if token not in text:
-            errors.append("dispatcher reservation contract missing token: " + token)
+            errors.append("dispatcher committed reservation contract missing token: " + token)
 
-    if "contents: write" in text:
-        errors.append("dispatcher must not gain contents: write for preview reservation")
+    for forbidden in (
+        "contents: write",
+        "max_preview=",
+        "preview=$((max_preview + 1))",
+        'reservation="${reservation_prefix} ordinal=${preview}',
+    ):
+        if forbidden in text:
+            errors.append("dispatcher must not use legacy reservation allocator token: " + forbidden)
 
-    reserve_index = text.find('-f body="${reservation}"')
-    dispatch_index = text.find("gh workflow run release-v25-cloud.yml")
-    if reserve_index < 0 or dispatch_index < 0 or reserve_index >= dispatch_index:
-        errors.append("preview ordinal must be durably reserved before downstream release dispatch")
+    loop_index = text.find("while IFS= read -r reservation; do")
+    loop_end = text.find("done < <(gh api --paginate", loop_index)
+    conflict_index = text.find("if (( reservation_conflict != 0 )); then", loop_end)
+    reserve_index = text.find('-f body="${reservation}"', conflict_index)
+    dispatch_index = text.find("gh workflow run release-v25-cloud.yml", reserve_index)
+    indexes = (loop_index, loop_end, conflict_index, reserve_index, dispatch_index)
+    if min(indexes) < 0 or not (
+        loop_index < loop_end < conflict_index < reserve_index < dispatch_index
+    ):
+        errors.append(
+            "dispatcher must scan the complete reservation ledger, reject conflicts, then durably reserve before downstream dispatch"
+        )
 
 print("QS3D V25 preview reservation preflight")
 if errors:
@@ -127,6 +142,7 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: automatic V25 preview allocation advances across both published tags and durable in-flight reservations, "
-    "records the reservation before dispatch, and keeps main contents read-only."
+    "PASS: automatic V25 dispatch binds reservation identity to committed ProductVersion, "
+    "reuses only an exact source reservation, rejects same-ordinal conflicts after complete ledger scan, "
+    "records a new reservation before dispatch, and keeps main contents read-only."
 )
