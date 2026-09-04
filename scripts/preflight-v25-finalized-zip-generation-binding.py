@@ -73,6 +73,7 @@ def main() -> int:
         "if ($zipPublished)",
         "if ($zipExistedBeforePublish",
         "$zip = Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip rollback target'",
+        "$zipBackup = Assert-SafeFile -Path $zipBackup -Label 'original PackageZip rollback backup'",
         "[IO.File]::Replace($zipBackup, $zip, $zipRollbackDiscard, $true)",
         "Remove-Item -LiteralPath $zip -Force -ErrorAction Stop",
     )
