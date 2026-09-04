@@ -9,7 +9,6 @@ required = [
     "private const int PublicProbeTimeoutMs",
     "private const int PublicProbeRetryDelayMs",
     "private static bool _publicReady;",
-    "private static string RouteProofPath",
     "public static bool IsPublicReady",
     "PublicMcpUrl => IsRunning && IsPublicReady",
     "private static bool EnsureDnsRoute(string executable, string tunnelId, string hostname, out string error)",
@@ -44,12 +43,21 @@ ensure = source[ensure_start:ensure_end]
 for token in [
     "tunnel route dns ",
     "LooksLikeExistingRouteConflict",
-    "HasExpectedLocalRouteProof",
     "route=conflict",
     "route=ready",
 ]:
     if token not in ensure:
-        raise SystemExit(f"DNS route re-assertion must fail closed and preserve local ownership proof: {token}")
+        raise SystemExit(f"DNS route re-assertion must fail closed: {token}")
+
+for forbidden in [
+    "HasExpectedLocalRouteProof",
+    "hadExpectedLocalProof",
+    "route=ready(existing-local-proof)",
+]:
+    if forbidden in ensure:
+        raise SystemExit(
+            "DNS route conflict must fail closed even when stale local route/config proof exists: " + forbidden
+        )
 
 wait_start = source.index("private static bool WaitForPublicReadiness(string hostname, out string error)")
 wait_end = source.index("private static bool ProbePublicDns", wait_start)
