@@ -10,11 +10,14 @@ errors = []
 required = {
     "workspace version synchronizer": "function Set-WorkspaceProductVersion",
     "requested tag drives product version": "$productVersion = $tag.Substring(1)",
-    "bounded V25 project path": "$workspaceVersionPath = 'src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj'",
+    "bounded V25 project path": "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj",
+    "bounded V26 project path": "src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj",
+    "bounded Core project path": "src/QS3D.Core/QS3D.Core.csproj",
     "Version synchronization": "Set-ProjectVersionValue -Name 'Version' -Value $productVersion",
     "FileVersion synchronization": "Set-ProjectVersionValue -Name 'FileVersion' -Value $fileVersion",
     "InformationalVersion synchronization": "Set-ProjectVersionValue -Name 'InformationalVersion' -Value $productVersion",
     "workspace-only rewrite call": "Set-WorkspaceProductVersion",
+    "post-sync identity validation": "Runtime product-version identity preflight failed after workspace synchronization.",
     "source HEAD remains release base": "Release workspace HEAD must remain the protected-main source commit.",
     "no commit/push mutation contract": "No commit, push, branch-protection bypass, or protected-main mutation was performed by release preparation.",
 }
@@ -31,11 +34,11 @@ for label, needle in forbidden.items():
     if needle in text:
         errors.append(f"stale {label} remains: {needle}")
 
-# The intentional dirty workspace must be bounded to the single V25 project file.
+# The intentional dirty workspace must be bounded to the V25/V26/Core identity trio.
 if "Unexpected release-preparation workspace change" not in text:
-    errors.append("missing fail-closed rejection for workspace changes outside the V25 project file")
-if "Workspace version synchronization did not produce exactly one bounded V25 project modification." not in text:
-    errors.append("missing exact-one intentional workspace modification assertion")
+    errors.append("missing fail-closed rejection for workspace changes outside the project identity trio")
+if "Workspace version synchronization did not produce exactly three bounded project modifications." not in text:
+    errors.append("missing exact-three intentional workspace modification assertion")
 
 # Keep source identity and drift admission before any workspace mutation.
 try:
@@ -51,4 +54,4 @@ if errors:
         print(f"ERROR: {error}")
     raise SystemExit(1)
 
-print("PASS: V25 manual release synchronizes preview identity only in the bounded workspace while preserving protected-main source identity.")
+print("PASS: V25 manual release synchronizes the coherent V25/V26/Core preview identity only in the bounded workspace while preserving protected-main source identity.")
