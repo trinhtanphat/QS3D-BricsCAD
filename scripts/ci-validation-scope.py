@@ -27,6 +27,7 @@ BUILD_EXACT = {
     "Directory.Build.props",
     "QS3D.sln",
     "QS3D.V26.sln",
+    "external/QS3D-Platform",
 }
 SOURCE_EXACT = {
     "CI_POLICY.md",
