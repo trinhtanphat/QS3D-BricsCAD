@@ -107,7 +107,7 @@ namespace QS3D.Core.SmokeTests
         private static ProjectState CreateProjectWithFamily(out ProjectFamily family)
         {
             var project = new ProjectState("P-FAMILY-PROPERTY-ADMISSION", "Family property admission regression");
-            family = new ProjectFamily("F-WALL", "Wall", ElementCategory.Wall);
+            family = new ProjectFamily("F-WALL", "Wall", ElementCategory.ArchitecturalWall);
             project.Families.Add(family);
             return project;
         }
