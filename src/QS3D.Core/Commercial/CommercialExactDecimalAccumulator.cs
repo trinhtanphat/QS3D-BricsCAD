@@ -65,6 +65,17 @@ namespace QS3D.Core.Commercial
                 "Commercial subtraction precision loss: " + label + ".");
         }
 
+        internal static decimal MultiplyExact(decimal left, decimal right, string label)
+        {
+            Decode(left, out var leftCoefficient, out var leftScale);
+            Decode(right, out var rightCoefficient, out var rightScale);
+            return MaterializeArithmetic(
+                leftCoefficient * rightCoefficient,
+                leftScale + rightScale,
+                label + " overflowed decimal arithmetic.",
+                "Commercial multiplication precision loss: " + label + ".");
+        }
+
         private static void Decode(decimal value, out BigInteger coefficient, out int scale)
         {
             var bits = decimal.GetBits(value);
@@ -104,6 +115,11 @@ namespace QS3D.Core.Commercial
             if (signedCoefficient.IsZero)
                 return 0m;
 
+            while (scale > 28 && signedCoefficient % 10 == 0)
+            {
+                signedCoefficient /= 10;
+                scale--;
+            }
             if (scale > 28)
                 throw new OverflowException(precisionLossMessage);
 
