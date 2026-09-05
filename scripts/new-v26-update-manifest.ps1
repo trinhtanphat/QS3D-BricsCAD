@@ -97,6 +97,49 @@ function Assert-HeldGeneratedScript {
     }
 }
 
+function Remove-V26ManifestTemporaryWorkspaceStrict {
+    param([Parameter(Mandatory = $true)][string]$ScriptPath, [Parameter(Mandatory = $true)][string]$RootPath)
+
+    if (Test-Path -LiteralPath $ScriptPath) {
+        Assert-OrdinaryPathItem -Path $ScriptPath -Label 'Generated V26 update-manifest script' -Directory $false | Out-Null
+        Remove-Item -LiteralPath $ScriptPath -Force -ErrorAction Stop
+        if (Test-Path -LiteralPath $ScriptPath) { throw "Generated V26 update-manifest script still exists after cleanup: $ScriptPath" }
+    }
+    if (Test-Path -LiteralPath $RootPath) {
+        Assert-DirectoryAncestorChain -Path $RootPath -Label 'V26 manifest temporary ancestor'
+        Assert-OrdinaryPathItem -Path $RootPath -Label 'V26 manifest temporary workspace' -Directory $true | Out-Null
+        $residue = @(Get-ChildItem -LiteralPath $RootPath -Force)
+        if ($residue.Count -ne 0) { throw "V26 manifest temporary workspace contains unexpected residue; refusing recursive cleanup: $RootPath" }
+        Remove-Item -LiteralPath $RootPath -Force -ErrorAction Stop
+        if (Test-Path -LiteralPath $RootPath) { throw "V26 manifest temporary workspace still exists after cleanup: $RootPath" }
+    }
+}
+
+function Remove-V26ManifestTemporaryWorkspaceBestEffort {
+    param([Parameter(Mandatory = $true)][string]$ScriptPath, [Parameter(Mandatory = $true)][string]$RootPath)
+
+    try {
+        if (Test-Path -LiteralPath $ScriptPath) {
+            $scriptItem = Get-Item -LiteralPath $ScriptPath -Force -ErrorAction Stop
+            if (-not $scriptItem.PSIsContainer -and ($scriptItem -is [IO.FileInfo]) -and (($scriptItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0)) {
+                Remove-Item -LiteralPath $ScriptPath -Force -ErrorAction Stop
+            }
+        }
+    }
+    catch { Write-Verbose "Secondary V26 manifest script cleanup failed while preserving the primary failure: $($_.Exception.Message)" }
+
+    try {
+        if (Test-Path -LiteralPath $RootPath) {
+            $rootItem = Get-Item -LiteralPath $RootPath -Force -ErrorAction Stop
+            if ($rootItem.PSIsContainer -and (($rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0)) {
+                $residue = @(Get-ChildItem -LiteralPath $RootPath -Force -ErrorAction Stop)
+                if ($residue.Count -eq 0) { Remove-Item -LiteralPath $RootPath -Force -ErrorAction Stop }
+            }
+        }
+    }
+    catch { Write-Verbose "Secondary V26 manifest workspace cleanup failed while preserving the primary failure: $($_.Exception.Message)" }
+}
+
 $generator = Join-Path $PSScriptRoot 'new-v26-script-from-v25.ps1'
 if (-not (Test-Path -LiteralPath $generator -PathType Leaf)) { throw "V26 script transformer was not found: $generator" }
 Assert-DirectoryAncestorChain -Path (Split-Path -Parent $generator) -Label 'V26 transformer ancestor'
@@ -113,6 +156,7 @@ New-Item -ItemType Directory -Path $tempRoot | Out-Null
 Assert-DirectoryAncestorChain -Path $tempRoot -Label 'V26 manifest temporary ancestor'
 Assert-OrdinaryPathItem -Path $tempRoot -Label 'V26 manifest temporary workspace' -Directory $true | Out-Null
 $generatedStream = $null
+$primaryFailure = $null
 try {
     & $generator -SourceScript 'new-v25-update-manifest.ps1' -OutputPath $tempScript
     if (-not $?) { throw 'Could not generate the V26 update-manifest implementation.' }
@@ -137,20 +181,24 @@ try {
     if (-not $?) { throw 'V26 update-manifest generation failed.' }
     Assert-HeldGeneratedScript -Stream $generatedStream -Admitted $generatedItem -ExpectedPath $tempScript
 }
+catch {
+    $primaryFailure = $_
+    throw
+}
 finally {
-    if ($null -ne $generatedStream) {
-        $generatedStream.Dispose()
-        $generatedStream = $null
+    if ($null -eq $primaryFailure) {
+        if ($null -ne $generatedStream) {
+            $generatedStream.Dispose()
+            $generatedStream = $null
+        }
+        Remove-V26ManifestTemporaryWorkspaceStrict -ScriptPath $tempScript -RootPath $tempRoot
     }
-    if (Test-Path -LiteralPath $tempScript) {
-        Assert-OrdinaryPathItem -Path $tempScript -Label 'Generated V26 update-manifest script' -Directory $false | Out-Null
-        Remove-Item -LiteralPath $tempScript -Force -ErrorAction Stop
-    }
-    if (Test-Path -LiteralPath $tempRoot) {
-        Assert-DirectoryAncestorChain -Path $tempRoot -Label 'V26 manifest temporary ancestor'
-        Assert-OrdinaryPathItem -Path $tempRoot -Label 'V26 manifest temporary workspace' -Directory $true | Out-Null
-        $residue = @(Get-ChildItem -LiteralPath $tempRoot -Force)
-        if ($residue.Count -ne 0) { throw "V26 manifest temporary workspace contains unexpected residue; refusing recursive cleanup: $tempRoot" }
-        Remove-Item -LiteralPath $tempRoot -Force -ErrorAction Stop
+    else {
+        if ($null -ne $generatedStream) {
+            try { $generatedStream.Dispose() }
+            catch { Write-Verbose "Secondary V26 manifest held-stream cleanup failed while preserving the primary failure: $($_.Exception.Message)" }
+            finally { $generatedStream = $null }
+        }
+        Remove-V26ManifestTemporaryWorkspaceBestEffort -ScriptPath $tempScript -RootPath $tempRoot
     }
 }
