@@ -366,26 +366,14 @@ namespace QS3D.LocalQualification.V25
                         var scope = RequirePropertyScope(_workspace!);
                         if (!AwaitAction(() => scope.ItemContainerGenerator.ContainerFromItem("Family / Type") as ComboBoxItem
                             ?? throw new ProbeException("ui_family_scope_item_missing"), "click", string.Empty)) return;
-                        if (!string.Equals(scope.SelectedItem as string, "Family / Type", StringComparison.Ordinal)) return;
-                        Advance(UiStage.SelectFoundationParent);
-                        break;
-                    }
-
-                    case UiStage.SelectFoundationParent:
-                    {
-                        var tree = FindVisualDescendants<TreeView>(_workspace!).Single(x => x.Name == "ModelTree");
-                        var parent = TreeItems(tree.Items).Single(item => string.Equals(item.Tag as string, "Foundation", StringComparison.Ordinal));
-                        if (!AwaitAction(() => FindVisualDescendants<TextBlock>(parent).Single(text => text.IsVisible && text.Text == "Móng"), "click", string.Empty)) return;
-                        if (!parent.IsSelected) return;
-                        Advance(UiStage.ReselectSingleFooting);
-                        break;
-                    }
-
-                    case UiStage.ReselectSingleFooting:
-                    {
-                        var item = RequireSingleFootingTree(_workspace!);
-                        if (!AwaitAction(() => FindVisualDescendants<TextBlock>(item).Single(text => text.IsVisible && text.Text == "Móng đơn"), "click", string.Empty)) return;
-                        if (!item.IsSelected) return;
+                        UiTrace("selected_scope_after_ack=" + scope.SelectedItem);
+                        if (!string.Equals(scope.SelectedItem as string, "Family / Type", StringComparison.Ordinal))
+                        {
+                            _stableIdleTicks = 0;
+                            return;
+                        }
+                        if (++_stableIdleTicks < 2) return;
+                        _stableIdleTicks = 0;
                         if (!ReferenceEquals(ProjectFamilyActivationService.GetActive(_project!), _family))
                             throw new ProbeException("ui_edit_family_changed");
                         Advance(UiStage.RevealH2);
@@ -395,6 +383,10 @@ namespace QS3D.LocalQualification.V25
                     case UiStage.RevealH2:
                     {
                         var list = FindVisualDescendants<ListView>(_workspace!).Single(x => x.Name == "PropertyList");
+                        UiTrace("family_scope=" + RequirePropertyScope(_workspace!).SelectedItem + " rows=" +
+                            string.Join("|", list.Items.Cast<object>().Select(item => item.GetType().GetProperty("Name")?.GetValue(item, null) + ":" + item.GetType().GetProperty("Unit")?.GetValue(item, null))));
+                        if (!string.Equals(RequirePropertyScope(_workspace!).SelectedItem as string, "Family / Type", StringComparison.Ordinal))
+                            throw new ProbeException("ui_family_scope_reverted");
                         var row = list.Items.Cast<object>().SingleOrDefault(item => IsPropertyRow(item, "H2", "mm"))
                             ?? throw new ProbeException("ui_family_h2_row_missing");
                         list.ScrollIntoView(row);
@@ -758,8 +750,6 @@ namespace QS3D.LocalQualification.V25
             EndFirstDraw,
             OpenFamilyScope,
             SelectFamilyScope,
-            SelectFoundationParent,
-            ReselectSingleFooting,
             RevealH2,
             EditH2,
             StartSecondDraw,
