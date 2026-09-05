@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 GRID = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.GridFamilySubtype.cs"
 BLT = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.Blt3dFamilyWorkspace.cs"
 ROOM = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.RoomWorkspacePane.cs"
+FAMILY = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.FamilySubtype.cs"
 
 
 def read(path: Path) -> str:
@@ -88,6 +89,18 @@ def main() -> int:
         "Móng đơn dimensions route must win before the generic Family chooser",
     )
     require(blt_add, "HandleSingleFootingAdd(e);", "Móng đơn dimensions route disappeared")
+    require_before(blt_add, "OnGridAwareFamilyAddModeClick(sender, e);", "ShowBlt3dFamilyModeChooser();",
+                   "Grid must remain direct before the deferred Room overlay is applied")
+    predicate = method_body(blt, "private bool IsBlt3dFamilyAddButton")
+    require(predicate, "FindNearestAncestor<DockPanel>(FamilyList)", "Add ownership must be bound to the Family pane")
+    require_before(predicate, "!IsVisualDescendant(familyPane, button)", "var text = button.Content as string;",
+                   "Label matching must not admit the unrelated Room finish button")
+    family_predicate = method_body(read(FAMILY), "private bool IsWorkspaceAddFamilyButton")
+    require_before(family_predicate, "!IsBlt3dFamilyAddButton(button)", "var text = button.Content as string;",
+                   "Earlier Family/Grid wiring must also exclude the Room finish pane")
+    rename = method_body(blt, "private void RenameBlt3dButton")
+    require_before(rename, "!IsBlt3dFamilyAddButton(button)", "button.Content = newText;",
+                   "Family Add relabeling must preserve the Room finish label")
 
     room_rewire = method_body(room, "private void RewireBlt3dRoomAwareAddActions")
     require_before(

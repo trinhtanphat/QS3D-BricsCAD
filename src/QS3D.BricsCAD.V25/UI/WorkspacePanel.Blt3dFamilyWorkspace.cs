@@ -293,7 +293,11 @@ namespace QS3D.BricsCAD.V25.UI
         {
             foreach (var button in FindVisualChildren<Button>(this).Where(button =>
                          string.Equals(button.Content as string, oldText, StringComparison.Ordinal)))
+            {
+                // Identical Add labels also exist in the Room finish pane.
+                if (string.Equals(newText, "+ Add", StringComparison.Ordinal) && !IsBlt3dFamilyAddButton(button)) continue;
                 button.Content = newText;
+            }
         }
 
         private void EnsureBlt3dFoundationTree()
@@ -443,8 +447,10 @@ namespace QS3D.BricsCAD.V25.UI
             }
         }
 
-        private static bool IsBlt3dFamilyAddButton(Button button)
+        private bool IsBlt3dFamilyAddButton(Button button)
         {
+            var familyPane = FindNearestAncestor<DockPanel>(FamilyList);
+            if (familyPane == null || !IsVisualDescendant(familyPane, button)) return false;
             var text = button.Content as string;
             return string.Equals(text, "+ Add", StringComparison.Ordinal) ||
                    string.Equals(text, "+ Thêm", StringComparison.Ordinal) ||
@@ -458,6 +464,11 @@ namespace QS3D.BricsCAD.V25.UI
             if (IsSingleFootingSelected())
             {
                 HandleSingleFootingAdd(e);
+                return;
+            }
+            if (IsGridSubtype(_familySubtypeFilter))
+            {
+                OnGridAwareFamilyAddModeClick(sender, e);
                 return;
             }
             ShowBlt3dFamilyModeChooser();
