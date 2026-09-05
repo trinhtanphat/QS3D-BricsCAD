@@ -13,7 +13,8 @@ const fields = ['schema', 'run_id', 'sequence', 'action', 'x', 'y', 'text', 'tar
 const clicks = new Set(['SelectTree', 'OpenCancelDialog', 'OpenCreateDialog',
   'AcceptCreateDialog', 'StartFirstDraw', 'FirstCentre', 'SecondCentre', 'OpenFamilyScope',
   'SelectFamilyScope', 'StartSecondDraw', 'RepeatCentre']);
-const numericStages = { InputL1: '2', InputW1: '2', InputL2: '1', InputW2: '1', InputH1: '1', InputH2: '0', EditH2: '1000' };
+// Dialog and property editors use millimetres, unlike semantic geometry (metres).
+const numericStages = { InputL1: '2000', InputW1: '2000', InputL2: '1000', InputW2: '1000', InputH1: '1000', InputH2: '0', EditH2: '1000' };
 function requireCondition(condition, message) { if (!condition) throw new Error(message); }
 
 export function decodeObservedRequest(raw, runId, sequence, ownedPid) {

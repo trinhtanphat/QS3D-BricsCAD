@@ -26,6 +26,7 @@ for (const patch of [
   { text: '1' }, { action: 'text', text: 'arbitrary command' },
   { action: 'key', text: 'CTRL+A' }, { stage: 'UnknownStage' }, { stage: 'SelectTree\u00ad' },
   { stage: 'CancelDialog', action: 'click', text: '' },
+  { stage: 'InputL1', action: 'text', text: '2' }, { stage: 'InputH1', action: 'text', text: '1' },
 ]) assert.throws(() => decodeObservedRequest(JSON.stringify({ ...value, ...patch }), runId, 1, 12345));
 for (const bad of [raw.replace('"x":94', '"x":94,"x":95'),
   raw.replace('"x":94', '"x":94,"\\u0078":95'),

@@ -25,6 +25,11 @@ $policy
 ([type]$name)::Run()
 $writer = [regex]::Match($source, '(?ms)^        private static void WriteUiAction\([^\r\n]*\)\r?\n        \{.*?^        \}').Value
 if (-not $writer) { throw 'FAIL: actual request writer is missing.' }
+$fieldDefinitions = [regex]::Matches($source, '(?m)^            private static readonly string\[\] Field(?:Order|Text) = \{[^\r\n]+\};')
+if ($fieldDefinitions.Count -ne 2) { throw 'FAIL: exact actual dialog field definitions missing.' }
+$fieldSource = ($fieldDefinitions | ForEach-Object Value) -join "`n"
+if (-not $source.Contains('var key = FieldOrder[index];') -or -not $source.Contains('var expected = FieldText[index];') -or
+    -not $source.Contains('if (!AwaitAction(input, "text", expected)) return;')) { throw 'FAIL: InputField no longer uses extracted values.' }
 $serializerName = 'Local022ObservedSerializer' + [Guid]::NewGuid().ToString('N')
 Add-Type -TypeDefinition @"
 using System;
@@ -42,6 +47,7 @@ public static class $serializerName {
     private static string UiActionPath(Context context, int sequence) { return "contract-fixture-only"; }
     private static void WriteNewAtomic(string path, string body) { Serialized = body; }
 $writer
+$fieldSource
     public static string GetRequests() {
         var records = new List<string>();
         foreach (var stage in new[] { "SelectTree", "OpenCancelDialog", "OpenCreateDialog", "AcceptCreateDialog",
@@ -51,10 +57,10 @@ $writer
         foreach (var stage in new[] { "CancelDialog", "EndFirstDraw", "EndSecondDraw" }) {
             WriteUiAction(new Context(), 1, "key", 94, 471, stage == "EndFirstDraw" ? "ENTER" : "ESC", stage); records.Add(Serialized);
         }
-        foreach (var item in new[] { "InputL1=2", "InputW1=2", "InputL2=1", "InputW2=1", "InputH1=1", "InputH2=0", "EditH2=1000" }) {
-            var pair = item.Split('=');
-            WriteUiAction(new Context(), 1, "text", 94, 471, pair[1], pair[0]); records.Add(Serialized);
+        for (var index = 0; index < FieldOrder.Length; index++) {
+            WriteUiAction(new Context(), 1, "text", 94, 471, FieldText[index], "Input" + FieldOrder[index]); records.Add(Serialized);
         }
+        WriteUiAction(new Context(), 1, "text", 94, 471, "1000", "EditH2"); records.Add(Serialized);
         foreach (var invalid in new[] { "", "InputH2\n", "InputH2\"", "InputH2\\", "_InputH2" }) {
             bool rejected = false;
             try { WriteUiAction(new Context(), 1, "text", 94, 471, "0", invalid); } catch (ProbeException) { rejected = true; }
@@ -82,6 +88,15 @@ foreach ($major in @(25,26)) {
     }
     if (-not $runner.Contains("if (`$UiDriver -ceq 'NATIVE_V1') { [void]`$process.CloseMainWindow() }")) {
         throw 'FAIL: observed cleanup can send a PowerShell window message.'
+    }
+    $exitGuard = [regex]::Match($runner, '(?ms)^            elseif \(\$children.Count -eq 0\) \{\r?\n.*?^            \}').Value
+    if (-not $exitGuard) { throw 'FAIL: exited owned host waits whole phase without child or marker.' }
+    $exitGuard = [scriptblock]::Create(($exitGuard -replace 'elseif', 'if'))
+    & {
+        $children = @(); $rejected = $false
+        try { & $exitGuard } catch { $rejected = $_.Exception.Message -ceq 'Native host exited without marker or exact child; begin owned cleanup.' }
+        if (-not $rejected) { throw 'FAIL: missing host did not enter failure cleanup.' }
+        $children = @([pscustomobject]@{ProcessId=1}); & $exitGuard
     }
 }
 Write-Output 'PASS: V1 requires real hover, V2 explicitly does not claim hover, unknown driver fails closed, and external runs cannot enter PowerShell input branches.'

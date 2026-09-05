@@ -284,6 +284,9 @@ function Invoke-NativePhase([string]$Phase, [string[]]$Commands) {
                 $ownedProcesses.Add($process)
                 $handoff = $true
             } elseif ($children.Count -gt 1) { throw 'Ambiguous native host handoff.' }
+            elseif ($children.Count -eq 0) {
+                throw 'Native host exited without marker or exact child; begin owned cleanup.'
+            }
         }
         Start-Sleep -Milliseconds 500
     }
