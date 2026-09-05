@@ -4,7 +4,7 @@ param(
     [string]$ExtractDir = '',
     [string]$ExpectedSha256 = '',
     [Parameter(Mandatory = $true)][string]$PrimaryUrl,
-    [string]$MirrorUrl = '',
+    [switch]$UsePinnedHttpMirror,
     [string]$FallbackUrl = '',
     [switch]$ExtractReferences
 )
@@ -71,14 +71,9 @@ function Assert-SafeHttpsUrl {
 }
 
 function Assert-PinnedV26HttpMirrorUrl {
-    param([Parameter(Mandatory = $true)][string]$Url)
     $expectedMirror = 'http://103.9.157.20/BricsCAD-V26.2.07-1-en_US(x64).msi'
-    if (-not [string]::Equals($Url, $expectedMirror, [StringComparison]::Ordinal)) {
-        throw 'MirrorUrl must equal the owner-approved BricsCAD V26.2.07 HTTP mirror exactly.'
-    }
-
     $uri = $null
-    if (-not [Uri]::TryCreate($Url, [UriKind]::Absolute, [ref]$uri) -or
+    if (-not [Uri]::TryCreate($expectedMirror, [UriKind]::Absolute, [ref]$uri) -or
         $uri.Scheme -ne 'http' -or
         $uri.Host -ne '103.9.157.20' -or
         $uri.Port -ne 80 -or
@@ -86,9 +81,9 @@ function Assert-PinnedV26HttpMirrorUrl {
         -not [string]::IsNullOrEmpty($uri.Query) -or
         -not [string]::IsNullOrEmpty($uri.UserInfo) -or
         -not [string]::IsNullOrEmpty($uri.Fragment)) {
-        throw 'MirrorUrl must be the exact owner-approved plaintext HTTP BricsCAD V26.2.07 mirror.'
+        throw 'The built-in V26 HTTP mirror identity is invalid.'
     }
-    return $uri
+    return $expectedMirror
 }
 
 function Open-AdmittedV26Installer {
@@ -234,9 +229,9 @@ if ($null -eq $admission) {
         [void](Assert-SafeHttpsUrl -Url $PrimaryUrl -Label 'PrimaryUrl')
         $candidates += [pscustomobject]@{ Name = 'canonical-public'; Url = $PrimaryUrl }
     }
-    if (-not [string]::IsNullOrWhiteSpace($MirrorUrl)) {
-        [void](Assert-PinnedV26HttpMirrorUrl -Url $MirrorUrl)
-        $candidates += [pscustomobject]@{ Name = 'pinned-http-mirror'; Url = $MirrorUrl }
+    if ($UsePinnedHttpMirror) {
+        $pinnedMirror = Assert-PinnedV26HttpMirrorUrl
+        $candidates += [pscustomobject]@{ Name = 'pinned-http-mirror'; Url = $pinnedMirror }
     }
     if (-not [string]::IsNullOrWhiteSpace($FallbackUrl)) {
         [void](Assert-SafeHttpsUrl -Url $FallbackUrl -Label 'FallbackUrl')
