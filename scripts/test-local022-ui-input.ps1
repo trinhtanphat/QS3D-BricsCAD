@@ -181,3 +181,20 @@ Write-Output 'PASS: orchestrator refuses missing consent before inspecting or mo
 
 # Required regression: replay cleanup against in-memory host doubles, never CAD.
 & (Join-Path $PSScriptRoot '../tests/QS3D.LocalQualification.V25/test-ui-quit-boundary.ps1')
+
+# Replay the actual new loop admission before any possible UI input.
+foreach ($major in @(25,26)) {
+    $runner = Get-Content (Join-Path $PSScriptRoot "test-bricscad-v$major-single-footing.ps1") -Raw
+    $guard = [regex]::Match($runner, '(?m)^        if \(\$InteractiveUi -and \(Test-Path -LiteralPath \$markerPath\)\) \{ \[void\]\(Read-Phase \$Phase\) \}').Value
+    if (-not $guard -or $runner.IndexOf($guard) -gt $runner.IndexOf('if (Invoke-Local022UiPendingAction')) { throw 'FAIL: marker admission must precede input.' }
+    & {
+        $InteractiveUi = $true; $markerPath = $PSCommandPath; $Phase = 'ui'; $testStatus = 'FAIL'
+        function Read-Phase([string]$phase) { if ($testStatus -ceq 'FAIL') { throw 'TEST_PHASE_FAILED' }; return $true }
+        $rejected = $false
+        try { & ([scriptblock]::Create($guard)) } catch { if ($_.Exception.Message -cne 'TEST_PHASE_FAILED') { throw }; $rejected = $true }
+        if (-not $rejected) { throw 'FAIL: failed phase allowed input loop continuation.' }
+        $testStatus = 'PASS'
+        & ([scriptblock]::Create($guard))
+    }
+}
+Write-Output 'PASS: both native loops reject failed atomic UI markers before further input and retain PASS wait behavior.'

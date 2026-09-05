@@ -405,6 +405,16 @@ namespace QS3D.LocalQualification.V25
 
             private void PlaceCentre(int pointIndex, int expectedNewElements, UiStage next)
             {
+                var observed = NewFamilyElements();
+                var targetPoint = ScreenWorldPoint(_context.Document, _screenPoints[pointIndex]);
+                var placementTrace = "placement " + pointIndex + " active=" + IsDrawCommandActive() +
+                    " count=" + observed.Count + " expected=" + targetPoint + " actual=" +
+                    string.Join("|", observed.Select(element => ReadFootprintCenter(_context.Document, element).ToString()));
+                if (!string.Equals(_lastPlacementTrace, placementTrace, StringComparison.Ordinal))
+                {
+                    UiTrace(placementTrace);
+                    _lastPlacementTrace = placementTrace;
+                }
                 if (!IsDrawCommandActive()) return;
                 var point = _screenPoints[pointIndex];
                 if (!AwaitAction(point.X, point.Y, "click", string.Empty)) return;
@@ -418,6 +428,8 @@ namespace QS3D.LocalQualification.V25
                 if (_centres.Count == pointIndex) _centres.Add(expected);
                 Advance(next);
             }
+
+            private string? _lastPlacementTrace;
 
             private void RequireCancelUnchanged()
             {

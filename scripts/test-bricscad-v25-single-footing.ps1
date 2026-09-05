@@ -255,6 +255,9 @@ function Invoke-NativePhase([string]$Phase, [string[]]$Commands) {
     $markerPath = Join-Path $ArtifactDir ('phase-' + $Phase + '.json')
     Write-Host ('LOCAL-022 native phase started: ' + $Phase)
     while ([DateTime]::UtcNow -lt $deadline) {
+        # UI markers are atomically published. A failed marker ends input immediately;
+        # the existing exact-owned-process finally block performs guarded cleanup.
+        if ($InteractiveUi -and (Test-Path -LiteralPath $markerPath)) { [void](Read-Phase $Phase) }
         [void](Close-Qs3dProxyInformationDialog -Process $process)
         $process.Refresh()
         if ($InteractiveUi -and -not $process.HasExited -and $Phase -ceq 'ui') {
