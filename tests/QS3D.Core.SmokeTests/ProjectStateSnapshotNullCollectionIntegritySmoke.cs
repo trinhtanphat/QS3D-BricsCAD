@@ -13,29 +13,34 @@ namespace QS3D.Core.SmokeTests
 
         internal static void Run()
         {
-            RejectsNullZoneEntry();
-            RejectsNullFamilyEntry();
+            RejectsNullZoneEntryAtCatalogBoundary();
+            RejectsNullFamilyEntryAtCatalogBoundary();
             RejectsNullAuditEntry();
             PreservesCanonicalDetachedCopyIsolation();
         }
 
-        private static void RejectsNullZoneEntry()
+        private static void RejectsNullZoneEntryAtCatalogBoundary()
         {
             var project = new ProjectState("SNAP-NULL-ZONE", "Snapshot null Zone");
-            project.Zones.Add(null!);
-            ThrowsExact(
-                () => ProjectStateSnapshot.CreateDetachedCopy(project),
-                "Cannot snapshot a project containing a null zone entry at index 0.");
+            var beforeVersion = project.ChangeVersion;
+
+            ThrowsArgumentNull(() => project.Zones.Add(null!), "item");
+
+            if (project.Zones.Count != 0 || project.ChangeVersion != beforeVersion)
+                throw new InvalidOperationException("Rejected null Zone admission must be mutation-neutral.");
         }
 
-        private static void RejectsNullFamilyEntry()
+        private static void RejectsNullFamilyEntryAtCatalogBoundary()
         {
             var project = new ProjectState("SNAP-NULL-FAMILY", "Snapshot null Family");
             project.Families.Add(new ProjectFamily("F1", "Family 1", ElementCategory.Beam));
-            project.Families.Add(null!);
-            ThrowsExact(
-                () => ProjectStateSnapshot.CreateDetachedCopy(project),
-                "Cannot snapshot a project containing a null family entry at index 1.");
+            var beforeVersion = project.ChangeVersion;
+            var beforeCount = project.Families.Count;
+
+            ThrowsArgumentNull(() => project.Families.Add(null!), "item");
+
+            if (project.Families.Count != beforeCount || project.ChangeVersion != beforeVersion)
+                throw new InvalidOperationException("Rejected null Family admission must be mutation-neutral.");
         }
 
         private static void RejectsNullAuditEntry()
@@ -70,6 +75,20 @@ namespace QS3D.Core.SmokeTests
                 !string.Equals(copy.Elements[0].ZoneId, "Z1", StringComparison.Ordinal) ||
                 !string.Equals(copy.Families[0].Properties["Material"], "Steel", StringComparison.Ordinal))
                 throw new InvalidOperationException("Detached snapshot must preserve canonical semantic content.");
+        }
+
+        private static void ThrowsArgumentNull(Action action, string expectedParamName)
+        {
+            try
+            {
+                action();
+            }
+            catch (ArgumentNullException ex)
+            {
+                if (string.Equals(ex.ParamName, expectedParamName, StringComparison.Ordinal)) return;
+                throw new InvalidOperationException("Catalog null-entry guard returned an unexpected parameter name.", ex);
+            }
+            throw new InvalidOperationException("Catalog null-entry guard did not reject malformed state.");
         }
 
         private static void ThrowsExact(Action action, string expectedMessage)

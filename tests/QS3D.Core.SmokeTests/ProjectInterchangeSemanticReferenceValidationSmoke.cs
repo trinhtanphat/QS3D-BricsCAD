@@ -13,7 +13,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             ExportRejectsMissingRegisteredReference();
-            ExportRejectsNullSemanticCollections();
+            CatalogRejectsNullSemanticCollections();
             ExportRejectsDuplicateSemanticIdentities();
             ValidatorRejectsNullSemanticElementBeforeOrdering();
             ValidatorAndTypedReaderRejectMissingRegisteredReference();
@@ -33,19 +33,35 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => ProjectInterchangeJsonExporter.Build(project));
         }
 
-        private static void ExportRejectsNullSemanticCollections()
+        private static void CatalogRejectsNullSemanticCollections()
         {
             var zoneProject = BaseProject("P-NULL-ZONE");
-            zoneProject.Zones.Add(null!);
-            Throws<InvalidDataException>(() => ProjectInterchangeJsonExporter.Build(zoneProject));
+            var zoneVersion = zoneProject.ChangeVersion;
+            var zoneUpdatedUtc = zoneProject.UpdatedUtc;
+            Throws<ArgumentNullException>(() => zoneProject.Zones.Add(null!));
+            Equal(0, zoneProject.Zones.Count);
+            Equal(zoneVersion, zoneProject.ChangeVersion);
+            Equal(zoneUpdatedUtc, zoneProject.UpdatedUtc);
+            True(!string.IsNullOrWhiteSpace(ProjectInterchangeJsonExporter.Build(zoneProject)));
 
             var floorProject = BaseProject("P-NULL-FLOOR");
-            floorProject.Floors.Add(null!);
-            Throws<InvalidDataException>(() => ProjectInterchangeJsonExporter.Build(floorProject));
+            var floorCount = floorProject.Floors.Count;
+            var floorVersion = floorProject.ChangeVersion;
+            var floorUpdatedUtc = floorProject.UpdatedUtc;
+            Throws<ArgumentNullException>(() => floorProject.Floors.Add(null!));
+            Equal(floorCount, floorProject.Floors.Count);
+            Equal(floorVersion, floorProject.ChangeVersion);
+            Equal(floorUpdatedUtc, floorProject.UpdatedUtc);
+            True(!string.IsNullOrWhiteSpace(ProjectInterchangeJsonExporter.Build(floorProject)));
 
             var familyProject = BaseProject("P-NULL-FAMILY");
-            familyProject.Families.Add(null!);
-            Throws<InvalidDataException>(() => ProjectInterchangeJsonExporter.Build(familyProject));
+            var familyVersion = familyProject.ChangeVersion;
+            var familyUpdatedUtc = familyProject.UpdatedUtc;
+            Throws<ArgumentNullException>(() => familyProject.Families.Add(null!));
+            Equal(0, familyProject.Families.Count);
+            Equal(familyVersion, familyProject.ChangeVersion);
+            Equal(familyUpdatedUtc, familyProject.UpdatedUtc);
+            True(!string.IsNullOrWhiteSpace(ProjectInterchangeJsonExporter.Build(familyProject)));
         }
 
         private static void ExportRejectsDuplicateSemanticIdentities()

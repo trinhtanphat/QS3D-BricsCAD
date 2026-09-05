@@ -30,7 +30,7 @@ namespace QS3D.Core.SmokeTests
             var created = ProjectFloorService.Create(valid, "F2", "Level 2", 3d);
             Equal("F2", created.Id, "valid created id");
             Equal(2, valid.Floors.Count, "valid count");
-            Equal(validVersion + 1L, valid.ChangeVersion, "valid revision");
+            Equal(validVersion + 2L, valid.ChangeVersion, "valid revision");
         }
 
         private static void Equal<T>(T expected, T actual, string label)

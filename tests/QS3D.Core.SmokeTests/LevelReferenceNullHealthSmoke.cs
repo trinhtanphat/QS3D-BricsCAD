@@ -19,10 +19,25 @@ namespace QS3D.Core.SmokeTests
         private static void NullFloorFailsVisible()
         {
             var project = new ProjectState("health-level-null-floor", "Level null floor");
-            project.Floors.Add(null!);
+            var beforeVersion = project.ChangeVersion;
 
-            ThrowsDirect(project, "null Floor/Level");
-            HasCompositeProviderFailure(project);
+            try
+            {
+                project.Floors.Add(null!);
+            }
+            catch (ArgumentNullException ex)
+            {
+                if (!string.Equals(ex.ParamName, "item", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Null Floor admission failed for the wrong parameter.", ex);
+
+                if (project.ChangeVersion != beforeVersion)
+                    throw new InvalidOperationException("Rejected null Floor admission unexpectedly advanced ProjectState.ChangeVersion.");
+                if (project.Floors.Count != 0)
+                    throw new InvalidOperationException("Rejected null Floor admission unexpectedly mutated the Floor catalog.");
+                return;
+            }
+
+            throw new InvalidOperationException("Floor catalog must reject null entries at the admission boundary.");
         }
 
         private static void NullElementFailsVisible()
