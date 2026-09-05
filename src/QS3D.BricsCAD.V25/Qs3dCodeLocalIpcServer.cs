@@ -17,8 +17,8 @@ namespace QS3D.BricsCAD.V25
         private readonly string _pipeName;
         private readonly string _capability;
         private readonly Func<string, string> _handler;
-        private Thread _thread;
-        private NamedPipeServerStream _activePipe;
+        private Thread? _thread;
+        private NamedPipeServerStream? _activePipe;
         private volatile bool _stopping;
 
         internal Qs3dCodeLocalIpcServer(string pipeName, string capability, Func<string, string> handler)
@@ -47,8 +47,8 @@ namespace QS3D.BricsCAD.V25
 
         internal void Stop()
         {
-            Thread thread;
-            NamedPipeServerStream pipe;
+            Thread? thread;
+            NamedPipeServerStream? pipe;
             lock (_gate)
             {
                 _stopping = true;
@@ -74,7 +74,7 @@ namespace QS3D.BricsCAD.V25
         {
             while (!_stopping)
             {
-                NamedPipeServerStream pipe = null;
+                NamedPipeServerStream? pipe = null;
                 try
                 {
                     var options = PipeOptions.Asynchronous | PipeOptions.WriteThrough;
@@ -162,7 +162,7 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void WriteBoundedLine(Stream stream, string response, int maxBytes)
+        private static void WriteBoundedLine(Stream stream, string? response, int maxBytes)
         {
             var bytes = Encoding.UTF8.GetBytes(response ?? string.Empty);
             if (bytes.Length > maxBytes)
@@ -172,7 +172,7 @@ namespace QS3D.BricsCAD.V25
             stream.Flush();
         }
 
-        private static bool FixedTimeEquals(string left, string right)
+        private static bool FixedTimeEquals(string? left, string? right)
         {
             var a = Encoding.UTF8.GetBytes(left ?? string.Empty);
             var b = Encoding.UTF8.GetBytes(right ?? string.Empty);
