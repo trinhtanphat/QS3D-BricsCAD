@@ -14,6 +14,8 @@ QUALIFY_READY_GUARD = (
     "!(needs.v26-reference-primary.outputs.ready != 'true' "
     "&& needs.v26-reference-fallback.outputs.ready != 'true')"
 )
+PRIMARY_CACHE_KEY = "qs3d-v26-hostrefs-v1-${{ github.run_id }}-primary"
+FALLBACK_CACHE_KEY = "qs3d-v26-hostrefs-v1-${{ github.run_id }}-fallback"
 
 
 def validate(text: str) -> list[str]:
@@ -26,8 +28,8 @@ def validate(text: str) -> list[str]:
         "needs:\n      - installer-cache\n      - v26-reference-primary",
         FALLBACK_JOB_GUARD,
         QUALIFY_READY_GUARD,
-        "qs3d-v26-hostrefs-v1-${{ github.run_id }}-primary",
-        "qs3d-v26-hostrefs-v1-${{ github.run_id }}-fallback",
+        PRIMARY_CACHE_KEY,
+        FALLBACK_CACHE_KEY,
         "bricscad-v26.2.07-x64-en-us-${{ needs.installer-cache.outputs.msi_sha256 }}",
         "-ExtractReferences | Select-Object -Last 1",
         "assert-v26-host-reference-safety.ps1",
@@ -58,12 +60,18 @@ def validate(text: str) -> list[str]:
         if "assert-v26-host-reference-safety.ps1" not in body:
             errors.append(f"{label} must validate the extracted host generation")
 
+    if PRIMARY_CACHE_KEY not in primary_body:
+        errors.append("primary must save the run-bound primary host-reference handoff")
     if FALLBACK_JOB_GUARD not in fallback_body:
         errors.append("fallback must run only after the primary fresh runner fails to produce a ready handoff")
+    if FALLBACK_CACHE_KEY not in fallback_body:
+        errors.append("fallback must save the run-bound fallback host-reference handoff")
     if "continue-on-error: true" in fallback_body:
         errors.append("fallback must remain fail-closed and must not continue on error")
     if QUALIFY_READY_GUARD not in qualify_body:
         errors.append("qualify must require a ready primary or fallback handoff")
+    if PRIMARY_CACHE_KEY not in qualify_body or FALLBACK_CACHE_KEY not in qualify_body:
+        errors.append("qualify must restore either run-bound primary or fallback handoff")
     if "-ExtractReferences" in qualify_body:
         errors.append("qualify must consume a run-bound handoff and must not execute MSI extraction")
     if "BricsCAD-V26.2.07-x64.msi" in qualify_body:
@@ -84,11 +92,7 @@ def main() -> int:
             "if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' && always() }}",
             1,
         ),
-        text.replace(
-            "qs3d-v26-hostrefs-v1-${{ github.run_id }}-fallback",
-            "qs3d-v26-hostrefs-v1-static-fallback",
-            1,
-        ),
+        text.replace(FALLBACK_CACHE_KEY, "qs3d-v26-hostrefs-v1-static-fallback", 1),
         text.replace(
             "  v26-reference-fallback:\n",
             "  v26-reference-fallback:\n    continue-on-error: true\n",
