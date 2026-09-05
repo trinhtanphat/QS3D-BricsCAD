@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using Microsoft.Win32.SafeHandles;
 
 namespace QS3D.Core.Persistence
@@ -17,9 +18,12 @@ namespace QS3D.Core.Persistence
         private const uint OpenExisting = 3;
         private const uint MetadataAccess = 0;
         private const uint NormalAttributes = 0x00000080;
+        private const uint FileFlagOpenReparsePoint = 0x00200000;
         private const uint ShareRead = 0x00000001;
         private const uint ShareWrite = 0x00000002;
         private const uint ShareDelete = 0x00000004;
+        private const uint FileNameNormalized = 0x0;
+        private const int InitialFinalPathCapacity = 512;
 
         public static void RequireNonRedirected(string fullPath, string role)
         {
@@ -88,17 +92,21 @@ namespace QS3D.Core.Persistence
             ByHandleFileInformation heldInformation;
             if (!GetFileInformationByHandle(openedStream.SafeFileHandle, out heldInformation))
                 throw CreateIdentityIOException("held " + role + " stream");
+            RequireCanonicalFinalPath(canonical, openedStream.SafeFileHandle, "held " + role + " stream");
 
             // Desired access is deliberately zero: this obtains identity metadata
             // without asking for read/write/delete access that would conflict with
             // the FileShare.None writer handle already held by ProjectFileLock.
+            // OPEN_REPARSE_POINT prevents the final component from being followed by
+            // this verification open; any such redirect is rejected from handle
+            // metadata before generation identity can be accepted.
             using (var pathHandle = CreateFileW(
                 canonical,
                 MetadataAccess,
                 ShareRead | ShareWrite | ShareDelete,
                 IntPtr.Zero,
                 OpenExisting,
-                NormalAttributes,
+                NormalAttributes | FileFlagOpenReparsePoint,
                 IntPtr.Zero))
             {
                 if (pathHandle.IsInvalid)
@@ -107,6 +115,10 @@ namespace QS3D.Core.Persistence
                 ByHandleFileInformation pathInformation;
                 if (!GetFileInformationByHandle(pathHandle, out pathInformation))
                     throw CreateIdentityIOException(role + " pathname generation");
+                if ((((FileAttributes)pathInformation.FileAttributes) & FileAttributes.ReparsePoint) != 0)
+                    throw new InvalidDataException("QS3D refused a redirected or reparse-point " + role + " pathname generation.");
+
+                RequireCanonicalFinalPath(canonical, pathHandle, role + " pathname generation");
 
                 // Re-check redirect attributes after the metadata handle has been
                 // opened, then compare immutable filesystem identity of both handles.
@@ -119,6 +131,48 @@ namespace QS3D.Core.Persistence
                         "QS3D refused a " + role + " path whose filesystem generation changed during acquisition.");
                 }
             }
+        }
+
+        private static void RequireCanonicalFinalPath(string canonical, SafeFileHandle handle, string subject)
+        {
+            var actual = ReadFinalPath(handle, subject);
+            var expected = NormalizeFinalPath(canonical);
+            if (!string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new IOException(
+                    "QS3D refused a " + subject + " whose resolved filesystem path differs from the canonical persistence path.");
+            }
+        }
+
+        private static string ReadFinalPath(SafeFileHandle handle, string subject)
+        {
+            var capacity = InitialFinalPathCapacity;
+            while (true)
+            {
+                var buffer = new StringBuilder(capacity);
+                var length = GetFinalPathNameByHandleW(handle, buffer, (uint)buffer.Capacity, FileNameNormalized);
+                if (length == 0)
+                    throw CreateIdentityIOException(subject + " final pathname");
+                if (length < buffer.Capacity)
+                    return NormalizeFinalPath(buffer.ToString());
+                if (length > int.MaxValue - 1)
+                    throw new IOException("QS3D could not safely size the resolved persistence pathname buffer.");
+                capacity = checked((int)length + 1);
+            }
+        }
+
+        private static string NormalizeFinalPath(string path)
+        {
+            var normalized = path;
+            const string uncPrefix = @"\\?\UNC\";
+            const string extendedPrefix = @"\\?\";
+            if (normalized.StartsWith(uncPrefix, StringComparison.OrdinalIgnoreCase))
+                normalized = @"\\" + normalized.Substring(uncPrefix.Length);
+            else if (normalized.StartsWith(extendedPrefix, StringComparison.OrdinalIgnoreCase))
+                normalized = normalized.Substring(extendedPrefix.Length);
+
+            normalized = normalized.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            return Path.GetFullPath(normalized).TrimEnd(Path.DirectorySeparatorChar);
         }
 
         private static IOException CreateIdentityIOException(string subject)
@@ -138,6 +192,13 @@ namespace QS3D.Core.Persistence
             uint creationDisposition,
             uint flagsAndAttributes,
             IntPtr templateFile);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern uint GetFinalPathNameByHandleW(
+            SafeFileHandle file,
+            StringBuilder filePath,
+            uint filePathLength,
+            uint flags);
 
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
