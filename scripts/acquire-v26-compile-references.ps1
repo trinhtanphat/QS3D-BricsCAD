@@ -89,7 +89,7 @@ function Assert-PinnedV26HttpMirrorUrl {
 function Open-AdmittedV26Installer {
     param([Parameter(Mandatory = $true)][string]$Path, [string]$Expected = '')
 
-    Assert-NoExistingReparseComponent -Path $Path -Label 'BricsCAD V26 MSI path'
+    [void](Assert-NoExistingReparseComponent -Path $Path -Label 'BricsCAD V26 MSI path')
     $item = Get-OrdinaryFileOrNull -Path $Path -Label 'BricsCAD V26 MSI'
     if ($null -eq $item) { throw 'BricsCAD V26 MSI is missing.' }
     if ([int64]$item.Length -le 100MB) { throw 'BricsCAD V26 MSI is unexpectedly small.' }
@@ -128,11 +128,11 @@ function Open-AdmittedV26Installer {
         $installer = New-Object -ComObject WindowsInstaller.Installer
         $database = $installer.OpenDatabase($canonical, 0)
         $versionView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')
-        $versionView.Execute()
+        [void]$versionView.Execute()
         $versionRecord = $versionView.Fetch()
         $productVersion = if ($versionRecord) { [string]$versionRecord.StringData(1) } else { [string]::Empty }
         $nameView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductName''')
-        $nameView.Execute()
+        [void]$nameView.Execute()
         $nameRecord = $nameView.Fetch()
         $productName = if ($nameRecord) { [string]$nameRecord.StringData(1) } else { [string]::Empty }
         if ($productVersion -notmatch '^26\.2\.07(?:\.|$)') {
@@ -162,6 +162,43 @@ function Open-AdmittedV26Installer {
         $stream.Dispose()
         throw
     }
+}
+
+function Get-SingleV26InstallerAdmission {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [string]$Expected = ''
+    )
+
+    $outputs = @(Open-AdmittedV26Installer -Path $Path -Expected $Expected)
+    if ($outputs.Count -ne 1) {
+        foreach ($output in $outputs) {
+            if ($null -ne $output -and $null -ne $output.PSObject.Properties['Stream']) {
+                $heldStream = $output.PSObject.Properties['Stream'].Value
+                if ($heldStream -is [IO.Stream]) { $heldStream.Dispose() }
+            }
+        }
+        $types = @($outputs | ForEach-Object {
+            if ($null -eq $_) { '<null>' } else { $_.GetType().FullName }
+        })
+        throw "Open-AdmittedV26Installer must emit exactly one admission object. Output types: $($types -join ', ')"
+    }
+
+    $admission = $outputs[0]
+    $requiredProperties = @('Path', 'Sha256', 'Length', 'LastWriteUtcTicks', 'ProductVersion', 'SignerSubject', 'Stream')
+    foreach ($propertyName in $requiredProperties) {
+        if ($null -eq $admission -or $null -eq $admission.PSObject.Properties[$propertyName]) {
+            if ($null -ne $admission -and $null -ne $admission.PSObject.Properties['Stream']) {
+                $heldStream = $admission.PSObject.Properties['Stream'].Value
+                if ($heldStream -is [IO.Stream]) { $heldStream.Dispose() }
+            }
+            throw "Open-AdmittedV26Installer returned one value, but it is missing required admission property $propertyName."
+        }
+    }
+    if ($admission.Stream -isnot [IO.Stream]) {
+        throw 'Open-AdmittedV26Installer returned one value, but its Stream property is not a held System.IO.Stream.'
+    }
+    return $admission
 }
 
 function Assert-HeldInstallerStable {
@@ -213,7 +250,7 @@ New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
 $admission = $null
 if (Test-Path -LiteralPath $msi -PathType Leaf) {
     try {
-        $admission = Open-AdmittedV26Installer -Path $msi -Expected $expected
+        $admission = Get-SingleV26InstallerAdmission -Path $msi -Expected $expected
         Write-Host 'Using admitted BricsCAD V26.2.07 installer from Actions cache/local cache.'
     }
     catch {
@@ -245,7 +282,7 @@ if ($null -eq $admission) {
             Assert-NoExistingReparseComponent -Path $staging -Label 'V26 MSI download staging path'
             Write-Host "Downloading BricsCAD V26.2.07 installer from $($candidate.Name) source."
             Invoke-WebRequest -Uri $candidate.Url -OutFile $staging -MaximumRedirection 10 -TimeoutSec 1800 -UseBasicParsing
-            $candidateAdmission = Open-AdmittedV26Installer -Path $staging -Expected $expected
+            $candidateAdmission = Get-SingleV26InstallerAdmission -Path $staging -Expected $expected
             try {
                 Assert-NoExistingReparseComponent -Path $msi -Label 'V26 MSI destination before publication'
                 if (Test-Path -LiteralPath $msi) {
@@ -256,7 +293,7 @@ if ($null -eq $admission) {
                 $candidateAdmission.Stream.Dispose()
                 $candidateAdmission = $null
                 [IO.File]::Move($staging, $msi)
-                $admission = Open-AdmittedV26Installer -Path $msi -Expected $expected
+                $admission = Get-SingleV26InstallerAdmission -Path $msi -Expected $expected
                 break
             }
             finally {
