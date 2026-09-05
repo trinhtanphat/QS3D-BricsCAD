@@ -95,7 +95,7 @@ namespace QS3D.Core.SmokeTests
 
             try
             {
-                return (List<int>)(method.Invoke(null, new object[] { values, knownCount, label })
+                return (List<int>)(method.Invoke(null, new object[] { values, knownCount, label, 10_000 })
                     ?? throw new InvalidOperationException("Persistence SnapshotBounded returned null."));
             }
             catch (TargetInvocationException ex) when (ex.InnerException != null)
