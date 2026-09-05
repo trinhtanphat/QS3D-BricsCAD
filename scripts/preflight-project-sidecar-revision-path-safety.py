@@ -65,7 +65,8 @@ presence_end = text.find("public void Dispose()", presence_start)
 if presence_start < 0 or presence_end < 0:
     fail("sidecar revision final presence fence could not be isolated")
 presence = text[presence_start:presence_end]
-if member_guard not in presence:
+presence_member_guard = 'PersistencePathSafety.RequireNonRedirected(_path, "sidecar revision member read");'
+if presence_member_guard not in presence:
     fail("sidecar revision final pair-presence fence must recheck redirected ancestors")
 final_identity_guard = 'PersistencePathSafety.RequireExclusiveOpenStillBound(_stream, _path, "sidecar revision member read");'
 if final_identity_guard not in presence:
