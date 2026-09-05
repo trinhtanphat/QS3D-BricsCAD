@@ -296,6 +296,17 @@ function Get-ReferenceDirectories {
     return @($directories)
 }
 
+function Get-CompleteV26ReferenceDirectory {
+    param([Parameter(Mandatory = $true)][string]$Root)
+    $candidateDirs = @(Get-ReferenceDirectories -Root $Root)
+    $complete = $candidateDirs | Where-Object {
+        (Test-Path -LiteralPath (Join-Path $_ 'BrxMgd.dll') -PathType Leaf) -and
+        (Test-Path -LiteralPath (Join-Path $_ 'TD_Mgd.dll') -PathType Leaf) -and
+        (Test-Path -LiteralPath (Join-Path $_ 'TD_MgdBrep.dll') -PathType Leaf)
+    } | Select-Object -First 1
+    return [string]$complete
+}
+
 $msi = Get-CanonicalAbsolutePath -Path $MsiPath
 $cacheDir = Get-CanonicalAbsolutePath -Path (Split-Path -Parent $msi)
 Assert-NoExistingReparseComponent -Path $cacheDir -Label 'V26 MSI cache directory'
@@ -380,19 +391,23 @@ try {
                 throw 'BricsCAD V26 MSI administrative extraction timed out after 15 minutes; owned process tree termination was requested.'
             }
             if ($process.ExitCode -notin @(0, 3010)) {
-                if (Test-Path -LiteralPath $msiLog -PathType Leaf) { Get-Content -LiteralPath $msiLog -Tail 120 }
-                throw "BricsCAD V26 MSI administrative extraction failed with exit code $($process.ExitCode)."
+                $completeReferenceDirAfter1603 = ''
+                if ($process.ExitCode -eq 1603) {
+                    $completeReferenceDirAfter1603 = Get-CompleteV26ReferenceDirectory -Root $extract
+                }
+                if ($process.ExitCode -eq 1603 -and -not [string]::IsNullOrWhiteSpace([string]$completeReferenceDirAfter1603)) {
+                    Write-Warning 'BricsCAD V26 MSI administrative extraction returned exit code 1603 after materializing a complete managed-reference payload; continuing with strict extracted-tree validation.'
+                }
+                else {
+                    if (Test-Path -LiteralPath $msiLog -PathType Leaf) { Get-Content -LiteralPath $msiLog -Tail 120 }
+                    throw "BricsCAD V26 MSI administrative extraction failed with exit code $($process.ExitCode)."
+                }
             }
             Assert-HeldInstallerStable -Held $admission -Phase 'after administrative extraction'
         }
         finally { Remove-Item -LiteralPath $msiLog -Force -ErrorAction SilentlyContinue }
 
-        $candidateDirs = @(Get-ReferenceDirectories -Root $extract)
-        $bricsDir = $candidateDirs | Where-Object {
-            (Test-Path -LiteralPath (Join-Path $_ 'BrxMgd.dll') -PathType Leaf) -and
-            (Test-Path -LiteralPath (Join-Path $_ 'TD_Mgd.dll') -PathType Leaf) -and
-            (Test-Path -LiteralPath (Join-Path $_ 'TD_MgdBrep.dll') -PathType Leaf)
-        } | Select-Object -First 1
+        $bricsDir = Get-CompleteV26ReferenceDirectory -Root $extract
         if ([string]::IsNullOrWhiteSpace([string]$bricsDir)) {
             throw 'BrxMgd.dll, TD_Mgd.dll, and TD_MgdBrep.dll were not found together in one extracted V26 runtime directory.'
         }
