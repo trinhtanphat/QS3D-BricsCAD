@@ -18,11 +18,13 @@ if source.is_file():
     constructor_end = text.find("public string EventId", constructor_start)
     constructor = text[constructor_start:constructor_end] if constructor_start >= 0 and constructor_end > constructor_start else ""
     snapshot_start = text.find("internal static IReadOnlyList<T> Snapshot<T>(")
-    snapshot_end = text.find("internal static void RequireCanProcessNext", snapshot_start)
-    snapshot = text[snapshot_start:snapshot_end] if snapshot_start >= 0 and snapshot_end > snapshot_start else ""
+    stable_snapshot_start = text.find("internal static IReadOnlyList<T> SnapshotStableGeneration<T>(", snapshot_start)
+    snapshot = text[snapshot_start:stable_snapshot_start] if snapshot_start >= 0 and stable_snapshot_start > snapshot_start else ""
+    stable_snapshot_end = text.find("internal static void RequireCanProcessNext", stable_snapshot_start)
+    stable_snapshot = text[stable_snapshot_start:stable_snapshot_end] if stable_snapshot_start >= 0 and stable_snapshot_end > stable_snapshot_start else ""
 
     constructor_required = (
-        "SourceRevisions = CommercialGuard.Snapshot(",
+        "SourceRevisions = CommercialGuard.SnapshotStableGeneration(",
         "sourceRevisions,",
         "nameof(sourceRevisions),",
         "64,",
@@ -40,17 +42,37 @@ if source.is_file():
             break
         cursor = position + len(token)
 
-    required = (
-        "Func<T, T, bool> semanticEquals",
+    snapshot_required = (
+        "IEnumerable<T> source,",
+        "string paramName,",
+        "int maximum)",
         "RequireStableSnapshotKnownCount(source, knownCount, paramName, maximum);",
-        "RequireStableSnapshotGeneration(source, knownCount, result, semanticEquals, paramName, maximum);",
         "return new ReadOnlyCollection<T>(result.ToArray());",
     )
     cursor = 0
-    for token in required:
+    for token in snapshot_required:
         position = snapshot.find(token, cursor)
         if position < 0:
-            errors.append("CommercialGuard.Snapshot missing ordered semantic-generation contract token: " + token)
+            errors.append("CommercialGuard.Snapshot missing historical three-argument snapshot contract token: " + token)
+            break
+        cursor = position + len(token)
+    if "Func<T, T, bool> semanticEquals" in snapshot or "RequireStableSnapshotGeneration(" in snapshot:
+        errors.append("CommercialGuard.Snapshot must remain the historical generic snapshot primitive without semantic replay policy.")
+
+    stable_required = (
+        "Func<T, T, bool> semanticEquals",
+        "if (semanticEquals == null) throw new ArgumentNullException(nameof(semanticEquals));",
+        "var admittedCount = SnapshotKnownCount(source, paramName, maximum);",
+        "var snapshot = Snapshot(source, paramName, maximum);",
+        "RequireStableSnapshotKnownCount(source, admittedCount, paramName, maximum);",
+        "RequireStableSnapshotGeneration(source, admittedCount, snapshot, semanticEquals, paramName, maximum);",
+        "return snapshot;",
+    )
+    cursor = 0
+    for token in stable_required:
+        position = stable_snapshot.find(token, cursor)
+        if position < 0:
+            errors.append("CommercialGuard.SnapshotStableGeneration missing ordered semantic-generation contract token: " + token)
             break
         cursor = position + len(token)
 
@@ -101,4 +123,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: counted commercial source-revision snapshots replay semantic generation before immutable publication while streams remain one-pass.")
+print("PASS: counted commercial source-revision snapshots replay semantic generation before immutable publication while the generic snapshot primitive and streams retain historical semantics.")
