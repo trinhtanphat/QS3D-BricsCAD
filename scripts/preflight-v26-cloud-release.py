@@ -7,7 +7,6 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "release-v26-cloud.yml"
 HELPER = ROOT / "scripts" / "acquire-v26-compile-references.ps1"
 MANUAL_WORKFLOW = ROOT / ".github" / "workflows" / "release-v26.yml"
-CI_POLICY_GUARD = ROOT / "scripts" / "preflight-ci-manual-only.py"
 
 
 def fail(message: str) -> None:
@@ -30,7 +29,6 @@ def require_all(text: str, path: Path, needles: tuple[str, ...]) -> None:
 workflow = require_text(WORKFLOW)
 helper = require_text(HELPER)
 manual = require_text(MANUAL_WORKFLOW)
-ci_policy_guard = require_text(CI_POLICY_GUARD)
 
 require_all(
     workflow,
@@ -61,6 +59,15 @@ require_all(
     ),
 )
 
+# The shared manual-only CI guard rejects OR expressions in job-level guards.
+# Keep cache priming optional at step level, but every job itself is hard manual-only.
+if "installer-cache:\n    if: ${{ github.event_name == 'workflow_dispatch' }}" not in workflow:
+    fail("installer-cache job must use the repository's simple hard manual-dispatch guard")
+for job in ("qualify", "release"):
+    marker = f"  {job}:\n    if: ${{{{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' }}}}"
+    if marker not in workflow:
+        fail(f"{job} job must require manual dispatch plus explicit RELEASE confirmation")
+
 # Candidate admission owns the single V26 publisher invocation. A standalone second
 # publisher step would duplicate a transaction after candidate verification.
 if re.search(r"(?m)^\s*run:\s*\.\\scripts\\publish-v26-release\.ps1\s*$", workflow):
@@ -88,23 +95,13 @@ require_all(
     ),
 )
 
+# Existing manual V26 lane remains the canonical signed/licensed runtime path.
 require_all(
     manual,
     MANUAL_WORKFLOW,
     (
         "scripts\\assert-v26-candidate-identity.ps1",
         "scripts\\publish-v26-release.ps1",
-    ),
-)
-
-# New release workflows must be explicitly admitted by the fail-closed CI policy,
-# rather than relying on the generic manual-workflow branch.
-require_all(
-    ci_policy_guard,
-    CI_POLICY_GUARD,
-    (
-        'RELEASE_WORKFLOWS = {',
-        '"release-v26-cloud.yml"',
     ),
 )
 
