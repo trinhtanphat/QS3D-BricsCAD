@@ -577,6 +577,22 @@ namespace QS3D.LocalQualification.V25
                 UiTrace(label + " tree=" + item?.Header + " tag=" + item?.Tag + " category=" + category +
                     " families=" + (_project == null ? "unbound" : string.Join(",", _project.Families.Select(x => x.Category.ToString()))));
                 UiTrace(label + " roots=" + string.Join(",", PresentationSource.CurrentSources.Cast<PresentationSource>().Select(x => x.RootVisual?.GetType().FullName)));
+                foreach (var source in PresentationSource.CurrentSources.Cast<PresentationSource>())
+                {
+                    var root = source.RootVisual;
+                    if (root == null) continue;
+                    UiTrace(label + " window=" + Window.GetWindow(root)?.GetType().FullName + " texts=" +
+                        string.Join("|", FindVisualDescendants<TextBlock>(root).Where(x => x.IsVisible).Take(18).Select(x => x.Text)));
+                }
+                var add = RequireWorkspaceButton(_workspace!, "+ Add", "+ Thêm");
+                var handlers = typeof(UIElement).GetProperty("EventHandlersStore", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(add, null);
+                var lookup = handlers?.GetType().GetMethod("GetRoutedEventHandlers", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (lookup?.Invoke(handlers, new object[] { Button.ClickEvent }) is Array routes)
+                    foreach (var route in routes)
+                    {
+                        var handler = route.GetType().GetProperty("Handler")?.GetValue(route, null) as Delegate;
+                        UiTrace(label + " add_handler=" + handler?.Method.Name);
+                    }
             }
 
             private void UiTrace(string value)
@@ -756,7 +772,7 @@ namespace QS3D.LocalQualification.V25
             // BricsCAD embeds WPF without necessarily creating Application.Current.
             // Observe actual presentation roots; never create an application or dialog.
             var windows = PresentationSource.CurrentSources.Cast<PresentationSource>()
-                .Select(source => source.RootVisual).OfType<Window>();
+                .Select(source => source.RootVisual == null ? null : Window.GetWindow(source.RootVisual)).OfType<Window>();
             if (app != null) windows = windows.Concat(app.Windows.Cast<Window>());
             var matches = windows.Distinct().Where(window => window.IsVisible &&
                 string.Equals(window.GetType().FullName, "QS3D.BricsCAD.V25.UI.SingleFootingDimensionsDialog", StringComparison.Ordinal) &&

@@ -48,6 +48,14 @@ try { Invoke-Local022UiPhysicalAction (New-Action) (Get-Process -Id $PID) 'C:\no
 if (-not $rejected) { throw 'FAIL: native input accepted a non-host target.' }
 Write-Output 'PASS: LOCAL022 UI action validation and non-host refusal (23 cases); no desktop input sent.'
 
+$captureRejected = $false
+& {
+    $ErrorActionPreference = 'Continue'
+    try { Save-Local022OwnedWindow (Get-Process -Id $PID) 'unused-must-not-capture.png' } catch { $script:captureRejected = $true }
+}
+if (-not $captureRejected -or (Test-Path -LiteralPath 'unused-must-not-capture.png')) { throw 'FAIL: non-host screenshot did not fail closed.' }
+Write-Output 'PASS: capture rejects non-hosts even when caller error policy is Continue.'
+
 # Exercise the actual final decision, isolated from all host/file operations.
 # A FAIL_OR_NO_RESULT receipt must never finish with a successful exit simply
 # because neither exception slot was populated.

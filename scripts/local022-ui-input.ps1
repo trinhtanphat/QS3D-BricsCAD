@@ -169,9 +169,16 @@ public static class Qs3dLocal022Input {
 }
 
 function Save-Local022OwnedWindow([Diagnostics.Process]$Process, [string]$Path) {
+    $ErrorActionPreference = 'Stop'
+    $Process.Refresh()
+    if ($Process.HasExited -or $Process.ProcessName -ine 'bricscad') { throw 'Capture target is not a live BricsCAD host.' }
     # Exact-HWND capture only. Never fall back to copying the whole desktop.
     [Qs3dLocal022Input]::RequireForeground($Process.Id)
     $window = [Qs3dLocal022Input]::GetForegroundWindow()
+    [uint32]$windowProcess = 0
+    if ([Qs3dLocal022Input]::GetWindowThreadProcessId($window,[ref]$windowProcess) -eq 0 -or $windowProcess -ne $Process.Id) {
+        throw 'Capture HWND is not owned by the host.'
+    }
     $rect = [Qs3dLocal022Input+RECT]::new()
     if (-not [Qs3dLocal022Input]::GetWindowRect($window,[ref]$rect)) { throw 'Cannot read owned screenshot bounds.' }
     $width=$rect.Right-$rect.Left; $height=$rect.Bottom-$rect.Top
@@ -193,6 +200,7 @@ function Save-Local022OwnedWindow([Diagnostics.Process]$Process, [string]$Path) 
 }
 
 function Invoke-Local022UiPhysicalAction($Request, [Diagnostics.Process]$Process, [string]$ExpectedExecutable) {
+    $ErrorActionPreference = 'Stop'
     $Process.Refresh()
     if ($Process.HasExited -or $Process.ProcessName -ine 'bricscad' -or
         [IO.Path]::GetFullPath($Process.Path) -ine [IO.Path]::GetFullPath($ExpectedExecutable) -or
