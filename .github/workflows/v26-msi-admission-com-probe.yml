@@ -27,13 +27,37 @@ jobs:
           key: bricscad-v26.2.07-x64-en-us-9330806cf29e1e6b01758191aa3d9e8d301d9d3125470b6d139f78c7772f9740
           fail-on-cache-miss: true
 
-      - name: Reproduce production admission then administrative extraction
+      - name: Reproduce production admission with focused MSI failure evidence
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
+          $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'scripts\acquire-v26-compile-references.ps1'
+          $source = Get-Content -LiteralPath $scriptPath -Raw
+          $needle = "if (Test-Path -LiteralPath `$msiLog -PathType Leaf) { Get-Content -LiteralPath `$msiLog -Tail 120 }"
+          $replacement = @'
+          if (Test-Path -LiteralPath $msiLog -PathType Leaf) {
+              $lines = @(Get-Content -LiteralPath $msiLog -ErrorAction Stop)
+              $hits = for ($i = 0; $i -lt $lines.Count; $i++) {
+                  if ($lines[$i] -match 'Return value 3|Error 1[0-9]{3}|CustomAction|InstallValidate|InstallInitialize|InstallFiles|InstallFinalize') { $i }
+              }
+              $selected = New-Object 'System.Collections.Generic.SortedSet[int]'
+              foreach ($hit in $hits) {
+                  $start = [Math]::Max(0, $hit - 8)
+                  $end = [Math]::Min($lines.Count - 1, $hit + 8)
+                  for ($j = $start; $j -le $end; $j++) { [void]$selected.Add($j) }
+              }
+              foreach ($idx in $selected) { Write-Host $lines[$idx] }
+          }
+          '@
+          if (-not $source.Contains($needle)) {
+              throw 'Probe could not locate the production MSI failure-tail statement.'
+          }
+          $source = $source.Replace($needle, $replacement.Trim())
+          Set-Content -LiteralPath $scriptPath -Value $source -Encoding UTF8
+
           $msi = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad\BricsCAD-V26.2.07-x64.msi'
           $extract = Join-Path $env:RUNNER_TEMP ('bricscad-v26-admission-com-probe-' + [Guid]::NewGuid().ToString('N'))
-          & .\scripts\acquire-v26-compile-references.ps1 `
+          & $scriptPath `
             -MsiPath $msi `
             -ExtractDir $extract `
             -ExpectedSha256 $env:BRICSCAD_V26_PINNED_MSI_SHA256 `
