@@ -153,7 +153,20 @@ namespace QS3D.BricsCAD.V25.UI
             // Only destruction of the currently active document suppresses a pending Record. Closing a
             // background document must preserve another document's already-queued activation intent.
             var destroyingDocument = e.Document;
-            var activeDocument = Application.DocumentManager.MdiActiveDocument;
+            Bricscad.ApplicationServices.Document activeDocument;
+            try
+            {
+                activeDocument = Application.DocumentManager.MdiActiveDocument;
+            }
+            catch
+            {
+                // The host may be tearing down the document collection while this native callback runs.
+                // Never let that native lookup escape into BricsCAD and never preserve a pending Record
+                // when active-document identity cannot be proven for this generation.
+                QueueHomeRefresh(ActiveDrawingRecordIntent.Suppress);
+                return;
+            }
+
             var destroyIntent = ReferenceEquals(destroyingDocument, activeDocument)
                 ? ActiveDrawingRecordIntent.Suppress
                 : ActiveDrawingRecordIntent.Preserve;
