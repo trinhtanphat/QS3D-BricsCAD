@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
     {
         private const string CanonicalityMessage = "must not contain leading/trailing whitespace";
         private const string UnknownReferenceMessage = "does not reference an existing";
+        private const string BackupRecoveryReason = "Primary QSDB was invalid; loaded validated backup.";
 
         private static readonly (string Attribute, string? Owner)[] References =
         {
@@ -142,8 +143,9 @@ namespace QS3D.Core.SmokeTests
             if (!result.RecoveredFromBackup)
                 throw new InvalidOperationException("Padded primary persisted reference must trigger validated backup recovery.");
             Equal(path + ".bak", result.SourcePath, "Backup recovery reported the wrong source path.");
-            if (result.PrimaryFailureMessage.IndexOf(CanonicalityMessage, StringComparison.OrdinalIgnoreCase) < 0)
-                throw new InvalidOperationException("Backup recovery must preserve the canonicality failure reason from the primary QSDB.");
+            Equal(BackupRecoveryReason, result.PrimaryFailureMessage, "Backup recovery must report the stable redacted primary failure reason.");
+            if (result.PrimaryFailureMessage.IndexOf(CanonicalityMessage, StringComparison.OrdinalIgnoreCase) >= 0)
+                throw new InvalidOperationException("Successful backup recovery must not expose primary canonicality detail through the public recovery reason.");
             Equal("F1", result.Project.ActiveFloorId, "Backup recovery returned a normalized value from the corrupt primary instead of the canonical backup.");
         }
 

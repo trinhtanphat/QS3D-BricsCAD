@@ -9,6 +9,8 @@ namespace QS3D.Core.SmokeTests
 {
     internal static class QsdbMetadataBackupFallbackSmoke
     {
+        private const string BackupRecoveryReason = "Primary QSDB was invalid; loaded validated backup.";
+
         [ModuleInitializer]
         internal static void Initialize()
         {
@@ -61,8 +63,10 @@ namespace QS3D.Core.SmokeTests
                     throw new Exception("QSDB backup recovery returned the wrong project identity.");
                 if (!string.Equals(Path.GetFullPath(recovered.SourcePath), Path.GetFullPath(backupPath), StringComparison.OrdinalIgnoreCase))
                     throw new Exception("QSDB backup recovery did not report the backup as its source path.");
-                if (recovered.PrimaryFailureMessage.IndexOf("metadata", StringComparison.OrdinalIgnoreCase) < 0)
-                    throw new Exception("QSDB backup recovery did not preserve the primary metadata failure diagnostic.");
+                if (!string.Equals(recovered.PrimaryFailureMessage, BackupRecoveryReason, StringComparison.Ordinal))
+                    throw new Exception("QSDB backup recovery did not report the stable redacted primary failure reason.");
+                if (recovered.PrimaryFailureMessage.IndexOf("metadata", StringComparison.OrdinalIgnoreCase) >= 0)
+                    throw new Exception("QSDB backup recovery leaked primary metadata validation detail through the public recovery reason.");
             }
             finally
             {
