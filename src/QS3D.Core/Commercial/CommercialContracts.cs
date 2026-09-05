@@ -351,10 +351,7 @@ namespace QS3D.Core.Commercial
             return value;
         }
 
-        internal static IReadOnlyList<T> Snapshot<T>(
-            IEnumerable<T> source,
-            string paramName,
-            int maximum)
+        internal static IReadOnlyList<T> Snapshot<T>(IEnumerable<T> source, string paramName, int maximum)
             where T : class
         {
             if (source == null) throw new ArgumentNullException(paramName);
