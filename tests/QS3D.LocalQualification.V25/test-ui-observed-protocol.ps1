@@ -23,6 +23,37 @@ $policy
 }
 "@
 ([type]$name)::Run()
+# Catch observed-operator expiration during a multi-call focus/input sequence,
+# while preserving the original native deadline and fail-closed upper bound.
+$stageAssignment = [regex]::Match($source, '(?m)^                _stageTimeout = [^\r\n]+;').Value
+$nativeDeadline = [regex]::Match($source, '(?m)^        private static readonly TimeSpan UiStageTimeout = [^\r\n]+;').Value
+$expiration = [regex]::Match($source, '(?ms)if \(DateTime.UtcNow > _deadlineUtc\)\s+throw new ProbeException\("ui_timeout_" \+ _stage.ToString\(\)\);').Value.Replace('DateTime.UtcNow', 'now')
+if (-not $stageAssignment -or -not $nativeDeadline -or -not $expiration) { throw 'FAIL: actual stage clock cannot be extracted.' }
+$clockName = 'Local022ObservedDeadline' + [Guid]::NewGuid().ToString('N')
+Add-Type -TypeDefinition @"
+using System;
+public static class $clockName {
+$nativeDeadline
+    private sealed class ProbeException : Exception { public ProbeException(string code) : base(code) {} }
+    private static bool Expired(bool _observedClickDriver, int elapsedSeconds) {
+        TimeSpan _stageTimeout;
+$stageAssignment
+        var started = new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc);
+        var _deadlineUtc = started + _stageTimeout;
+        var now = started.AddSeconds(elapsedSeconds);
+        var _stage = "InputW1";
+        try { $expiration } catch (ProbeException) { return true; }
+        return false;
+    }
+    public static void Run() {
+        if (Expired(true, 181) || Expired(true, 599) || Expired(true, 600))
+            throw new Exception("Observed input expires before approved ten-minute operator boundary");
+        if (!Expired(true, 601)) throw new Exception("Observed input lost bounded expiration");
+        if (Expired(false, 25) || !Expired(false, 26)) throw new Exception("Native deadline changed");
+    }
+}
+"@
+([type]$clockName)::Run()
 $writer = [regex]::Match($source, '(?ms)^        private static void WriteUiAction\([^\r\n]*\)\r?\n        \{.*?^        \}').Value
 if (-not $writer) { throw 'FAIL: actual request writer is missing.' }
 $fieldDefinitions = [regex]::Matches($source, '(?m)^            private static readonly string\[\] Field(?:Order|Text) = \{[^\r\n]+\};')

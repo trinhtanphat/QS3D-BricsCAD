@@ -59,7 +59,7 @@ prepares the visible window/tree/editor through those APIs.
    final receipts before any PASS claim. V26 follows only a cleaned V25 pass on
    the same frozen product; qualify the new driver on V25 before using it on V26.
 
-The asynchronous operator mode uses a bounded 180-second stage deadline and
+The owner-approved asynchronous operator mode uses a bounded 600-second stage deadline and
 3600-second phase limit. These are distinct from the original 25/600-second
 native-driver limits; neither mode retries or relabels failed evidence.
 

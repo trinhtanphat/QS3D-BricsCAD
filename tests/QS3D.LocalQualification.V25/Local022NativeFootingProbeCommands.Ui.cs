@@ -230,7 +230,7 @@ namespace QS3D.LocalQualification.V25
                 // An external observe/action/refresh operator has multiple explicit
                 // focus checks per numeric field. Its separate bounded deadline is
                 // not a retry or relaxation of the native driver deadline.
-                _stageTimeout = _observedClickDriver ? TimeSpan.FromSeconds(180) : UiStageTimeout;
+                _stageTimeout = _observedClickDriver ? TimeSpan.FromSeconds(600) : UiStageTimeout;
                 _startedUtc = DateTime.UtcNow;
                 _deadlineUtc = _startedUtc + _stageTimeout;
                 _stage = UiStage.LocateWorkspace;
