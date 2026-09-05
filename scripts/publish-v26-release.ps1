@@ -337,6 +337,9 @@ try {
   $publishPatchAttempted = $true
   $publishRequest = @{
     draft = $false
+    tag_name = $env:RELEASE_TAG
+    target_commitish = $env:GITHUB_SHA
+    prerelease = $isPrerelease
     name = $expectedReleaseName
     body = $expectedPublishedBody
   } | ConvertTo-Json
