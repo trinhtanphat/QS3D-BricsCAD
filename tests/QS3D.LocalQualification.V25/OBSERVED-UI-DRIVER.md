@@ -14,6 +14,15 @@ JavaScript APIs, with a new observation before each action and a refresh after i
 The probe does not maximize or scroll WPF controls in this mode; the operator
 prepares the visible window/tree/editor through those APIs.
 
+Optional `-SourceProfile Default` selects an existing, manually verified native
+profile as the source of the runner's disposable clone. Omission preserves the
+native runner's existing host-specific test-profile default. It never attaches
+to an existing host or runs against the original profile: the native runner still
+creates its unique nonce, records the source and recovery snapshot in the hashed
+profile recovery receipt, and restores the original current-profile pointer and
+inventory. Profile names are validated before autostart/file mutation. Do not use
+this option to bypass privacy/licensing prompts or to relax product assertions.
+
 ## Per-allocation procedure
 
 1. Freeze/commit/push the harness, and run its host-free guards and both probe

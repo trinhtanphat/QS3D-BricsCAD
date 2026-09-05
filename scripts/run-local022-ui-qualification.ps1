@@ -5,12 +5,22 @@ param(
     [Parameter(Mandatory=$true)][string]$PackageRoot,
     [string]$V26ProvenancePath,
     [string]$PrecedingV25Receipt,
+    [string]$SourceProfile,
     [ValidateSet('NATIVE_V1','OBSERVED_CLICK_V2')][string]$UiDriver = 'NATIVE_V1',
     [switch]$PauseForOperator,
     [Parameter(Mandatory=$true)][switch]$ConfirmTemporaryAutostartPause
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+function Get-Local022SourceProfile([string]$Name, [bool]$Specified) {
+    if (-not $Specified) { return $null }
+    if ([string]::IsNullOrWhiteSpace($Name) -or $Name -cne $Name.Trim() -or
+        $Name.Length -gt 128 -or $Name -match '[\\/"\x00-\x1f\x7f]') {
+        throw 'Source profile must be a canonical nonblank profile name without paths, quotes or controls.'
+    }
+    return $Name
+}
+$selectedProfile = Get-Local022SourceProfile $SourceProfile $PSBoundParameters.ContainsKey('SourceProfile')
 if (-not $ConfirmTemporaryAutostartPause) { throw 'Explicit temporary-autostart authorization required.' }
 if ($PauseForOperator -and $UiDriver -cne 'OBSERVED_CLICK_V2') { throw 'Operator pause requires OBSERVED_CLICK_V2.' }
 $operatorWaitPolicy = if ($PauseForOperator) { 'PAUSE_FOR_OPERATOR_V1' } else { 'WALL_CLOCK_V1' }
@@ -95,6 +105,7 @@ try {
         UiDriver = $UiDriver
         PauseForOperator = [bool]$PauseForOperator
     }
+    if ($null -ne $selectedProfile) { $parameters.Profile = $selectedProfile }
     if ($HostMajor -eq 26) { $parameters.ProvenancePath = $V26ProvenancePath }
     & (Join-Path $PSScriptRoot "test-bricscad-v$HostMajor-single-footing.ps1") @parameters
 } catch { $runFailure = $_ }

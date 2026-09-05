@@ -314,3 +314,32 @@ Allocation `ui-paused-v26-38`, RunId `5b9b7824175545a69cc8dc07134bd502`, same ex
 After more than ten minutes before QS3D baseline, the operator verified exact executable, parent, disposable DWG, nonce profile, process age, no main window, no loaded QS3D and no action/phase files, then stopped only that owned test process. The live runner was not interrupted: it reported exit_code=-1/phase=ui and completed finally. Final receipt verifies private/protected/profile cleanup, nonce removal, zero hosts, cleanup_failure=null and exact original autostart restoration. The diagnostic exit code reflects operator termination, not a spontaneous host crash. No consumed allocation may be retried or relabelled as PASS.
 
 The startup command used the existing `/L /P <nonce> /B <script>` form, not `/Automation`; `/L` only suppresses the splash screen according to [Bricsys startup options](https://help.bricsys.com/en-us/document/bricscad/customization/startup-options). Further V26 execution requires resolving the native pre-plugin startup condition. No product source, licensing configuration, installed release or tunnel endpoint was changed. #5718/#4034 and aggregate #72 remain open.
+
+### V26 manual startup and allocation39 — source-profile diagnostic
+
+On 2026-09-06 the owner opened V26 normally (no runner arguments). The native
+Start window appeared, followed by its Analytics privacy prompt. The operator
+only read that prompt, did not choose a privacy option, and subsequently observed
+it disappear. The owner then confirmed closing the manual host for exclusive
+test execution. Manual startup is not a QS3D qualification result.
+
+Fresh allocation `ui-paused-v26-39`, RunId `40e423036acc4ebea157ed6992134e66`,
+used harness `f27c8d4d407ded1b3cc5e57d8313f850f96774ce` and the same frozen
+`87aff7fec452f9a8dd9f641ef84d143edc73514d` product. It ran
+`2026-09-05T17:28:54.0687885Z`–`2026-09-05T17:32:41.3000362Z` and again
+produced no window, QS3D module, action request or phase. The operator stopped
+only its verified owned process to investigate the profile difference; this is
+`FAIL_OR_NO_RESULT`, not an observed crash or automatic timeout. All private,
+protected-state, current-profile, profile-inventory and nonce cleanup checks
+passed, as did exact original autostart restoration. Allocation39 is consumed.
+
+Read-only registry inspection found that the runner's source `QS3D-V26-TEST`
+contained only `Drawing Recovery`, whereas the manually successful `Default`
+contained the normal Config/Startup/UI branches. This is a diagnostic difference,
+not yet proof of the stall's root cause. The wrapper now exposes optional
+`-SourceProfile` to pass an explicitly selected existing profile to the unchanged
+native sandbox clone. The original profile is not used as the live test profile;
+all nonce isolation, hash binding, product assertions and cleanup remain required.
+Actual selector/forwarding regression was RED before implementation and GREEN
+afterward. A fresh V26 allocation from `Default` remains required; V25's accepted
+allocation37 and all previous consumed receipts are unchanged.
