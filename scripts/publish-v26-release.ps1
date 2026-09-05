@@ -105,6 +105,8 @@ function Assert-PublishedReleaseMatchesVerifiedTransaction {
     [Parameter(Mandatory = $true)]$ReleaseSnapshot,
     [Parameter(Mandatory = $true)][string]$ReleaseUri,
     [Parameter(Mandatory = $true)][long]$ReleaseId,
+    [Parameter(Mandatory = $true)][string]$ExpectedReleaseName,
+    [Parameter(Mandatory = $true)][string]$ExpectedReleaseBody,
     [Parameter(Mandatory = $true)][string[]]$ExpectedAssets,
     [Parameter(Mandatory = $true)][hashtable]$VerifiedAssetIds,
     [Parameter(Mandatory = $true)][hashtable]$AdmittedAssets,
@@ -116,6 +118,8 @@ function Assert-PublishedReleaseMatchesVerifiedTransaction {
   if (-not [string]::Equals([string]$ReleaseSnapshot.tag_name, $env:RELEASE_TAG, [StringComparison]::Ordinal)) { throw "Published V26 release tag mismatch during acknowledgement reconciliation." }
   if (-not [string]::Equals([string]$ReleaseSnapshot.target_commitish, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) { throw "Published V26 release target SHA mismatch during acknowledgement reconciliation." }
   if ([bool]$ReleaseSnapshot.prerelease -ne $IsPrerelease) { throw "Published V26 release prerelease-state mismatch during acknowledgement reconciliation." }
+  if (-not [string]::Equals([string]$ReleaseSnapshot.name, $ExpectedReleaseName, [StringComparison]::Ordinal)) { throw "Published V26 release name mismatch during acknowledgement reconciliation." }
+  if (-not [string]::Equals([string]$ReleaseSnapshot.body, $ExpectedReleaseBody, [StringComparison]::Ordinal)) { throw "Published V26 release body transaction identity mismatch during acknowledgement reconciliation." }
   Assert-RemoteReleaseTagTargetsWorkflowSha
   if (@($ReleaseSnapshot.assets).Count -ne $ExpectedAssets.Count) { throw "Published V26 release asset count mismatch during acknowledgement reconciliation." }
   if ($VerifiedAssetIds.Count -ne $ExpectedAssets.Count) { throw "Verified V26 release asset identity set is incomplete; refusing acknowledgement recovery." }
@@ -156,6 +160,7 @@ $tagReadyForRelease = $false
 $releaseId = [long]0
 $release = $null
 $releaseUri = $null
+$expectedPublishedBody = $null
 $expectedAssets = @()
 $admittedAssets = @{}
 $verifiedAssetIds = @{}
@@ -213,6 +218,7 @@ try {
       ([string]$release.body).IndexOf($draftTransactionMarker, [StringComparison]::Ordinal) -lt 0) {
     throw "Newly-created/reconciled V26 draft identity, state, or transaction marker mismatch."
   }
+  $expectedPublishedBody = [string]$release.body
   $releaseId = [long]$release.id
   Assert-RemoteReleaseTagTargetsWorkflowSha
 
@@ -329,11 +335,21 @@ try {
   }
 
   $publishPatchAttempted = $true
-  $published = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body (@{ draft = $false } | ConvertTo-Json)
+  $publishRequest = @{
+    draft = $false
+    tag_name = $env:RELEASE_TAG
+    target_commitish = $env:GITHUB_SHA
+    prerelease = $isPrerelease
+    name = $expectedReleaseName
+    body = $expectedPublishedBody
+  } | ConvertTo-Json
+  $published = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body $publishRequest
   Assert-PublishedReleaseMatchesVerifiedTransaction `
     -ReleaseSnapshot $published `
     -ReleaseUri $releaseUri `
     -ReleaseId $releaseId `
+    -ExpectedReleaseName $expectedReleaseName `
+    -ExpectedReleaseBody $expectedPublishedBody `
     -ExpectedAssets $expectedAssets `
     -VerifiedAssetIds $verifiedAssetIds `
     -AdmittedAssets $admittedAssets `
@@ -352,6 +368,8 @@ catch {
           -ReleaseSnapshot $reconciledRelease `
           -ReleaseUri $releaseUri `
           -ReleaseId $releaseId `
+          -ExpectedReleaseName $expectedReleaseName `
+          -ExpectedReleaseBody $expectedPublishedBody `
           -ExpectedAssets $expectedAssets `
           -VerifiedAssetIds $verifiedAssetIds `
           -AdmittedAssets $admittedAssets `
