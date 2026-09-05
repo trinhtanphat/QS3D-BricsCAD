@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import hashlib
+import re
 import subprocess
 from pathlib import Path
 
@@ -33,6 +34,15 @@ gitmodules = tracked_gitmodules.stdout
 EXPECTED_GITMODULES_SHA256 = "c6763e859259d63fc1c7df6ef0c726e7e5bc03af00fd5224a3004dec064ccd6c"
 
 
+def active_literal_entries(block: str) -> list[str]:
+    entries: list[str] = []
+    for line in block.splitlines()[1:]:
+        match = re.fullmatch(r"\s*'([^']+)'\s*,?\s*(?:#.*)?", line)
+        if match:
+            entries.append(match.group(1))
+    return entries
+
+
 def validate(text: str, gitmodules_bytes: bytes, expected_digest: str) -> list[str]:
     errors: list[str] = []
     start = text.find("$finalReleaseRelevantPaths = @(")
@@ -42,14 +52,19 @@ def validate(text: str, gitmodules_bytes: bytes, expected_digest: str) -> list[s
     if end < 0:
         return ["V26 publisher final release-relevant path classifier is not bounded"]
     block = text[start:end]
+    active_entries = active_literal_entries(block)
 
-    # #5890 only owns the metadata-to-release-relevance binding. Existing V26
-    # publisher/preflight coverage owns ancestry, final-main confirmation and
-    # publish ordering; duplicating those contracts here makes this focused
-    # guard brittle without strengthening the binding under test.
-    for token in ("'scripts/'", "'external/'"):
-        if token not in block:
-            errors.append(f"V26 final-main release drift classifier missing binding path: {token}")
+    # Require exactly one active literal for each binding path. Raw substring
+    # checks are unsafe because a commented-out or duplicate literal can make a
+    # source guard appear green while PowerShell no longer classifies the path
+    # as intended.
+    for required_path in ("scripts/", "external/"):
+        count = active_entries.count(required_path)
+        if count != 1:
+            errors.append(
+                "V26 final-main release drift classifier requires exactly one active literal "
+                f"for {required_path}; found {count}"
+            )
 
     actual_digest = hashlib.sha256(gitmodules_bytes).hexdigest()
     if actual_digest != expected_digest:
@@ -81,4 +96,10 @@ if commented_publisher == publisher:
 if not validate(commented_publisher, gitmodules, EXPECTED_GITMODULES_SHA256):
     raise SystemExit("V26 commented scripts/ classifier mutation probe did not fail closed")
 
-print("PASS V26 .gitmodules metadata is bound to the release-relevant scripts/ classifier")
+duplicated_publisher = publisher.replace("    'scripts/',\n", "    'scripts/',\n    'scripts/',\n", 1)
+if duplicated_publisher == publisher:
+    raise SystemExit("V26 duplicate scripts/ classifier mutation probe could not mutate publisher fixture")
+if not validate(duplicated_publisher, gitmodules, EXPECTED_GITMODULES_SHA256):
+    raise SystemExit("V26 duplicate scripts/ classifier mutation probe did not fail closed")
+
+print("PASS V26 .gitmodules metadata is bound to exactly one active release-relevant scripts/ classifier entry")
