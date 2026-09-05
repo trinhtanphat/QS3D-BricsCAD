@@ -244,6 +244,7 @@ namespace QS3D.LocalQualification.V25
                         _workspace = RequireProductionWorkspace(_context.Product);
                         RequireClickable(_workspace, "workspace_not_visible");
                         _workspace.AddHandler(Mouse.PreviewMouseDownEvent, new MouseButtonEventHandler(OnPhysicalMouse), true);
+                        _workspace.AddHandler(Button.ClickEvent, new RoutedEventHandler(OnPhysicalButtonClick), true);
                         Advance(UiStage.SelectTree);
                         break;
 
@@ -262,7 +263,6 @@ namespace QS3D.LocalQualification.V25
                         if (!AwaitAction(() => FindVisualDescendants<TextBlock>(item).Single(text =>
                             text.IsVisible && string.Equals(text.Text, "Móng đơn", StringComparison.Ordinal)), "click", string.Empty)) return;
                         if (!item.IsSelected) return;
-                        _workspace!.RemoveHandler(Mouse.PreviewMouseDownEvent, new MouseButtonEventHandler(OnPhysicalMouse));
                         _project = GetOrCreateProject(_context.Document);
                         _familyBaseline = _project.Families.Count;
                         _semanticBaseline = _project.Elements.Count;
@@ -550,12 +550,19 @@ namespace QS3D.LocalQualification.V25
                 while (ancestor != null && !ReferenceEquals(ancestor, _workspace))
                 {
                     if (ancestor is TreeViewItem row) UiTrace("hit_tree=" + row.Header + " selected=" + row.IsSelected);
+                    if (ancestor is Button button) UiTrace("hit_button=" + button.Content + " tooltip=" + button.ToolTip);
                     ancestor = VisualTreeHelper.GetParent(ancestor);
                 }
-                var target = RequireSingleFootingTree(_workspace!);
-                var label = FindVisualDescendants<TextBlock>(target).Single(text => text.IsVisible && text.Text == "Móng đơn");
-                UiTrace("current_target=" + ElementCenter(label) + " relative=" + label.TranslatePoint(new WpfPoint(label.ActualWidth / 2,label.ActualHeight / 2), _workspace));
+                if (_stage == UiStage.SelectTree)
+                {
+                    var target = RequireSingleFootingTree(_workspace!);
+                    var label = FindVisualDescendants<TextBlock>(target).Single(text => text.IsVisible && text.Text == "Móng đơn");
+                    UiTrace("current_target=" + ElementCenter(label) + " relative=" + label.TranslatePoint(new WpfPoint(label.ActualWidth / 2,label.ActualHeight / 2), _workspace));
+                }
             }
+
+            private void OnPhysicalButtonClick(object sender, RoutedEventArgs args) =>
+                UiTrace("button_click " + _stage + " source=" + args.OriginalSource + " handled=" + args.Handled);
 
             private void UiTrace(string value)
             {
