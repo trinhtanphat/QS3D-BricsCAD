@@ -18,6 +18,7 @@ for path in (CORE, COORDINATOR, CONTEXT, CONFIRMATION, SMOKE, PERSISTENCE_SMOKE,
 
 if CORE.is_file():
     text = CORE.read_text(encoding="utf-8")
+    # Capture now names the backup path before opening it; pin that semantic form instead of the retired inline expression.
     for token in (
         "MaxSidecarBytes = 64L * 1024L * 1024L",
         'var backupPath = fullPath + ".bak";',
