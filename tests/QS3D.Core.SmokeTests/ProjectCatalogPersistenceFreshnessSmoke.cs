@@ -75,7 +75,7 @@ namespace QS3D.Core.SmokeTests
 
             project.Families.Remove(family);
             family.Properties.Add("Detached", "true");
-            Equal(baseline + 6L, project.ChangeVersion, "detached family property mutation must not touch former owner");
+            Equal(baseline + 7L, project.ChangeVersion, "structural family removal must advance once and detached family property mutation must not touch former owner");
         }
 
         private static void NormalizedNoOpsDoNotAdvanceProjectFreshness()
@@ -102,12 +102,12 @@ namespace QS3D.Core.SmokeTests
 
             project.Zones.Remove(zone);
             zone.Name = "Detached zone";
-            Equal(capturedVersion, project.ChangeVersion, "removed zone must be detached");
+            Equal(capturedVersion + 1L, project.ChangeVersion, "removed zone structural mutation must advance once and detached child must stay neutral");
 
             var replacement = new ZoneDefinition("Z2", "Replacement");
             project.Zones.Add(replacement);
             replacement.Name = "Replacement edited";
-            Equal(capturedVersion + 1L, project.ChangeVersion, "newly owned zone must be attached");
+            Equal(capturedVersion + 3L, project.ChangeVersion, "newly owned zone add plus child edit must each advance freshness once");
 
             floor.ElevationM = 7d;
             family.Name = "Changed family";
@@ -149,23 +149,23 @@ namespace QS3D.Core.SmokeTests
 
             project.Zones.RemoveAt(0);
             zone.Name = "Duplicate zone still owned";
-            Equal(baseline + 2L, project.ChangeVersion, "remaining duplicate reference must stay attached once");
+            Equal(baseline + 3L, project.ChangeVersion, "first duplicate removal and remaining owned child edit must each advance once");
 
             project.Zones.RemoveAt(0);
             zone.Name = "Duplicate zone detached";
-            Equal(baseline + 2L, project.ChangeVersion, "last duplicate removal must detach ownership");
+            Equal(baseline + 4L, project.ChangeVersion, "last duplicate removal must advance once and detach ownership");
 
             var family = new ProjectFamily("PF-DUP", "Duplicate family", ElementCategory.ArchitecturalWall);
             project.Families.Add(family);
             project.Families.Add(family);
             family.Properties["A"] = "1";
-            Equal(baseline + 3L, project.ChangeVersion, "duplicate family reference must request one project touch");
+            Equal(baseline + 7L, project.ChangeVersion, "two family structural adds plus one owned property mutation must each advance once");
             project.Families.RemoveAt(0);
             family.Properties["A"] = "2";
-            Equal(baseline + 4L, project.ChangeVersion, "remaining duplicate family reference must stay attached once");
+            Equal(baseline + 9L, project.ChangeVersion, "first family removal and remaining owned property edit must each advance once");
             project.Families.RemoveAt(0);
             family.Properties["A"] = "3";
-            Equal(baseline + 4L, project.ChangeVersion, "last duplicate family removal must detach ownership");
+            Equal(baseline + 10L, project.ChangeVersion, "last family removal must advance once and detach ownership");
         }
 
         private static void ServiceRenameAdvancesProjectFreshnessExactlyOnce()
@@ -279,7 +279,7 @@ namespace QS3D.Core.SmokeTests
             project.Zones.Add(zone);
             project.Floors.Add(floor);
             project.Families.Add(family);
-            Equal(baseline, project.ChangeVersion, "catalog materialization must not advance freshness");
+            Equal(baseline + 3L, project.ChangeVersion, "three persisted catalog structural adds must each advance freshness once");
             return project;
         }
 

@@ -36,9 +36,11 @@ for token in (
     "if (_inner.TryGetValue(key, out var current) && string.Equals(current, value, StringComparison.Ordinal)) return;",
     "if (_inner.Count == 0) return;",
     "internal sealed class CatalogOwnershipList<T> : IList<T>",
-    "Zones = new CatalogOwnershipList<ZoneDefinition>(AttachZone, DetachZone);",
-    "Floors = new CatalogOwnershipList<FloorDefinition>(AttachFloor, DetachFloor);",
-    "Families = new CatalogOwnershipList<ProjectFamily>(AttachFamily, DetachFamily);",
+    "private readonly Action _beforeMutation;",
+    "internal CatalogOwnershipList(Action<T> attach, Action<T> detach, Action beforeMutation)",
+    "Zones = new CatalogOwnershipList<ZoneDefinition>(AttachZone, DetachZone, Touch);",
+    "Floors = new CatalogOwnershipList<FloorDefinition>(AttachFloor, DetachFloor, Touch);",
+    "Families = new CatalogOwnershipList<ProjectFamily>(AttachFamily, DetachFamily, Touch);",
     "zone.PersistenceMutationRequested += Touch",
     "floor.PersistenceMutationRequested += Touch",
     "family.PersistenceMutationRequested += Touch",
@@ -61,6 +63,7 @@ for token in (
     "ServiceZoneUpdateAdvancesProjectFreshnessExactlyOnce",
     "ServiceFloorUpdateAdvancesProjectFreshnessOncePerLogicalUpdate",
     "ProjectStateSnapshot.CreateDetachedCopy(project)",
+    "three persisted catalog structural adds must each advance freshness once",
 ):
     if token not in smoke:
         errors.append("catalog freshness regression missing: " + token)
@@ -76,13 +79,21 @@ for forbidden, label in (
     if forbidden in text:
         errors.append(label)
 
+for forbidden, label in (
+    ("project.Touch();\n            project.Families.Add(family);", "Family create must let structural Add own revision admission"),
+    ("project.Touch();\n            project.Families.Add(clone);", "Family duplicate must let structural Add own revision admission"),
+    ("project.Touch();\n            return project.Families.Remove(family);", "Family delete must let structural Remove own revision admission"),
+):
+    if forbidden in family_service:
+        errors.append(label)
+
 for token in (
     "var clone = CreateDetached(project, newId, newName, source.Category);",
     "foreach (var pair in properties) clone.Properties[pair.Key] = pair.Value;",
-    "project.Touch();\n            project.Families.Add(clone);",
+    "project.Families.Add(clone);",
 ):
     if token not in family_service:
-        errors.append("Family duplicate must initialize properties while detached and admit the completed clone in one project revision: " + token)
+        errors.append("Family duplicate must initialize properties while detached and let structural admission publish the completed clone in one project revision: " + token)
 
 if "floor.ApplyPersistedUpdate(normalizedName, nameChanged, elevationM, elevationChanged);" not in floor_service:
     errors.append("Floor service must batch name/elevation persistence freshness into one logical revision.")
@@ -96,4 +107,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: owned Zone/Floor/Family scalar and Family property changes advance ProjectState persistence freshness exactly once per logical catalog operation while no-op/materialization/snapshot semantics stay guarded.")
+print("PASS: owned Zone/Floor/Family scalar, Family property, and structural catalog changes advance ProjectState persistence freshness exactly once per logical catalog operation while no-op and snapshot semantics stay guarded.")
