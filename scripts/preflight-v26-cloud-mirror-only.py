@@ -33,16 +33,17 @@ for forbidden in (
 
 # PrimaryUrl stays mandatory in the shared helper. One explicit whitespace value
 # satisfies PowerShell's mandatory string binder, while the helper's existing
-# IsNullOrWhiteSpace gate deliberately omits the primary candidate. This keeps the
-# shared helper contract untouched and makes the cloud lane mirror-only.
-if workflow.count("-PrimaryUrl ' '") != 2:
-    fail("both V26 acquisition call sites must use the explicit whitespace PrimaryUrl sentinel")
+# IsNullOrWhiteSpace gate deliberately omits the primary candidate. The cloud lane
+# now has three helper invocations: installer admission plus primary/fallback fresh-
+# runner extraction. All three must preserve the same mirror-only sentinel contract.
+if workflow.count("-PrimaryUrl ' '") != 3:
+    fail("all three V26 helper call sites must use the explicit whitespace PrimaryUrl sentinel")
 if "[Parameter(Mandatory = $true)][string]$PrimaryUrl" not in helper:
     fail("V26 helper must keep PrimaryUrl mandatory")
 if "if (-not [string]::IsNullOrWhiteSpace($PrimaryUrl))" not in helper:
     fail("V26 helper must continue to omit the primary candidate for whitespace PrimaryUrl")
-if workflow.count("-UsePinnedHttpMirror") != 2:
-    fail("both V26 acquisition call sites must opt into the helper-owned pinned mirror")
+if workflow.count("-UsePinnedHttpMirror") != 3:
+    fail("all three V26 helper call sites must opt into the helper-owned pinned mirror")
 if "http://" in workflow:
     fail("release-v26-cloud.yml must not embed the plaintext .20 URL; the helper owns it")
 
