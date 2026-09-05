@@ -663,6 +663,10 @@ namespace QS3D.LocalQualification.V25
                 var tree = FindVisualDescendants<TreeView>(_workspace!).Single(x => x.Name == "ModelTree");
                 var item = tree.SelectedItem as TreeViewItem;
                 var category = _workspace!.GetType().GetField("_categoryFilter", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(_workspace);
+                var viewModel = _workspace.GetType().GetField("_viewModel", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(_workspace);
+                UiTrace(label + " workspace_status=" + viewModel?.GetType().GetProperty("Status")?.GetValue(viewModel, null) +
+                    " loading=" + _workspace.GetType().GetField("_loadingContext", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(_workspace) +
+                    " subtype=" + _workspace.GetType().GetField("_familySubtypeFilter", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(_workspace));
                 UiTrace(label + " tree=" + item?.Header + " tag=" + item?.Tag + " category=" + category +
                     " families=" + (_project == null ? "unbound" : string.Join(",", _project.Families.Select(x => x.Category.ToString()))));
                 UiTrace(label + " roots=" + string.Join(",", PresentationSource.CurrentSources.Cast<PresentationSource>().Select(x => x.RootVisual?.GetType().FullName)));
@@ -680,7 +684,7 @@ namespace QS3D.LocalQualification.V25
                     foreach (var route in routes)
                     {
                         var handler = route.GetType().GetProperty("Handler")?.GetValue(route, null) as Delegate;
-                        UiTrace(label + " add_handler=" + handler?.Method.Name);
+                        UiTrace(label + " add_handler=" + handler?.Method.Name + " same_workspace=" + ReferenceEquals(handler?.Target, _workspace));
                     }
             }
 
