@@ -68,6 +68,32 @@ for job in ("qualify", "release"):
     if marker not in workflow:
         fail(f"{job} job must require manual dispatch plus explicit RELEASE confirmation")
 
+# V25 owns the unscoped shared preview tags. Cloud V26 publication must therefore
+# append a V26-only prerelease identifier while package ProductVersion remains the
+# source version. Package semantic validation uses the base source tag; provenance,
+# candidate identity, and publisher keep using the scoped cloud publication tag.
+require_all(
+    workflow,
+    WORKFLOW,
+    (
+        "V26_PACKAGE_TAG",
+        "$packageTag = 'v' + $v26Versions[0]",
+        "$expectedCloudTag = $packageTag + '.v26'",
+        "V26 cloud release tag/source version mismatch. Expected $expectedCloudTag with matching Core version.",
+        '"V26_PACKAGE_TAG=$packageTag" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append',
+        "-ReleaseTag $env:V26_PACKAGE_TAG | Out-Null",
+    ),
+)
+
+package_identity_step = re.search(
+    r"(?s)- name: Validate V26 preview package identity.*?scripts\\assert-v26-release-package-identity\.ps1.*?(?=\n\s*- name:)",
+    workflow,
+)
+if package_identity_step is None:
+    fail("release-v26-cloud.yml is missing the bounded V26 package identity validation step")
+if "-ReleaseTag $env:RELEASE_TAG" in package_identity_step.group(0):
+    fail("V26 package identity must use V26_PACKAGE_TAG, not the scoped cloud publication tag")
+
 # Candidate admission owns the single V26 publisher invocation. A standalone second
 # publisher step would duplicate a transaction after candidate verification.
 if re.search(r"(?m)^\s*run:\s*\.\\scripts\\publish-v26-release\.ps1\s*$", workflow):
