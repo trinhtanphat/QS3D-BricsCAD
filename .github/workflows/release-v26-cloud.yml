@@ -183,7 +183,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $msi = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad\BricsCAD-V26.2.07-x64.msi'
-          $extract = Join-Path $env:RUNNER_TEMP ('bricscad-v26-reference-primary-' + [Guid]::NewGuid().ToString('N'))
+          $extract = Join-Path $env:RUNNER_TEMP ('v26p-' + [Guid]::NewGuid().ToString('N'))
           $result = & .\scripts\acquire-v26-compile-references.ps1 `
             -MsiPath $msi `
             -ExtractDir $extract `
@@ -253,7 +253,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $msi = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad\BricsCAD-V26.2.07-x64.msi'
-          $extract = Join-Path $env:RUNNER_TEMP ('bricscad-v26-reference-fallback-' + [Guid]::NewGuid().ToString('N'))
+          $extract = Join-Path $env:RUNNER_TEMP ('v26f-' + [Guid]::NewGuid().ToString('N'))
           $result = & .\scripts\acquire-v26-compile-references.ps1 `
             -MsiPath $msi `
             -ExtractDir $extract `
