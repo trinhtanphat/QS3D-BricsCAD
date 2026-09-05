@@ -43,8 +43,14 @@ namespace QS3D.BricsCAD.V25.Services
 
         public static bool CaptureSnapshot(Document document, EntitySnapshot snapshot, ElementCategory category)
         {
+            return CaptureSnapshot(document, snapshot, category, _ => { });
+        }
+
+        public static bool CaptureSnapshot(Document document, EntitySnapshot snapshot, ElementCategory category, Action<ProjectState> postCaptureMutation)
+        {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            if (postCaptureMutation == null) throw new ArgumentNullException(nameof(postCaptureMutation));
             EnsureCapturePreflight(document, new[] { snapshot }, category);
             var projectExistedBeforeCapture = ProjectContextCoordinator.TryGetReadOnly(document, out _);
             var project = ProjectContextCoordinator.GetOrCreate(document);
@@ -54,6 +60,7 @@ namespace QS3D.BricsCAD.V25.Services
                 var captured = CaptureSnapshotCore(document, project, snapshot, category);
                 if (captured && StructuralWallConcreteContactService.IsConcreteContactCategory(category))
                     RefreshStructuralWallConcreteContacts(document, project);
+                if (captured) postCaptureMutation(project);
                 return captured;
             }
             catch (Exception operationError)
