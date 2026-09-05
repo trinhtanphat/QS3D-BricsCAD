@@ -43,6 +43,7 @@ namespace QS3D.BricsCAD.V25.UI
         private bool _browserUpdating;
         private bool _browserRefreshQueued;
         private bool _browserForceRebindQueued;
+        private long _browserAttachmentGeneration;
         private DependencyPropertyDescriptor? _browserInspectionSourceDescriptor;
 
         private TabControl? _browserTabs;
@@ -94,6 +95,7 @@ namespace QS3D.BricsCAD.V25.UI
                 throw new InvalidOperationException("Project Browser class handlers were not registered.");
             EnsureProjectBrowserSurface();
             if (_browserAttached) return;
+            _browserAttachmentGeneration++;
             _browserAttached = true;
             DataContextChanged += OnBrowserDataContextChanged;
             _browserInspectionSourceDescriptor = DependencyPropertyDescriptor.FromProperty(
@@ -107,6 +109,7 @@ namespace QS3D.BricsCAD.V25.UI
         private void DetachProjectBrowser()
         {
             if (!_browserAttached) return;
+            _browserAttachmentGeneration++;
             _browserAttached = false;
             DataContextChanged -= OnBrowserDataContextChanged;
             _browserInspectionSourceDescriptor?.RemoveValueChanged(InspectionList, OnBrowserInspectionSourceChanged);
@@ -117,6 +120,11 @@ namespace QS3D.BricsCAD.V25.UI
             _browserInspectionDrawingFingerprint = string.Empty;
             _browserRefreshQueued = false;
             _browserForceRebindQueued = false;
+        }
+
+        private bool IsCurrentBrowserAttachment(long generation)
+        {
+            return _browserAttached && IsLoaded && generation == _browserAttachmentGeneration;
         }
 
         private void OnBrowserDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -132,7 +140,14 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (!_browserAttached || _browserUpdating) return;
             CaptureBrowserInspectionIdentity();
-            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(SyncProjectBrowserFromCad));
+            var generation = _browserAttachmentGeneration;
+            Dispatcher.BeginInvoke(
+                DispatcherPriority.Background,
+                new Action(() =>
+                {
+                    if (!IsCurrentBrowserAttachment(generation)) return;
+                    SyncProjectBrowserFromCad();
+                }));
         }
 
         private void CaptureBrowserInspectionIdentity()
@@ -147,14 +162,16 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void QueueBrowserRefresh(bool forceRebind)
         {
-            if (!_browserAttached && !IsLoaded) return;
+            if (!_browserAttached || !IsLoaded) return;
             _browserForceRebindQueued |= forceRebind;
             if (_browserRefreshQueued) return;
             _browserRefreshQueued = true;
+            var generation = _browserAttachmentGeneration;
             Dispatcher.BeginInvoke(
                 DispatcherPriority.Background,
                 new Action(() =>
                 {
+                    if (!IsCurrentBrowserAttachment(generation)) return;
                     _browserRefreshQueued = false;
                     var force = _browserForceRebindQueued;
                     _browserForceRebindQueued = false;
