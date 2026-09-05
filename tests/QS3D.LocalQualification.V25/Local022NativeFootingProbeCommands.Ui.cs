@@ -543,6 +543,15 @@ namespace QS3D.LocalQualification.V25
                 UiTrace("mouse " + _stage + " source=" + args.OriginalSource?.GetType().FullName +
                     " text=" + (element is TextBlock text ? text.Text : element?.Name) +
                     " position=" + args.GetPosition(_workspace));
+                DependencyObject? ancestor = args.OriginalSource as DependencyObject;
+                while (ancestor != null && !ReferenceEquals(ancestor, _workspace))
+                {
+                    if (ancestor is TreeViewItem row) UiTrace("hit_tree=" + row.Header + " selected=" + row.IsSelected);
+                    ancestor = VisualTreeHelper.GetParent(ancestor);
+                }
+                var target = RequireSingleFootingTree(_workspace!);
+                var label = FindVisualDescendants<TextBlock>(target).Single(text => text.IsVisible && text.Text == "Móng đơn");
+                UiTrace("current_target=" + ElementCenter(label) + " relative=" + label.TranslatePoint(new WpfPoint(label.ActualWidth / 2,label.ActualHeight / 2), _workspace));
             }
 
             private void UiTrace(string value)
