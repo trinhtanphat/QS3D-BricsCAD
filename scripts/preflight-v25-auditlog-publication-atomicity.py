@@ -53,13 +53,15 @@ def main() -> None:
     prepare_end = source.find("private static bool PreparePublishedWindow", prepare_start)
     require(prepare_start >= 0 and prepare_end > prepare_start, "cannot bound unpublished-candidate preparation helper")
     prepare = source[prepare_start:prepare_end]
+    publication_guard_index = prepare.find("if (_publicationInFlightCandidate != null)")
+    unpublished_read_index = prepare.find("var candidate = _unpublishedCandidate;")
     require(
-        "ReferenceEquals(_publicationInFlightCandidate, candidate)" in prepare and "return false;" in prepare,
-        "reentrant invocation must fail closed without closing a candidate while native publication is in flight",
+        publication_guard_index >= 0 and publication_guard_index < unpublished_read_index,
+        "reentrant invocation must fail closed on any native publication in flight before reading a Closed-cleared unpublished slot",
     )
     require(
-        prepare.find("ReferenceEquals(_publicationInFlightCandidate, candidate)") < prepare.find("CloseUnpublishedCandidate(candidate)"),
-        "in-flight publication guard must run before any Close attempt",
+        prepare.find("return false;", publication_guard_index, unpublished_read_index) > publication_guard_index,
+        "in-flight publication guard must reject reentry before singleton reads or Close attempts",
     )
 
     require(
@@ -67,7 +69,7 @@ def main() -> None:
         "Audit Log must reserve the exact candidate while terminal Close is executing",
     )
     require(
-        "if (_cleanupInFlightCandidate != null)" in prepare and prepare.find("if (_cleanupInFlightCandidate != null)") < prepare.find("var candidate = _unpublishedCandidate;"),
+        "if (_cleanupInFlightCandidate != null)" in prepare and prepare.find("if (_cleanupInFlightCandidate != null)") < unpublished_read_index,
         "reentrant invocation must fail closed before reading singleton state while terminal Close is in flight",
     )
 
