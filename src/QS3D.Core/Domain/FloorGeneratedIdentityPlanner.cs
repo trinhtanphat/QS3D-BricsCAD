@@ -77,19 +77,21 @@ namespace QS3D.Core.Domain
             var raw = value ?? string.Empty;
             RequireNoControlCharacters(raw, nameof(value), "Floor id");
             var normalized = raw.Trim();
-            if (normalized.Length == 0 || normalized.Length > MaxFloorIdLength)
+            RequireWellFormedUnicode(normalized, nameof(value), "Floor id");
+            normalized = normalized.Normalize(NormalizationForm.FormC);
+            var canonical = normalized.ToUpperInvariant().Normalize(NormalizationForm.FormC);
+            if (canonical.Length == 0 || canonical.Length > MaxFloorIdLength)
                 throw new ArgumentException("Floor id must contain 1.." + MaxFloorIdLength + " characters.", nameof(value));
-            var canonical = normalized.ToUpperInvariant();
-            RequireWellFormedUnicode(canonical, nameof(value), "Floor id");
             return canonical;
         }
 
         private static string NormalizeName(string value)
         {
             var normalized = (value ?? string.Empty).Trim();
+            RequireWellFormedUnicode(normalized, nameof(value), "Floor name");
+            normalized = normalized.Normalize(NormalizationForm.FormC);
             if (normalized.Length == 0 || normalized.Length > MaxFloorNameLength)
                 throw new ArgumentException("Floor name must contain 1.." + MaxFloorNameLength + " characters.", nameof(value));
-            RequireWellFormedUnicode(normalized, nameof(value), "Floor name");
             return normalized;
         }
 
