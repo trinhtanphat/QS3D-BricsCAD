@@ -106,10 +106,53 @@ Final cleanup verification found zero BricsCAD/tunnel processes, both successful
 
 The owner approved real UI expansion on 2026-09-05. The existing host runners now have an opt-in `-InteractiveUi` path, separate from the already consumed native-API allocations. The intended matrix is the visible Móng đơn tree/Add route, Cancel/no mutation, six numeric dialog fields, physical viewport centre picks, Enter/Esc termination, UI Family edit/regeneration, save and fresh-process reopen. The probe must assert product state after each action; sending an input event is not a PASS.
 
-`scripts/local022-ui-input.ps1` accepts only nonce/sequence/PID-bound click, numeric text and Enter/Esc requests. It checks the exact owned executable, foreground PID and point ownership before native input. Screenshots use only the owned HWND via `PrintWindow`, never the desktop. Action/ack files, images and raw diagnostics are private ignored artifacts, not public evidence.
+`scripts/local022-ui-input.ps1` accepts only nonce/sequence/PID-bound hover/move, click, numeric text and Enter/Esc requests. It checks the exact owned executable, foreground PID and point ownership before native input. Screenshots use only the owned HWND via `PrintWindow`, never the desktop. The capture helper has its own terminating error policy and rechecks captured HWND ownership, independent of the caller's error preference. Action/ack files, images and raw diagnostics are private ignored artifacts, not public evidence.
 
 `scripts/run-local022-ui-qualification.ps1` is the reusable orchestration entry point for the frozen `43130a49...` package pair described above. It requires a clean, pushed `-HarnessSha`, a fresh `-AllocationName`, the local `-PackageRoot`, `-HostMajor 25` or `26`, and explicit `-ConfirmTemporaryAutostartPause`. V26 additionally requires `-V26ProvenancePath` and `-PrecedingV25Receipt` from a same-source UI PASS with verified cleanup/restoration. Each invocation restores the original OpenAI autostart byte/timestamp; it does not test either tunnel.
 
 Guard regression command: `pwsh -File scripts/test-local022-ui-input.ps1`. These deterministic guard tests are not licensed qualification. Interactive runtime results must be recorded separately against the exact successful harness/product identities; none is inferred from adding or compiling this extension. Historical native PASS and consumed failures above remain unchanged.
 
 First UI allocation on harness `b5947224c` (V25, 02:41:55Z–02:42:32Z) is consumed `FAIL_OR_NO_RESULT`, zero verified phases. The physical-input boundary refused its first point as outside/occluded from the owned HWND, before acknowledging input. Code review found the consumer restored the measured window immediately before input, potentially invalidating coordinates from a maximized window; the successor removes that resize and retains exact-HWND diagnostics on rejection. This is a harness-coordinate non-result, not a product UI PASS or feature failure. Host/profile/private-drawing cleanup and exact autostart restoration passed.
+
+## Physical UI result: existing source defect #4586 reproduced
+
+The owner-approved V25 UI extension has **not passed**. Final diagnostic allocation `ui-window-owner-v25-14`, harness `91b7810168d65bcf57ad29cf8248deac4e5d84dc`, ran on licensed BricsCAD `25.2.10` from `2026-09-05T03:10:16.2672506Z` to `2026-09-05T03:11:25.0833995Z`. Product source remains the frozen `43130a49f49676299b865f094a9a6ded482f67ad` local package pair and hashes above; the installed user release was not replaced.
+
+Observed production behavior after acknowledged physical input:
+
+- The real tree selected `Móng đơn`, tag `Foundation.SingleFooting`; `_categoryFilter` was `Foundation` before and after the test baseline bind.
+- The actual Family toolbar Add button had two Click handlers, in order: `OnGridAwareFamilyAddModeClick`, then `OnBlt3dRoomAwareAddClick`.
+- Mouse-down and routed Click reached that button. The Click was handled, a visible WPF popup contained `Tham số` / `Solid3D`, no `SingleFootingDimensionsDialog` appeared, and the family inventory was unchanged.
+- The phase timed out with `UI_TIMEOUT_OPENCANCELDIALOG`; receipt remains `FAIL_OR_NO_RESULT`, **0 verified phases**. This is positive evidence of wrong production Add routing, not a dialog/Cancel/placement PASS.
+- Profile inventory/current pointer/nonce/private-drawing cleanup, protected installed-loader/settings checks and exact original OpenAI autostart byte/timestamp restoration passed. No owned BricsCAD process or tunnel remained; no MCP request was issued.
+
+Source inspection and independent read-only review identify the stale Grid handler as the cause. Both final BLT/Room rewires omit removing it, allowing its generic chooser to consume the Click before the SingleFooting route. Those routing files are unchanged between the tested source and refreshed `origin/main@8dc5cc21769385509cf565b907095b9c93971303`.
+
+This is the exact defect already reserved by open issue **#4586**, canonical branch `agent/trinhtanphat-01a046ab/issue-4586-single-footing-add-routing`, another session's active ownership. Its PR #4594 is closed without merge; that does not release the open reservation. No source fix, replacement carrier, PR reopening or takeover was performed by #5718. The next source action requires that carrier's owner or explicit reassignment. Merely deleting the Grid handler is insufficient: the final dispatcher must retain direct Grid creation and Room routing.
+
+Do not run the remaining UI matrix again on this unchanged defective product source. After an authorized exact source correction, prepare a new frozen matching package pair and run a fresh V25 allocation first, then V26 only after V25 UI PASS and full cleanup. V26 physical UI remains **NOT RUN**. Existing V25/V26 native-API bounded PASS receipts are preserved, not promoted or invalidated by this distinct UI routing failure.
+
+### Consumed UI allocations
+
+All allocations below used the same frozen product source, ended `FAIL_OR_NO_RESULT` with zero verified phases, and completed receipt-verified host/profile/private-drawing cleanup. None may be reused or presented as UI PASS.
+
+| Allocation suffix / harness | Observed stop |
+| --- | --- |
+| `01 / b5947224c` | Input point rejected; superseded capture/resize implementation |
+| `02 / 50637424b` | Input point rejected; target outside displayed window |
+| `03 / a79ee4a09` | Tree selection timeout |
+| `04 / 99e8bd21b` | Foreground ownership rejected |
+| `05 / ce17e234a` | Tree selection timeout |
+| `06 / bcd60a9b5` | Tree selection timeout; private WPF hit diagnostics added |
+| `07 / 2fe9e9c08` | Tree selection timeout; measured target shifted 15 pixels |
+| `08 / 5a258d954` | Tree selected; Add selector ambiguous |
+| `09 / 01f32e66d` | Add clicked; hosted WPF Application.Current absent |
+| `10 / 8784a05d8` | Add dialog timeout |
+| `11 / 14f5487b6` | Add dialog timeout; actual button Click observed |
+| `12 / 347bbf335` | Tree target moved repeatedly; wrong row hit; no Add-route result |
+| `13 / 347bbf335` | Fresh allocation after unstable UI; Add dialog timeout; category preserved |
+| `14 / 91b781016` | Exact duplicate-handler / generic-popup source failure above |
+
+The runner corrections preserve physical input and post-action product assertions: maximize before measuring; bring the tree into view; hover then remeasure; select visible row text; bind Add to the Family toolbar; locate hosted WPF window ownership without manufacturing Application.Current. Private diagnostic observers do not invoke the production Add handler or alter its routing. A separate late diagnostic capture from allocation 13 was excluded and deleted without inspection after its foreground check failed under a permissive caller; the successor helper now fails closed regardless of caller error policy, covered by a deterministic refusal test.
+
+Aggregate LOCAL-022 / #4034 remains `IN_PROGRESS / SOURCE_FIX_4586_REQUIRED`. Six-field input, Cancel, physical placement/edit/save/reopen, DPI/Quantity and extended topology acceptance remain unproved by these UI attempts.
