@@ -75,4 +75,10 @@ if mutated_publisher == publisher:
 if not validate(mutated_publisher, gitmodules, EXPECTED_GITMODULES_SHA256):
     raise SystemExit("V26 release-relevant scripts/ classifier mutation probe did not fail closed")
 
+commented_publisher = publisher.replace("    'scripts/',\n", "    # 'scripts/',\n", 1)
+if commented_publisher == publisher:
+    raise SystemExit("V26 commented scripts/ classifier mutation probe could not mutate publisher fixture")
+if not validate(commented_publisher, gitmodules, EXPECTED_GITMODULES_SHA256):
+    raise SystemExit("V26 commented scripts/ classifier mutation probe did not fail closed")
+
 print("PASS V26 .gitmodules metadata is bound to the release-relevant scripts/ classifier")
