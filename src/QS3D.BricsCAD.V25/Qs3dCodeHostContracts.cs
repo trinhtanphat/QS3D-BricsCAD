@@ -60,8 +60,8 @@ namespace QS3D.BricsCAD.V25
         internal Qs3dCodeHostResult(
             bool ok,
             string operationId,
-            Qs3dCodeHostIdentity hostIdentity,
-            Qs3dCodeDocumentIdentity activeDocumentIdentity,
+            Qs3dCodeHostIdentity? hostIdentity,
+            Qs3dCodeDocumentIdentity? activeDocumentIdentity,
             string payloadJson,
             string errorCode,
             string message)
@@ -77,8 +77,8 @@ namespace QS3D.BricsCAD.V25
 
         public bool Ok { get; private set; }
         public string OperationId { get; private set; }
-        public Qs3dCodeHostIdentity HostIdentity { get; private set; }
-        public Qs3dCodeDocumentIdentity ActiveDocumentIdentity { get; private set; }
+        public Qs3dCodeHostIdentity? HostIdentity { get; private set; }
+        public Qs3dCodeDocumentIdentity? ActiveDocumentIdentity { get; private set; }
         public string PayloadJson { get; private set; }
         public string ErrorCode { get; private set; }
         public string Message { get; private set; }
