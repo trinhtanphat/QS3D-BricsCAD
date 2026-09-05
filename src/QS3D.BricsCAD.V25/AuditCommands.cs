@@ -207,9 +207,6 @@ namespace QS3D.BricsCAD.V25
 
             if (ReferenceEquals(_unpublishedCandidate, candidate))
                 _unpublishedCandidate = null;
-
-            if (ReferenceEquals(_publicationInFlightCandidate, candidate))
-                _publicationInFlightCandidate = null;
         }
 
         private static IntPtr GetNativeDatabaseIdentity(Document document)
