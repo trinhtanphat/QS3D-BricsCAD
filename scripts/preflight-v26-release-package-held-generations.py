@@ -98,7 +98,7 @@ def main() -> int:
         DISPOSE,
     )
     for token in mutation_tokens:
-        mutated = source.replace(token, "MUTATED-V26-PACKAGE-GENERATION", 1)
+        mutated = source.replace(token, "MUTATED-V26-PACKAGE-GENERATION")
         if mutated == source:
             failures.append(f"mutation fixture did not modify V26 package source: {token}")
         elif not validate(mutated):
