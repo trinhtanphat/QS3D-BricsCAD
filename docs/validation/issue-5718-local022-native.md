@@ -166,3 +166,15 @@ Independent review found two test-harness boundary defects; neither was used to 
 - Follow-up review reproduced culture-sensitive PowerShell equality accepting an added U+00AD in an action schema. Action and phase-marker identities now require printable ASCII and ordinal equality; regular expressions use absolute end anchors. Additional regressions reject literal/escaped soft hyphens, NUL, newline and hidden characters in check names. Canonical requests emitted by the probe remain accepted without input replay.
 
 Both regressions run through `scripts/test-local022-ui-input.ps1`; the cleanup test lives in `tests/QS3D.LocalQualification.V25/test-ui-quit-boundary.ps1`. V25/V26 probe builds remain zero-warning/zero-error. These post-run safety checks are static/in-memory evidence only; the failed licensed UI allocation above is still bound to its original harness SHA. No unchanged-source UI rerun was performed after discovering #4586.
+
+## Authorized Add-route successor, 2026-09-05
+
+The owner authorized takeover/fix of existing source carrier #4586; PR #4594 is reopened, not replaced. Exact pushed product source is `0db6e659510809a6781221204a32409605c851ba`. It includes the original Grid detach correction plus deterministic real-WPF regressions/fixes for Grid before the deferred Room overlay and Family/finish control isolation. WPF tests execute extracted production routing methods with mutation endpoints doubled; they are not native placement evidence.
+
+Matching frozen local qualification packages from that source both build with zero warnings/errors:
+
+- V25 ZIP SHA-256 `6b6d00de4d391e772b58780be96afab9e4b31c0d8e0246dee3d7b79a8c1c5f70`.
+- V26 ZIP SHA-256 `4259a2c9850e2e18dd82a8496a8b70c4c68d80abe290c51fb660e1e9d12e946d`.
+- Version `0.1.0-preview.10307`, explicitly `LOCAL_PR_CANDIDATE`; the installed official `.10309` package is not replaced.
+
+The orchestrator now pins this successor pair. Old source receipts/failed UI allocations remain unchanged. Require a fresh V25 UI allocation and successful full cleanup before a fresh V26 UI allocation. At this registration, licensed UI acceptance remains pending; MCP is paused and no user-owned BricsCAD session may be closed or driven.

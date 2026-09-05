@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if (-not $ConfirmTemporaryAutostartPause) { throw 'Explicit temporary-autostart authorization required.' }
 $taskRepo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$source = '43130a49f49676299b865f094a9a6ded482f67ad'
+$source = '0db6e659510809a6781221204a32409605c851ba'
 $base = Join-Path $taskRepo 'artifacts\issue-5718-local022'
 $runRoot = Join-Path $base $AllocationName
 $restoreRoot = Join-Path $base ($AllocationName + '-autostart-recovery')
@@ -77,7 +77,7 @@ try {
     $parameters = @{
         ProductDir = Join-Path $PackageRoot "QS3D-BricsCAD-V$HostMajor"
         PackageZip = Join-Path $PackageRoot "QS3D-BricsCAD-V$HostMajor.zip"
-        PackageSha256 = if ($HostMajor -eq 25) { '4d9869e38682674772196a3e238f115624ff357a276bb0b976000b63c9a833b5' } else { '7dbf9216e873f2e20c2fae5011785148e9feded944a7b43233b4710b331fd2c5' }
+        PackageSha256 = if ($HostMajor -eq 25) { '6b6d00de4d391e772b58780be96afab9e4b31c0d8e0246dee3d7b79a8c1c5f70' } else { '4259a2c9850e2e18dd82a8496a8b70c4c68d80abe290c51fb660e1e9d12e946d' }
         ProductSourceSha = $source
         ProbeDll = Join-Path $taskRepo "tests\QS3D.LocalQualification.V$HostMajor\bin\Release\$framework\QS3D.LocalQualification.V$HostMajor.dll"
         ArtifactDir = $runRoot
