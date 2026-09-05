@@ -24,6 +24,9 @@ namespace QS3D.BricsCAD.V25
                 throw;
             }
 
+            try { Qs3dCodeHostService.Start(); }
+            catch (Exception ex) { ReportOptionalStartupFailure("QS3D Code local host bridge", ex); }
+
             try { McpPersistentUserSettings.ApplyStartupSecretsToProcessEnvironment(); }
             catch (Exception ex) { ReportOptionalStartupFailure("MCP secure settings", ex); }
 
@@ -92,6 +95,7 @@ namespace QS3D.BricsCAD.V25
 
         private static void TeardownHostServices()
         {
+            TryCleanup(Qs3dCodeHostService.Stop);
             TryCleanup(McpDesktopControlSession.Shutdown);
             TryCleanup(McpFirstRunExperience.Stop);
             TryCleanup(McpProjectRecoveryService.Stop);
