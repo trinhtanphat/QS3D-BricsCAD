@@ -241,6 +241,10 @@ namespace QS3D.LocalQualification.V25
                 switch (_stage)
                 {
                     case UiStage.LocateWorkspace:
+                        // The host can restore profile window placement after Start-Process's
+                        // Maximized hint. Establish actual owned-window state before measuring
+                        // any control or publishing the first physical request.
+                        if (!PrepareOwnedUiWindow(ref _preparedWindow, ref _windowReadyAfter, _sequence, DateTime.UtcNow)) return;
                         _workspace = RequireProductionWorkspace(_context.Product);
                         RequireClickable(_workspace, "workspace_not_visible");
                         _workspace.AddHandler(Mouse.PreviewMouseDownEvent, new MouseButtonEventHandler(OnPhysicalMouse), true);
@@ -262,7 +266,8 @@ namespace QS3D.LocalQualification.V25
                         }
                         var label = FindVisualDescendants<TextBlock>(item).Single(text =>
                             text.IsVisible && string.Equals(text.Text, "Móng đơn", StringComparison.Ordinal));
-                        if (!_requestWritten && !Contains(ElementBounds(_workspace!), ElementBounds(label)))
+                        if (!_requestWritten && (!Contains(ElementBounds(_workspace!), ElementBounds(label)) ||
+                            !TreeLabelHitMatches(_workspace!, item, label)))
                         {
                             // Deferred workspace layout can move the row out of view after
                             // hover. Finish its ACK, then reveal/hover again before clicking.
@@ -491,6 +496,8 @@ namespace QS3D.LocalQualification.V25
 
             private string? _lastPlacementTrace;
             private Point3d? _pendingPlacementCentre;
+            private DateTime? _windowReadyAfter;
+            private IntPtr _preparedWindow;
 
             private void RequireCancelUnchanged()
             {
@@ -976,6 +983,44 @@ namespace QS3D.LocalQualification.V25
 
         private static bool Contains(UiPixelRect outer, UiPixelRect inner) =>
             inner.Left >= outer.Left && inner.Top >= outer.Top && inner.Right <= outer.Right && inner.Bottom <= outer.Bottom;
+
+        private static bool TreeLabelHitMatches(FrameworkElement workspace, TreeViewItem item, FrameworkElement label)
+        {
+            var point = ElementCenter(label);
+            var local = workspace.PointFromScreen(new WpfPoint(point.X, point.Y));
+            var hit = workspace.InputHitTest(local) as DependencyObject;
+            while (hit != null && !ReferenceEquals(hit, workspace))
+            {
+                if (hit is TreeViewItem row) return ReferenceEquals(row, item);
+                hit = VisualTreeHelper.GetParent(hit);
+            }
+            return false;
+        }
+
+        private static bool PrepareOwnedUiWindow(ref IntPtr preparedWindow, ref DateTime? readyAfter, int sequence, DateTime now)
+        {
+            if (sequence != 0) throw new ProbeException("ui_prepare_after_input");
+            using (var process = Process.GetCurrentProcess())
+            {
+                var window = process.MainWindowHandle;
+                GetWindowThreadProcessId(window, out var owner);
+                if (window == IntPtr.Zero || owner != (uint)process.Id ||
+                    (preparedWindow != IntPtr.Zero && preparedWindow != window))
+                    throw new ProbeException("ui_prepare_window_identity");
+                if (preparedWindow == IntPtr.Zero)
+                {
+                    preparedWindow = window;
+                    if (!IsZoomed(window)) ShowWindow(window, 3);
+                }
+                if (!IsZoomed(window))
+                {
+                    readyAfter = null;
+                    return false;
+                }
+                if (!readyAfter.HasValue) readyAfter = now.AddSeconds(2);
+                return now >= readyAfter.Value;
+            }
+        }
 
         private static IReadOnlyList<DrawingPoint> RequireViewportPoints(Bricscad.ApplicationServices.Document document, FrameworkElement workspace, int count)
         {
@@ -1565,5 +1610,13 @@ namespace QS3D.LocalQualification.V25
 
         [DllImport("bricscadapi.dll", EntryPoint = "sds_getviewhwnd", CallingConvention = CallingConvention.Cdecl)]
         private static extern IntPtr GetDrawingViewWindow();
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool IsZoomed(IntPtr window);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool ShowWindow(IntPtr window, int command);
     }
 }

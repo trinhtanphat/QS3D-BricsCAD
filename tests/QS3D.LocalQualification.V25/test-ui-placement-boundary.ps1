@@ -117,3 +117,79 @@ $rowMethod
 "@
 ([type]$name)::Run()
 Write-Output 'PASS: actual row selector requires exact editable H2/mm identity, rejecting wrong dimension/unit/read-only/unknown rows.'
+
+$prepare = [regex]::Match($source, '(?ms)^        private static bool PrepareOwnedUiWindow\([^\r\n]*\)\r?\n        \{.*?^        \}').Value
+if (-not $prepare) { throw 'FAIL: missing one-shot pre-input window preparation.' }
+$name = 'Local022WindowReplay_' + [Guid]::NewGuid().ToString('N')
+Add-Type -TypeDefinition @"
+using System;
+public static class $name {
+    private sealed class Process : IDisposable {
+        public int Id = 123;
+        public IntPtr MainWindowHandle = CurrentWindow;
+        public static Process GetCurrentProcess() { return new Process(); }
+        public void Dispose() {}
+    }
+    private sealed class ProbeException : Exception { public ProbeException(string code) : base(code) {} }
+    private static IntPtr CurrentWindow = new IntPtr(7);
+    private static uint Owner = 123;
+    private static bool Zoomed;
+    private static int Shows;
+    private static uint GetWindowThreadProcessId(IntPtr window,out uint owner) { owner=Owner; return 1; }
+    private static bool IsZoomed(IntPtr window) { return Zoomed; }
+    private static bool ShowWindow(IntPtr window,int command) { if (window != CurrentWindow || command != 3) throw new Exception("Wrong maximize target"); Shows++; return false; }
+$prepare
+    public static void Run() {
+        var window=IntPtr.Zero; DateTime? ready=null; var now=new DateTime(2026,9,5);
+        if (PrepareOwnedUiWindow(ref window,ref ready,0,now) || Shows!=1) throw new Exception("Did not issue one pre-input maximize");
+        if (PrepareOwnedUiWindow(ref window,ref ready,0,now.AddSeconds(1)) || Shows!=1) throw new Exception("Repeated maximize or admitted unmaximized window");
+        Zoomed=true;
+        if (PrepareOwnedUiWindow(ref window,ref ready,0,now.AddSeconds(2))) throw new Exception("Skipped layout settling");
+        if (!PrepareOwnedUiWindow(ref window,ref ready,0,now.AddSeconds(4))) throw new Exception("Stable window not admitted");
+        bool refused=false;
+        try { PrepareOwnedUiWindow(ref window,ref ready,1,now.AddSeconds(4)); } catch (ProbeException) { refused=true; }
+        if (!refused || Shows!=1) throw new Exception("Allowed resize after input");
+        CurrentWindow=new IntPtr(8); refused=false;
+        try { PrepareOwnedUiWindow(ref window,ref ready,0,now); } catch (ProbeException) { refused=true; }
+        if (!refused) throw new Exception("Window replacement accepted");
+        window=IntPtr.Zero; Owner=456; refused=false;
+        try { PrepareOwnedUiWindow(ref window,ref ready,0,now); } catch (ProbeException) { refused=true; }
+        if (!refused || Shows!=1) throw new Exception("Foreign HWND accepted");
+    }
+}
+"@
+([type]$name)::Run()
+Write-Output 'PASS: actual pre-input preparation maximizes once, waits for verified stable state, rejects HWND drift/foreign ownership and any post-input resize.'
+
+$hit = [regex]::Match($source, '(?ms)^        private static bool TreeLabelHitMatches\([^\r\n]*\)\r?\n        \{.*?^        \}').Value
+if (-not $hit) { throw 'FAIL: missing intended-row hit verification.' }
+$name = 'Local022HitReplay_' + [Guid]::NewGuid().ToString('N')
+Add-Type -TypeDefinition @"
+using System;
+public static class $name {
+    private class DependencyObject { public DependencyObject Parent; }
+    private class FrameworkElement : DependencyObject {
+        public WpfPoint PointFromScreen(WpfPoint p) { return p; }
+        public DependencyObject InputHitTest(WpfPoint p) { return Hit; }
+    }
+    private class TreeViewItem : DependencyObject {}
+    private struct WpfPoint { public double X,Y; public WpfPoint(double x,double y) {X=x;Y=y;} }
+    private static class VisualTreeHelper { public static DependencyObject GetParent(DependencyObject obj) { return obj.Parent; } }
+    private static DependencyObject Hit;
+    private static WpfPoint ElementCenter(FrameworkElement label) { return new WpfPoint(90,605); }
+$hit
+    public static void Run() {
+        var root=new FrameworkElement(); var target=new TreeViewItem {Parent=root};
+        var label=new FrameworkElement {Parent=target};
+        Hit=label; if (!TreeLabelHitMatches(root,target,label)) throw new Exception("Intended row rejected");
+        Hit=new FrameworkElement {Parent=new TreeViewItem {Parent=root}};
+        if (TreeLabelHitMatches(root,target,label)) throw new Exception("Overlapping other row accepted");
+        Hit=new FrameworkElement {Parent=new TreeViewItem {Parent=target}};
+        if (TreeLabelHitMatches(root,target,label)) throw new Exception("Nested different row accepted");
+        Hit=root; if (TreeLabelHitMatches(root,target,label)) throw new Exception("Clipped label accepted");
+        Hit=null; if (TreeLabelHitMatches(root,target,label)) throw new Exception("Missing hit accepted");
+    }
+}
+"@
+([type]$name)::Run()
+Write-Output 'PASS: actual hit ancestry accepts only intended nearest tree row, refusing overlapping/nested other rows and clipped/missing hits.'
