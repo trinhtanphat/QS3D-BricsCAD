@@ -8,6 +8,7 @@ SRC = ROOT / "src" / "QS3D.BricsCAD.V25"
 BACKGROUND = SRC / "McpBackgroundHostRuntime.cs"
 SEMANTIC = SRC / "McpBackgroundSemanticUiRuntime.cs"
 AGENT = SRC / "McpCadAgentRuntime.cs"
+DESKTOP = SRC / "McpDesktopAutomationRuntime.cs"
 RUNBOOK = ROOT / "docs" / "FEATURE-RUNBOOKS" / "mcp-background-semantic-ui.md"
 
 
@@ -16,19 +17,19 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
-for path in (BACKGROUND, SEMANTIC, AGENT, RUNBOOK):
+for path in (BACKGROUND, SEMANTIC, AGENT, DESKTOP, RUNBOOK):
     if not path.is_file():
         fail(f"missing {path.relative_to(ROOT)}")
 
 background = BACKGROUND.read_text(encoding="utf-8")
 semantic = SEMANTIC.read_text(encoding="utf-8")
 agent = AGENT.read_text(encoding="utf-8")
+desktop = DESKTOP.read_text(encoding="utf-8")
 runbook = RUNBOOK.read_text(encoding="utf-8")
 
 # Semantic mutations must keep using the repository-wide mutation coordinator rather than
 # introducing a second local idempotency/locking protocol.
 for token in (
-    '"bricscad_ui_invoke"',
     "McpMutationAckLedger.ReserveOrReplay",
     "McpCadMutationCoordinator.EnterMutation",
     "McpMutationAckLedger.MarkApplied",
@@ -36,6 +37,17 @@ for token in (
 ):
     if token not in agent:
         fail(f"generic mutation wrapper missing hardening dependency: {token}")
+
+# bricscad_ui_invoke is registered by the desktop automation router, then mutation calls flow
+# through McpCadAgentRuntime.Mutation(). Guard the actual registration/routing source instead of
+# requiring the tool literal to be duplicated in the generic mutation wrapper.
+for token in (
+    '"bricscad_ui_invoke"',
+    "MutationTools",
+    "McpBackgroundHostRuntime.Call",
+):
+    if token not in desktop:
+        fail(f"desktop automation route missing hardening dependency: {token}")
 
 if "expectedDiscoveryGeneration" not in background:
     fail("background semantic invoke schema must expose expectedDiscoveryGeneration")
