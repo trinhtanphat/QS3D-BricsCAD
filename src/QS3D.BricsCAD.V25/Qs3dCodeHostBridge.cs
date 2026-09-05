@@ -17,8 +17,8 @@ namespace QS3D.BricsCAD.V25
 
         internal static Qs3dCodeHostResult Execute(Qs3dCodeHostRequest request)
         {
-            Qs3dCodeHostIdentity host = null;
-            Qs3dCodeDocumentIdentity active = null;
+            Qs3dCodeHostIdentity? host = null;
+            Qs3dCodeDocumentIdentity? active = null;
             var operationId = string.Empty;
             try
             {
@@ -149,7 +149,7 @@ namespace QS3D.BricsCAD.V25
             if (!FixedEquals(request.SessionId, host.SessionId))
                 throw new StaleIdentityException("Host session changed; reload local QS3D Code host state.");
             if (!requireDrawing) return;
-            if (active == null || active.DrawingId.Length == 0)
+            if (active.DrawingId.Length == 0)
                 throw new StaleIdentityException("No active drawing is available for this operation.");
             if (!FixedEquals(request.DrawingId, active.DrawingId))
                 throw new StaleIdentityException("Active drawing changed; refresh identity before dispatch.");
@@ -161,7 +161,7 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("permission_denied: request permission class is not admitted for this operation.");
         }
 
-        private static string BoundArguments(string value)
+        private static string BoundArguments(string? value)
         {
             var arguments = string.IsNullOrWhiteSpace(value) ? "{}" : value.Trim();
             if (arguments.Length > MaxArgumentsCharacters || arguments.IndexOf('\0') >= 0)
@@ -169,7 +169,7 @@ namespace QS3D.BricsCAD.V25
             return arguments;
         }
 
-        private static string NormalizeToken(string value, int maxLength)
+        private static string NormalizeToken(string? value, int maxLength)
         {
             var normalized = (value ?? string.Empty).Trim();
             if (normalized.Length == 0) throw new InvalidOperationException("operation_required: operationId is required.");
@@ -182,7 +182,7 @@ namespace QS3D.BricsCAD.V25
             return normalized;
         }
 
-        private static string HashIdentity(string value)
+        private static string HashIdentity(string? value)
         {
             using (var sha = SHA256.Create())
             {
@@ -193,7 +193,7 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static string SafeLeaf(string value)
+        private static string SafeLeaf(string? value)
         {
             try
             {
@@ -203,7 +203,7 @@ namespace QS3D.BricsCAD.V25
             catch { return string.Empty; }
         }
 
-        private static bool FixedEquals(string left, string right)
+        private static bool FixedEquals(string? left, string? right)
         {
             var a = Encoding.UTF8.GetBytes(left ?? string.Empty);
             var b = Encoding.UTF8.GetBytes(right ?? string.Empty);
@@ -229,22 +229,22 @@ namespace QS3D.BricsCAD.V25
 
         private static Qs3dCodeHostResult Failure(
             string operationId,
-            Qs3dCodeHostIdentity host,
-            Qs3dCodeDocumentIdentity active,
+            Qs3dCodeHostIdentity? host,
+            Qs3dCodeDocumentIdentity? active,
             string code,
             string message)
         {
             return new Qs3dCodeHostResult(false, operationId, host, active, string.Empty, code, BoundMessage(message));
         }
 
-        private static string BoundMessage(string value)
+        private static string BoundMessage(string? value)
         {
             var message = value ?? string.Empty;
             if (message.Length > 1200) message = message.Substring(0, 1200);
             return message.Replace("\r", " ").Replace("\n", " ");
         }
 
-        private static string Classify(string message)
+        private static string Classify(string? message)
         {
             var value = message ?? string.Empty;
             if (value.StartsWith("permission_denied:", StringComparison.Ordinal)) return "permission_denied";
