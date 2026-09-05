@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Require V26 assembly identity semantics to stay bound to admitted held generations."""
+"""Require V26 assembly identity semantics to consume admitted held file generations."""
 
 from __future__ import annotations
 
@@ -30,6 +30,7 @@ def main() -> int:
     forbidden_path_reopens = (
         "GetAssemblyName($pluginHeld.Path)",
         "GetAssemblyName($coreHeld.Path)",
+        "GetAssemblyName($Held.Path)",
     )
     for token in forbidden_path_reopens:
         if token in source:
@@ -37,28 +38,42 @@ def main() -> int:
                 f"managed assembly semantics still reopen admitted input by pathname: {token}"
             )
 
-    snapshot_helper = source.find("function Get-HeldAssemblyVersion")
-    held_stream_copy = source.find("$Held.Stream.Read(")
-    create_new = source.find("[IO.FileMode]::CreateNew")
-    read_share = source.find("[IO.FileShare]::Read", create_new if create_new >= 0 else 0)
-    assembly_semantics = source.find("[Reflection.AssemblyName]::GetAssemblyName($snapshotPath)")
-    dispose_snapshot = source.find("$snapshotStream.Dispose()")
-    delete_snapshot = source.find("Remove-Item -LiteralPath $snapshotPath")
+    helper_start = source.find("function Get-HeldAssemblyVersion")
+    plugin_call = source.find("$pluginVersion = Get-HeldAssemblyVersion -Held $pluginHeld")
+    core_call = source.find("$coreVersion = Get-HeldAssemblyVersion -Held $coreHeld")
 
-    if min(snapshot_helper, held_stream_copy, create_new, read_share, assembly_semantics) < 0:
-        failures.append(
-            "held assembly semantic snapshot contract is incomplete: expected stream-copy, exclusive generation creation, read lock, and snapshot-only GetAssemblyName"
-        )
-    elif not (snapshot_helper < create_new < held_stream_copy < assembly_semantics):
-        failures.append(
-            "assembly semantics must consume a snapshot copied from the held input stream, not a pathname generation"
-        )
+    if helper_start < 0:
+        failures.append("missing held-generation assembly semantic helper")
+        helper = ""
+    else:
+        next_function = source.find("\nfunction ", helper_start + len("function Get-HeldAssemblyVersion"))
+        helper = source[helper_start:next_function] if next_function > helper_start else source[helper_start:]
 
-    if assembly_semantics >= 0 and dispose_snapshot >= 0 and dispose_snapshot < assembly_semantics:
-        failures.append("semantic snapshot lock must remain held through GetAssemblyName")
+    required_helper = (
+        "$Held.Stream.Position = 0",
+        "$Held.Stream.Length -gt [int]::MaxValue",
+        "[byte[]]::new([int]$Held.Stream.Length)",
+        "$Held.Stream.Read(",
+        "$Held.Stream.ReadByte()",
+        "[Reflection.Assembly]::ReflectionOnlyLoad($bytes)",
+        ".GetName().Version",
+    )
+    for token in required_helper:
+        if token not in helper:
+            failures.append(f"held-byte assembly inspection contract is incomplete; missing: {token}")
 
-    if delete_snapshot >= 0 and dispose_snapshot >= 0 and delete_snapshot < dispose_snapshot:
-        failures.append("semantic snapshot must not be deleted before its lock is disposed")
+    if helper and "GetAssemblyName(" in helper:
+        failures.append("held assembly helper must not reopen a pathname through AssemblyName.GetAssemblyName")
+    if helper and ("CreateNew" in helper or "$snapshotPath" in helper or "GetTemp" in helper):
+        failures.append("held assembly helper must not introduce a temporary pathname generation")
+
+    if plugin_call < 0 or core_call < 0:
+        failures.append("plugin/Core semantic consumers must both use Get-HeldAssemblyVersion")
+
+    dispose_marker = source.find("$heldFiles[$index].Stream.Dispose()")
+    version_match = source.find("if ($pluginVersion -ne $packageVersion -or $coreVersion -ne $packageVersion)")
+    if dispose_marker < 0 or version_match < 0 or dispose_marker < version_match:
+        failures.append("held input streams must remain live through cross-assembly version equality checks")
 
     if "continue-on-error" in source.lower():
         failures.append("release package identity must not hide held-generation failures")
@@ -68,7 +83,7 @@ def main() -> int:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
 
-    print("PASS: V26 package assembly semantics consume a locked snapshot copied from each admitted held generation")
+    print("PASS: V26 package assembly semantics consume the exact admitted held bytes with no semantic pathname reopen")
     return 0
 
 
