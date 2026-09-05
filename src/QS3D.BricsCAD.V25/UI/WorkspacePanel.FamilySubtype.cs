@@ -81,8 +81,9 @@ namespace QS3D.BricsCAD.V25.UI
             }
         }
 
-        private static bool IsWorkspaceAddFamilyButton(Button button)
+        private bool IsWorkspaceAddFamilyButton(Button button)
         {
+            if (!IsBlt3dFamilyAddButton(button)) return false;
             var text = button.Content as string;
             return string.Equals(text, "+ Thêm", StringComparison.Ordinal) ||
                    string.Equals(text, "＋  Add", StringComparison.Ordinal) ||

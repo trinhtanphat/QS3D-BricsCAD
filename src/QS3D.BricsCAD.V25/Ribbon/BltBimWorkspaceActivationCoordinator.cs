@@ -73,18 +73,19 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     return;
                 }
 
-                _lastTabId = currentId;
-
                 // BricsCAD may reconstruct its top-level Ribbon/window chrome on workspace or tab
                 // transitions after the one-time Ribbon initializer has stopped. Reassert only
                 // QS3D-owned shell presentation here; the operation is idempotent and does not
-                // rebuild feature panels or take ownership of native tabs.
+                // rebuild feature panels or take ownership of native tabs. Keep the observed tab
+                // unpublished until the complete route succeeds so a transient host/WPF exception
+                // leaves the transition pending for the next bounded polling tick.
                 Blt3dShellChromeCoordinator.Reassert();
 
                 if (string.Equals(currentId, HomeTabId, StringComparison.OrdinalIgnoreCase))
                 {
                     _bimSettleTicksRemaining = 0;
                     RouteHomeSurface();
+                    _lastTabId = currentId;
                     return;
                 }
 
@@ -92,6 +93,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 {
                     _bimSettleTicksRemaining = 0;
                     RouteProjectSurface();
+                    _lastTabId = currentId;
                     return;
                 }
 
@@ -103,16 +105,19 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     // ensuring a prior HOME/PROJECT surface cannot cover the editor.
                     StartCenterPaletteCoordinator.Hide();
                     ProjectSetupPaletteCoordinator.Hide();
+                    _lastTabId = currentId;
                     return;
                 }
 
                 _bimSettleTicksRemaining = BimSettleTicks;
                 ReassertBimWorkspace();
+                _lastTabId = currentId;
             }
             catch
             {
                 // Ribbon polling is presentation-only. A host/Ribbon transient must never break
-                // CAD commands or initialization; a pending settle tick retries naturally.
+                // CAD commands or initialization; because a failed route is not published as the
+                // last tab, the next polling tick retries that transition naturally.
             }
         }
 
