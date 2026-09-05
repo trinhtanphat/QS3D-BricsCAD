@@ -622,7 +622,7 @@ namespace QS3D.Core.Commercial
             return new BulkRateAssignmentPreview(
                 request,
                 new ReadOnlyCollection<EstimatingLine>(sourceLines.ToArray()),
-                request.LineIds.Count,
+                sourceLines.Count,
                 replacements,
                 new ReadOnlyCollection<UnitDistributionItem>(distribution.ToArray()),
                 new ReadOnlyCollection<string>(unmatched.ToArray()),
