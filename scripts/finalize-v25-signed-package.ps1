@@ -669,11 +669,17 @@ catch {
         catch { $rollbackErrors.Add("remove staged manifest: $($_.Exception.Message)") }
     }
     if ($manifestDetached -and (Test-Path -LiteralPath $manifestBackup)) {
-        try { [IO.File]::Move($manifestBackup, $hashManifest) }
+        try {
+            $manifestBackup = Assert-SafeFile -Path $manifestBackup -Label 'original SHA256SUMS.txt rollback backup'
+            $hashManifest = Assert-SafeOptionalFileTarget -Path $hashManifest -Label 'SHA256SUMS.txt rollback target'
+            [IO.File]::Move($manifestBackup, $hashManifest)
+        }
         catch { $rollbackErrors.Add("restore original manifest: $($_.Exception.Message)") }
     }
     if ($metadataPublished -and (Test-Path -LiteralPath $metadataBackup)) {
         try {
+            $metadataBackup = Assert-SafeFile -Path $metadataBackup -Label 'original PACKAGE-METADATA.json rollback backup'
+            $metadataPath = Assert-SafeFile -Path $metadataPath -Label 'PACKAGE-METADATA.json rollback target'
             [IO.File]::Replace($metadataBackup, $metadataPath, $metadataRollbackDiscard, $true)
             if (Test-Path -LiteralPath $metadataRollbackDiscard) {
                 Remove-Item -LiteralPath $metadataRollbackDiscard -Force -ErrorAction Stop
