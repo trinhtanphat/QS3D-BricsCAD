@@ -211,6 +211,64 @@ function Assert-HeldInstallerStable {
     }
 }
 
+function Publish-AdmittedV26Installer {
+    param(
+        [Parameter(Mandatory = $true)]$Candidate,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+
+    Assert-HeldInstallerStable -Held $Candidate -Phase 'before canonical cache publication'
+    Assert-NoExistingReparseComponent -Path $Destination -Label 'V26 MSI destination before publication'
+    if (Test-Path -LiteralPath $Destination) {
+        throw 'V26 MSI destination must be fresh before held-byte publication.'
+    }
+
+    $destinationStream = $null
+    $published = $null
+    try {
+        $destinationStream = [IO.File]::Open(
+            $Destination,
+            [IO.FileMode]::CreateNew,
+            [IO.FileAccess]::Write,
+            [IO.FileShare]::None
+        )
+        $Candidate.Stream.Position = 0
+        $Candidate.Stream.CopyTo($destinationStream)
+        $destinationStream.Flush($true)
+        $destinationStream.Dispose()
+        $destinationStream = $null
+
+        Assert-HeldInstallerStable -Held $Candidate -Phase 'after canonical cache byte publication'
+        $published = Get-SingleV26InstallerAdmission -Path $Destination -Expected $Candidate.Sha256
+        if (-not [string]::Equals([string]$published.Sha256, [string]$Candidate.Sha256, [StringComparison]::Ordinal)) {
+            throw 'published V26 MSI digest does not match admitted staged generation'
+        }
+        if (-not [string]::Equals([string]$published.ProductVersion, [string]$Candidate.ProductVersion, [StringComparison]::Ordinal) -or
+            -not [string]::Equals([string]$published.ProductName, [string]$Candidate.ProductName, [StringComparison]::Ordinal)) {
+            throw 'published V26 MSI product identity does not match admitted staged generation'
+        }
+        if (-not [string]::Equals([string]$published.SignerSubject, [string]$Candidate.SignerSubject, [StringComparison]::Ordinal)) {
+            throw 'published V26 MSI signer does not match admitted staged generation'
+        }
+        return $published
+    }
+    catch {
+        if ($null -ne $published) {
+            $published.Stream.Dispose()
+            $published = $null
+        }
+        if ($null -ne $destinationStream) {
+            $destinationStream.Dispose()
+            $destinationStream = $null
+        }
+        $ordinary = Get-OrdinaryFileOrNull -Path $Destination -Label 'failed V26 MSI publication destination'
+        if ($null -ne $ordinary) {
+            Remove-Item -LiteralPath $ordinary.FullName -Force
+        }
+        throw
+    }
+}
+
 function Get-ReferenceDirectories {
     param([Parameter(Mandatory = $true)][string]$Root)
     $rootItem = Get-Item -LiteralPath $Root -Force -ErrorAction Stop
@@ -284,16 +342,7 @@ if ($null -eq $admission) {
             Invoke-WebRequest -Uri $candidate.Url -OutFile $staging -MaximumRedirection 10 -TimeoutSec 1800 -UseBasicParsing
             $candidateAdmission = Get-SingleV26InstallerAdmission -Path $staging -Expected $expected
             try {
-                Assert-NoExistingReparseComponent -Path $msi -Label 'V26 MSI destination before publication'
-                if (Test-Path -LiteralPath $msi) {
-                    $existing = Get-OrdinaryFileOrNull -Path $msi -Label 'existing V26 MSI destination'
-                    if ($null -eq $existing) { throw 'V26 MSI destination is not an ordinary file.' }
-                    Remove-Item -LiteralPath $existing.FullName -Force
-                }
-                $candidateAdmission.Stream.Dispose()
-                $candidateAdmission = $null
-                [IO.File]::Move($staging, $msi)
-                $admission = Get-SingleV26InstallerAdmission -Path $msi -Expected $expected
+                $admission = Publish-AdmittedV26Installer -Candidate $candidateAdmission -Destination $msi
                 break
             }
             finally {
