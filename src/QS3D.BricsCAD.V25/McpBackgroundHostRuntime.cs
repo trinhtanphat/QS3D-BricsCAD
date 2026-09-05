@@ -219,7 +219,9 @@ namespace QS3D.BricsCAD.V25
             {
                 if (result.Count >= limit || textBudget <= 0) return false;
                 if (!BelongsToCurrentProcess(hwnd) || !IsWindowVisible(hwnd)) return true;
-                var isPopupTop = hwnd != mainWindow;
+                var isPopupTop = scope == "popup"
+                    ? McpPopupWindowClassifier.IsPopupRoot(hwnd, mainWindow)
+                    : hwnd != mainWindow;
                 if (scope == "popup" && !isPopupTop) return true;
 
                 AddTextItem(hwnd, true, scope, isPopupTop, result, seen, ref textBudget, limit);
@@ -248,6 +250,7 @@ namespace QS3D.BricsCAD.V25
             if (result.Count >= limit || textBudget <= 0 || !seen.Add(hwnd.ToInt64())) return;
             var className = ClassName(hwnd);
             if (scope == "popup" && !popupTree) return;
+            if (scope == "popup" && LooksLikeCommandLineClass(className)) return;
             if (scope == "commandline" && !LooksLikeCommandLineClass(className)) return;
             var text = WindowText(hwnd);
             if (text.Length == 0) return;
