@@ -3,13 +3,17 @@ function Assert-Local022UiPhase($Marker, [string]$RunId, [string]$Phase) {
     $keys = @($Marker.PSObject.Properties.Name)
     $expected = @('schema','run_id','phase','status','stage','error_code','checks')
     if ($keys.Count -ne $expected.Count) { throw 'UI marker field count mismatch.' }
+    foreach ($key in $keys) { if ($key -cnotmatch '\A[a-z_]+\z') { throw 'UI marker key is not canonical ASCII.' } }
     foreach ($key in $expected) { if ($keys -cnotcontains $key) { throw 'UI marker schema mismatch.' } }
     foreach ($key in @('schema','run_id','phase','status','stage','error_code')) {
         if ($Marker.$key -isnot [string]) { throw 'UI marker field type mismatch.' }
+        if ($Marker.$key -cmatch '[^\x20-\x7e]') { throw 'UI marker field is not printable ASCII.' }
     }
-    if ($Marker.schema -cne 'QS3D_LOCAL022_NATIVE_UI_V1' -or $Marker.run_id -cne $RunId -or
-        $Marker.phase -cne $Phase) { throw 'UI marker identity mismatch.' }
-    if ($Marker.stage -cnotmatch '^[a-z0-9_]{1,80}$' -or $Marker.error_code -cnotmatch '^[A-Z0-9_]{1,80}$') {
+    if ($RunId -cnotmatch '\A[0-9a-f]{32}\z' -or $Phase -cnotmatch '\A(?:ui|uisaved|uireopen)\z') { throw 'Invalid expected UI marker identity.' }
+    if (-not [string]::Equals($Marker.schema,'QS3D_LOCAL022_NATIVE_UI_V1',[StringComparison]::Ordinal) -or
+        -not [string]::Equals($Marker.run_id,$RunId,[StringComparison]::Ordinal) -or
+        -not [string]::Equals($Marker.phase,$Phase,[StringComparison]::Ordinal)) { throw 'UI marker identity mismatch.' }
+    if ($Marker.stage -cnotmatch '\A[a-z0-9_]{1,80}\z' -or $Marker.error_code -cnotmatch '\A[A-Z0-9_]{1,80}\z') {
         throw 'Unsanitized UI marker diagnostic.'
     }
     if ($Marker.status -cne 'PASS') { throw ('Native UI failed: ' + $Marker.stage + '/' + $Marker.error_code) }
@@ -22,7 +26,7 @@ function Assert-Local022UiPhase($Marker, [string]$RunId, [string]$Phase) {
     if (-not $requiredByPhase.ContainsKey($Phase)) { throw 'Unknown UI phase.' }
     $required = @($requiredByPhase[$Phase] | Sort-Object)
     $actual = @($Marker.checks.PSObject.Properties.Name | Sort-Object)
-    if ($required.Count -ne $actual.Count -or [string]::Join([char]0,$required) -cne [string]::Join([char]0,$actual)) {
+    if ($required.Count -ne $actual.Count -or -not [string]::Equals([string]::Join([char]0,$required),[string]::Join([char]0,$actual),[StringComparison]::Ordinal)) {
         throw 'UI marker assertion coverage mismatch.'
     }
     foreach ($check in $Marker.checks.PSObject.Properties) {
@@ -35,12 +39,15 @@ function Assert-Local022UiAction($Request, [string]$RunId, [int]$Sequence, [int]
     $keys = @($Request.PSObject.Properties.Name)
     $expected = @('schema','run_id','sequence','action','x','y','text','target_pid')
     if ($keys.Count -ne $expected.Count) { throw 'UI action field count mismatch.' }
+    foreach ($key in $keys) { if ($key -cnotmatch '\A[a-z_]+\z') { throw 'UI action key is not canonical ASCII.' } }
     foreach ($key in $expected) { if ($keys -cnotcontains $key) { throw 'UI action field mismatch.' } }
     foreach ($key in @('schema','run_id','action','text')) {
         if ($Request.$key -isnot [string]) { throw 'UI action string type mismatch.' }
+        if ($Request.$key -cmatch '[^\x20-\x7e]') { throw 'UI action field is not printable ASCII.' }
     }
-    if ($RunId -cnotmatch '^[0-9a-f]{32}$' -or $Request.run_id -cne $RunId -or
-        $Request.schema -cne 'QS3D_LOCAL022_UI_ACTION_V1') { throw 'UI action allocation mismatch.' }
+    if ($RunId -cnotmatch '\A[0-9a-f]{32}\z' -or
+        -not [string]::Equals($Request.run_id,$RunId,[StringComparison]::Ordinal) -or
+        -not [string]::Equals($Request.schema,'QS3D_LOCAL022_UI_ACTION_V1',[StringComparison]::Ordinal)) { throw 'UI action allocation mismatch.' }
     foreach ($name in @('sequence','target_pid','x','y')) {
         if ($Request.$name -isnot [int] -and $Request.$name -isnot [long]) { throw 'UI action integer type mismatch.' }
     }
@@ -53,7 +60,7 @@ function Assert-Local022UiAction($Request, [string]$RunId, [int]$Sequence, [int]
     switch -CaseSensitive ($Request.action) {
         'move' { if ($Request.text -cne '') { throw 'Move cannot carry text.' } }
         'click' { if ($Request.text -cne '') { throw 'Click cannot carry text.' } }
-        'text' { if ($Request.text -cnotmatch '^\-?[0-9]{1,7}(\.[0-9]{1,4})?$') { throw 'Only bounded numeric dimension input is allowed.' } }
+        'text' { if ($Request.text -cnotmatch '\A-?[0-9]{1,7}(\.[0-9]{1,4})?\z') { throw 'Only bounded numeric dimension input is allowed.' } }
         'key' { if ($Request.text -cnotin @('ENTER','ESC')) { throw 'Only Enter/Esc termination is allowed.' } }
         default { throw 'Unsupported UI action.' }
     }
@@ -61,6 +68,7 @@ function Assert-Local022UiAction($Request, [string]$RunId, [int]$Sequence, [int]
 }
 
 function ConvertFrom-Local022UiActionJson([string]$Raw, [string]$RunId, [int]$Sequence, [int]$OwnedProcessId) {
+    if ($Raw -cmatch '[^\x20-\x7e]') { throw 'UI request is not printable ASCII.' }
     $request = Assert-Local022UiAction ($Raw | ConvertFrom-Json -ErrorAction Stop) $RunId $Sequence $OwnedProcessId
     # The probe emits one compact ASCII object with these exact eight ordered
     # fields. Reconstruct only after type/value validation, then compare the raw
@@ -70,7 +78,7 @@ function ConvertFrom-Local022UiActionJson([string]$Raw, [string]$RunId, [int]$Se
         schema=$request.schema; run_id=$request.run_id; sequence=$request.sequence
         action=$request.action; x=$request.x; y=$request.y; text=$request.text; target_pid=$request.target_pid
     } | ConvertTo-Json -Compress
-    if ($Raw -cne $canonical) {
+    if (-not [string]::Equals($Raw,$canonical,[StringComparison]::Ordinal)) {
         throw 'UI request is not canonical; duplicate or ambiguous fields refused.'
     }
     return $request

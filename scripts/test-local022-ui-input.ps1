@@ -33,6 +33,13 @@ Expect-Rejected 'click carrying text' { param($a) $a.text='100' }
 Expect-Rejected 'non-ASCII digits' { param($a) $a.action='text'; $a.text=[string][char]0x0661 }
 Expect-Rejected 'array allocation identity' { param($a) $a.run_id=@($a.run_id) }
 Expect-Rejected 'array schema identity' { param($a) $a.schema=@($a.schema) }
+Expect-Rejected 'hidden schema character' { param($a) $a.schema += [char]0x00ad }
+Expect-Rejected 'hidden nonce character' { param($a) $a.run_id += [char]0x00ad }
+Expect-Rejected 'NUL schema character' { param($a) $a.schema += [char]0 }
+Expect-Rejected 'NUL nonce character' { param($a) $a.run_id += [char]0 }
+Expect-Rejected 'hidden action character' { param($a) $a.action += [char]0x00ad }
+Expect-Rejected 'hidden key character' { param($a) $a.action='key'; $a.text='ENTER' + [char]0x00ad }
+Expect-Rejected 'trailing numeric newline' { param($a) $a.action='text'; $a.text="100`n" }
 foreach ($value in @('0','2000','1000.5','-25')) {
     $action = New-Action; $action.action='text'; $action.text=$value
     $null = Assert-Local022UiAction $action $nonce 1 12345
@@ -71,6 +78,13 @@ $invalidJson = [ordered]@{
     'comment before field' = $canonical.Replace('"x":100','/* ambiguous */"x":100')
     'array wrapper' = '[' + $canonical + ']'
     'malformed JSON' = $canonical.TrimEnd('}')
+    'literal soft-hyphen schema' = $canonical.Replace('QS3D_LOCAL022_UI_ACTION_V1', ('QS3D_LOCAL022_UI_ACTION_V1' + [char]0x00ad))
+    'escaped soft-hyphen schema' = $canonical.Replace('QS3D_LOCAL022_UI_ACTION_V1', 'QS3D_LOCAL022_UI_ACTION_V1\u00ad')
+    'literal soft-hyphen nonce' = $canonical.Replace($nonce, ($nonce + [char]0x00ad))
+    'escaped soft-hyphen nonce' = $canonical.Replace($nonce, ($nonce + '\u00ad'))
+    'escaped NUL schema' = $canonical.Replace('QS3D_LOCAL022_UI_ACTION_V1', 'QS3D_LOCAL022_UI_ACTION_V1\u0000')
+    'escaped NUL nonce' = $canonical.Replace($nonce, ($nonce + '\u0000'))
+    'escaped trailing numeric newline' = $canonical.Replace('"click"','"text"').Replace('"text":""','"text":"100\n"')
 }
 foreach ($case in $invalidJson.GetEnumerator()) {
     $rejected = $false
@@ -83,7 +97,7 @@ Write-Output 'PASS: raw UI decoder rejects escaped/plain duplicate keys and wron
 $rejected = $false
 try { Invoke-Local022UiPhysicalAction (New-Action) (Get-Process -Id $PID) 'C:\not-the-owned-host\bricscad.exe' } catch { $rejected = $true }
 if (-not $rejected) { throw 'FAIL: native input accepted a non-host target.' }
-Write-Output 'PASS: LOCAL022 UI action validation and non-host refusal (23 cases); no desktop input sent.'
+Write-Output 'PASS: LOCAL022 UI action validation, hidden-character rejection and non-host refusal; no desktop input sent.'
 
 $captureRejected = $false
 & {
@@ -121,6 +135,24 @@ foreach ($phase in $phaseCases.Keys) {
     foreach ($check in $phaseCases[$phase]) { $checks[$check]=$true }
     $marker = [pscustomobject]@{schema='QS3D_LOCAL022_NATIVE_UI_V1';run_id=$nonce;phase=$phase;status='PASS';stage=$phase;error_code='NONE';checks=[pscustomobject]$checks}
     $null = Assert-Local022UiPhase $marker $nonce $phase
+    foreach ($field in @('schema','run_id','phase','status','stage','error_code')) {
+        $original = $marker.$field
+        foreach ($hidden in @([char]0x00ad,[char]0,[char]10)) {
+            $marker.$field = $original + $hidden
+            $rejected = $false
+            try { $null=Assert-Local022UiPhase $marker $nonce $phase } catch { $rejected=$true }
+            if (-not $rejected) { throw "FAIL: hidden character accepted in $phase marker/$field" }
+        }
+        $marker.$field = $original
+    }
+    $checkName = $phaseCases[$phase][0]
+    $marker.checks.PSObject.Properties.Remove($checkName)
+    $marker.checks | Add-Member NoteProperty ($checkName + [char]0x00ad) $true
+    $rejected = $false
+    try { $null=Assert-Local022UiPhase $marker $nonce $phase } catch { $rejected=$true }
+    if (-not $rejected) { throw 'FAIL: hidden character accepted in assertion name.' }
+    $marker.checks.PSObject.Properties.Remove($checkName + [char]0x00ad)
+    $marker.checks | Add-Member NoteProperty $checkName $true
     foreach ($check in $phaseCases[$phase]) {
         $marker.checks.$check=$false
         $rejected=$false
