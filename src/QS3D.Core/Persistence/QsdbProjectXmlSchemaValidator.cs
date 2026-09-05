@@ -52,10 +52,14 @@ namespace QS3D.Core.Persistence
         private static void ValidateMap(XElement container, string owner)
         {
             ValidateElement(container, container.Name.LocalName, Array.Empty<string>(), new[] { "p" });
+            var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var property in container.Elements("p"))
             {
                 ValidateElement(property, "p", new[] { "name", "value" }, Array.Empty<string>());
                 ValidateCanonicalMapKey(property, owner);
+                var key = property.Attribute("name")?.Value ?? string.Empty;
+                if (!seenKeys.Add(key))
+                    throw new InvalidDataException("Duplicate QSDB map key in " + owner + ": " + key + ".");
             }
         }
 

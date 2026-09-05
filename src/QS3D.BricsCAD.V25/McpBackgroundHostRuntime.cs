@@ -41,7 +41,7 @@ namespace QS3D.BricsCAD.V25
                     "\"mode\":{\"type\":\"string\",\"enum\":[\"background_only\"]}," + ConfirmMutationProperty(),
                     "mode", "confirmMutation"),
                 Tool("bricscad_ui_text_snapshot",
-                    "BACKGROUND CONTROL: Read bounded BricsCAD UI without screen OCR, focus stealing or global input. mode=text preserves bounded Win32 text diagnostics; mode=semantic returns a bounded same-process UI Automation ControlView tree with exact elementPath, automationId, controlType and supported semantic actions.",
+                    "BACKGROUND CONTROL: Read bounded BricsCAD UI without screen OCR, focus stealing or global input. mode=text preserves bounded Win32 text diagnostics; mode=semantic returns a bounded same-process UI Automation ControlView tree with exact elementPath, automationId, controlType and supported semantic actions plus a discoveryGeneration for the next semantic mutation.",
                     "\"mode\":{\"type\":\"string\",\"enum\":[\"text\",\"semantic\"]},"
                     + "\"scope\":{\"type\":\"string\",\"enum\":[\"all\",\"commandline\",\"popup\"]},"
                     + "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":200},"
@@ -50,12 +50,13 @@ namespace QS3D.BricsCAD.V25
                     + "\"maxNodes\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":200},"
                     + ConfirmSensitiveReadProperty(), "confirmSensitiveRead"),
                 Tool("bricscad_ui_invoke",
-                    "BACKGROUND CONTROL: Invoke either one visible standard Win32 Button by controlHandle or one exact same-process semantic Ribbon/WPF/custom target by windowHandle+elementPath+action. Does not focus the window, move the cursor, capture pixels or inject keyboard/mouse input; unsupported/stale controls fail instead of falling back to Foreground Control.",
+                    "BACKGROUND CONTROL: Invoke either one visible standard Win32 Button by controlHandle or one exact same-process semantic Ribbon/WPF/custom target by windowHandle+elementPath+action. Semantic calls require expectedDiscoveryGeneration from fresh semantic discovery. Does not focus the window, move the cursor, capture pixels or inject keyboard/mouse input; unsupported/stale controls fail instead of falling back to Foreground Control.",
                     ControlHandleProperty() + "," + WindowHandleProperty()
                     + ",\"elementPath\":{\"type\":\"string\",\"maxLength\":96}"
                     + ",\"action\":{\"type\":\"string\",\"enum\":[\"invoke\",\"toggle\",\"select\",\"expand\",\"collapse\"]}"
                     + ",\"expectedControlType\":{\"type\":\"string\",\"maxLength\":64}"
-                    + ",\"expectedAutomationId\":{\"type\":\"string\",\"maxLength\":256},"
+                    + ",\"expectedAutomationId\":{\"type\":\"string\",\"maxLength\":256}"
+                    + ",\"expectedDiscoveryGeneration\":{\"type\":\"integer\",\"minimum\":1},"
                     + ConfirmMutationProperty(), "confirmMutation"),
                 Tool("bricscad_ui_set_text",
                     "BACKGROUND CONTROL: Set bounded text on one visible standard Edit/RichEdit control owned by the current BricsCAD process using WM_SETTEXT. Does not focus the window or inject global keyboard input. Unsupported controls fail instead of falling back to Foreground Control.",
@@ -218,7 +219,9 @@ namespace QS3D.BricsCAD.V25
             {
                 if (result.Count >= limit || textBudget <= 0) return false;
                 if (!BelongsToCurrentProcess(hwnd) || !IsWindowVisible(hwnd)) return true;
-                var isPopupTop = hwnd != mainWindow;
+                var isPopupTop = scope == "popup"
+                    ? McpPopupWindowClassifier.IsPopupRoot(hwnd, mainWindow)
+                    : hwnd != mainWindow;
                 if (scope == "popup" && !isPopupTop) return true;
 
                 AddTextItem(hwnd, true, scope, isPopupTop, result, seen, ref textBudget, limit);
@@ -247,6 +250,7 @@ namespace QS3D.BricsCAD.V25
             if (result.Count >= limit || textBudget <= 0 || !seen.Add(hwnd.ToInt64())) return;
             var className = ClassName(hwnd);
             if (scope == "popup" && !popupTree) return;
+            if (scope == "popup" && LooksLikeCommandLineClass(className)) return;
             if (scope == "commandline" && !LooksLikeCommandLineClass(className)) return;
             var text = WindowText(hwnd);
             if (text.Length == 0) return;

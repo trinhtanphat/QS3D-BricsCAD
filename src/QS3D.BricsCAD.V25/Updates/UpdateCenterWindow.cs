@@ -40,9 +40,9 @@ namespace QS3D.BricsCAD.V25.Updates
         private readonly Button _releaseButton;
         private UpdateCheckResult? _result;
         private bool _coordinatorAttached;
-        private bool _previewDownloading;
         private bool _changingUpdateOnClose;
 #if !BRICSCAD_V26
+        private bool _previewDownloading;
         private bool _previewScheduled;
         private string? _previewScheduledDetail;
 #endif
@@ -296,8 +296,10 @@ namespace QS3D.BricsCAD.V25.Updates
             var hasPreviewDownload = result.State == UpdateState.ManualInstallRequired && result.Release?.HasVerifiedPreviewPackage == true;
 #endif
 #if !BRICSCAD_V26
+            var previewDownloading = _previewDownloading;
             var previewScheduled = _previewScheduled;
 #else
+            var previewDownloading = false;
             var previewScheduled = false;
 #endif
 
@@ -306,7 +308,7 @@ namespace QS3D.BricsCAD.V25.Updates
             HideProgress();
 
 #if !BRICSCAD_V26
-            if (hasPreviewDownload && !_previewDownloading && !previewScheduled)
+            if (hasPreviewDownload && !previewDownloading && !previewScheduled)
             {
                 _status.Text = "Gói preview + SHA-256 đã sẵn sàng";
                 _status.Foreground = Success;
@@ -320,12 +322,12 @@ namespace QS3D.BricsCAD.V25.Updates
                 _status.Foreground = result.State == UpdateState.Error ? Warning : TextPrimary;
             }
 
-            _refreshButton.IsEnabled = !_previewDownloading && !previewScheduled && !checking && result.State != UpdateState.Scheduled;
-            _updateButton.IsEnabled = !_previewDownloading && !previewScheduled && (result.CanAutoInstall || hasPreviewDownload || hasManualRelease);
-            _releaseButton.IsEnabled = !_previewDownloading && result.Release?.PageUri != null;
-            _updateOnCloseCheckBox.IsEnabled = !_previewDownloading && !previewScheduled && result.State != UpdateState.Scheduled;
+            _refreshButton.IsEnabled = !previewDownloading && !previewScheduled && !checking && result.State != UpdateState.Scheduled;
+            _updateButton.IsEnabled = !previewDownloading && !previewScheduled && (result.CanAutoInstall || hasPreviewDownload || hasManualRelease);
+            _releaseButton.IsEnabled = !previewDownloading && result.Release?.PageUri != null;
+            _updateOnCloseCheckBox.IsEnabled = !previewDownloading && !previewScheduled && result.State != UpdateState.Scheduled;
 
-            if (_previewDownloading)
+            if (previewDownloading)
             {
                 _updateButton.Content = "Đang tải…";
                 _updateButton.ToolTip = "Đang tải package từ GitHub Release và kiểm tra SHA-256.";
@@ -495,6 +497,7 @@ namespace QS3D.BricsCAD.V25.Updates
             }
         }
 
+#if !BRICSCAD_V26
         private void ApplyDownloadProgress(UpdateDownloadProgress progress)
         {
             if (progress == null) return;
@@ -513,6 +516,7 @@ namespace QS3D.BricsCAD.V25.Updates
                 _detail.Text = "Đang tải từ GitHub: " + received + total + ". File chỉ được dùng sau khi SHA-256 khớp checksum release.";
             }
         }
+#endif
 
         private void PersistUpdateOnClose(bool enabled)
         {

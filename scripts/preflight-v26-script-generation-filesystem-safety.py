@@ -23,19 +23,32 @@ def validate(generator: str, wrapper: str) -> list[str]:
         "function Assert-DirectoryAncestorChain",
         "Assert-OrdinaryPathItem -Path $sourceFull -Label 'V25 template script' -Directory $false",
         "Assert-DirectoryAncestorChain -Path $parent -Label 'V26 output ancestor'",
-        "Assert-SafeExistingOutputLeaf -Path $outputFull",
+        "function Open-AdmittedOutputParent",
+        "function Assert-AdmittedOutputParentBinding",
+        "$outputParentHandle = Open-AdmittedOutputParent -Path $parent",
+        "$pathAdmission = Open-AdmittedOutputParent -Path $Admission.Path",
+        "Test-SameHandleIdentity -Before $Admission.Information -After $pathAdmission.Information",
+        "$pathAdmission.Handle.Dispose()",
+        "V26 generation output must be fresh",
         "$stagePath = Join-Path $parent",
         "[IO.File]::WriteAllText($stagePath, $generated",
-        "[IO.File]::Replace($stagePath, $outputFull, $null)",
         "[IO.File]::Move($stagePath, $outputFull)",
         "Assert-OrdinaryPathItem -Path $stagePath -Label 'V26 generated script staging file' -Directory $false",
+        "$outputParentHandle.Handle.Dispose()",
     )
     for token in generator_tokens:
         if token not in generator:
             errors.append(f"generator missing safety contract: {token}")
 
-    if "[IO.File]::WriteAllText($outputFull" in generator:
-        errors.append("generator must not write generated content directly into the final output leaf")
+    forbidden = (
+        "[IO.File]::WriteAllText($outputFull",
+        "[IO.File]::Replace($stagePath, $outputFull, $null)",
+        "New-Item -ItemType Directory -Path $parent -Force",
+        "[IO.File]::OpenHandle(",
+    )
+    for token in forbidden:
+        if token in generator:
+            errors.append(f"generator retains unsafe output contract: {token}")
 
     before(
         generator,
@@ -47,21 +60,35 @@ def validate(generator: str, wrapper: str) -> list[str]:
     before(
         generator,
         "Assert-DirectoryAncestorChain -Path $parent -Label 'V26 output ancestor'",
-        "New-Item -ItemType Directory -Path $parent -Force",
-        "output ancestor validation before creation",
+        "$outputParentHandle = Open-AdmittedOutputParent -Path $parent",
+        "output ancestor validation before held-parent admission",
         errors,
     )
     before(
         generator,
-        "Assert-SafeExistingOutputLeaf -Path $outputFull",
+        "$outputParentHandle = Open-AdmittedOutputParent -Path $parent",
         "[IO.File]::WriteAllText($stagePath, $generated",
-        "existing output validation before staging",
+        "held-parent admission before staging",
+        errors,
+    )
+    before(
+        generator,
+        "$pathAdmission = Open-AdmittedOutputParent -Path $Admission.Path",
+        "Test-SameHandleIdentity -Before $Admission.Information -After $pathAdmission.Information",
+        "native pathname re-admission before held-generation identity comparison",
+        errors,
+    )
+    before(
+        generator,
+        "Assert-AdmittedOutputParentBinding -Admission $outputParentHandle",
+        "[IO.File]::Move($stagePath, $outputFull)",
+        "held-parent revalidation before publication",
         errors,
     )
     before(
         generator,
         "Assert-OrdinaryPathItem -Path $stagePath -Label 'V26 generated script staging file' -Directory $false",
-        "[IO.File]::Replace($stagePath, $outputFull, $null)",
+        "[IO.File]::Move($stagePath, $outputFull)",
         "staging validation before publication",
         errors,
     )
@@ -126,8 +153,24 @@ def main() -> int:
             ),
             wrapper,
         ),
+        "held parent binding": (
+            generator.replace("Assert-AdmittedOutputParentBinding -Admission $outputParentHandle", "# binding removed"),
+            wrapper,
+        ),
+        "native pathname re-admission": (
+            generator.replace(
+                "$pathAdmission = Open-AdmittedOutputParent -Path $Admission.Path",
+                "$pathAdmission = $Admission",
+                1,
+            ),
+            wrapper,
+        ),
+        "fresh-only publication": (
+            generator.replace("V26 generation output must be fresh", "V26 existing output may be replaced"),
+            wrapper,
+        ),
         "atomic final publication": (
-            generator.replace("[IO.File]::Replace($stagePath, $outputFull, $null)", "Move-Item -LiteralPath $stagePath -Destination $outputFull -Force", 1),
+            generator.replace("[IO.File]::Move($stagePath, $outputFull)", "Move-Item -LiteralPath $stagePath -Destination $outputFull -Force", 1),
             wrapper,
         ),
         "temporary parent validation": (

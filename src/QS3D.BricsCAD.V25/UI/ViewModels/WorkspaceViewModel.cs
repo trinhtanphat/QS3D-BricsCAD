@@ -614,6 +614,13 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         private static bool IsNumericProperty(string key)
         {
             if (string.IsNullOrWhiteSpace(key)) return false;
+            // The generic Family view is populated before the dedicated footing rows.
+            // Its initial value normalization must never turn metre values 0/1 into booleans.
+            if (SingleFootingContract.IsDimensionKey(key) || new[]
+                {
+                    "SingleFootingL1M", "SingleFootingW1M", "SingleFootingL2M",
+                    "SingleFootingW2M", "SingleFootingH1M", "SingleFootingH2M"
+                }.Any(candidate => string.Equals(candidate, key, StringComparison.OrdinalIgnoreCase))) return true;
             if (SemanticPropertyUnitClassifier.IsLinearMeterProperty(key) || key.EndsWith("M2", StringComparison.OrdinalIgnoreCase) || key.EndsWith("M3", StringComparison.OrdinalIgnoreCase) ||
                 key.EndsWith("Mm", StringComparison.OrdinalIgnoreCase) || key.EndsWith("Deg", StringComparison.OrdinalIgnoreCase) || key.EndsWith("Count", StringComparison.OrdinalIgnoreCase) ||
                 key.EndsWith("Ratio", StringComparison.OrdinalIgnoreCase) || key.EndsWith("Factor", StringComparison.OrdinalIgnoreCase) || key.EndsWith("Percent", StringComparison.OrdinalIgnoreCase)) return true;
