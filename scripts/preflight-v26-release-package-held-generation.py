@@ -97,11 +97,20 @@ def static_failures() -> list[str]:
     return failures
 
 
+def github_annotation_escape(value: str) -> str:
+    return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def phase_notice(phase: str) -> None:
+    print(f"::notice title=V26 held-generation phase::{github_annotation_escape(phase)}")
+
+
 def run_probe_regression() -> list[str]:
     failures: list[str] = []
     dotnet = shutil.which("dotnet")
     if dotnet is None:
         return ["dotnet SDK/runtime is required to exercise the V26 metadata probe"]
+    phase_notice("dotnet-resolved")
 
     env = os.environ.copy()
     env.update(
@@ -134,6 +143,7 @@ def run_probe_regression() -> list[str]:
     if build.returncode != 0:
         detail = (build.stderr or build.stdout).strip()[-2000:]
         return [f"V26 metadata probe build failed: {detail}"]
+    phase_notice("probe-build-pass")
 
     probe_dll = PROBE_DIR / "bin" / "Release" / "net8.0" / "V26ReleaseIdentityProbe.dll"
     if not probe_dll.is_file():
@@ -154,6 +164,8 @@ def run_probe_regression() -> list[str]:
         failures.append(
             f"V26 metadata probe did not parse its own exact stdin generation: rc={good.returncode} stdout={good_stdout!r} stderr={detail!r}"
         )
+    else:
+        phase_notice("self-parse-pass")
 
     malformed = subprocess.run(
         [dotnet, str(probe_dll)],
@@ -165,17 +177,17 @@ def run_probe_regression() -> list[str]:
     malformed_stdout = malformed.stdout.decode("utf-8", errors="replace")
     if malformed.returncode == 0 or MARKER in malformed_stdout:
         failures.append("V26 metadata probe did not fail closed on malformed stdin bytes")
+    else:
+        phase_notice("malformed-rejection-pass")
 
     return failures
 
 
-def github_annotation_escape(value: str) -> str:
-    return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-
-
 def main() -> int:
+    phase_notice("guard-entered")
     failures = static_failures()
     if not failures:
+        phase_notice("static-contract-pass")
         failures.extend(run_probe_regression())
 
     if failures:
@@ -184,6 +196,7 @@ def main() -> int:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
 
+    phase_notice("guard-pass")
     print("PASS: V26 package semantics use a bounded metadata-only probe over exact held-stream bytes")
     return 0
 
