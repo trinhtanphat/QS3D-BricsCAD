@@ -172,7 +172,8 @@ function Invoke-Local022UiPhysicalAction($Request, [Diagnostics.Process]$Process
     if ($window -eq [IntPtr]::Zero) { throw 'Owned BricsCAD has no UI window.' }
     # Activate only the owned window or its owned modal dialog. Never inject into
     # the desktop when activation fails or a user/other process takes focus.
-    [void][Qs3dLocal022Input]::ShowWindowAsync($window, 9)
+    # Do not restore/resize a maximized window after the probe has measured its
+    # controls; that would invalidate every screen coordinate in this request.
     $popup = [Qs3dLocal022Input]::GetLastActivePopup($window)
     if ($popup -ne [IntPtr]::Zero) { $window = $popup }
     [void][Qs3dLocal022Input]::SetForegroundWindow($window)
@@ -203,7 +204,13 @@ function Invoke-Local022UiPendingAction([string]$Root, [string]$RunId, [int]$Seq
     $request = Assert-Local022UiAction ($raw | ConvertFrom-Json) $RunId $Sequence $Process.Id
     $ack = Join-Path $Root ('ui-ack-{0:D4}.private.json' -f $Sequence)
     if (Test-Path -LiteralPath $ack) { throw 'UI action already acknowledged; refusing replay.' }
-    Invoke-Local022UiPhysicalAction $request $Process $ExpectedExecutable
+    try { Invoke-Local022UiPhysicalAction $request $Process $ExpectedExecutable }
+    catch {
+        # Preserve the exact owned window for diagnosis of rejected coordinates.
+        # No input retries or alternate/unverified coordinates are attempted.
+        try { Save-Local022OwnedWindow $Process (Join-Path $Root ('ui-rejected-{0:D4}.private.png' -f $Sequence)) } catch { }
+        throw
+    }
     # The matching private frame supports human visual QA; it never establishes
     # the semantic/native PASS by itself. The probe independently checks state.
     Save-Local022OwnedWindow $Process (Join-Path $Root ('ui-window-{0:D4}.private.png' -f $Sequence))
