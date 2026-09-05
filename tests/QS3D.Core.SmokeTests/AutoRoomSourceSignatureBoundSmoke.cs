@@ -20,6 +20,7 @@ namespace QS3D.Core.SmokeTests
             MarkActiveOverBoundaryFailsClosedBeforeMutation();
             RemoveEmptyEntriesSemanticsRemainStable();
             WhitespaceOnlyTokensStillConsumeTheInputEnvelope();
+            OpaqueCaseEquivalentPermutationsCanonicalizeDeterministically();
         }
 
         private static void ExactBoundaryRemainsAccepted()
@@ -88,6 +89,15 @@ namespace QS3D.Core.SmokeTests
                 () => AutoRoomLifecycle.SourceSignature(room),
                 "Whitespace-only non-empty tokens historically survive RemoveEmptyEntries and must still consume the 5,000-input envelope.",
                 "cannot exceed 5000 input entries");
+        }
+
+        private static void OpaqueCaseEquivalentPermutationsCanonicalizeDeterministically()
+        {
+            var first = AutoRoomLifecycle.NormalizeSourceHandles(new[] { "room-x", "ZONE-y", "ROOM-X" });
+            var reversed = AutoRoomLifecycle.NormalizeSourceHandles(new[] { "ROOM-X", "zone-Y", "room-x" });
+
+            AssertEqual("ROOM-X;ZONE-Y", first, "Opaque Auto Room source handles must have one exact canonical casing.");
+            AssertEqual(first, reversed, "Case-equivalent Auto Room source-handle permutations must produce the same persisted signature.");
         }
 
         private static ProjectElement NewRoom(string id) =>

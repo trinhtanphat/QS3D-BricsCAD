@@ -54,16 +54,22 @@ required_generator_tokens = (
     "$generated = $text.Replace('V25', 'V26').Replace('v25', 'v26')",
     "$stagePath = Join-Path $parent",
     "[IO.File]::WriteAllText($stagePath, $generated",
-    "[IO.File]::Replace($stagePath, $outputFull, $null)",
-    "[IO.File]::Move($stagePath, $outputFull)",
     "Assert-SafeExistingOutputLeaf -Path $outputFull",
+    "$outputParentHandle = Open-AdmittedOutputParent -Path $parent",
+    "Assert-AdmittedOutputParentBinding -Admission $outputParentHandle",
+    "V26 generation output must be fresh; destination appeared before publication.",
+    "[IO.File]::Move($stagePath, $outputFull)",
 )
 for token in required_generator_tokens:
     if token not in generator:
         errors.append(f"V25→V26 transformer contract changed unexpectedly: {token}")
 
-if "[IO.File]::WriteAllText($outputFull" in generator:
-    errors.append("V25→V26 transformer must not publish generated content by writing the final output leaf in place")
+for forbidden in (
+    "[IO.File]::WriteAllText($outputFull",
+    "[IO.File]::Replace(",
+):
+    if forbidden in generator:
+        errors.append(f"V25→V26 transformer must not use in-place/existing-destination publication: {forbidden}")
 
 # The containment invariant is positional: the generated script must live directly
 # in scripts/, because the inherited template calculates repositoryRoot as the
@@ -78,20 +84,46 @@ if wrapper:
         if not temp_index < generate_index < execute_index < cleanup_index:
             errors.append("generated V26 finalizer lifecycle is not create -> generate -> execute -> cleanup")
 
-# The transformer now writes to an ordinary sibling stage then performs a same-directory
-# replace/move. Preserve that publication boundary so repository-root-sensitive wrappers
-# still receive the final generated script at the exact path they selected.
+# The transformer publishes only a fresh output generation. It pins the output-parent
+# generation, writes an ordinary sibling stage, revalidates the held parent immediately
+# before publication, proves the destination is still absent, then atomically moves the
+# stage into the selected repository-local finalizer path. Existing-destination replace
+# semantics are intentionally forbidden because they break the #5711 generation boundary.
 if generator:
     parent_index = generator.find("$parent = Split-Path -Parent $outputFull")
+    admission_index = generator.find("$outputParentHandle = Open-AdmittedOutputParent -Path $parent")
     stage_index = generator.find("$stagePath = Join-Path $parent")
     write_index = generator.find("[IO.File]::WriteAllText($stagePath, $generated")
-    replace_index = generator.find("[IO.File]::Replace($stagePath, $outputFull, $null)")
+    binding_after_write_index = generator.find(
+        "Assert-AdmittedOutputParentBinding -Admission $outputParentHandle",
+        write_index + 1 if write_index >= 0 else 0,
+    )
+    fresh_before_move_index = generator.find(
+        "V26 generation output must be fresh; destination appeared before publication.",
+        write_index + 1 if write_index >= 0 else 0,
+    )
     move_index = generator.find("[IO.File]::Move($stagePath, $outputFull)")
-    if min(parent_index, stage_index, write_index, replace_index, move_index) >= 0:
-        replace_ordered = parent_index < stage_index < write_index < replace_index
-        move_ordered = parent_index < stage_index < write_index < move_index
-        if not (replace_ordered and move_ordered):
-            errors.append("V25→V26 transformer publication is not parent -> sibling stage -> write -> replace/move")
+    if min(
+        parent_index,
+        admission_index,
+        stage_index,
+        write_index,
+        binding_after_write_index,
+        fresh_before_move_index,
+        move_index,
+    ) >= 0:
+        if not (
+            parent_index
+            < admission_index
+            < stage_index
+            < write_index
+            < binding_after_write_index
+            < fresh_before_move_index
+            < move_index
+        ):
+            errors.append(
+                "V25→V26 transformer publication is not parent -> held admission -> sibling stage -> write -> revalidate -> fresh proof -> atomic move"
+            )
 
 if errors:
     print("V26 finalizer repository-root preflight FAILED:", file=sys.stderr)

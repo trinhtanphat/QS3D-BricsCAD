@@ -36,6 +36,9 @@ def validate_helper(text: str) -> None:
     require(text, "Assert-NoExistingReparseComponent -Path $cacheDir", "cache path guard")
     require(text, "Assert-NoExistingReparseComponent -Path $msi", "MSI path guard")
     require(text, "Assert-NoExistingReparseComponent -Path $extract", "extract path guard")
+    require(text, "if (Test-Path -LiteralPath $extract)", "fresh ExtractDir absence guard")
+    require(text, "ExtractDir unexpectedly already exists; refusing pathname reuse", "fresh ExtractDir refusal diagnostic")
+    require(text, "New-Item -ItemType Directory -Path $extract | Out-Null", "non-Force fresh ExtractDir creation")
     require(text, "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging", "isolated staged download")
     require(text, "Test-PinnedMsiGeneration -Path $staging", "staged held admission")
     require(text, "[IO.File]::Move($staging, $msi)", "canonical publication")
@@ -53,14 +56,18 @@ def validate_helper(text: str) -> None:
     forbid(text, "[IO.FileShare]::Delete", "delete-share MSI generation lock")
     forbid(text, "Invoke-WebRequest -Uri $candidate.Url -OutFile $msi", "direct canonical download")
     forbid(text, "Get-AuthenticodeSignature -FilePath $msi\n", "unheld MSI Authenticode validation")
+    forbid(text, "Remove-Item -LiteralPath $extract -Recurse", "recursive ExtractDir pathname cleanup")
+    forbid(text, "New-Item -ItemType Directory -Path $extract -Force", "Force-based ExtractDir reuse")
 
-    destructive = "Remove-Item -LiteralPath $extract -Recurse -Force"
-    require_before(text, "Assert-NoExistingReparseComponent -Path $cacheDir", destructive,
-                   "cache reparse guard before recursive cleanup")
-    require_before(text, "Assert-NoExistingReparseComponent -Path $msi", destructive,
-                   "MSI reparse guard before recursive cleanup")
-    require_before(text, "Assert-NoExistingReparseComponent -Path $extract", destructive,
-                   "extract reparse guard before recursive cleanup")
+    absent = "if (Test-Path -LiteralPath $extract)"
+    create = "New-Item -ItemType Directory -Path $extract | Out-Null"
+    require_before(text, "Assert-NoExistingReparseComponent -Path $cacheDir", absent,
+                   "cache reparse guard before fresh-root admission")
+    require_before(text, "Assert-NoExistingReparseComponent -Path $msi", absent,
+                   "MSI reparse guard before fresh-root admission")
+    require_before(text, "Assert-NoExistingReparseComponent -Path $extract", absent,
+                   "extract reparse guard before fresh-root admission")
+    require_before(text, absent, create, "existing ExtractDir refusal before non-Force creation")
     require_before(text, "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging",
                    "Test-PinnedMsiGeneration -Path $staging",
                    "staged download before held admission")
@@ -158,13 +165,30 @@ def main() -> None:
                      "Get-AuthenticodeSignature -FilePath $msi", 1),
         "detached Authenticode from final held state",
     )
-    destructive = "Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue"
     expect_rejected(
         validate_helper,
-        text.replace("Assert-NoExistingReparseComponent -Path $cacheDir -Label 'MSI cache directory'", "# delayed cache guard", 1)
-            .replace(destructive,
-                     destructive + "\nAssert-NoExistingReparseComponent -Path $cacheDir -Label 'MSI cache directory'", 1),
-        "moved cache guard after recursive cleanup",
+        text.replace("if (Test-Path -LiteralPath $extract)", "if ($false)", 1),
+        "removed fresh ExtractDir absence guard",
+    )
+    expect_rejected(
+        validate_helper,
+        text.replace("New-Item -ItemType Directory -Path $extract | Out-Null",
+                     "New-Item -ItemType Directory -Path $extract -Force | Out-Null", 1),
+        "made ExtractDir creation reusable with Force",
+    )
+    fresh_create = "New-Item -ItemType Directory -Path $extract | Out-Null"
+    cache_guard = "Assert-NoExistingReparseComponent -Path $cacheDir -Label 'MSI cache directory'"
+    expect_rejected(
+        validate_helper,
+        text.replace(cache_guard, "# delayed cache guard", 1)
+            .replace(fresh_create, fresh_create + "\n" + cache_guard, 1),
+        "moved cache reparse guard after fresh-root creation",
+    )
+    expect_rejected(
+        validate_helper,
+        text.replace(fresh_create,
+                     "Remove-Item -LiteralPath $extract -Recurse -Force\n" + fresh_create, 1),
+        "reintroduced recursive pathname cleanup",
     )
 
     helper = ".\\scripts\\acquire-v25-compile-references.ps1"
@@ -194,7 +218,7 @@ def main() -> None:
         "reintroduced cloud inline recursive cleanup",
     )
 
-    print("PASS V25 compile-reference acquisition path/cache and cloud parity contract")
+    print("PASS V25 compile-reference fresh-root/path/cache and cloud parity contract")
 
 
 if __name__ == "__main__":

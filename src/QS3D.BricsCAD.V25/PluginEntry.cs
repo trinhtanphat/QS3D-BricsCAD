@@ -28,6 +28,9 @@ namespace QS3D.BricsCAD.V25
             try { McpDiagnosticHub.Start(); }
             catch (Exception ex) { ReportOptionalStartupFailure("diagnostics bridge", ex); }
 
+            try { Qs3dCodeHostService.Start(); }
+            catch (Exception ex) { ReportOptionalStartupFailure("QS3D Code local host bridge", ex); }
+
             try { McpPopupObserver.Start(); }
             catch (Exception ex) { ReportOptionalStartupFailure("popup notification observer", ex); }
 
@@ -88,6 +91,7 @@ namespace QS3D.BricsCAD.V25
 
         private static void TeardownHostServices()
         {
+            TryCleanup(Qs3dCodeHostService.Stop);
             TryCleanup(McpDesktopControlSession.Shutdown);
             TryCleanup(McpPopupObserver.Stop);
             TryCleanup(McpFirstRunExperience.Stop);
