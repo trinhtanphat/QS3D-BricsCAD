@@ -86,6 +86,31 @@ public static class Qs3dLocal022Input {
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
     [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr window, int command);
     [DllImport("user32.dll")] public static extern IntPtr GetLastActivePopup(IntPtr window);
+    [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] static extern bool AttachThreadInput(uint thread, uint other, bool attach);
+    [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr window);
+    public static bool ActivateOwned(IntPtr window, int process) {
+        uint actual;
+        uint targetThread=GetWindowThreadProcessId(window,out actual);
+        if (targetThread == 0 || actual != process) throw new InvalidOperationException("Activation target is not owned.");
+        uint foregroundProcess;
+        uint foregroundThread=GetWindowThreadProcessId(GetForegroundWindow(),out foregroundProcess);
+        uint thread=GetCurrentThreadId();
+        bool attachedForeground=false, attachedTarget=false;
+        try {
+            if (foregroundThread != 0 && foregroundThread != thread)
+                attachedForeground=AttachThreadInput(thread,foregroundThread,true);
+            if (targetThread != thread && targetThread != foregroundThread)
+                attachedTarget=AttachThreadInput(thread,targetThread,true);
+            BringWindowToTop(window);
+            SetForegroundWindow(window);
+        } finally {
+            if (attachedTarget) AttachThreadInput(thread,targetThread,false);
+            if (attachedForeground) AttachThreadInput(thread,foregroundThread,false);
+        }
+        GetWindowThreadProcessId(GetForegroundWindow(),out actual);
+        return actual == process;
+    }
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr window, out RECT rectangle);
     [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr window, IntPtr deviceContext, uint flags);
     public static void RequireForeground(int process) {
@@ -176,8 +201,14 @@ function Invoke-Local022UiPhysicalAction($Request, [Diagnostics.Process]$Process
     # controls; that would invalidate every screen coordinate in this request.
     $popup = [Qs3dLocal022Input]::GetLastActivePopup($window)
     if ($popup -ne [IntPtr]::Zero) { $window = $popup }
-    [void][Qs3dLocal022Input]::SetForegroundWindow($window)
-    Start-Sleep -Milliseconds 100
+    $activationDeadline = [DateTime]::UtcNow.AddSeconds(5)
+    $activationShell = New-Object -ComObject WScript.Shell
+    do {
+        [void]$activationShell.AppActivate($Process.Id)
+        $activated = [Qs3dLocal022Input]::ActivateOwned($window,$Process.Id)
+        if ($activated) { break }
+        Start-Sleep -Milliseconds 100
+    } while ([DateTime]::UtcNow -lt $activationDeadline)
     [Qs3dLocal022Input]::RequireForeground($Process.Id)
     switch -CaseSensitive ($Request.action) {
         'click' { [Qs3dLocal022Input]::Click($Process.Id, $Request.x, $Request.y) }
