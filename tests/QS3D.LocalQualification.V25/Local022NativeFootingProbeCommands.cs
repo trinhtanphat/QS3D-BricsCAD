@@ -22,7 +22,7 @@ namespace QS3D.LocalQualification.V25
     /// and reaches its non-public V25 authoring seams only by exact reflection.  It is deliberately
     /// not a replacement geometry implementation and writes only sanitized phase markers.
     /// </summary>
-    public sealed class Local022NativeFootingProbeCommands
+    public sealed partial class Local022NativeFootingProbeCommands
     {
         private const string Schema = "QS3D_LOCAL022_NATIVE_V1";
         private const string RunIdVariable = "QS3D_LOCAL022_RUN_ID";

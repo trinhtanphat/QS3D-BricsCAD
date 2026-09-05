@@ -43,7 +43,7 @@ The fresh allocation produced three independent PASS markers:
    - live reopened generated solids;
    - exact dimensions, volumes, extents and cardinality.
 
-Cleanup also passed: zero BricsCAD/tunnel processes, the nonce profile was removed, the original profile inventory and current-profile pointer were restored, the private disposable root was removed, the repository fixture retained SHA-256 `cec1350fb2207542aeecd96a790a198a6c9cc9e99a9f875871f367554b3d967e`, and protected DemandLoad/tunnel state was unchanged.
+Cleanup also passed: zero BricsCAD/tunnel processes, the nonce profile was removed, the original profile inventory and current-profile pointer were restored, the private disposable root was removed, the repository fixture retained SHA-256 `cec1350fb2207542aeecd96a790a198a6c9cc9e99a9f875871f367554b3d967e`, and the checked DemandLoad fields (`LOADER`, loader-file hash and `LOADCTRLS`) and tunnel-autostart bytes were unchanged. The V25 snapshot did not cover every registry value in the DemandLoad key; no full-key preservation claim is made for those historical V25 allocations.
 
 ## Consumed non-result retained
 
@@ -100,4 +100,14 @@ A fresh allocation on harness `628a920b5b943ea1273d3b7132eb758e6f38b709` then re
 | V25.2.10 | `e32fba7b808bbe2a286c5c8b625e061de48d8ea0` | `e3e4b77ae6d239fb2cfbfddff4f85d5c57d4b12c13124bcc3464c3be36492d58` | `f5111a773159e4dab4f88f68d8652c3d56f9c29b6e23a858701ed2bc3a6eff01` |
 | V26.2.07 | `628a920b5b943ea1273d3b7132eb758e6f38b709` | `11016af66fbc7b9ee0dd3fae2266ff6d3688cfabd9786b8842ca9ee865212adc` | `ce82d507e36ce96b6c98e59982e01d737996ee1cf5d4e271ec63eb66f0855741` |
 
-Final cleanup verification found zero BricsCAD/tunnel processes, both successful private drawing roots and profile recovery files removed, exact per-host profile inventories/current pointers restored, and unchanged reference fixture/product payloads. OpenAI autostart returned to its original byte `1` and original timestamp after each allocation; Cloudflare remained `0`. No MCP request or tunnel functional test was performed. The installed user plugin was not replaced by these local candidate packages.
+Final cleanup verification found zero BricsCAD/tunnel processes, both successful private drawing roots and profile recovery files removed, exact per-host profile inventories/current pointers restored, and unchanged reference fixture/product payloads. V25 DemandLoad preservation is limited to the checked fields listed above; V26 additionally fingerprints all value names, kinds and values in its registration key. OpenAI autostart returned to its original byte `1` and original timestamp after each allocation; Cloudflare remained `0`. No MCP request or tunnel functional test was performed. The installed user plugin was not replaced by these local candidate packages.
+
+## Owner-approved interactive extension
+
+The owner approved real UI expansion on 2026-09-05. The existing host runners now have an opt-in `-InteractiveUi` path, separate from the already consumed native-API allocations. The intended matrix is the visible Móng đơn tree/Add route, Cancel/no mutation, six numeric dialog fields, physical viewport centre picks, Enter/Esc termination, UI Family edit/regeneration, save and fresh-process reopen. The probe must assert product state after each action; sending an input event is not a PASS.
+
+`scripts/local022-ui-input.ps1` accepts only nonce/sequence/PID-bound click, numeric text and Enter/Esc requests. It checks the exact owned executable, foreground PID and point ownership before native input. Screenshots use only the owned HWND via `PrintWindow`, never the desktop. Action/ack files, images and raw diagnostics are private ignored artifacts, not public evidence.
+
+`scripts/run-local022-ui-qualification.ps1` is the reusable orchestration entry point for the frozen `43130a49...` package pair described above. It requires a clean, pushed `-HarnessSha`, a fresh `-AllocationName`, the local `-PackageRoot`, `-HostMajor 25` or `26`, and explicit `-ConfirmTemporaryAutostartPause`. V26 additionally requires `-V26ProvenancePath` and `-PrecedingV25Receipt` from a same-source UI PASS with verified cleanup/restoration. Each invocation restores the original OpenAI autostart byte/timestamp; it does not test either tunnel.
+
+Guard regression command: `pwsh -File scripts/test-local022-ui-input.ps1`. These deterministic guard tests are not licensed qualification. Interactive runtime results must be recorded separately against the exact successful harness/product identities; none is inferred from adding or compiling this extension. Historical native PASS and consumed failures above remain unchanged.

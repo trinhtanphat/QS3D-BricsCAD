@@ -9,15 +9,17 @@ param(
     [string]$BricsCadDir = 'C:\Program Files\Bricsys\BricsCAD V26 en_US',
     [string]$Profile = 'QS3D-V26-TEST',
     [ValidateRange(60, 600)][int]$PhaseTimeoutSeconds = 240,
+    [switch]$InteractiveUi,
     [Parameter(Mandatory = $true)][switch]$ConfirmDisposableCopy
 )
 
-# LOCAL-022 bounded native API qualification only. This runner issues no MCP
-# requests and does not test MCP behavior, physical mouse picks, dialog/Workspace
-# layout, or the aggregate V25/V26 matrix.
+# LOCAL-022 bounded native qualification; -InteractiveUi adds real mouse/key
+# authoring with independent host-side assertions. Neither mode tests MCP or
+# claims aggregate V25/V26, private-DWG or full-DPI qualification.
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'bricscad-runner-window-interop.ps1')
+. (Join-Path $PSScriptRoot 'local022-ui-input.ps1')
 
 $script:Qs3dV26ProfilesRegistryPath = 'Software\Bricsys\BricsCAD\V26x64\en_US\Profiles'
 $script:Qs3dV26NoncePrefix = 'QS3D-AUTO-'
@@ -594,6 +596,7 @@ function Get-ProtectedState {
 function Read-Phase([string]$Phase) {
     $path = Join-Path $ArtifactDir ('phase-' + $Phase + '.json')
     $marker = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+    if ($Phase -in @('ui','uisaved','uireopen')) { return Assert-Local022UiPhase $marker $runId $Phase }
     $keys = @($marker.PSObject.Properties.Name)
     foreach ($key in @('schema', 'run_id', 'phase', 'status', 'stage', 'error_code', 'checks')) {
         if ($keys -notcontains $key) { throw 'Native marker lacks a required field.' }
@@ -653,16 +656,21 @@ function Invoke-NativePhase([string]$Phase, [string[]]$Commands) {
         'NETLOAD', ('"' + $pluginDll + '"'), 'NETLOAD', ('"' + $ProbeDll + '"')) + $Commands
     [IO.File]::WriteAllLines($scriptPath, $lines, [Text.Encoding]::ASCII)
     $arguments = '"' + $drawing + '" /L /P "' + $sandbox.NonceProfile + '" /B "' + $scriptPath + '"'
-    $process = Start-Process -FilePath $bricscadExe -ArgumentList $arguments -WorkingDirectory $privateRoot -PassThru -WindowStyle Hidden
+    $windowStyle = if ($InteractiveUi) { 'Normal' } else { 'Hidden' }
+    $process = Start-Process -FilePath $bricscadExe -ArgumentList $arguments -WorkingDirectory $privateRoot -PassThru -WindowStyle $windowStyle
     $ownedProcesses.Add($process)
     $launcherId = $process.Id
     $deadline = [DateTime]::UtcNow.AddSeconds($PhaseTimeoutSeconds)
     $handoff = $false
+    $uiSequence = 1
     $markerPath = Join-Path $ArtifactDir ('phase-' + $Phase + '.json')
     Write-Host ('LOCAL-022 native phase started: ' + $Phase)
     while ([DateTime]::UtcNow -lt $deadline) {
         [void](Close-Qs3dProxyInformationDialog -Process $process)
         $process.Refresh()
+        if ($InteractiveUi -and -not $process.HasExited -and $Phase -ceq 'ui') {
+            if (Invoke-Local022UiPendingAction $ArtifactDir $runId $uiSequence $process $bricscadExe) { $uiSequence++ }
+        }
         if ($process.HasExited) {
             if (Test-Path -LiteralPath $markerPath) { break }
             # BricsCAD may hand off from its launcher. Adopt only an exact child
@@ -783,6 +791,10 @@ $probePdb = [IO.Path]::ChangeExtension($ProbeDll, '.pdb')
 $probeSourceHash = Get-Hash $probeSource
 $probeProjectHash = Get-Hash $probeProject
 $runnerHash = Get-Hash $PSCommandPath
+$supplementalInputs = [ordered]@{}
+foreach ($inputPath in @((Join-Path $PSScriptRoot 'local022-ui-input.ps1')) + @(Get-ChildItem (Split-Path $probeSource) -Filter '*.cs' -File | Select-Object -ExpandProperty FullName) + @(Get-ChildItem (Join-Path $repoRoot 'tests\QS3D.LocalQualification.V25') -Filter '*Ui*.cs' -File | Select-Object -ExpandProperty FullName)) {
+    $supplementalInputs[$inputPath] = Get-Hash $inputPath
+}
 $harnessSha = (& git -C $repoRoot rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Cannot read harness Git SHA.' }
 $dirty = @(& git -C $repoRoot status --porcelain=v1 --untracked-files=all)
@@ -821,6 +833,7 @@ $freeze = [ordered]@{
     probe_files = $probeExtraHashes
     probe_source_sha256 = $probeSourceHash; probe_project_sha256 = $probeProjectHash; dotnet_sdk = $dotnetVersion
     runner_sha256 = $runnerHash; harness_git_sha = $harnessSha
+    interactive_ui = [bool]$InteractiveUi; supplemental_input_hashes = @($supplementalInputs.Values)
     fixture_sha256 = $fixtureHash; host_version = (Get-Item -LiteralPath $bricscadExe).VersionInfo.FileVersion
     host_sha256 = Get-Hash $bricscadExe; pre_existing_host_count = 0
     mcp_test_executed = $false; mcp_requests_issued_by_runner = $false
@@ -890,10 +903,16 @@ try {
     $env:QS3D_LOCAL022_V26_DRAWING = $drawing
     $env:QS3D_LOCAL022_V26_PRODUCT_DLL = $pluginDll
     $env:QS3D_LOCAL022_V26_PROBE_DLL = $ProbeDll
-    $markers += Invoke-NativePhase 'run' @('QL22RUN', 'QS3DSAVE', '_.QSAVE', 'QL22SAVED', '_.QUIT', '_Y')
-    $markers += Read-Phase 'saved'
+    if ($InteractiveUi) {
+        $markers += Invoke-NativePhase 'ui' @('OSMODE','0','SNAPMODE','0','DYNMODE','0','QS3D','QL22UI')
+        $markers += Read-Phase 'uisaved'
+    } else {
+        $markers += Invoke-NativePhase 'run' @('QL22RUN', 'QS3DSAVE', '_.QSAVE', 'QL22SAVED', '_.QUIT', '_Y')
+        $markers += Read-Phase 'saved'
+    }
     if (-not (Test-Path -LiteralPath ([IO.Path]::ChangeExtension($drawing, '.qsdb')))) { throw 'No persisted product sidecar.' }
-    $markers += Invoke-NativePhase 'reopen' @('QL22REOPEN', '_.QUIT', '_Y')
+    if ($InteractiveUi) { $markers += Invoke-NativePhase 'uireopen' @('QL22UIREOPEN') }
+    else { $markers += Invoke-NativePhase 'reopen' @('QL22REOPEN', '_.QUIT', '_Y') }
 } catch {
     $failure = $_.Exception.Message
 } finally {
@@ -948,6 +967,9 @@ try {
     } catch { $cleanupErrors.Add('PROTECTED_STATE:' + $_.Exception.Message) }
     try {
         if ((Get-Hash $ProvenancePath) -cne $provenanceHash) { throw 'Frozen provenance changed during allocation.' }
+        foreach ($entry in $supplementalInputs.GetEnumerator()) {
+            if ((Get-Hash $entry.Key) -cne $entry.Value) { throw 'Frozen supplemental harness changed.' }
+        }
         foreach ($entry in $probeExtraHashes.GetEnumerator()) {
             if ((Get-Hash (Join-Path (Split-Path -Parent $ProbeDll) $entry.Key)) -cne $entry.Value) { throw 'Frozen probe payload changed.' }
         }
@@ -1000,9 +1022,10 @@ $receipt = [ordered]@{
     protected_state_unchanged = $protectedStateOk
     profile_cleanup = $profileReceipt; mcp_test_executed = $false; mcp_requests_issued_by_runner = $false
     aggregate_local022_qualified = $false
+    interactive_ui_executed = [bool]$InteractiveUi
 }
 Write-Json (Join-Path $ArtifactDir 'receipt.json') $receipt
-if ($failure -or $cleanupFailure) {
+if ($status -cne 'LOCAL_PASS_BOUNDED' -or $failure -or $cleanupFailure) {
     # Diagnostics stay in ignored local artifacts, never in a public receipt.
     Write-Json (Join-Path $ArtifactDir 'diagnostics.private.json') @{ failure = $failure; cleanup_failure = $cleanupFailure }
     throw 'LOCAL-022 did not qualify. Inspect local receipts; do not retry the consumed allocation.'
