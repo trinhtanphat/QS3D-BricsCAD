@@ -58,8 +58,8 @@ namespace QS3D.Core.SmokeTests
             var created = ProjectZoneService.Create(project, "Z2", "Zone 2");
             if (!string.Equals(created.Id, "Z2", StringComparison.Ordinal) || project.Zones.Count != 2)
                 throw new InvalidOperationException("Valid Zone creation must preserve the existing Create contract.");
-            if (project.ChangeVersion != checked(changeVersion + 1L))
-                throw new InvalidOperationException("Valid Zone creation must advance ChangeVersion exactly once.");
+            if (project.ChangeVersion != checked(changeVersion + 2L))
+                throw new InvalidOperationException("Valid Zone creation must advance ChangeVersion once for the semantic service touch and once for the catalog structural add.");
             if (!string.Equals(project.ActiveZoneId, "Z1", StringComparison.Ordinal))
                 throw new InvalidOperationException("Creating a second Zone must preserve the existing active Zone.");
         }

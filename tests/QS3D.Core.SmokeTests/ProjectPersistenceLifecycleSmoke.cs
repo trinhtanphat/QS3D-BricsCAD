@@ -87,11 +87,16 @@ namespace QS3D.Core.SmokeTests
             False(stamp.RequiresSave(project), "Restoring the persisted element handles left a false-positive dirty state.");
 
             project.Zones.Add(new ZoneDefinition("zone-1", "Zone 1"));
-            Equal(expectedVersion, project.ChangeVersion, "Direct nested collection mutation unexpectedly changed the project revision.");
-            True(stamp.RequiresSave(project), "Direct persisted nested collection mutation bypassed dirty detection.");
+            expectedVersion = checked(expectedVersion + 1L);
+            Equal(expectedVersion, project.ChangeVersion, "Direct Zone catalog add did not advance the project revision exactly once.");
+            True(stamp.RequiresSave(project), "Direct persisted Zone catalog mutation bypassed dirty detection.");
             project.Zones.Clear();
-            Equal(expectedVersion, project.ChangeVersion, "Restoring a direct nested collection unexpectedly changed the project revision.");
-            False(stamp.RequiresSave(project), "Restoring the persisted nested collection left a false-positive dirty state.");
+            expectedVersion = checked(expectedVersion + 1L);
+            Equal(expectedVersion, project.ChangeVersion, "Restoring the Zone catalog did not advance the project revision exactly once.");
+            True(stamp.RequiresSave(project), "Restoring Zone catalog content must remain pending until the monotonic project revision is saved.");
+            stamp.MarkSaved(project);
+            False(stamp.RequiresSave(project), "MarkSaved did not accept the restored Zone catalog baseline.");
+            savedUpdatedUtc = project.UpdatedUtc;
 
             project.UpdatedUtc = savedUpdatedUtc.AddSeconds(1);
             Equal(expectedVersion, project.ChangeVersion, "Direct persisted timestamp mutation unexpectedly changed the project revision.");
