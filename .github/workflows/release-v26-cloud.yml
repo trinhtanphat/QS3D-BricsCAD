@@ -120,7 +120,7 @@ jobs:
             $result = & .\scripts\acquire-v26-compile-references.ps1 `
               -MsiPath $msi `
               -ExpectedSha256 $env:BRICSCAD_V26_PINNED_MSI_SHA256 `
-              -PrimaryUrl '' `
+              -PrimaryUrl ' ' `
               -UsePinnedHttpMirror | Select-Object -Last 1
             if ($null -eq $result -or [string]$result.Sha256 -notmatch '^[0-9A-Fa-f]{64}$') {
               throw 'V26 installer acquisition did not return an exact admitted SHA-256 identity.'
@@ -290,7 +290,7 @@ jobs:
             -MsiPath $msi `
             -ExtractDir $extract `
             -ExpectedSha256 $env:BRICSCAD_V26_PINNED_MSI_SHA256 `
-            -PrimaryUrl '' `
+            -PrimaryUrl ' ' `
             -UsePinnedHttpMirror `
             -ExtractReferences | Select-Object -Last 1
           if ($null -eq $result -or [string]::IsNullOrWhiteSpace([string]$result.BricsCadDir)) {
