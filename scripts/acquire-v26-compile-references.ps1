@@ -379,61 +379,33 @@ try {
         if ($msi.StartsWith($extract + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
             throw 'V26 MSI cache path must remain outside the extraction directory.'
         }
+        New-Item -ItemType Directory -Path $extract | Out-Null
 
-        $maxAdminExtractionAttempts = 2
-        $adminExtractionSucceeded = $false
-        for ($attempt = 1; $attempt -le $maxAdminExtractionAttempts; $attempt++) {
-            if (Test-Path -LiteralPath $extract) {
-                Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction Stop
+        $msiLog = Join-Path ([IO.Path]::GetTempPath()) ('qs3d-v26-admin-' + [Guid]::NewGuid().ToString('N') + '.log')
+        try {
+            $arguments = @('/a', ('"' + $admission.Path + '"'), '/qn', ('TARGETDIR="' + $extract + '"'), 'REBOOT=ReallySuppress', '/L*v', ('"' + $msiLog + '"'))
+            Write-Host 'Starting BricsCAD V26 MSI administrative extraction (15-minute timeout).'
+            $process = Start-Process -FilePath msiexec.exe -ArgumentList $arguments -PassThru
+            if (-not $process.WaitForExit(900000)) {
+                & taskkill.exe /PID $process.Id /T /F | Out-Null
+                throw 'BricsCAD V26 MSI administrative extraction timed out after 15 minutes; owned process tree termination was requested.'
             }
-            New-Item -ItemType Directory -Path $extract | Out-Null
-
-            $msiLog = Join-Path ([IO.Path]::GetTempPath()) ('qs3d-v26-admin-' + [Guid]::NewGuid().ToString('N') + '.log')
-            $process = $null
-            try {
-                Assert-HeldInstallerStable -Held $admission -Phase "before administrative extraction attempt $attempt"
-                $arguments = @('/a', ('"' + $admission.Path + '"'), '/qn', ('TARGETDIR="' + $extract + '"'), 'REBOOT=ReallySuppress', '/L*v', ('"' + $msiLog + '"'))
-                Write-Host 'Starting BricsCAD V26 MSI administrative extraction (15-minute timeout).'
-                Write-Host "Administrative extraction attempt $attempt/$maxAdminExtractionAttempts."
-                $process = Start-Process -FilePath msiexec.exe -ArgumentList $arguments -PassThru
-                if (-not $process.WaitForExit(900000)) {
-                    & taskkill.exe /PID $process.Id /T /F | Out-Null
-                    throw 'BricsCAD V26 MSI administrative extraction timed out after 15 minutes; owned process tree termination was requested.'
+            if ($process.ExitCode -notin @(0, 3010)) {
+                $completeReferenceDirAfter1603 = ''
+                if ($process.ExitCode -eq 1603) {
+                    $completeReferenceDirAfter1603 = Get-CompleteV26ReferenceDirectory -Root $extract
                 }
-                if ($process.ExitCode -notin @(0, 3010)) {
-                    $completeReferenceDirAfter1603 = ''
-                    if ($process.ExitCode -eq 1603) {
-                        $completeReferenceDirAfter1603 = Get-CompleteV26ReferenceDirectory -Root $extract
-                    }
-                    if ($process.ExitCode -eq 1603 -and -not [string]::IsNullOrWhiteSpace([string]$completeReferenceDirAfter1603)) {
-                        Write-Warning 'BricsCAD V26 MSI administrative extraction returned exit code 1603 after materializing a complete managed-reference payload; continuing with strict extracted-tree validation.'
-                    }
-                    else {
-                        if (Test-Path -LiteralPath $msiLog -PathType Leaf) { Get-Content -LiteralPath $msiLog -Tail 120 }
-                        throw "BricsCAD V26 MSI administrative extraction failed with exit code $($process.ExitCode)."
-                    }
+                if ($process.ExitCode -eq 1603 -and -not [string]::IsNullOrWhiteSpace([string]$completeReferenceDirAfter1603)) {
+                    Write-Warning 'BricsCAD V26 MSI administrative extraction returned exit code 1603 after materializing a complete managed-reference payload; continuing with strict extracted-tree validation.'
                 }
-                Assert-HeldInstallerStable -Held $admission -Phase "after administrative extraction attempt $attempt"
-                $adminExtractionSucceeded = $true
-                break
-            }
-            catch {
-                if ($null -ne $process -and $process.HasExited -and $process.ExitCode -eq 1603 -and [string]::IsNullOrWhiteSpace([string]$completeReferenceDirAfter1603) -and $attempt -lt $maxAdminExtractionAttempts) {
-                    Write-Warning "BricsCAD V26 MSI administrative extraction attempt $attempt returned exit code 1603 before a complete managed-reference payload was materialized; retrying once with a clean extraction directory."
-                    Assert-HeldInstallerStable -Held $admission -Phase "after incomplete administrative extraction attempt $attempt"
-                    Start-Sleep -Seconds 5
-                    continue
+                else {
+                    if (Test-Path -LiteralPath $msiLog -PathType Leaf) { Get-Content -LiteralPath $msiLog -Tail 120 }
+                    throw "BricsCAD V26 MSI administrative extraction failed with exit code $($process.ExitCode)."
                 }
-                throw
             }
-            finally {
-                Remove-Item -LiteralPath $msiLog -Force -ErrorAction SilentlyContinue
-            }
+            Assert-HeldInstallerStable -Held $admission -Phase 'after administrative extraction'
         }
-
-        if (-not $adminExtractionSucceeded) {
-            throw 'BricsCAD V26 MSI administrative extraction did not complete successfully.'
-        }
+        finally { Remove-Item -LiteralPath $msiLog -Force -ErrorAction SilentlyContinue }
 
         $bricsDir = Get-CompleteV26ReferenceDirectory -Root $extract
         if ([string]::IsNullOrWhiteSpace([string]$bricsDir)) {
