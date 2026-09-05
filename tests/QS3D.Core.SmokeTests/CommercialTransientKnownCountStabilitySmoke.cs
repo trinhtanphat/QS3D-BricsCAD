@@ -57,7 +57,7 @@ namespace QS3D.Core.SmokeTests
             var record = Record("EVENT-STABLE", revisions);
 
             Equal(1, record.SourceRevisions.Count, "Stable multi-interface Count evidence changed accepted snapshot cardinality.");
-            Equal(1, revisions.CurrentReads, "Stable source-revision input must be consumed exactly once.");
+            Equal(2, revisions.CurrentReads, "Stable known-count source-revision input must be replayed exactly once for semantic-generation validation.");
         }
 
         private static CommercialAuditRecord Record(string eventId, IEnumerable<CommercialRevisionRef>? revisions = null)
