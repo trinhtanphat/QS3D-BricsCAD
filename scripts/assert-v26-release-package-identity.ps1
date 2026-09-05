@@ -268,17 +268,32 @@ function Get-HeldAssemblyVersion {
         if (-not $process.Start()) { throw "$Label metadata probe could not be started." }
         $stdoutTask = $process.StandardOutput.ReadToEndAsync()
         $stderrTask = $process.StandardError.ReadToEndAsync()
+        $deadline = [Diagnostics.Stopwatch]::StartNew()
 
         $Held.Stream.Position = 0
-        $Held.Stream.CopyTo($process.StandardInput.BaseStream)
+        $copyTask = $Held.Stream.CopyToAsync($process.StandardInput.BaseStream)
+        try {
+            $copyWait = [Math]::Max(1, 30000 - [int]$deadline.ElapsedMilliseconds)
+            if (-not $copyTask.Wait($copyWait)) {
+                try { $process.Kill() } catch { }
+                throw "$Label metadata probe input streaming exceeded its 30000 ms total budget."
+            }
+            $copyTask.GetAwaiter().GetResult()
+        }
+        catch {
+            try { $process.Kill() } catch { }
+            throw "$Label metadata probe input streaming failed: $($_.Exception.Message)"
+        }
+
         if ($Held.Stream.Position -ne $Held.Stream.Length) {
             throw "$Label held generation was not streamed completely to the metadata probe."
         }
         $process.StandardInput.Close()
 
-        if (-not $process.WaitForExit(30000)) {
+        $exitWait = [Math]::Max(1, 30000 - [int]$deadline.ElapsedMilliseconds)
+        if (-not $process.WaitForExit($exitWait)) {
             try { $process.Kill() } catch { }
-            throw "$Label metadata probe exceeded its 30000 ms timeout."
+            throw "$Label metadata probe exceeded its 30000 ms total timeout."
         }
 
         $stdout = $stdoutTask.GetAwaiter().GetResult().Trim()
