@@ -94,6 +94,8 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWWALLADV", () =>
             {
                 RequireModelSpace(document);
+                var promptUnit = (object)CadUnitService.GetLengthUnit(document);
+                var promptUcs = document.Editor.CurrentUserCoordinateSystem;
                 var points = AcquirePath(document, "Tường tùy chỉnh", minimumPoints: 2, close: false);
                 if (points == null) return;
 
@@ -106,6 +108,7 @@ namespace QS3D.BricsCAD.V25
                 if (!heightM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Tường so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.ArchitecturalWall, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
+                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWWALLADV");
 
                 ExecuteDirect(
                     document,
@@ -167,6 +170,8 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWBEAMADV", () =>
             {
                 RequireModelSpace(document);
+                var promptUnit = (object)CadUnitService.GetLengthUnit(document);
+                var promptUcs = document.Editor.CurrentUserCoordinateSystem;
                 var points = AcquireFixedPath(document, "Dầm tùy chỉnh", 2);
                 if (points == null) return;
 
@@ -179,6 +184,7 @@ namespace QS3D.BricsCAD.V25
                 if (!heightM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Dầm so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.Beam, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
+                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWBEAMADV");
 
                 ExecuteDirect(
                     document,
@@ -237,6 +243,8 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWSLABADV", () =>
             {
                 RequireModelSpace(document);
+                var promptUnit = (object)CadUnitService.GetLengthUnit(document);
+                var promptUcs = document.Editor.CurrentUserCoordinateSystem;
                 var points = AcquirePath(document, "Sàn tùy chỉnh", minimumPoints: 3, close: true);
                 if (points == null) return;
 
@@ -247,6 +255,7 @@ namespace QS3D.BricsCAD.V25
                 if (!thicknessM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Sàn so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.Slab, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
+                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWSLABADV");
 
                 ExecuteDirect(
                     document,
@@ -330,6 +339,7 @@ namespace QS3D.BricsCAD.V25
                 if (!heightM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Cột so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.Column, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
+                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWCOLUMNADV");
 
                 ExecuteDirect(
                     document,
