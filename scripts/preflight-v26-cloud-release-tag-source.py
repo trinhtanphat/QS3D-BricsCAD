@@ -33,7 +33,8 @@ for token in required:
     if token not in workflow:
         fail(f"workflow is missing source-owned tag contract token: {token}")
 
-if "RELEASE_TAG: ${{ inputs.release_tag }}" in workflow:
+direct_input_binding = "RELEASE_TAG: ${{ inputs.release_tag }}"
+if direct_input_binding in {line.strip() for line in workflow.splitlines()}:
     fail("workflow must not bind publication RELEASE_TAG directly to workflow_dispatch input")
 
 core_match = "[string]::Equals($v26Versions[0], $coreVersions[0], [StringComparison]::Ordinal)"
