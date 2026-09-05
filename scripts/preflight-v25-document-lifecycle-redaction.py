@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed when V25 document lifecycle publishes raw exception details."""
+"""Fail closed when V25 document lifecycle publishes raw exception details or stale-document UI."""
 
 from pathlib import Path
 import re
@@ -33,10 +33,14 @@ def body(text: str, signature: str) -> str:
     return ""
 
 
+def require(block: str, token: str, label: str) -> None:
+    if token not in block:
+        fail(f"missing {label}: {token!r}")
+
+
 def main() -> int:
     text = SOURCE.read_text(encoding="utf-8")
 
-    # User-visible lifecycle reporting must never publish raw exception text.
     guarded = (
         "private static void ReportDocumentDestroyTeardownErrors(",
         "private static void OnDrawingSaveComplete(",
@@ -50,10 +54,10 @@ def main() -> int:
         if ".Message" in block:
             fail(f"{signature} still publishes Exception.Message")
 
-    # Keep phase-specific truth instead of replacing every failure with one generic message.
     for token in (
         "DWG save completed, but the QS3D sidecar could not be saved.",
         "The drawing was kept open because QS3D could not save its sidecar.",
+        "Recovery copy was written successfully.",
         "Recovery copy also failed; internal details were hidden.",
         "QS3D document lifecycle reconcile failed. Internal details were hidden.",
         "QS3D project load failed. Internal details were hidden.",
@@ -61,27 +65,43 @@ def main() -> int:
         if token not in text:
             fail(f"missing stable lifecycle diagnostic {token!r}")
 
-    # A close failure must remain fail-closed and must not lose the veto.
     close = body(text, "private static void OnBeginDocumentClose(")
     for token in ("e.Veto()", "ProjectContextCoordinator.Save(document)", "TryWriteRecovery(document, saveError)"):
-        if token not in close:
-            fail(f"close/save truth contract missing {token!r}")
+        require(close, token, "close/save truth contract")
 
-    # A DWG SaveComplete callback must continue to describe sidecar failure as post-DWG-save work.
     save = body(text, "private static void OnDrawingSaveComplete(")
     for token in ("ProjectContextCoordinator.TrySavePending", "TryWriteRecovery(document, saveError)"):
-        if token not in save:
-            fail(f"post-DWG-save sidecar contract missing {token!r}")
+        require(save, token, "post-DWG-save sidecar contract")
 
-    # Stable failed-load memoization must retain revision gating and must not cache raw exception text.
+    recovery = body(text, "private static string TryWriteRecovery(")
+    require(recovery, "ProjectContextCoordinator.SaveRecoveryCopy(document, saveError)", "recovery attempt")
+    if '" Recovery copy: " + path' in recovery or "recoveryError.Message" in recovery:
+        fail("recovery status still publishes recovery path or raw failure detail")
+
     ensure = body(text, "private static void EnsureProject(")
     for token in ("RememberStableProjectLoadFailure", "attemptedRevision", "ResetForUnavailableProject"):
-        if token not in ensure:
-            fail(f"project-load reconcile contract missing {token!r}")
+        require(ensure, token, "project-load reconcile contract")
     if re.search(r"catch\s*\([^)]*Exception\s+\w+\s*\).*?\b\w+\.Message", ensure, re.S):
         fail("project-load reconcile still derives public status from captured exception text")
+    if ensure.count("if (refreshUi)") < 3:
+        fail("project-load failure paths must gate global palette publication on active refresh affinity")
 
-    print("OK: V25 document lifecycle uses stable redacted diagnostics while preserving save/close/reconcile truth.")
+    reconcile = body(text, "private static void ReconcileDocument(")
+    for token in (
+        "refreshActiveUi = refreshUi && IsActiveDocument(document)",
+        "EnsureProject(document, refreshActiveUi)",
+        "if (refreshActiveUi) SelectionSyncCoordinator.Refresh(document)",
+    ):
+        require(reconcile, token, "execution-time active-document reconcile fence")
+
+    active = body(text, "private static bool IsActiveDocument(")
+    require(active, "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)", "active-document identity check")
+
+    report = body(text, "private static void Report(")
+    require(report, "IsActiveDocument(document)", "global status active-document fence")
+    require(report, "PaletteCoordinator.SetStatus(message)", "global lifecycle status publication")
+
+    print("OK: V25 document lifecycle redacts failures and fences modeless UI to the active document while preserving save/close/reconcile truth.")
     return 0
 
 
