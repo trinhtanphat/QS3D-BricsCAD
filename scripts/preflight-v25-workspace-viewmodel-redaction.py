@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed when Workspace ViewModel family activation publishes raw exception details."""
+"""Fail closed when Workspace ViewModel publishes raw exception details."""
 
 from pathlib import Path
 import re
@@ -35,23 +35,63 @@ def body(text: str, signature: str) -> str:
 
 def main() -> int:
     text = SOURCE.read_text(encoding="utf-8")
-    block = body(text, "public void SetActiveFamily(ProjectFamily? family)")
+    if ".Message" in text:
+        fail("WorkspaceViewModel still references Exception.Message in a user-visible mutation path")
 
-    if ".Message" in block:
-        fail("SetActiveFamily still publishes Exception.Message")
-    if re.search(r"catch\s*\(\s*InvalidOperationException\s+\w+\s*\)", block):
-        fail("SetActiveFamily still captures InvalidOperationException for user-visible reporting")
-    required = (
+    helper = body(text, "private void ReportMutationFailure(string operation)")
+    for token in ("Status =", "không hoàn tất", "Chi tiết nội bộ đã được ẩn", "Refresh Workspace"):
+        if token not in helper:
+            fail(f"stable mutation-failure helper missing {token!r}")
+
+    active_family = body(text, "public void SetActiveFamily(ProjectFamily? family)")
+    for token in (
         "catch (InvalidOperationException)",
-        "Status = \"Không thể chọn Family vì project hoặc Family đã thay đổi. Hãy Refresh Workspace và thử lại.\"",
+        "ReportMutationFailure(\"Chọn Family\")",
         "ReferenceEquals(ownedFamily, family)",
         "ProjectFamilyActivationService.SetActive(project, family.Id)",
-    )
-    for token in required:
-        if token not in block:
+    ):
+        if token not in active_family:
             fail(f"SetActiveFamily missing {token!r}")
 
-    print("OK: V25 Workspace ViewModel family activation is exception-redacted and preserves affinity checks.")
+    selected = body(text, "public void SetSelectedElement(ProjectElement? element)")
+    for token in (
+        "ReferenceEquals(ownedElement, element)",
+        "catch (InvalidOperationException)",
+        "ReportMutationFailure(\"Chọn cấu kiện\")",
+    ):
+        if token not in selected:
+            fail(f"SetSelectedElement missing {token!r}")
+
+    representative = (
+        ("private string ApplyFamilyName(", "ReportMutationFailure(\"Đổi tên Family\")"),
+        ("private string ApplyFamilyProperty(", "ReportMutationFailure(\"Cập nhật \" + DisplayNameFor(key))"),
+        ("private string ApplyInstanceProperty(", "ProjectSemanticMutationExecutor.Execute("),
+        ("private void ResetInstanceProperty(", "ReportMutationFailure(\"Đặt lại Instance\")"),
+        ("private bool TryGetCurrentProjectForMutation(", "ReferenceEquals(current, _project)"),
+    )
+    for signature, token in representative:
+        block = body(text, signature)
+        if token not in block:
+            fail(f"{signature} missing preserved mutation/redaction contract {token!r}")
+
+    mutation = body(text, "private string ApplyInstanceProperty(")
+    for token in (
+        "ReportMutationFailure(\"Cập nhật Instance\")",
+        "ReportMutationFailure(\"Cập nhật \" + DisplayNameFor(key))",
+        "ReferenceEquals(ownedElement, element)",
+        "ReferenceEquals(ownedFamily, family)",
+    ):
+        if token not in mutation:
+            fail(f"ApplyInstanceProperty missing {token!r}")
+
+    current = body(text, "private bool TryGetCurrentProjectForMutation(")
+    if "ReportMutationFailure(operation)" not in current:
+        fail("current-project mutation gate does not use stable redacted failure reporting")
+
+    if re.search(r"catch\s*\(\s*InvalidOperationException\s+\w+\s*\)", text):
+        fail("WorkspaceViewModel still captures InvalidOperationException solely for user-visible detail publication")
+
+    print("OK: V25 Workspace ViewModel mutation failures are exception-redacted while affinity and mutation contracts remain intact.")
     return 0
 
 
