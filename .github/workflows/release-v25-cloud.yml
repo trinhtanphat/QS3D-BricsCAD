@@ -516,6 +516,30 @@ jobs:
             throw 'Final draft release asset IDs changed after byte verification; refusing publication.'
           }
 
+          $finalMainResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers
+          $finalMain = ([string]$finalMainResponse.sha).Trim().ToLowerInvariant()
+          if ($finalMain -notmatch '^[0-9a-f]{40}$') {
+            throw "Protected main API returned an invalid final SHA: $finalMain"
+          }
+          $finalMainRef = 'refs/remotes/origin/qs3d-release-final-main'
+          & git fetch --no-tags --force origin "+refs/heads/main:$finalMainRef"
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not fetch protected main for final release admission.'
+          }
+          $fetchedFinalMain = ([string](& git rev-parse --verify $finalMainRef)).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $fetchedFinalMain -notmatch '^[0-9a-f]{40}$') {
+            throw 'Could not resolve fetched protected-main SHA for final release admission.'
+          }
+          if ($fetchedFinalMain -ne $finalMain) {
+            throw "Protected-main API/fetch identity mismatch during final publication admission. API=$finalMain fetched=$fetchedFinalMain"
+          }
+          & git merge-base --is-ancestor $env:SOURCE_SHA $finalMain
+          $finalAncestorStatus = $LASTEXITCODE
+          if ($finalAncestorStatus -ne 0) {
+            throw "Release SOURCE_SHA is no longer an ancestor of protected main during final publication admission: $env:SOURCE_SHA"
+          }
+          Write-Host 'Release SOURCE_SHA remains an ancestor of protected main; publication stays pinned to the already verified SOURCE_SHA even if newer main integrations landed.'
+
           $publishBody = @{ draft = $false } | ConvertTo-Json
           $publishedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body $publishBody
           if ($publishedRelease.draft -ne $false -or $publishedRelease.prerelease -ne $true) {

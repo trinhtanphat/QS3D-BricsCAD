@@ -43,6 +43,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void BindViewModel()
         {
+            _viewModel.SetFamilyPropertyPresenter(TryShowSingleFootingFamilyProperties);
             DataContext = _viewModel;
             var propertyView = CollectionViewSource.GetDefaultView(_viewModel.Properties);
             if (propertyView != null && propertyView.CanGroup)

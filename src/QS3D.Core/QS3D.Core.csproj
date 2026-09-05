@@ -3,10 +3,10 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <AssemblyName>QS3D.Core</AssemblyName>
     <RootNamespace>QS3D.Core</RootNamespace>
-    <Version>0.1.0-preview.10304</Version>
+    <Version>0.1.0-preview.10307</Version>
     <AssemblyVersion>0.1.0.0</AssemblyVersion>
-    <FileVersion>0.1.0.10304</FileVersion>
-    <InformationalVersion>0.1.0-preview.10304</InformationalVersion>
+    <FileVersion>0.1.0.10307</FileVersion>
+    <InformationalVersion>0.1.0-preview.10307</InformationalVersion>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\external\QS3D-Platform\src\QS3D.Platform.Parity\QS3D.Platform.Parity.csproj" />

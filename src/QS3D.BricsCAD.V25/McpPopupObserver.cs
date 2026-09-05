@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
+using System.Windows.Automation;
 using Bricscad.ApplicationServices;
 
 namespace QS3D.BricsCAD.V25
@@ -22,8 +23,9 @@ namespace QS3D.BricsCAD.V25
         private const uint WineventOutOfContext = 0x0000;
         private const int ObjIdWindow = 0;
         private const uint GaRoot = 2;
-        private const uint GwOwner = 4;
         private const int MaxChildWindows = 64;
+        private const int MaxAutomationNodes = 96;
+        private const int MaxAutomationDepth = 6;
         private const int MaxTitleCharacters = 512;
         private const int MaxMessageCharacters = 1400;
         private const int MaxButtonCharacters = 320;
@@ -130,17 +132,16 @@ namespace QS3D.BricsCAD.V25
 
         private static bool IsCandidateRoot(IntPtr hwnd)
         {
-            if (hwnd == IntPtr.Zero || !IsWindowVisible(hwnd)) return false;
-            uint processId;
-            if (GetWindowThreadProcessId(hwnd, out processId) == 0 || processId != _processId) return false;
-            var root = GetAncestor(hwnd, GaRoot);
-            if (root != IntPtr.Zero && root != hwnd) return false;
-            var className = WindowClass(hwnd);
-            if (string.Equals(className, "#32770", StringComparison.Ordinal)) return true;
-            var owner = GetWindow(hwnd, GwOwner);
-            if (owner == IntPtr.Zero) return false;
-            uint ownerProcessId;
-            return GetWindowThreadProcessId(owner, out ownerProcessId) != 0 && ownerProcessId == _processId;
+            return McpPopupWindowClassifier.IsPopupRoot(hwnd, CurrentMainWindowHandle());
+        }
+
+        private static IntPtr CurrentMainWindowHandle()
+        {
+            try
+            {
+                using (var process = Process.GetCurrentProcess()) return process.MainWindowHandle;
+            }
+            catch { return IntPtr.Zero; }
         }
 
         private static void Capture(IntPtr hwnd)
@@ -174,6 +175,8 @@ namespace QS3D.BricsCAD.V25
                 return true;
             }, IntPtr.Zero);
 
+            CaptureAutomationText(hwnd, title, messages, buttons);
+
             if (messages.Count == 0 && buttons.Count == 0 && title.Length == 0) return;
             var message = JoinBounded(messages, " | ", MaxMessageCharacters);
             var buttonText = JoinBounded(buttons, " | ", MaxButtonCharacters);
@@ -188,6 +191,92 @@ namespace QS3D.BricsCAD.V25
             Document? document = null;
             try { document = Application.DocumentManager.MdiActiveDocument; } catch { }
             McpDiagnosticHub.Record("bricscad", "warning", "popup-notification", detail, document);
+        }
+
+        private static void CaptureAutomationText(
+            IntPtr hwnd,
+            string title,
+            List<string> messages,
+            List<string> buttons)
+        {
+            AutomationElement root;
+            try { root = AutomationElement.FromHandle(hwnd); }
+            catch { return; }
+            if (root == null) return;
+
+            try
+            {
+                if (root.Current.ProcessId != unchecked((int)_processId)) return;
+            }
+            catch { return; }
+
+            var visited = 0;
+            WalkAutomation(root, title, 0, messages, buttons, ref visited);
+        }
+
+        private static void WalkAutomation(
+            AutomationElement element,
+            string title,
+            int depth,
+            List<string> messages,
+            List<string> buttons,
+            ref int visited)
+        {
+            if (element == null || visited >= MaxAutomationNodes || depth > MaxAutomationDepth) return;
+            visited++;
+
+            var skipChildren = false;
+            if (depth > 0)
+            {
+                try
+                {
+                    var current = element.Current;
+                    var controlType = current.ControlType;
+                    if (controlType == ControlType.Edit)
+                    {
+                        skipChildren = true;
+                    }
+                    else if (!current.IsOffscreen)
+                    {
+                        var name = NormalizeText(current.Name);
+                        if (name.Length > 0)
+                        {
+                            if (controlType == ControlType.Button)
+                            {
+                                AppendDistinct(buttons, name, MaxButtonCharacters);
+                            }
+                            else if (controlType == ControlType.Text
+                                     && !string.Equals(name, title, StringComparison.Ordinal))
+                            {
+                                AppendDistinct(messages, name, MaxMessageCharacters);
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            if (skipChildren || depth >= MaxAutomationDepth || visited >= MaxAutomationNodes) return;
+
+            AutomationElement? child;
+            try { child = TreeWalker.ControlViewWalker.GetFirstChild(element); }
+            catch { return; }
+
+            while (child != null && visited < MaxAutomationNodes)
+            {
+                var currentChild = child;
+                WalkAutomation(currentChild, title, depth + 1, messages, buttons, ref visited);
+                try { child = TreeWalker.ControlViewWalker.GetNextSibling(currentChild); }
+                catch { return; }
+            }
+        }
+
+        private static string NormalizeText(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+            var text = value.Trim();
+            if (text.Length > 512) text = text.Substring(0, 512);
+            return text;
         }
 
         private static bool ShouldRecord(IntPtr hwnd, string signature)
@@ -276,9 +365,6 @@ namespace QS3D.BricsCAD.V25
 
         [DllImport("user32.dll")]
         private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetWindow(IntPtr hwnd, uint command);
 
         [DllImport("user32.dll")]
         private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);

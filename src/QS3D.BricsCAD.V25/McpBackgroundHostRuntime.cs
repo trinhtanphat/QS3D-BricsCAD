@@ -41,13 +41,23 @@ namespace QS3D.BricsCAD.V25
                     "\"mode\":{\"type\":\"string\",\"enum\":[\"background_only\"]}," + ConfirmMutationProperty(),
                     "mode", "confirmMutation"),
                 Tool("bricscad_ui_text_snapshot",
-                    "BACKGROUND CONTROL: Read bounded visible title/control text only from windows owned by the current BricsCAD process. Useful for command-line/status/popup diagnostics without screen OCR, focus stealing or global input. Captured text is returned to the caller and is not written to the MCP audit stream.",
-                    "\"scope\":{\"type\":\"string\",\"enum\":[\"all\",\"commandline\",\"popup\"]},"
+                    "BACKGROUND CONTROL: Read bounded BricsCAD UI without screen OCR, focus stealing or global input. mode=text preserves bounded Win32 text diagnostics; mode=semantic returns a bounded same-process UI Automation ControlView tree with exact elementPath, automationId, controlType and supported semantic actions plus a discoveryGeneration for the next semantic mutation.",
+                    "\"mode\":{\"type\":\"string\",\"enum\":[\"text\",\"semantic\"]},"
+                    + "\"scope\":{\"type\":\"string\",\"enum\":[\"all\",\"commandline\",\"popup\"]},"
                     + "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":200},"
-                    + ConfirmSensitiveReadProperty(), "scope", "confirmSensitiveRead"),
+                    + WindowHandleProperty() + ","
+                    + "\"maxDepth\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":8},"
+                    + "\"maxNodes\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":200},"
+                    + ConfirmSensitiveReadProperty(), "confirmSensitiveRead"),
                 Tool("bricscad_ui_invoke",
-                    "BACKGROUND CONTROL: Invoke one visible standard Button control owned by the current BricsCAD process using a bounded window message. Does not focus the window, move the cursor or inject keyboard/mouse input. Unsupported controls fail instead of falling back to Foreground Control.",
-                    ControlHandleProperty() + "," + ConfirmMutationProperty(), "controlHandle", "confirmMutation"),
+                    "BACKGROUND CONTROL: Invoke either one visible standard Win32 Button by controlHandle or one exact same-process semantic Ribbon/WPF/custom target by windowHandle+elementPath+action. Semantic calls require expectedDiscoveryGeneration from fresh semantic discovery. Does not focus the window, move the cursor, capture pixels or inject keyboard/mouse input; unsupported/stale controls fail instead of falling back to Foreground Control.",
+                    ControlHandleProperty() + "," + WindowHandleProperty()
+                    + ",\"elementPath\":{\"type\":\"string\",\"maxLength\":96}"
+                    + ",\"action\":{\"type\":\"string\",\"enum\":[\"invoke\",\"toggle\",\"select\",\"expand\",\"collapse\"]}"
+                    + ",\"expectedControlType\":{\"type\":\"string\",\"maxLength\":64}"
+                    + ",\"expectedAutomationId\":{\"type\":\"string\",\"maxLength\":256}"
+                    + ",\"expectedDiscoveryGeneration\":{\"type\":\"integer\",\"minimum\":1},"
+                    + ConfirmMutationProperty(), "confirmMutation"),
                 Tool("bricscad_ui_set_text",
                     "BACKGROUND CONTROL: Set bounded text on one visible standard Edit/RichEdit control owned by the current BricsCAD process using WM_SETTEXT. Does not focus the window or inject global keyboard input. Unsupported controls fail instead of falling back to Foreground Control.",
                     ControlHandleProperty() + ",\"text\":{\"type\":\"string\",\"maxLength\":4000}," + ConfirmMutationProperty(),
@@ -169,9 +179,16 @@ namespace QS3D.BricsCAD.V25
         private static string TextSnapshot(string body, Action<string> audit)
         {
             RequireSensitiveRead(body);
+            var mode = McpTopLevelJson.ExtractString(body, "mode").Trim().ToLowerInvariant();
+            if (mode.Length == 0) mode = "text";
+            if (mode == "semantic")
+                return McpBackgroundSemanticUiRuntime.SemanticTree(body, audit);
+            if (mode != "text")
+                throw new InvalidOperationException("mode must be text or semantic.");
+
             var scope = McpTopLevelJson.ExtractString(body, "scope").Trim().ToLowerInvariant();
             if (scope != "all" && scope != "commandline" && scope != "popup")
-                throw new InvalidOperationException("scope must be all, commandline or popup.");
+                throw new InvalidOperationException("scope must be all, commandline or popup in text mode.");
             var limit = Integer(body, "limit", 80, 1, MaxSnapshotItems);
             var items = CaptureTextItems(scope, limit);
             var builder = new StringBuilder("{\"scope\":\"").Append(Escape(scope)).Append("\",\"items\":[");
@@ -202,7 +219,9 @@ namespace QS3D.BricsCAD.V25
             {
                 if (result.Count >= limit || textBudget <= 0) return false;
                 if (!BelongsToCurrentProcess(hwnd) || !IsWindowVisible(hwnd)) return true;
-                var isPopupTop = hwnd != mainWindow;
+                var isPopupTop = scope == "popup"
+                    ? McpPopupWindowClassifier.IsPopupRoot(hwnd, mainWindow)
+                    : hwnd != mainWindow;
                 if (scope == "popup" && !isPopupTop) return true;
 
                 AddTextItem(hwnd, true, scope, isPopupTop, result, seen, ref textBudget, limit);
@@ -231,6 +250,7 @@ namespace QS3D.BricsCAD.V25
             if (result.Count >= limit || textBudget <= 0 || !seen.Add(hwnd.ToInt64())) return;
             var className = ClassName(hwnd);
             if (scope == "popup" && !popupTree) return;
+            if (scope == "popup" && LooksLikeCommandLineClass(className)) return;
             if (scope == "commandline" && !LooksLikeCommandLineClass(className)) return;
             var text = WindowText(hwnd);
             if (text.Length == 0) return;
@@ -248,10 +268,16 @@ namespace QS3D.BricsCAD.V25
 
         private static string InvokeButton(string body, Action ensureMutationRunning, Action<string> audit)
         {
+            var semanticWindow = McpTopLevelJson.ExtractString(body, "windowHandle").Trim();
+            var semanticPath = McpTopLevelJson.ExtractString(body, "elementPath").Trim();
+            var semanticAction = McpTopLevelJson.ExtractString(body, "action").Trim();
+            if (semanticWindow.Length > 0 || semanticPath.Length > 0 || semanticAction.Length > 0)
+                return McpBackgroundSemanticUiRuntime.SemanticAction(body, ensureMutationRunning, audit);
+
             var hwnd = RequiredControl(body);
             var className = ClassName(hwnd);
             if (!string.Equals(className, "Button", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("bricscad_ui_invoke accepts only a standard Button control owned by the current BricsCAD process.");
+                throw new InvalidOperationException("bricscad_ui_invoke accepts a standard Button controlHandle or an exact semantic BricsCAD target.");
             ensureMutationRunning();
             SendMessageBounded(hwnd, BM_CLICK, IntPtr.Zero, IntPtr.Zero, "Button invoke");
             ensureMutationRunning();
@@ -380,6 +406,11 @@ namespace QS3D.BricsCAD.V25
         private static string ControlHandleProperty()
         {
             return "\"controlHandle\":{\"type\":\"string\",\"pattern\":\"^[0-9A-Fa-f]{1,16}$\"}";
+        }
+
+        private static string WindowHandleProperty()
+        {
+            return "\"windowHandle\":{\"type\":\"string\",\"pattern\":\"^[0-9A-Fa-f]{1,16}$\"}";
         }
 
         private static string ConfirmMutationProperty()

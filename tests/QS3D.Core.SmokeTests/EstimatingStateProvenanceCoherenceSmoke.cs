@@ -83,7 +83,7 @@ namespace QS3D.Core.SmokeTests
             Equal("2026-08", rated.RateRevision);
             Equal(EstimatingReadinessState.Stale, rated.State);
 
-            portfolio = service.ApplyManualRateOverride(
+            Throws<InvalidOperationException>(() => service.ApplyManualRateOverride(
                 portfolio,
                 "S2",
                 12m,
@@ -91,26 +91,16 @@ namespace QS3D.Core.SmokeTests
                 audit,
                 "w1-smoke",
                 "override-1",
-                new DateTime(2026, 8, 21, 0, 1, 0, DateTimeKind.Utc));
-            var overridden = portfolio.GetLine("S2");
-            Equal(true, overridden.IsStale);
-            Equal("Source quantity changed", overridden.StaleReason);
-            Equal(12m, overridden.OverrideRate!.Value);
+                new DateTime(2026, 8, 21, 0, 1, 0, DateTimeKind.Utc)));
+            Equal(0, audit.Events.Count);
 
-            portfolio = service.RemoveManualRateOverride(
-                portfolio,
-                "S2",
-                "Return to referenced rate",
-                audit,
-                "w1-smoke",
-                "override-2",
-                new DateTime(2026, 8, 21, 0, 2, 0, DateTimeKind.Utc));
-            var restored = portfolio.GetLine("S2");
-            Equal(true, restored.IsStale);
-            Equal("Source quantity changed", restored.StaleReason);
-            Equal(null, restored.OverrideRate);
-            Equal(10m, restored.ReferencedRate!.Value);
-            Equal("2026-08", restored.RateRevision);
+            var overrideRejected = portfolio.GetLine("S2");
+            Equal(true, overrideRejected.IsStale);
+            Equal("Source quantity changed", overrideRejected.StaleReason);
+            Equal(null, overrideRejected.OverrideRate);
+            Equal(10m, overrideRejected.ReferencedRate!.Value);
+            Equal("2026-08", overrideRejected.RateRevision);
+            Equal(EstimatingReadinessState.Stale, overrideRejected.State);
         }
 
         private static void BlockedBulkAssignmentFailsWithoutAuditMutation()

@@ -51,12 +51,28 @@ namespace QS3D.Core.Persistence
             var elements = new Dictionary<string, ElementPersistenceState>(StringComparer.OrdinalIgnoreCase);
             var observed = 0;
             using var enumerator = elementIds.GetEnumerator();
-            while (enumerator.MoveNext())
+            if (expectedKnownCount.HasValue)
+                RequireStableKnownCount(elementIds, expectedKnownCount.Value);
+
+            while (true)
             {
+                if (expectedKnownCount.HasValue)
+                    RequireStableKnownCount(elementIds, expectedKnownCount.Value);
+
+                var movedNext = enumerator.MoveNext();
+
+                if (expectedKnownCount.HasValue)
+                    RequireStableKnownCount(elementIds, expectedKnownCount.Value);
+                if (!movedNext)
+                    break;
+
                 if (expectedKnownCount.HasValue && observed >= expectedKnownCount.Value)
                     throw new InvalidOperationException("Persistence checkpoint known element count does not match enumerated element count.");
 
                 var rawId = enumerator.Current;
+                if (expectedKnownCount.HasValue)
+                    RequireStableKnownCount(elementIds, expectedKnownCount.Value);
+
                 observed++;
                 if (observed > MaximumElementCount)
                     throw new InvalidOperationException("Persistence checkpoint exceeds the supported " + MaximumElementCount + " element limit.");
@@ -75,10 +91,6 @@ namespace QS3D.Core.Persistence
 
             if (expectedKnownCount.HasValue && observed != expectedKnownCount.Value)
                 throw new InvalidOperationException("Persistence checkpoint known element count does not match enumerated element count.");
-
-            var currentKnownCount = RejectMalformedKnownCounts(elementIds);
-            if (currentKnownCount != expectedKnownCount)
-                throw new InvalidOperationException("Persistence checkpoint known element count changed during enumeration.");
 
             if (!string.Equals(project.ProjectId, projectId, StringComparison.Ordinal) ||
                 project.UpdatedUtc != projectUpdatedUtc ||
@@ -138,6 +150,13 @@ namespace QS3D.Core.Persistence
             foreach (var pair in _elements)
                 pair.Value.Restore(targets[pair.Key]);
             project.RestorePersistenceState(_projectUpdatedUtc, _projectChangeVersion);
+        }
+
+        private static void RequireStableKnownCount(IEnumerable<string> elementIds, int expectedKnownCount)
+        {
+            var currentKnownCount = RejectMalformedKnownCounts(elementIds);
+            if (!currentKnownCount.HasValue || currentKnownCount.Value != expectedKnownCount)
+                throw new InvalidOperationException("Persistence checkpoint known element count changed during enumeration.");
         }
 
         private static int? RejectMalformedKnownCounts(IEnumerable<string> elementIds)

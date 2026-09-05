@@ -37,6 +37,11 @@ namespace QS3D.BricsCAD.V25.UI
         internal const string Steel = "M1,0 L11,0 L11,2 L7,2 L7,10 L11,10 L11,12 L1,12 L1,10 L5,10 L5,2 L1,2 Z";
         internal const string Other = "M0,0 L5,0 L5,5 L0,5 Z M7,0 L12,0 L12,5 L7,5 Z M0,7 L5,7 L5,12 L0,12 Z M7,7 L12,7 L12,12 L7,12 Z";
 
+        // Family-mode cards intentionally use stroked line art instead of a font glyph. The
+        // parametric icon reads as three adjustable controls; Solid3D is a wireframe cube.
+        internal const string Parameter = "M1,2 L11,2 M1,6 L11,6 M1,10 L11,10 M3,0.5 L3,3.5 M8,4.5 L8,7.5 M5,8.5 L5,11.5";
+        internal const string Solid3D = "M1,4 L8,4 L8,11 L1,11 Z M4,1 L11,1 L11,8 L8,11 M4,1 L1,4 M11,1 L8,4 M11,8 L8,11";
+
         internal static void Apply(Button? button, string geometryData, double size = 12d)
         {
             if (button == null || string.IsNullOrWhiteSpace(geometryData)) return;
@@ -47,6 +52,39 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (item == null || string.IsNullOrWhiteSpace(geometryData)) return;
             item.HeaderTemplate = CreateTemplate(geometryData, size, typeof(TreeViewItem));
+        }
+
+        internal static void ApplyModeCard(Button? button, string geometryData, double size = 30d)
+        {
+            if (button == null || string.IsNullOrWhiteSpace(geometryData)) return;
+
+            var stack = button.Content as StackPanel;
+            if (stack == null || stack.Children.Count < 2) return;
+            if (stack.Children[0] is Path) return;
+            if (!(stack.Children[0] is TextBlock)) return;
+
+            var path = new Path
+            {
+                Data = Geometry.Parse(geometryData),
+                Width = size,
+                Height = size,
+                Stretch = Stretch.Uniform,
+                StrokeThickness = 1.35,
+                StrokeLineJoin = PenLineJoin.Round,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 2, 0, 7)
+            };
+            path.SetBinding(
+                Shape.StrokeProperty,
+                new Binding("Foreground")
+                {
+                    RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(Button), 1)
+                });
+
+            stack.Children.RemoveAt(0);
+            stack.Children.Insert(0, path);
         }
 
         private static DataTemplate CreateTemplate(string geometryData, double size, System.Type ancestorType)
