@@ -4,6 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "release-v26-cloud.yml"
+HELPER = ROOT / "scripts" / "acquire-v26-compile-references.ps1"
 
 
 def fail(message: str) -> None:
@@ -13,8 +14,11 @@ def fail(message: str) -> None:
 
 if not WORKFLOW.is_file():
     fail(f"missing required workflow: {WORKFLOW.relative_to(ROOT)}")
+if not HELPER.is_file():
+    fail(f"missing required helper: {HELPER.relative_to(ROOT)}")
 
 workflow = WORKFLOW.read_text(encoding="utf-8")
+helper = HELPER.read_text(encoding="utf-8")
 
 # The cloud lane intentionally uses only the helper-owned pinned .20 mirror when
 # the Actions cache is empty. Do not reintroduce canonical Google Storage or the
@@ -33,6 +37,16 @@ if workflow.count("-UsePinnedHttpMirror") != 2:
     fail("both V26 acquisition call sites must opt into the helper-owned pinned mirror")
 if "http://" in workflow:
     fail("release-v26-cloud.yml must not embed the plaintext .20 URL; the helper owns it")
+
+# PrimaryUrl stays mandatory at the public script boundary so callers cannot omit
+# source intent accidentally, but mirror-only callers must be allowed to pass an
+# explicit empty value. Without AllowEmptyString PowerShell rejects the call before
+# the helper can reach the pinned-mirror candidate branch.
+primary_url_contract = "[Parameter(Mandatory = $true)][AllowEmptyString()][string]$PrimaryUrl"
+if primary_url_contract not in helper:
+    fail("V26 helper must allow an explicit empty mandatory PrimaryUrl for mirror-only cloud calls")
+if "if (-not [string]::IsNullOrWhiteSpace($PrimaryUrl))" not in helper:
+    fail("V26 helper must continue to skip the primary candidate when PrimaryUrl is explicitly empty")
 
 # The prime-cache call may be slow. Keep a separate child PowerShell monitor on
 # the same Windows runner so GitHub Actions receives live staging-byte telemetry
