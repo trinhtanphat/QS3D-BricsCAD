@@ -2,7 +2,7 @@
 
 ## Verdict
 
-Latest observed UI result: V25 allocation37 is `LOCAL_PASS_BOUNDED` on exact harness `b5fcbfb673810e22b3ac5792a579284c20a75a56` and frozen product `87aff7fec452f9a8dd9f641ef84d143edc73514d`, including all three UI/save/cold-reopen phases. Matching V26 allocation38 is `NO_RESULT / PRE_QS3D_STARTUP_STALL`, with zero action requests and zero qualified phases; the operator ended only its exact owned host after more than ten minutes without a main window or loaded QS3D/probe. Both allocations completed full cleanup and original autostart restoration. Details below; aggregate qualification remains open.
+Latest observed UI result: V25 allocation37 is `LOCAL_PASS_BOUNDED` on exact harness `b5fcbfb673810e22b3ac5792a579284c20a75a56` and frozen product `87aff7fec452f9a8dd9f641ef84d143edc73514d`, including all three UI/save/cold-reopen phases. V26 allocation40 on harness `a281679b40e74895b4ce33d423f19a94927fb037` and the same product now starts from a `Default` nonce clone and loads QS3D/probe, but the WPF panes remain blank and the unchanged guard fails `UI_TIMEOUT_SELECTTREE`. Zero requests/ACKs and zero qualified phases. Full cleanup and original autostart restoration passed. Prior V26 startup no-results38/39 remain consumed. Details below; aggregate qualification remains open.
 
 `LOCAL_PASS_BOUNDED` for the automated BricsCAD V25 and V26 portions on the same frozen product source `43130a49f49676299b865f094a9a6ded482f67ad`. Each host passed run, saved and fresh-process reopen. Aggregate LOCAL-022 remains open for interactive/UI and the additional coverage limits recorded below.
 
@@ -343,3 +343,42 @@ all nonce isolation, hash binding, product assertions and cleanup remain require
 Actual selector/forwarding regression was RED before implementation and GREEN
 afterward. A fresh V26 allocation from `Default` remains required; V25's accepted
 allocation37 and all previous consumed receipts are unchanged.
+
+### V26 allocation40 — native startup recovered, Workspace still unqualified
+
+`ui-default-v26-40`, RunId `8289ed9cf1c6402c9f2c2e46df59f89c`, ran
+`2026-09-05T17:39:28.1856731Z`–`2026-09-05T17:50:20.6905381Z` on exact
+harness `a281679b40e74895b4ce33d423f19a94927fb037`, unchanged product
+`87aff7fec452f9a8dd9f641ef84d143edc73514d`, observed driver and paused-operator
+policy. The only newly selected native input was `-SourceProfile Default`, cloned
+into the usual unique nonce. Source-profile recovery identity remains hashed by
+the allocation. Both protected PR checks passed for this harness in run
+`33981623498`; this is not licensed qualification.
+
+The exact disposable drawing window appeared and native module inspection showed
+both QS3D and the V26 probe loaded. Physical F2/Prompt History observation showed
+the startup script reached `QL22UI`, not a pending NETLOAD/tool-panel question.
+However, both visible QS3D pane interiors remained blank. A physical restore and
+maximize cycle did not resolve that state. No acceptance click was sent and no
+action/ACK file exists. The actual timer ultimately published `phase-ui.json`:
+`FAIL / ui_selecttree / UI_TIMEOUT_SELECTTREE`; final receipt is
+`FAIL_OR_NO_RESULT`, `phases_verified=0`. This is the unchanged active-stage
+timeout, not another pre-QS3D startup stall or an operator-timeout extension.
+
+A local managed heap diagnostic captured before the timeout confirms one live
+UiController at `SelectTree`, sequence0/requestWritten=false, with its timer
+enabled and a bound production WorkspacePanel sized628×484. This narrows the
+pending condition to the existing tree-label containment/hit checks rather than
+an unstarted controller. It does not by itself prove why rendering/hit testing
+failed. The dump is private, ignored and retained locally outside the disposable
+fixture subtree for further diagnosis; it must not be uploaded or committed.
+Diagnostic tools were installed only beneath ignored task artifacts. References:
+[Microsoft dotnet-stack](https://learn.microsoft.com/en-us/dotnet/core/diagnostics/dotnet-stack)
+and [dotnet-dump](https://learn.microsoft.com/en-us/dotnet/core/diagnostics/dotnet-dump).
+
+Runner cleanup verified the private drawing subtree removed, protected state
+unchanged, original current-profile pointer and inventory restored, nonce removed
+and zero BricsCAD processes. The original OpenAI autostart byte/hash/timestamp was
+restored exactly; no MCP request was issued. V25 allocation37 remains accepted on
+its own candidate. Do not repeat40 unchanged or claim that the remaining V26 UI,
+save/cold-reopen, cross-DPI/Quantity/private-DWG/topology matrix has passed.
