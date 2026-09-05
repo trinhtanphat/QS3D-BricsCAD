@@ -44,14 +44,23 @@ def main() -> None:
     if not open_index < read_index < invoke_index < dispose_index:
         raise SystemExit("ERROR: V26 finalizer held generation ordering is not open -> held read -> invoke -> dispose")
 
-    # Transient cleanup is best-effort only after the held stream is disposed;
-    # cleanup failure must not replace the primary generation/finalization error.
+    # Cleanup has two simultaneous invariants. A successful finalization must
+    # still fail closed if the transient pathname is unexpectedly a container or
+    # reparse leaf. If a primary failure is already propagating, final unlink is
+    # best-effort so a secondary cleanup problem does not replace that evidence.
+    require(source, "$primaryFailure = $null", "primary failure sentinel")
+    require(source, "$primaryFailure = $_", "primary failure capture")
+    cleanup_admission = "if ($null -eq $primaryFailure -and (Test-Path -LiteralPath $tempScript)) {"
+    require(source, cleanup_admission, "successful-path cleanup admission gate")
+    require(source, "Resolve-OrdinaryNonReparseFile -Path $tempScript -Label 'Generated V26 finalizer cleanup script'", "successful-path cleanup leaf revalidation")
     cleanup = "if (Test-Path -LiteralPath $tempScript) { Remove-Item -LiteralPath $tempScript -Force -ErrorAction SilentlyContinue }"
     require(source, cleanup, "primary-error-preserving temp-script cleanup")
     forbid(source, "Remove-Item -LiteralPath $tempScript -Force -ErrorAction Stop", "primary-error-masking temp-script cleanup")
-    cleanup_index = source.index(cleanup)
-    if not invoke_index < dispose_index < cleanup_index:
-        raise SystemExit("ERROR: V26 finalizer cleanup must occur after invocation and held-stream disposal")
+
+    admission_index = source.index(cleanup_admission, dispose_index)
+    cleanup_index = source.index(cleanup, admission_index)
+    if not invoke_index < dispose_index < admission_index < cleanup_index:
+        raise SystemExit("ERROR: V26 finalizer cleanup must be invoke -> dispose -> successful-path fail-closed admission -> best-effort unlink")
 
     print("PASS V26 generated finalizer held-generation guard")
 
