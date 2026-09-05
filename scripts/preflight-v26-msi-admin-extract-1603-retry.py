@@ -15,6 +15,7 @@ def validate(text: str) -> list[str]:
         "for ($attempt = 1; $attempt -le $maxAdminExtractionAttempts; $attempt++)",
         "Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction Stop",
         "$process.ExitCode -eq 1603",
+        "[string]::IsNullOrWhiteSpace([string]$completeReferenceDirAfter1603)",
         "$attempt -lt $maxAdminExtractionAttempts",
         "retrying once with a clean extraction directory",
         "Assert-HeldInstallerStable -Held $admission -Phase \"after incomplete administrative extraction attempt $attempt\"",
@@ -28,13 +29,13 @@ def validate(text: str) -> list[str]:
 
     retry = re.search(
         r"catch\s*\{\s*if \(\$null -ne \$process -and \$process\.HasExited -and "
-        r"\$process\.ExitCode -eq 1603 -and \$attempt -lt \$maxAdminExtractionAttempts\) \{"
-        r"(?P<body>.*?)continue\s*\}\s*throw\s*\}",
+        r"\$process\.ExitCode -eq 1603 -and \[string\]::IsNullOrWhiteSpace\(\[string\]\$completeReferenceDirAfter1603\) -and "
+        r"\$attempt -lt \$maxAdminExtractionAttempts\) \{(?P<body>.*?)continue\s*\}\s*throw\s*\}",
         text,
         flags=re.DOTALL,
     )
     if not retry:
-        errors.append("could not locate fail-closed 1603-only retry catch block")
+        errors.append("could not locate fail-closed incomplete-1603-only retry catch block")
     else:
         body = retry.group("body")
         for literal in (
@@ -59,7 +60,11 @@ def main() -> int:
 
     mutations = (
         text.replace("$maxAdminExtractionAttempts = 2", "$maxAdminExtractionAttempts = 3", 1),
-        text.replace("$process.ExitCode -eq 1603 -and $attempt -lt", "$process.ExitCode -eq 1605 -and $attempt -lt", 1),
+        text.replace(
+            "$process.ExitCode -eq 1603 -and [string]::IsNullOrWhiteSpace([string]$completeReferenceDirAfter1603) -and",
+            "$process.ExitCode -eq 1605 -and [string]::IsNullOrWhiteSpace([string]$completeReferenceDirAfter1603) -and",
+            1,
+        ),
         text.replace("Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction Stop", "Write-Host 'reuse dirty extraction tree'", 1),
     )
     for index, mutated in enumerate(mutations, start=1):
