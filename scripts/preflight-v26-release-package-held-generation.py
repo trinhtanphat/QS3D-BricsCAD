@@ -3,15 +3,24 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "assert-v26-release-package-identity.ps1"
+PROBE_DIR = ROOT / "scripts" / "V26ReleaseIdentityProbe"
+PROBE_PROJECT = PROBE_DIR / "V26ReleaseIdentityProbe.csproj"
+PROBE_SOURCE = PROBE_DIR / "Program.cs"
+MARKER = "QS3D_ASSEMBLY_VERSION:"
+EXPECTED_PROBE_VERSION = "1.0.0.0"
 
 
-def main() -> int:
+def static_failures() -> list[str]:
     source = SCRIPT.read_text(encoding="utf-8")
+    probe = PROBE_SOURCE.read_text(encoding="utf-8")
     failures: list[str] = []
 
     required_existing = (
@@ -27,48 +36,51 @@ def main() -> int:
         if token not in source:
             failures.append(f"held-generation admission regressed; missing: {token}")
 
-    forbidden_path_reopens = (
+    forbidden = (
         "GetAssemblyName($pluginHeld.Path)",
         "GetAssemblyName($coreHeld.Path)",
         "GetAssemblyName($Held.Path)",
+        "ReflectionOnlyLoad(",
+        "$snapshotPath",
     )
-    for token in forbidden_path_reopens:
+    for token in forbidden:
         if token in source:
-            failures.append(
-                f"managed assembly semantics still reopen admitted input by pathname: {token}"
-            )
+            failures.append(f"assembly semantics reintroduced an unsafe/redundant generation path: {token}")
 
-    helper_start = source.find("function Get-HeldAssemblyVersion")
-    plugin_call = source.find("$pluginVersion = Get-HeldAssemblyVersion -Held $pluginHeld")
-    core_call = source.find("$coreVersion = Get-HeldAssemblyVersion -Held $coreHeld")
-
-    if helper_start < 0:
-        failures.append("missing held-generation assembly semantic helper")
-        helper = ""
-    else:
-        next_function = source.find("\nfunction ", helper_start + len("function Get-HeldAssemblyVersion"))
-        helper = source[helper_start:next_function] if next_function > helper_start else source[helper_start:]
-
-    required_helper = (
+    required_source = (
+        "function Initialize-AssemblyVersionProbe",
+        "function Get-HeldAssemblyVersion",
         "$Held.Stream.Position = 0",
-        "$Held.Stream.Length -gt [int]::MaxValue",
-        "[byte[]]::new([int]$Held.Stream.Length)",
-        "$Held.Stream.Read(",
-        "$Held.Stream.ReadByte()",
-        "[Reflection.Assembly]::ReflectionOnlyLoad($bytes)",
-        ".GetName().Version",
+        "$Held.Stream.CopyTo($process.StandardInput.BaseStream)",
+        "$process.StandardInput.Close()",
+        "$process.WaitForExit(",
+        "RedirectStandardInput = $true",
+        "RedirectStandardOutput = $true",
+        "RedirectStandardError = $true",
+        "$pluginVersion = Get-HeldAssemblyVersion -Held $pluginHeld",
+        "$coreVersion = Get-HeldAssemblyVersion -Held $coreHeld",
     )
-    for token in required_helper:
-        if token not in helper:
-            failures.append(f"held-byte assembly inspection contract is incomplete; missing: {token}")
+    for token in required_source:
+        if token not in source:
+            failures.append(f"held-stream probe contract is incomplete; missing: {token}")
 
-    if helper and "GetAssemblyName(" in helper:
-        failures.append("held assembly helper must not reopen a pathname through AssemblyName.GetAssemblyName")
-    if helper and ("CreateNew" in helper or "$snapshotPath" in helper or "GetTemp" in helper):
-        failures.append("held assembly helper must not introduce a temporary pathname generation")
+    required_probe = (
+        "Console.OpenStandardInput()",
+        "MaxAssemblyBytes = 256L * 1024L * 1024L",
+        "new PEReader(",
+        "PEStreamOptions.LeaveOpen",
+        "peReader.HasMetadata",
+        "peReader.GetMetadataReader()",
+        "metadata.IsAssembly",
+        "metadata.GetAssemblyDefinition().Version",
+        "QS3D_ASSEMBLY_VERSION:",
+    )
+    for token in required_probe:
+        if token not in probe:
+            failures.append(f"metadata-only probe contract is incomplete; missing: {token}")
 
-    if plugin_call < 0 or core_call < 0:
-        failures.append("plugin/Core semantic consumers must both use Get-HeldAssemblyVersion")
+    if "Assembly.Load" in probe or "AssemblyName.GetAssemblyName" in probe:
+        failures.append("metadata probe must parse PE metadata without loading or pathname-opening the candidate assembly")
 
     dispose_marker = source.find("$heldFiles[$index].Stream.Dispose()")
     version_match = source.find("if ($pluginVersion -ne $packageVersion -or $coreVersion -ne $packageVersion)")
@@ -78,12 +90,92 @@ def main() -> int:
     if "continue-on-error" in source.lower():
         failures.append("release package identity must not hide held-generation failures")
 
+    return failures
+
+
+def run_probe_regression() -> list[str]:
+    failures: list[str] = []
+    dotnet = shutil.which("dotnet")
+    if dotnet is None:
+        return ["dotnet SDK/runtime is required to exercise the V26 metadata probe"]
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+            "DOTNET_NOLOGO": "1",
+            "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
+        }
+    )
+
+    build = subprocess.run(
+        [
+            dotnet,
+            "build",
+            str(PROBE_PROJECT),
+            "--configuration",
+            "Release",
+            "--nologo",
+            "--verbosity",
+            "quiet",
+            "-p:RestoreIgnoreFailedSources=true",
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=90,
+        check=False,
+    )
+    if build.returncode != 0:
+        detail = (build.stderr or build.stdout).strip()[-2000:]
+        return [f"V26 metadata probe build failed: {detail}"]
+
+    probe_dll = PROBE_DIR / "bin" / "Release" / "net8.0" / "V26ReleaseIdentityProbe.dll"
+    if not probe_dll.is_file():
+        return [f"V26 metadata probe build produced no expected assembly: {probe_dll}"]
+
+    probe_bytes = probe_dll.read_bytes()
+    good = subprocess.run(
+        [dotnet, str(probe_dll)],
+        input=probe_bytes,
+        capture_output=True,
+        timeout=20,
+        check=False,
+    )
+    expected = f"{MARKER}{EXPECTED_PROBE_VERSION}"
+    good_stdout = good.stdout.decode("utf-8", errors="replace").strip()
+    if good.returncode != 0 or good_stdout != expected:
+        detail = good.stderr.decode("utf-8", errors="replace").strip()[-1000:]
+        failures.append(
+            f"V26 metadata probe did not parse its own exact stdin generation: rc={good.returncode} stdout={good_stdout!r} stderr={detail!r}"
+        )
+
+    malformed = subprocess.run(
+        [dotnet, str(probe_dll)],
+        input=b"not-a-managed-pe",
+        capture_output=True,
+        timeout=20,
+        check=False,
+    )
+    malformed_stdout = malformed.stdout.decode("utf-8", errors="replace")
+    if malformed.returncode == 0 or MARKER in malformed_stdout:
+        failures.append("V26 metadata probe did not fail closed on malformed stdin bytes")
+
+    return failures
+
+
+def main() -> int:
+    failures = static_failures()
+    if not failures:
+        failures.extend(run_probe_regression())
+
     if failures:
         for failure in failures:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
 
-    print("PASS: V26 package assembly semantics consume the exact admitted held bytes with no semantic pathname reopen")
+    print("PASS: V26 package semantics use a bounded metadata-only probe over exact held-stream bytes")
     return 0
 
 
