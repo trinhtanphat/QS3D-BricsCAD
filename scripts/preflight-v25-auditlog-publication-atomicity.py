@@ -41,6 +41,14 @@ def main() -> None:
         inflight_set_index > reservation_index,
         "Audit Log must mark the exact candidate in-flight before entering native ShowModelessWindow",
     )
+    show_finally_index = source.find("finally", show_index)
+    show_inflight_clear_index = source.find("ReferenceEquals(_publicationInFlightCandidate, candidate)", show_finally_index)
+    show_post_index = source.find("if (!candidate.IsLoaded)", show_finally_index)
+    require(
+        show_finally_index > show_index and show_inflight_clear_index > show_finally_index and show_post_index > show_inflight_clear_index,
+        "publication-in-flight reservation must remain held until native ShowModelessWindow unwinds",
+    )
+
     prepare_start = source.find("private static bool PrepareUnpublishedCandidate")
     prepare_end = source.find("private static bool PreparePublishedWindow", prepare_start)
     require(prepare_start >= 0 and prepare_end > prepare_start, "cannot bound unpublished-candidate preparation helper")
@@ -138,8 +146,8 @@ def main() -> None:
     release_end = source.find("private static IntPtr GetNativeDatabaseIdentity", release_start)
     release = source[release_start:release_end]
     require(
-        "ReferenceEquals(_publicationInFlightCandidate, candidate)" in release,
-        "terminal candidate release must identity-clear any matching in-flight publication marker",
+        "_publicationInFlightCandidate" not in release,
+        "synchronous Closed must not release publication-in-flight ownership before ShowModelessWindow returns",
     )
     require(
         "_cleanupInFlightCandidate" not in release,
