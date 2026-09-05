@@ -134,8 +134,13 @@ def main() -> int:
             "$sha.ComputeHash($stream)",
             "function Test-PinnedMsiGeneration",
             "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging",
-            "[IO.File]::Move($staging, $msi)",
-            "Test-PinnedMsiGeneration -Path $msi -Label 'Published BricsCAD V25 MSI'",
+            "$stagingAdmission = Open-PinnedMsiReadLock -Path $staging -ExpectedSha256 $expected",
+            "[IO.FileMode]::CreateNew",
+            "$stagingAdmission.Stream.CopyTo($publishedStream)",
+            "$publishedStream.Flush($true)",
+            "$publishedAdmission = Open-PinnedMsiReadLock -Path $msi -ExpectedSha256 $expected",
+            "Assert-PinnedMsiStable -State $publishedAdmission -Label 'immediately after held-generation publication'",
+            "[string]$publishedAdmission.Sha256, [string]$stagingAdmission.Sha256",
             "Get-AuthenticodeSignature -FilePath $msiState.Path",
             "WindowsInstaller.Installer",
             "ProductVersion",
@@ -153,6 +158,10 @@ def main() -> int:
         failures.append("V25 managed-reference acquisition must hash installer generations through held streams, not pathname Get-FileHash")
     if "Invoke-WebRequest -Uri $candidate.Url -OutFile $msi" in acquire:
         failures.append("V25 managed-reference acquisition must not download remote bytes directly to the canonical cache pathname")
+    if "[IO.File]::Move($staging, $msi)" in acquire:
+        failures.append("V25 managed-reference acquisition must publish from the held staging stream, not pathname File.Move")
+    if "Remove-Item -LiteralPath $msi -Force" in acquire:
+        failures.append("V25 managed-reference acquisition must refuse an appeared canonical destination instead of destructively replacing it")
 
     if failures:
         print("V25 protected-main release/compile preflight FAILED")
@@ -163,7 +172,7 @@ def main() -> int:
     print("PASS: V25 preview release and pre-merge compile contracts are protected-main safe.")
     print(" - manual preview identity may already be synchronized or is derived only in the bounded V25/V26/Core workspace; protected main is never mutated")
     print(" - source HEAD/provenance remains an exact protected-main commit and release drift uses Git pathspec semantics")
-    print(" - canonical core check compiles V25 through locked, held-verified reference generations with immutable Action refs")
+    print(" - canonical core check compiles V25 through locked, held-verified reference generations with fresh-only held-stream MSI publication")
     return 0
 
 
