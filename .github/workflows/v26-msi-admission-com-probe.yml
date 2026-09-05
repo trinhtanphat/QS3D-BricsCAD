@@ -1,4 +1,4 @@
-name: TEMP V26 MSI admission COM lifetime probe
+name: TEMP V26 MSI path-budget probe
 
 on:
   push:
@@ -27,7 +27,7 @@ jobs:
           key: bricscad-v26.2.07-x64-en-us-9330806cf29e1e6b01758191aa3d9e8d301d9d3125470b6d139f78c7772f9740
           fail-on-cache-miss: true
 
-      - name: Reproduce production admission with focused MSI failure evidence
+      - name: Verify short-root production admission and administrative extraction
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -56,11 +56,16 @@ jobs:
           Set-Content -LiteralPath $scriptPath -Value $source -Encoding UTF8
 
           $msi = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad\BricsCAD-V26.2.07-x64.msi'
-          $extract = Join-Path $env:RUNNER_TEMP ('bricscad-v26-admission-com-probe-' + [Guid]::NewGuid().ToString('N'))
-          & $scriptPath `
+          $extract = Join-Path $env:RUNNER_TEMP ('v26x-' + [Guid]::NewGuid().ToString('N'))
+          $result = & $scriptPath `
             -MsiPath $msi `
             -ExtractDir $extract `
             -ExpectedSha256 $env:BRICSCAD_V26_PINNED_MSI_SHA256 `
             -PrimaryUrl ' ' `
             -UsePinnedHttpMirror `
-            -ExtractReferences
+            -ExtractReferences | Select-Object -Last 1
+          if ($null -eq $result -or [string]::IsNullOrWhiteSpace([string]$result.BricsCadDir)) {
+            throw 'Short-root V26 extraction did not return a BricsCAD runtime directory.'
+          }
+          & .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $result.BricsCadDir | Out-Null
+          Write-Host "PASS: short-root V26 extraction returned safe host references from $($result.BricsCadDir)."
