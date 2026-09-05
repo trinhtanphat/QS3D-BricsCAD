@@ -96,3 +96,24 @@ $mapping
 "@
 ([type]$name)::Run()
 Write-Output 'PASS: actual mapping subtracts drawing origin and rejects document/PID/HWND/API failures and every outside edge; no native library loaded.'
+
+$rowMethod = [regex]::Match($source, '(?ms)^        private static bool IsPropertyRow\([^\r\n]*\)\r?\n        \{.*?^        \}').Value
+if (-not $rowMethod) { throw 'FAIL: missing dimension row identity guard.' }
+$name = 'Local022PropertyReplay_' + [Guid]::NewGuid().ToString('N')
+Add-Type -TypeDefinition @"
+using System;
+public static class $name {
+    private sealed class Row { public string Name {get;set;} = "H2"; public string Unit {get;set;} = "mm"; public bool IsReadOnly {get;set;} }
+$rowMethod
+    public static void Run() {
+        var row = new Row();
+        if (!IsPropertyRow(row,"H2","mm")) throw new Exception("Valid H2/mm editor rejected");
+        row.Name = "H1"; if (IsPropertyRow(row,"H2","mm")) throw new Exception("Wrong dimension accepted");
+        row.Name = "H2"; row.Unit = "m"; if (IsPropertyRow(row,"H2","mm")) throw new Exception("Wrong unit accepted");
+        row.Unit = "mm"; row.IsReadOnly = true; if (IsPropertyRow(row,"H2","mm")) throw new Exception("Read-only row accepted");
+        if (IsPropertyRow(new object(),"H2","mm")) throw new Exception("Unknown row accepted");
+    }
+}
+"@
+([type]$name)::Run()
+Write-Output 'PASS: actual row selector requires exact editable H2/mm identity, rejecting wrong dimension/unit/read-only/unknown rows.'

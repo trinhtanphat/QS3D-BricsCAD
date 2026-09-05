@@ -349,8 +349,59 @@ namespace QS3D.LocalQualification.V25
                         if (++_stableIdleTicks < 2) return;
                         _stableIdleTicks = 0;
                         CapturePreRegenerationState();
+                        Advance(UiStage.OpenFamilyScope);
+                        break;
+
+                    case UiStage.OpenFamilyScope:
+                    {
+                        var scope = RequirePropertyScope(_workspace!);
+                        if (!AwaitAction(scope, "click", string.Empty)) return;
+                        if (!scope.IsDropDownOpen) return;
+                        Advance(UiStage.SelectFamilyScope);
+                        break;
+                    }
+
+                    case UiStage.SelectFamilyScope:
+                    {
+                        var scope = RequirePropertyScope(_workspace!);
+                        if (!AwaitAction(() => scope.ItemContainerGenerator.ContainerFromItem("Family / Type") as ComboBoxItem
+                            ?? throw new ProbeException("ui_family_scope_item_missing"), "click", string.Empty)) return;
+                        if (!string.Equals(scope.SelectedItem as string, "Family / Type", StringComparison.Ordinal)) return;
+                        Advance(UiStage.SelectFoundationParent);
+                        break;
+                    }
+
+                    case UiStage.SelectFoundationParent:
+                    {
+                        var tree = FindVisualDescendants<TreeView>(_workspace!).Single(x => x.Name == "ModelTree");
+                        var parent = TreeItems(tree.Items).Single(item => string.Equals(item.Tag as string, "Foundation", StringComparison.Ordinal));
+                        if (!AwaitAction(() => FindVisualDescendants<TextBlock>(parent).Single(text => text.IsVisible && text.Text == "Móng"), "click", string.Empty)) return;
+                        if (!parent.IsSelected) return;
+                        Advance(UiStage.ReselectSingleFooting);
+                        break;
+                    }
+
+                    case UiStage.ReselectSingleFooting:
+                    {
+                        var item = RequireSingleFootingTree(_workspace!);
+                        if (!AwaitAction(() => FindVisualDescendants<TextBlock>(item).Single(text => text.IsVisible && text.Text == "Móng đơn"), "click", string.Empty)) return;
+                        if (!item.IsSelected) return;
+                        if (!ReferenceEquals(ProjectFamilyActivationService.GetActive(_project!), _family))
+                            throw new ProbeException("ui_edit_family_changed");
+                        Advance(UiStage.RevealH2);
+                        break;
+                    }
+
+                    case UiStage.RevealH2:
+                    {
+                        var list = FindVisualDescendants<ListView>(_workspace!).Single(x => x.Name == "PropertyList");
+                        var row = list.Items.Cast<object>().SingleOrDefault(item => IsPropertyRow(item, "H2", "mm"))
+                            ?? throw new ProbeException("ui_family_h2_row_missing");
+                        list.ScrollIntoView(row);
+                        _workspace!.UpdateLayout();
                         Advance(UiStage.EditH2);
                         break;
+                    }
 
                     case UiStage.EditH2:
                     {
@@ -705,6 +756,11 @@ namespace QS3D.LocalQualification.V25
             FirstCentre,
             SecondCentre,
             EndFirstDraw,
+            OpenFamilyScope,
+            SelectFamilyScope,
+            SelectFoundationParent,
+            ReselectSingleFooting,
+            RevealH2,
             EditH2,
             StartSecondDraw,
             RepeatCentre,
@@ -854,14 +910,27 @@ namespace QS3D.LocalQualification.V25
             var matches = FindVisualDescendants<TextBox>(workspace).Where(textBox =>
             {
                 if (!textBox.IsVisible || !textBox.IsEnabled || textBox.IsReadOnly || textBox.DataContext == null) return false;
-                var property = textBox.DataContext.GetType().GetProperty("Name", BindingFlags.Instance | BindingFlags.Public);
-                return property != null && string.Equals(
-                    Convert.ToString(property.GetValue(textBox.DataContext, null), CultureInfo.InvariantCulture),
-                    name,
-                    StringComparison.Ordinal);
+                return IsPropertyRow(textBox.DataContext, name, "mm");
             }).ToList();
             if (matches.Count != 1) throw new ProbeException("ui_property_editor_identity");
             RequireClickable(matches[0], "ui_property_editor_not_clickable");
+            return matches[0];
+        }
+
+        private static bool IsPropertyRow(object row, string name, string unit)
+        {
+            var type = row.GetType();
+            return string.Equals(type.GetProperty("Name")?.GetValue(row, null) as string, name, StringComparison.Ordinal) &&
+                string.Equals(type.GetProperty("Unit")?.GetValue(row, null) as string, unit, StringComparison.Ordinal) &&
+                type.GetProperty("IsReadOnly")?.GetValue(row, null) is bool readOnly && !readOnly;
+        }
+
+        private static ComboBox RequirePropertyScope(FrameworkElement workspace)
+        {
+            var matches = FindVisualDescendants<ComboBox>(workspace).Where(combo => combo.IsVisible && combo.IsEnabled &&
+                combo.Items.Cast<object>().OfType<string>().Contains("Family / Type", StringComparer.Ordinal) &&
+                combo.Items.Cast<object>().OfType<string>().Contains("Đối tượng / Instance", StringComparer.Ordinal)).ToList();
+            if (matches.Count != 1) throw new ProbeException("ui_property_scope_identity");
             return matches[0];
         }
 
