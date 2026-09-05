@@ -88,6 +88,37 @@ require_all(
 if "[string]$MirrorUrl" in helper:
     fail("V26 helper must not accept an arbitrary HTTP mirror URL parameter")
 
+# Windows PowerShell must never let helper/COM output widen the function pipeline
+# that carries the held MSI admission object. Normalize every admission call through
+# one single-output boundary and suppress all statement-level output inside the
+# admission function before callers dereference the held Stream.
+require_all(
+    helper,
+    HELPER,
+    (
+        "function Get-SingleV26InstallerAdmission",
+        "[void](Assert-NoExistingReparseComponent -Path $Path -Label 'BricsCAD V26 MSI path')",
+        "[void]$versionView.Execute()",
+        "[void]$nameView.Execute()",
+        "$outputs = @(Open-AdmittedV26Installer -Path $Path -Expected $Expected)",
+        "must emit exactly one admission object",
+        "Stream = $stream",
+    ),
+)
+if helper.count("Get-SingleV26InstallerAdmission -Path") != 3:
+    fail("all three V26 installer admission call sites must use the single-output boundary")
+if helper.count("Open-AdmittedV26Installer -Path") != 1:
+    fail("Open-AdmittedV26Installer must only be invoked inside the single-output boundary")
+required_properties_match = re.search(r"\$requiredProperties\s*=\s*@\(([^)]*)\)", helper)
+if required_properties_match is None:
+    fail("single-output admission boundary must declare required admission properties")
+required_properties_text = required_properties_match.group(1)
+for required_property in ("Path", "Sha256", "Stream"):
+    if f"'{required_property}'" not in required_properties_text:
+        fail(f"single-output admission boundary must require admission property {required_property}")
+if "$admission.Stream -isnot [IO.Stream]" not in helper:
+    fail("single-output admission boundary must reject Stream values that are not System.IO.Stream")
+
 # The shared manual-only CI guard rejects OR expressions in job-level guards.
 # Keep cache priming optional at step level, but every job itself is hard manual-only.
 if "installer-cache:\n    if: ${{ github.event_name == 'workflow_dispatch' }}" not in workflow:
