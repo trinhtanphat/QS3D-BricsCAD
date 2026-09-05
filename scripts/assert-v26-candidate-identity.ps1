@@ -6,6 +6,7 @@ param(
     [string]$UpdateManifestPath,
     [Parameter(Mandatory = $true)][ValidatePattern('^[0-9A-Fa-f]{40}$')][string]$ExpectedSourceCommit,
     [Parameter(Mandatory = $true)][string]$ExpectedReleaseTag,
+    [string]$ExpectedPackageReleaseTag,
     [string]$AdmittedScript
 )
 
@@ -15,6 +16,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
 $maxTextBytes = 65536
 $maxAdmittedScriptBytes = 262144
+$effectivePackageTag = if ([string]::IsNullOrWhiteSpace($ExpectedPackageReleaseTag)) { $ExpectedReleaseTag } else { $ExpectedPackageReleaseTag }
 
 function Resolve-OrdinaryFile([string]$Path, [string]$Label) {
     $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
@@ -96,7 +98,7 @@ try {
     try { $metadata = $metadataText | ConvertFrom-Json -ErrorAction Stop }
     catch { throw "V26 PACKAGE-METADATA.json is invalid JSON: $($_.Exception.Message)" }
     if ([string]$metadata.product -ne 'QS3D' -or [string]$metadata.target -ne 'BricsCAD V26 x64' -or [string]$metadata.framework -ne 'net8.0-windows') { throw 'V26 candidate ZIP metadata identity is invalid.' }
-    if (-not [string]::Equals(('v' + [string]$metadata.productVersion), $ExpectedReleaseTag, [StringComparison]::Ordinal)) { throw 'V26 candidate ZIP productVersion does not match the expected release tag.' }
+    if (-not [string]::Equals(('v' + [string]$metadata.productVersion), $effectivePackageTag, [StringComparison]::Ordinal)) { throw 'V26 candidate ZIP productVersion does not match the expected package release tag.' }
     if (-not [string]::Equals([string]$metadata.productVersion, [string]$provenance.productVersion, [StringComparison]::Ordinal)) { throw 'V26 candidate ZIP/provenance productVersion mismatch.' }
 
     if ($null -ne $updateHeld) {

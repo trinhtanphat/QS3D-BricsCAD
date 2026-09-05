@@ -122,8 +122,11 @@ namespace QS3D.BricsCAD.V25
                 {
                     var category = candidate.Category;
                     if (!category.HasValue) continue;
-                    if (!SemanticCaptureService.CaptureSnapshot(document, candidate.Snapshot, category.Value)) continue;
-                    ApplyLegacyEvidence(document, candidate);
+                    if (!SemanticCaptureService.CaptureSnapshot(
+                            document,
+                            candidate.Snapshot,
+                            category.Value,
+                            project => ApplyLegacyEvidence(project, candidate))) continue;
                     imported++;
                 }
 
@@ -139,17 +142,17 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void ApplyLegacyEvidence(Document document, BltLegacyElementCandidate candidate)
+        private static void ApplyLegacyEvidence(ProjectState project, BltLegacyElementCandidate candidate)
         {
-            var project = ExistingProjectMutationContext.Require(document, "BLT legacy semantic import");
+            if (project == null) throw new ArgumentNullException(nameof(project));
             var element = project.Elements.FirstOrDefault(x =>
                 x.SourceHandles.Any(handle => string.Equals(handle, candidate.Snapshot.Handle, StringComparison.OrdinalIgnoreCase)));
             if (element == null)
                 throw new InvalidOperationException("BLT semantic import could not resolve the captured source Handle " + candidate.Snapshot.Handle + ".");
 
-            element.Properties["CAD.BLT.SourceSystem"] = "BLT3D";
-            element.Properties["CAD.BLT.EvidenceMode"] = candidate.EvidenceMode.ToString();
-            element.Properties["CAD.BLT.CategoryEvidence"] = candidate.CategoryEvidence;
+            element.SetProperty("CAD.BLT.SourceSystem", "BLT3D");
+            element.SetProperty("CAD.BLT.EvidenceMode", candidate.EvidenceMode.ToString());
+            element.SetProperty("CAD.BLT.CategoryEvidence", candidate.CategoryEvidence);
 
             if (candidate.LegacyConcreteM3.HasValue)
             {
@@ -157,28 +160,28 @@ namespace QS3D.BricsCAD.V25
                 element.SetQuantity("GrossVolumeM3", concrete);
                 element.SetQuantity("NetVolumeM3", concrete);
                 element.SetQuantity("MeasuredSolidVolumeM3", concrete);
-                element.Properties["CAD.BLT.LegacyConcreteM3"] = concrete.ToString("R", CultureInfo.InvariantCulture);
+                element.SetProperty("CAD.BLT.LegacyConcreteM3", concrete.ToString("R", CultureInfo.InvariantCulture));
             }
 
             if (candidate.LegacyFormworkM2.HasValue)
             {
                 var formwork = candidate.LegacyFormworkM2.Value;
                 element.SetQuantity("FormworkM2", formwork);
-                element.Properties["CAD.BLT.LegacyFormworkM2"] = formwork.ToString("R", CultureInfo.InvariantCulture);
-                element.Properties["CAD.BLT.FormworkStatus"] = "ExactLegacyQuantity";
+                element.SetProperty("CAD.BLT.LegacyFormworkM2", formwork.ToString("R", CultureInfo.InvariantCulture));
+                element.SetProperty("CAD.BLT.FormworkStatus", "ExactLegacyQuantity");
             }
             else
             {
                 // Structural defaults are not evidence for an arbitrary legacy/proxy body.
                 // Keep VK blank rather than exporting an invented default-family value.
-                element.Quantities.Remove("FormworkM2");
-                element.Properties["CAD.BLT.FormworkStatus"] = "PENDING_EXACT_EVIDENCE";
+                element.RemoveQuantity("FormworkM2");
+                element.SetProperty("CAD.BLT.FormworkStatus", "PENDING_EXACT_EVIDENCE");
             }
 
             if (!string.IsNullOrWhiteSpace(candidate.ElementNameHint))
-                element.Properties["Name"] = candidate.ElementNameHint;
+                element.SetProperty("Name", candidate.ElementNameHint);
             if (!string.IsNullOrWhiteSpace(candidate.MaterialHint))
-                element.Properties["Material"] = candidate.MaterialHint;
+                element.SetProperty("Material", candidate.MaterialHint);
 
             if (!string.IsNullOrWhiteSpace(candidate.FloorHint))
             {
@@ -186,7 +189,7 @@ namespace QS3D.BricsCAD.V25
                     string.Equals(x.Id, candidate.FloorHint, StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(x.Name, candidate.FloorHint, StringComparison.OrdinalIgnoreCase));
                 if (floor != null) element.FloorId = floor.Id;
-                else element.Properties["CAD.BLT.UnresolvedFloorHint"] = candidate.FloorHint;
+                else element.SetProperty("CAD.BLT.UnresolvedFloorHint", candidate.FloorHint);
             }
 
             if (!string.IsNullOrWhiteSpace(candidate.FamilyHint))
@@ -196,7 +199,7 @@ namespace QS3D.BricsCAD.V25
                     (string.Equals(x.Id, candidate.FamilyHint, StringComparison.OrdinalIgnoreCase) ||
                      string.Equals(x.Name, candidate.FamilyHint, StringComparison.OrdinalIgnoreCase)));
                 if (family != null) element.FamilyId = family.Id;
-                else element.Properties["CAD.BLT.UnresolvedFamilyHint"] = candidate.FamilyHint;
+                else element.SetProperty("CAD.BLT.UnresolvedFamilyHint", candidate.FamilyHint);
             }
 
             project.Touch();
@@ -217,7 +220,6 @@ namespace QS3D.BricsCAD.V25
                          .OrderBy(x => x.Key.ToString(), StringComparer.Ordinal))
                 document.Editor.WriteMessage("\n  " + group.Key + ": " + group.Count().ToString(CultureInfo.InvariantCulture));
         }
-
         private static void Report(Document document, string operation, Exception error)
         {
             try { document.Editor.WriteMessage("\nQS3D " + operation + " lỗi: " + error.GetBaseException().Message); }
