@@ -34,8 +34,9 @@ if present:
     raise SystemExit("V25 rollback tag-preservation guard failed; destructive surface remains: " + ", ".join(present))
 
 workflow_required = {
-    "exact reusable-tag resolver": "Get-ExactReusableReleaseTag",
-    "reusable-tag acknowledgement": "reusing it without deletion ownership",
+    "exact reusable-tag resolver": "function Get-ExactReusableReleaseTag",
+    "pre-create reusable-tag probe": "$existingTag = Get-ExactReusableReleaseTag",
+    "pre-create reusable-tag admission": "Reusing exact V25 lightweight tag $env:RELEASE_TAG at workflow SHA without claiming deletion ownership.",
     "rollback invocation": "rollback-v25-draft-release.ps1",
     "rollback provenance input": "-TagCreatedByThisRun $tagCreatedByThisRun",
 }
