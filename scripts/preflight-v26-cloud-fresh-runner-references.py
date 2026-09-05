@@ -15,8 +15,6 @@ def validate(text: str) -> list[str]:
         "runs-on: windows-latest",
         "continue-on-error: true",
         "needs:\n      - installer-cache\n      - v26-reference-primary",
-        "needs.v26-reference-primary.outputs.ready != 'true'",
-        "needs.v26-reference-primary.outputs.ready == 'true' || needs.v26-reference-fallback.outputs.ready == 'true'",
         "qs3d-v26-hostrefs-v1-${{ github.run_id }}-primary",
         "qs3d-v26-hostrefs-v1-${{ github.run_id }}-fallback",
         "bricscad-v26.2.07-x64-en-us-${{ needs.installer-cache.outputs.msi_sha256 }}",
@@ -40,6 +38,17 @@ def validate(text: str) -> list[str]:
     primary_body = primary[1].split("  v26-reference-fallback:", 1)[0]
     fallback_body = fallback[1].split("  qualify:", 1)[0]
     qualify_body = qualify[1].split("  release:", 1)[0]
+
+    fallback_condition = "needs.v26-reference-primary.outputs.ready != 'true'"
+    if fallback_condition not in fallback_body:
+        errors.append("fallback must run only when the primary fresh runner did not produce a ready handoff")
+
+    readiness_contracts = (
+        "needs.v26-reference-primary.outputs.ready == 'true' || needs.v26-reference-fallback.outputs.ready == 'true'",
+        "!(needs.v26-reference-primary.outputs.ready != 'true' && needs.v26-reference-fallback.outputs.ready != 'true')",
+    )
+    if not any(contract in qualify_body for contract in readiness_contracts):
+        errors.append("qualify must require either the primary or fallback run-bound V26 handoff to be ready")
 
     for label, body in (("primary", primary_body), ("fallback", fallback_body)):
         if body.count("-ExtractReferences | Select-Object -Last 1") != 1:
