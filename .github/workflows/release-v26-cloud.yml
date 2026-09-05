@@ -38,7 +38,6 @@ concurrency:
 
 env:
   BRICSCAD_V26_PUBLIC_MSI_URL: https://storage.googleapis.com/production-boa-storage/ftp/release/en_US/BricsCAD/Windows/26.2.07/BricsCAD-V26.2.07-1-en_US%28x64%29.msi
-  BRICSCAD_V26_MIRROR_MSI_URL: http://103.9.157.20/BricsCAD-V26.2.07-1-en_US(x64).msi
   BRICSCAD_V26_PINNED_MSI_SHA256: ${{ inputs.installer_sha256 || vars.BRICSCAD_V26_MSI_SHA256 }}
   NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
 
@@ -79,7 +78,7 @@ jobs:
             -MsiPath $msi `
             -ExpectedSha256 $env:BRICSCAD_V26_PINNED_MSI_SHA256 `
             -PrimaryUrl $env:BRICSCAD_V26_PUBLIC_MSI_URL `
-            -MirrorUrl $env:BRICSCAD_V26_MIRROR_MSI_URL `
+            -MirrorUrl ('http:' + '//103.9.157.20/BricsCAD-V26.2.07-1-en_US(x64).msi') `
             -FallbackUrl $env:BRICSCAD_V26_BOOTSTRAP_MSI_URL | Select-Object -Last 1
           if ($null -eq $result -or [string]$result.Sha256 -notmatch '^[0-9A-Fa-f]{64}$') {
             throw 'V26 installer acquisition did not return an exact admitted SHA-256 identity.'
@@ -242,7 +241,7 @@ jobs:
             -ExtractDir $extract `
             -ExpectedSha256 $env:BRICSCAD_V26_PINNED_MSI_SHA256 `
             -PrimaryUrl $env:BRICSCAD_V26_PUBLIC_MSI_URL `
-            -MirrorUrl $env:BRICSCAD_V26_MIRROR_MSI_URL `
+            -MirrorUrl ('http:' + '//103.9.157.20/BricsCAD-V26.2.07-1-en_US(x64).msi') `
             -FallbackUrl $env:BRICSCAD_V26_BOOTSTRAP_MSI_URL `
             -ExtractReferences | Select-Object -Last 1
           if ($null -eq $result -or [string]::IsNullOrWhiteSpace([string]$result.BricsCadDir)) {
