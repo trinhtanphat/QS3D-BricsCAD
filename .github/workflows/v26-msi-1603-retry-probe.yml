@@ -1,0 +1,53 @@
+name: TEMP V26 MSI 1603 retry probe
+
+on:
+  push:
+    branches:
+      - agent/gpt56sol-20260905-v26-msi1603-retry/issue-5859-v26-msi1603-retry
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Restore latest admitted BricsCAD V26.2.07 installer cache
+        id: v26-msi-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/bricscad/BricsCAD-V26.2.07-x64.msi
+          key: bricscad-v26-probe-${{ github.sha }}
+          restore-keys: |
+            bricscad-v26.2.07-x64-en-us-
+
+      - name: Probe V26 administrative extraction without publishing
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msi = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad\BricsCAD-V26.2.07-x64.msi'
+          if (-not (Test-Path -LiteralPath $msi -PathType Leaf)) {
+            throw 'No admitted BricsCAD V26.2.07 MSI was restored from Actions cache for the non-publishing probe.'
+          }
+          $extract = Join-Path $env:RUNNER_TEMP ('qs3d-v26-msi1603-retry-probe-' + [Guid]::NewGuid().ToString('N'))
+          $result = & .\scripts\acquire-v26-compile-references.ps1 `
+            -MsiPath $msi `
+            -ExtractDir $extract `
+            -PrimaryUrl ' ' `
+            -UsePinnedHttpMirror `
+            -ExtractReferences | Select-Object -Last 1
+          if ($null -eq $result -or [string]::IsNullOrWhiteSpace([string]$result.BricsCadDir)) {
+            throw 'V26 retry probe did not return a BricsCAD runtime directory.'
+          }
+          foreach ($name in @('BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $result.BricsCadDir $name) -PathType Leaf)) {
+              throw "V26 retry probe missing required compile reference: $name"
+            }
+          }
+          Write-Host "PASS: non-publishing V26 MSI extraction probe produced complete compile references from SHA256 $($result.Sha256)."
