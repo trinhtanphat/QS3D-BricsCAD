@@ -60,6 +60,22 @@ function Assert-Local022UiAction($Request, [string]$RunId, [int]$Sequence, [int]
     return $Request
 }
 
+function ConvertFrom-Local022UiActionJson([string]$Raw, [string]$RunId, [int]$Sequence, [int]$OwnedProcessId) {
+    $request = Assert-Local022UiAction ($Raw | ConvertFrom-Json -ErrorAction Stop) $RunId $Sequence $OwnedProcessId
+    # The probe emits one compact ASCII object with these exact eight ordered
+    # fields. Reconstruct only after type/value validation, then compare the raw
+    # request: JSON normalization must not conceal duplicates, escaped property
+    # names, comments, alternate number forms, or extra/reordered fields.
+    $canonical = [ordered]@{
+        schema=$request.schema; run_id=$request.run_id; sequence=$request.sequence
+        action=$request.action; x=$request.x; y=$request.y; text=$request.text; target_pid=$request.target_pid
+    } | ConvertTo-Json -Compress
+    if ($Raw -cne $canonical) {
+        throw 'UI request is not canonical; duplicate or ambiguous fields refused.'
+    }
+    return $request
+}
+
 function Initialize-Local022UiInput {
     if ('Qs3dLocal022Input' -as [type]) { return }
     Add-Type -TypeDefinition @'
@@ -243,10 +259,7 @@ function Invoke-Local022UiPendingAction([string]$Root, [string]$RunId, [int]$Seq
     $file = Get-Item -LiteralPath $requestPath
     if ($file.Length -gt 4096 -or ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Unsafe UI request file.' }
     $raw = [IO.File]::ReadAllText($requestPath)
-    if ([regex]::Matches($raw, '"(?:schema|run_id|sequence|action|x|y|text|target_pid)"\s*:').Count -ne 8) {
-        throw 'Duplicate or missing UI request key.'
-    }
-    $request = Assert-Local022UiAction ($raw | ConvertFrom-Json) $RunId $Sequence $Process.Id
+    $request = ConvertFrom-Local022UiActionJson $raw $RunId $Sequence $Process.Id
     $ack = Join-Path $Root ('ui-ack-{0:D4}.private.json' -f $Sequence)
     if (Test-Path -LiteralPath $ack) { throw 'UI action already acknowledged; refusing replay.' }
     try { Invoke-Local022UiPhysicalAction $request $Process $ExpectedExecutable }

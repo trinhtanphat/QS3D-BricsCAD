@@ -649,6 +649,7 @@ namespace QS3D.LocalQualification.V25
                 _timer.Stop();
                 try
                 {
+                    RequireUiCleanupContext(_context);
                     var dialog = FindSingleFootingDialog(_context.Product);
                     if (dialog != null) dialog.Close();
                 }
@@ -1286,13 +1287,22 @@ namespace QS3D.LocalQualification.V25
             catch { }
         }
 
+        private static void RequireUiCleanupContext(Context context)
+        {
+            RequireUiContextStable(context);
+            if (Application.DocumentManager.Count != 1 || !IsChildPath(context.Root, context.Drawing))
+                throw new ProbeException("ui_cleanup_ownership_changed");
+        }
+
         private static void QueueOwnedQuit(Context? context, bool cancelFirst)
         {
             try
             {
-                var document = context?.Document ?? Application.DocumentManager.MdiActiveDocument;
-                if (document == null) return;
-                document.SendStringToExecute((cancelFirst ? "\u001b\u001b" : string.Empty) + "_.QUIT _N ", true, false, false);
+                // A failed bind never grants authority over the active drawing.
+                // QUIT is application-wide: refuse it after drift or another DWG opens.
+                if (context == null) return;
+                RequireUiCleanupContext(context);
+                context.Document.SendStringToExecute((cancelFirst ? "\u001b\u001b" : string.Empty) + "_.QUIT _N ", true, false, false);
             }
             catch { }
         }

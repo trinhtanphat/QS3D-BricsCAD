@@ -41,6 +41,43 @@ foreach ($value in @('ENTER','ESC')) {
     $action = New-Action; $action.action='key'; $action.text=$value
     $null = Assert-Local022UiAction $action $nonce 1 12345
 }
+# Exercise the actual file-consumer decoder, before normalized JSON can hide
+# duplicate/escaped property identifiers. No native input is initialized here.
+$canonical = '{"schema":"QS3D_LOCAL022_UI_ACTION_V1","run_id":"0123456789abcdef0123456789abcdef","sequence":1,"action":"click","x":100,"y":200,"text":"","target_pid":12345}'
+$decoded = ConvertFrom-Local022UiActionJson $canonical $nonce 1 12345
+if ($decoded.x -ne 100) { throw 'FAIL: canonical action did not retain its coordinate.' }
+foreach ($raw in @(
+    $canonical.Replace('"click"','"move"'),
+    $canonical.Replace('"click"','"text"').Replace('"text":""','"text":"-25.5"'),
+    $canonical.Replace('"click"','"key"').Replace('"text":""','"text":"ENTER"'),
+    $canonical.Replace('"click"','"key"').Replace('"text":""','"text":"ESC"'),
+    $canonical.Replace('"x":100','"x":-32768').Replace('"y":200','"y":32767')
+)) {
+    $null = ConvertFrom-Local022UiActionJson $raw $nonce 1 12345
+}
+$invalidJson = [ordered]@{
+    'escaped duplicate coordinate' = $canonical.TrimEnd('}') + ',"\u0078":101}'
+    'escaped duplicate schema' = $canonical.TrimEnd('}') + ',"\u0073chema":"QS3D_LOCAL022_UI_ACTION_V1"}'
+    'plain duplicate coordinate' = $canonical.TrimEnd('}') + ',"x":101}'
+    'unexpected raw field' = $canonical.TrimEnd('}') + ',"extra":1}'
+    'missing raw field' = $canonical.Replace(',"y":200','')
+    'renamed raw field' = $canonical.Replace('"x":100','"wrong":100')
+    'escaped sole coordinate name' = $canonical.Replace('"x":100','"\u0078":100')
+    'escaped action value' = $canonical.Replace('"click"','"cl\u0069ck"')
+    'reordered fields' = $canonical.Replace('"x":100,"y":200','"y":200,"x":100')
+    'alternate integer representation' = $canonical.Replace('"x":100','"x":1e2')
+    'leading whitespace' = ' ' + $canonical
+    'trailing newline' = $canonical + "`n"
+    'comment before field' = $canonical.Replace('"x":100','/* ambiguous */"x":100')
+    'array wrapper' = '[' + $canonical + ']'
+    'malformed JSON' = $canonical.TrimEnd('}')
+}
+foreach ($case in $invalidJson.GetEnumerator()) {
+    $rejected = $false
+    try { $null = ConvertFrom-Local022UiActionJson $case.Value $nonce 1 12345 } catch { $rejected = $true }
+    if (-not $rejected) { throw ('FAIL: raw UI decoder accepted ' + $case.Key) }
+}
+Write-Output 'PASS: raw UI decoder rejects escaped/plain duplicate keys and wrong fields.'
 # This invokes the real input boundary with a non-host process. It must reject
 # before initializing native input or sending any event to the desktop.
 $rejected = $false
@@ -109,3 +146,6 @@ try {
 }
 if (-not $rejected) { throw 'FAIL: orchestration ignored missing autostart authorization.' }
 Write-Output 'PASS: orchestrator refuses missing consent before inspecting or modifying machine state.'
+
+# Required regression: replay cleanup against in-memory host doubles, never CAD.
+& (Join-Path $PSScriptRoot '../tests/QS3D.LocalQualification.V25/test-ui-quit-boundary.ps1')
