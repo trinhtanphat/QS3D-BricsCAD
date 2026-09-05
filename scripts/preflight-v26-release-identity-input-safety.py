@@ -38,10 +38,15 @@ def validate_helper(text: str) -> list[str]:
         "BricsCAD V26 x64",
         "net8.0-windows",
         "[string]::Equals(('v' + [string]$metadata.productVersion), $ReleaseTag, [StringComparison]::Ordinal)",
+        "Initialize-AssemblyVersionProbe",
+        "$startInfo.RedirectStandardInput = $true",
+        "$Held.Stream.CopyToAsync($process.StandardInput.BaseStream)",
+        "30000 - [int]$deadline.ElapsedMilliseconds",
+        "^QS3D_ASSEMBLY_VERSION:(\\d+\\.\\d+\\.\\d+\\.\\d+)$",
         "Assert-LockedPathBinding -Held $pluginHeld",
-        "[Reflection.AssemblyName]::GetAssemblyName($pluginHeld.Path)",
+        "$pluginVersion = Get-HeldAssemblyVersion -Held $pluginHeld -Probe $assemblyProbe -Label 'V26 plugin assembly'",
         "Assert-LockedPathBinding -Held $coreHeld",
-        "[Reflection.AssemblyName]::GetAssemblyName($coreHeld.Path)",
+        "$coreVersion = Get-HeldAssemblyVersion -Held $coreHeld -Probe $assemblyProbe -Label 'V26 Core assembly'",
         "$heldFiles[$index].Stream.Dispose()",
     )
     for token in required:
@@ -55,10 +60,10 @@ def validate_helper(text: str) -> list[str]:
     metadata_read = text.find("$metadataText = Read-BoundedStrictUtf8Stream -Held $metadataHeld", metadata_guard)
     json_parse = text.find("ConvertFrom-Json -ErrorAction Stop", metadata_read)
     plugin_pre = text.find("Assert-LockedPathBinding -Held $pluginHeld", json_parse)
-    plugin_read = text.find("GetAssemblyName($pluginHeld.Path)", plugin_pre)
+    plugin_read = text.find("$pluginVersion = Get-HeldAssemblyVersion -Held $pluginHeld", plugin_pre)
     plugin_post = text.find("Assert-LockedPathBinding -Held $pluginHeld", plugin_read)
     core_pre = text.find("Assert-LockedPathBinding -Held $coreHeld", plugin_post)
-    core_read = text.find("GetAssemblyName($coreHeld.Path)", core_pre)
+    core_read = text.find("$coreVersion = Get-HeldAssemblyVersion -Held $coreHeld", core_pre)
     core_post = text.find("Assert-LockedPathBinding -Held $coreHeld", core_read)
     dispose = text.find("$heldFiles[$index].Stream.Dispose()", core_post)
 
@@ -79,7 +84,7 @@ def validate_helper(text: str) -> list[str]:
     )
     if min(ordered) < 0 or list(ordered) != sorted(ordered):
         errors.append(
-            "V26 identity safety order must lock metadata/plugin/core before consumption, read metadata from the held stream, consume AssemblyName under locked pathname assertions, then dispose"
+            "V26 identity safety order must lock metadata/plugin/core before consumption, read metadata from the held stream, consume plugin/Core semantics from held streams under path assertions, then dispose"
         )
 
     lock_function = text.find("function Open-LockedStableFile")
@@ -95,6 +100,18 @@ def validate_helper(text: str) -> list[str]:
             "V26 held generation admission must open with FileShare.Read, fingerprint the held stream, re-resolve, and publish that held SHA-256 state"
         )
 
+    probe_function = text.find("function Get-HeldAssemblyVersion")
+    probe_stream = text.find("$Held.Stream.CopyToAsync($process.StandardInput.BaseStream)", probe_function)
+    probe_complete = text.find("$Held.Stream.Position -ne $Held.Stream.Length", probe_stream)
+    probe_wait = text.find("$process.WaitForExit($exitWait)", probe_complete)
+    probe_reset = text.find("$Held.Stream.Position = 0", probe_wait)
+    if min(probe_function, probe_stream, probe_complete, probe_wait, probe_reset) < 0 or not (
+        probe_function < probe_stream < probe_complete < probe_wait < probe_reset
+    ):
+        errors.append(
+            "V26 assembly semantics must stream the exact held generation to the bounded metadata probe, verify complete consumption, wait boundedly, then reset the held stream"
+        )
+
     for forbidden in (
         "Get-StableFileState",
         "Assert-StableFileState",
@@ -102,6 +119,8 @@ def validate_helper(text: str) -> list[str]:
         "Get-Content -LiteralPath $MetadataPath -Raw | ConvertFrom-Json",
         "[Text.Encoding]::UTF8.GetString",
         "Get-FileHash",
+        "[Reflection.AssemblyName]::GetAssemblyName",
+        "AssemblyName.GetAssemblyName",
     ):
         if forbidden in text:
             errors.append(f"V26 release identity helper contains superseded/unsafe transient parsing shortcut: {forbidden}")
@@ -166,8 +185,9 @@ helper_mutations = {
     "plugin generation lock": helper.replace("$pluginHeld = Open-LockedStableFile", "$pluginHeld = Resolve-OrdinaryNonReparseFile", 1),
     "core generation lock": helper.replace("$coreHeld = Open-LockedStableFile", "$coreHeld = Resolve-OrdinaryNonReparseFile", 1),
     "held metadata consumption": helper.replace("$metadataText = Read-BoundedStrictUtf8Stream -Held $metadataHeld", "$metadataText = Get-Content $MetadataPath -Raw", 1),
-    "plugin locked AssemblyName": helper.replace("GetAssemblyName($pluginHeld.Path)", "GetAssemblyName($PluginPath)", 1),
-    "core locked AssemblyName": helper.replace("GetAssemblyName($coreHeld.Path)", "GetAssemblyName($CorePath)", 1),
+    "plugin held semantics": helper.replace("$pluginVersion = Get-HeldAssemblyVersion -Held $pluginHeld -Probe $assemblyProbe -Label 'V26 plugin assembly'", "$pluginVersion = [Reflection.AssemblyName]::GetAssemblyName($PluginPath).Version", 1),
+    "core held semantics": helper.replace("$coreVersion = Get-HeldAssemblyVersion -Held $coreHeld -Probe $assemblyProbe -Label 'V26 Core assembly'", "$coreVersion = [Reflection.AssemblyName]::GetAssemblyName($CorePath).Version", 1),
+    "probe stdin streaming": helper.replace("$Held.Stream.CopyToAsync($process.StandardInput.BaseStream)", "$process.StandardInput.Write('pathname')", 1),
     "finally disposal": helper.replace("$heldFiles[$index].Stream.Dispose()", "# generation lock disposal removed", 1),
 }
 for label, mutated in helper_mutations.items():
@@ -196,4 +216,4 @@ if errors:
         print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: V26 release package identity is bounded, strict-UTF8, ordinary-file/reparse guarded, SHA-256 bound to held FileShare.Read generations through semantic consumption, and the manual release workflow is mutation-locked to the exact shared-helper invocation.")
+print("PASS: V26 release package identity is bounded, strict-UTF8, ordinary-file/reparse guarded, SHA-256 bound to held FileShare.Read generations through metadata-only held-stream semantic consumption, and the manual release workflow is mutation-locked to the exact shared-helper invocation.")
