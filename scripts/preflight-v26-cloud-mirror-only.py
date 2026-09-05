@@ -31,22 +31,20 @@ for forbidden in (
     if forbidden in workflow:
         fail(f"release-v26-cloud.yml must not contain mirror-only forbidden token: {forbidden}")
 
-if workflow.count("-PrimaryUrl ''") != 2:
-    fail("both V26 acquisition call sites must explicitly disable PrimaryUrl")
+# PrimaryUrl stays mandatory in the shared helper. One explicit whitespace value
+# satisfies PowerShell's mandatory string binder, while the helper's existing
+# IsNullOrWhiteSpace gate deliberately omits the primary candidate. This keeps the
+# shared helper contract untouched and makes the cloud lane mirror-only.
+if workflow.count("-PrimaryUrl ' '") != 2:
+    fail("both V26 acquisition call sites must use the explicit whitespace PrimaryUrl sentinel")
+if "[Parameter(Mandatory = $true)][string]$PrimaryUrl" not in helper:
+    fail("V26 helper must keep PrimaryUrl mandatory")
+if "if (-not [string]::IsNullOrWhiteSpace($PrimaryUrl))" not in helper:
+    fail("V26 helper must continue to omit the primary candidate for whitespace PrimaryUrl")
 if workflow.count("-UsePinnedHttpMirror") != 2:
     fail("both V26 acquisition call sites must opt into the helper-owned pinned mirror")
 if "http://" in workflow:
     fail("release-v26-cloud.yml must not embed the plaintext .20 URL; the helper owns it")
-
-# PrimaryUrl stays mandatory at the public script boundary so callers cannot omit
-# source intent accidentally, but mirror-only callers must be allowed to pass an
-# explicit empty value. Without AllowEmptyString PowerShell rejects the call before
-# the helper can reach the pinned-mirror candidate branch.
-primary_url_contract = "[Parameter(Mandatory = $true)][AllowEmptyString()][string]$PrimaryUrl"
-if primary_url_contract not in helper:
-    fail("V26 helper must allow an explicit empty mandatory PrimaryUrl for mirror-only cloud calls")
-if "if (-not [string]::IsNullOrWhiteSpace($PrimaryUrl))" not in helper:
-    fail("V26 helper must continue to skip the primary candidate when PrimaryUrl is explicitly empty")
 
 # The prime-cache call may be slow. Keep a separate child PowerShell monitor on
 # the same Windows runner so GitHub Actions receives live staging-byte telemetry
