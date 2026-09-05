@@ -56,18 +56,20 @@ def main() -> int:
         ("var projectExistedBeforeCapture = ProjectContextCoordinator.TryGetReadOnly", "atomic capture must remember whether project context existed"),
         ("var rollback = ProjectStateSnapshot.Capture(project)", "atomic capture must snapshot project state before mutation"),
         ("var captured = CaptureSnapshotCore(document, project, snapshot, category)", "atomic capture must run normal capture core"),
+        ("RefreshStructuralWallConcreteContacts(document, project)", "atomic capture must preserve structural-wall contact refresh semantics"),
         ("postCaptureMutation(project)", "post-capture mutation must run inside atomic capture method"),
         ("RestoreCaptureOrThrow(document, project, rollback, projectExistedBeforeCapture, operationError", "post-capture failures must use the existing exact restore/forget path"),
     ):
         require(method, needle, message)
 
     capture_pos = require(method, "var captured = CaptureSnapshotCore", "missing capture core")
+    refresh_pos = require(method, "RefreshStructuralWallConcreteContacts(document, project)", "missing structural-wall contact refresh")
     callback_pos = require(method, "postCaptureMutation(project)", "missing post-capture callback")
     catch_pos = require(method, "catch (Exception operationError)", "missing shared rollback catch")
-    if not capture_pos < callback_pos < catch_pos:
-        fail("post-capture mutation must execute after successful capture and before the shared rollback catch boundary")
+    if not capture_pos < refresh_pos < callback_pos < catch_pos:
+        fail("atomic capture must preserve capture -> structural refresh -> BLT evidence override order inside the shared rollback boundary")
 
-    print("PASS: V25 BLT semantic capture and legacy evidence mutation share one rollback boundary.")
+    print("PASS: V25 BLT semantic capture and legacy evidence mutation share one rollback boundary without changing override order.")
     return 0
 
 
