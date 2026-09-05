@@ -6,6 +6,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "release-v26-cloud.yml"
 HELPER = ROOT / "scripts" / "acquire-v26-compile-references.ps1"
+PROVENANCE_HELPER = ROOT / "scripts" / "new-v26-candidate-provenance.ps1"
+CANDIDATE_HELPER = ROOT / "scripts" / "assert-v26-candidate-identity.ps1"
 MANUAL_WORKFLOW = ROOT / ".github" / "workflows" / "release-v26.yml"
 
 
@@ -28,6 +30,8 @@ def require_all(text: str, path: Path, needles: tuple[str, ...]) -> None:
 
 workflow = require_text(WORKFLOW)
 helper = require_text(HELPER)
+provenance_helper = require_text(PROVENANCE_HELPER)
+candidate_helper = require_text(CANDIDATE_HELPER)
 manual = require_text(MANUAL_WORKFLOW)
 
 require_all(
@@ -82,6 +86,8 @@ require_all(
         "V26 cloud release tag/source version mismatch. Expected $expectedCloudTag with matching Core version.",
         '"V26_PACKAGE_TAG=$packageTag" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append',
         "-ReleaseTag $env:V26_PACKAGE_TAG | Out-Null",
+        "-PackageReleaseTag $env:V26_PACKAGE_TAG",
+        "-ExpectedPackageReleaseTag $env:V26_PACKAGE_TAG",
     ),
 )
 
@@ -93,6 +99,29 @@ if package_identity_step is None:
     fail("release-v26-cloud.yml is missing the bounded V26 package identity validation step")
 if "-ReleaseTag $env:RELEASE_TAG" in package_identity_step.group(0):
     fail("V26 package identity must use V26_PACKAGE_TAG, not the scoped cloud publication tag")
+
+require_all(
+    provenance_helper,
+    PROVENANCE_HELPER,
+    (
+        "[string]$PackageReleaseTag",
+        "$effectivePackageTag",
+        "[string]::IsNullOrWhiteSpace($PackageReleaseTag)",
+        "('v' + $productVersion), $effectivePackageTag",
+        "releaseTag = $ReleaseTag",
+    ),
+)
+require_all(
+    candidate_helper,
+    CANDIDATE_HELPER,
+    (
+        "[string]$ExpectedPackageReleaseTag",
+        "$effectivePackageTag",
+        "[string]::IsNullOrWhiteSpace($ExpectedPackageReleaseTag)",
+        "('v' + [string]$metadata.productVersion), $effectivePackageTag",
+        "[string]$provenance.releaseTag, $ExpectedReleaseTag",
+    ),
+)
 
 # Candidate admission owns the single V26 publisher invocation. A standalone second
 # publisher step would duplicate a transaction after candidate verification.
@@ -121,7 +150,8 @@ require_all(
     ),
 )
 
-# Existing manual V26 lane remains the canonical signed/licensed runtime path.
+# Existing manual V26 lane remains the canonical signed/licensed runtime path and
+# deliberately relies on the helpers' backward-compatible default package tag.
 require_all(
     manual,
     MANUAL_WORKFLOW,
@@ -130,5 +160,7 @@ require_all(
         "scripts\\publish-v26-release.ps1",
     ),
 )
+if "ExpectedPackageReleaseTag" in manual or "PackageReleaseTag" in manual:
+    fail("manual V26 lane must remain on the default release/package tag contract")
 
 print("V26 cloud preview release preflight passed.")
