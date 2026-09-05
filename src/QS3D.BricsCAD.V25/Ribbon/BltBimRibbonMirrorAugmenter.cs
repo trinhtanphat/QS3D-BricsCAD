@@ -36,6 +36,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
         {
             if (_initialized) return true;
 
+            object? bimPanels = null;
             try
             {
                 var control = FindRibbonControl();
@@ -49,7 +50,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 if (drawTab == null || bimTab == null) return false;
 
                 var drawPanels = GetProperty(drawTab, "Panels");
-                var bimPanels = GetProperty(bimTab, "Panels");
+                bimPanels = GetProperty(bimTab, "Panels");
                 if (drawPanels == null || bimPanels == null) return false;
 
                 var sources = new List<object>(PanelSpecs.Length);
@@ -60,18 +61,32 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     sources.Add(panel);
                 }
 
+                // Build the complete replacement before mutating the live BIM collection. An
+                // unsupported source item or reflective construction failure therefore leaves the
+                // currently-published QS3D surface untouched and the initialization retryable.
+                var stagedPanels = new List<object>(PanelSpecs.Length);
+                for (var index = 0; index < PanelSpecs.Length; index++)
+                    stagedPanels.Add(BuildMirroredPanel(sources[index], PanelSpecs[index]));
+
                 // MÔ HÌNH BIM is an exact owner-reference contract. Remove only QS3D-owned BIM
                 // panels; native/third-party tabs and panels are never touched.
                 RemoveQs3dOwnedBimPanels(bimPanels);
-
-                for (var index = 0; index < PanelSpecs.Length; index++)
-                    AddMirroredPanel(bimPanels, sources[index], PanelSpecs[index]);
+                foreach (var panel in stagedPanels)
+                    Add(bimPanels, panel);
 
                 _initialized = true;
                 return true;
             }
             catch
             {
+                // A host collection can still fail while publishing a staged panel. Never leave a
+                // partially-published QS3D mirror behind: clean only our owned BIM panels and let a
+                // later initializer attempt rebuild the complete surface.
+                if (bimPanels != null)
+                {
+                    try { RemoveQs3dOwnedBimPanels(bimPanels); } catch { }
+                }
+                _initialized = false;
                 return false;
             }
         }
@@ -98,7 +113,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 Remove(panels, panel);
         }
 
-        private static void AddMirroredPanel(object targetPanels, object sourcePanel, PanelMirrorSpec spec)
+        private static object BuildMirroredPanel(object sourcePanel, PanelMirrorSpec spec)
         {
             var source = GetProperty(sourcePanel, "Source")
                          ?? throw new InvalidOperationException("Source RibbonPanel did not expose Source.");
@@ -118,7 +133,6 @@ namespace QS3D.BricsCAD.V25.Ribbon
             {
                 if (sourceItem == null) continue;
                 var mirrored = CloneRibbonItem(sourceItem, ref buttonCount, spec.RasterizeImages);
-                if (mirrored == null) continue;
                 Add(mirroredItems, mirrored);
             }
 
@@ -127,10 +141,10 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
             var panel = Create("Bricscad.Windows.RibbonPanel");
             SetProperty(panel, "Source", mirroredSource);
-            Add(targetPanels, panel);
+            return panel;
         }
 
-        private static object? CloneRibbonItem(object source, ref int buttonCount, bool rasterizeImages)
+        private static object CloneRibbonItem(object source, ref int buttonCount, bool rasterizeImages)
         {
             var typeName = source.GetType().Name;
             if (string.Equals(typeName, "RibbonButton", StringComparison.Ordinal))
@@ -191,16 +205,15 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 {
                     if (sourceItem == null) continue;
                     var mirrored = CloneRibbonItem(sourceItem, ref buttonCount, rasterizeImages);
-                    if (mirrored != null)
-                        Add(targetItems, mirrored);
+                    Add(targetItems, mirrored);
                 }
 
                 return target;
             }
 
-            // Unknown QS3D-owned ribbon item shapes are never guessed. Fail the mirror rather than
-            // silently emitting a different BIM surface.
-            return null;
+            // Unknown QS3D-owned ribbon item shapes are never guessed. Failing the requested
+            // mirror is safer than silently publishing a BIM surface with missing commands.
+            throw new InvalidOperationException("Unsupported QS3D Ribbon item type: " + typeName + ".");
         }
 
         private static void CopyRasterizedImageProperty(object source, object target, string name, int pixels)
