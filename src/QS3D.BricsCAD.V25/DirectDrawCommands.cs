@@ -45,6 +45,8 @@ namespace QS3D.BricsCAD.V25
     {
         private const double PlanarityToleranceM = 0.005d;
         private const double UcsAxisTolerance = 1e-9d;
+        private const string OperationFailureSuffix = " lỗi: không thể hoàn tất thao tác. Vui lòng thử lại.";
+        private const string PostCommitUiWarning = "Direct Draw đã commit nhưng đồng bộ giao diện chưa hoàn tất. Hãy refresh giao diện.";
 
         [CommandMethod("QS3DDRAWWALL", CommandFlags.Modal)]
         public void DrawWall()
@@ -783,10 +785,11 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                try { document.Editor.WriteMessage("\nQS3D " + status + " UI sync warning: " + ex.Message); }
+                try { document.Editor.WriteMessage("\nQS3D " + PostCommitUiWarning); }
                 catch { }
+                TrySetPaletteStatus(PostCommitUiWarning);
             }
         }
 
@@ -801,11 +804,18 @@ namespace QS3D.BricsCAD.V25
         private static void Guard(Document document, string operation, Action action)
         {
             try { action(); }
-            catch (Exception ex)
+            catch (Exception)
             {
-                document.Editor.WriteMessage("\n" + operation + " error: " + ex.Message);
-                PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message);
+                try { document.Editor.WriteMessage("\n" + operation + OperationFailureSuffix); }
+                catch { }
+                TrySetPaletteStatus(operation + OperationFailureSuffix);
             }
+        }
+
+        private static void TrySetPaletteStatus(string status)
+        {
+            try { PaletteCoordinator.SetStatus(status); }
+            catch { }
         }
     }
 }
