@@ -35,10 +35,10 @@ for label, block in (("CanonicalFloorId", canonical), ("NormalizeName", name_blo
         errors.append(f"{label} must validate well-formed Unicode before NFC normalization")
 
 # Length limits are limits on canonical persisted identity text, not on one arbitrary Unicode
-# spelling. Checking length before NFC would reject a decomposed spelling at 65/121 code units
-# while accepting its canonically equivalent composed spelling at 64/120.
+# spelling. Checking length before NFC would reject a decomposed spelling at 65/121 UTF-16
+# code units while accepting its canonically equivalent composed spelling at 64/120.
 for label, block, length_marker in (
-    ("CanonicalFloorId", canonical, "normalized.Length"),
+    ("CanonicalFloorId", canonical, "canonical.Length"),
     ("NormalizeName", name_block, "normalized.Length"),
 ):
     normalize = block.find(".Normalize(NormalizationForm.FormC)")
