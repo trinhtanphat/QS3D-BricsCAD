@@ -232,11 +232,15 @@ namespace QS3D.BricsCAD.V25
         private const int MaxMetadataValues = 512;
         private const int MaxTypedValues = 256;
         private const int MaxMetadataValueLength = 512;
+        private const long MaxRetainedSnapshotBudgetBytes = 64L * 1024L * 1024L;
+        private const int EstimatedSnapshotOverheadBytes = 512;
+        private const int EstimatedMetadataEntryOverheadBytes = 128;
 
         public static IReadOnlyList<EntitySnapshot> ReadCurrentSpace(Document document)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             var result = new List<EntitySnapshot>();
+            long retainedSnapshotBytes = 0;
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
                 var space = transaction.GetObject(document.Database.CurrentSpaceId, OpenMode.ForRead, false) as BlockTableRecord;
@@ -246,7 +250,7 @@ namespace QS3D.BricsCAD.V25
                 {
                     if (scanned++ >= MaxScannedEntities)
                         throw new InvalidOperationException("BLT legacy scan exceeds guarded Current Space limit of " + MaxScannedEntities + " entities.");
-                    TryAdd(transaction, id, result);
+                    TryAdd(transaction, id, result, ref retainedSnapshotBytes);
                 }
                 transaction.Commit();
             }
@@ -267,33 +271,66 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("BLT legacy selection exceeds guarded limit of " + MaxScannedEntities + " entities.");
 
             var result = new List<EntitySnapshot>();
+            long retainedSnapshotBytes = 0;
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
-                foreach (var id in selection.Value.GetObjectIds()) TryAdd(transaction, id, result);
+                foreach (var id in selection.Value.GetObjectIds()) TryAdd(transaction, id, result, ref retainedSnapshotBytes);
                 transaction.Commit();
             }
             return result.AsReadOnly();
         }
 
-        private static void TryAdd(Transaction transaction, ObjectId id, ICollection<EntitySnapshot> result)
+        private static void TryAdd(Transaction transaction, ObjectId id, ICollection<EntitySnapshot> result, ref long retainedSnapshotBytes)
         {
             if (id.IsNull || id.IsErased) return;
+            EntitySnapshot snapshot;
             try
             {
                 var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
                 if (entity == null) return;
-                var snapshot = new EntitySnapshot(entity.Handle.ToString(), entity.GetType().Name, entity.Layer);
+                snapshot = new EntitySnapshot(entity.Handle.ToString(), entity.GetType().Name, entity.Layer);
                 PopulateDirectMetrics(entity, snapshot);
                 PopulateRuntimeMetadata(entity, snapshot);
                 PopulateXData(entity, snapshot);
                 PopulateExtensionDictionary(transaction, entity, snapshot);
                 PopulateProxyExplodeMetrics(entity, snapshot);
-                result.Add(snapshot);
             }
             catch
             {
                 // One malformed/proprietary object must not prevent probing the rest of a legacy drawing.
+                return;
             }
+
+            var snapshotBytes = EstimateRetainedSnapshotBytes(snapshot);
+            if (snapshotBytes > MaxRetainedSnapshotBudgetBytes ||
+                retainedSnapshotBytes > MaxRetainedSnapshotBudgetBytes - snapshotBytes)
+                throw new InvalidOperationException(
+                    "BLT legacy scan exceeds guarded retained snapshot budget of " +
+                    MaxRetainedSnapshotBudgetBytes.ToString(CultureInfo.InvariantCulture) + " bytes.");
+            retainedSnapshotBytes += snapshotBytes;
+            result.Add(snapshot);
+        }
+
+        private static long EstimateRetainedSnapshotBytes(EntitySnapshot snapshot)
+        {
+            long total = EstimatedSnapshotOverheadBytes;
+            total = AddEstimatedBytes(total, Encoding.UTF8.GetByteCount(snapshot.Handle ?? string.Empty));
+            total = AddEstimatedBytes(total, Encoding.UTF8.GetByteCount(snapshot.EntityType ?? string.Empty));
+            total = AddEstimatedBytes(total, Encoding.UTF8.GetByteCount(snapshot.Layer ?? string.Empty));
+            foreach (var pair in snapshot.Metadata)
+            {
+                total = AddEstimatedBytes(total, EstimatedMetadataEntryOverheadBytes);
+                total = AddEstimatedBytes(total, Encoding.UTF8.GetByteCount(pair.Key ?? string.Empty));
+                total = AddEstimatedBytes(total, Encoding.UTF8.GetByteCount(pair.Value ?? string.Empty));
+            }
+            return total;
+        }
+
+        private static long AddEstimatedBytes(long current, long addition)
+        {
+            if (addition < 0 || current > MaxRetainedSnapshotBudgetBytes - addition)
+                return MaxRetainedSnapshotBudgetBytes + 1L;
+            return current + addition;
         }
 
         private static void PopulateDirectMetrics(Entity entity, EntitySnapshot snapshot)
@@ -398,10 +435,13 @@ namespace QS3D.BricsCAD.V25
                     try
                     {
                         var record = transaction.GetObject(entry.Value, OpenMode.ForRead, false) as Xrecord;
-                        if (record != null && record.Data != null)
+                        if (record != null)
                         {
                             using (var data = record.Data)
-                                PutTypedValues(snapshot, prefix + ".Data", data.AsArray());
+                            {
+                                if (data != null)
+                                    PutTypedValues(snapshot, prefix + ".Data", data.AsArray());
+                            }
                         }
                     }
                     catch { }
@@ -515,70 +555,106 @@ namespace QS3D.BricsCAD.V25
 
     internal static class BltLegacyProbeReport
     {
+        private const long MaxProbeReportBytes = 64L * 1024L * 1024L;
+        private static readonly UTF8Encoding Utf8NoBom = new UTF8Encoding(false);
+
         public static string Write(IReadOnlyList<BltLegacyElementCandidate> candidates)
         {
             if (candidates == null) throw new ArgumentNullException(nameof(candidates));
             var directory = Path.Combine(Path.GetTempPath(), "QS3D-BLT-Probe");
             Directory.CreateDirectory(directory);
             var path = Path.Combine(directory, "qs3d-blt-probe-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture) + ".json");
-            File.WriteAllText(path, Serialize(candidates), new UTF8Encoding(false));
-            return path;
+            var tempPath = path + ".partial-" + Guid.NewGuid().ToString("N");
+            var published = false;
+            try
+            {
+                using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, FileOptions.SequentialScan))
+                using (var writer = new StreamWriter(stream, Utf8NoBom, 65536))
+                {
+                    long bytesWritten = 0;
+                    WriteJson(writer, candidates, ref bytesWritten);
+                    writer.Flush();
+                    stream.Flush();
+                }
+
+                File.Move(tempPath, path);
+                published = true;
+                return path;
+            }
+            catch
+            {
+                throw;
+            }
+            finally
+            {
+                if (!published && File.Exists(tempPath))
+                {
+                    try { File.Delete(tempPath); }
+                    catch { }
+                }
+            }
         }
 
-        private static string Serialize(IReadOnlyList<BltLegacyElementCandidate> candidates)
+        private static void WriteJson(StreamWriter writer, IReadOnlyList<BltLegacyElementCandidate> candidates, ref long bytesWritten)
         {
-            var builder = new StringBuilder();
-            builder.Append("{\n  \"schema\": \"QS3D_BLT_LEGACY_PROBE_V1\",\n  \"objects\": [\n");
+            WritePart(writer, "{\n  \"schema\": \"QS3D_BLT_LEGACY_PROBE_V1\",\n  \"objects\": [\n", ref bytesWritten);
             for (var index = 0; index < candidates.Count; index++)
             {
-                if (index > 0) builder.Append(",\n");
+                if (index > 0) WritePart(writer, ",\n", ref bytesWritten);
                 var item = candidates[index];
-                builder.Append("    {\n");
-                Property(builder, "handle", item.Snapshot.Handle, true, 6);
-                Property(builder, "entityType", item.Snapshot.EntityType, true, 6);
-                Property(builder, "layer", item.Snapshot.Layer, true, 6);
-                Property(builder, "legacySignal", item.HasLegacySignal ? "true" : "false", true, 6, true);
-                Property(builder, "category", item.Category.HasValue ? item.Category.Value.ToString() : string.Empty, true, 6);
-                Property(builder, "categoryEvidence", item.CategoryEvidence, true, 6);
-                Property(builder, "evidenceMode", item.EvidenceMode.ToString(), true, 6);
-                Property(builder, "canImport", item.CanImport ? "true" : "false", true, 6, true);
-                NumberProperty(builder, "lengthDrawingUnits", item.Snapshot.LengthDrawingUnits, true, 6);
-                NumberProperty(builder, "areaDrawingUnitsSquared", item.Snapshot.AreaDrawingUnitsSquared, true, 6);
-                NumberProperty(builder, "surfaceAreaDrawingUnitsSquared", item.Snapshot.SurfaceAreaDrawingUnitsSquared, true, 6);
-                NumberProperty(builder, "volumeDrawingUnitsCubed", item.Snapshot.VolumeDrawingUnitsCubed, true, 6);
-                NumberProperty(builder, "legacyConcreteM3", item.LegacyConcreteM3, true, 6);
-                NumberProperty(builder, "legacyFormworkM2", item.LegacyFormworkM2, true, 6);
-                Property(builder, "reason", item.Reason, true, 6);
-                builder.Append("      \"metadata\": {\n");
+                WritePart(writer, "    {\n", ref bytesWritten);
+                Property(writer, "handle", item.Snapshot.Handle, true, 6, ref bytesWritten);
+                Property(writer, "entityType", item.Snapshot.EntityType, true, 6, ref bytesWritten);
+                Property(writer, "layer", item.Snapshot.Layer, true, 6, ref bytesWritten);
+                Property(writer, "legacySignal", item.HasLegacySignal ? "true" : "false", true, 6, ref bytesWritten, true);
+                Property(writer, "category", item.Category.HasValue ? item.Category.Value.ToString() : string.Empty, true, 6, ref bytesWritten);
+                Property(writer, "categoryEvidence", item.CategoryEvidence, true, 6, ref bytesWritten);
+                Property(writer, "evidenceMode", item.EvidenceMode.ToString(), true, 6, ref bytesWritten);
+                Property(writer, "canImport", item.CanImport ? "true" : "false", true, 6, ref bytesWritten, true);
+                NumberProperty(writer, "lengthDrawingUnits", item.Snapshot.LengthDrawingUnits, true, 6, ref bytesWritten);
+                NumberProperty(writer, "areaDrawingUnitsSquared", item.Snapshot.AreaDrawingUnitsSquared, true, 6, ref bytesWritten);
+                NumberProperty(writer, "surfaceAreaDrawingUnitsSquared", item.Snapshot.SurfaceAreaDrawingUnitsSquared, true, 6, ref bytesWritten);
+                NumberProperty(writer, "volumeDrawingUnitsCubed", item.Snapshot.VolumeDrawingUnitsCubed, true, 6, ref bytesWritten);
+                NumberProperty(writer, "legacyConcreteM3", item.LegacyConcreteM3, true, 6, ref bytesWritten);
+                NumberProperty(writer, "legacyFormworkM2", item.LegacyFormworkM2, true, 6, ref bytesWritten);
+                Property(writer, "reason", item.Reason, true, 6, ref bytesWritten);
+                WritePart(writer, "      \"metadata\": {\n", ref bytesWritten);
                 var metadata = item.Snapshot.Metadata.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase).ToList();
                 for (var metadataIndex = 0; metadataIndex < metadata.Count; metadataIndex++)
                 {
                     var pair = metadata[metadataIndex];
-                    builder.Append("        \"").Append(Escape(pair.Key)).Append("\": \"").Append(Escape(pair.Value)).Append("\"");
-                    if (metadataIndex + 1 < metadata.Count) builder.Append(',');
-                    builder.Append('\n');
+                    WritePart(writer, "        \"" + Escape(pair.Key) + "\": \"" + Escape(pair.Value) + "\"", ref bytesWritten);
+                    if (metadataIndex + 1 < metadata.Count) WritePart(writer, ",", ref bytesWritten);
+                    WritePart(writer, "\n", ref bytesWritten);
                 }
-                builder.Append("      }\n    }");
+                WritePart(writer, "      }\n    }", ref bytesWritten);
             }
-            builder.Append("\n  ]\n}\n");
-            return builder.ToString();
+            WritePart(writer, "\n  ]\n}\n", ref bytesWritten);
         }
 
-        private static void Property(StringBuilder builder, string name, string value, bool comma, int indent, bool raw = false)
+        private static void Property(StreamWriter writer, string name, string value, bool comma, int indent, ref long bytesWritten, bool raw = false)
         {
-            builder.Append(' ', indent).Append('"').Append(name).Append("\": ");
-            if (raw) builder.Append(value);
-            else builder.Append('"').Append(Escape(value ?? string.Empty)).Append('"');
-            if (comma) builder.Append(',');
-            builder.Append('\n');
+            var text = new string(' ', indent) + "\"" + name + "\": " +
+                (raw ? value : "\"" + Escape(value ?? string.Empty) + "\"") +
+                (comma ? "," : string.Empty) + "\n";
+            WritePart(writer, text, ref bytesWritten);
         }
 
-        private static void NumberProperty(StringBuilder builder, string name, double? value, bool comma, int indent)
+        private static void NumberProperty(StreamWriter writer, string name, double? value, bool comma, int indent, ref long bytesWritten)
         {
-            builder.Append(' ', indent).Append('"').Append(name).Append("\": ");
-            builder.Append(value.HasValue ? value.Value.ToString("R", CultureInfo.InvariantCulture) : "null");
-            if (comma) builder.Append(',');
-            builder.Append('\n');
+            var text = new string(' ', indent) + "\"" + name + "\": " +
+                (value.HasValue ? value.Value.ToString("R", CultureInfo.InvariantCulture) : "null") +
+                (comma ? "," : string.Empty) + "\n";
+            WritePart(writer, text, ref bytesWritten);
+        }
+
+        private static void WritePart(StreamWriter writer, string value, ref long bytesWritten)
+        {
+            var byteCount = Utf8NoBom.GetByteCount(value ?? string.Empty);
+            if (byteCount > MaxProbeReportBytes || bytesWritten > MaxProbeReportBytes - byteCount)
+                throw new InvalidOperationException("BLT legacy probe report exceeds guarded output limit of " + MaxProbeReportBytes.ToString(CultureInfo.InvariantCulture) + " bytes.");
+            writer.Write(value);
+            bytesWritten += byteCount;
         }
 
         private static string Escape(string value)
