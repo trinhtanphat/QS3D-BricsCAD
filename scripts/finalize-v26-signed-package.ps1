@@ -139,13 +139,26 @@ finally {
         $generatedStream = $null
     }
 
-    # A successful main operation still fails closed if the transient leaf was
-    # replaced by a container/reparse object before cleanup. When a primary
-    # generation/finalization failure is already propagating, do not replace it
-    # with a secondary cleanup diagnostic; the overall operation is already
-    # failing closed. The repository-root contract keeps final unlink best-effort.
-    if ($null -eq $primaryFailure -and (Test-Path -LiteralPath $tempScript)) {
-        [void](Resolve-OrdinaryNonReparseFile -Path $tempScript -Label 'Generated V26 finalizer cleanup script')
+    # Successful finalization has a strict cleanup contract: re-admit the leaf,
+    # unlink it, and prove the canonical temp pathname is gone. The repository-
+    # root compatibility token uses SilentlyContinue only for the Remove-Item
+    # call; the postcondition below converts any hidden unlink failure back into
+    # a release-safety failure. If a primary failure is already propagating,
+    # cleanup is best-effort and cannot replace that primary evidence.
+    if ($null -eq $primaryFailure) {
+        if (Test-Path -LiteralPath $tempScript) {
+            [void](Resolve-OrdinaryNonReparseFile -Path $tempScript -Label 'Generated V26 finalizer cleanup script')
+            if (Test-Path -LiteralPath $tempScript) { Remove-Item -LiteralPath $tempScript -Force -ErrorAction SilentlyContinue }
+            if (Test-Path -LiteralPath $tempScript) { throw 'Generated V26 finalizer cleanup did not remove the admitted transient script.' }
+        }
     }
-    if (Test-Path -LiteralPath $tempScript) { Remove-Item -LiteralPath $tempScript -Force -ErrorAction SilentlyContinue }
+    else {
+        try {
+            if (Test-Path -LiteralPath $tempScript) { Remove-Item -LiteralPath $tempScript -Force -ErrorAction SilentlyContinue }
+        }
+        catch {
+            # Preserve the primary transformer/finalizer failure; this branch is
+            # already fail-closed and cleanup is only secondary evidence.
+        }
+    }
 }
