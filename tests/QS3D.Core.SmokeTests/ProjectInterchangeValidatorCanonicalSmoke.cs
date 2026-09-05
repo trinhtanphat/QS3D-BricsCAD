@@ -111,6 +111,8 @@ namespace QS3D.Core.SmokeTests
             child.SetProperty("Mark", "B-01");
             child.SetQuantity("Count", 2d);
             project.Elements.Add(child);
+
+            project.UpdatedUtc = new DateTime(2026, 8, 10, 10, 0, 0, DateTimeKind.Utc);
             return ProjectInterchangeJsonExporter.Build(project);
         }
     }

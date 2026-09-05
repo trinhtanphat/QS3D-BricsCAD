@@ -21,9 +21,10 @@ namespace QS3D.Core.SmokeTests
             var project = BuildProject();
             var store = new SemanticDocumentationCatalogStore();
 
-            Equal(0L, project.ChangeVersion);
+            var baseline = project.ChangeVersion;
+            Equal(4L, baseline);
             store.Save(project, new[] { BuildView() }, new[] { BuildSheet() });
-            Equal(1L, project.ChangeVersion);
+            Equal(baseline + 1L, project.ChangeVersion);
             True(project.Metadata.ContainsKey(SemanticDocumentationCatalogStore.MetadataKey));
 
             var version = project.ChangeVersion;

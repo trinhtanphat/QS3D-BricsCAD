@@ -12,7 +12,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             RejectsUnrelatedDuplicateFloors();
-            RejectsUnrelatedNullFloor();
+            RejectsNullFloorAtCatalogBoundary();
             PreservesValidFloorPlacement();
             PreservesLegacyFallbackWithoutLevelMetadata();
         }
@@ -26,12 +26,19 @@ namespace QS3D.Core.SmokeTests
             AssertReadOnlyRejection(project, element, "Project contains duplicate floor id: other.");
         }
 
-        private static void RejectsUnrelatedNullFloor()
+        private static void RejectsNullFloorAtCatalogBoundary()
         {
             var project = CreateProjectWithLevels();
-            project.Floors.Add(null!);
-            var element = LevelElement();
-            AssertReadOnlyRejection(project, element, "Project floor collection contains a null floor.");
+            var floorCount = project.Floors.Count;
+            var changeVersion = project.ChangeVersion;
+            var updatedUtc = project.UpdatedUtc;
+
+            ThrowsArgumentNull(() => project.Floors.Add(null!));
+
+            if (project.Floors.Count != floorCount ||
+                project.ChangeVersion != changeVersion ||
+                project.UpdatedUtc != updatedUtc)
+                throw new InvalidOperationException("Null Floor structural rejection must remain read-only.");
         }
 
         private static void AssertReadOnlyRejection(ProjectState project, ProjectElement element, string expectedMessage)
@@ -105,6 +112,21 @@ namespace QS3D.Core.SmokeTests
                 return;
             }
             throw new InvalidOperationException("Expected vertical placement to reject malformed Floor identity state.");
+        }
+
+        private static void ThrowsArgumentNull(Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (ArgumentNullException ex)
+            {
+                if (!string.Equals(ex.ParamName, "item", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Unexpected null Floor rejection parameter.", ex);
+                return;
+            }
+            throw new InvalidOperationException("Expected the Floor catalog boundary to reject a null entry.");
         }
     }
 }
