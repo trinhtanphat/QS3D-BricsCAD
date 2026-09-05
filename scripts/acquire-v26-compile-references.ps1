@@ -382,14 +382,49 @@ try {
         New-Item -ItemType Directory -Path $extract | Out-Null
 
         $msiLog = Join-Path ([IO.Path]::GetTempPath()) ('qs3d-v26-admin-' + [Guid]::NewGuid().ToString('N') + '.log')
+        $executionMsi = Join-Path ([IO.Path]::GetTempPath()) ('qs3d-v26-execution-' + [Guid]::NewGuid().ToString('N') + '.msi')
+        $executionStream = $null
         try {
-            $arguments = @('/a', ('"' + $admission.Path + '"'), '/qn', ('TARGETDIR="' + $extract + '"'), 'REBOOT=ReallySuppress', '/L*v', ('"' + $msiLog + '"'))
-            Write-Host 'Starting BricsCAD V26 MSI administrative extraction (15-minute timeout).'
+            Assert-NoExistingReparseComponent -Path $executionMsi -Label 'V26 MSI execution copy path'
+            $executionStream = [IO.File]::Open(
+                $executionMsi,
+                [IO.FileMode]::CreateNew,
+                [IO.FileAccess]::Write,
+                [IO.FileShare]::None
+            )
+            $admission.Stream.Position = 0
+            $admission.Stream.CopyTo($executionStream)
+            $executionStream.Flush($true)
+            $executionStream.Dispose()
+            $executionStream = $null
+            $admission.Stream.Position = 0
+
+            $executionFileBefore = Get-OrdinaryFileOrNull -Path $executionMsi -Label 'V26 MSI execution copy before administrative extraction'
+            if ($null -eq $executionFileBefore -or [int64]$executionFileBefore.Length -ne [int64]$admission.Length) {
+                throw 'V26 execution MSI length mismatch before administrative extraction.'
+            }
+            $executionHashBefore = (Get-FileHash -LiteralPath $executionMsi -Algorithm SHA256 -ErrorAction Stop).Hash.ToUpperInvariant()
+            if (-not [string]::Equals($executionHashBefore, [string]$admission.Sha256, [StringComparison]::Ordinal)) {
+                throw 'V26 execution MSI SHA-256 mismatch before administrative extraction.'
+            }
+
+            $arguments = @('/a', ('"' + $executionMsi + '"'), '/qn', ('TARGETDIR="' + $extract + '"'), 'REBOOT=ReallySuppress', '/L*v', ('"' + $msiLog + '"'))
+            Write-Host 'Starting BricsCAD V26 MSI administrative extraction (15-minute timeout) from digest-verified execution copy.'
             $process = Start-Process -FilePath msiexec.exe -ArgumentList $arguments -PassThru
             if (-not $process.WaitForExit(900000)) {
                 & taskkill.exe /PID $process.Id /T /F | Out-Null
                 throw 'BricsCAD V26 MSI administrative extraction timed out after 15 minutes; owned process tree termination was requested.'
             }
+
+            $executionFileAfter = Get-OrdinaryFileOrNull -Path $executionMsi -Label 'V26 MSI execution copy after administrative extraction'
+            if ($null -eq $executionFileAfter -or [int64]$executionFileAfter.Length -ne [int64]$admission.Length) {
+                throw 'V26 execution MSI length mismatch after administrative extraction.'
+            }
+            $executionHashAfter = (Get-FileHash -LiteralPath $executionMsi -Algorithm SHA256 -ErrorAction Stop).Hash.ToUpperInvariant()
+            if (-not [string]::Equals($executionHashAfter, [string]$admission.Sha256, [StringComparison]::Ordinal)) {
+                throw 'V26 execution MSI SHA-256 mismatch after administrative extraction.'
+            }
+
             if ($process.ExitCode -notin @(0, 3010)) {
                 $completeReferenceDirAfter1603 = ''
                 if ($process.ExitCode -eq 1603) {
@@ -405,7 +440,11 @@ try {
             }
             Assert-HeldInstallerStable -Held $admission -Phase 'after administrative extraction'
         }
-        finally { Remove-Item -LiteralPath $msiLog -Force -ErrorAction SilentlyContinue }
+        finally {
+            if ($null -ne $executionStream) { $executionStream.Dispose() }
+            Remove-Item -LiteralPath $msiLog -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $executionMsi -Force -ErrorAction SilentlyContinue
+        }
 
         $bricsDir = Get-CompleteV26ReferenceDirectory -Root $extract
         if ([string]::IsNullOrWhiteSpace([string]$bricsDir)) {
