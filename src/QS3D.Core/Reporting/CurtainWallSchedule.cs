@@ -37,14 +37,23 @@ namespace QS3D.Core.Reporting
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             ReportingProjectIdentityGuard.RequireUniqueElementIds(project, "Curtain wall schedule");
-            var floors = project.Floors.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
-            var families = project.Families.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
+
+            var reportVersion = project.ChangeVersion;
+            var elementInstances = project.Elements.ToList();
+            var floorInstances = project.Floors.ToList();
+            var familyInstances = project.Families.ToList();
+            var drawingFingerprint = project.DrawingFingerprint;
+            EnsureProjectRevision(project, reportVersion, elementInstances, floorInstances, familyInstances, drawingFingerprint);
+
+            var floors = floorInstances.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
+            var families = familyInstances.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
             var rows = new Dictionary<string, CurtainWallScheduleRow>(StringComparer.OrdinalIgnoreCase);
             var accumulators = new Dictionary<string, CurtainWallAggregateState>(StringComparer.OrdinalIgnoreCase);
             var order = new List<string>();
 
-            foreach (var element in project.Elements.Where(x => x.Category == ElementCategory.GlassWall).OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
+            foreach (var element in elementInstances.Where(x => x.Category == ElementCategory.GlassWall).OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
+                EnsureProjectRevision(project, reportVersion, elementInstances, floorInstances, familyInstances, drawingFingerprint);
                 var floorId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FloorId);
                 var familyId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FamilyId);
                 var floor = floors.TryGetValue(floorId, out var floorName) ? floorName : floorId;
@@ -66,7 +75,7 @@ namespace QS3D.Core.Reporting
                     row = new CurtainWallScheduleRow
                     {
                         ProjectId = project.ProjectId,
-                        DrawingFingerprint = project.DrawingFingerprint,
+                        DrawingFingerprint = drawingFingerprint,
                         Floor = floor,
                         FamilyName = family
                     };
@@ -92,8 +101,10 @@ namespace QS3D.Core.Reporting
                 row.MaximumClearPanelHeightM = Math.Max(row.MaximumClearPanelHeightM, maximumClearPanelHeightM);
                 row.ElementIds.Add(element.Id);
                 ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
+                EnsureProjectRevision(project, reportVersion, elementInstances, floorInstances, familyInstances, drawingFingerprint);
             }
 
+            EnsureProjectRevision(project, reportVersion, elementInstances, floorInstances, familyInstances, drawingFingerprint);
             foreach (var key in order)
             {
                 var row = rows[key];
@@ -107,7 +118,33 @@ namespace QS3D.Core.Reporting
                 if (row.MinimumClearPanelWidthM == double.MaxValue) row.MinimumClearPanelWidthM = 0d;
                 if (row.MinimumClearPanelHeightM == double.MaxValue) row.MinimumClearPanelHeightM = 0d;
             }
+            EnsureProjectRevision(project, reportVersion, elementInstances, floorInstances, familyInstances, drawingFingerprint);
             return order.Select(x => rows[x]).ToList().AsReadOnly();
+        }
+
+        private static void EnsureProjectRevision(
+            ProjectState project,
+            long expectedVersion,
+            IReadOnlyList<ProjectElement> elements,
+            IReadOnlyList<FloorDefinition> floors,
+            IReadOnlyList<ProjectFamily> families,
+            string drawingFingerprint)
+        {
+            if (project.ChangeVersion != expectedVersion ||
+                !string.Equals(project.DrawingFingerprint, drawingFingerprint, StringComparison.Ordinal) ||
+                !SameInstances(project.Elements, elements) ||
+                !SameInstances(project.Floors, floors) ||
+                !SameInstances(project.Families, families))
+                throw new InvalidOperationException(
+                    "Project changed while the curtain wall schedule was being built; recompute the schedule against the current project state.");
+        }
+
+        private static bool SameInstances<T>(IList<T> current, IReadOnlyList<T> snapshot) where T : class
+        {
+            if (current.Count != snapshot.Count) return false;
+            for (var index = 0; index < current.Count; index++)
+                if (!ReferenceEquals(current[index], snapshot[index])) return false;
+            return true;
         }
 
         private static void RequireClearPanelEnvelope(
