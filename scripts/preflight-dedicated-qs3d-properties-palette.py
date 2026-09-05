@@ -134,7 +134,7 @@ for token in (
     "familyPane.RowDefinitions[2].Height = new GridLength(0);",
     "PropertyList.MinHeight = 0;",
     "familyPane.RowDefinitions[2].Height = new GridLength(44, GridUnitType.Star);",
-    "PropertyList.MinHeight = 120;",
+    "familyPane.RowDefinitions[2].MinHeight = 120;",
 ):
     if token not in layout:
         errors.append("embedded/optional-dedicated layout contract missing: " + token)

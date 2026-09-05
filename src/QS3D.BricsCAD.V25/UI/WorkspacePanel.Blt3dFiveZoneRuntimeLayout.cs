@@ -197,7 +197,9 @@ namespace QS3D.BricsCAD.V25.UI
                         splitter.Visibility = Visibility.Visible;
 
                     FamilyList.MinHeight = 100;
-                    PropertyList.MinHeight = 120;
+                    // The pane minimum includes its title, scope and search controls.
+                    // Let the inner scroll viewport fit the space left by those controls.
+                    PropertyList.MinHeight = 0;
                 }
             }
         }
