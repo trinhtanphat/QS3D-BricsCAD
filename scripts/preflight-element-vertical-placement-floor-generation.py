@@ -34,8 +34,10 @@ if "FindFloor(project," in text:
 hosted_start = text.index("public static HostedOpeningVerticalPlacement ResolveHostedOpening(\n            ProjectState project,\n            ProjectElement host,")
 hosted_end = text.index("public static HostedOpeningVerticalPlacement ResolveHostedOpening(\n            ProjectState project,\n            ElementVerticalPlacement hostPlacement,", hosted_start)
 hosted_block = text[hosted_start:hosted_end]
-if "IReadOnlyDictionary<string, double> floorGeneration = null;" not in hosted_block:
-    fail("hosted opening resolution must hold one optional shared floor generation")
+if "IReadOnlyDictionary<string, double>? floorGeneration = null;" not in hosted_block:
+    fail("hosted opening resolution must model its optional shared floor generation as nullable")
+if text.count("IReadOnlyDictionary<string, double>? floorGeneration") < 3:
+    fail("all optional floor-generation holders/parameters must use the nullable reference contract")
 if hosted_block.count("floorGeneration = CaptureFloorGeneration(project);") < 2:
     fail("hosted opening resolution must capture the shared floor generation for whichever participant first needs Level lookup")
 if "var hostPlacement = ResolveCore(" not in hosted_block:
@@ -49,4 +51,4 @@ if "ResolveCore(" not in text:
 if "floorGeneration ?? CaptureFloorGeneration(project)" not in text:
     fail("single-element resolution must capture lazily while hosted resolution may supply its shared generation")
 
-print("PASS: vertical placement and hosted openings resolve levels from one fenced floor generation")
+print("PASS: vertical placement and hosted openings resolve levels from one nullable fenced floor generation")
