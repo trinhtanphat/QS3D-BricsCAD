@@ -105,7 +105,12 @@ def main() -> int:
         )
         for token in tokens:
             check(token in text, "atomic signed-finalizer contract missing: " + token)
-        check("Remove-Item -LiteralPath $zip -Force" not in text, "atomic publication must not delete the published ZIP")
+        zip_remove = text.find("Remove-Item -LiteralPath $zip -Force")
+        rollback_marker = text.find("$originalError = $_")
+        check(
+            zip_remove < 0 or (rollback_marker >= 0 and rollback_marker < zip_remove),
+            "atomic publication may delete PackageZip only during rollback",
+        )
         existing = (approval,) + tuple(text.find(token) for token in tokens[:9:1] if token != "[IO.File]::Move($tempZip, $zip)")
         check(min(existing) >= 0 and list(existing) == sorted(existing), "atomic publication order drift")
         verify = text.find("Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package")
