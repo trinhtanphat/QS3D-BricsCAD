@@ -18,6 +18,7 @@ def validate(text: str) -> list[str]:
     errors: list[str] = []
     required = (
         "function Publish-AdmittedV26Installer",
+        "rejected cached V26 MSI is left untouched because safe replacement requires a fresh canonical destination",
         "[IO.FileMode]::CreateNew",
         "$Candidate.Stream.Position = 0",
         "$Candidate.Stream.CopyTo($destination)",
@@ -26,6 +27,7 @@ def validate(text: str) -> list[str]:
         "published V26 MSI digest does not match admitted staged generation",
         "published V26 MSI product identity does not match admitted staged generation",
         "published V26 MSI signer does not match admitted staged generation",
+        "V26 MSI publication failed after canonical destination creation; leaving the destination untouched for fail-closed re-admission",
         "$admission = Publish-AdmittedV26Installer -Candidate $candidateAdmission -Destination $msi",
     )
     for token in required:
@@ -35,33 +37,17 @@ def validate(text: str) -> list[str]:
     forbidden = (
         "$candidateAdmission.Stream.Dispose()\n                $candidateAdmission = $null\n                [IO.File]::Move($staging, $msi)",
         "Remove-Item -LiteralPath $existing.FullName -Force",
+        "Remove-Item -LiteralPath $cached.FullName -Force",
+        "Remove-Item -LiteralPath $ordinary.FullName -Force",
         "[IO.File]::Move($staging, $msi)",
     )
     for token in forbidden:
         if token in text:
-            errors.append(f"V26 MSI publication retains unbound pathname publication token: {token}")
+            errors.append(f"V26 MSI publication retains unbound/destructive pathname token: {token}")
 
-    before(
-        text,
-        "$Candidate.Stream.Position = 0",
-        "$Candidate.Stream.CopyTo($destination)",
-        "rewind held admitted stream before publication copy",
-        errors,
-    )
-    before(
-        text,
-        "$Candidate.Stream.CopyTo($destination)",
-        "$destination.Flush($true)",
-        "held byte copy before durable flush",
-        errors,
-    )
-    before(
-        text,
-        "$destination.Flush($true)",
-        "Get-SingleV26InstallerAdmission -Path $Destination -Expected $Candidate.Sha256",
-        "durable publication before destination re-admission",
-        errors,
-    )
+    before(text, "$Candidate.Stream.Position = 0", "$Candidate.Stream.CopyTo($destination)", "rewind held admitted stream before publication copy", errors)
+    before(text, "$Candidate.Stream.CopyTo($destination)", "$destination.Flush($true)", "held byte copy before durable flush", errors)
+    before(text, "$destination.Flush($true)", "Get-SingleV26InstallerAdmission -Path $Destination -Expected $Candidate.Sha256", "durable publication before destination re-admission", errors)
     return errors
 
 
@@ -77,6 +63,8 @@ def main() -> int:
         "durable flush": text.replace("$destination.Flush($true)", "$destination.Flush()", 1),
         "post-publication admission": text.replace("Get-SingleV26InstallerAdmission -Path $Destination -Expected $Candidate.Sha256", "$null", 1),
         "digest parity": text.replace("published V26 MSI digest does not match admitted staged generation", "digest ignored", 1),
+        "rejected-cache fail closed": text.replace("rejected cached V26 MSI is left untouched because safe replacement requires a fresh canonical destination", "cached MSI removed", 1),
+        "failed-publication fail closed": text.replace("V26 MSI publication failed after canonical destination creation; leaving the destination untouched for fail-closed re-admission", "failed destination removed", 1),
     }
     for label, mutated in probes.items():
         if not validate(mutated):
