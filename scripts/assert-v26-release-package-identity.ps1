@@ -294,7 +294,10 @@ function Get-HeldAssemblyVersion {
     }
     finally {
         try { $process.StandardInput.Close() } catch { }
-        if (-not $process.HasExited) { try { $process.Kill() } catch { } }
+        try {
+            if (-not $process.HasExited) { $process.Kill() }
+        }
+        catch { }
         $process.Dispose()
         $Held.Stream.Position = 0
     }
