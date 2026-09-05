@@ -1,12 +1,29 @@
 #!/usr/bin/env python3
 import hashlib
+import subprocess
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 publisher_path = root / "scripts" / "publish-v26-release.ps1"
-gitmodules_path = root / ".gitmodules"
 publisher = publisher_path.read_text(encoding="utf-8")
-gitmodules = gitmodules_path.read_bytes()
+
+# Read the exact Git blob, not checkout-materialized bytes. Windows runners can
+# materialize tracked LF text as CRLF depending on Git checkout configuration;
+# hashing the working tree would make this release gate platform-dependent even
+# when HEAD is identical.
+tracked_gitmodules = subprocess.run(
+    ["git", "cat-file", "blob", "HEAD:.gitmodules"],
+    cwd=root,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    check=False,
+)
+if tracked_gitmodules.returncode != 0:
+    raise SystemExit(
+        "V26 .gitmodules release binding could not read exact tracked blob: "
+        + tracked_gitmodules.stderr.decode("utf-8", errors="replace").strip()
+    )
+gitmodules = tracked_gitmodules.stdout
 
 # This reviewed fingerprint deliberately lives in scripts/. The publisher's
 # final protected-main drift classifier already treats scripts/ as release-
