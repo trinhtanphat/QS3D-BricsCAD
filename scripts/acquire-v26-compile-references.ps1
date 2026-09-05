@@ -4,6 +4,7 @@ param(
     [string]$ExtractDir = '',
     [string]$ExpectedSha256 = '',
     [Parameter(Mandatory = $true)][string]$PrimaryUrl,
+    [switch]$UsePinnedHttpMirror,
     [string]$FallbackUrl = '',
     [switch]$ExtractReferences
 )
@@ -67,6 +68,22 @@ function Assert-SafeHttpsUrl {
         throw "$Label must not contain embedded credentials or a fragment."
     }
     return $uri
+}
+
+function Assert-PinnedV26HttpMirrorUrl {
+    $expectedMirror = 'http://103.9.157.20/BricsCAD-V26.2.07-1-en_US(x64).msi'
+    $uri = $null
+    if (-not [Uri]::TryCreate($expectedMirror, [UriKind]::Absolute, [ref]$uri) -or
+        $uri.Scheme -ne 'http' -or
+        $uri.Host -ne '103.9.157.20' -or
+        $uri.Port -ne 80 -or
+        -not [string]::Equals($uri.AbsolutePath, '/BricsCAD-V26.2.07-1-en_US(x64).msi', [StringComparison]::Ordinal) -or
+        -not [string]::IsNullOrEmpty($uri.Query) -or
+        -not [string]::IsNullOrEmpty($uri.UserInfo) -or
+        -not [string]::IsNullOrEmpty($uri.Fragment)) {
+        throw 'The built-in V26 HTTP mirror identity is invalid.'
+    }
+    return $expectedMirror
 }
 
 function Open-AdmittedV26Installer {
@@ -211,6 +228,10 @@ if ($null -eq $admission) {
     if (-not [string]::IsNullOrWhiteSpace($PrimaryUrl)) {
         [void](Assert-SafeHttpsUrl -Url $PrimaryUrl -Label 'PrimaryUrl')
         $candidates += [pscustomobject]@{ Name = 'canonical-public'; Url = $PrimaryUrl }
+    }
+    if ($UsePinnedHttpMirror) {
+        $pinnedMirror = Assert-PinnedV26HttpMirrorUrl
+        $candidates += [pscustomobject]@{ Name = 'pinned-http-mirror'; Url = $pinnedMirror }
     }
     if (-not [string]::IsNullOrWhiteSpace($FallbackUrl)) {
         [void](Assert-SafeHttpsUrl -Url $FallbackUrl -Label 'FallbackUrl')
