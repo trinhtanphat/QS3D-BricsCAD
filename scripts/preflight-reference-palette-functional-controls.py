@@ -41,7 +41,8 @@ def main() -> int:
         "Grid.SetColumn(familyPane, 2);",
         "familyPane.Visibility = Visibility.Visible;",
         "FamilyList.MinHeight = 100;",
-        "PropertyList.MinHeight = 120;",
+        "familyPane.RowDefinitions[2].MinHeight = 120;",
+        "PropertyList.MinHeight = 0;",
     ):
         require(runtime, needle, "owner reference two-left-pane runtime layout")
 
