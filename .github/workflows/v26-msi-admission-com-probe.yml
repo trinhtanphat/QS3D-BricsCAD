@@ -1,0 +1,42 @@
+name: TEMP V26 MSI admission COM lifetime probe
+
+on:
+  push:
+    branches:
+      - agent/gpt56sol-20260906-0629-v26-msi-com-release/issue-5901-v26-msi-com-release
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      BRICSCAD_V26_PINNED_MSI_SHA256: 9330806cf29e1e6b01758191aa3d9e8d301d9d3125470b6d139f78c7772f9740
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Restore exact admitted BricsCAD V26.2.07 installer
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/bricscad/BricsCAD-V26.2.07-x64.msi
+          key: bricscad-v26.2.07-x64-en-us-9330806cf29e1e6b01758191aa3d9e8d301d9d3125470b6d139f78c7772f9740
+          fail-on-cache-miss: true
+
+      - name: Reproduce production admission then administrative extraction
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msi = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad\BricsCAD-V26.2.07-x64.msi'
+          $extract = Join-Path $env:RUNNER_TEMP ('bricscad-v26-admission-com-probe-' + [Guid]::NewGuid().ToString('N'))
+          & .\scripts\acquire-v26-compile-references.ps1 `
+            -MsiPath $msi `
+            -ExtractDir $extract `
+            -ExpectedSha256 $env:BRICSCAD_V26_PINNED_MSI_SHA256 `
+            -PrimaryUrl ' ' `
+            -UsePinnedHttpMirror `
+            -ExtractReferences
