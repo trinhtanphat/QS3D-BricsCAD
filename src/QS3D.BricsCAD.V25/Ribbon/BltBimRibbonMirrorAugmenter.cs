@@ -37,6 +37,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
             if (_initialized) return true;
 
             object? bimPanels = null;
+            var publicationStarted = false;
             try
             {
                 var control = FindRibbonControl();
@@ -70,6 +71,7 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
                 // MÔ HÌNH BIM is an exact owner-reference contract. Remove only QS3D-owned BIM
                 // panels; native/third-party tabs and panels are never touched.
+                publicationStarted = true;
                 RemoveQs3dOwnedBimPanels(bimPanels);
                 foreach (var panel in stagedPanels)
                     Add(bimPanels, panel);
@@ -79,10 +81,10 @@ namespace QS3D.BricsCAD.V25.Ribbon
             }
             catch
             {
-                // A host collection can still fail while publishing a staged panel. Never leave a
-                // partially-published QS3D mirror behind: clean only our owned BIM panels and let a
-                // later initializer attempt rebuild the complete surface.
-                if (bimPanels != null)
+                // Staging failures happen before publicationStarted and must leave the currently
+                // published mirror untouched. Once publication starts, a collection failure must
+                // not leave a partial owned BIM mirror behind.
+                if (publicationStarted && bimPanels != null)
                 {
                     try { RemoveQs3dOwnedBimPanels(bimPanels); } catch { }
                 }
