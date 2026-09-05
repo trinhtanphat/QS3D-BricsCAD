@@ -195,6 +195,26 @@ namespace QS3D.Core.Reporting
             return value;
         }
 
+        private static void RequireClearPanelEnvelope(
+            ProjectElement element,
+            out double minimumWidthM,
+            out double maximumWidthM,
+            out double minimumHeightM,
+            out double maximumHeightM)
+        {
+            minimumWidthM = Q(element, "CurtainMinClearPanelWidthM");
+            maximumWidthM = Q(element, "CurtainMaxClearPanelWidthM");
+            minimumHeightM = Q(element, "CurtainMinClearPanelHeightM");
+            maximumHeightM = Q(element, "CurtainMaxClearPanelHeightM");
+
+            if (minimumWidthM > maximumWidthM)
+                throw new InvalidOperationException(
+                    element.Id + "/CurtainClearPanelWidthM minimum cannot exceed maximum.");
+            if (minimumHeightM > maximumHeightM)
+                throw new InvalidOperationException(
+                    element.Id + "/CurtainClearPanelHeightM minimum cannot exceed maximum.");
+        }
+
         private static string GroupKey(string floorId, string familyId)
         {
             var floor = floorId ?? string.Empty;
@@ -269,14 +289,16 @@ namespace QS3D.Core.Reporting
                 PanelCount = QInt(element, "CurtainPanelCount");
                 VerticalFrameCount = QInt(element, "CurtainVerticalFrameCount");
                 HorizontalFrameCount = QInt(element, "CurtainHorizontalFrameCount");
-                MinimumClearPanelWidthM = Q(element, "CurtainMinClearPanelWidthM");
-                MaximumClearPanelWidthM = Q(element, "CurtainMaxClearPanelWidthM");
-                MinimumClearPanelHeightM = Q(element, "CurtainMinClearPanelHeightM");
-                MaximumClearPanelHeightM = Q(element, "CurtainMaxClearPanelHeightM");
-                if (MinimumClearPanelWidthM > MaximumClearPanelWidthM)
-                    throw new InvalidOperationException(element.Id + "/CurtainClearPanelWidthM minimum cannot exceed maximum.");
-                if (MinimumClearPanelHeightM > MaximumClearPanelHeightM)
-                    throw new InvalidOperationException(element.Id + "/CurtainClearPanelHeightM minimum cannot exceed maximum.");
+                RequireClearPanelEnvelope(
+                    element,
+                    out var minimumClearPanelWidthM,
+                    out var maximumClearPanelWidthM,
+                    out var minimumClearPanelHeightM,
+                    out var maximumClearPanelHeightM);
+                MinimumClearPanelWidthM = minimumClearPanelWidthM;
+                MaximumClearPanelWidthM = maximumClearPanelWidthM;
+                MinimumClearPanelHeightM = minimumClearPanelHeightM;
+                MaximumClearPanelHeightM = maximumClearPanelHeightM;
                 SourceHandles = element.SourceHandles.ToList().AsReadOnly();
             }
 
