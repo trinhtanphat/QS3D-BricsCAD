@@ -8,6 +8,9 @@ namespace QS3D.BricsCAD.V25
     public sealed class AuditCommands
     {
         private static AuditLogWindow? _window;
+        private static AuditLogWindow? _unpublishedCandidate;
+        private static AuditLogWindow? _publicationInFlightCandidate;
+        private static AuditLogWindow? _cleanupInFlightCandidate;
         private static IntPtr _nativeDatabaseIdentity;
 
         [CommandMethod("QS3DAUDIT", CommandFlags.Modal)]
@@ -17,6 +20,14 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
+                if (!PrepareUnpublishedCandidate())
+                {
+                    const string blockedStatus = "Nhật ký thay đổi lỗi: cửa sổ chưa publish trước đó chưa thể đóng an toàn.";
+                    try { document.Editor.WriteMessage("\nQS3DAUDIT: candidate chưa publish trước đó chưa đạt terminal Closed; không mở thêm cửa sổ."); } catch { }
+                    try { PaletteCoordinator.SetStatus(blockedStatus); } catch { }
+                    return;
+                }
+
                 var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
                 if (!PreparePublishedWindow(nativeDatabaseIdentity))
                 {
@@ -38,12 +49,52 @@ namespace QS3D.BricsCAD.V25
 
                 var hasProject = ProjectContextCoordinator.TryGetReadOnly(document, out var project);
                 var candidate = new AuditLogWindow(document);
-                candidate.Closed += (_, __) => ReleasePublishedWindow(candidate);
-                Application.ShowModelessWindow(IntPtr.Zero, candidate, true);
-                if (!candidate.IsLoaded) return;
+                candidate.Closed += (_, __) => ReleaseCandidate(candidate);
+                _unpublishedCandidate = candidate;
+                _publicationInFlightCandidate = candidate;
+                try
+                {
+                    Application.ShowModelessWindow(IntPtr.Zero, candidate, true);
+                }
+                catch (System.Exception)
+                {
+                    if (!CloseUnpublishedCandidate(candidate))
+                    {
+                        const string blockedStatus = "Nhật ký thay đổi lỗi: cửa sổ chưa publish không thể đóng an toàn.";
+                        try { document.Editor.WriteMessage("\nQS3DAUDIT: candidate chưa publish chưa đạt terminal Closed; không mở thêm cửa sổ."); } catch { }
+                        try { PaletteCoordinator.SetStatus(blockedStatus); } catch { }
+                        return;
+                    }
 
-                _window = candidate;
-                _nativeDatabaseIdentity = nativeDatabaseIdentity;
+                    const string showFailure = "Nhật ký thay đổi lỗi: không thể mở nhật ký thay đổi.";
+                    try { document.Editor.WriteMessage("\nQS3DAUDIT error: không thể mở nhật ký thay đổi."); } catch { }
+                    try { PaletteCoordinator.SetStatus(showFailure); } catch { }
+                    return;
+                }
+                finally
+                {
+                    if (ReferenceEquals(_publicationInFlightCandidate, candidate))
+                        _publicationInFlightCandidate = null;
+                }
+
+                if (!candidate.IsLoaded)
+                {
+                    if (!CloseUnpublishedCandidate(candidate))
+                    {
+                        const string blockedStatus = "Nhật ký thay đổi lỗi: cửa sổ chưa publish không thể đóng an toàn.";
+                        try { document.Editor.WriteMessage("\nQS3DAUDIT: candidate chưa publish chưa đạt terminal Closed; không mở thêm cửa sổ."); } catch { }
+                        try { PaletteCoordinator.SetStatus(blockedStatus); } catch { }
+                    }
+                    return;
+                }
+
+                if (candidate.IsLoaded)
+                {
+                    _window = candidate;
+                    _nativeDatabaseIdentity = nativeDatabaseIdentity;
+                    if (ReferenceEquals(_unpublishedCandidate, candidate))
+                        _unpublishedCandidate = null;
+                }
 
                 var status = hasProject
                     ? "Đã mở Nhật ký thay đổi • " + project.AuditEvents.Count + " sự kiện."
@@ -58,6 +109,18 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        private static bool PrepareUnpublishedCandidate()
+        {
+            if (_cleanupInFlightCandidate != null)
+                return false;
+            if (_publicationInFlightCandidate != null)
+                return false;
+
+            var candidate = _unpublishedCandidate;
+            if (candidate == null) return true;
+            return CloseUnpublishedCandidate(candidate);
+        }
+
         private static bool PreparePublishedWindow(IntPtr requestedNativeDatabaseIdentity)
         {
             var published = _window;
@@ -65,34 +128,85 @@ namespace QS3D.BricsCAD.V25
 
             if (!published.IsLoaded)
             {
-                ReleasePublishedWindow(published);
+                ReleaseCandidate(published);
                 return true;
             }
 
             if (_nativeDatabaseIdentity == requestedNativeDatabaseIdentity)
                 return true;
 
+            _cleanupInFlightCandidate = published;
             try
             {
                 published.Close();
             }
             catch
             {
+                if (!published.IsLoaded)
+                {
+                    ReleaseCandidate(published);
+                    return true;
+                }
+
                 return false;
+            }
+            finally
+            {
+                if (ReferenceEquals(_cleanupInFlightCandidate, published))
+                    _cleanupInFlightCandidate = null;
             }
 
             if (published.IsLoaded)
                 return false;
 
-            ReleasePublishedWindow(published);
+            ReleaseCandidate(published);
             return true;
         }
 
-        private static void ReleasePublishedWindow(AuditLogWindow candidate)
+        private static bool CloseUnpublishedCandidate(AuditLogWindow candidate)
         {
-            if (!ReferenceEquals(_window, candidate)) return;
-            _window = null;
-            _nativeDatabaseIdentity = IntPtr.Zero;
+            _cleanupInFlightCandidate = candidate;
+            try
+            {
+                candidate.Close();
+            }
+            catch
+            {
+                if (!candidate.IsLoaded)
+                {
+                    ReleaseCandidate(candidate);
+                    return true;
+                }
+
+                _unpublishedCandidate = candidate;
+                return false;
+            }
+            finally
+            {
+                if (ReferenceEquals(_cleanupInFlightCandidate, candidate))
+                    _cleanupInFlightCandidate = null;
+            }
+
+            if (!candidate.IsLoaded)
+            {
+                ReleaseCandidate(candidate);
+                return true;
+            }
+
+            _unpublishedCandidate = candidate;
+            return false;
+        }
+
+        private static void ReleaseCandidate(AuditLogWindow candidate)
+        {
+            if (ReferenceEquals(_window, candidate))
+            {
+                _window = null;
+                _nativeDatabaseIdentity = IntPtr.Zero;
+            }
+
+            if (ReferenceEquals(_unpublishedCandidate, candidate))
+                _unpublishedCandidate = null;
         }
 
         private static IntPtr GetNativeDatabaseIdentity(Document document)
