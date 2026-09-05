@@ -24,6 +24,9 @@ def validate(text: str) -> list[str]:
     assertion = published_assertion(text)
 
     required_assertion_tokens = (
+        "[string]::Equals([string]$ReleaseSnapshot.tag_name, $env:RELEASE_TAG, [StringComparison]::Ordinal)",
+        "[string]::Equals([string]$ReleaseSnapshot.target_commitish, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)",
+        "[bool]$ReleaseSnapshot.prerelease -ne $IsPrerelease",
         "[string]::Equals([string]$ReleaseSnapshot.name, $ExpectedReleaseName, [StringComparison]::Ordinal)",
         "[string]::Equals([string]$ReleaseSnapshot.body, $ExpectedReleaseBody, [StringComparison]::Ordinal)",
     )
@@ -57,6 +60,9 @@ def validate(text: str) -> list[str]:
         publish_request = text[publish_request_start:publish_call]
         for literal in (
             "draft = $false",
+            "tag_name = $env:RELEASE_TAG",
+            "target_commitish = $env:GITHUB_SHA",
+            "prerelease = $isPrerelease",
             "name = $expectedReleaseName",
             "body = $expectedPublishedBody",
         ):
@@ -111,14 +117,14 @@ require_mutation_failure(
         1,
     ),
 )
-require_mutation_failure(
-    "commented atomic publish name binding",
-    publisher.replace("    name = $expectedReleaseName\n", "    # name = $expectedReleaseName\n", 1),
-)
-require_mutation_failure(
-    "commented atomic publish body binding",
-    publisher.replace("    body = $expectedPublishedBody\n", "    # body = $expectedPublishedBody\n", 1),
-)
+for label, literal in (
+    ("atomic publish tag binding", "    tag_name = $env:RELEASE_TAG\n"),
+    ("atomic publish target binding", "    target_commitish = $env:GITHUB_SHA\n"),
+    ("atomic publish prerelease binding", "    prerelease = $isPrerelease\n"),
+    ("atomic publish name binding", "    name = $expectedReleaseName\n"),
+    ("atomic publish body binding", "    body = $expectedPublishedBody\n"),
+):
+    require_mutation_failure(label, publisher.replace(literal, "    # " + literal.strip() + "\n", 1))
 require_mutation_failure(
     "commented direct publish expected body wiring",
     publisher.replace("    -ExpectedReleaseBody $expectedPublishedBody `\n", "    # -ExpectedReleaseBody $expectedPublishedBody `\n", 1),
@@ -131,4 +137,4 @@ require_mutation_failure(
     publisher[:last_body_arg] + "          # -ExpectedReleaseBody $expectedPublishedBody `\n" + publisher[last_body_arg + len("          -ExpectedReleaseBody $expectedPublishedBody `\n"):],
 )
 
-print("PASS final V26 publication atomically preserves exact admitted release name/body transaction identity")
+print("PASS final V26 publication atomically preserves exact qualified mutable release metadata identity")
