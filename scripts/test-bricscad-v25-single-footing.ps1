@@ -22,6 +22,10 @@ Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'local022-ui-input.ps1')
 
 $candidates = @{
+    '87aff7fec452f9a8dd9f641ef84d143edc73514d' = @{
+        PackageSha256 = '6da38fcb3bc5fdb1989e9397fad45da712bf4af6b7690298a2fe83657bcb10ac'
+        ProductVersion = '0.1.0-preview.10307'; Kind = 'LOCAL_PR_CANDIDATE'
+    }
     'f0146aacef0b398bc71e8e278e6f7675432c1f17' = @{
         PackageSha256 = 'ee1f820baaa93d1b5e636432e317ca76c632b856480450467449af249c2636c0'
         ProductVersion = '0.1.0-preview.10307'; Kind = 'LOCAL_PR_CANDIDATE'

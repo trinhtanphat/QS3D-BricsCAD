@@ -409,15 +409,6 @@ namespace QS3D.LocalQualification.V25
                             ?? throw new ProbeException("ui_family_h2_row_missing");
                         list.ScrollIntoView(row);
                         _workspace!.UpdateLayout();
-                        // Grouped ScrollIntoView aligns H2 at the list's bottom, which can
-                        // be clipped by the short hosted property pane. The final rows
-                        // are below H2; reveal that end before measuring the actual editor.
-                        DependencyObject? parent = VisualTreeHelper.GetParent(RequirePropertyEditor(_workspace, "H2"));
-                        while (parent != null && !ReferenceEquals(parent, list) && !(parent is ScrollViewer))
-                            parent = VisualTreeHelper.GetParent(parent);
-                        if (!(parent is ScrollViewer scroll)) throw new ProbeException("ui_property_scroll_missing");
-                        scroll.ScrollToBottom();
-                        _workspace.UpdateLayout();
                         Advance(UiStage.EditH2);
                         break;
                     }
