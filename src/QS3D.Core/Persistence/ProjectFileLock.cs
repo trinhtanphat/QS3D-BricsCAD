@@ -63,8 +63,12 @@ namespace QS3D.Core.Persistence
         {
             var stream = _stream;
             if (stream == null) return;
-            _stream = null;
+
+            // The held stream is the lock authority. Do not forget that authority
+            // until the underlying release has completed successfully; if Dispose
+            // throws, retaining the reference keeps release retryable/fail-closed.
             stream.Dispose();
+            _stream = null;
         }
     }
 }
