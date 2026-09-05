@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+    <OutputType>Library</OutputType>
+    <AssemblyName>QS3D.LocalQualification.V26</AssemblyName>
+    <RootNamespace>QS3D.LocalQualification.V26</RootNamespace>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <Nullable>enable</Nullable>
+    <ProductDir Condition="'$(ProductDir)' == ''"></ProductDir>
+    <BricsCadDir Condition="'$(BricsCadDir)' == ''">$(BRICSCAD_V26_DIR)</BricsCadDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="QS3D.Core"><HintPath>$(ProductDir)\QS3D.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="QS3D.BricsCAD.V26"><HintPath>$(ProductDir)\QS3D.BricsCAD.V26.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="BrxMgd"><HintPath>$(BricsCadDir)\BrxMgd.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TD_Mgd"><HintPath>$(BricsCadDir)\TD_Mgd.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="TD_MgdBrep"><HintPath>$(BricsCadDir)\TD_MgdBrep.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+  <Target Name="ValidateLocal022References" BeforeTargets="ResolveReferences">
+    <Error Condition="'$(ProductDir)' == ''" Text="ProductDir must name the frozen local V26 candidate package directory." />
+    <Error Condition="!Exists('$(ProductDir)\QS3D.BricsCAD.V26.dll')" Text="ProductDir must contain the candidate QS3D.BricsCAD.V26.dll." />
+    <Error Condition="!Exists('$(ProductDir)\QS3D.Core.dll')" Text="ProductDir must contain the candidate QS3D.Core.dll." />
+    <Error Condition="!Exists('$(ProductDir)\QS3D.BricsCAD.V26.runtimeconfig.json')" Text="ProductDir must contain the candidate QS3D.BricsCAD.V26.runtimeconfig.json." />
+    <Error Condition="'$(BricsCadDir)' == '' Or !Exists('$(BricsCadDir)\BrxMgd.dll') Or !Exists('$(BricsCadDir)\TD_Mgd.dll') Or !Exists('$(BricsCadDir)\TD_MgdBrep.dll')" Text="BricsCadDir must name a BricsCAD V26 installation with managed references." />
+  </Target>
+</Project>

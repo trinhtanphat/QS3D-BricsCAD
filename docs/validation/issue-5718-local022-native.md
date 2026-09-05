@@ -60,3 +60,15 @@ This result does not close aggregate LOCAL-022:
 - no MCP request or MCP tool test is issued. The frozen product starts its embedded loopback server as part of `NETLOAD`; the probe immediately pauses and verifies the MCP CAD-mutation and desktop-control boundaries, while both external tunnels remain stopped.
 
 Accordingly, issue #4034 and LOCAL-022 remain open for the V26 and interactive/UI cells.
+
+## Same-source V25/V26 successor candidate
+
+The V26 build at official `.10308` source `988998bd26c9d0da5915670d9b5adca14b93ecca` failed with `CS0246` because the shared Update Center exposed the V25-only `UpdateDownloadProgress` type. The submodule had first been restored to its exact gitlink `fcf24893aac7fabe11017bbd5ed0072f5becd87d`; this was then a product-source compile failure, before any V26 launch.
+
+Issue #5740 / PR #5770 carries the separate source correction at pushed candidate `43130a49f49676299b865f094a9a6ded482f67ad`. It also resolves the exposed V26 `CS0649` download-state warning and two scoped `SYSLIB0014` compatibility warnings. V25 and V26 Release builds passed with zero warnings/errors. The V26 build additionally passed the held-host-reference-generation wrapper.
+
+The next LOCAL-022 pair uses packages generated from that same candidate, with V25 first and full cleanup before V26. Their committed product version is `0.1.0-preview.10307`; they are explicitly `LOCAL_PR_CANDIDATE`, not the official release of that version. The V25 candidate ZIP hash is `4d9869e38682674772196a3e238f115624ff357a276bb0b976000b63c9a833b5`. The prior official `.10308` runtime evidence remains unchanged above. Successor runtime results are pending until fresh allocation receipts exist.
+
+The V26 candidate ZIP hash is `7dbf9216e873f2e20c2fae5011785148e9feded944a7b43233b4710b331fd2c5`. A separate provenance file binds this archive to source `43130a49f49676299b865f094a9a6ded482f67ad`. The V26 runner checks that provenance, every extracted ZIP member, the installed .NET 8 Windows Desktop runtime, the V26 host identity, and the four-file probe output. It uses a separate V26 nonce profile and marker schema, preserves an absent or OnCommand-only registration, and restores exact profile state after both native processes.
+
+The frozen source passed Core smoke (`ALL PASS`) and all 1611 discovered feature preflights. The V26 probe rebuild also passed with zero warnings/errors. These are source/build results, not V26 runtime qualification. PR #5770 has since merged as `3fb8cf086` and its issue is closed; the locally packaged source and hashes above remain unchanged and must not be relabelled as a newer main build.
