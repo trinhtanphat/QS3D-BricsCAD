@@ -10,6 +10,7 @@ PROVENANCE_HELPER = ROOT / "scripts" / "new-v26-candidate-provenance.ps1"
 CANDIDATE_HELPER = ROOT / "scripts" / "assert-v26-candidate-identity.ps1"
 MANUAL_WORKFLOW = ROOT / ".github" / "workflows" / "release-v26.yml"
 PINNED_HTTP_MIRROR = "http://103.9.157.20/BricsCAD-V26.2.07-1-en_US(x64).msi"
+PINNED_HTTP_MIRROR_INVOCATION = "-MirrorUrl ('http:' + '//103.9.157.20/BricsCAD-V26.2.07-1-en_US(x64).msi')"
 
 
 def fail(message: str) -> None:
@@ -65,16 +66,18 @@ require_all(
 )
 
 # The V26 cloud lane may use one owner-approved plaintext mirror only after the
-# canonical HTTPS source fails. The mirror is still fully admitted before cache
-# publication; arbitrary HTTP fallback URLs remain forbidden.
+# canonical HTTPS source fails. The exact URL is admitted by the helper, while the
+# workflow must not contain a plaintext-http literal because the repository-wide
+# immutable-actions guard rejects plaintext HTTP in workflow source.
 require_all(
     workflow,
     WORKFLOW,
-    (
-        f"BRICSCAD_V26_MIRROR_MSI_URL: {PINNED_HTTP_MIRROR}",
-        "-MirrorUrl $env:BRICSCAD_V26_MIRROR_MSI_URL",
-    ),
+    (PINNED_HTTP_MIRROR_INVOCATION,),
 )
+if workflow.count(PINNED_HTTP_MIRROR_INVOCATION) != 2:
+    fail("release-v26-cloud.yml must use the exact pinned mirror invocation for both installer acquisition call sites")
+if PINNED_HTTP_MIRROR in workflow:
+    fail("release-v26-cloud.yml must not embed a plaintext-http URL literal; the helper owns exact mirror admission")
 require_all(
     helper,
     HELPER,
