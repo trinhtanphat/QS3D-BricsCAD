@@ -44,23 +44,28 @@ def main() -> None:
     if not open_index < read_index < invoke_index < dispose_index:
         raise SystemExit("ERROR: V26 finalizer held generation ordering is not open -> held read -> invoke -> dispose")
 
-    # Cleanup has two simultaneous invariants. A successful finalization must
-    # still fail closed if the transient pathname is unexpectedly a container or
-    # reparse leaf. If a primary failure is already propagating, final unlink is
-    # best-effort so a secondary cleanup problem does not replace that evidence.
+    # Cleanup has two simultaneous invariants. On success, re-admit the transient
+    # leaf, perform the repository-root-compatible unlink, and prove absence so
+    # SilentlyContinue cannot hide a release-safety failure. On an already-failed
+    # operation, cleanup is secondary and must not replace the primary evidence.
     require(source, "$primaryFailure = $null", "primary failure sentinel")
     require(source, "$primaryFailure = $_", "primary failure capture")
-    cleanup_admission = "if ($null -eq $primaryFailure -and (Test-Path -LiteralPath $tempScript)) {"
-    require(source, cleanup_admission, "successful-path cleanup admission gate")
+    success_cleanup = "if ($null -eq $primaryFailure) {"
+    require(source, success_cleanup, "successful-path cleanup branch")
     require(source, "Resolve-OrdinaryNonReparseFile -Path $tempScript -Label 'Generated V26 finalizer cleanup script'", "successful-path cleanup leaf revalidation")
     cleanup = "if (Test-Path -LiteralPath $tempScript) { Remove-Item -LiteralPath $tempScript -Force -ErrorAction SilentlyContinue }"
-    require(source, cleanup, "primary-error-preserving temp-script cleanup")
+    require(source, cleanup, "repository-root-compatible temp-script cleanup")
+    require(source, "if (Test-Path -LiteralPath $tempScript) { throw 'Generated V26 finalizer cleanup did not remove the admitted transient script.' }", "successful-path cleanup absence proof")
+    require(source, "else {", "primary-failure cleanup branch")
+    require(source, "Preserve the primary transformer/finalizer failure", "primary failure preservation rationale")
     forbid(source, "Remove-Item -LiteralPath $tempScript -Force -ErrorAction Stop", "primary-error-masking temp-script cleanup")
 
-    admission_index = source.index(cleanup_admission, dispose_index)
+    success_index = source.index(success_cleanup, dispose_index)
+    admission_index = source.index("Resolve-OrdinaryNonReparseFile -Path $tempScript -Label 'Generated V26 finalizer cleanup script'", success_index)
     cleanup_index = source.index(cleanup, admission_index)
-    if not invoke_index < dispose_index < admission_index < cleanup_index:
-        raise SystemExit("ERROR: V26 finalizer cleanup must be invoke -> dispose -> successful-path fail-closed admission -> best-effort unlink")
+    absence_index = source.index("Generated V26 finalizer cleanup did not remove the admitted transient script.", cleanup_index)
+    if not invoke_index < dispose_index < success_index < admission_index < cleanup_index < absence_index:
+        raise SystemExit("ERROR: V26 success cleanup must be invoke -> dispose -> strict admission -> unlink -> absence proof")
 
     print("PASS V26 generated finalizer held-generation guard")
 
