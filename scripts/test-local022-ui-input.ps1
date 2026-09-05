@@ -233,3 +233,19 @@ $activation = $activation.Replace('Qs3dLocal022Input',$activationType).Replace('
     if (-not $rejected) { throw 'FAIL: failed activation allowed input.' }
 }
 Write-Output 'PASS: actual activation guard preserves owned focus, activates only when necessary and refuses failed activation; no native input.'
+
+# Inspect and replay the actual V26 UI startup command array without launching CAD.
+$v26Source = Get-Content (Join-Path $PSScriptRoot 'test-bricscad-v26-single-footing.ps1') -Raw
+$startup = [regex]::Match($v26Source, "(?m)^        \`$markers \+= Invoke-NativePhase 'ui' @\([^\r\n]+\)").Value
+if (-not $startup) { throw 'FAIL: missing V26 UI startup sequence.' }
+& {
+    $markers = @()
+    function Invoke-NativePhase([string]$phase,[string[]]$commands) {
+        $expected = @('OSMODE','0','SNAPMODE','0','DYNMODE','0','QS3D','_.-TOOLPANEL','Tips','_Hide','_.PROPERTIESCLOSE','QL22UI')
+        if ($phase -cne 'ui' -or [string]::Join('|',$commands) -cne [string]::Join('|',$expected)) {
+            throw 'FAIL: V26 UI must hide only native Tips/Properties in its disposable profile before qualification.'
+        }
+    }
+    & ([scriptblock]::Create($startup))
+}
+Write-Output 'PASS: actual V26 startup hides only native Tips/Properties before UI qualification; no CAD or input executed.'

@@ -907,7 +907,9 @@ try {
     $env:QS3D_LOCAL022_V26_PRODUCT_DLL = $pluginDll
     $env:QS3D_LOCAL022_V26_PROBE_DLL = $ProbeDll
     if ($InteractiveUi) {
-        $markers += Invoke-NativePhase 'ui' @('OSMODE','0','SNAPMODE','0','DYNMODE','0','QS3D','QL22UI')
+        # V26's default native Tips/Properties consume the small-screen drawing
+        # area. Hide only these in the nonce profile; QS3D panes stay visible.
+        $markers += Invoke-NativePhase 'ui' @('OSMODE','0','SNAPMODE','0','DYNMODE','0','QS3D','_.-TOOLPANEL','Tips','_Hide','_.PROPERTIESCLOSE','QL22UI')
         $markers += Read-Phase 'uisaved'
     } else {
         $markers += Invoke-NativePhase 'run' @('QL22RUN', 'QS3DSAVE', '_.QSAVE', 'QL22SAVED', '_.QUIT', '_Y')
