@@ -15,7 +15,7 @@ namespace QS3D.BricsCAD.V25
     {
         private static readonly object Gate = new object();
         private static readonly string HostInstanceId = Guid.NewGuid().ToString("N");
-        private static Qs3dCodeLocalIpcServer _server;
+        private static Qs3dCodeLocalIpcServer? _server;
         private static string _sessionId = string.Empty;
         private static string _pipeName = string.Empty;
         private static string _stateFilePath = string.Empty;
@@ -63,7 +63,7 @@ namespace QS3D.BricsCAD.V25
 
         internal static void Stop()
         {
-            Qs3dCodeLocalIpcServer server;
+            Qs3dCodeLocalIpcServer? server;
             string stateFilePath;
             lock (Gate)
             {
@@ -108,13 +108,13 @@ namespace QS3D.BricsCAD.V25
         {
             var request = new Qs3dCodeHostRequest
             {
-                OperationId = McpTopLevelJson.ExtractString(requestJson, "operationId"),
-                PermissionClass = McpTopLevelJson.ExtractString(requestJson, "permissionClass"),
-                HostId = McpTopLevelJson.ExtractString(requestJson, "hostId"),
-                SessionId = McpTopLevelJson.ExtractString(requestJson, "sessionId"),
-                DrawingId = McpTopLevelJson.ExtractString(requestJson, "drawingId"),
-                ArgumentsJson = McpTopLevelJson.ExtractString(requestJson, "argumentsJson"),
-                WriterToken = McpTopLevelJson.ExtractString(requestJson, "writerToken")
+                OperationId = McpTopLevelJson.ExtractString(requestJson, "operationId") ?? string.Empty,
+                PermissionClass = McpTopLevelJson.ExtractString(requestJson, "permissionClass") ?? string.Empty,
+                HostId = McpTopLevelJson.ExtractString(requestJson, "hostId") ?? string.Empty,
+                SessionId = McpTopLevelJson.ExtractString(requestJson, "sessionId") ?? string.Empty,
+                DrawingId = McpTopLevelJson.ExtractString(requestJson, "drawingId") ?? string.Empty,
+                ArgumentsJson = McpTopLevelJson.ExtractString(requestJson, "argumentsJson") ?? string.Empty,
+                WriterToken = McpTopLevelJson.ExtractString(requestJson, "writerToken") ?? string.Empty
             };
             return SerializeResult(Qs3dCodeHostBridge.Execute(request));
         }
@@ -211,7 +211,7 @@ namespace QS3D.BricsCAD.V25
             return Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
         }
 
-        private static string HashToken(string value)
+        private static string HashToken(string? value)
         {
             using (var sha = SHA256.Create())
             {
@@ -231,7 +231,7 @@ namespace QS3D.BricsCAD.V25
 #endif
         }
 
-        private static string Escape(string value)
+        private static string Escape(string? value)
         {
             var builder = new StringBuilder((value ?? string.Empty).Length + 16);
             foreach (var ch in value ?? string.Empty)
@@ -252,13 +252,13 @@ namespace QS3D.BricsCAD.V25
             return builder.ToString();
         }
 
-        private static string Bound(string value, int maxCharacters)
+        private static string Bound(string? value, int maxCharacters)
         {
             var text = value ?? string.Empty;
             return text.Length <= maxCharacters ? text : text.Substring(0, maxCharacters);
         }
 
-        private static void TryDelete(string path)
+        private static void TryDelete(string? path)
         {
             if (string.IsNullOrWhiteSpace(path)) return;
             try { if (File.Exists(path)) File.Delete(path); } catch { }
