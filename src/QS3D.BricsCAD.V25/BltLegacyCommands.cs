@@ -122,8 +122,11 @@ namespace QS3D.BricsCAD.V25
                 {
                     var category = candidate.Category;
                     if (!category.HasValue) continue;
-                    if (!SemanticCaptureService.CaptureSnapshot(document, candidate.Snapshot, category.Value)) continue;
-                    ApplyLegacyEvidence(document, candidate);
+                    if (!SemanticCaptureService.CaptureSnapshot(
+                            document,
+                            candidate.Snapshot,
+                            category.Value,
+                            project => ApplyLegacyEvidence(project, candidate))) continue;
                     imported++;
                 }
 
@@ -139,9 +142,9 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void ApplyLegacyEvidence(Document document, BltLegacyElementCandidate candidate)
+        private static void ApplyLegacyEvidence(ProjectState project, BltLegacyElementCandidate candidate)
         {
-            var project = ExistingProjectMutationContext.Require(document, "BLT legacy semantic import");
+            if (project == null) throw new ArgumentNullException(nameof(project));
             var element = project.Elements.FirstOrDefault(x =>
                 x.SourceHandles.Any(handle => string.Equals(handle, candidate.Snapshot.Handle, StringComparison.OrdinalIgnoreCase)));
             if (element == null)
