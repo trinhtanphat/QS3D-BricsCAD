@@ -232,11 +232,15 @@ namespace QS3D.BricsCAD.V25
         private const int MaxMetadataValues = 512;
         private const int MaxTypedValues = 256;
         private const int MaxMetadataValueLength = 512;
+        private const long MaxRetainedSnapshotBudgetBytes = 64L * 1024L * 1024L;
+        private const int EstimatedSnapshotOverheadBytes = 512;
+        private const int EstimatedMetadataEntryOverheadBytes = 128;
 
         public static IReadOnlyList<EntitySnapshot> ReadCurrentSpace(Document document)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             var result = new List<EntitySnapshot>();
+            long retainedSnapshotBytes = 0;
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
                 var space = transaction.GetObject(document.Database.CurrentSpaceId, OpenMode.ForRead, false) as BlockTableRecord;
@@ -246,7 +250,7 @@ namespace QS3D.BricsCAD.V25
                 {
                     if (scanned++ >= MaxScannedEntities)
                         throw new InvalidOperationException("BLT legacy scan exceeds guarded Current Space limit of " + MaxScannedEntities + " entities.");
-                    TryAdd(transaction, id, result);
+                    TryAdd(transaction, id, result, ref retainedSnapshotBytes);
                 }
                 transaction.Commit();
             }
@@ -267,33 +271,66 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("BLT legacy selection exceeds guarded limit of " + MaxScannedEntities + " entities.");
 
             var result = new List<EntitySnapshot>();
+            long retainedSnapshotBytes = 0;
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
-                foreach (var id in selection.Value.GetObjectIds()) TryAdd(transaction, id, result);
+                foreach (var id in selection.Value.GetObjectIds()) TryAdd(transaction, id, result, ref retainedSnapshotBytes);
                 transaction.Commit();
             }
             return result.AsReadOnly();
         }
 
-        private static void TryAdd(Transaction transaction, ObjectId id, ICollection<EntitySnapshot> result)
+        private static void TryAdd(Transaction transaction, ObjectId id, ICollection<EntitySnapshot> result, ref long retainedSnapshotBytes)
         {
             if (id.IsNull || id.IsErased) return;
+            EntitySnapshot snapshot;
             try
             {
                 var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity;
                 if (entity == null) return;
-                var snapshot = new EntitySnapshot(entity.Handle.ToString(), entity.GetType().Name, entity.Layer);
+                snapshot = new EntitySnapshot(entity.Handle.ToString(), entity.GetType().Name, entity.Layer);
                 PopulateDirectMetrics(entity, snapshot);
                 PopulateRuntimeMetadata(entity, snapshot);
                 PopulateXData(entity, snapshot);
                 PopulateExtensionDictionary(transaction, entity, snapshot);
                 PopulateProxyExplodeMetrics(entity, snapshot);
-                result.Add(snapshot);
             }
             catch
             {
                 // One malformed/proprietary object must not prevent probing the rest of a legacy drawing.
+                return;
             }
+
+            var snapshotBytes = EstimateRetainedSnapshotBytes(snapshot);
+            if (snapshotBytes > MaxRetainedSnapshotBudgetBytes ||
+                retainedSnapshotBytes > MaxRetainedSnapshotBudgetBytes - snapshotBytes)
+                throw new InvalidOperationException(
+                    "BLT legacy scan exceeds guarded retained snapshot budget of " +
+                    MaxRetainedSnapshotBudgetBytes.ToString(CultureInfo.InvariantCulture) + " bytes.");
+            retainedSnapshotBytes += snapshotBytes;
+            result.Add(snapshot);
+        }
+
+        private static long EstimateRetainedSnapshotBytes(EntitySnapshot snapshot)
+        {
+            long total = EstimatedSnapshotOverheadBytes;
+            total = AddEstimatedBytes(total, Encoding.UTF8.GetByteCount(snapshot.Handle ?? string.Empty));
+            total = AddEstimatedBytes(total, Encoding.UTF8.GetByteCount(snapshot.EntityType ?? string.Empty));
+            total = AddEstimatedBytes(total, Encoding.UTF8.GetByteCount(snapshot.Layer ?? string.Empty));
+            foreach (var pair in snapshot.Metadata)
+            {
+                total = AddEstimatedBytes(total, EstimatedMetadataEntryOverheadBytes);
+                total = AddEstimatedBytes(total, Encoding.UTF8.GetByteCount(pair.Key ?? string.Empty));
+                total = AddEstimatedBytes(total, Encoding.UTF8.GetByteCount(pair.Value ?? string.Empty));
+            }
+            return total;
+        }
+
+        private static long AddEstimatedBytes(long current, long addition)
+        {
+            if (addition < 0 || current > MaxRetainedSnapshotBudgetBytes - addition)
+                return MaxRetainedSnapshotBudgetBytes + 1L;
+            return current + addition;
         }
 
         private static void PopulateDirectMetrics(Entity entity, EntitySnapshot snapshot)
@@ -398,10 +435,13 @@ namespace QS3D.BricsCAD.V25
                     try
                     {
                         var record = transaction.GetObject(entry.Value, OpenMode.ForRead, false) as Xrecord;
-                        if (record != null && record.Data != null)
+                        if (record != null)
                         {
                             using (var data = record.Data)
-                                PutTypedValues(snapshot, prefix + ".Data", data.AsArray());
+                            {
+                                if (data != null)
+                                    PutTypedValues(snapshot, prefix + ".Data", data.AsArray());
+                            }
                         }
                     }
                     catch { }

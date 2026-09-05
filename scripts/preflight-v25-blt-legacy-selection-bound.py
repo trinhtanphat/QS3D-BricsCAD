@@ -25,7 +25,7 @@ def main():
         "if (scanned++ >= MaxScannedEntities)",
         "if (selection.Value.Count > MaxScannedEntities)",
         '"BLT legacy selection exceeds guarded limit of " + MaxScannedEntities + " entities."',
-        "foreach (var id in selection.Value.GetObjectIds()) TryAdd(transaction, id, result);",
+        "foreach (var id in selection.Value.GetObjectIds()) TryAdd(transaction, id, result, ref retainedSnapshotBytes);",
         "StartOpenCloseTransaction()",
     ):
         require(source, needle)
