@@ -17,6 +17,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $script:MaxMetadataBytes = 65536
+$script:MaxAssemblyBytes = 256MB
 $script:StrictUtf8 = [Text.UTF8Encoding]::new($false, $true)
 
 function Resolve-OrdinaryNonReparseFile {
@@ -178,6 +179,55 @@ function Read-BoundedStrictUtf8Stream {
     }
 }
 
+function Get-HeldAssemblyVersion {
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Held,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Label
+    )
+
+    # release-v26.yml intentionally invokes this validator with Windows PowerShell.
+    # ReflectionOnlyLoad(Byte[]) lets the semantic consumer examine the exact bytes
+    # read from the already-admitted held generation without reopening a pathname.
+    if ($PSVersionTable.PSEdition -ne 'Desktop') {
+        throw "$Label held-generation assembly inspection requires Windows PowerShell/.NET Framework."
+    }
+    if ($Held.Stream.Length -gt $script:MaxAssemblyBytes) {
+        throw "$Label exceeds the $($script:MaxAssemblyBytes)-byte assembly safety limit."
+    }
+    if ($Held.Stream.Length -gt [int]::MaxValue) {
+        throw "$Label is too large to materialize safely."
+    }
+
+    $Held.Stream.Position = 0
+    $bytes = [byte[]]::new([int]$Held.Stream.Length)
+    $offset = 0
+    while ($offset -lt $bytes.Length) {
+        $read = $Held.Stream.Read($bytes, $offset, $bytes.Length - $offset)
+        if ($read -le 0) {
+            throw "$Label ended before the held file length was read."
+        }
+        $offset += $read
+    }
+    if ($Held.Stream.ReadByte() -ne -1) {
+        throw "$Label held stream changed while its assembly identity was being read."
+    }
+    $Held.Stream.Position = 0
+
+    try {
+        $assembly = [Reflection.Assembly]::ReflectionOnlyLoad($bytes)
+        return $assembly.GetName().Version
+    }
+    catch {
+        throw "$Label could not be inspected safely from its held generation: $($_.Exception.Message)"
+    }
+    finally {
+        $Held.Stream.Position = 0
+    }
+}
+
 $heldFiles = New-Object 'System.Collections.Generic.List[object]'
 try {
     # Admit all release-identity inputs first and keep every generation locked
@@ -214,14 +264,12 @@ try {
         throw "PACKAGE-METADATA version is invalid: $($metadata.version)"
     }
 
-    # AssemblyName accepts a pathname, so the held FileShare.Read handles are the
-    # generation-binding boundary that prevents swap/delete/write while it opens.
     Assert-LockedPathBinding -Held $pluginHeld -Label 'V26 plugin assembly'
-    $pluginVersion = [Reflection.AssemblyName]::GetAssemblyName($pluginHeld.Path).Version
+    $pluginVersion = Get-HeldAssemblyVersion -Held $pluginHeld -Label 'V26 plugin assembly'
     Assert-LockedPathBinding -Held $pluginHeld -Label 'V26 plugin assembly'
 
     Assert-LockedPathBinding -Held $coreHeld -Label 'V26 Core assembly'
-    $coreVersion = [Reflection.AssemblyName]::GetAssemblyName($coreHeld.Path).Version
+    $coreVersion = Get-HeldAssemblyVersion -Held $coreHeld -Label 'V26 Core assembly'
     Assert-LockedPathBinding -Held $coreHeld -Label 'V26 Core assembly'
 
     if ($pluginVersion -ne $packageVersion -or $coreVersion -ne $packageVersion) {
