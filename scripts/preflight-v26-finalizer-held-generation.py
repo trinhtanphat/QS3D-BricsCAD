@@ -44,9 +44,14 @@ def main() -> None:
     if not open_index < read_index < invoke_index < dispose_index:
         raise SystemExit("ERROR: V26 finalizer held generation ordering is not open -> held read -> invoke -> dispose")
 
-    # Cleanup must not hide a compromised transient script state.
-    forbid(source, "Remove-Item -LiteralPath $tempScript -Force -ErrorAction SilentlyContinue", "fail-open temp-script cleanup")
-    require(source, "Resolve-OrdinaryNonReparseFile -Path $tempScript", "cleanup leaf revalidation")
+    # Transient cleanup is best-effort only after the held stream is disposed;
+    # cleanup failure must not replace the primary generation/finalization error.
+    cleanup = "if (Test-Path -LiteralPath $tempScript) { Remove-Item -LiteralPath $tempScript -Force -ErrorAction SilentlyContinue }"
+    require(source, cleanup, "primary-error-preserving temp-script cleanup")
+    forbid(source, "Remove-Item -LiteralPath $tempScript -Force -ErrorAction Stop", "primary-error-masking temp-script cleanup")
+    cleanup_index = source.index(cleanup)
+    if not invoke_index < dispose_index < cleanup_index:
+        raise SystemExit("ERROR: V26 finalizer cleanup must occur after invocation and held-stream disposal")
 
     print("PASS V26 generated finalizer held-generation guard")
 
