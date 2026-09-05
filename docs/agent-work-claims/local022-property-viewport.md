@@ -38,3 +38,27 @@ packages, V25 physical H2 edit/regeneration/repeated placement/Enter/Esc/save/
 cold-reopen first, full cleanup, then V26 on the same source. Source/WPF/CI PASS
 must not be presented as LOCAL_PASS. Qualification evidence stays on #5718;
 the full #4034/#72 matrices remain open beyond this correction.
+
+## Licensed checkpoint, 2026-09-05
+
+Exact pushed source `87aff7fec452f9a8dd9f641ef84d143edc73514d` now has
+V25.2.10 `LOCAL_PASS_BOUNDED` from allocation `ui-property-fit-v25-29`,
+harness `6976ea8f599d5a3147123ac874b873116a0de8f0`, RunId
+`53fafd79a2b5456fb9226a43405aa47b`. All three physical UI/save/cold-reopen
+phases passed, including exact H2 hit/input, old-element native regeneration,
+former-output erasure, third placement/Esc and persisted identity/digest.
+Observed list79px/viewport77px fit the remaining pane. Full cleanup and exact
+autostart restoration passed; the installed release and MCP remain untouched.
+
+V26's first allocation30 passed Add/Cancel/six values but could not admit
+viewport points because native Tips/Properties panels consumed the drawing
+area. Its cleanup passed, zero phases qualified. A new V26 runner allocation31
+hides only those native panels in a disposable profile before qualification;
+V26 PASS is not yet claimed. Product packages remain frozen at `87aff7fec`.
+
+Source-local all1652 discovered preflights and exact-head protected branch
+33954182384 / PR33954225983 preflight/core succeeded. The source carrier is
+now reconciled non-force with main `5088ab7328d4560ec009d65041d7dce8b57820e2`;
+only unrelated release/commercial changes arrived, with no viewport-source
+overlap. New-head protected checks are required; old CI does not qualify the
+reconciled head and runtime evidence remains bound to its original source.
