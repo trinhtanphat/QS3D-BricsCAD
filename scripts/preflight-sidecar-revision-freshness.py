@@ -20,7 +20,8 @@ if CORE.is_file():
     text = CORE.read_text(encoding="utf-8")
     for token in (
         "MaxSidecarBytes = 64L * 1024L * 1024L",
-        'FileCapture.Open(fullPath + ".bak")',
+        'var backupPath = fullPath + ".bak";',
+        "FileCapture.Open(backupPath)",
         "new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read)",
         "SHA256.Create()",
         "CaptureStableRevision()",
