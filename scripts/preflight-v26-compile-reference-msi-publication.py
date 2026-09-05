@@ -21,8 +21,8 @@ def validate(text: str) -> list[str]:
         "rejected cached V26 MSI is left untouched because safe replacement requires a fresh canonical destination",
         "[IO.FileMode]::CreateNew",
         "$Candidate.Stream.Position = 0",
-        "$Candidate.Stream.CopyTo($destination)",
-        "$destination.Flush($true)",
+        "$Candidate.Stream.CopyTo($destinationStream)",
+        "$destinationStream.Flush($true)",
         "Get-SingleV26InstallerAdmission -Path $Destination -Expected $Candidate.Sha256",
         "published V26 MSI digest does not match admitted staged generation",
         "published V26 MSI product identity does not match admitted staged generation",
@@ -45,9 +45,9 @@ def validate(text: str) -> list[str]:
         if token in text:
             errors.append(f"V26 MSI publication retains unbound/destructive pathname token: {token}")
 
-    before(text, "$Candidate.Stream.Position = 0", "$Candidate.Stream.CopyTo($destination)", "rewind held admitted stream before publication copy", errors)
-    before(text, "$Candidate.Stream.CopyTo($destination)", "$destination.Flush($true)", "held byte copy before durable flush", errors)
-    before(text, "$destination.Flush($true)", "Get-SingleV26InstallerAdmission -Path $Destination -Expected $Candidate.Sha256", "durable publication before destination re-admission", errors)
+    before(text, "$Candidate.Stream.Position = 0", "$Candidate.Stream.CopyTo($destinationStream)", "rewind held admitted stream before publication copy", errors)
+    before(text, "$Candidate.Stream.CopyTo($destinationStream)", "$destinationStream.Flush($true)", "held byte copy before durable flush", errors)
+    before(text, "$destinationStream.Flush($true)", "Get-SingleV26InstallerAdmission -Path $Destination -Expected $Candidate.Sha256", "durable publication before destination re-admission", errors)
     return errors
 
 
@@ -59,8 +59,8 @@ def main() -> int:
 
     probes = {
         "fresh-only destination": text.replace("[IO.FileMode]::CreateNew", "[IO.FileMode]::Create", 1),
-        "held admitted source": text.replace("$Candidate.Stream.CopyTo($destination)", "[IO.File]::OpenRead($Candidate.Path).CopyTo($destination)", 1),
-        "durable flush": text.replace("$destination.Flush($true)", "$destination.Flush()", 1),
+        "held admitted source": text.replace("$Candidate.Stream.CopyTo($destinationStream)", "[IO.File]::OpenRead($Candidate.Path).CopyTo($destinationStream)", 1),
+        "durable flush": text.replace("$destinationStream.Flush($true)", "$destinationStream.Flush()", 1),
         "post-publication admission": text.replace("Get-SingleV26InstallerAdmission -Path $Destination -Expected $Candidate.Sha256", "$null", 1),
         "digest parity": text.replace("published V26 MSI digest does not match admitted staged generation", "digest ignored", 1),
         "rejected-cache fail closed": text.replace("rejected cached V26 MSI is left untouched because safe replacement requires a fresh canonical destination", "cached MSI removed", 1),
