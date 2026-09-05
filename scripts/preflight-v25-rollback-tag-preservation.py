@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+TARGET = ROOT / "scripts" / "rollback-v25-draft-release.ps1"
+WORKFLOW = ROOT / ".github" / "workflows" / "release-v25.yml"
+text = TARGET.read_text(encoding="utf-8")
+workflow = WORKFLOW.read_text(encoding="utf-8")
+
+required = {
+    "draft identity gate": "if ([long]$release.id -ne $ReleaseId)",
+    "draft repository identity gate": "release.url, $releaseUri",
+    "draft-only gate": "$release.draft -ne $true",
+    "draft tag gate": "release.tag_name, $ReleaseTag",
+    "draft delete": "Invoke-RestMethod -Method Delete -Uri $releaseUri",
+    "owner exhaustion": "Assert-NoReleaseOwnsTag",
+    "post-cleanup tag resolution": "$resolvedPreserved = Resolve-ExactRemoteTagSha",
+    "post-cleanup exact-SHA gate": "V25 release tag $ReleaseTag changed during draft rollback",
+    "preservation marker": "Preserving exact V25 tag $ReleaseTag",
+    "non-destructive result": "TagDeleted = $false",
+}
+missing = [name for name, token in required.items() if token not in text]
+if missing:
+    raise SystemExit("V25 rollback tag-preservation guard failed; missing: " + ", ".join(missing))
+
+forbidden = {
+    "tag DELETE URI": "/git/refs/tags/",
+    "tag reconciliation URI": "/git/ref/tags/",
+    "tag delete reconciliation helper": "Assert-TagDeleteCommittedAfterError",
+    "successful destructive result": "TagDeleted = $true",
+}
+present = [name for name, token in forbidden.items() if token in text]
+if present:
+    raise SystemExit("V25 rollback tag-preservation guard failed; destructive surface remains: " + ", ".join(present))
+
+workflow_required = {
+    "exact reusable-tag resolver": "function Get-ExactReusableReleaseTag",
+    "pre-create reusable-tag probe": "$existingTag = Get-ExactReusableReleaseTag",
+    "pre-create reusable-tag admission": "Reusing exact V25 lightweight tag $env:RELEASE_TAG at workflow SHA without claiming deletion ownership.",
+    "rollback invocation": "rollback-v25-draft-release.ps1",
+    "rollback provenance input": "-TagCreatedByThisRun $tagCreatedByThisRun",
+}
+workflow_missing = [name for name, token in workflow_required.items() if token not in workflow]
+if workflow_missing:
+    raise SystemExit("V25 rollback tag-preservation caller guard failed; missing: " + ", ".join(workflow_missing))
+if "TagDeleted" in workflow:
+    raise SystemExit("V25 release workflow must not require destructive TagDeleted rollback output.")
+
+# Mutation controls: each rollback invariant must be independently detectable by this guard.
+def rejects_rollback(mutated: str) -> bool:
+    return any(token not in mutated for token in required.values()) or any(
+        token in mutated for token in forbidden.values()
+    )
+
+for name, token in required.items():
+    mutated = text.replace(token, "__REMOVED__")
+    if not rejects_rollback(mutated):
+        raise SystemExit(f"mutation control did not detect removed invariant: {name}")
+
+for name, token in forbidden.items():
+    mutated = text + "\n# injected mutation\n" + token + "\n"
+    if not rejects_rollback(mutated):
+        raise SystemExit(f"mutation control did not detect destructive invariant: {name}")
+
+def rejects_workflow(mutated: str) -> bool:
+    return any(token not in mutated for token in workflow_required.values()) or "TagDeleted" in mutated
+
+for name, token in workflow_required.items():
+    mutated = workflow.replace(token, "__REMOVED__")
+    if not rejects_workflow(mutated):
+        raise SystemExit(f"workflow mutation control did not detect removed invariant: {name}")
+
+if not rejects_workflow(workflow + "\n# injected mutation\nTagDeleted\n"):
+    raise SystemExit("workflow mutation control did not detect TagDeleted dependency.")
+
+print("PASS V25 rollback preserves exact reusable tag and caller admits safe retry")
