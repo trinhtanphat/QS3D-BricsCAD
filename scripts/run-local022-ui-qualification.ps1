@@ -6,11 +6,14 @@ param(
     [string]$V26ProvenancePath,
     [string]$PrecedingV25Receipt,
     [ValidateSet('NATIVE_V1','OBSERVED_CLICK_V2')][string]$UiDriver = 'NATIVE_V1',
+    [switch]$PauseForOperator,
     [Parameter(Mandatory=$true)][switch]$ConfirmTemporaryAutostartPause
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if (-not $ConfirmTemporaryAutostartPause) { throw 'Explicit temporary-autostart authorization required.' }
+if ($PauseForOperator -and $UiDriver -cne 'OBSERVED_CLICK_V2') { throw 'Operator pause requires OBSERVED_CLICK_V2.' }
+$operatorWaitPolicy = if ($PauseForOperator) { 'PAUSE_FOR_OPERATOR_V1' } else { 'WALL_CLOCK_V1' }
 $taskRepo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $source = '87aff7fec452f9a8dd9f641ef84d143edc73514d'
 $base = Join-Path $taskRepo 'artifacts\issue-5718-local022'
@@ -43,6 +46,10 @@ if ($HostMajor -eq 26) {
     $v25Root = Split-Path ([IO.Path]::GetFullPath($PrecedingV25Receipt))
     $allocation = Get-Content (Join-Path $v25Root 'allocation.json') -Raw | ConvertFrom-Json
     $restore = Get-Content ($v25Root + '-autostart-recovery\tunnel-restoration.json') -Raw | ConvertFrom-Json
+    if ($v25.ui_driver -cne $UiDriver -or $allocation.ui_driver -cne $UiDriver -or
+        $v25.operator_wait_policy -cne $operatorWaitPolicy -or $allocation.operator_wait_policy -cne $operatorWaitPolicy) {
+        throw 'Preceding V25 result must qualify the same observed driver and operator wait policy.'
+    }
     if ($v25.status -cne 'LOCAL_PASS_BOUNDED' -or $v25.product_source_sha -cne $source -or
         -not $v25.interactive_ui_executed -or -not $v25.private_cleanup_verified -or
         -not $v25.protected_state_unchanged -or -not $v25.profile_cleanup.cur_profile_restored -or
@@ -86,6 +93,7 @@ try {
         ConfirmDisposableCopy = $true
         InteractiveUi = $true
         UiDriver = $UiDriver
+        PauseForOperator = [bool]$PauseForOperator
     }
     if ($HostMajor -eq 26) { $parameters.ProvenancePath = $V26ProvenancePath }
     & (Join-Path $PSScriptRoot "test-bricscad-v$HostMajor-single-footing.ps1") @parameters

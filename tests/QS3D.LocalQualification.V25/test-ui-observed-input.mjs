@@ -78,3 +78,48 @@ try {
   await fs.rmdir(fixtureRoot);
 }
 console.log('PASS: actual V2 receipt I/O binds driver hash, refuses replay/invalid completion/changed allocation/terminal state, and publishes exclusive V2 ACKs; no CAD or input executed.');
+
+const helperHash = createHash('sha256').update(await fs.readFile(new URL('./local022-observed-input.mjs', import.meta.url))).digest('hex');
+for (const scenario of ['valid', 'notOptedIn', 'gap', 'orphanAck', 'futureRequest', 'invalidAck', 'wrongPid', 'wrongRun', 'wrongHash', 'terminal', 'changedHistory']) {
+  const root = await fs.mkdtemp(path.join(base, 'observed-resume-contract-'));
+  try {
+    const allocation = { run_id: runId, ui_driver: 'OBSERVED_CLICK_V2', interactive_ui: true,
+      observed_input_sha256: scenario === 'wrongHash' ? 'bad' : helperHash,
+      operator_wait_policy: scenario === 'notOptedIn' ? 'WALL_CLOCK_V1' : 'PAUSE_FOR_OPERATOR_V1',
+      contract_fixture_only: true, licensed_runtime_executed: false };
+    await fs.writeFile(path.join(root, 'allocation.json'), JSON.stringify(allocation), { flag: 'wx' });
+    const action = sequence => JSON.stringify({ ...value, sequence, target_pid: scenario === 'wrongPid' ? 7 : 12345 });
+    const ack = sequence => JSON.stringify({ schema: 'QS3D_LOCAL022_UI_ACK_V2',
+      run_id: scenario === 'wrongRun' ? 'fedcba9876543210fedcba9876543210' : runId, sequence, status: 'SENT' });
+    if (scenario !== 'orphanAck') await fs.writeFile(path.join(root, 'ui-action-0001.private.json'), action(1));
+    await fs.writeFile(path.join(root, 'ui-ack-0001.private.json'), ack(1) + (scenario === 'invalidAck' ? '\n' : ''));
+    await fs.writeFile(path.join(root, `ui-action-${scenario === 'gap' ? '0003' : '0002'}.private.json`), action(scenario === 'gap' ? 3 : 2));
+    if (scenario === 'futureRequest') await fs.writeFile(path.join(root, 'ui-action-0003.private.json'), action(3));
+    if (scenario === 'terminal') await fs.writeFile(path.join(root, 'phase-ui.json'), '{}');
+    if (!['valid', 'changedHistory'].includes(scenario)) {
+      await assert.rejects(openObservedAllocation(root, runId, 12345, { resume: true }), undefined, scenario);
+      continue;
+    }
+    const resumed = await openObservedAllocation(root, runId, 12345, { resume: true });
+    const request = await resumed.read();
+    assert.equal(request.sequence, 2, 'resume must skip only exact acknowledged prefix');
+    assert.equal(await resumed.read(), request, 'unchanged repeated observation must retain request identity');
+    await assert.rejects(fs.stat(path.join(root, 'ui-ack-0002.private.json')), { code: 'ENOENT' });
+    if (scenario === 'changedHistory') {
+      await fs.writeFile(path.join(root, 'ui-ack-0001.private.json'), ack(1) + '\n');
+      await assert.rejects(resumed.read(), /history changed/);
+    } else {
+      await assert.rejects(resumed.acknowledge(request, { completed: false }), /attestation/);
+      await fs.writeFile(path.join(root, 'ui-action-0002.private.json'), action(2).replace('"x":94', '"x":95'));
+      await assert.rejects(resumed.read(), /Request changed/);
+    }
+  } finally {
+    assert.equal(path.dirname(root), base);
+    for (const item of await fs.readdir(root, { withFileTypes: true })) {
+      assert.equal(item.isFile(), true);
+      await fs.unlink(path.join(root, item.name));
+    }
+    await fs.rmdir(root);
+  }
+}
+console.log('PASS: explicit paused resume validates exact contiguous receipt history, rejects identity/gap/future/terminal/tamper errors and never invents ACKs.');

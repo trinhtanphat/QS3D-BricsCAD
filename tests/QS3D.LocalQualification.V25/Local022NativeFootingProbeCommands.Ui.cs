@@ -222,11 +222,15 @@ namespace QS3D.LocalQualification.V25
             private bool _pickObserverAttached;
             private readonly bool _observedClickDriver;
             private readonly TimeSpan _stageTimeout;
+            private readonly bool _pauseForOperator;
+            private DateTime? _operatorPauseStartedUtc;
 
             public UiController(Context context)
             {
                 _context = context;
                 _observedClickDriver = ObservedClickDriver;
+                _pauseForOperator = OperatorPauseEnabled(_observedClickDriver,
+                    Environment.GetEnvironmentVariable("QS3D_LOCAL022_PAUSE_FOR_OPERATOR"));
                 // An external observe/action/refresh operator has multiple explicit
                 // focus checks per numeric field. Its separate bounded deadline is
                 // not a retry or relaxation of the native driver deadline.
@@ -253,15 +257,36 @@ namespace QS3D.LocalQualification.V25
                 try
                 {
                     if (_pickObservationError != null) throw new ProbeException(_pickObservationError);
+                    // Even an operator-paused run must retain the exact active drawing
+                    // and paused MCP boundary. An ACK only resumes product assertions.
+                    RequireUiContextStable(_context);
+                    if (AwaitObservedOperator(DateTime.UtcNow)) return;
                     if (DateTime.UtcNow > _deadlineUtc)
                         throw new ProbeException("ui_timeout_" + _stage.ToString());
-                    RequireUiContextStable(_context);
                     Tick();
                 }
                 catch (System.Exception error)
                 {
                     Fail(error);
                 }
+            }
+
+            private static bool OperatorPauseEnabled(bool observed, string? value)
+            {
+                if (value == null || value == "0") return false;
+                if (value != "1" || !observed) throw new ProbeException("ui_operator_pause_policy_invalid");
+                return true;
+            }
+
+            private bool AwaitObservedOperator(DateTime now)
+            {
+                if (!_pauseForOperator || !_requestWritten || !_operatorPauseStartedUtc.HasValue) return false;
+                var pausedAt = _operatorPauseStartedUtc.Value;
+                if (now < pausedAt) throw new ProbeException("ui_operator_pause_clock_invalid");
+                if (!HasExactUiAck(_context, _sequence)) return true;
+                _deadlineUtc += now - pausedAt;
+                _operatorPauseStartedUtc = null;
+                return false;
             }
 
             private void Tick()
@@ -841,6 +866,7 @@ namespace QS3D.LocalQualification.V25
                     _sequence++;
                     WriteUiAction(_context, _sequence, action, x, y, text, _stage.ToString());
                     _requestWritten = true;
+                    if (_pauseForOperator) _operatorPauseStartedUtc = DateTime.UtcNow;
                     return false;
                 }
                 return HasExactUiAck(_context, _sequence);
@@ -852,6 +878,7 @@ namespace QS3D.LocalQualification.V25
                 _requestWritten = false;
                 _moveRequested = false;
                 _moveAcknowledged = false;
+                _operatorPauseStartedUtc = null;
                 _deadlineUtc = DateTime.UtcNow + _stageTimeout;
                 if (_observedClickDriver) UiTrace("observed_stage=" + next);
             }

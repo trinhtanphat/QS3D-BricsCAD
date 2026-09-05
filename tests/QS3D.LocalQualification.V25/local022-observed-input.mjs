@@ -47,7 +47,9 @@ async function requireAbsent(file, message) {
   throw new Error(message);
 }
 
-export async function openObservedAllocation(allocationRoot, runId, ownedPid) {
+export async function openObservedAllocation(allocationRoot, runId, ownedPid, options = {}) {
+  requireCondition(options && Object.keys(options).every(key => key === 'resume') &&
+    (options.resume === undefined || typeof options.resume === 'boolean'), 'Invalid resume options');
   const root = path.resolve(allocationRoot);
   requireCondition(root.toLowerCase().startsWith((artifactBase + path.sep).toLowerCase()) &&
     path.dirname(root).toLowerCase() === artifactBase.toLowerCase(), 'Not a direct owned allocation');
@@ -59,6 +61,8 @@ export async function openObservedAllocation(allocationRoot, runId, ownedPid) {
   'Allocation does not bind this observed driver');
   let nextSequence = 1;
   let outstanding = null;
+  const acknowledgedHistory = new Map();
+  const ackBody = sequence => JSON.stringify({ schema: 'QS3D_LOCAL022_UI_ACK_V2', run_id: runId, sequence, status: 'SENT' });
 
   async function requireLiveEvidence() {
     requireCondition(await boundedRead(path.join(root, 'allocation.json'), 131072) === allocationRaw, 'Allocation changed');
@@ -66,6 +70,43 @@ export async function openObservedAllocation(allocationRoot, runId, ownedPid) {
       try { await fs.lstat(path.join(root, terminal)); } catch (error) { if (error.code === 'ENOENT') continue; throw error; }
       throw new Error('Terminal marker exists; no more input or acknowledgements');
     }
+    for (const [file, raw] of acknowledgedHistory) {
+      requireCondition(await boundedRead(file, 4096) === raw, 'Acknowledged history changed');
+    }
+  }
+
+  await requireLiveEvidence();
+  if (options.resume) {
+    requireCondition(allocation.operator_wait_policy === 'PAUSE_FOR_OPERATOR_V1', 'Resume requires explicit paused allocation');
+    const actions = new Map();
+    const acks = new Map();
+    for (const name of await fs.readdir(root)) {
+      if (!/^ui-(action|ack)-/.test(name)) continue;
+      const match = /^ui-(action|ack)-(\d{4})\.private\.json$/.exec(name);
+      requireCondition(match && Number(match[2]) >= 1 && Number(match[2]) <= 100, 'Unexpected resume evidence name');
+      const sequence = Number(match[2]);
+      const file = path.join(root, name);
+      const raw = await boundedRead(file, match[1] === 'ack' ? 1024 : 4096);
+      if (match[1] === 'action') {
+        decodeObservedRequest(raw, runId, sequence, ownedPid);
+        actions.set(sequence, { file, raw });
+      } else {
+        requireCondition(raw === ackBody(sequence), 'Resume ACK identity differs');
+        acks.set(sequence, { file, raw });
+      }
+    }
+    for (const sequence of acks.keys()) requireCondition(actions.has(sequence), 'Resume ACK has no request');
+    let unacknowledged = false;
+    for (let sequence = 1; sequence <= actions.size; sequence++) {
+      requireCondition(actions.has(sequence) && !unacknowledged, 'Resume history has gap or future request');
+      if (acks.has(sequence)) {
+        for (const evidence of [actions.get(sequence), acks.get(sequence)]) acknowledgedHistory.set(evidence.file, evidence.raw);
+        nextSequence++;
+      } else {
+        unacknowledged = true;
+      }
+    }
+    await requireLiveEvidence();
   }
 
   return Object.freeze({
@@ -77,6 +118,10 @@ export async function openObservedAllocation(allocationRoot, runId, ownedPid) {
       const requestPath = path.join(root, `ui-action-${suffix}.private.json`);
       let raw;
       try { raw = await boundedRead(requestPath, 4096); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+      if (outstanding) {
+        requireCondition(raw === outstanding.raw, 'Request changed');
+        return outstanding.request;
+      }
       const request = decodeObservedRequest(raw, runId, nextSequence, ownedPid);
       outstanding = { raw, request, requestPath, suffix };
       return request;
@@ -96,13 +141,15 @@ export async function openObservedAllocation(allocationRoot, runId, ownedPid) {
         JSON.stringify(proof.operations) === JSON.stringify(expectedOperations), 'Missing completed observed input attestation');
       const ackPath = path.join(root, `ui-ack-${outstanding.suffix}.private.json`);
       const temporary = ackPath + '.tmp';
-      const body = JSON.stringify({ schema: 'QS3D_LOCAL022_UI_ACK_V2', run_id: runId, sequence: nextSequence, status: 'SENT' });
+      const body = ackBody(nextSequence);
       const stream = await fs.open(temporary, 'wx');
       try { await stream.writeFile(body, 'utf8'); await stream.sync(); } finally { await stream.close(); }
       await requireLiveEvidence();
       // link is exclusive: unlike rename, it cannot replace an existing ACK.
       await fs.link(temporary, ackPath);
       await fs.unlink(temporary);
+      acknowledgedHistory.set(outstanding.requestPath, outstanding.raw);
+      acknowledgedHistory.set(ackPath, body);
       nextSequence++;
       outstanding = null;
     },

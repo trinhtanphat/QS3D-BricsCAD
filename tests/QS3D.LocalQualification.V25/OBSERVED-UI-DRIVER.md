@@ -59,9 +59,34 @@ prepares the visible window/tree/editor through those APIs.
    final receipts before any PASS claim. V26 follows only a cleaned V25 pass on
    the same frozen product; qualify the new driver on V25 before using it on V26.
 
-The owner-approved asynchronous operator mode uses a bounded 600-second stage deadline and
-3600-second phase limit. These are distinct from the original 25/600-second
-native-driver limits; neither mode retries or relabels failed evidence.
+By default, observed mode retains a 600-second wall-clock stage deadline and
+3600-second phase limit. Native mode retains its original 25/600-second limits.
+The owner-approved `-PauseForOperator` option is valid only with
+`OBSERVED_CLICK_V2` and freezes `operator_wait_policy=PAUSE_FOR_OPERATOR_V1`
+in both allocation and final receipt (otherwise `WALL_CLOCK_V1`).
+
+Only time between publishing an action and receiving its exact ACK is excluded
+from the 600-second active stage budget. Every timer tick still checks the exact
+active document/path, paused MCP boundary and latched pick-observation errors.
+After the ACK, the remaining budget resumes once and all existing UI/native
+assertions run; an ACK is never itself product PASS. Preparation before an action
+is published is not paused. The outer UI process has a finite four-hour hard cap;
+after verified UI completion its save/exit wait is capped once at the normal
+phase timeout, without extending that hard cap. Cold reopen is unchanged. This
+allowance covers operator scheduling, not a product performance acceptance claim.
+
+To recover receipt I/O after an operator-session interruption, first revalidate
+the sole exact owned live PID, executable, disposable drawing and fresh visible
+state. Call `openObservedAllocation(root, runId, ownedPid, { resume: true })` using
+the frozen helper. It validates a contiguous canonical action/ACK prefix and
+skips only acknowledged actions. It refuses another policy, changed evidence,
+gaps, future actions, orphan/malformed ACKs and terminal markers. Repeated
+`read()` returns the same outstanding request without doing input. An
+unacknowledged gesture with unknown completion must not be replayed or ACKed from
+appearance alone: require the actual successful tool history and a fresh
+observation, or stop that allocation as no-result. Closed hosts and consumed
+allocations are never resumed. V26 must follow a cleaned V25 result using the
+same driver and wait policy. Neither mode retries or relabels failed evidence.
 
 The new protocol and Editor-event ordering must be qualified in licensed hosts.
 Host-free tests/builds alone do not establish that runtime observation order.
