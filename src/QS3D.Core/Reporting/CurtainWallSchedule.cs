@@ -38,6 +38,15 @@ namespace QS3D.Core.Reporting
             if (project == null) throw new ArgumentNullException(nameof(project));
             ReportingProjectIdentityGuard.RequireUniqueElementIds(project, "Curtain wall schedule");
 
+            // Preserve the historical fail-closed admission check on the live collection.
+            // CaptureProjectRevision repeats this validation while freezing the authoritative
+            // generation, so a mutation between admission and capture cannot publish mixed state.
+            foreach (var element in project.Elements)
+            {
+                if (element.Category != ElementCategory.GlassWall) continue;
+                RequireClearPanelEnvelope(element, out _, out _, out _, out _);
+            }
+
             var snapshot = CaptureProjectRevision(project);
             EnsureProjectRevision(project, snapshot);
 
@@ -59,6 +68,13 @@ namespace QS3D.Core.Reporting
                 var family = familyDefinition?.Name ?? familyId;
                 var key = GroupKey(floorId, familyId);
 
+                RequireClearPanelEnvelope(
+                    element,
+                    out var minimumClearPanelWidthM,
+                    out var maximumClearPanelWidthM,
+                    out var minimumClearPanelHeightM,
+                    out var maximumClearPanelHeightM);
+
                 if (!rows.TryGetValue(key, out var row))
                 {
                     row = new CurtainWallScheduleRow
@@ -78,16 +94,16 @@ namespace QS3D.Core.Reporting
                 row.PanelCount = AddInt(row.PanelCount, element.PanelCount, element.Id + "/CurtainPanelCount");
                 row.VerticalFrameCount = AddInt(row.VerticalFrameCount, element.VerticalFrameCount, element.Id + "/CurtainVerticalFrameCount");
                 row.HorizontalFrameCount = AddInt(row.HorizontalFrameCount, element.HorizontalFrameCount, element.Id + "/CurtainHorizontalFrameCount");
-                aggregate.TotalWallLengthM.Add(element.LengthM, element.Id + "/LengthM");
-                aggregate.GrossWallAreaM2.Add(element.GrossWallAreaM2, element.Id + "/GrossWallAreaM2");
-                aggregate.OpeningAreaM2.Add(element.OpeningAreaM2, element.Id + "/OpeningAreaM2");
-                aggregate.NetGlassAreaM2.Add(element.NetGlassAreaM2, element.Id + "/CurtainNetGlassAreaM2");
-                aggregate.FrameFaceAreaM2.Add(element.FrameFaceAreaM2, element.Id + "/CurtainFrameFaceAreaM2");
-                aggregate.FrameLengthM.Add(element.FrameLengthM, element.Id + "/CurtainFrameLengthM");
-                row.MinimumClearPanelWidthM = Math.Min(row.MinimumClearPanelWidthM, element.MinimumClearPanelWidthM);
-                row.MaximumClearPanelWidthM = Math.Max(row.MaximumClearPanelWidthM, element.MaximumClearPanelWidthM);
-                row.MinimumClearPanelHeightM = Math.Min(row.MinimumClearPanelHeightM, element.MinimumClearPanelHeightM);
-                row.MaximumClearPanelHeightM = Math.Max(row.MaximumClearPanelHeightM, element.MaximumClearPanelHeightM);
+                aggregate.TotalWallLengthM.Add(Q(element, "LengthM"), element.Id + "/LengthM");
+                aggregate.GrossWallAreaM2.Add(Q(element, "GrossWallAreaM2"), element.Id + "/GrossWallAreaM2");
+                aggregate.OpeningAreaM2.Add(Q(element, "OpeningAreaM2"), element.Id + "/OpeningAreaM2");
+                aggregate.NetGlassAreaM2.Add(Q(element, "CurtainNetGlassAreaM2"), element.Id + "/CurtainNetGlassAreaM2");
+                aggregate.FrameFaceAreaM2.Add(Q(element, "CurtainFrameFaceAreaM2"), element.Id + "/CurtainFrameFaceAreaM2");
+                aggregate.FrameLengthM.Add(Q(element, "CurtainFrameLengthM"), element.Id + "/CurtainFrameLengthM");
+                row.MinimumClearPanelWidthM = Math.Min(row.MinimumClearPanelWidthM, minimumClearPanelWidthM);
+                row.MaximumClearPanelWidthM = Math.Max(row.MaximumClearPanelWidthM, maximumClearPanelWidthM);
+                row.MinimumClearPanelHeightM = Math.Min(row.MinimumClearPanelHeightM, minimumClearPanelHeightM);
+                row.MaximumClearPanelHeightM = Math.Max(row.MaximumClearPanelHeightM, maximumClearPanelHeightM);
                 row.ElementIds.Add(element.Id);
                 ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
                 EnsureProjectRevision(project, snapshot);
@@ -195,6 +211,20 @@ namespace QS3D.Core.Reporting
             return value;
         }
 
+        private static double Q(CurtainElementSnapshot element, string key)
+        {
+            switch (key)
+            {
+                case "LengthM": return element.LengthM;
+                case "GrossWallAreaM2": return element.GrossWallAreaM2;
+                case "OpeningAreaM2": return element.OpeningAreaM2;
+                case "CurtainNetGlassAreaM2": return element.NetGlassAreaM2;
+                case "CurtainFrameFaceAreaM2": return element.FrameFaceAreaM2;
+                case "CurtainFrameLengthM": return element.FrameLengthM;
+                default: throw new InvalidOperationException(element.Id + "/" + key + " is not a frozen Curtain Wall schedule quantity.");
+            }
+        }
+
         private static void RequireClearPanelEnvelope(
             ProjectElement element,
             out double minimumWidthM,
@@ -206,6 +236,26 @@ namespace QS3D.Core.Reporting
             maximumWidthM = Q(element, "CurtainMaxClearPanelWidthM");
             minimumHeightM = Q(element, "CurtainMinClearPanelHeightM");
             maximumHeightM = Q(element, "CurtainMaxClearPanelHeightM");
+
+            if (minimumWidthM > maximumWidthM)
+                throw new InvalidOperationException(
+                    element.Id + "/CurtainClearPanelWidthM minimum cannot exceed maximum.");
+            if (minimumHeightM > maximumHeightM)
+                throw new InvalidOperationException(
+                    element.Id + "/CurtainClearPanelHeightM minimum cannot exceed maximum.");
+        }
+
+        private static void RequireClearPanelEnvelope(
+            CurtainElementSnapshot element,
+            out double minimumWidthM,
+            out double maximumWidthM,
+            out double minimumHeightM,
+            out double maximumHeightM)
+        {
+            minimumWidthM = element.MinimumClearPanelWidthM;
+            maximumWidthM = element.MaximumClearPanelWidthM;
+            minimumHeightM = element.MinimumClearPanelHeightM;
+            maximumHeightM = element.MaximumClearPanelHeightM;
 
             if (minimumWidthM > maximumWidthM)
                 throw new InvalidOperationException(
