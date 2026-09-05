@@ -2,6 +2,8 @@
 
 ## Verdict
 
+Latest observed UI result: V25 allocation37 is `LOCAL_PASS_BOUNDED` on exact harness `b5fcbfb673810e22b3ac5792a579284c20a75a56` and frozen product `87aff7fec452f9a8dd9f641ef84d143edc73514d`, including all three UI/save/cold-reopen phases. Matching V26 allocation38 is `NO_RESULT / PRE_QS3D_STARTUP_STALL`, with zero action requests and zero qualified phases; the operator ended only its exact owned host after more than ten minutes without a main window or loaded QS3D/probe. Both allocations completed full cleanup and original autostart restoration. Details below; aggregate qualification remains open.
+
 `LOCAL_PASS_BOUNDED` for the automated BricsCAD V25 and V26 portions on the same frozen product source `43130a49f49676299b865f094a9a6ded482f67ad`. Each host passed run, saved and fresh-process reopen. Aggregate LOCAL-022 remains open for interactive/UI and the additional coverage limits recorded below.
 
 ## Earlier official V25 release result
@@ -294,3 +296,21 @@ The explicit `-PauseForOperator` switch is restricted to observed interactive UI
 Receipt-I/O resume is explicit and requires that frozen policy. Actual filesystem tests reject gaps, future requests, orphan/malformed ACKs, wrong nonce/PID/helper hash, changed acknowledged history and terminal markers. It skips only the exact acknowledged prefix, never injects input or creates an ACK on resume. Unknown completion cannot be inferred from a screenshot. The full procedure is in `tests/QS3D.LocalQualification.V25/OBSERVED-UI-DRIVER.md`.
 
 The new clock/runner/resume regressions were observed RED before implementation and GREEN afterward. `scripts/test-local022-ui-input.ps1` passes, including all 21 actual C# serializer/JS decoder combinations and the existing physical/native guards. V25/net48 and V26/net8.0-windows probe builds both pass with zero warnings/errors against the same frozen product packages. These are host-free results, not a new licensed PASS. A fresh V25 allocation and full cleanup must qualify the new driver/policy before V26. Exact b5a928d0f CI push33972752843 and PR33972756191 preflight/core succeeded before this successor; they do not qualify its new head.
+
+### Observed paused V25 allocation37 — UI/save/cold-reopen PASS
+
+Allocation `ui-paused-v25-37`, RunId `c3f0e68e554147478bf50a3692565f2f`, exact pushed harness `b5fcbfb673810e22b3ac5792a579284c20a75a56`, frozen product `87aff7fec452f9a8dd9f641ef84d143edc73514d`, BricsCAD25.2.10, `2026-09-05T16:12:23.2012590Z`–`2026-09-05T16:40:50.1076013Z`: `LOCAL_PASS_BOUNDED`, three phases verified. Driver `OBSERVED_CLICK_V2`, wait policy `PAUSE_FOR_OPERATOR_V1`, helper SHA256 `2786aad5a0127a13c5ea92f7eb13d56ffb23afdb6e479bf9acf1821b7b5d0358`.
+
+All21 actual action/ACK pairs completed using supported Computer Use: Móng đơn selection, Add/Cancel/Esc with nonmutation, six mm fields, OK, two independently witnessed physical centres, Enter, direct Family / Type selection, physical H2=1000mm edit, native regeneration of both earlier elements with former handles erased, a third independently witnessed centre and final Esc. The operator was interrupted after actual L2 input and resumed only after confirming the exact still-live host and fresh unchanged dialog; no repeated gesture or manufactured ACK was used.
+
+Every check in `ui` (19), `uisaved` (8) and separate-process `uireopen` (9) is true. Saved/cold checks include exact artifact digest/cardinality, live generated solids, semantic/Family identity, dimensions/volume/extents and the paused MCP boundary. Private disposable data cleanup, protected-state equality, current profile and complete profile-inventory restoration, nonce removal and zero hosts all verified. The original OpenAI autostart hash and timestamp were restored exactly; Cloudflare stayed paused. MCP execution is false. Exact harness push33977036851 and PR33977040307/33977113009 completed SUCCESS; PR33977113009 independently read back preflight/coreSUCCESS.
+
+This qualifies the bounded observed V25 driver/policy, not V26, all DPI/Quantity/private-DWG cells, full topology or a customer release. Existing native/legacy/failed receipts remain unchanged.
+
+### Matching V26 allocation38 — pre-QS3D startup no-result, cleaned
+
+Allocation `ui-paused-v26-38`, RunId `5b9b7824175545a69cc8dc07134bd502`, same exact harness/product/driver/policy, BricsCAD26.2.07, `2026-09-05T16:41:57.7564775Z`–`2026-09-05T16:52:24.9873503Z`: `FAIL_OR_NO_RESULT`, zero phases and zero action/ACK files. The owned process was started only after V25's full cleanup. Repeated current process/window checks showed no main window (handle0), no targetable V26 window, no loaded QS3D/probe/managed adapter and no baseline marker. The native process stayed alive with all sampled threads waiting; its application log was stale, and no current Application Error/.NET Runtime/Hang event identified a cause. These facts do not establish a licensing failure, crash or QS3D source defect.
+
+After more than ten minutes before QS3D baseline, the operator verified exact executable, parent, disposable DWG, nonce profile, process age, no main window, no loaded QS3D and no action/phase files, then stopped only that owned test process. The live runner was not interrupted: it reported exit_code=-1/phase=ui and completed finally. Final receipt verifies private/protected/profile cleanup, nonce removal, zero hosts, cleanup_failure=null and exact original autostart restoration. The diagnostic exit code reflects operator termination, not a spontaneous host crash. No consumed allocation may be retried or relabelled as PASS.
+
+The startup command used the existing `/L /P <nonce> /B <script>` form, not `/Automation`; `/L` only suppresses the splash screen according to [Bricsys startup options](https://help.bricsys.com/en-us/document/bricscad/customization/startup-options). Further V26 execution requires resolving the native pre-plugin startup condition. No product source, licensing configuration, installed release or tunnel endpoint was changed. #5718/#4034 and aggregate #72 remain open.
