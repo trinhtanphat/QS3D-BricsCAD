@@ -731,8 +731,12 @@ namespace QS3D.LocalQualification.V25
         private static Window? FindSingleFootingDialog(Assembly product)
         {
             var app = WpfApplication.Current;
-            if (app == null) throw new ProbeException("ui_wpf_application_missing");
-            var matches = app.Windows.Cast<Window>().Where(window => window.IsVisible &&
+            // BricsCAD embeds WPF without necessarily creating Application.Current.
+            // Observe actual presentation roots; never create an application or dialog.
+            var windows = PresentationSource.CurrentSources.Cast<PresentationSource>()
+                .Select(source => source.RootVisual).OfType<Window>();
+            if (app != null) windows = windows.Concat(app.Windows.Cast<Window>());
+            var matches = windows.Distinct().Where(window => window.IsVisible &&
                 string.Equals(window.GetType().FullName, "QS3D.BricsCAD.V25.UI.SingleFootingDimensionsDialog", StringComparison.Ordinal) &&
                 ReferenceEquals(window.GetType().Assembly, product)).ToList();
             if (matches.Count > 1) throw new ProbeException("ui_dialog_ambiguous");
