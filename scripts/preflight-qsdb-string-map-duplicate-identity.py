@@ -11,7 +11,7 @@ required = [
     'var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);',
     'var key = property.Attribute("name")?.Value ?? string.Empty;',
     'if (!seenKeys.Add(key))',
-    'throw new InvalidDataException("QSDB " + owner + " contains duplicate map key: " + key + ".");',
+    'throw new InvalidDataException("Duplicate QSDB map key in " + owner + ": " + key + ".");',
 ]
 for token in required:
     if token not in method:
