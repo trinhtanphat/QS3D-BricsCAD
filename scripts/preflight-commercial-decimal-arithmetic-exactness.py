@@ -17,6 +17,18 @@ def reject(text: str, needle: str, label: str) -> None:
         raise SystemExit(f"FAIL commercial decimal exactness preflight: stale {label}: {needle}")
 
 
+def require_arithmetic_zero_before_scale_rejection(text: str) -> None:
+    arithmetic = text.find("private static decimal MaterializeArithmetic(")
+    aggregate = text.find("private static decimal MaterializeAggregate(", arithmetic + 1)
+    zero_check = text.find("if (signedCoefficient.IsZero)", arithmetic, aggregate)
+    zero_return = text.find("return 0m;", zero_check, aggregate)
+    scale_reject = text.find("if (scale > 28)", zero_return, aggregate)
+    if not (0 <= arithmetic < zero_check < zero_return < scale_reject < aggregate):
+        raise SystemExit(
+            "FAIL commercial decimal exactness preflight: arithmetic zero must canonicalize before scale representability rejection"
+        )
+
+
 def main() -> None:
     contracts = CONTRACTS.read_text(encoding="utf-8")
     exact = EXACT.read_text(encoding="utf-8")
@@ -30,11 +42,7 @@ def main() -> None:
     require(exact, "BigInteger.Abs(signedCoefficient)", "96-bit representability check")
     require(exact, "coefficient > MaximumDecimalCoefficient", "decimal coefficient bound")
     require(exact, "maximumAtScale", "true-overflow versus precision-loss classification")
-    require(
-        exact,
-        "if (signedCoefficient.IsZero)\n                return 0m;\n\n            if (scale > 28)",
-        "arithmetic zero canonicalization before representability checks",
-    )
+    require_arithmetic_zero_before_scale_rejection(exact)
     require(smoke, "CommercialBoundaryMagnitude, 0.6m", "high-magnitude fractional regression")
     require(smoke, "Commercial addition precision loss: boundary addition.", "addition fail-closed assertion")
     require(smoke, "Commercial subtraction precision loss: boundary subtraction.", "subtraction fail-closed assertion")

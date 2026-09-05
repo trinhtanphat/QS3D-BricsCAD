@@ -513,7 +513,7 @@ namespace QS3D.Core.Commercial
             }
             if (left != 0m && right != 0m && result == 0m)
                 throw new OverflowException(label + " underflowed decimal arithmetic.");
-            return result;
+            return CommercialExactDecimalAccumulator.MultiplyExact(left, right, label);
         }
 
         internal static decimal Add(decimal left, decimal right, string label)
