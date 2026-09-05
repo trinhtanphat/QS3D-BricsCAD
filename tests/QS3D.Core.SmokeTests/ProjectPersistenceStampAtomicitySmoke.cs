@@ -24,7 +24,7 @@ namespace QS3D.Core.SmokeTests
 
             project.DrawingFingerprint = "DWG-AFTER-SAVE";
             Require(project.ChangeVersion != savedVersion, "Scalar control must advance the live project version.");
-            AddOversizedZones(project);
+            AddOversizedNestedFamilyProperties(project);
 
             ExpectInvalidOperation(() => stamp.MarkSaved(project), "Oversized nested content must fail MarkSaved.");
             Require(stamp.SavedChangeVersion == savedVersion,
@@ -38,10 +38,10 @@ namespace QS3D.Core.SmokeTests
 
             project.Metadata["AtomicityProbe"] = "changed-after-save";
             Require(stamp.RequiresSave(project), "Tracked metadata mutation must require save before the failure probe.");
-            AddOversizedZones(project);
+            AddOversizedNestedFamilyProperties(project);
 
             ExpectInvalidOperation(() => stamp.MarkSaved(project), "Oversized nested content must fail MarkSaved.");
-            project.Zones.Clear();
+            project.Families.Clear();
 
             Require(stamp.RequiresSave(project),
                 "Failed MarkSaved must not accept staged metadata into the saved baseline.");
@@ -49,10 +49,12 @@ namespace QS3D.Core.SmokeTests
             Require(!stamp.RequiresSave(project), "A later successful MarkSaved must publish the complete new baseline.");
         }
 
-        private static void AddOversizedZones(ProjectState project)
+        private static void AddOversizedNestedFamilyProperties(ProjectState project)
         {
+            var family = new ProjectFamily("F-ATOMICITY", "Atomicity failure probe", ElementCategory.ArchitecturalWall);
+            project.Families.Add(family);
             for (var i = 0; i <= 10_000; i++)
-                project.Zones.Add(new ZoneDefinition("Z" + i, "Zone " + i));
+                family.Properties.Add("P-" + i.ToString("D5"), "value");
         }
 
         private static void ExpectInvalidOperation(Action action, string message)
