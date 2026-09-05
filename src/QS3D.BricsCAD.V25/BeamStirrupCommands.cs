@@ -12,6 +12,10 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class BeamStirrupCommands
     {
+        private const string OperationFailure = "QS3DREBARSTIRRUP3D lỗi: không thể tạo/cập nhật đai dầm. Kiểm tra selection, project semantic và dữ liệu stirrup rồi thử lại.";
+        private const string HealthFailure = "QS3DREBARSTIRRUPHEALTH lỗi: không thể hoàn tất kiểm tra đai dầm. Kiểm tra project/drawing hiện hành rồi thử lại.";
+        private const string UiSyncWarning = "UI sync warning: đã cập nhật đai dầm nhưng đồng bộ giao diện chưa hoàn tất. Dữ liệu CAD/project đã được giữ nguyên; hãy refresh giao diện.";
+
         [CommandMethod("QS3DBEAMSTIRRUP3D", CommandFlags.UsePickSet)]
         public void BuildBeamStirrupsWorkspaceAlias() => BuildBeamStirrups();
 
@@ -73,9 +77,9 @@ namespace QS3D.BricsCAD.V25
                     : "Beam Stirrup 3D: đã tạo/cập nhật " + result.Stirrups + " đai trên " + result.Elements + " dầm.";
                 FinalizeUi(document, message);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Report(document, "QS3DREBARSTIRRUP3D lỗi: " + ex.Message);
+                Report(document, OperationFailure);
             }
         }
 
@@ -105,15 +109,15 @@ namespace QS3D.BricsCAD.V25
                 var issues = new GeneratedBeamStirrupHealthService().Inspect(project, live);
                 var summary = new HealthSummary(issues);
                 var message = "Beam Stirrup Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
-                PaletteCoordinator.SetStatus(message);
+                TrySetPaletteStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
                 foreach (var issue in issues.Take(50))
                     document.Editor.WriteMessage("\n  [" + issue.Severity + "] " + issue.Code + " • " + issue.ElementId + " • " + issue.Message);
                 if (issues.Count > 50) document.Editor.WriteMessage("\n  … health output truncated.");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Report(document, "QS3DREBARSTIRRUPHEALTH lỗi: " + ex.Message);
+                Report(document, HealthFailure);
             }
         }
 
@@ -132,16 +136,21 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                TryWriteMessage(document, "\nQS3D " + message + " UI sync warning: " + ex.Message);
+                TryWriteMessage(document, "\nQS3D " + message + " " + UiSyncWarning);
             }
+        }
+
+        private static void TrySetPaletteStatus(string message)
+        {
+            try { PaletteCoordinator.SetStatus(message); }
+            catch { }
         }
 
         private static void Report(Document document, string message)
         {
-            try { PaletteCoordinator.SetStatus(message); }
-            catch { }
+            TrySetPaletteStatus(message);
             TryWriteMessage(document, "\nQS3D " + message);
         }
 

@@ -323,6 +323,49 @@ namespace QS3D.Core.Cost
                 initialKnownCount,
                 collectionLabel);
         }
+
+        internal static void RequireStableKnownGeneration<T>(
+            IEnumerable<T> items,
+            bool hadKnownCount,
+            int initialKnownCount,
+            IReadOnlyList<T> admittedItems,
+            Func<T, T, bool> sameState,
+            string collectionLabel)
+            where T : class
+        {
+            if (!hadKnownCount)
+                return;
+            if (admittedItems == null) throw new ArgumentNullException(nameof(admittedItems));
+            if (sameState == null) throw new ArgumentNullException(nameof(sameState));
+
+            var replayIndex = 0;
+            using (var enumerator = items.GetEnumerator())
+            {
+                RequireKnownCountStableDuringTraversal(items, true, initialKnownCount, collectionLabel);
+                while (true)
+                {
+                    RequireKnownCountStableDuringTraversal(items, true, initialKnownCount, collectionLabel);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireKnownCountStableDuringTraversal(items, true, initialKnownCount, collectionLabel);
+                    RequireCanProcessNext(true, initialKnownCount, replayIndex, collectionLabel);
+                    var item = enumerator.Current;
+                    RequireKnownCountStableDuringTraversal(items, true, initialKnownCount, collectionLabel);
+                    if (item == null || replayIndex >= admittedItems.Count || !sameState(admittedItems[replayIndex], item))
+                        throw new InvalidOperationException(collectionLabel + " content changed across semantic generation replay.");
+                    replayIndex++;
+                }
+            }
+
+            RequireKnownCountStableAfterTraversal(
+                items,
+                true,
+                initialKnownCount,
+                replayIndex,
+                collectionLabel);
+            if (replayIndex != admittedItems.Count)
+                throw new InvalidOperationException(collectionLabel + " content changed across semantic generation replay.");
+        }
     }
 
     internal static class AdvancedCostTextContract
@@ -450,6 +493,11 @@ namespace QS3D.Core.Cost
                 knownComponentCount,
                 index,
                 "Rate build-up component collection");
+            RequireStableComponentGeneration(
+                components,
+                snapshot,
+                hasKnownComponentCount,
+                knownComponentCount);
             snapshot.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.ResourceCode, right.ResourceCode));
             Components = new ReadOnlyCollection<CostResourceComponent>(snapshot.ToArray());
             OverheadPercent = overheadPercent;
@@ -475,6 +523,76 @@ namespace QS3D.Core.Cost
                     ProfitUnitCost,
                     "rate build-up unit rate");
             }
+        }
+
+        private static void RequireStableComponentGeneration(
+            IEnumerable<CostResourceComponent> components,
+            IReadOnlyList<CostResourceComponent> snapshot,
+            bool hasKnownComponentCount,
+            int knownComponentCount)
+        {
+            if (!hasKnownComponentCount)
+                return;
+
+            var replayIndex = 0;
+            using (var componentEnumerator = components.GetEnumerator())
+            {
+                while (true)
+                {
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        components,
+                        true,
+                        knownComponentCount,
+                        "Rate build-up component collection");
+                    if (!componentEnumerator.MoveNext())
+                        break;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        components,
+                        true,
+                        knownComponentCount,
+                        "Rate build-up component collection");
+                    AdvancedCostCollectionContract.RequireCanProcessNext(
+                        true,
+                        knownComponentCount,
+                        replayIndex,
+                        "Rate build-up component collection");
+                    var component = componentEnumerator.Current;
+                    AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal(
+                        components,
+                        true,
+                        knownComponentCount,
+                        "Rate build-up component collection");
+                    if (component == null ||
+                        replayIndex >= snapshot.Count ||
+                        !SameComponentState(snapshot[replayIndex], component))
+                    {
+                        throw new InvalidOperationException(
+                            "Rate build-up component collection content changed during traversal.");
+                    }
+                    replayIndex++;
+                }
+            }
+
+            AdvancedCostCollectionContract.RequireKnownCountStableAfterTraversal(
+                components,
+                true,
+                knownComponentCount,
+                replayIndex,
+                "Rate build-up component collection");
+            if (replayIndex != snapshot.Count)
+            {
+                throw new InvalidOperationException(
+                    "Rate build-up component collection content changed during traversal.");
+            }
+        }
+
+        private static bool SameComponentState(CostResourceComponent left, CostResourceComponent right)
+        {
+            return StringComparer.Ordinal.Equals(left.ResourceCode, right.ResourceCode) &&
+                   StringComparer.Ordinal.Equals(left.Description, right.Description) &&
+                   StringComparer.Ordinal.Equals(left.Unit, right.Unit) &&
+                   left.QuantityPerBillUnit == right.QuantityPerBillUnit &&
+                   left.UnitRate == right.UnitRate;
         }
 
         private static void ValidatePercentageForScaling(decimal value, string paramName)
@@ -585,6 +703,13 @@ namespace QS3D.Core.Cost
                 knownRecordCount,
                 index,
                 "Historical cost catalog");
+            AdvancedCostCollectionContract.RequireStableKnownGeneration(
+                records,
+                hasKnownRecordCount,
+                knownRecordCount,
+                snapshot,
+                SameHistoricalRecordState,
+                "Historical cost catalog");
             snapshot.Sort(CompareHistoricalRecords);
             _records = new ReadOnlyCollection<HistoricalCostRecord>(snapshot.ToArray());
         }
@@ -606,6 +731,17 @@ namespace QS3D.Core.Cost
                     result.Add(record);
             }
             return new ReadOnlyCollection<HistoricalCostRecord>(result.ToArray());
+        }
+
+        private static bool SameHistoricalRecordState(HistoricalCostRecord left, HistoricalCostRecord right)
+        {
+            return StringComparer.Ordinal.Equals(left.RecordId, right.RecordId) &&
+                   StringComparer.Ordinal.Equals(left.BenchmarkKey, right.BenchmarkKey) &&
+                   StringComparer.Ordinal.Equals(left.DimensionKey, right.DimensionKey) &&
+                   left.Quantity == right.Quantity &&
+                   left.TotalCost == right.TotalCost &&
+                   StringComparer.Ordinal.Equals(left.Currency, right.Currency) &&
+                   left.AsOfUtc == right.AsOfUtc;
         }
 
         private static int CompareHistoricalRecords(HistoricalCostRecord left, HistoricalCostRecord right)
@@ -813,6 +949,7 @@ namespace QS3D.Core.Cost
                 AdvancedCostCollectionContract.ThrowTooManyEntries("Tender quote line collection");
 
             var byItem = new Dictionary<string, TenderQuoteLine>(StringComparer.OrdinalIgnoreCase);
+            var admittedLines = new List<TenderQuoteLine>();
             var index = 0;
             using (var lineEnumerator = lines.GetEnumerator())
             {
@@ -846,6 +983,7 @@ namespace QS3D.Core.Cost
                     if (byItem.ContainsKey(line.ItemCode))
                         throw new ArgumentException("Duplicate tender quote item code: " + line.ItemCode + ".", nameof(lines));
                     byItem.Add(line.ItemCode, line);
+                    admittedLines.Add(line);
                     index++;
                 }
             }
@@ -855,6 +993,13 @@ namespace QS3D.Core.Cost
                 knownLineCount,
                 index,
                 "Tender quote line collection");
+            AdvancedCostCollectionContract.RequireStableKnownGeneration(
+                lines,
+                hasKnownLineCount,
+                knownLineCount,
+                admittedLines,
+                SameTenderQuoteLineState,
+                "Tender quote line collection");
             Lines = new ReadOnlyDictionary<string, TenderQuoteLine>(byItem);
         }
 
@@ -862,6 +1007,12 @@ namespace QS3D.Core.Cost
         public string Bidder { get; }
         public string Currency { get; }
         public IReadOnlyDictionary<string, TenderQuoteLine> Lines { get; }
+
+        private static bool SameTenderQuoteLineState(TenderQuoteLine left, TenderQuoteLine right)
+        {
+            return StringComparer.Ordinal.Equals(left.ItemCode, right.ItemCode) &&
+                   left.UnitRate == right.UnitRate;
+        }
     }
 
     public sealed class TenderEvaluationResult
@@ -1016,6 +1167,13 @@ namespace QS3D.Core.Cost
                 knownRequirementCount,
                 index,
                 "Tender requirement collection");
+            AdvancedCostCollectionContract.RequireStableKnownGeneration(
+                requirements,
+                hasKnownRequirementCount,
+                knownRequirementCount,
+                result,
+                SameTenderRequirementState,
+                "Tender requirement collection");
             result.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.ItemCode, right.ItemCode));
             return result;
         }
@@ -1070,8 +1228,41 @@ namespace QS3D.Core.Cost
                 knownBidCount,
                 index,
                 "Tender bid collection");
+            AdvancedCostCollectionContract.RequireStableKnownGeneration(
+                bids,
+                hasKnownBidCount,
+                knownBidCount,
+                result,
+                SameTenderBidState,
+                "Tender bid collection");
             result.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.BidId, right.BidId));
             return result;
+        }
+
+        private static bool SameTenderRequirementState(TenderRequirement left, TenderRequirement right)
+        {
+            return StringComparer.Ordinal.Equals(left.ItemCode, right.ItemCode) &&
+                   StringComparer.Ordinal.Equals(left.Description, right.Description) &&
+                   StringComparer.Ordinal.Equals(left.Unit, right.Unit) &&
+                   left.Quantity == right.Quantity;
+        }
+
+        private static bool SameTenderBidState(TenderBid left, TenderBid right)
+        {
+            if (!StringComparer.Ordinal.Equals(left.BidId, right.BidId) ||
+                !StringComparer.Ordinal.Equals(left.Bidder, right.Bidder) ||
+                !StringComparer.Ordinal.Equals(left.Currency, right.Currency) ||
+                left.Lines.Count != right.Lines.Count)
+                return false;
+
+            foreach (var pair in left.Lines)
+            {
+                if (!right.Lines.TryGetValue(pair.Key, out var candidate) ||
+                    !StringComparer.Ordinal.Equals(pair.Value.ItemCode, candidate.ItemCode) ||
+                    pair.Value.UnitRate != candidate.UnitRate)
+                    return false;
+            }
+            return true;
         }
 
         private sealed class EvaluationBuilder
@@ -1197,6 +1388,7 @@ namespace QS3D.Core.Cost
                 AdvancedCostCollectionContract.ThrowTooManyEntries("Progress claim line collection");
 
             var contracts = new Dictionary<string, ProgressContractItem>(StringComparer.OrdinalIgnoreCase);
+            var admittedContracts = new List<ProgressContractItem>();
             var contractIndex = 0;
             using (var contractEnumerator = contractItems.GetEnumerator())
             {
@@ -1229,6 +1421,7 @@ namespace QS3D.Core.Cost
                     if (contracts.ContainsKey(item.ItemCode))
                         throw new ArgumentException("Duplicate progress contract item code: " + item.ItemCode + ".", nameof(contractItems));
                     contracts.Add(item.ItemCode, item);
+                    admittedContracts.Add(item);
                     contractIndex++;
                 }
             }
@@ -1238,8 +1431,16 @@ namespace QS3D.Core.Cost
                 knownContractCount,
                 contractIndex,
                 "Progress contract item collection");
+            AdvancedCostCollectionContract.RequireStableKnownGeneration(
+                contractItems,
+                hasKnownContractCount,
+                knownContractCount,
+                admittedContracts,
+                SameProgressContractState,
+                "Progress contract item collection");
 
             var claims = new Dictionary<string, ProgressClaimLine>(StringComparer.OrdinalIgnoreCase);
+            var admittedClaims = new List<ProgressClaimLine>();
             var claimIndex = 0;
             using (var claimEnumerator = claimLines.GetEnumerator())
             {
@@ -1274,6 +1475,7 @@ namespace QS3D.Core.Cost
                     if (!contracts.ContainsKey(line.ItemCode))
                         throw new InvalidOperationException("Progress claim references an unknown contract item: " + line.ItemCode + ".");
                     claims.Add(line.ItemCode, line);
+                    admittedClaims.Add(line);
                     claimIndex++;
                 }
             }
@@ -1282,6 +1484,13 @@ namespace QS3D.Core.Cost
                 hasKnownClaimCount,
                 knownClaimCount,
                 claimIndex,
+                "Progress claim line collection");
+            AdvancedCostCollectionContract.RequireStableKnownGeneration(
+                claimLines,
+                hasKnownClaimCount,
+                knownClaimCount,
+                admittedClaims,
+                SameProgressClaimState,
                 "Progress claim line collection");
 
             var itemCodes = new List<string>(contracts.Keys);
@@ -1333,6 +1542,21 @@ namespace QS3D.Core.Cost
                     retention,
                     net);
             }
+        }
+
+        private static bool SameProgressContractState(ProgressContractItem left, ProgressContractItem right)
+        {
+            return StringComparer.Ordinal.Equals(left.ItemCode, right.ItemCode) &&
+                   StringComparer.Ordinal.Equals(left.Unit, right.Unit) &&
+                   left.ContractQuantity == right.ContractQuantity &&
+                   left.UnitRate == right.UnitRate;
+        }
+
+        private static bool SameProgressClaimState(ProgressClaimLine left, ProgressClaimLine right)
+        {
+            return StringComparer.Ordinal.Equals(left.ItemCode, right.ItemCode) &&
+                   left.PreviousCertifiedQuantity == right.PreviousCertifiedQuantity &&
+                   left.ClaimedThisPeriodQuantity == right.ClaimedThisPeriodQuantity;
         }
     }
 }

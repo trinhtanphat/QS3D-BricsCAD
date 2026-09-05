@@ -96,18 +96,20 @@ namespace QS3D.Core.Cost
 
             BillItems = SnapshotBillItems(billItems, knownBillItemCount);
             BuildUpRates = SnapshotBuildUpRates(buildUpRates, knownBuildUpRateCount);
-            RateReferences = new RateReferenceGraph(Bounded(
+            var rateReferenceSnapshot = SnapshotNestedGeneration(
                 rateReferences,
                 MaxRateReferences,
                 "rate references",
-                knownRateReferenceCount));
-            Library = new BqLibraryCatalog(
-                LibraryId,
-                Bounded(
-                    libraryEntries,
-                    MaxLibraryEntries,
-                    "BQ library entries",
-                    knownLibraryEntryCount));
+                knownRateReferenceCount,
+                SameRateReferenceState);
+            var libraryEntrySnapshot = SnapshotNestedGeneration(
+                libraryEntries,
+                MaxLibraryEntries,
+                "BQ library entries",
+                knownLibraryEntryCount,
+                SameLibraryEntryState);
+            RateReferences = new RateReferenceGraph(rateReferenceSnapshot);
+            Library = new BqLibraryCatalog(LibraryId, libraryEntrySnapshot);
 
             new CostAdjustmentService().AdjustByRatios(0m, adjustmentRatioPercent, markupRatioPercent);
             AdjustmentRatioPercent = adjustmentRatioPercent == 0m ? 0m : adjustmentRatioPercent;
@@ -210,6 +212,8 @@ namespace QS3D.Core.Cost
             }
             RequireKnownCountMatchesTraversal("bill items", knownCount, index);
             RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);
+            if (knownCount.HasValue)
+                RequireStableBillItemGeneration(items, knownCount.Value, snapshot);
             snapshot.Sort(CompareBillItems);
             return new ReadOnlyCollection<TbqBillItem>(snapshot.ToArray());
         }
@@ -242,8 +246,95 @@ namespace QS3D.Core.Cost
             }
             RequireKnownCountMatchesTraversal("build-up rates", knownCount, index);
             RequireKnownCountStable(rates, MaxBuildUpRates, "build-up rates", knownCount);
+            if (knownCount.HasValue)
+                RequireStableBuildUpRateGeneration(rates, knownCount.Value, snapshot);
             snapshot.Sort(CompareBuildUps);
             return new ReadOnlyCollection<BuildUpRateSnapshot>(snapshot.ToArray());
+        }
+
+        private static void RequireStableBillItemGeneration(
+            IEnumerable<TbqBillItem> items,
+            int knownCount,
+            IReadOnlyList<TbqBillItem> admittedItems)
+        {
+            var index = 0;
+            using (var enumerator = items.GetEnumerator())
+            {
+                RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);
+                while (true)
+                {
+                    RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);
+                    if (index >= admittedItems.Count)
+                        ThrowBillItemContentChanged();
+                    var replayItem = enumerator.Current;
+                    RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);
+                    if (replayItem == null || !SameBillItemState(admittedItems[index], replayItem))
+                        ThrowBillItemContentChanged();
+                    index++;
+                }
+            }
+            if (index != admittedItems.Count)
+                ThrowBillItemContentChanged();
+            RequireKnownCountStable(items, MaxBillItems, "bill items", knownCount);
+        }
+
+        private static bool SameBillItemState(TbqBillItem left, TbqBillItem right)
+        {
+            return string.Equals(left.ItemCode, right.ItemCode, StringComparison.Ordinal) &&
+                   string.Equals(left.Description, right.Description, StringComparison.Ordinal) &&
+                   string.Equals(left.Unit, right.Unit, StringComparison.Ordinal) &&
+                   string.Equals(left.TradeCode, right.TradeCode, StringComparison.Ordinal) &&
+                   left.Quantity == right.Quantity &&
+                   left.UnitRate == right.UnitRate &&
+                   string.Equals(left.RateCode, right.RateCode, StringComparison.Ordinal);
+        }
+
+        private static void RequireStableBuildUpRateGeneration(
+            IEnumerable<BuildUpRateSnapshot> rates,
+            int knownCount,
+            IReadOnlyList<BuildUpRateSnapshot> admittedRates)
+        {
+            var index = 0;
+            using (var enumerator = rates.GetEnumerator())
+            {
+                RequireKnownCountStable(rates, MaxBuildUpRates, "build-up rates", knownCount);
+                while (true)
+                {
+                    RequireKnownCountStable(rates, MaxBuildUpRates, "build-up rates", knownCount);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireKnownCountStable(rates, MaxBuildUpRates, "build-up rates", knownCount);
+                    if (index >= admittedRates.Count)
+                        ThrowBuildUpRateContentChanged();
+                    var rate = enumerator.Current;
+                    RequireKnownCountStable(rates, MaxBuildUpRates, "build-up rates", knownCount);
+                    if (rate == null || !SameBuildUpRateState(admittedRates[index], rate))
+                        ThrowBuildUpRateContentChanged();
+                    index++;
+                }
+            }
+            if (index != admittedRates.Count)
+                ThrowBuildUpRateContentChanged();
+            RequireKnownCountStable(rates, MaxBuildUpRates, "build-up rates", knownCount);
+        }
+
+        private static bool SameBuildUpRateState(BuildUpRateSnapshot left, BuildUpRateSnapshot right)
+        {
+            return string.Equals(left.RateCode, right.RateCode, StringComparison.Ordinal) &&
+                   left.UnitRate == right.UnitRate;
+        }
+
+        private static void ThrowBillItemContentChanged()
+        {
+            throw new InvalidOperationException("TBQ workspace bill item source content changed during traversal.");
+        }
+
+        private static void ThrowBuildUpRateContentChanged()
+        {
+            throw new InvalidOperationException("TBQ workspace build-up rate source content changed during traversal.");
         }
 
         private static int? ValidateKnownCount<T>(IEnumerable<T> source, int maximum, string label)
@@ -277,6 +368,64 @@ namespace QS3D.Core.Cost
             if (hasConflict)
                 throw new InvalidOperationException("TBQ workspace " + label + " collection reports conflicting known counts.");
             return expected;
+        }
+
+        private static IReadOnlyList<T> SnapshotNestedGeneration<T>(
+            IEnumerable<T> source,
+            int maximum,
+            string label,
+            int? knownCount,
+            Func<T, T, bool> sameState)
+            where T : class
+        {
+            var snapshot = new List<T>();
+            foreach (var item in Bounded(source, maximum, label, knownCount))
+                snapshot.Add(item);
+
+            if (knownCount.HasValue)
+            {
+                var index = 0;
+                foreach (var replayItem in Bounded(source, maximum, label, knownCount))
+                {
+                    if (index >= snapshot.Count || !SameNestedState(snapshot[index], replayItem, sameState))
+                        ThrowNestedContentChanged(label);
+                    index++;
+                }
+                if (index != snapshot.Count)
+                    ThrowNestedContentChanged(label);
+            }
+
+            return new ReadOnlyCollection<T>(snapshot.ToArray());
+        }
+
+        private static bool SameNestedState<T>(T left, T right, Func<T, T, bool> sameState)
+            where T : class
+        {
+            if (left == null || right == null)
+                return left == null && right == null;
+            return sameState(left, right);
+        }
+
+        private static bool SameRateReferenceState(RateReferenceEdge left, RateReferenceEdge right)
+        {
+            return string.Equals(left.SourceRateCode, right.SourceRateCode, StringComparison.Ordinal) &&
+                   left.TargetKind == right.TargetKind &&
+                   string.Equals(left.TargetId, right.TargetId, StringComparison.Ordinal);
+        }
+
+        private static bool SameLibraryEntryState(BqLibraryEntry left, BqLibraryEntry right)
+        {
+            return string.Equals(left.ItemCode, right.ItemCode, StringComparison.Ordinal) &&
+                   string.Equals(left.Description, right.Description, StringComparison.Ordinal) &&
+                   string.Equals(left.Unit, right.Unit, StringComparison.Ordinal) &&
+                   string.Equals(left.CategoryPath, right.CategoryPath, StringComparison.Ordinal) &&
+                   left.ReferenceUnitRate == right.ReferenceUnitRate;
+        }
+
+        private static void ThrowNestedContentChanged(string label)
+        {
+            throw new InvalidOperationException(
+                "TBQ workspace " + label + " content changed across semantic generation replay.");
         }
 
         private static IEnumerable<T> Bounded<T>(IEnumerable<T> source, int maximum, string label, int? knownCount)

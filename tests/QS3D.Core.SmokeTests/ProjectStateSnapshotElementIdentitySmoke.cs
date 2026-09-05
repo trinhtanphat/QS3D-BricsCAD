@@ -15,7 +15,7 @@ namespace QS3D.Core.SmokeTests
             PreservesCanonicalPropertyState();
             RejectsInvalidMutableQuantityState();
             RejectsCanonicalQuantityNameCollision();
-            DetachedCopyCanonicalizesQuantityNameAndNegativeZero();
+            DetachedCopyCanonicalizesNegativeZero();
             RestorePreservesCapturedElementIdentity();
             RestoreIntoDifferentSameIdProjectNeverInjectsCapturedElements();
             DetachedCopyNeverAliasesCanonicalElements();
@@ -119,6 +119,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void RejectsInvalidMutableQuantityState()
         {
+            ExpectRejectedQuantity("padded name", " AreaM2 ", 1d);
             ExpectRejectedQuantity("negative", "AreaM2", -1d);
             ExpectRejectedQuantity("NaN", "AreaM2", double.NaN);
             ExpectRejectedQuantity("positive infinity", "AreaM2", double.PositiveInfinity);
@@ -156,18 +157,18 @@ namespace QS3D.Core.SmokeTests
             Require(element.Quantities.Count == 2, "Canonical-collision rejection mutated source quantities.");
         }
 
-        private static void DetachedCopyCanonicalizesQuantityNameAndNegativeZero()
+        private static void DetachedCopyCanonicalizesNegativeZero()
         {
             var project = new ProjectState("snapshot-negative-zero", "Negative zero fixture");
             var element = new ProjectElement("E1", ElementCategory.Room);
-            element.Quantities[" AreaM2 "] = BitConverter.Int64BitsToDouble(unchecked((long)0x8000000000000000UL));
+            element.Quantities["AreaM2"] = BitConverter.Int64BitsToDouble(unchecked((long)0x8000000000000000UL));
             element.MarkClean(ElementDirtyFlags.All);
             var dirty = element.Dirty;
             var updatedUtc = element.UpdatedUtc;
             project.Elements.Add(element);
             var detached = ProjectStateSnapshot.CreateDetachedCopy(project);
             var detachedElement = detached.FindElement("E1") ?? throw new Exception("Detached negative-zero fixture lost E1.");
-            Require(detachedElement.Quantities.Count == 1 && detachedElement.Quantities.ContainsKey("AreaM2"), "Detached snapshot did not canonicalize padded quantity name through SetQuantity.");
+            Require(detachedElement.Quantities.Count == 1 && detachedElement.Quantities.ContainsKey("AreaM2"), "Detached snapshot changed canonical quantity identity.");
             var copied = detachedElement.Quantities["AreaM2"];
             Require(copied == 0d, "Detached snapshot changed zero quantity magnitude.");
             Require(BitConverter.DoubleToInt64Bits(copied) == 0L, "Detached snapshot bypassed canonical positive-zero normalization.");

@@ -95,7 +95,17 @@ namespace QS3D.Core.Domain
         public string FamilyId { get => _familyId; set => SetRelationId(ref _familyId, value); }
         public string FloorId { get => _floorId; set => SetRelationId(ref _floorId, value); }
         public string ZoneId { get => _zoneId; set => SetRelationId(ref _zoneId, value); }
-        public string DrawingFingerprint { get => _drawingFingerprint; set => _drawingFingerprint = NormalizeDrawingFingerprint(value); }
+        public string DrawingFingerprint
+        {
+            get => _drawingFingerprint;
+            set
+            {
+                var next = NormalizeDrawingFingerprint(value);
+                if (string.Equals(_drawingFingerprint, next, StringComparison.Ordinal)) return;
+                _drawingFingerprint = next;
+                MarkDirtyCore(ElementDirtyFlags.Relations, true);
+            }
+        }
         public IList<string> SourceHandles { get; }
         public IList<string> DependsOn { get; }
         public IDictionary<string, string> Properties { get; }
@@ -273,8 +283,10 @@ namespace QS3D.Core.Domain
         internal void RestorePersistenceState(ElementDirtyFlags dirty, DateTime updatedUtc)
         {
             if ((dirty & ~ElementDirtyFlags.All) != 0) throw new ArgumentOutOfRangeException(nameof(dirty));
+            if (updatedUtc.Kind != DateTimeKind.Utc)
+                throw new ArgumentException("Element persistence timestamp must be UTC.", nameof(updatedUtc));
             Dirty = dirty;
-            UpdatedUtc = updatedUtc.Kind == DateTimeKind.Utc ? updatedUtc : updatedUtc.ToUniversalTime();
+            UpdatedUtc = updatedUtc;
         }
 
         internal void TouchPersistenceState()

@@ -46,7 +46,9 @@ namespace QS3D.Core.SmokeTests
                 ?? throw new Exception("ProjectPersistenceStamp.SnapshotBounded was not found.");
             try
             {
-                method.MakeGenericMethod(typeof(string)).Invoke(null, new object[] { values, knownCount, "regression entries" });
+                method.MakeGenericMethod(typeof(string)).Invoke(
+                    null,
+                    new object[] { values, knownCount, "regression entries", 10_000 });
                 return null;
             }
             catch (TargetInvocationException ex)

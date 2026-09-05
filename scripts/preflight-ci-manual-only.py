@@ -381,7 +381,7 @@ if not workflow_sources:
     errors.append("no GitHub Actions workflows found")
 
 workflow_names = {path.name for path, _ in workflow_sources}
-for required_workflow in (VALIDATION_WORKFLOW, AUTO_DISPATCHER, HYBRID_COORDINATOR):
+for required_workflow in (VALIDATION_WORKFLOW, AUTO_DISPATCHER):
     if required_workflow not in workflow_names:
         errors.append(f"missing owner-approved workflow: {required_workflow}")
 
@@ -475,10 +475,14 @@ for path, text in workflow_sources:
             "github.event.workflow_run.head_branch == 'main'", "gh workflow run release-v25-cloud.yml", "--ref main",
             'source_sha="${GITHUB_SHA,,}"', 'source_sha="${current_main,,}"', '-f source_sha="${source_sha}"', "confirm_release=RELEASE",
             "git fetch --force --tags origin", 'series_prefix="v0.1.0-preview."',
-            'git tag --list "${series_prefix}*"', "ordinal > 65535", "max_preview >= 65535",
-            "preview=$((max_preview + 1))",
+            "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj", "committed_product_version=",
+            "committed_preview_ordinal=", 'tag="${series_prefix}${committed_preview_ordinal}"',
+            "Refusing to reserve or dispatch an uncommitted preview tag", "ordinal > 65535",
         ), path.name)
-        for forbidden in ("GITHUB_RUN_NUMBER", "10000 +", '-f source_sha="${current_main}"', "contents: write"):
+        for forbidden in (
+            "GITHUB_RUN_NUMBER", "10000 +", '-f source_sha="${current_main}"', "contents: write",
+            "max_preview", "preview=$((max_preview + 1))",
+        ):
             if forbidden in text:
                 errors.append(f"{path.name}: dispatcher contains forbidden source/publish token: {forbidden}")
         if re.search(r"gh\s+workflow\s+run\s+(?!release-v25-cloud\.yml)", text):
@@ -492,54 +496,11 @@ for path, text in workflow_sources:
                 errors.append(f"{path.name}: unexpected automatic dispatcher job: {job_name}")
 
     elif path.name == HYBRID_COORDINATOR:
-        expected = {"pull_request", "push"}
-        if trigger_names != expected:
-            errors.append(f"{path.name}: hybrid coordinator must expose exactly pull_request + push; got {sorted(trigger_names)}")
-
-        pr_block = "\n".join(trigger_blocks.get("pull_request", []))
-        require_tokens(
-            pr_block,
-            ("types:", "- opened", "- reopened", "- ready_for_review", "- converted_to_draft", "- synchronize", "- labeled", "- unlabeled", "branches:", "- main"),
-            f"{path.name} pull_request",
-        )
-        push_block = "\n".join(trigger_blocks.get("push", []))
-        require_tokens(push_block, ("branches:", "- main"), f"{path.name} push")
-        if "paths:" in pr_block or "paths-ignore:" in pr_block or "paths:" in push_block or "paths-ignore:" in push_block:
-            errors.append(f"{path.name}: coordinator triggers must not use path filters")
-
-        require_tokens(text, (
-            "name: QS3D Hybrid PR Coordinator",
-            "contents: read", "actions: read", "pull-requests: write",
-            "group: qs3d-hybrid-pr-coordinator", "cancel-in-progress: false",
-            "arm-native-automerge:", "refresh-branches:",
-            "github.event_name == 'pull_request'", "github.event_name == 'push'",
-            "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}",
-            "enablePullRequestAutoMerge", "disablePullRequestAutoMerge", "autoMergeRequest",
-            "no-automerge", "head.repo.full_name", "base.ref", "draft", "dependabot[bot]",
-            "event_head_sha", "api_head_sha", "/update-branch", "expected_head_sha",
-        ), path.name)
-        for forbidden in (
-            "workflow_dispatch", "pull_request_target", "contents: write", "actions: write", "issues: write",
-            "gh pr merge", "git push", "git reset", "--force", "gh workflow run", "gh release",
-        ):
-            if forbidden in text:
-                errors.append(f"{path.name}: hybrid coordinator contains forbidden token: {forbidden}")
-        if re.search(r"repos/[^\s\"']+/pulls/[^\s\"']+/merge(?:[\s\"']|$)", text, re.IGNORECASE):
-            errors.append(f"{path.name}: direct pull-request merge endpoint remains forbidden")
-
-        expected_jobs = {"arm-native-automerge", "refresh-branches"}
-        if {name for name, _ in job_blocks} != expected_jobs:
-            errors.append(f"{path.name}: coordinator jobs must be exactly {sorted(expected_jobs)}")
-        arm_block = next(("\n".join(block) for name, block in job_blocks if name == "arm-native-automerge"), "")
-        refresh_block = next(("\n".join(block) for name, block in job_blocks if name == "refresh-branches"), "")
-        require_tokens(arm_block, ("github.event_name == 'pull_request'", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "enablePullRequestAutoMerge", "disablePullRequestAutoMerge", "autoMergeRequest"), f"{path.name}/arm-native-automerge")
-        require_tokens(refresh_block, ("github.event_name == 'push'", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "/update-branch", "expected_head_sha"), f"{path.name}/refresh-branches")
-        if "github.token" in arm_block or "github.token" in refresh_block:
-            errors.append(f"{path.name}: coordinator mutations must not fall back to github.token")
+        errors.append(f"{path.name}: retired Hybrid PR Coordinator workflow must remain removed")
 
     else:
         if trigger_names != {"workflow_dispatch"}:
-            errors.append(f"{path.name}: only {VALIDATION_WORKFLOW}, {AUTO_DISPATCHER}, and {HYBRID_COORDINATOR} may use automatic triggers; got {sorted(trigger_names)}")
+            errors.append(f"{path.name}: only {VALIDATION_WORKFLOW} and {AUTO_DISPATCHER} may use automatic triggers; got {sorted(trigger_names)}")
         for job_name, job_lines in job_blocks:
             if not is_hard_manual_dispatch_guard(extract_job_if_expression(job_lines)):
                 errors.append(f"{path.name}/{job_name}: job must hard-guard github.event_name == 'workflow_dispatch'")
@@ -563,7 +524,7 @@ policy_path = ROOT / "CI_POLICY.md"
 policy = policy_path.read_text(encoding="utf-8") if policy_path.is_file() else ""
 for token in (
     "automatic branch/PR validation", VALIDATION_WORKFLOW, "integration/<batch-id>", "exact-main release",
-    AUTO_DISPATCHER, HYBRID_COORDINATOR, "release-v25-cloud.yml", "ALL MERGED TO MAIN",
+    AUTO_DISPATCHER, "release-v25-cloud.yml", "ALL MERGED TO MAIN",
 ):
     if token not in policy:
         errors.append("CI_POLICY.md missing staged CI policy token: " + token)
@@ -575,7 +536,6 @@ for token in (
     "Only an agent/session explicitly authorized by the repository owner as an integration/merge coordinator may change `main`.",
     "shared branch/PR CI", "combined-tree CI", "exact-main release CI",
     "merge to `main` only within the owner's explicit authorization", "ALL MERGED TO MAIN", AUTO_DISPATCHER,
-    HYBRID_COORDINATOR,
 ):
     if token not in registration:
         errors.append("AGENT-WORK-REGISTRATION.md missing staged integration token: " + token)
@@ -589,5 +549,5 @@ if errors:
 
 print(
     "PASS: every agent/integration push produces exact-head branch CI, every PR emits stable required contexts, governance/docs-only candidates remain lightweight through internal scope classification, "
-    "build-relevant candidates run Core plus V25 compile, main owns exact-source V25 dispatch with a bounded successful-release wakeup, the named hybrid coordinator may arm protected native auto-merge/refresh, and releases retain explicit confirmation."
+    "build-relevant candidates run Core plus V25 compile, main owns exact-source V25 dispatch with a bounded successful-release wakeup, the Hybrid PR Coordinator workflow remains retired, and releases retain explicit confirmation."
 )

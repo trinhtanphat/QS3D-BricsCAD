@@ -227,6 +227,22 @@ namespace QS3D.BricsCAD.V25
                     });
                 }
             }
+            catch (CadStartedTimeoutException timeout)
+            {
+                // Work already crossed the application-context start boundary. Keep the retry
+                // identity accepted and transfer the global writer to the callback's terminal
+                // completion; abandoning here could replay a mutation that is still executing.
+                if (writerScope != null)
+                {
+                    var deferredWriterScope = McpCadMutationCoordinator.DetachMutationForDeferredCompletion(writerScope);
+                    // Detach is a one-way safety boundary. Clear caller ownership before attach so
+                    // any unexpected transfer failure leaks/quarantines the writer instead of
+                    // releasing it while the already-started CAD callback may still be mutating.
+                    writerScope = null;
+                    timeout.TransferWriterScope(deferredWriterScope);
+                }
+                throw;
+            }
             catch
             {
                 // If writer ownership was never acquired, no CAD mutation could have started and
@@ -713,6 +729,7 @@ namespace QS3D.BricsCAD.V25
             }
             return builder.Append("],\"guard\":\"one allowlisted command; bounded prompt lines; no known command chaining after terminators\"}").ToString();
         }
+
         private static string NormalizeCadCommandToken(string value)
         {
             var token = (value ?? string.Empty).Trim();
@@ -880,14 +897,103 @@ namespace QS3D.BricsCAD.V25
             catch { return false; }
         }
 
+        private sealed class CadStartedTimeoutException : TimeoutException
+        {
+            private readonly CadWorkItem _item;
+
+            public CadStartedTimeoutException(CadWorkItem item)
+                : base("BricsCAD work started but exceeded the MCP response deadline; completion continues without replay.")
+            {
+                _item = item ?? throw new ArgumentNullException(nameof(item));
+            }
+
+            public void TransferWriterScope(IDisposable deferredWriterScope)
+            {
+                _item.AttachWriterScope(deferredWriterScope);
+            }
+        }
+
         private sealed class CadWorkItem
         {
+            private readonly object _completionSync = new object();
+            private bool _callerOwnsCompletion = true;
+            private bool _completionDisposed;
+            private bool _completed;
+            private IDisposable? _writerScope;
+
             public Func<string> Action = null!;
             public string Result = string.Empty;
             public Exception? Error;
             public readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
             public int DispatchState = CadWorkQueued;
-            public int Abandoned;
+
+            public void DetachAfterStartedTimeout()
+            {
+                var disposeCompletion = false;
+                lock (_completionSync)
+                {
+                    if (!_callerOwnsCompletion) return;
+                    _callerOwnsCompletion = false;
+                    if (_completed && !_completionDisposed)
+                    {
+                        _completionDisposed = true;
+                        disposeCompletion = true;
+                    }
+                }
+                if (disposeCompletion) Done.Dispose();
+            }
+
+            public void AttachWriterScope(IDisposable writerScope)
+            {
+                if (writerScope == null) throw new ArgumentNullException(nameof(writerScope));
+                IDisposable? releaseNow = null;
+                lock (_completionSync)
+                {
+                    if (_writerScope != null)
+                        throw new InvalidOperationException("Deferred CAD writer scope is already attached.");
+                    if (_completed) releaseNow = writerScope;
+                    else _writerScope = writerScope;
+                }
+                if (releaseNow != null) releaseNow.Dispose();
+            }
+
+            public void Complete()
+            {
+                IDisposable? writerScope = null;
+                var disposeCompletion = false;
+                lock (_completionSync)
+                {
+                    if (_completed) return;
+                    _completed = true;
+                    writerScope = _writerScope;
+                    _writerScope = null;
+                    if (!_callerOwnsCompletion && !_completionDisposed)
+                    {
+                        _completionDisposed = true;
+                        disposeCompletion = true;
+                    }
+                }
+
+                try { Done.Set(); }
+                catch (ObjectDisposedException) { }
+                if (disposeCompletion) Done.Dispose();
+                if (writerScope != null) writerScope.Dispose();
+            }
+
+            public void DisposeCallerCompletionIfOwned()
+            {
+                var disposeCompletion = false;
+                lock (_completionSync)
+                {
+                    if (_callerOwnsCompletion && !_completionDisposed)
+                    {
+                        _callerOwnsCompletion = false;
+                        _completionDisposed = true;
+                        disposeCompletion = true;
+                    }
+                }
+                if (disposeCompletion) Done.Dispose();
+            }
         }
 
         private static string InvokeCadMutation(Func<string> action)
@@ -906,21 +1012,29 @@ namespace QS3D.BricsCAD.V25
         {
             if (action == null) throw new ArgumentNullException(nameof(action));
             var item = new CadWorkItem { Action = action };
-            Application.DocumentManager.ExecuteInApplicationContext(ExecuteCadWork, item);
-            if (!item.Done.Wait(CadDispatchTimeoutMilliseconds))
-            {
-                Interlocked.Exchange(ref item.Abandoned, 1);
-                var cancelled = Interlocked.CompareExchange(ref item.DispatchState, CadWorkCancelledBeforeStart, CadWorkQueued) == CadWorkQueued;
-                if (cancelled)
-                    throw new TimeoutException("Timed out waiting for BricsCAD application context; queued work was cancelled before start.");
-                throw new TimeoutException("Timed out after CAD work started; completion is uncertain. Do not retry automatically; inspect drawing/audit state first.");
-            }
             try
             {
+                Application.DocumentManager.ExecuteInApplicationContext(ExecuteCadWork, item);
+                if (!item.Done.Wait(CadDispatchTimeoutMilliseconds))
+                {
+                    var cancelled = Interlocked.CompareExchange(ref item.DispatchState, CadWorkCancelledBeforeStart, CadWorkQueued) == CadWorkQueued;
+                    if (cancelled)
+                        throw new TimeoutException("Timed out waiting for BricsCAD application context; queued work was cancelled before start.");
+
+                    // ExecuteCadWork already owns the operation. Transfer completion ownership
+                    // before returning a bounded timeout; the callback will publish terminal state
+                    // and, for mutations, release the detached process-global writer.
+                    item.DetachAfterStartedTimeout();
+                    throw new CadStartedTimeoutException(item);
+                }
+
                 if (item.Error != null) throw new InvalidOperationException(item.Error.Message, item.Error);
                 return item.Result;
             }
-            finally { item.Done.Dispose(); }
+            finally
+            {
+                item.DisposeCallerCompletionIfOwned();
+            }
         }
 
         private static void ExecuteCadWork(object state)
@@ -934,29 +1048,22 @@ namespace QS3D.BricsCAD.V25
             catch (Exception ex) { item.Error = ex; }
             finally
             {
-                try { item.Done.Set(); }
-                finally
-                {
-                    if (Volatile.Read(ref item.Abandoned) != 0)
-                    {
-                        try { item.Done.Dispose(); } catch (ObjectDisposedException) { }
-                    }
-                }
+                item.Complete();
             }
         }
 
         private static string DescribeEntity(Entity entity, bool extents, bool details)
         {
             var builder = new StringBuilder();
-            var boundedSolidInspect = extents && details && entity is Solid3d;
+            var boundedSolidExtents = extents && entity is Solid3d;
             builder.Append("{\"handle\":\"").Append(Escape(entity.Handle.ToString())).Append("\",\"type\":\"")
                 .Append(Escape(entity.GetType().Name)).Append("\",\"layer\":\"").Append(Escape(entity.Layer)).Append('"');
             if (extents)
             {
                 builder.Append(",\"extents\":");
-                if (boundedSolidInspect) builder.Append("null");
+                if (boundedSolidExtents) builder.Append("null");
                 else try { builder.Append(ExtentsJson(entity.GeometricExtents)); } catch { builder.Append("null"); }
-                if (boundedSolidInspect) builder.Append(",\"extentsDeferred\":true");
+                if (boundedSolidExtents) builder.Append(",\"extentsDeferred\":true");
             }
             if (details)
             {
@@ -1093,6 +1200,7 @@ namespace QS3D.BricsCAD.V25
         }
 
         private static bool Finite(double value) { return !double.IsNaN(value) && !double.IsInfinity(value); }
+
         private static Point3d EntityCenter(Entity entity)
         {
             try
@@ -1212,7 +1320,8 @@ namespace QS3D.BricsCAD.V25
             if (ctrl) list.Add(KeyInput(0x11, false));
             if (alt) list.Add(KeyInput(0x12, false));
             if (shift) list.Add(KeyInput(0x10, false));
-            list.Add(KeyInput(key, false)); list.Add(KeyInput(key, true));
+            list.Add(KeyInput(key, false));
+            list.Add(KeyInput(key, true));
             if (shift) list.Add(KeyInput(0x10, true));
             if (alt) list.Add(KeyInput(0x12, true));
             if (ctrl) list.Add(KeyInput(0x11, true));
@@ -1224,7 +1333,8 @@ namespace QS3D.BricsCAD.V25
         private static void SendMouse(uint flags)
         {
             var input = new[] { new INPUT { type = 0, U = new InputUnion { mi = new MOUSEINPUT { dwFlags = flags } } } };
-            if (SendInput(1, input, Marshal.SizeOf(typeof(INPUT))) != 1) throw new InvalidOperationException("Windows SendInput rejected mouse input.");
+            if (SendInput(1, input, Marshal.SizeOf(typeof(INPUT))) != 1)
+                throw new InvalidOperationException("Windows SendInput rejected mouse input.");
         }
 
         private static INPUT KeyInput(ushort key, bool up)
@@ -1236,13 +1346,33 @@ namespace QS3D.BricsCAD.V25
         {
             switch (key)
             {
-                case "ENTER": return 0x0D; case "ESC": case "ESCAPE": return 0x1B; case "TAB": return 0x09;
-                case "BACKSPACE": return 0x08; case "DELETE": return 0x2E; case "SPACE": return 0x20;
-                case "LEFT": return 0x25; case "UP": return 0x26; case "RIGHT": return 0x27; case "DOWN": return 0x28;
-                case "HOME": return 0x24; case "END": return 0x23; case "PAGEUP": return 0x21; case "PAGEDOWN": return 0x22;
-                case "F1": return 0x70; case "F2": return 0x71; case "F3": return 0x72; case "F4": return 0x73; case "F5": return 0x74;
-                case "F6": return 0x75; case "F7": return 0x76; case "F8": return 0x77; case "F9": return 0x78; case "F10": return 0x79;
-                case "F11": return 0x7A; case "F12": return 0x7B;
+                case "ENTER": return 0x0D;
+                case "ESC":
+                case "ESCAPE": return 0x1B;
+                case "TAB": return 0x09;
+                case "BACKSPACE": return 0x08;
+                case "DELETE": return 0x2E;
+                case "SPACE": return 0x20;
+                case "LEFT": return 0x25;
+                case "UP": return 0x26;
+                case "RIGHT": return 0x27;
+                case "DOWN": return 0x28;
+                case "HOME": return 0x24;
+                case "END": return 0x23;
+                case "PAGEUP": return 0x21;
+                case "PAGEDOWN": return 0x22;
+                case "F1": return 0x70;
+                case "F2": return 0x71;
+                case "F3": return 0x72;
+                case "F4": return 0x73;
+                case "F5": return 0x74;
+                case "F6": return 0x75;
+                case "F7": return 0x76;
+                case "F8": return 0x77;
+                case "F9": return 0x78;
+                case "F10": return 0x79;
+                case "F11": return 0x7A;
+                case "F12": return 0x7B;
             }
             if (key.Length == 1)
             {
@@ -1277,7 +1407,8 @@ namespace QS3D.BricsCAD.V25
                 if (!File.Exists(path) || new FileInfo(path).Length < MaxAuditBytes) return;
                 var previous = path + ".1";
                 try { if (File.Exists(previous)) File.Delete(previous); } catch { }
-                try { File.Move(path, previous); } catch { File.WriteAllText(path, string.Empty, new UTF8Encoding(false)); }
+                try { File.Move(path, previous); }
+                catch { File.WriteAllText(path, string.Empty, new UTF8Encoding(false)); }
             }
             catch { }
         }

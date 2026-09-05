@@ -1,0 +1,16 @@
+id: mcp-transport
+version: 1
+triggers:
+  - McpTransport
+prerequisites:
+  - repository-lifecycle
+  - tdd-source
+required-docs:
+  - docs/MCP-CANONICAL-RUNBOOK.md
+tool-classes:
+  - mcp.inspect
+  - mcp.transport
+  - process.test
+validation:
+  - transport-contracts
+  - no-secret-export

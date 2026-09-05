@@ -1,0 +1,13 @@
+id: release-local-only
+version: 1
+triggers:
+  - ReleasePackage
+prerequisites:
+  - repository-lifecycle
+required-docs:
+  - docs/REMOTE-AGENT-SCOPE.md
+tool-classes:
+  - release.inspect
+  - process.test
+validation:
+  - licensed-runtime-local-only
