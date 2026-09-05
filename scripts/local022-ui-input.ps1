@@ -138,9 +138,12 @@ public static class Qs3dLocal022Input {
     }
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr window, out RECT rectangle);
     [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr window, IntPtr deviceContext, uint flags);
-    public static void RequireForeground(int process) {
+    public static bool IsForegroundOwned(int process) {
         uint actual;
-        if (GetWindowThreadProcessId(GetForegroundWindow(), out actual) == 0 || actual != process)
+        return GetWindowThreadProcessId(GetForegroundWindow(), out actual) != 0 && actual == process;
+    }
+    public static void RequireForeground(int process) {
+        if (!IsForegroundOwned(process))
             throw new InvalidOperationException("UI foreground is not the owned host.");
     }
     public static void RequirePoint(int process, int x, int y) {
@@ -238,14 +241,18 @@ function Invoke-Local022UiPhysicalAction($Request, [Diagnostics.Process]$Process
     # controls; that would invalidate every screen coordinate in this request.
     $popup = [Qs3dLocal022Input]::GetLastActivePopup($window)
     if ($popup -ne [IntPtr]::Zero) { $window = $popup }
-    $activationDeadline = [DateTime]::UtcNow.AddSeconds(5)
-    $activationShell = New-Object -ComObject WScript.Shell
-    do {
-        [void]$activationShell.AppActivate($Process.Id)
-        $activated = [Qs3dLocal022Input]::ActivateOwned($window,$Process.Id)
-        if ($activated) { break }
-        Start-Sleep -Milliseconds 100
-    } while ([DateTime]::UtcNow -lt $activationDeadline)
+    # Re-activating an already foreground host can dismiss a WPF ComboBox popup
+    # between its measured hover and click. Keep current owned focus intact.
+    if (-not [Qs3dLocal022Input]::IsForegroundOwned($Process.Id)) {
+        $activationDeadline = [DateTime]::UtcNow.AddSeconds(5)
+        $activationShell = New-Object -ComObject WScript.Shell
+        do {
+            [void]$activationShell.AppActivate($Process.Id)
+            $activated = [Qs3dLocal022Input]::ActivateOwned($window,$Process.Id)
+            if ($activated) { break }
+            Start-Sleep -Milliseconds 100
+        } while ([DateTime]::UtcNow -lt $activationDeadline)
+    }
     [Qs3dLocal022Input]::RequireForeground($Process.Id)
     switch -CaseSensitive ($Request.action) {
         'move' { [Qs3dLocal022Input]::Move($Process.Id, $Request.x, $Request.y) }

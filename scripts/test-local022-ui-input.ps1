@@ -199,3 +199,37 @@ foreach ($major in @(25,26)) {
     }
 }
 Write-Output 'PASS: both native loops reject failed atomic UI markers before further input and retain PASS wait behavior.'
+
+# Replay the actual activation guard with an in-memory native/COM double.
+$inputSource = Get-Content $library -Raw
+$activation = [regex]::Match($inputSource, '(?ms)^    if \(-not \[Qs3dLocal022Input\]::IsForegroundOwned\(\$Process.Id\)\) \{.*?^    \}\r?\n    \[Qs3dLocal022Input\]::RequireForeground\(\$Process.Id\)').Value
+if (-not $activation) { throw 'FAIL: already-owned focus is not preserved before UI input.' }
+$activationType = 'Local022ActivationReplay_' + [Guid]::NewGuid().ToString('N')
+Add-Type -TypeDefinition @"
+using System;
+public static class $activationType {
+    public static bool Owned, AllowActivation = true;
+    public static int Activations;
+    public static bool IsForegroundOwned(int process) { return Owned; }
+    public static bool ActivateOwned(IntPtr window,int process) { Activations++; Owned=AllowActivation; return Owned; }
+    public static void RequireForeground(int process) { if (!Owned) throw new Exception("TEST_FOREIGN_FOCUS"); }
+}
+"@
+$activation = $activation.Replace('Qs3dLocal022Input',$activationType).Replace('AddSeconds(5)','AddSeconds(-1)')
+& {
+    $Process = [pscustomobject]@{ Id=12345 }; $window=[IntPtr]123
+    function New-Object { param($ComObject) return [pscustomobject]@{} | Add-Member ScriptMethod AppActivate { param($Id) return $true } -PassThru }
+    function Start-Sleep { param($Milliseconds) }
+    ([type]$activationType)::Owned = $true
+    & ([scriptblock]::Create($activation))
+    if (([type]$activationType)::Activations -ne 0) { throw 'FAIL: existing owned foreground was reactivated.' }
+    ([type]$activationType)::Owned = $false
+    & ([scriptblock]::Create($activation))
+    if (([type]$activationType)::Activations -ne 1) { throw 'FAIL: foreign foreground did not require guarded activation.' }
+    ([type]$activationType)::Owned = $false
+    ([type]$activationType)::AllowActivation = $false
+    $rejected=$false
+    try { & ([scriptblock]::Create($activation)) } catch { if ($_.Exception.Message -notmatch 'TEST_FOREIGN_FOCUS') { throw }; $rejected=$true }
+    if (-not $rejected) { throw 'FAIL: failed activation allowed input.' }
+}
+Write-Output 'PASS: actual activation guard preserves owned focus, activates only when necessary and refuses failed activation; no native input.'
