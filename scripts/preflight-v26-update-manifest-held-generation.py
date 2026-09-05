@@ -34,9 +34,22 @@ def main() -> None:
     if not open_index < read_index < invoke_index < dispose_index:
         raise SystemExit("ERROR: V26 update-manifest held generation ordering must be open -> held read -> invoke -> dispose")
 
-    # Preserve existing residue-safe cleanup: no recursive temp-root deletion.
+    # Preserve residue-safe cleanup after the cleanup implementation moved behind
+    # strict/best-effort helper parameters. The strict success path remains fail-closed;
+    # the best-effort path is only allowed when a primary failure is already propagating.
+    require(source, "function Remove-V26ManifestTemporaryWorkspaceStrict", "strict cleanup helper")
+    require(source, "function Remove-V26ManifestTemporaryWorkspaceBestEffort", "primary-failure cleanup helper")
+    require(source, "$residue = @(Get-ChildItem -LiteralPath $RootPath -Force)", "strict residue enumeration before temp-root cleanup")
+    require(source, "Remove-V26ManifestTemporaryWorkspaceStrict -ScriptPath $tempScript -RootPath $tempRoot", "strict cleanup dispatch")
+    require(source, "Remove-V26ManifestTemporaryWorkspaceBestEffort -ScriptPath $tempScript -RootPath $tempRoot", "primary-failure cleanup dispatch")
     forbid(source, "Remove-Item -LiteralPath $tempRoot -Recurse", "recursive temp-root cleanup")
-    require(source, "$residue = @(Get-ChildItem -LiteralPath $tempRoot -Force)", "residue enumeration before temp-root cleanup")
+    forbid(source, "Remove-Item -LiteralPath $RootPath -Recurse", "recursive helper-root cleanup")
+
+    strict_call = source.index("Remove-V26ManifestTemporaryWorkspaceStrict -ScriptPath $tempScript -RootPath $tempRoot")
+    best_effort_call = source.index("Remove-V26ManifestTemporaryWorkspaceBestEffort -ScriptPath $tempScript -RootPath $tempRoot")
+    if not dispose_index < strict_call < best_effort_call:
+        raise SystemExit("ERROR: V26 held generation cleanup must dispose after invocation, then use strict success cleanup before primary-failure best-effort cleanup")
+
     print("PASS V26 update-manifest held-generation guard")
 
 
