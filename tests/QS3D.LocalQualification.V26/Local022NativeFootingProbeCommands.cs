@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.Loader;
 using System.Security.Cryptography;
 using System.Text;
 using Bricscad.ApplicationServices;
@@ -35,6 +36,9 @@ namespace QS3D.LocalQualification.V26
         private static readonly object Sync = new object();
         private static readonly object VoidResult = new object();
         private static RunState? _state;
+        private static Assembly? _sharedProduct;
+        private static Assembly? _sharedCore;
+        private static AssemblyLoadContext? _probeLoadContext;
 
         [CommandMethod("QL22RUN", CommandFlags.Modal)]
         public void Run() => Execute("run", RunPhase);
@@ -177,8 +181,42 @@ namespace QS3D.LocalQualification.V26
             var expectedCore = Path.Combine(Path.GetDirectoryName(productPath) ?? throw new ProbeException("product_root_missing"), "QS3D.Core.dll");
             if (!SamePath(core.Location, expectedCore)) throw new ProbeException("core_location_mismatch");
             if (!SamePath(Assembly.GetExecutingAssembly().Location, probePath)) throw new ProbeException("probe_location_mismatch");
+            ShareFrozenProductAssemblies(product, core);
             PauseMcpMutationBoundary(product);
             return new Context(document, runId, root, drawing, productPath, product);
+        }
+
+        private static void ShareFrozenProductAssemblies(Assembly product, Assembly core)
+        {
+            // V26 NETLOAD may isolate the probe from the product's load context.
+            // Share only the exact already-loaded and path-verified assemblies;
+            // never copy/reload a second Core or resolve arbitrary filesystem DLLs.
+            lock (Sync)
+            {
+                if (_probeLoadContext != null)
+                {
+                    if (!ReferenceEquals(_sharedProduct, product) || !ReferenceEquals(_sharedCore, core))
+                        throw new ProbeException("shared_assembly_identity_changed");
+                    return;
+                }
+                _sharedProduct = product;
+                _sharedCore = core;
+                _probeLoadContext = AssemblyLoadContext.GetLoadContext(Assembly.GetExecutingAssembly())
+                    ?? throw new ProbeException("probe_load_context_missing");
+                _probeLoadContext.Resolving += ResolveFrozenAssembly;
+            }
+        }
+
+        private static Assembly? ResolveFrozenAssembly(AssemblyLoadContext context, AssemblyName requested)
+        {
+            lock (Sync)
+            {
+                if (!ReferenceEquals(context, _probeLoadContext)) return null;
+                foreach (var candidate in new[] { _sharedCore, _sharedProduct })
+                    if (candidate != null && string.Equals(requested.FullName, candidate.GetName().FullName, StringComparison.Ordinal))
+                        return candidate;
+                return null;
+            }
         }
 
         private static void PauseMcpMutationBoundary(Assembly product)
@@ -531,6 +569,12 @@ namespace QS3D.LocalQualification.V26
                 {
                     lines.Add("type=" + NormalizeCode(current.GetType().FullName ?? "UNKNOWN"));
                     lines.Add("hresult=" + current.HResult.ToString("X8", CultureInfo.InvariantCulture));
+                    if (current is FileNotFoundException missing && !string.IsNullOrWhiteSpace(missing.FileName))
+                    {
+                        var name = new AssemblyName(missing.FileName).Name;
+                        if (new[] { "QS3D.Core", "QS3D.BricsCAD.V26", "BrxMgd", "TD_Mgd", "TD_MgdBrep" }.Contains(name, StringComparer.Ordinal))
+                            lines.Add("requested_assembly=" + NormalizeCode(name!));
+                    }
                     foreach (var frame in (new StackTrace(current, false).GetFrames() ?? Array.Empty<StackFrame>()).Take(8))
                     {
                         var method = frame.GetMethod();
