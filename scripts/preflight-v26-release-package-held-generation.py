@@ -169,6 +169,10 @@ def run_probe_regression() -> list[str]:
     return failures
 
 
+def github_annotation_escape(value: str) -> str:
+    return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
 def main() -> int:
     failures = static_failures()
     if not failures:
@@ -176,6 +180,7 @@ def main() -> int:
 
     if failures:
         for failure in failures:
+            print(f"::error title=V26 held-generation preflight::{github_annotation_escape(failure)}")
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
 
