@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import sys
 
@@ -16,6 +17,7 @@ PROBE_PROJECT = PROBE_DIR / "V26ReleaseIdentityProbe.csproj"
 PROBE_SOURCE = PROBE_DIR / "Program.cs"
 MARKER = "QS3D_ASSEMBLY_VERSION:"
 EXPECTED_PROBE_VERSION = "1.0.0.0"
+WINDOWS_CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
 
 
 def static_failures() -> list[str]:
@@ -105,6 +107,67 @@ def phase_notice(phase: str) -> None:
     print(f"::notice title=V26 held-generation phase::{github_annotation_escape(phase)}")
 
 
+def _terminate_process_tree(process: subprocess.Popen[bytes]) -> None:
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+            check=False,
+        )
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=10)
+
+
+def run_bounded(
+    command: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str],
+    timeout: int,
+    input_bytes: bytes | None = None,
+) -> tuple[int, bytes, bytes]:
+    launch_kwargs: dict[str, object]
+    if os.name == "nt":
+        launch_kwargs = {"creationflags": WINDOWS_CREATE_NEW_PROCESS_GROUP}
+    else:
+        launch_kwargs = {"start_new_session": True}
+
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        stdin=subprocess.PIPE if input_bytes is not None else subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        **launch_kwargs,
+    )
+    try:
+        stdout, stderr = process.communicate(input=input_bytes, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        _terminate_process_tree(process)
+        try:
+            stdout, stderr = process.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            stdout, stderr = b"", b""
+        detail = (stderr or stdout).decode("utf-8", errors="replace").strip()[-1000:]
+        raise RuntimeError(
+            f"bounded subprocess exceeded {timeout}s and its owned process tree was terminated: {detail}"
+        ) from exc
+    return process.returncode, stdout, stderr
+
+
 def run_probe_regression() -> list[str]:
     failures: list[str] = []
     dotnet = shutil.which("dotnet")
@@ -121,27 +184,27 @@ def run_probe_regression() -> list[str]:
         }
     )
 
-    build = subprocess.run(
-        [
-            dotnet,
-            "build",
-            str(PROBE_PROJECT),
-            "--configuration",
-            "Release",
-            "--nologo",
-            "--verbosity",
-            "quiet",
-            "-p:RestoreIgnoreFailedSources=true",
-        ],
-        cwd=ROOT,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=90,
-        check=False,
-    )
-    if build.returncode != 0:
-        detail = (build.stderr or build.stdout).strip()[-2000:]
+    try:
+        build_rc, build_stdout, build_stderr = run_bounded(
+            [
+                dotnet,
+                "build",
+                str(PROBE_PROJECT),
+                "--configuration",
+                "Release",
+                "--nologo",
+                "--verbosity",
+                "quiet",
+                "-p:RestoreIgnoreFailedSources=true",
+            ],
+            cwd=ROOT,
+            env=env,
+            timeout=90,
+        )
+    except RuntimeError as exc:
+        return [f"V26 metadata probe build did not terminate safely: {exc}"]
+    if build_rc != 0:
+        detail = (build_stderr or build_stdout).decode("utf-8", errors="replace").strip()[-2000:]
         return [f"V26 metadata probe build failed: {detail}"]
     phase_notice("probe-build-pass")
 
@@ -150,32 +213,38 @@ def run_probe_regression() -> list[str]:
         return [f"V26 metadata probe build produced no expected assembly: {probe_dll}"]
 
     probe_bytes = probe_dll.read_bytes()
-    good = subprocess.run(
-        [dotnet, str(probe_dll)],
-        input=probe_bytes,
-        capture_output=True,
-        timeout=20,
-        check=False,
-    )
+    try:
+        good_rc, good_stdout_bytes, good_stderr_bytes = run_bounded(
+            [dotnet, str(probe_dll)],
+            cwd=ROOT,
+            env=env,
+            timeout=20,
+            input_bytes=probe_bytes,
+        )
+    except RuntimeError as exc:
+        return [f"V26 metadata probe self-parse did not terminate safely: {exc}"]
     expected = f"{MARKER}{EXPECTED_PROBE_VERSION}"
-    good_stdout = good.stdout.decode("utf-8", errors="replace").strip()
-    if good.returncode != 0 or good_stdout != expected:
-        detail = good.stderr.decode("utf-8", errors="replace").strip()[-1000:]
+    good_stdout = good_stdout_bytes.decode("utf-8", errors="replace").strip()
+    if good_rc != 0 or good_stdout != expected:
+        detail = good_stderr_bytes.decode("utf-8", errors="replace").strip()[-1000:]
         failures.append(
-            f"V26 metadata probe did not parse its own exact stdin generation: rc={good.returncode} stdout={good_stdout!r} stderr={detail!r}"
+            f"V26 metadata probe did not parse its own exact stdin generation: rc={good_rc} stdout={good_stdout!r} stderr={detail!r}"
         )
     else:
         phase_notice("self-parse-pass")
 
-    malformed = subprocess.run(
-        [dotnet, str(probe_dll)],
-        input=b"not-a-managed-pe",
-        capture_output=True,
-        timeout=20,
-        check=False,
-    )
-    malformed_stdout = malformed.stdout.decode("utf-8", errors="replace")
-    if malformed.returncode == 0 or MARKER in malformed_stdout:
+    try:
+        malformed_rc, malformed_stdout_bytes, _ = run_bounded(
+            [dotnet, str(probe_dll)],
+            cwd=ROOT,
+            env=env,
+            timeout=20,
+            input_bytes=b"not-a-managed-pe",
+        )
+    except RuntimeError as exc:
+        return failures + [f"V26 metadata probe malformed-input check did not terminate safely: {exc}"]
+    malformed_stdout = malformed_stdout_bytes.decode("utf-8", errors="replace")
+    if malformed_rc == 0 or MARKER in malformed_stdout:
         failures.append("V26 metadata probe did not fail closed on malformed stdin bytes")
     else:
         phase_notice("malformed-rejection-pass")
