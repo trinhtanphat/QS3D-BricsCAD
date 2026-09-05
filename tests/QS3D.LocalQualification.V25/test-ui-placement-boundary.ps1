@@ -193,3 +193,35 @@ $hit
 "@
 ([type]$name)::Run()
 Write-Output 'PASS: actual hit ancestry accepts only intended nearest tree row, refusing overlapping/nested other rows and clipped/missing hits.'
+
+$editorHit = [regex]::Match($source, '(?ms)^        private static bool PropertyEditorHitMatches\([^\r\n]*\)\r?\n        \{.*?^        \}').Value
+if (-not $editorHit) { throw 'FAIL: missing property editor hit guard; clipped H2 may receive physical input.' }
+$name = 'Local022EditorHitReplay_' + [Guid]::NewGuid().ToString('N')
+Add-Type -TypeDefinition @"
+using System;
+public static class $name {
+    private class DependencyObject { public DependencyObject Parent; }
+    private class FrameworkElement : DependencyObject {
+        public WpfPoint PointFromScreen(WpfPoint p) { return p; }
+        public DependencyObject InputHitTest(WpfPoint p) { return Hit; }
+    }
+    private class TextBox : FrameworkElement {}
+    private struct WpfPoint { public double X,Y; public WpfPoint(double x,double y) {X=x;Y=y;} }
+    private static class VisualTreeHelper { public static DependencyObject GetParent(DependencyObject obj) { return obj.Parent; } }
+    private static DependencyObject Hit;
+    private static WpfPoint ElementCenter(FrameworkElement editor) { return new WpfPoint(377,666); }
+$editorHit
+    public static void Run() {
+        var root=new FrameworkElement(); var target=new TextBox {Parent=root};
+        Hit=new FrameworkElement {Parent=target};
+        if (!PropertyEditorHitMatches(root,target)) throw new Exception("Intended H2 editor rejected");
+        Hit=target; if (!PropertyEditorHitMatches(root,target)) throw new Exception("Direct editor hit rejected");
+        Hit=new FrameworkElement {Parent=new TextBox {Parent=root}};
+        if (PropertyEditorHitMatches(root,target)) throw new Exception("Different editor accepted");
+        Hit=root; if (PropertyEditorHitMatches(root,target)) throw new Exception("Clipped H2 accepted");
+        Hit=null; if (PropertyEditorHitMatches(root,target)) throw new Exception("Missing editor hit accepted");
+    }
+}
+"@
+([type]$name)::Run()
+Write-Output 'PASS: actual editor hit guard requires the exact TextBox and refuses clipped, missing or different editor targets.'

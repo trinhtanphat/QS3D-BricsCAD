@@ -408,6 +408,15 @@ namespace QS3D.LocalQualification.V25
                             ?? throw new ProbeException("ui_family_h2_row_missing");
                         list.ScrollIntoView(row);
                         _workspace!.UpdateLayout();
+                        // Grouped ScrollIntoView aligns H2 at the list's bottom, which can
+                        // be clipped by the short hosted property pane. The final rows
+                        // are below H2; reveal that end before measuring the actual editor.
+                        DependencyObject? parent = VisualTreeHelper.GetParent(RequirePropertyEditor(_workspace, "H2"));
+                        while (parent != null && !ReferenceEquals(parent, list) && !(parent is ScrollViewer))
+                            parent = VisualTreeHelper.GetParent(parent);
+                        if (!(parent is ScrollViewer scroll)) throw new ProbeException("ui_property_scroll_missing");
+                        scroll.ScrollToBottom();
+                        _workspace.UpdateLayout();
                         Advance(UiStage.EditH2);
                         break;
                     }
@@ -415,6 +424,7 @@ namespace QS3D.LocalQualification.V25
                     case UiStage.EditH2:
                     {
                         var h2 = RequirePropertyEditor(_workspace!, "H2");
+                        if (!_requestWritten && !PropertyEditorHitMatches(_workspace!, h2)) return;
                         if (!AwaitAction(h2, "text", "1000")) return;
                         if (!string.Equals((h2.Text ?? string.Empty).Trim(), "1000", StringComparison.Ordinal)) return;
                         Advance(UiStage.StartSecondDraw);
@@ -987,6 +997,19 @@ namespace QS3D.LocalQualification.V25
 
         private static bool Contains(UiPixelRect outer, UiPixelRect inner) =>
             inner.Left >= outer.Left && inner.Top >= outer.Top && inner.Right <= outer.Right && inner.Bottom <= outer.Bottom;
+
+        private static bool PropertyEditorHitMatches(FrameworkElement workspace, TextBox editor)
+        {
+            var point = ElementCenter(editor);
+            var local = workspace.PointFromScreen(new WpfPoint(point.X, point.Y));
+            var hit = workspace.InputHitTest(local) as DependencyObject;
+            while (hit != null && !ReferenceEquals(hit, workspace))
+            {
+                if (hit is TextBox target) return ReferenceEquals(target, editor);
+                hit = VisualTreeHelper.GetParent(hit);
+            }
+            return false;
+        }
 
         private static bool TreeLabelHitMatches(FrameworkElement workspace, TreeViewItem item, FrameworkElement label)
         {
