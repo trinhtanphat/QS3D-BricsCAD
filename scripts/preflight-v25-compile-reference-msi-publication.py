@@ -4,12 +4,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "scripts" / "acquire-v25-compile-references.ps1"
 
+STAGING_OPEN = "$stagingAdmission = Open-PinnedMsiReadLock -Path $staging -ExpectedSha256 $expected"
+DESTINATION_READMIT = "$publishedAdmission = Open-PinnedMsiReadLock -Path $msi -ExpectedSha256 $expected"
 REQUIRED = [
-    "Open-PinnedMsiReadLock -Path $staging -ExpectedSha256 $expected",
+    STAGING_OPEN,
     "[IO.FileMode]::CreateNew",
     "$stagingAdmission.Stream.CopyTo($publishedStream)",
     "$publishedStream.Flush($true)",
-    "Open-PinnedMsiReadLock -Path $msi -ExpectedSha256 $expected",
+    DESTINATION_READMIT,
     "Canonical MSI destination appeared before held-generation publication; refusing destructive replacement.",
 ]
 FORBIDDEN = [
@@ -28,11 +30,11 @@ def validate(source: str) -> None:
         if token in source:
             raise ValueError(f"unsafe pathname publication contract remains: {token}")
 
-    staging_open = source.index("Open-PinnedMsiReadLock -Path $staging -ExpectedSha256 $expected")
+    staging_open = source.index(STAGING_OPEN)
     create_new = source.index("[IO.FileMode]::CreateNew", staging_open)
     copy_pos = source.index("$stagingAdmission.Stream.CopyTo($publishedStream)", create_new)
     flush_pos = source.index("$publishedStream.Flush($true)", copy_pos)
-    readmit_pos = source.index("Open-PinnedMsiReadLock -Path $msi -ExpectedSha256 $expected", flush_pos)
+    readmit_pos = source.index(DESTINATION_READMIT, flush_pos)
     if not (staging_open < create_new < copy_pos < flush_pos < readmit_pos):
         raise ValueError("held staging admission, fresh publication, durable flush and re-admission ordering changed")
 
@@ -65,11 +67,7 @@ mutations = {
         1,
     ),
     "non-durable publication": text.replace("$publishedStream.Flush($true)", "$publishedStream.Flush()", 1),
-    "missing post-publication re-admission": text.replace(
-        "$publishedAdmission = Open-PinnedMsiReadLock -Path $msi -ExpectedSha256 $expected",
-        "$publishedAdmission = $null",
-        1,
-    ),
+    "missing post-publication re-admission": text.replace(DESTINATION_READMIT, "$publishedAdmission = $null", 1),
 }
 for label, mutated in mutations.items():
     if mutated == text:
