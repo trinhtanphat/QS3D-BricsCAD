@@ -84,13 +84,13 @@ else:
     if kernel_at < 0 or handover_at < 0 or erase_at < 0 or not (kernel_at < handover_at < erase_at):
         errors.append("boolean ordering must be transient kernel success -> target identity handover -> tool erase")
 
-# Legacy Solid3d extents are bounded: detailed Solid3d inspection defers extents rather than
-# evaluating GeometricExtents, and generic extents reads are caught so eNullExtents cannot escape.
+# Solid3d extents are bounded for every extents request, including database snapshots where
+# details=false. Generic extents reads remain caught so eNullExtents cannot escape.
 for token in (
-    'var boundedSolidInspect = extents && details && entity is Solid3d;',
-    'if (boundedSolidInspect) builder.Append("null");',
+    'var boundedSolidExtents = extents && entity is Solid3d;',
+    'if (boundedSolidExtents) builder.Append("null");',
     'else try { builder.Append(ExtentsJson(entity.GeometricExtents)); } catch { builder.Append("null"); }',
-    'extentsDeferred',
+    'if (boundedSolidExtents) builder.Append(",\\"extentsDeferred\\":true");',
 ):
     require(agent, token, "McpCadAgentRuntime.DescribeEntity")
 
@@ -100,4 +100,4 @@ if errors:
         print(" -", error)
     sys.exit(1)
 
-print("PASS: REGENALL/modal native dispatch is fail-closed, direct extrusion evaluates a transient Curve clone without Region conversion, Boolean kernels evaluate detached target/tool clones before target identity handover and tool consumption, and Solid3d extents stay bounded against eNullExtents.")
+print("PASS: REGENALL/modal native dispatch is fail-closed, direct extrusion evaluates a transient Curve clone without Region conversion, Boolean kernels evaluate detached target/tool clones before target identity handover and tool consumption, and Solid3d extents stay bounded against eNullExtents across detailed inspection and database snapshots.")
