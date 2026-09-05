@@ -28,6 +28,8 @@ namespace QS3D.BricsCAD.V25
     {
         private const string RegAppName = "QS3DBASICDRAW";
         private const string MarkerVersion = "1";
+        private const string OperationFailureSuffix = ": không thể hoàn tất thao tác. Vui lòng thử lại.";
+        private const string UiSyncWarning = "UI sync warning: CAD đã commit nhưng đồng bộ giao diện chưa hoàn tất. Hãy refresh giao diện.";
         private const double CoordinateTolerance = 1e-9d;
 
         [CommandMethod("QS3DDRAWLINE", CommandFlags.Modal)]
@@ -148,9 +150,9 @@ namespace QS3D.BricsCAD.V25
             {
                 action(document);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Report(document, operation + " lỗi: " + ex.Message);
+                Report(document, operation + OperationFailureSuffix);
             }
         }
 
@@ -340,9 +342,10 @@ namespace QS3D.BricsCAD.V25
                 if (!id.IsNull && id.IsValid) document.Editor.SetImpliedSelection(new[] { id });
                 document.Editor.Regen();
             }
-            catch (Exception uiError)
+            catch (Exception)
             {
-                try { document.Editor.WriteMessage("\nQS3D basic draw UI sync warning: " + uiError.Message); } catch { }
+                Report(document, status + " " + UiSyncWarning);
+                return;
             }
             Report(document, status);
         }

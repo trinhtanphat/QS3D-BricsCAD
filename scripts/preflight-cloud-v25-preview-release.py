@@ -158,6 +158,9 @@ else:
         "Assert-NoExistingReparseComponent -Path $cacheDir",
         "Assert-NoExistingReparseComponent -Path $msi",
         "Assert-NoExistingReparseComponent -Path $extract",
+        "if (Test-Path -LiteralPath $extract)",
+        "ExtractDir unexpectedly already exists; refusing pathname reuse",
+        "New-Item -ItemType Directory -Path $extract | Out-Null",
         "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging",
         "Test-PinnedMsiGeneration -Path $staging",
         "[IO.File]::Move($staging, $msi)",
@@ -175,22 +178,27 @@ else:
     )
     for token in helper_required:
         if token not in helper:
-            errors.append("shared V25 acquisition helper missing required held-generation/integrity/identity/bounded-process/path-safety token: " + token)
+            errors.append("shared V25 acquisition helper missing required held-generation/integrity/identity/bounded-process/fresh-root/path-safety token: " + token)
+
     for forbidden in (
         "Get-FileHash",
         "Invoke-WebRequest -Uri $candidate.Url -OutFile $msi",
+        "Remove-Item -LiteralPath $extract -Recurse",
+        "New-Item -ItemType Directory -Path $extract -Force",
     ):
         if forbidden in helper:
-            errors.append("shared V25 acquisition helper contains forbidden pathname/direct-publication token: " + forbidden)
+            errors.append("shared V25 acquisition helper contains forbidden pathname/direct-publication/extract-reuse token: " + forbidden)
 
-    destructive = "Remove-Item -LiteralPath $extract -Recurse -Force"
+    absent_index = helper.find("if (Test-Path -LiteralPath $extract)")
+    create_index = helper.find("New-Item -ItemType Directory -Path $extract | Out-Null")
     for guard in (
         "Assert-NoExistingReparseComponent -Path $cacheDir",
         "Assert-NoExistingReparseComponent -Path $msi",
         "Assert-NoExistingReparseComponent -Path $extract",
     ):
-        if helper.find(guard) < 0 or helper.find(destructive) < 0 or helper.find(guard) >= helper.find(destructive):
-            errors.append("shared V25 acquisition helper must validate existing path components before recursive extraction cleanup: " + guard)
+        guard_index = helper.find(guard)
+        if guard_index < 0 or absent_index < 0 or create_index < 0 or not guard_index < absent_index < create_index:
+            errors.append("shared V25 acquisition helper must validate existing path components, refuse existing ExtractDir, then create a fresh non-Force extraction root: " + guard)
 
     download_index = helper.find("Invoke-WebRequest -Uri $candidate.Url -OutFile $staging")
     staged_index = helper.find("Test-PinnedMsiGeneration -Path $staging", download_index if download_index >= 0 else 0)
@@ -230,4 +238,6 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: cloud V25 preview remains manual-only; immutable Actions/cache pins, exact installer URI/digest provenance, held-generation acquisition, Bricsys Authenticode + MSI identity, bounded extraction, and release/package binding remain fail-closed.")
+print(
+    "PASS: cloud V25 preview remains manual-only; immutable Actions/cache pins, exact installer URI/digest provenance, held-generation acquisition, fresh-only extraction-root admission, Bricsys Authenticode + MSI identity, bounded extraction, and release/package binding remain fail-closed."
+)

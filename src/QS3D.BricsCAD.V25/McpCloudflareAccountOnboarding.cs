@@ -74,6 +74,7 @@ namespace QS3D.BricsCAD.V25
         private static bool _publicReady;
         private static bool _certificateImportNeeded;
         private static int _setupOperationActive;
+        private static int _autoStartWorkerActive;
 
         private static string SettingsDirectory => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QS3D", "MCP", "CloudflareAccount");
@@ -328,8 +329,33 @@ namespace QS3D.BricsCAD.V25
         public static void TryAutoStart()
         {
             if (ReadText(AutoStartPath) != "1") return;
-            string ignored;
-            StartSaved(out ignored);
+            if (Interlocked.CompareExchange(ref _autoStartWorkerActive, 1, 0) != 0) return;
+
+            try
+            {
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        if (ReadText(AutoStartPath) != "1") return;
+                        string ignored;
+                        StartSaved(out ignored);
+                    }
+                    catch (Exception ex)
+                    {
+                        SetState("Named Tunnel auto-start failed.", ex.Message);
+                    }
+                    finally
+                    {
+                        Interlocked.Exchange(ref _autoStartWorkerActive, 0);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Interlocked.Exchange(ref _autoStartWorkerActive, 0);
+                SetState("Named Tunnel auto-start scheduling failed.", ex.Message);
+            }
         }
 
         public static void StopForHostShutdown() => StopProcess();
@@ -619,7 +645,9 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 var uri = new Uri("https://" + hostname + "/mcp", UriKind.Absolute);
+#pragma warning disable SYSLIB0014
                 var request = (HttpWebRequest)WebRequest.Create(uri);
+#pragma warning restore SYSLIB0014
                 request.Method = "GET";
                 request.AllowAutoRedirect = false;
                 request.KeepAlive = false;

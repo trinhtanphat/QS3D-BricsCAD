@@ -109,7 +109,7 @@ namespace QS3D.BricsCAD.V25
                 var issues = new GeneratedBeamStirrupHealthService().Inspect(project, live);
                 var summary = new HealthSummary(issues);
                 var message = "Beam Stirrup Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
-                PaletteCoordinator.SetStatus(message);
+                TrySetPaletteStatus(message);
                 document.Editor.WriteMessage("\nQS3D " + message);
                 foreach (var issue in issues.Take(50))
                     document.Editor.WriteMessage("\n  [" + issue.Severity + "] " + issue.Code + " • " + issue.ElementId + " • " + issue.Message);
@@ -142,10 +142,15 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void Report(Document document, string message)
+        private static void TrySetPaletteStatus(string message)
         {
             try { PaletteCoordinator.SetStatus(message); }
             catch { }
+        }
+
+        private static void Report(Document document, string message)
+        {
+            TrySetPaletteStatus(message);
             TryWriteMessage(document, "\nQS3D " + message);
         }
 

@@ -24,7 +24,7 @@ required = [
     "observed++;",
     "if (observed > MaxMutationTargetCount)",
     "if (knownTargetCount.HasValue && observed > knownTargetCount.Value)",
-    "continue;",
+    "Floor mutation target collection known count does not match the observed target traversal.",
     "var element = enumerator.Current;",
 ]
 for token in required:
@@ -40,11 +40,13 @@ if min(move, observed, cap, known, current) < 0 or not (move < observed < cap < 
     raise SystemExit("FAIL Floor mutation target Count stability: admission must be MoveNext -> observe -> cap -> Count admission -> Current")
 
 known_slice = body[known:current]
-if "continue;" not in known_slice:
-    raise SystemExit("FAIL Floor mutation target Count stability: entries beyond known Count must continue bounded traversal without Current")
+if "throw new InvalidOperationException(" not in known_slice:
+    raise SystemExit("FAIL Floor mutation target Count stability: first entry beyond known Count must fail closed before Current")
+if "continue;" in known_slice:
+    raise SystemExit("FAIL Floor mutation target Count stability: known-Count overrun must not continue traversal")
 if "observed != knownTargetCount.Value" not in body:
     raise SystemExit("FAIL Floor mutation target Count stability: completed traversal equality check missing")
 if "Project changed while Floor mutation targets were being enumerated" not in body:
     raise SystemExit("FAIL Floor mutation target Count stability: project freshness guard missing")
 
-print("PASS Floor mutation target known-Count no-overread source guard")
+print("PASS Floor mutation target known-Count fail-closed source guard")
