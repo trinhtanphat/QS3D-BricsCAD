@@ -25,7 +25,7 @@ if "project.Elements.Where" in build:
 if build.count("EnsureProjectRevision(project, snapshot);") < 4:
     raise SystemExit("Curtain Wall schedule must recheck the semantic generation during iteration and before publication.")
 
-fence_end = source.index("private static string GroupKey", fence_start)
+fence_end = source.index("private sealed class CurtainWallAggregateState", fence_start)
 fence = source[fence_start:fence_end]
 for token in [
     "project.ChangeVersion != snapshot.Version",
