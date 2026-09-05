@@ -1,0 +1,58 @@
+name: QS3D V26 MSI Admin Extraction Probe
+
+on:
+  push:
+    branches:
+      - agent/gpt56sol-20260905-v26-admin-options/issue-5857-v26-msi-admin-options
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qs3d-v26-msi-admin-extraction-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BRICSCAD_V26_PINNED_MSI_SHA256: ${{ vars.BRICSCAD_V26_MSI_SHA256 }}
+
+jobs:
+  extraction-probe:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Restore BricsCAD V26.2.07 installer cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/bricscad/BricsCAD-V26.2.07-x64.msi
+          key: bricscad-v26.2.07-x64-en-us-${{ vars.BRICSCAD_V26_MSI_SHA256 || 'mirror' }}
+          restore-keys: |
+            bricscad-v26.2.07-x64-en-us-
+
+      - name: Exercise admitted V26 administrative reference extraction
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msi = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad\BricsCAD-V26.2.07-x64.msi'
+          $extract = Join-Path $env:RUNNER_TEMP ('qs3d-v26-admin-probe-' + [Guid]::NewGuid().ToString('N'))
+          $result = & .\scripts\acquire-v26-compile-references.ps1 `
+            -MsiPath $msi `
+            -ExtractDir $extract `
+            -ExpectedSha256 $env:BRICSCAD_V26_PINNED_MSI_SHA256 `
+            -PrimaryUrl ' ' `
+            -UsePinnedHttpMirror `
+            -ExtractReferences | Select-Object -Last 1
+          if ($null -eq $result -or [string]::IsNullOrWhiteSpace([string]$result.BricsCadDir)) {
+            throw 'V26 extraction probe did not return a BricsCAD runtime directory.'
+          }
+          foreach ($leaf in @('BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')) {
+            $path = Join-Path ([string]$result.BricsCadDir) $leaf
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "V26 extraction probe missing required managed reference: $leaf"
+            }
+          }
+          Write-Host "V26 MSI administrative extraction probe PASS: $($result.BricsCadDir)"
