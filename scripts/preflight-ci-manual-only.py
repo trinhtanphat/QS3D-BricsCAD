@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 VALIDATION_WORKFLOW = "ci.yml"
 AUTO_DISPATCHER = "dispatch-v25-cloud-after-main-integration.yml"
+HYBRID_COORDINATOR = "hybrid-pr-coordinator.yml"
 RELEASE_WORKFLOWS = {"release-v25.yml", "release-v25-cloud.yml", "release-v26.yml"}
 MAX_WORKFLOW_SOURCE_BYTES = 1024 * 1024
 MAX_OPEN_IDENTITY_ATTEMPTS = 2
@@ -56,9 +57,7 @@ def _read_validated_workflow_source(path, root):
         if type_error is not None:
             raise ValueError(f"{path.name}: workflow candidate {type_error}")
         if metadata.st_size > MAX_WORKFLOW_SOURCE_BYTES:
-            raise ValueError(
-                f"{path.name}: workflow source exceeds {MAX_WORKFLOW_SOURCE_BYTES} bytes"
-            )
+            raise ValueError(f"{path.name}: workflow source exceeds {MAX_WORKFLOW_SOURCE_BYTES} bytes")
 
         try:
             resolved = path.resolve(strict=True)
@@ -79,29 +78,20 @@ def _read_validated_workflow_source(path, root):
                 identity_changed = True
                 if attempt + 1 < MAX_OPEN_IDENTITY_ATTEMPTS:
                     continue
-                raise ValueError(
-                    f"{path.name}: changed identity between workflow validation and open after bounded retry"
-                )
+                raise ValueError(f"{path.name}: changed identity between workflow validation and open after bounded retry")
             if opened_metadata.st_size > MAX_WORKFLOW_SOURCE_BYTES:
-                raise ValueError(
-                    f"{path.name}: workflow source exceeds {MAX_WORKFLOW_SOURCE_BYTES} bytes"
-                )
+                raise ValueError(f"{path.name}: workflow source exceeds {MAX_WORKFLOW_SOURCE_BYTES} bytes")
 
             chunks = []
             total = 0
             while total <= MAX_WORKFLOW_SOURCE_BYTES:
-                chunk = os.read(
-                    fd,
-                    min(64 * 1024, MAX_WORKFLOW_SOURCE_BYTES + 1 - total),
-                )
+                chunk = os.read(fd, min(64 * 1024, MAX_WORKFLOW_SOURCE_BYTES + 1 - total))
                 if not chunk:
                     break
                 chunks.append(chunk)
                 total += len(chunk)
             if total > MAX_WORKFLOW_SOURCE_BYTES:
-                raise ValueError(
-                    f"{path.name}: workflow source exceeds {MAX_WORKFLOW_SOURCE_BYTES} bytes"
-                )
+                raise ValueError(f"{path.name}: workflow source exceeds {MAX_WORKFLOW_SOURCE_BYTES} bytes")
             payload = b"".join(chunks)
             identity_changed = False
             break
@@ -114,9 +104,7 @@ def _read_validated_workflow_source(path, root):
                 os.close(fd)
     else:
         if identity_changed:
-            raise ValueError(
-                f"{path.name}: changed identity between workflow validation and open after bounded retry"
-            )
+            raise ValueError(f"{path.name}: changed identity between workflow validation and open after bounded retry")
         raise ValueError(f"{path.name}: workflow source could not be read safely")
 
     try:
@@ -144,7 +132,6 @@ def discover_workflow_sources(workflows):
     if not root.is_dir():
         raise ValueError("missing .github/workflows directory")
 
-    discovered = []
     try:
         candidates = sorted(
             (path for path in workflows.iterdir() if path.suffix in (".yml", ".yaml")),
@@ -153,10 +140,10 @@ def discover_workflow_sources(workflows):
     except OSError as exc:
         raise ValueError(f"workflow directory cannot be enumerated: {exc}") from exc
 
+    discovered = []
     for path in candidates:
         text = _read_validated_workflow_source(path, root)
         discovered.append((path, text))
-
     return discovered
 
 
@@ -253,10 +240,7 @@ def normalize_expression(expression):
 def is_hard_manual_dispatch_guard(expression):
     if expression is None or "||" in expression:
         return False
-    return bool(re.fullmatch(
-        r"github\.event_name\s*==\s*'workflow_dispatch'(?:\s*&&\s*.+)?",
-        expression,
-    ))
+    return bool(re.fullmatch(r"github\.event_name\s*==\s*'workflow_dispatch'(?:\s*&&\s*.+)?", expression))
 
 
 def is_hard_release_confirmation_guard(expression):
@@ -270,13 +254,11 @@ def is_hard_release_confirmation_guard(expression):
 
 
 def is_hard_auto_dispatch_guard(expression):
-    if expression is None or "||" in expression:
-        return False
-    return bool(re.fullmatch(
-        r"github\.ref\s*==\s*'refs/heads/main'\s*&&\s*"
-        r"github\.actor\s*!=\s*'github-actions\[bot\]'",
-        expression,
-    ))
+    return normalize_expression(expression) == (
+        "(github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && "
+        "github.event.workflow_run.head_branch == 'main') || "
+        "(github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]')"
+    )
 
 
 def is_hard_validation_guard(expression):
@@ -288,10 +270,7 @@ def is_hard_validation_guard(expression):
 
 
 def parse_trigger_name(line):
-    match = re.match(
-        r"^\s{2}(?:\"([A-Za-z0-9_-]+)\"|'([A-Za-z0-9_-]+)'|([A-Za-z0-9_-]+))\s*:",
-        line,
-    )
+    match = re.match(r"^\s{2}(?:\"([A-Za-z0-9_-]+)\"|'([A-Za-z0-9_-]+)'|([A-Za-z0-9_-]+))\s*:", line)
     if not match:
         return None
     return next(value for value in match.groups() if value is not None)
@@ -320,19 +299,9 @@ def require_tokens(text, tokens, label):
 def validate_guard_parser():
     cases = (
         ("manual equality", ["    if: ${{ github.event_name == 'workflow_dispatch' }}"], True, False),
-        (
-            "release conjunction",
-            ["    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' }}"],
-            True,
-            True,
-        ),
+        ("release conjunction", ["    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' }}"], True, True),
         ("comment-only equality", ["    if: # github.event_name == 'workflow_dispatch'"], False, False),
-        (
-            "OR bypass",
-            ["    if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' }}"],
-            False,
-            False,
-        ),
+        ("OR bypass", ["    if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' }}"], False, False),
     )
     for name, lines, expected_manual, expected_release in cases:
         expression = extract_job_if_expression(lines)
@@ -351,10 +320,10 @@ def validate_guard_parser():
         errors.append("shared validation guard parser regression")
 
     auto_good = extract_job_if_expression([
-        "    if: ${{ github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]' }}"
+        "    if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') || (github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]') }}"
     ])
     auto_bad = extract_job_if_expression([
-        "    if: ${{ github.ref == 'refs/heads/main' || github.actor != 'github-actions[bot]' }}"
+        "    if: ${{ github.event_name == 'workflow_run' || github.ref == 'refs/heads/main' }}"
     ])
     if not is_hard_auto_dispatch_guard(auto_good) or is_hard_auto_dispatch_guard(auto_bad):
         errors.append("automatic dispatcher guard parser regression")
@@ -363,26 +332,16 @@ def validate_guard_parser():
         errors.append("trigger parser must support quoted automatic validation keys")
 
     accepted_policy_keys = (
-        ("on:", 0, "on"),
-        ("'on':", 0, "on"),
-        ('"on": # approved triggers', 0, "on"),
-        ("  preflight:", 2, "preflight"),
-        ("  'release':", 2, "release"),
-        ('  "core": # comment', 2, "core"),
+        ("on:", 0, "on"), ("'on':", 0, "on"), ('"on": # approved triggers', 0, "on"),
+        ("  preflight:", 2, "preflight"), ("  'release':", 2, "release"), ('  "core": # comment', 2, "core"),
     )
     for line, indentation, expected in accepted_policy_keys:
         if parse_block_mapping_key(line, indentation) != expected:
             errors.append(f"quoted policy mapping-key parser regression: {line!r}")
 
     rejected_policy_keys = (
-        (" on:", 0),
-        ("\t'on':", 0),
-        ("'on\":", 0),
-        ('"on\':', 0),
-        ("   preflight:", 2),
-        ("  'bad.name':", 2),
-        ("  'bad name':", 2),
-        ("  'unterminated:", 2),
+        (" on:", 0), ("\t'on':", 0), ("'on\":", 0), ('"on\':', 0),
+        ("   preflight:", 2), ("  'bad.name':", 2), ("  'bad name':", 2), ("  'unterminated:", 2),
     )
     for line, indentation in rejected_policy_keys:
         if parse_block_mapping_key(line, indentation) is not None:
@@ -453,18 +412,14 @@ for path, text in workflow_sources:
         push_block = "\n".join(trigger_blocks.get("push", []))
         require_tokens(push_block, ('branches:', '"agent/**"', '"integration/**"'), f"{path.name} push")
         if "paths:" in push_block or "paths-ignore:" in push_block:
-            errors.append(
-                f"{path.name}: branch-push validation must not use path filters because exact-head admission must survive docs-only and ancestry-only reconciliation commits"
-            )
+            errors.append(f"{path.name}: branch-push validation must not use path filters because exact-head admission must survive docs-only and ancestry-only reconciliation commits")
         if re.search(r"(?m)^\s*-\s*[\"']?main[\"']?\s*$", push_block):
             errors.append(f"{path.name}: direct main push must not trigger shared branch CI; main owns the release dispatcher")
 
         pr_block = "\n".join(trigger_blocks.get("pull_request", []))
         require_tokens(pr_block, ('branches:', '- main', '"integration/**"'), f"{path.name} pull_request")
         if "paths:" in pr_block or "paths-ignore:" in pr_block:
-            errors.append(
-                f"{path.name}: pull_request validation must not use path filters because protected main always requires stable preflight/core contexts"
-            )
+            errors.append(f"{path.name}: pull_request validation must not use path filters because protected main always requires stable preflight/core contexts")
 
         require_tokens(text, (
             "contents: read", "persist-credentials: false",
@@ -498,24 +453,36 @@ for path, text in workflow_sources:
             errors.append(f"{path.name}/core: Core/V25 validation must depend on preflight")
 
     elif path.name == AUTO_DISPATCHER:
-        expected = {"workflow_dispatch", "push"}
+        expected = {"workflow_dispatch", "workflow_run", "push"}
         if trigger_names != expected:
-            errors.append(f"{path.name}: approved dispatcher must expose exactly workflow_dispatch + push; got {sorted(trigger_names)}")
+            errors.append(f"{path.name}: approved dispatcher must expose exactly workflow_dispatch + workflow_run + push; got {sorted(trigger_names)}")
 
         push_block = "\n".join(trigger_blocks.get("push", []))
         require_tokens(push_block, ("branches:", "- main", "paths:"), f"{path.name} push")
         if "docs/**" in push_block or "README" in push_block or "AGENTS.md" in push_block:
             errors.append(f"{path.name}: docs/claim-only changes must not trigger automatic V25 cloud CI")
 
+        workflow_run_block = "\n".join(trigger_blocks.get("workflow_run", []))
+        require_tokens(
+            workflow_run_block,
+            ("workflows:", '"QS3D Cloud V25 Preview Build & Release"', "types:", "- completed"),
+            f"{path.name} workflow_run",
+        )
+
         require_tokens(text, (
             "contents: read", "actions: write", "cancel-in-progress: true",
-            "github.actor != 'github-actions[bot]'", "gh workflow run release-v25-cloud.yml", "--ref main",
-            'source_sha="${GITHUB_SHA,,}"', '-f source_sha="${source_sha}"', "confirm_release=RELEASE",
+            "github.actor != 'github-actions[bot]'", "github.event.workflow_run.conclusion == 'success'",
+            "github.event.workflow_run.head_branch == 'main'", "gh workflow run release-v25-cloud.yml", "--ref main",
+            'source_sha="${GITHUB_SHA,,}"', 'source_sha="${current_main,,}"', '-f source_sha="${source_sha}"', "confirm_release=RELEASE",
             "git fetch --force --tags origin", 'series_prefix="v0.1.0-preview."',
-            'git tag --list "${series_prefix}*"', "ordinal > 65535", "max_preview >= 65535",
-            "preview=$((max_preview + 1))",
+            "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj", "committed_product_version=",
+            "committed_preview_ordinal=", 'tag="${series_prefix}${committed_preview_ordinal}"',
+            "Refusing to reserve or dispatch an uncommitted preview tag", "ordinal > 65535",
         ), path.name)
-        for forbidden in ("GITHUB_RUN_NUMBER", "10000 +", '-f source_sha="${current_main}"', "contents: write"):
+        for forbidden in (
+            "GITHUB_RUN_NUMBER", "10000 +", '-f source_sha="${current_main}"', "contents: write",
+            "max_preview", "preview=$((max_preview + 1))",
+        ):
             if forbidden in text:
                 errors.append(f"{path.name}: dispatcher contains forbidden source/publish token: {forbidden}")
         if re.search(r"gh\s+workflow\s+run\s+(?!release-v25-cloud\.yml)", text):
@@ -523,16 +490,17 @@ for path, text in workflow_sources:
 
         dispatch_job = next((block for name, block in job_blocks if name == "dispatch"), None)
         if not is_hard_auto_dispatch_guard(extract_job_if_expression(dispatch_job) if dispatch_job is not None else None):
-            errors.append(f"{path.name}/dispatch: job must hard-require main and reject github-actions[bot] pushes")
+            errors.append(f"{path.name}/dispatch: job must require either a successful main-branch V25 release completion or a non-bot main push/manual dispatch")
         for job_name, _ in job_blocks:
             if job_name != "dispatch":
                 errors.append(f"{path.name}: unexpected automatic dispatcher job: {job_name}")
 
+    elif path.name == HYBRID_COORDINATOR:
+        errors.append(f"{path.name}: retired Hybrid PR Coordinator workflow must remain removed")
+
     else:
         if trigger_names != {"workflow_dispatch"}:
-            errors.append(
-                f"{path.name}: only {VALIDATION_WORKFLOW} and {AUTO_DISPATCHER} may use automatic triggers; got {sorted(trigger_names)}"
-            )
+            errors.append(f"{path.name}: only {VALIDATION_WORKFLOW} and {AUTO_DISPATCHER} may use automatic triggers; got {sorted(trigger_names)}")
         for job_name, job_lines in job_blocks:
             if not is_hard_manual_dispatch_guard(extract_job_if_expression(job_lines)):
                 errors.append(f"{path.name}/{job_name}: job must hard-guard github.event_name == 'workflow_dispatch'")
@@ -581,5 +549,5 @@ if errors:
 
 print(
     "PASS: every agent/integration push produces exact-head branch CI, every PR emits stable required contexts, governance/docs-only candidates remain lightweight through internal scope classification, "
-    "build-relevant candidates run Core plus V25 compile, main alone owns exact-source V25 dispatch, and releases retain explicit confirmation."
+    "build-relevant candidates run Core plus V25 compile, main owns exact-source V25 dispatch with a bounded successful-release wakeup, the Hybrid PR Coordinator workflow remains retired, and releases retain explicit confirmation."
 )

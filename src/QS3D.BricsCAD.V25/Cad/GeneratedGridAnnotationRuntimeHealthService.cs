@@ -27,6 +27,13 @@ namespace QS3D.BricsCAD.V25.Cad
                     if (element.Category != ElementCategory.Grid) continue;
                     if (!element.Properties.TryGetValue(HandlesKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
 
+                    var hasAuthoritativeOwner = TryResolveAuthoritativeOwner(
+                        document,
+                        transaction,
+                        element,
+                        issues,
+                        out var authoritativeOwnerId);
+
                     // Preserve every persisted slot. Empty/malformed tokens must not collapse the
                     // extension/bubble/text positional contract before validation.
                     var handles = (raw ?? string.Empty)
@@ -34,7 +41,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         .ToList();
 
                     for (var index = 0; index < handles.Count; index++)
-                        InspectHandle(document, transaction, project, element, handles[index], index, issues);
+                        InspectHandle(document, transaction, project, element, handles[index], index, hasAuthoritativeOwner, authoritativeOwnerId, issues);
 
                     if (handles.Count != ExpectedEntityCount)
                     {
@@ -51,6 +58,103 @@ namespace QS3D.BricsCAD.V25.Cad
             return issues.AsReadOnly();
         }
 
+        private static bool TryResolveAuthoritativeOwner(
+            Document document,
+            Transaction transaction,
+            ProjectElement element,
+            ICollection<ModelHealthIssue> issues,
+            out ObjectId authoritativeOwnerId)
+        {
+            authoritativeOwnerId = ObjectId.Null;
+            var sources = element.SourceHandles
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (sources.Count != 1)
+            {
+                issues.Add(new ModelHealthIssue(
+                    "GRID_ANNOTATION_SOURCE_HANDLE_COUNT",
+                    HealthSeverity.Error,
+                    "Grid annotation runtime health cần đúng một authoritative Grid source Handle; hiện có " + sources.Count + ".",
+                    element.Id));
+                return false;
+            }
+
+            var canonical = CadHandleService.NormalizeHexHandle(sources[0]);
+            if (canonical == null ||
+                !long.TryParse(canonical, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value) ||
+                value <= 0L)
+            {
+                issues.Add(new ModelHealthIssue(
+                    "GRID_ANNOTATION_SOURCE_HANDLE_INVALID",
+                    HealthSeverity.Error,
+                    "Authoritative Grid source Handle không hợp lệ cho runtime owner-space health: " + sources[0] + ".",
+                    element.Id));
+                return false;
+            }
+
+            ObjectId sourceId;
+            try { sourceId = document.Database.GetObjectId(false, new Handle(value), 0); }
+            catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
+            {
+                AddSourceMissing(element, canonical, issues);
+                return false;
+            }
+
+            if (sourceId.IsNull || !sourceId.IsValid)
+            {
+                AddSourceMissing(element, canonical, issues);
+                return false;
+            }
+
+            Entity? source;
+            try { source = transaction.GetObject(sourceId, OpenMode.ForRead, true) as Entity; }
+            catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
+            {
+                AddSourceMissing(element, canonical, issues);
+                return false;
+            }
+
+            if (source == null || source.IsErased)
+            {
+                AddSourceMissing(element, canonical, issues);
+                return false;
+            }
+
+            authoritativeOwnerId = source.OwnerId;
+            if (authoritativeOwnerId.IsNull || !authoritativeOwnerId.IsValid)
+            {
+                issues.Add(new ModelHealthIssue(
+                    "GRID_ANNOTATION_SOURCE_OWNER_INVALID",
+                    HealthSeverity.Error,
+                    "Authoritative Grid source không có live owner space/layout hợp lệ: " + canonical + ".",
+                    element.Id));
+                authoritativeOwnerId = ObjectId.Null;
+                return false;
+            }
+
+            DBObject? owner;
+            try { owner = transaction.GetObject(authoritativeOwnerId, OpenMode.ForRead, true); }
+            catch (Exception ex) when (IsRecoverableDiagnosticFailure(ex))
+            {
+                owner = null;
+            }
+            if (!(owner is BlockTableRecord))
+            {
+                issues.Add(new ModelHealthIssue(
+                    "GRID_ANNOTATION_SOURCE_OWNER_INVALID",
+                    HealthSeverity.Error,
+                    "Authoritative Grid source owner không phải BlockTableRecord live cho annotation lifecycle: " + canonical + ".",
+                    element.Id));
+                authoritativeOwnerId = ObjectId.Null;
+                return false;
+            }
+
+            return true;
+        }
+
         private static void InspectHandle(
             Document document,
             Transaction transaction,
@@ -58,6 +162,8 @@ namespace QS3D.BricsCAD.V25.Cad
             ProjectElement element,
             string handle,
             int index,
+            bool hasAuthoritativeOwner,
+            ObjectId authoritativeOwnerId,
             ICollection<ModelHealthIssue> issues)
         {
             var canonicalHandle = CadHandleService.NormalizeHexHandle(handle);
@@ -127,6 +233,15 @@ namespace QS3D.BricsCAD.V25.Cad
                     element.Id));
             }
 
+            if (hasAuthoritativeOwner && entity.OwnerId != authoritativeOwnerId)
+            {
+                issues.Add(new ModelHealthIssue(
+                    "GRID_ANNOTATION_CAD_OWNER_SPACE_MISMATCH",
+                    HealthSeverity.Error,
+                    "Generated Grid annotation Handle " + canonicalHandle + " đã drift sang owner space/layout khác authoritative Grid source.",
+                    element.Id));
+            }
+
             if (!GeneratedGeometryService.HasMatchingOwnership(entity, project, element))
             {
                 issues.Add(new ModelHealthIssue(
@@ -179,6 +294,15 @@ namespace QS3D.BricsCAD.V25.Cad
                 "GRID_ANNOTATION_CAD_MISSING",
                 HealthSeverity.Error,
                 "Generated Grid annotation Handle không còn resolve tới live CAD entity: " + handle + ".",
+                element.Id));
+        }
+
+        private static void AddSourceMissing(ProjectElement element, string handle, ICollection<ModelHealthIssue> issues)
+        {
+            issues.Add(new ModelHealthIssue(
+                "GRID_ANNOTATION_SOURCE_MISSING",
+                HealthSeverity.Error,
+                "Authoritative Grid source Handle không còn resolve tới live CAD entity cho runtime owner-space health: " + handle + ".",
                 element.Id));
         }
 

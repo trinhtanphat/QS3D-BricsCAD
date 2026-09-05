@@ -28,6 +28,8 @@ namespace QS3D.Core.Revisions
                     throw Changed(label + " elements", elementCount, elements.Count);
 
                 var element = elements[index];
+                if (elements.Count != elementCount)
+                    throw Changed(label + " elements", elementCount, elements.Count);
                 if (element == null)
                 {
                     detached.Elements.Add(null!);
@@ -62,15 +64,32 @@ namespace QS3D.Core.Revisions
             var expectedCount = source.Count;
             ValidateCount(expectedCount, MaxEntriesPerCollection, label);
             var observed = 0;
-            foreach (var pair in source)
+            using (var enumerator = source.GetEnumerator())
             {
                 if (source.Count != expectedCount)
                     throw Changed(label, expectedCount, source.Count);
-                destination.Add(pair.Key, pair.Value);
-                observed++;
-                if (observed > expectedCount)
-                    throw Changed(label, expectedCount, observed);
+
+                while (true)
+                {
+                    if (source.Count != expectedCount)
+                        throw Changed(label, expectedCount, source.Count);
+
+                    var moved = enumerator.MoveNext();
+                    if (source.Count != expectedCount)
+                        throw Changed(label, expectedCount, source.Count);
+                    if (!moved) break;
+
+                    var pair = enumerator.Current;
+                    if (source.Count != expectedCount)
+                        throw Changed(label, expectedCount, source.Count);
+
+                    destination.Add(pair.Key, pair.Value);
+                    observed++;
+                    if (observed > expectedCount)
+                        throw Changed(label, expectedCount, observed);
+                }
             }
+
             if (observed != expectedCount || source.Count != expectedCount)
                 throw Changed(label, expectedCount, observed);
         }
@@ -84,7 +103,10 @@ namespace QS3D.Core.Revisions
             {
                 if (source.Count != expectedCount)
                     throw Changed(label, expectedCount, source.Count);
-                destination.Add(source[index]);
+                var item = source[index];
+                if (source.Count != expectedCount)
+                    throw Changed(label, expectedCount, source.Count);
+                destination.Add(item);
             }
             if (source.Count != expectedCount)
                 throw Changed(label, expectedCount, source.Count);

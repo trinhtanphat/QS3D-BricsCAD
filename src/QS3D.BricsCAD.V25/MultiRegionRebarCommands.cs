@@ -37,11 +37,11 @@ namespace QS3D.BricsCAD.V25
                 var message = result.Bars == 0
                     ? "Slab Multi-Region Rebar 3D: không có multi-region output được tạo."
                     : "Slab Multi-Region Rebar 3D: đã tạo/cập nhật " + result.Bars + " thanh trên " + result.Regions + " region.";
-                FinalizeUi(document, message);
+                FinalizeUi(document, "Slab Multi-Region Rebar 3D", message);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Report(document, "QS3DSLABREBAR3DMULTI lỗi: " + ex.Message);
+                Report(document, "QS3DSLABREBAR3DMULTI không thể hoàn tất. Kiểm tra selection/project/topology và thử lại.");
             }
         }
 
@@ -73,11 +73,11 @@ namespace QS3D.BricsCAD.V25
                 var message = result.Bars == 0
                     ? "Foundation Multi-Region Rebar 3D: không có multi-region output được tạo."
                     : "Foundation Multi-Region Rebar 3D: đã tạo/cập nhật " + result.Bars + " thanh trên " + result.Regions + " region.";
-                FinalizeUi(document, message);
+                FinalizeUi(document, "Foundation Multi-Region Rebar 3D", message);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Report(document, "QS3DFOUNDATIONREBAR3DMULTI lỗi: " + ex.Message);
+                Report(document, "QS3DFOUNDATIONREBAR3DMULTI không thể hoàn tất. Kiểm tra selection/project/topology và thử lại.");
             }
         }
 
@@ -99,12 +99,12 @@ namespace QS3D.BricsCAD.V25
                 var message = "Multi-Region Rebar Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
                 Report(document, message);
                 foreach (var issue in issues.Take(50))
-                    document.Editor.WriteMessage("\n  [" + issue.Severity + "] " + issue.Code + " • " + issue.ElementId + " • " + issue.Message);
-                if (issues.Count > 50) document.Editor.WriteMessage("\n  … health output truncated.");
+                    TryWriteMessage(document, "\n  [" + issue.Severity + "] " + issue.Code + " • " + issue.ElementId + " • " + issue.Message);
+                if (issues.Count > 50) TryWriteMessage(document, "\n  … health output truncated.");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Report(document, "QS3DMULTIREBARHEALTH lỗi: " + ex.Message);
+                Report(document, "QS3DMULTIREBARHEALTH không thể hoàn tất kiểm tra. Project/native geometry không bị thay đổi.");
             }
         }
 
@@ -120,18 +120,15 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException(operation + ": QS3D project đã thay đổi sau pha đọc read-only; hãy chọn lại source loops và chạy lại lệnh.");
         }
 
-        private static void FinalizeUi(Document document, string message)
+        private static void FinalizeUi(Document document, string operation, string message)
         {
-            try
-            {
-                PaletteCoordinator.RefreshProject();
-                document.Editor.Regen();
-                Report(document, message);
-            }
-            catch (Exception ex)
-            {
-                TryWriteMessage(document, "\nQS3D " + message + " UI sync warning: " + ex.Message);
-            }
+            var uiSyncFailed = false;
+            try { PaletteCoordinator.RefreshProject(); } catch { uiSyncFailed = true; }
+            try { document.Editor.Regen(); } catch { uiSyncFailed = true; }
+            try { PaletteCoordinator.SetStatus(message); } catch { uiSyncFailed = true; }
+            TryWriteMessage(document, "\nQS3D " + message);
+            if (uiSyncFailed)
+                TryWriteMessage(document, "\nQS3D " + operation + ": native update đã hoàn tất; một phần UI không thể đồng bộ.");
         }
 
         private static void Report(Document document, string message)

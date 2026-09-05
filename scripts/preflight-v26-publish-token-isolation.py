@@ -41,15 +41,23 @@ require(
     "ref: ${{ github.sha }}\n          fetch-depth: 0\n          persist-credentials: false",
     "hosted publisher checkout must remain pinned to the exact workflow SHA with credentials disabled.",
 )
+require(
+    "      - name: Verify and publish held V26 candidate after job boundary\n",
+    "hosted publication must keep post-boundary semantic admission and publication in one held-generation step.",
+)
+require(
+    "-AdmittedScript '.\\scripts\\publish-v26-release.ps1'",
+    "held-generation admission must execute the reviewed V26 publisher before releasing candidate handles.",
+)
 
 qualify_start = text.index("  qualify:\n")
 release_start = text.index("  release:\n", qualify_start + 1)
-publish_step = text.index("      - name: Publish V26 GitHub Release\n")
+publish_step = text.index("      - name: Verify and publish held V26 candidate after job boundary\n")
 upload_step = text.index("      - name: Upload V26 qualification artifacts\n")
 
 if not (qualify_start < upload_step < release_start < publish_step):
     raise SystemExit(
-        "V26 publish-token isolation preflight failed: qualification artifacts must be frozen before the hosted publish job starts."
+        "V26 publish-token isolation preflight failed: qualification artifacts must be frozen before the hosted held-generation publish job starts."
     )
 
 qualify_block = text[qualify_start:release_start]
@@ -72,6 +80,10 @@ if release_block.count("contents: write") != 1:
 if "runs-on: [self-hosted" in release_block:
     raise SystemExit(
         "V26 publish-token isolation preflight failed: write-capable release job must not run on a self-hosted runner."
+    )
+if "      - name: Publish V26 GitHub Release\n" in release_block:
+    raise SystemExit(
+        "V26 publish-token isolation preflight failed: publication must not be split back out of the held-generation admission step."
     )
 
 print("PASS V26 publish token isolation")

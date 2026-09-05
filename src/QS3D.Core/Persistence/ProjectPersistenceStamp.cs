@@ -9,7 +9,8 @@ namespace QS3D.Core.Persistence
 {
     public sealed class ProjectPersistenceStamp
     {
-        private const int MaximumSnapshotEntries = 10_000;
+        private const int MaximumTopLevelSnapshotEntries = QsdbProjectStructuralCardinality.MaxTopLevelEntries;
+        private const int MaximumNestedSnapshotEntries = QsdbProjectStructuralCardinality.MaxNestedEntries;
         private const string RecoveredFromBackupKey = "QS3D.RecoveredFromBackup";
         private const string ProjectBrowserWorkspaceStateKey = "QS3D.ProjectBrowser.WorkspaceState";
         private readonly ProjectState _project;
@@ -96,12 +97,24 @@ namespace QS3D.Core.Persistence
                 throw new InvalidOperationException(
                     "Project state changed while the persistence stamp was materializing persisted content.");
 
+            // Nested Family/Element state can change without incrementing the parent
+            // ProjectState revision. Materialize a second complete pass and require the
+            // same content so a mixed-time first pass cannot be accepted as a saved state.
+            var secondMetadata = SnapshotMetadata(project.Metadata);
+            var secondNestedPersistedContent = SnapshotNestedPersistedContent(project, boundary);
+
+            if (!boundary.Matches(project) ||
+                !MetadataMatches(secondMetadata, metadata) ||
+                !string.Equals(secondNestedPersistedContent, nestedPersistedContent, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "Nested persisted project state changed while the persistence stamp was materializing content.");
+
             return new StableSnapshot(boundary, metadata, nestedPersistedContent);
         }
 
         private static Dictionary<string, string> SnapshotMetadata(IDictionary<string, string> metadata)
         {
-            var items = SnapshotBounded(metadata, metadata.Count, "project metadata");
+            var items = SnapshotNestedBounded(metadata, metadata.Count, "project metadata");
             var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in items)
             {
@@ -132,7 +145,7 @@ namespace QS3D.Core.Persistence
             AppendString(snapshot, boundary.Name);
             AppendDateTime(snapshot, boundary.UpdatedUtc);
 
-            var zones = SnapshotBounded(project.Zones, project.Zones.Count, "project zones");
+            var zones = SnapshotTopLevelBounded(project.Zones, project.Zones.Count, "project zones");
             AppendSequenceCount(snapshot, zones.Count);
             foreach (var zone in zones)
             {
@@ -140,7 +153,7 @@ namespace QS3D.Core.Persistence
                 AppendString(snapshot, zone?.Name);
             }
 
-            var floors = SnapshotBounded(project.Floors, project.Floors.Count, "project floors");
+            var floors = SnapshotTopLevelBounded(project.Floors, project.Floors.Count, "project floors");
             AppendSequenceCount(snapshot, floors.Count);
             foreach (var floor in floors)
             {
@@ -149,7 +162,7 @@ namespace QS3D.Core.Persistence
                 AppendDouble(snapshot, floor?.ElevationM ?? double.NaN);
             }
 
-            var families = SnapshotBounded(project.Families, project.Families.Count, "project families");
+            var families = SnapshotTopLevelBounded(project.Families, project.Families.Count, "project families");
             AppendSequenceCount(snapshot, families.Count);
             foreach (var family in families)
             {
@@ -159,7 +172,7 @@ namespace QS3D.Core.Persistence
                 AppendStringMap(snapshot, family?.Properties, "family properties");
             }
 
-            var ruleSnapshot = SnapshotBounded(project.QuantityRules, project.QuantityRules.Count, "project quantity rules");
+            var ruleSnapshot = SnapshotTopLevelBounded(project.QuantityRules, project.QuantityRules.Count, "project quantity rules");
             var rules = ruleSnapshot
                 .OrderBy(x => x?.Id ?? string.Empty, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
@@ -173,7 +186,7 @@ namespace QS3D.Core.Persistence
                 AppendString(snapshot, rule?.Version);
             }
 
-            var elements = SnapshotBounded(project.Elements, project.Elements.Count, "project elements");
+            var elements = SnapshotTopLevelBounded(project.Elements, project.Elements.Count, "project elements");
             AppendSequenceCount(snapshot, elements.Count);
             foreach (var element in elements)
             {
@@ -191,7 +204,7 @@ namespace QS3D.Core.Persistence
                 AppendDoubleMap(snapshot, element?.Quantities, "element quantities");
             }
 
-            var auditSnapshot = SnapshotBounded(project.AuditEvents, project.AuditEvents.Count, "project audit events");
+            var auditSnapshot = SnapshotTopLevelBounded(project.AuditEvents, project.AuditEvents.Count, "project audit events");
             var auditEvents = auditSnapshot
                 .Select((item, index) => new { Item = item, Index = index })
                 .OrderBy(x => x.Item?.Utc ?? DateTime.MinValue)
@@ -223,7 +236,7 @@ namespace QS3D.Core.Persistence
                 return;
             }
 
-            var bounded = SnapshotBounded(values, values.Count, collectionLabel);
+            var bounded = SnapshotNestedBounded(values, values.Count, collectionLabel);
             var ordered = bounded.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase).ToArray();
             AppendSequenceCount(snapshot, ordered.Length);
             foreach (var item in ordered)
@@ -244,7 +257,7 @@ namespace QS3D.Core.Persistence
                 return;
             }
 
-            var bounded = SnapshotBounded(values, values.Count, collectionLabel);
+            var bounded = SnapshotNestedBounded(values, values.Count, collectionLabel);
             var ordered = bounded.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase).ToArray();
             AppendSequenceCount(snapshot, ordered.Length);
             foreach (var item in ordered)
@@ -265,24 +278,38 @@ namespace QS3D.Core.Persistence
                 return;
             }
 
-            var bounded = SnapshotBounded(values, values.Count, collectionLabel);
+            var bounded = SnapshotNestedBounded(values, values.Count, collectionLabel);
             AppendSequenceCount(snapshot, bounded.Count);
             foreach (var value in bounded) AppendString(snapshot, value);
         }
 
-        private static List<T> SnapshotBounded<T>(IEnumerable<T> values, int knownCount, string collectionLabel)
+        private static List<T> SnapshotTopLevelBounded<T>(IEnumerable<T> values, int knownCount, string collectionLabel)
+        {
+            return SnapshotBounded(values, knownCount, collectionLabel, MaximumTopLevelSnapshotEntries);
+        }
+
+        private static List<T> SnapshotNestedBounded<T>(IEnumerable<T> values, int knownCount, string collectionLabel)
+        {
+            return SnapshotBounded(values, knownCount, collectionLabel, MaximumNestedSnapshotEntries);
+        }
+
+        private static List<T> SnapshotBounded<T>(
+            IEnumerable<T> values,
+            int knownCount,
+            string collectionLabel,
+            int maximumEntries)
         {
             if (values == null) throw new ArgumentNullException(nameof(values));
-            RequireSupportedCount(knownCount, collectionLabel);
-            RequireStableCountEvidence(values, knownCount, collectionLabel, "before traversal");
+            RequireSupportedCount(knownCount, collectionLabel, maximumEntries);
+            RequireStableCountEvidence(values, knownCount, collectionLabel, "before traversal", maximumEntries);
 
             var bounded = new List<T>(knownCount);
             using (var enumerator = values.GetEnumerator())
             {
                 while (enumerator.MoveNext())
                 {
-                    if (bounded.Count == MaximumSnapshotEntries)
-                        ThrowTooManyEntries(collectionLabel);
+                    if (bounded.Count == maximumEntries)
+                        ThrowTooManyEntries(collectionLabel, maximumEntries);
                     if (bounded.Count >= knownCount)
                         ThrowKnownCountMismatch(collectionLabel);
                     var value = enumerator.Current;
@@ -293,7 +320,7 @@ namespace QS3D.Core.Persistence
             if (bounded.Count != knownCount)
                 ThrowKnownCountMismatch(collectionLabel);
 
-            RequireStableCountEvidence(values, knownCount, collectionLabel, "after traversal");
+            RequireStableCountEvidence(values, knownCount, collectionLabel, "after traversal", maximumEntries);
             return bounded;
         }
 
@@ -301,15 +328,16 @@ namespace QS3D.Core.Persistence
             IEnumerable<T> values,
             int knownCount,
             string collectionLabel,
-            string phase)
+            string phase,
+            int maximumEntries)
         {
             int? observed = null;
             if (values is ICollection<T> genericCollection)
-                MergeCountEvidence(genericCollection.Count, knownCount, collectionLabel, phase, ref observed);
+                MergeCountEvidence(genericCollection.Count, knownCount, collectionLabel, phase, maximumEntries, ref observed);
             if (values is IReadOnlyCollection<T> readOnlyCollection)
-                MergeCountEvidence(readOnlyCollection.Count, knownCount, collectionLabel, phase, ref observed);
+                MergeCountEvidence(readOnlyCollection.Count, knownCount, collectionLabel, phase, maximumEntries, ref observed);
             if (values is System.Collections.ICollection nonGenericCollection)
-                MergeCountEvidence(nonGenericCollection.Count, knownCount, collectionLabel, phase, ref observed);
+                MergeCountEvidence(nonGenericCollection.Count, knownCount, collectionLabel, phase, maximumEntries, ref observed);
         }
 
         private static void MergeCountEvidence(
@@ -317,9 +345,10 @@ namespace QS3D.Core.Persistence
             int knownCount,
             string collectionLabel,
             string phase,
+            int maximumEntries,
             ref int? observed)
         {
-            RequireSupportedCount(candidate, collectionLabel);
+            RequireSupportedCount(candidate, collectionLabel, maximumEntries);
             if (candidate != knownCount)
             {
                 if (string.Equals(phase, "before traversal", StringComparison.Ordinal))
@@ -339,20 +368,20 @@ namespace QS3D.Core.Persistence
                 "Persistence stamp " + collectionLabel + " known count does not match enumerated entry count.");
         }
 
-        private static void RequireSupportedCount(int count, string collectionLabel)
+        private static void RequireSupportedCount(int count, string collectionLabel, int maximumEntries)
         {
             if (count < 0)
                 throw new InvalidOperationException(
                     "Persistence stamp " + collectionLabel + " reports an invalid negative count.");
-            if (count > MaximumSnapshotEntries)
-                ThrowTooManyEntries(collectionLabel);
+            if (count > maximumEntries)
+                ThrowTooManyEntries(collectionLabel, maximumEntries);
         }
 
-        private static void ThrowTooManyEntries(string collectionLabel)
+        private static void ThrowTooManyEntries(string collectionLabel, int maximumEntries)
         {
             throw new InvalidOperationException(
                 "Persistence stamp " + collectionLabel + " supports at most " +
-                MaximumSnapshotEntries.ToString(CultureInfo.InvariantCulture) + " entries.");
+                maximumEntries.ToString(CultureInfo.InvariantCulture) + " entries.");
         }
 
         private static void AppendSequenceCount(StringBuilder snapshot, int value)

@@ -28,6 +28,9 @@ namespace QS3D.BricsCAD.V25
             try { McpDiagnosticHub.Start(); }
             catch (Exception ex) { ReportOptionalStartupFailure("diagnostics bridge", ex); }
 
+            try { Qs3dCodeHostService.Start(); }
+            catch (Exception ex) { ReportOptionalStartupFailure("QS3D Code local host bridge", ex); }
+
             try { McpPopupObserver.Start(); }
             catch (Exception ex) { ReportOptionalStartupFailure("popup notification observer", ex); }
 
@@ -44,14 +47,26 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex) { ReportOptionalStartupFailure("MCP server", ex); }
 
-            try
-            {
-                McpTransportAgentCenterAugmenter.Start();
-                McpPersistentAgentCenterAugmenter.Start();
-                McpTransportCoordinator.TryAutoStartPreferred();
-                McpPublicEndpointResolver.Resolve();
-            }
-            catch (Exception ex) { ReportOptionalStartupFailure("MCP transport", ex); }
+            // Desktop Resume is a trusted local-host startup action, never an MCP remote action.
+            // It only grants foreground control to this BricsCAD process and preserves the
+            // existing Esc×2 / Pause / host-shutdown revocation boundaries.
+            try { McpDesktopControlSession.ResumeFromLocalUser(); }
+            catch (Exception ex) { ReportOptionalStartupFailure("MCP desktop Resume", ex); }
+
+            // Keep optional Agent Center UI augmentation independent from transport autostart.
+            // A ribbon/palette failure must never prevent the selected persistent tunnel from
+            // starting with BricsCAD.
+            try { McpTransportAgentCenterAugmenter.Start(); }
+            catch (Exception ex) { ReportOptionalStartupFailure("MCP transport Agent Center", ex); }
+
+            try { McpPersistentAgentCenterAugmenter.Start(); }
+            catch (Exception ex) { ReportOptionalStartupFailure("MCP persistent Agent Center", ex); }
+
+            try { McpTransportCoordinator.TryAutoStartPreferred(); }
+            catch (Exception ex) { ReportOptionalStartupFailure("MCP tunnel autostart", ex); }
+
+            try { McpPublicEndpointResolver.Resolve(); }
+            catch (Exception ex) { ReportOptionalStartupFailure("MCP public endpoint", ex); }
 
             try { McpProjectRecoveryService.Start(); }
             catch (Exception ex) { ReportOptionalStartupFailure("MCP recovery service", ex); }
@@ -76,6 +91,7 @@ namespace QS3D.BricsCAD.V25
 
         private static void TeardownHostServices()
         {
+            TryCleanup(Qs3dCodeHostService.Stop);
             TryCleanup(McpDesktopControlSession.Shutdown);
             TryCleanup(McpPopupObserver.Stop);
             TryCleanup(McpFirstRunExperience.Stop);

@@ -75,10 +75,13 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("scalar-snapshot", "Persisted scalar snapshot")
             {
                 DrawingPath = "original-path",
-                DrawingFingerprint = "original-fingerprint",
-                ActiveZoneId = "original-zone",
-                ActiveFloorId = "original-floor"
+                DrawingFingerprint = "original-fingerprint"
             };
+            project.Zones.Add(new ZoneDefinition("original-zone", "Original zone"));
+            project.Floors.Add(new FloorDefinition("original-floor", "Original floor", 0d));
+            project.ActiveZoneId = "original-zone";
+            project.ActiveFloorId = "original-floor";
+
             var persistedTimestamp = new DateTime(2026, 8, 12, 6, 0, 0, DateTimeKind.Utc);
             project.UpdatedUtc = persistedTimestamp;
             var persistedVersion = project.ChangeVersion;

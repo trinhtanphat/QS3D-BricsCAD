@@ -24,6 +24,7 @@ namespace QS3D.Core.Persistence
 
             if (schema == ProjectState.CurrentSchemaVersion)
             {
+                ValidatePrimaryIdentityCanonicality(callerRoot);
                 ValidateCurrentPersistenceState(callerRoot);
                 QsdbProjectXmlSchemaValidator.ValidateCurrent(callerRoot);
                 return document;
@@ -55,6 +56,7 @@ namespace QS3D.Core.Persistence
             }
 
             QsdbProjectStructuralCardinality.Validate(root);
+            ValidatePrimaryIdentityCanonicality(root);
             ValidateCurrentPersistenceState(root);
             QsdbProjectXmlSchemaValidator.ValidateCurrent(root);
 
@@ -99,6 +101,44 @@ namespace QS3D.Core.Persistence
                 (x.Attribute("name")?.Value ?? string.Empty).StartsWith(ProjectMeasurementWorkItemMappingCodec.Prefix, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidDataException("QSDB v3 metadata uses the reserved measurement/work-item mapping namespace and cannot be migrated automatically.");
             SetMigrationOrigin(root, "3");
+        }
+
+        private static void ValidatePrimaryIdentityCanonicality(XElement root)
+        {
+            foreach (var item in root.Element("metadata")?.Elements("p") ?? Enumerable.Empty<XElement>())
+                RequireCanonicalAttribute(item, "name", "Project metadata key");
+            foreach (var zone in root.Element("zones")?.Elements("zone") ?? Enumerable.Empty<XElement>())
+                RequireCanonicalAttribute(zone, "id", "Project zone id");
+            foreach (var floor in root.Element("floors")?.Elements("floor") ?? Enumerable.Empty<XElement>())
+                RequireCanonicalAttribute(floor, "id", "Project floor id");
+            foreach (var family in root.Element("families")?.Elements("family") ?? Enumerable.Empty<XElement>())
+            {
+                RequireCanonicalAttribute(family, "id", "Project family id");
+                foreach (var property in family.Element("properties")?.Elements("p") ?? Enumerable.Empty<XElement>())
+                    RequireCanonicalAttribute(property, "name", "Project family property key");
+            }
+            foreach (var rule in root.Element("rules")?.Elements("rule") ?? Enumerable.Empty<XElement>())
+            {
+                RequireCanonicalAttribute(rule, "id", "Quantity rule id");
+                RequireCanonicalAttribute(rule, "output", "Quantity rule output");
+            }
+            foreach (var element in root.Element("elements")?.Elements("element") ?? Enumerable.Empty<XElement>())
+            {
+                RequireCanonicalAttribute(element, "id", "Project element id");
+                foreach (var property in element.Element("properties")?.Elements("p") ?? Enumerable.Empty<XElement>())
+                    RequireCanonicalAttribute(property, "name", "Project element property key");
+                foreach (var quantity in element.Element("quantities")?.Elements("q") ?? Enumerable.Empty<XElement>())
+                    RequireCanonicalAttribute(quantity, "name", "Project element quantity name");
+            }
+        }
+
+        private static void RequireCanonicalAttribute(XElement element, string attributeName, string owner)
+        {
+            var value = element.Attribute(attributeName)?.Value
+                ?? throw new InvalidDataException(owner + " is missing required " + attributeName + ".");
+            if (string.IsNullOrWhiteSpace(value)) throw new InvalidDataException(owner + " is missing required " + attributeName + ".");
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                throw new InvalidDataException(owner + " must not contain leading/trailing whitespace.");
         }
 
         private static void ValidateCurrentPersistenceState(XElement root)

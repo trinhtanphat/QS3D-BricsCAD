@@ -5,6 +5,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "QS3D.BricsCAD.V25"
 OPENAI = SRC / "McpOpenAiSecureTunnel.cs"
+SERVER_V2 = SRC / "McpEmbeddedServerV2.cs"
 CENTER = SRC / "McpAgentControlCenter.cs"
 AUGMENTER = SRC / "McpTransportAgentCenterAugmenter.cs"
 BOOTSTRAP = SRC / "McpCloudflaredBootstrapper.cs"
@@ -28,7 +29,7 @@ def forbid(text: str, token: str, label: str, errors: list[str]) -> None:
 
 def main() -> int:
     errors: list[str] = []
-    for path in (OPENAI, CENTER, AUGMENTER, BOOTSTRAP, CLOUDFLARE_FALLBACK, FIRST_RUN, V25_ENTRY, V26_ENTRY, DOC, RECOVERY_DOC):
+    for path in (OPENAI, SERVER_V2, CENTER, AUGMENTER, BOOTSTRAP, CLOUDFLARE_FALLBACK, FIRST_RUN, V25_ENTRY, V26_ENTRY, DOC, RECOVERY_DOC):
         if not path.is_file():
             errors.append(f"missing file: {path.relative_to(ROOT)}")
     if errors:
@@ -37,6 +38,7 @@ def main() -> int:
         return 1
 
     openai = OPENAI.read_text(encoding="utf-8")
+    server_v2 = SERVER_V2.read_text(encoding="utf-8")
     center = CENTER.read_text(encoding="utf-8")
     augmenter = AUGMENTER.read_text(encoding="utf-8")
     bootstrap = BOOTSTRAP.read_text(encoding="utf-8")
@@ -60,7 +62,9 @@ def main() -> int:
         "https://chatgpt.com/#settings/Connectors": "ChatGPT connector settings",
         "^tunnel_[0-9a-f]{32}$": "strict Tunnel ID format",
         'api_key: env:CONTROL_PLANE_API_KEY': "runtime key env reference",
-        'Authorization: env:': "local bearer env reference",
+        'X-QS3D-MCP-Local-Authorization': "dedicated local tunnel-origin bearer header",
+        'QS3D_TUNNEL_MCP_AUTH': "local bearer child-environment reference",
+        'LocalTunnelAuthorizationHeader': "local auth header constant",
         'McpEmbeddedServer.Endpoint': "dynamic loopback endpoint binding",
         'McpEmbeddedServer.GetBearerToken()': "existing local bearer boundary",
         'McpPersistentUserSettings.SaveOpenAiRuntimeApiKey': "direct-start credential persistence",
@@ -86,6 +90,20 @@ def main() -> int:
     }.items():
         need(openai, token, label, errors)
 
+    forbid(openai, 'Authorization: env:', "colliding local bearer Authorization header", errors)
+
+    for token, label in {
+        'private const string LocalTunnelAuthorizationHeader = "X-QS3D-MCP-Local-Authorization";': "embedded dedicated local-auth constant",
+        'string.Equals(name, LocalTunnelAuthorizationHeader, StringComparison.OrdinalIgnoreCase)': "local-auth singleton header parsing",
+        'private static bool IsValidLocalTunnelAuthorization(': "dedicated local-origin validation helper",
+        'headers.TryGetValue(LocalTunnelAuthorizationHeader, out authorization)': "dedicated local-origin credential read",
+        'McpTransportCoordinator.SelectedProvider != McpTransportProvider.OpenAiSecureTunnel': "provider-scoped local auth",
+        'return ConstantTimeEquals(token, GetBearerToken());': "constant-time local bearer comparison",
+        'headers.TryGetValue("Authorization", out authorization)': "existing Authorization compatibility",
+        'McpOAuthAuthorizationServer.TryValidateAccessToken(headers, publicMcpUrl, GetBearerToken())': "OAuth access-token validation preservation",
+    }.items():
+        need(server_v2, token, label, errors)
+
     for token, label in {
         'OpenAI Secure Tunnel': "OpenAI selector",
         'Cloudflare Named': "Named selector",
@@ -97,8 +115,21 @@ def main() -> int:
         'McpOpenAiSecureTunnelManager.IsReady': "OpenAI ready status",
         'Không cần public URL': "no-public-URL status",
         'Cloudflare Tunnel đang được tải/cài. Vui lòng chờ; đây không phải lỗi.': "busy install informational UX",
+        'private McpTransportProvider? _renderedConnectionProvider;': "rendered connection-provider pin",
+        '_renderedConnectionProvider = provider;': "connection page provider capture",
+        'CopyUrl(McpTransportProvider.CloudflareNamedTunnel)': "Named Tunnel copy-URL binding",
+        'CopyUrl(McpTransportProvider.CloudflareQuickTunnel)': "Quick Tunnel copy-URL binding",
+        'OpenChatGpt(McpTransportProvider provider)': "provider-bound ChatGPT action",
+        'MarkChatGptRegistered(McpTransportProvider provider)': "provider-bound registration action",
+        'private void CopyUrl(McpTransportProvider provider)': "provider-bound copy-URL action",
+        '_renderedConnectionProvider.Value != provider': "live stale-page provider mismatch detection",
+        'AppendProviderStatusRows(provider,': "provider-scoped status rows",
     }.items():
         need(center, token, label, errors)
+
+    forbid(center, '(_, __) => CopyUrl()', "ambient-provider copy-URL handler", errors)
+    forbid(center, '(_, __) => OpenChatGpt()', "ambient-provider ChatGPT handler", errors)
+    forbid(center, '(_, __) => MarkChatGptRegistered()', "ambient-provider registration handler", errors)
 
     for token, label in {
         'PresentationSource.CurrentSources': "host-safe WPF Agent Center discovery",
@@ -206,6 +237,9 @@ def main() -> int:
         "Open tunnel logs": "documented sanitized support log action",
         "Restart tunnel": "documented Agent Center restart action",
         "does not require the user to own/configure a Cloudflare account": "precise Secure Tunnel Cloudflare wording",
+        "X-QS3D-MCP-Local-Authorization": "documented dedicated local tunnel-origin auth header",
+        "Authorization": "documented connector/OAuth Authorization layer",
+        "two separate authentication layers": "documented split-auth invariant",
     }.items():
         need(doc, token, label, errors)
 
@@ -221,7 +255,7 @@ def main() -> int:
             print("ERROR:", error)
         return 1
 
-    print("PASS MCP transport providers / binary trust / bounded installer recovery / single cancel owner / Agent Center diagnostics / restart-safe credential contract / first-run contract")
+    print("PASS MCP transport providers / provider-isolated Agent Center UI / collision-safe split auth / binary trust / bounded installer recovery / single cancel owner / Agent Center diagnostics / restart-safe credential contract / first-run contract")
     return 0
 
 

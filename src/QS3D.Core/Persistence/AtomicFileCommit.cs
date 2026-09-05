@@ -26,10 +26,7 @@ namespace QS3D.Core.Persistence
 
             if (!File.Exists(destination))
             {
-                RequireSafe(temp, "temporary");
-                RequireSafe(destination, "destination");
-                RequireSafe(backup, "backup");
-                File.Move(temp, destination);
+                PublishMissingDestinationWithoutStaleBackup(temp, destination, backup);
                 return;
             }
 
@@ -106,6 +103,59 @@ namespace QS3D.Core.Persistence
             try { if (!string.IsNullOrWhiteSpace(path) && File.Exists(path)) File.Delete(path); }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
+        }
+
+        private static void PublishMissingDestinationWithoutStaleBackup(string tempPath, string destinationPath, string backupPath)
+        {
+            RequireSafe(tempPath, "temporary");
+            RequireSafe(destinationPath, "destination");
+            RequireSafe(backupPath, "backup");
+            if (Directory.Exists(backupPath))
+                throw new IOException("QS3D refused to recreate a project while its backup path is a directory.");
+
+            string? staleBackupSafety = null;
+            if (File.Exists(backupPath))
+            {
+                staleBackupSafety = backupPath + "." + Guid.NewGuid().ToString("N") + ".stale";
+                RequireSafe(staleBackupSafety, "stale-backup safety");
+                RequireSafe(backupPath, "backup");
+                File.Move(backupPath, staleBackupSafety);
+            }
+
+            var installed = false;
+            try
+            {
+                RequireSafe(tempPath, "temporary");
+                RequireSafe(destinationPath, "destination");
+                RequireSafe(backupPath, "backup");
+                if (File.Exists(backupPath) || Directory.Exists(backupPath))
+                    throw new IOException("A QS3D backup appeared while recreating a missing project primary.");
+
+                File.Move(tempPath, destinationPath);
+                installed = true;
+
+                // A normal replacement backup represents the immediately previous
+                // primary generation. When the primary was already missing, an old
+                // .bak cannot satisfy that contract and must never remain eligible
+                // for LoadWithBackupFallback beside the newly published generation.
+                if (File.Exists(backupPath) || Directory.Exists(backupPath))
+                {
+                    try { File.Delete(destinationPath); }
+                    catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+                    {
+                        throw new IOException("A QS3D backup appeared during primary recreation and the new primary could not be rolled back.", ex);
+                    }
+                    installed = false;
+                    throw new IOException("A QS3D backup appeared during primary recreation; the new primary was rolled back.");
+                }
+            }
+            finally
+            {
+                if (!installed)
+                    RestorePreviousBackup(staleBackupSafety, backupPath);
+                else if (!string.IsNullOrWhiteSpace(staleBackupSafety))
+                    TryDelete(staleBackupSafety);
+            }
         }
 
         private static void MoveWithRecovery(string tempPath, string destinationPath, string backupPath, bool keepBackup)

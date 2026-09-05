@@ -17,6 +17,56 @@ namespace QS3D.Core.Export
         public const int MaxElementStringArrayItems = 4096;
         public const int MaxInterchangeMapItems = 4096;
 
+        private sealed class BoundedUtf8StringBuilder
+        {
+            private static readonly Encoding StrictUtf8 = new UTF8Encoding(false, true);
+            private readonly StringBuilder _inner;
+            private readonly long _maxBytes;
+            private long _utf8Bytes;
+
+            public BoundedUtf8StringBuilder(int capacity, long maxBytes)
+            {
+                if (capacity < 0) throw new ArgumentOutOfRangeException(nameof(capacity));
+                if (maxBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxBytes));
+                _inner = new StringBuilder(capacity);
+                _maxBytes = maxBytes;
+            }
+
+            public BoundedUtf8StringBuilder Append(string value)
+            {
+                var text = value ?? string.Empty;
+                int additionalBytes;
+                try
+                {
+                    additionalBytes = StrictUtf8.GetByteCount(text);
+                }
+                catch (EncoderFallbackException ex)
+                {
+                    throw new InvalidDataException("Interchange export strings cannot contain invalid UTF-16.", ex);
+                }
+
+                if (_utf8Bytes > _maxBytes - additionalBytes)
+                    throw new InvalidDataException(
+                        "Interchange export exceeds the guarded " +
+                        _maxBytes.ToString(CultureInfo.InvariantCulture) +
+                        " byte semantic snapshot limit.");
+
+                _inner.Append(text);
+                _utf8Bytes += additionalBytes;
+                return this;
+            }
+
+            public BoundedUtf8StringBuilder Append(char value)
+            {
+                return Append(value.ToString());
+            }
+
+            public override string ToString()
+            {
+                return _inner.ToString();
+            }
+        }
+
         public static string Build(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -25,7 +75,7 @@ namespace QS3D.Core.Export
             ProjectInterchangeSemanticReferenceValidator.Validate(project);
             ValidateSemanticCollections(project);
 
-            var json = new StringBuilder(32768);
+            var json = new BoundedUtf8StringBuilder(32768, ProjectInterchangeJsonValidator.MaxFileBytes);
             json.Append("{\n");
             Property(json, 1, "format", FormatName, true);
             NumberProperty(json, 1, "formatVersion", FormatVersion, true);
@@ -130,7 +180,7 @@ namespace QS3D.Core.Export
                 "Interchange export produced a snapshot rejected by canonical validation (" + issue.Code + path + "): " + issue.Message);
         }
 
-        private static void AppendElement(StringBuilder json, ProjectElement element)
+        private static void AppendElement(BoundedUtf8StringBuilder json, ProjectElement element)
         {
             json.Append("    {\n");
             Property(json, 3, "id", element.Id, true);
@@ -169,7 +219,7 @@ namespace QS3D.Core.Export
         }
 
         private static void AppendStringMap(
-            StringBuilder json,
+            BoundedUtf8StringBuilder json,
             IEnumerable<KeyValuePair<string, string>> source,
             Func<string, bool> include,
             int indent,
@@ -200,7 +250,7 @@ namespace QS3D.Core.Export
             json.Append(new string(' ', indent * 2)).Append('}');
         }
 
-        private static void AppendNumberMap(StringBuilder json, IDictionary<string, double> source, string label)
+        private static void AppendNumberMap(BoundedUtf8StringBuilder json, IDictionary<string, double> source, string label)
         {
             if (source == null) throw new InvalidDataException("Interchange export requires " + label + ".");
             if (source.Count > MaxInterchangeMapItems)
@@ -223,7 +273,7 @@ namespace QS3D.Core.Export
                 MaxInterchangeMapItems.ToString(CultureInfo.InvariantCulture) + "-member map limit.");
         }
 
-        private static void AppendStringArray(StringBuilder json, IEnumerable<string> values, string label)
+        private static void AppendStringArray(BoundedUtf8StringBuilder json, IEnumerable<string> values, string label)
         {
             if (values == null) throw new InvalidDataException("Interchange export requires " + label + ".");
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -301,13 +351,13 @@ namespace QS3D.Core.Export
             }
         }
 
-        private static void Property(StringBuilder json, int indent, string name, string value, bool comma)
+        private static void Property(BoundedUtf8StringBuilder json, int indent, string name, string value, bool comma)
         {
             json.Append(new string(' ', indent * 2)).Append('"').Append(Escape(name)).Append("\":\"").Append(Escape(value ?? string.Empty)).Append('"');
             json.Append(comma ? ",\n" : "\n");
         }
 
-        private static void NumberProperty(StringBuilder json, int indent, string name, int value, bool comma)
+        private static void NumberProperty(BoundedUtf8StringBuilder json, int indent, string name, int value, bool comma)
         {
             json.Append(new string(' ', indent * 2)).Append('"').Append(Escape(name)).Append("\":").Append(value.ToString(CultureInfo.InvariantCulture));
             json.Append(comma ? ",\n" : "\n");

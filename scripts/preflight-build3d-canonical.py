@@ -52,8 +52,9 @@ else:
         "if (sourceTypes.Count == 0)",
         "FinalizeUi(document, elementIds, sourceHandles, built, regenerated, category, project)",
         "CadHandleService.Select(document, generatedHandles)",
-        '" UI sync warning: " + ex.Message',
-        "Report(document, \"QS3DBUILD3D lỗi: \" + ex.Message)",
+        "Build 3D UI sync warning: native rebuild đã commit; một phần viewport/selection/UI không thể đồng bộ.",
+        "Report(document, \"QS3DBUILD3D lỗi: không thể hoàn tất native rebuild cho selection hiện tại.\")",
+        "native ownership đã thay đổi trước lỗi post-commit; giữ trạng thái đã commit để tránh lệch CAD/semantic.",
         'string.Equals(sourceType, "Line", StringComparison.OrdinalIgnoreCase)',
         "category == ElementCategory.WallPier",
         "WallPierProfileSolidBuilder.BuildSelectedLinePiers(document, project)",
@@ -63,6 +64,10 @@ else:
     for token in required:
         if token not in text:
             errors.append("canonical Build3D missing contract: " + token)
+
+    for forbidden in ("operationError.Message", "ex.Message", "uiError.Message", "exception.Message", "Exception.Message"):
+        if forbidden in text:
+            errors.append("canonical Build3D must not expose raw caught exception detail: " + forbidden)
 
     resolve_sources = text.find("var sourceIds = CadHandleService.Resolve(document, sourceHandles)")
     direct_snapshots = text.find("var sourceSnapshots = EntitySnapshotReader.ReadHandles(document, sourceHandles)")
@@ -95,8 +100,10 @@ else:
 
         report_start = text.find("private static void Report", finalize_start)
         finalize = text[finalize_start:report_start if report_start > finalize_start else len(text)]
-        if "catch (Exception ex)" not in finalize or "TryWriteMessage" not in finalize:
-            errors.append("post-commit Build3D UI synchronization must be non-fatal and best-effort")
+        if "var uiSyncFailed = false;" not in finalize or "TryWriteMessage" not in finalize:
+            errors.append("post-commit Build3D UI synchronization must remain non-fatal and best-effort")
+        if finalize.count("catch") < 5:
+            errors.append("post-commit Build3D Palette/Regen/selection/status/editor cells must fail independently")
 
 review = SRC / "ReviewCommands.cs"
 if review.is_file() and 'CommandMethod("QS3DBUILD3D"' in review.read_text(encoding="utf-8"):
@@ -109,4 +116,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: QS3DBUILD3D keeps source preflight read-only, hands validated source IDs to implied-selection native builders only at dispatch, preserves generated selection after success, and retains canonical native category/WallPier handling with non-fatal post-commit UI sync.")
+print("PASS: QS3DBUILD3D keeps source preflight read-only, late native dispatch, semantic rollback versus committed ownership truth, stable failure redaction, and independently non-fatal committed-state UI sync.")

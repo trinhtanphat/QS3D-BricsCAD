@@ -90,15 +90,33 @@ if not live_state.is_file():
     errors.append("missing CurtainWallFrameLiveStateService.cs")
 else:
     text = live_state.read_text(encoding="utf-8")
+    try_stamp_start = text.find("public static int TryStampSelected(Document document, ProjectState project, out string warning)")
+    inspect_start = text.find("public static IReadOnlyList<ModelHealthIssue> Inspect", try_stamp_start + 1) if try_stamp_start >= 0 else -1
+    if try_stamp_start < 0 or inspect_start < 0 or inspect_start <= try_stamp_start:
+        errors.append("curtain live fingerprint best-effort contract missing: cannot isolate TryStampSelected")
+        try_stamp = ""
+    else:
+        try_stamp = text[try_stamp_start:inspect_start]
+
     for token in (
         "public static int TryStampSelected(Document document, ProjectState project, out string warning)",
         "return StampSelected(document, project);",
-        'warning = "Không stamp được live curtain fingerprint: " + ex.Message;',
+        "catch (Exception)",
+        'warning = "Live curtain fingerprint chưa được cập nhật; hãy chạy lại Curtain Frames 3D hoặc Health trước khi phát hành.";',
         "return 0;",
         "CURTAIN_FRAME_LIVE_FINGERPRINT_MISSING",
     ):
         if token not in text:
             errors.append("curtain live fingerprint best-effort contract missing: " + token)
+    for forbidden in (
+        'warning = "Không stamp được live curtain fingerprint: " + ex.Message;',
+        "ex.Message",
+        "exception.Message",
+        "GetBaseException()",
+        "StackTrace",
+    ):
+        if forbidden in try_stamp:
+            errors.append("curtain live fingerprint warning must not expose caught host detail: " + forbidden)
 
 for relative in (
     "src/QS3D.BricsCAD.V25/CurtainWallBuildCommands.cs",
@@ -123,4 +141,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: LINE/path frame replacement validates the complete previous live set before erase; semantic ownership and AuditTrail-owned project revision commit before CAD commit inside the rollback boundary; live fingerprint stamping remains best-effort post-commit.")
+print("PASS: LINE/path frame replacement validates the complete previous live set before erase; semantic ownership and AuditTrail-owned project revision commit before CAD commit inside the rollback boundary; live fingerprint stamping remains best-effort post-commit with stable redacted warning semantics.")

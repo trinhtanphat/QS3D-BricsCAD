@@ -1,12 +1,12 @@
 # Advanced cost deterministic Count stability
 
-Issues: #4365, #4792  
-Lane-Key: `issue-4792` for the traversal-wide follow-up  
+Issues: #4365, #4792, #5686  
+Current semantic-generation follow-up: `issue-5686`  
 Runtime: `NOT_APPLICABLE` — Core cost-domain correctness only.
 
 ## Defect boundary
 
-Advanced-cost collection snapshots bind deterministic Count evidence from generic `ICollection<T>`, `IReadOnlyCollection<T>`, and non-generic `ICollection` before traversal. #4365 added first-over-yield protection plus post-traversal Count rebinding, but `AdvancedCostManagement.cs` still crossed caller-controlled `MoveNext()` boundaries without rereading the admitted Count before and after each move. A counted source could therefore expose transient growth, shrink, negative, or conflicting Count evidence at the successful-move boundary and restore the admitted Count before final validation.
+Advanced-cost collection snapshots bind deterministic Count evidence from generic `ICollection<T>`, `IReadOnlyCollection<T>`, and non-generic `ICollection` before traversal. #4365 added first-over-yield protection plus post-traversal Count rebinding, and #4792 fenced every caller-controlled `MoveNext()` boundary. That protects cardinality metadata, but several `AdvancedCostManagement.cs` consumers still published the first semantic generation without proving that a stable-count source returned the same business data when replayed. A hostile or mutable source could therefore keep Count unchanged while replacing historical records, tender data, or progress-claim data across enumerator generations.
 
 ## Required traversal-wide contract
 
@@ -18,20 +18,22 @@ For every advanced-cost consumer that admitted deterministic Count evidence:
 4. after every successful `MoveNext()`, re-read Count again **before** cap/overrun checks and before `Current`;
 5. retain first-overrun-before-item-validation behavior and the independent 10,000-entry streaming ceiling;
 6. after traversal, retain the initial Count-versus-observed-cardinality check and post-traversal Count rebind before sorting, result construction, or publication;
-7. accept stable honest multi-interface sources and pure streaming `IEnumerable<T>` sources with no deterministic Count contract.
+7. for materializers covered by #5686, replay a known-count source before publication/evaluation and compare the complete immutable business state in admitted order; reject any semantic generation drift even when Count remains stable;
+8. keep pure streaming `IEnumerable<T>` inputs single-pass because they did not advertise a deterministic Count contract;
+9. accept stable honest multi-interface and stable known-count sources without requiring object-reference identity.
 
-`AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal` owns the pre/post-`MoveNext` rebound. `RequireKnownCountStableAfterTraversal` retains final observed-cardinality validation and delegates to the same Count reread logic.
+`AdvancedCostCollectionContract.RequireKnownCountStableDuringTraversal` owns the pre/post-`MoveNext` rebound. `RequireKnownCountStableAfterTraversal` retains final observed-cardinality validation. `RequireStableKnownGeneration` owns the #5686 semantic generation replay and is a no-op for sources without an admitted Count.
 
-The traversal-wide contract applies to all shared-contract materializers in `AdvancedCostManagement.cs`: rate build-up components, historical records, tender quote lines, tender requirements, tender bids, progress contract items, and progress claim lines. Existing `DeepCostWorkflows.cs` post-traversal coverage from #4365 remains pinned and is not weakened by #4792.
+The #5686 replay applies to historical records, tender quote lines, tender requirements, tender bids, progress contract items, and progress claim lines. Rate build-up components already had equivalent replay protection, while `DeepCostWorkflows.cs` has its own generation-stability fences; those existing contracts are not weakened.
 
 ## Deterministic regression
 
-`AdvancedCostKnownCountStabilitySmoke` keeps the historical final-state regressions: post-enumeration drift, multi-interface conflict, non-generic drift, honest stable multi-interface controls, and pure streaming controls.
+`AdvancedCostKnownCountStabilitySmoke` retains the historical Count-drift regressions and now adds stable-Count generation-switch sources for all six #5686 boundaries. Each source reports the same Count but returns different semantic state from its second enumerator; publication/evaluation must fail with the semantic generation replay diagnostic. Stable known-count controls remain accepted.
 
-`AdvancedCostTransientCountSmoke` adds move-boundary hostile collections whose next Count observation changes after a successful `MoveNext()`. Growth, shrink, and negative Count cases must be rejected with zero `Current` reads, while stable counted and streaming controls continue to succeed.
+The same smoke also uses a single-pass streaming source to prove the new helper does not replay unknown-count inputs. `AdvancedCostTransientCountSmoke` continues to pin successful-move Count changes before `Current`.
 
-`preflight-advanced-cost-known-count-stability.py` is auto-discovered by the aggregate feature guard. It retains #4365 assertions across both cost-domain source files and additionally pins `rebind -> MoveNext -> rebind -> Current` ordering for every `AdvancedCostManagement.cs` materializer covered by #4792.
+`preflight-advanced-cost-known-count-stability.py` is auto-discovered by the aggregate feature guard. It retains the earlier Count fencing assertions and additionally requires the shared semantic replay helper, all six semantic-state comparators/consumers, the generation-switch regressions, and the streaming single-pass control.
 
 ## Acceptance
 
-The source package is complete only when exact-head branch CI and the current protected PR candidate both report `preflight` and `core` SUCCESS. Merge uses the repository's expected-head protected PR path, followed by exact-main verification. No licensed BricsCAD runtime claim applies.
+This package is REMOTE_SAFE. Source acceptance requires fresh exact-head Shared CI and the current protected PR candidate to report `preflight` and `core` SUCCESS, followed by expected-head merge and exact protected-main verification. No licensed BricsCAD runtime or `LOCAL_PASS` claim applies.

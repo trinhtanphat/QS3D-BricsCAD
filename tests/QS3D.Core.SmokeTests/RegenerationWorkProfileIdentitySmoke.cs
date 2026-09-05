@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             WorkItemIdentityIsCanonicalizedAndUnicodeSafe();
             ProfileIdentityIsCanonicalizedAndUnicodeSafe();
+            TargetIdentityIsCanonicalizedAndUnicodeSafe();
             HostileIdentityTextFailsAtPublicAdmission();
         }
 
@@ -29,6 +30,14 @@ namespace QS3D.Core.SmokeTests
             Equal("Project-MiXeD", Profile("Project-MiXeD").ProjectId);
         }
 
+        private static void TargetIdentityIsCanonicalizedAndUnicodeSafe()
+        {
+            var profile = ProfileWithTargets("  T-\U0001F680  ", "Target-MiXeD");
+            Equal(2, profile.TargetElementIds.Count);
+            Equal("T-\U0001F680", profile.TargetElementIds[0]);
+            Equal("Target-MiXeD", profile.TargetElementIds[1]);
+        }
+
         private static void HostileIdentityTextFailsAtPublicAdmission()
         {
             ThrowsIdentity(() => Item(" "), "elementId", "required");
@@ -39,6 +48,12 @@ namespace QS3D.Core.SmokeTests
             ThrowsIdentity(() => Item("E-\uDC00-X"), "elementId", "malformed UTF-16");
             ThrowsIdentity(() => Profile("P-\uD800-X"), "projectId", "malformed UTF-16");
             ThrowsIdentity(() => Profile("P-\uFFFF-X"), "projectId", "XML-invalid");
+
+            ThrowsIdentity(() => ProfileWithTargets(" "), "targetElementIds", "required");
+            ThrowsIdentity(() => ProfileWithTargets("T-\u0001-X"), "targetElementIds", "control characters");
+            ThrowsIdentity(() => ProfileWithTargets("T-\uD800-X"), "targetElementIds", "malformed UTF-16");
+            ThrowsIdentity(() => ProfileWithTargets("T-\uDC00-X"), "targetElementIds", "malformed UTF-16");
+            ThrowsIdentity(() => ProfileWithTargets("T-\uFFFF-X"), "targetElementIds", "XML-invalid");
         }
 
         private static RegenerationWorkItem Item(string elementId) =>
@@ -58,6 +73,19 @@ namespace QS3D.Core.SmokeTests
                 RegenerationWorkScope.Project,
                 Array.Empty<string>(),
                 0,
+                0,
+                Array.Empty<RegenerationWorkItem>(),
+                Array.Empty<RegenerationCategoryWork>(),
+                0,
+                0);
+
+        private static RegenerationWorkProfile ProfileWithTargets(params string[] targetElementIds) =>
+            new RegenerationWorkProfile(
+                "Project-1",
+                0L,
+                RegenerationWorkScope.Subset,
+                targetElementIds,
+                targetElementIds.Length,
                 0,
                 Array.Empty<RegenerationWorkItem>(),
                 Array.Empty<RegenerationCategoryWork>(),

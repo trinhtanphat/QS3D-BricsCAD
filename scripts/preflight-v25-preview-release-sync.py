@@ -4,7 +4,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "release-v25-cloud.yml"
 PREPARE = ROOT / "scripts" / "prepare-v25-cloud-release.ps1"
-SYNC = ROOT / "scripts" / "sync-preview-release-version.ps1"
 PACKAGE = ROOT / "scripts" / "package-v25.ps1"
 
 
@@ -16,14 +15,17 @@ def fail(message):
 def require_tokens(text, tokens, label):
     for token in tokens:
         if token not in text:
-            raise ValueError(f"{label} lost required release-sync guard: {token}")
+            raise ValueError(f"{label} lost required guard: {token}")
+
+
+def contains_executable_line(text, token):
+    return any(token.lower() in line.lower() for line in text.splitlines() if not line.lstrip().startswith("#"))
 
 
 def main():
     try:
         workflow = WORKFLOW.read_text(encoding="utf-8")
         prepare = PREPARE.read_text(encoding="utf-8")
-        sync = SYNC.read_text(encoding="utf-8")
         package = PACKAGE.read_text(encoding="utf-8")
     except OSError as exc:
         return fail(str(exc))
@@ -63,73 +65,75 @@ def main():
                 "Get-ReleaseStatusEntries",
                 "git status --porcelain=v1 --untracked-files=all -- . ':(exclude).nuget/packages/**'",
                 "Release preparation must start from a clean checkout/index",
+                "$releaseRelevantPathspecs = @(",
+                "external/QS3D-Platform",
+                "git diff --quiet --no-ext-diff $range -- @releaseRelevantPathspecs",
                 "git reset --hard",
                 "git checkout --detach $releaseBase",
-                "sync-preview-release-version.ps1",
                 "preflight-runtime-product-version-identity.py",
-                "Preview synchronization produced an unexpected Git status",
-                "if ($entry.State -ne ' M')",
-                "if ($entry.Path -notin $allowed)",
+                "$workspaceVersionPaths = @(",
+                "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj",
+                "src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj",
+                "src/QS3D.Core/QS3D.Core.csproj",
+                "function Set-WorkspaceProductVersion",
+                "$productVersion = $tag.Substring(1)",
+                "Set-ProjectVersionValue -Name 'Version' -Value $productVersion",
+                "Set-ProjectVersionValue -Name 'FileVersion' -Value $fileVersion",
+                "Set-ProjectVersionValue -Name 'InformationalVersion' -Value $productVersion",
+                "Set-WorkspaceProductVersion -ReleaseTagValue $tag",
+                "Runtime product-version identity preflight failed after workspace synchronization.",
+                "$expectedProductVersion = $tag.Substring(1)",
+                "$finalStatus.Count -ne 0 -and $finalStatus.Count -ne $workspaceVersionPaths.Count",
+                "Workspace version synchronization must either be a no-op or produce exactly three bounded project modifications.",
+                "Workspace ProductVersion is already synchronized",
+                "if ($finalStatus.Count -eq $workspaceVersionPaths.Count)",
+                "Unexpected release-preparation workspace change",
                 "git diff --check",
                 "git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'",
                 "main moved after dispatch with release-relevant changes",
                 "Release workspace HEAD must remain the protected-main source commit",
                 "$latestMain = Get-RemoteMain",
-                "main advanced through additional non-release paths while preparing the workspace",
-                "No commit, push, branch-protection bypass, or main mutation was performed by release preparation.",
+                "main advanced through additional non-release paths while validating release source",
+                "No commit, push, branch-protection bypass, or protected-main mutation was performed by release preparation.",
                 "Write-Output $releaseBase",
             ],
             "V25 release preparation helper",
         )
+        for stale in (
+            "function Get-CommittedProductVersion",
+            "Merge the version update to protected main before publishing.",
+            "No commit, push, branch-protection bypass, workspace-only version rewrite, or main mutation was performed by release preparation.",
+        ):
+            if stale in prepare:
+                raise ValueError(f"V25 release preparation retained stale committed-version contract: {stale}")
+        if "sync-preview-release-version.ps1" in prepare:
+            raise ValueError("V25 release preparation must keep workspace synchronization bounded inside prepare helper")
+        if contains_executable_line(prepare, "git diff --name-only"):
+            raise ValueError("V25 release preparation must not classify release drift from line-oriented pathname output")
         if "Test-IsExpectedNuGetCachePath" in prepare:
             raise ValueError("V25 release preparation must exclude NuGet cache before status parsing")
-        for forbidden in (
-            "git add",
-            "git commit",
-            "git push",
-            "HEAD:refs/heads/main",
-        ):
-            if forbidden.lower() in prepare.lower():
-                raise ValueError(
-                    f"V25 release preparation must keep preview synchronization workspace-only; forbidden primitive: {forbidden}"
-                )
+        for forbidden in ("git add", "git commit", "git push", "HEAD:refs/heads/main"):
+            if contains_executable_line(prepare, forbidden):
+                raise ValueError(f"V25 release preparation must keep protected main read-only: {forbidden}")
 
         anchors = [
             prepare.find("$initialStatus = @(Get-ReleaseStatusEntries)"),
             prepare.find("git checkout --detach $releaseBase"),
-            prepare.find("sync-preview-release-version.ps1"),
-            prepare.find("$status = @(Get-ReleaseStatusEntries)"),
+            prepare.find("preflight-runtime-product-version-identity.py"),
+            prepare.find("Set-WorkspaceProductVersion -ReleaseTagValue $tag"),
+            prepare.find("Runtime product-version identity preflight failed after workspace synchronization."),
+            prepare.find("$expectedProductVersion = $tag.Substring(1)"),
             prepare.find("git diff --check"),
             prepare.find("Release workspace HEAD must remain the protected-main source commit"),
+            prepare.find("$finalStatus = @(Get-ReleaseStatusEntries)"),
             prepare.find("$latestMain = Get-RemoteMain"),
             prepare.find("Write-Output $releaseBase"),
         ]
         if min(anchors) < 0 or anchors != sorted(anchors):
             raise ValueError(
-                "V25 release preparation must start clean, select protected main, sync workspace-only identity, validate dirty allowlist, preserve HEAD, recheck main, then return source SHA"
+                "V25 release preparation must start clean, select protected main, synchronize bounded workspace identity, validate it, preserve HEAD, bound dirty paths, recheck main, then return source SHA"
             )
 
-        expected_projects = [
-            "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj",
-            "src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj",
-            "src/QS3D.Core/QS3D.Core.csproj",
-        ]
-        for path in expected_projects:
-            if path not in prepare or path not in sync:
-                raise ValueError(f"preview release synchronization lost project path: {path}")
-
-        require_tokens(
-            sync,
-            [
-                "(?<preview>[1-9][0-9]*)$",
-                "Replace-SingleProjectValue",
-                "-Element 'Version'",
-                "-Element 'FileVersion'",
-                "-Element 'InformationalVersion'",
-                "New-Object Text.UTF8Encoding($false)",
-            ],
-            "preview version sync helper",
-        )
         require_tokens(
             package,
             [
@@ -143,8 +147,7 @@ def main():
         return fail(str(exc))
 
     print(
-        "PASS: V25 preview release sync requires a positive preview ordinal, excludes NuGet cache before status parsing, "
-        "keeps version changes workspace-only on an exact protected-main HEAD, and publishes exact release-source provenance"
+        "PASS: V25 preview release accepts an already-synchronized requested preview identity or derives it only in the bounded V25/V26/Core workspace, preserves exact protected-main HEAD provenance, and packages only the synchronized tag identity"
     )
     return 0
 

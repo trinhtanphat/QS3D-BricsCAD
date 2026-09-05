@@ -15,6 +15,8 @@ namespace QS3D.BricsCAD.V25
     internal static class McpLocalAgentClient
     {
         private const string ProtocolVersion = "2025-06-18";
+        private const int MaxResponseBytes = 4 * 1024 * 1024;
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         public static string CallOne(Uri endpoint, int timeoutMilliseconds, string tool, string argumentsJson)
         {
@@ -154,11 +156,29 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException(operation + " returned JSON-RPC error.");
         }
 
+        private static void ValidateLocalEndpoint(Uri endpoint)
+        {
+            var expected = McpEmbeddedServer.Endpoint;
+            if (endpoint == null
+                || !endpoint.IsAbsoluteUri
+                || !string.Equals(endpoint.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                || !endpoint.IsLoopback
+                || !string.IsNullOrEmpty(endpoint.UserInfo)
+                || !string.Equals(endpoint.Host, expected.Host, StringComparison.OrdinalIgnoreCase)
+                || endpoint.Port != expected.Port
+                || !string.Equals(endpoint.AbsolutePath, "/mcp", StringComparison.Ordinal)
+                || !string.IsNullOrEmpty(endpoint.Query)
+                || !string.IsNullOrEmpty(endpoint.Fragment))
+                throw new InvalidOperationException("Local MCP endpoint must match the current embedded loopback http://.../mcp endpoint.");
+        }
+
         private static LocalHttpResult Send(Uri endpoint, string method, string body, int timeoutMilliseconds, string? session)
         {
+            ValidateLocalEndpoint(endpoint);
 #pragma warning disable SYSLIB0014
             var request = (HttpWebRequest)WebRequest.Create(endpoint);
 #pragma warning restore SYSLIB0014
+            request.AllowAutoRedirect = false;
             request.Method = method;
             request.Accept = "application/json, text/event-stream";
             request.Timeout = timeoutMilliseconds;
@@ -178,14 +198,48 @@ namespace QS3D.BricsCAD.V25
 
             using (var response = (HttpWebResponse)request.GetResponse())
             {
+                if (response.ContentLength > MaxResponseBytes)
+                    throw new InvalidOperationException("Local MCP response exceeds the allowed size.");
+
                 var responseBody = string.Empty;
                 using (var stream = response.GetResponseStream())
                 {
                     if (stream != null)
-                    using (var reader = new StreamReader(stream, Encoding.UTF8))
-                        responseBody = NormalizeBody(reader.ReadToEnd());
+                        responseBody = NormalizeBody(ReadBoundedResponseBody(stream, response.ContentLength));
                 }
                 return new LocalHttpResult((int)response.StatusCode, response.Headers["Mcp-Session-Id"], responseBody);
+            }
+        }
+
+        private static string ReadBoundedResponseBody(Stream stream, long advertisedLength)
+        {
+            if (stream == null) return string.Empty;
+            if (advertisedLength > MaxResponseBytes)
+                throw new InvalidOperationException("Local MCP response exceeds the allowed size.");
+
+            var initialCapacity = advertisedLength > 0 ? (int)advertisedLength : 8192;
+            var buffer = new byte[8192];
+            var totalBytes = 0;
+            using (var memory = new MemoryStream(initialCapacity))
+            {
+                while (true)
+                {
+                    var read = stream.Read(buffer, 0, buffer.Length);
+                    if (read <= 0) break;
+                    if (totalBytes > MaxResponseBytes - read)
+                        throw new InvalidOperationException("Local MCP response exceeds the allowed size.");
+                    memory.Write(buffer, 0, read);
+                    totalBytes += read;
+                }
+
+                try
+                {
+                    return StrictUtf8.GetString(memory.GetBuffer(), 0, totalBytes);
+                }
+                catch (DecoderFallbackException)
+                {
+                    throw new InvalidOperationException("Local MCP response is not valid UTF-8.");
+                }
             }
         }
 

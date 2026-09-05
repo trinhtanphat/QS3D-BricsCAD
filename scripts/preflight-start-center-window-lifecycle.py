@@ -51,29 +51,69 @@ def main() -> None:
     require(text, "Application.DocumentManager.DocumentToBeDestroyed -= OnHostDocumentToBeDestroyed;", "document destruction unsubscription")
     activated = method_body(text, "private void OnHostDocumentActivated", "private void OnHostDocumentToBeDestroyed", "activation handler")
     destroying = method_body(text, "private void OnHostDocumentToBeDestroyed", "private void QueueHomeRefresh", "destruction handler")
-    require(activated, "QueueHomeRefresh(recordActiveDrawing: true);", "activation deferred refresh")
-    require(destroying, "QueueHomeRefresh(recordActiveDrawing: false);", "destruction deferred refresh")
+    require(activated, "QueueHomeRefresh(ActiveDrawingRecordIntent.Record);", "activation deferred record refresh")
+    require(destroying, "var destroyingDocument = e.Document;", "destruction event-local document")
+    require(destroying, "Application.DocumentManager.MdiActiveDocument", "destruction active-document comparison")
+    require(destroying, "ReferenceEquals(destroyingDocument, activeDocument)", "destruction document affinity")
+    require(destroying, "? ActiveDrawingRecordIntent.Suppress", "active destruction suppression")
+    require(destroying, ": ActiveDrawingRecordIntent.Preserve;", "background destruction preservation")
+    require(destroying, "QueueHomeRefresh(destroyIntent);", "destruction deferred refresh")
+
+    # Active-document identity is a one-shot host observation and must fail soft during teardown.
+    lookup = destroying.find("Application.DocumentManager.MdiActiveDocument")
+    try_pos = destroying.find("try")
+    catch_pos = destroying.find("catch", lookup + 1 if lookup >= 0 else 0)
+    suppress_pos = destroying.find("QueueHomeRefresh(ActiveDrawingRecordIntent.Suppress);", catch_pos + 1 if catch_pos >= 0 else 0)
+    return_pos = destroying.find("return;", catch_pos + 1 if catch_pos >= 0 else 0)
+    if lookup < 0 or try_pos < 0 or try_pos > lookup or catch_pos < 0:
+        raise AssertionError("Start Center destruction active-document lookup must remain inside a fail-soft try/catch boundary")
+    if suppress_pos < 0 or return_pos < 0 or suppress_pos > return_pos:
+        raise AssertionError("Start Center destruction lookup failure must suppress recording before returning")
+    if destroying.count("MdiActiveDocument") != 1:
+        raise AssertionError("Start Center destruction handler must observe the active document exactly once")
+
     if "RefreshHomeShell(" in activated or "RefreshHomeShell(" in destroying:
         raise AssertionError("BricsCAD document events must defer rather than refresh inline")
 
-    # Dispatcher coalescing/reentrancy keeps rapid MDI transitions bounded.
+    # Dispatcher coalescing/reentrancy keeps rapid MDI transitions bounded while preserving lifecycle intent.
     for token, label in (
+        ("private enum ActiveDrawingRecordIntent", "record-intent enum"),
+        ("Preserve,", "record-intent preserve state"),
+        ("Record,", "record-intent record state"),
+        ("Suppress", "record-intent suppress state"),
         ("private bool _hostRefreshQueued;", "coalescing state"),
         ("private bool _hostRefreshInProgress;", "reentrancy state"),
-        ("private bool _queuedRecordActiveDrawing;", "record intent state"),
+        ("private ActiveDrawingRecordIntent _queuedActiveDrawingRecordIntent = ActiveDrawingRecordIntent.Preserve;", "record intent state"),
+        ("private void QueueHomeRefresh(ActiveDrawingRecordIntent intent)", "typed refresh queue"),
+        ("if (intent != ActiveDrawingRecordIntent.Preserve)", "preserve intent merge guard"),
+        ("_queuedActiveDrawingRecordIntent = intent;", "latest explicit lifecycle intent publication"),
         ("Dispatcher.HasShutdownStarted", "dispatcher shutdown guard"),
         ("Dispatcher.HasShutdownFinished", "dispatcher shutdown guard"),
         ("Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(DrainQueuedHomeRefresh));", "deferred dispatcher refresh"),
         ("if (_hostRefreshQueued)", "refresh coalescing guard"),
         ("if (_hostRefreshInProgress)", "refresh reentrancy guard"),
+        ("QueueHomeRefresh(ActiveDrawingRecordIntent.Preserve);", "reentrant refresh preservation"),
+        ("var recordActiveDrawing = _queuedActiveDrawingRecordIntent == ActiveDrawingRecordIntent.Record;", "drained record decision"),
+        ("_queuedActiveDrawingRecordIntent = ActiveDrawingRecordIntent.Preserve;", "drained intent reset"),
         ("RefreshHomeShell(recordActiveDrawing);", "single drained refresh"),
     ):
         require(text, token, label)
 
+    # Explicitly reject the superseded OR-only boolean coalescing contract that can record a closing drawing.
+    for legacy in (
+        "private bool _queuedRecordActiveDrawing;",
+        "private void QueueHomeRefresh(bool recordActiveDrawing)",
+        "_queuedRecordActiveDrawing |= recordActiveDrawing;",
+        "QueueHomeRefresh(recordActiveDrawing: true);",
+        "QueueHomeRefresh(recordActiveDrawing: false);",
+    ):
+        if legacy in text:
+            raise AssertionError(f"Start Center lifecycle must not regress to legacy boolean queue contract: {legacy}")
+
     # Refresh remains click/run-time bound to the active host document, never a cached native object.
     refresh = method_body(text, "private void RefreshHomeShell(bool recordActiveDrawing)", "private void RefreshRecentProjects()", "home refresh")
     require(refresh, "Application.DocumentManager.MdiActiveDocument", "active-document resolution")
-    require(text, "QueueHomeRefresh(recordActiveDrawing: true);", "post-action refresh")
+    require(text, "QueueHomeRefresh(ActiveDrawingRecordIntent.Record);", "post-action record refresh")
 
     native_field_patterns = (
         r"^\s*private\s+(?:readonly\s+|static\s+)*(?:Bricscad\.ApplicationServices\.)?Document\??\s+_",

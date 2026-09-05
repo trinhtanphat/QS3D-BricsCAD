@@ -401,6 +401,7 @@ namespace QS3D.Core.Export
         private const long MaxWorkbookBytes = 128L * 1024L * 1024L;
         private const long MaxXmlCharacters = 64L * 1024L * 1024L;
         private const int MaxRows = 1048576;
+        private const int MaxColumns = 16384;
         private const string WorksheetRelationshipType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
 
         public static CoordinationWorkbookTrace Read(string path, int rowNumber)
@@ -590,10 +591,11 @@ namespace QS3D.Core.Export
         {
             var result = new Dictionary<int, string>();
             formulaColumns = new HashSet<int>();
+            var declaredRow = ParseRow(row);
             foreach (var cell in row.Elements(ns + "c"))
             {
-                var reference = ((string)cell.Attribute("r") ?? string.Empty).Trim();
-                var column = ParseColumn(reference);
+                var reference = (string)cell.Attribute("r") ?? string.Empty;
+                var column = ParseColumn(reference, declaredRow);
                 if (result.ContainsKey(column)) throw new InvalidDataException("Coordination workbook row contains duplicate cell coordinates.");
                 if (cell.Element(ns + "f") != null) formulaColumns.Add(column);
                 var type = ((string)cell.Attribute("t") ?? string.Empty).Trim();
@@ -627,19 +629,34 @@ namespace QS3D.Core.Export
             return value;
         }
 
-        private static int ParseColumn(string reference)
+        private static int ParseColumn(string reference, int expectedRow)
         {
-            if (string.IsNullOrWhiteSpace(reference)) throw new InvalidDataException("Coordination workbook cell coordinate is missing.");
-            var value = 0;
-            var count = 0;
-            foreach (var ch in reference)
+            if (string.IsNullOrEmpty(reference)) throw new InvalidDataException("Coordination workbook cell coordinate is missing.");
+
+            var column = 0;
+            var index = 0;
+            while (index < reference.Length && reference[index] >= 'A' && reference[index] <= 'Z')
             {
-                if (ch >= 'A' && ch <= 'Z') { value = checked(value * 26 + (ch - 'A' + 1)); count++; }
-                else if (ch >= 'a' && ch <= 'z') { value = checked(value * 26 + (ch - 'a' + 1)); count++; }
-                else break;
+                if (index >= 3) throw new InvalidDataException("Coordination workbook cell coordinate is invalid: " + reference + ".");
+                column = column * 26 + (reference[index] - 'A' + 1);
+                index++;
             }
-            if (count == 0) throw new InvalidDataException("Coordination workbook cell coordinate is invalid: " + reference + ".");
-            return value - 1;
+
+            if (index == 0 || column < 1 || column > MaxColumns || index >= reference.Length || reference[index] == '0')
+                throw new InvalidDataException("Coordination workbook cell coordinate is invalid: " + reference + ".");
+
+            var rowStart = index;
+            while (index < reference.Length && reference[index] >= '0' && reference[index] <= '9') index++;
+            if (index != reference.Length)
+                throw new InvalidDataException("Coordination workbook cell coordinate is invalid: " + reference + ".");
+
+            int cellRow;
+            if (!int.TryParse(reference.Substring(rowStart), NumberStyles.None, CultureInfo.InvariantCulture, out cellRow) || cellRow < 1 || cellRow > MaxRows)
+                throw new InvalidDataException("Coordination workbook cell coordinate is invalid: " + reference + ".");
+            if (cellRow != expectedRow)
+                throw new InvalidDataException("Coordination workbook cell coordinate row does not match its containing row: " + reference + ".");
+
+            return column - 1;
         }
 
         private static string RequiredCell(IReadOnlyDictionary<int, string> cells, int column, string label)

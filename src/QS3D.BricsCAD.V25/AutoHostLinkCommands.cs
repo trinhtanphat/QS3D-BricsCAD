@@ -16,6 +16,10 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class AutoHostLinkCommands
     {
+        private const string OpeningReadFailure = "bỏ qua — không thể đọc/đánh giá source CAD của opening.";
+        private const string OperationFailure = "QS3DAUTOLINKHOSTS lỗi: không thể hoàn tất thao tác. Vui lòng thử lại.";
+        private const string PostCommitUiWarning = "[QS3D] Auto Host đã commit nhưng đồng bộ giao diện chưa hoàn tất. Hãy refresh giao diện.";
+
         private sealed class PlannedLink
         {
             public ProjectElement Opening { get; set; } = null!;
@@ -110,10 +114,10 @@ namespace QS3D.BricsCAD.V25
                             }
                             planned.Add(new PlannedLink { Opening = opening, HostId = result.HostElementId, GapM = result.GapM });
                         }
-                        catch (System.Exception ex)
+                        catch (System.Exception)
                         {
                             invalid++;
-                            document.Editor.WriteMessage("\n  " + opening.Id + ": bỏ qua — " + ex.Message);
+                            document.Editor.WriteMessage("\n  " + opening.Id + ": " + OpeningReadFailure);
                         }
                     }
                     transaction.Commit();
@@ -169,29 +173,29 @@ namespace QS3D.BricsCAD.V25
                 if (regenerated > 0) summary += " • regen=" + regenerated;
                 FinalizeAutoHostUi(document, summary);
             }
-            catch (System.Exception ex)
+            catch (System.Exception)
             {
-                ReportAutoHostError(document, ex);
+                ReportAutoHostError(document);
             }
         }
 
         private static void FinalizeAutoHostUi(Document document, string summary)
         {
-            System.Exception? warning = null;
+            var warning = false;
             try { PaletteCoordinator.RefreshProject(); }
-            catch (System.Exception ex) { warning = ex; }
+            catch (System.Exception) { warning = true; }
             try { PaletteCoordinator.SetStatus(summary); }
-            catch (System.Exception ex) { if (warning == null) warning = ex; }
+            catch (System.Exception) { warning = true; }
             try { document.Editor.WriteMessage("\nQS3D " + summary + ". Chạy QS3DCUTOPENINGS khi muốn áp physical boolean."); }
-            catch (System.Exception ex) { if (warning == null) warning = ex; }
-            if (warning == null) return;
-            try { document.Editor.WriteMessage("\n[QS3D] Cảnh báo UI sau Auto Host commit: " + warning.Message); }
+            catch (System.Exception) { warning = true; }
+            if (!warning) return;
+            try { document.Editor.WriteMessage("\n" + PostCommitUiWarning); }
             catch { }
         }
 
-        private static void ReportAutoHostError(Document document, System.Exception error)
+        private static void ReportAutoHostError(Document document)
         {
-            var message = "QS3DAUTOLINKHOSTS lỗi: " + error.Message;
+            var message = OperationFailure;
             try { PaletteCoordinator.SetStatus(message); }
             catch { }
             try { document.Editor.WriteMessage("\n" + message); }

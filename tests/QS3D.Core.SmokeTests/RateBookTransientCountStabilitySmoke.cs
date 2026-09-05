@@ -65,8 +65,8 @@ namespace QS3D.Core.SmokeTests
             var source = new ScriptedCountCollection(new[] { 2 }, itemCount: 2);
             var book = new RateBook("BOOK-TRANSIENT-STABLE", source);
 
-            Equal(3, source.MoveNextCalls, "Stable counted traversal must include the terminal false MoveNext.");
-            Equal(2, source.CurrentReads, "Stable counted traversal must observe each admitted Current exactly once.");
+            Equal(6, source.MoveNextCalls, "Stable counted input must include terminal false MoveNext once for admission and once for semantic replay.");
+            Equal(4, source.CurrentReads, "Stable counted input must observe each item once for admission and once for semantic replay.");
             Equal(2, book.Items.Count, "Stable counted input must remain accepted.");
         }
 

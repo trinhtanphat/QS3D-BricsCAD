@@ -66,18 +66,7 @@ namespace QS3D.BricsCAD.V25
 
         public static void TryAutoStartPreferred()
         {
-            switch (SelectedProvider)
-            {
-                case McpTransportProvider.CloudflareNamedTunnel:
-                    McpCloudflareAccountTunnelManager.TryAutoStart();
-                    break;
-                case McpTransportProvider.CloudflareQuickTunnel:
-                    // Quick Tunnel hostnames rotate and are intentionally never auto-started.
-                    break;
-                default:
-                    McpOpenAiSecureTunnelManager.TryAutoStart();
-                    break;
-            }
+            McpTransportSupervisor.TryAutoStartPreferred(SelectedProvider);
         }
 
         public static bool IsChatGptRegistrationAcknowledged()
@@ -112,9 +101,7 @@ namespace QS3D.BricsCAD.V25
 
         public static void StopAllForHostShutdown()
         {
-            McpOpenAiSecureTunnelManager.StopForHostShutdown();
-            McpCloudflareAccountTunnelManager.StopForHostShutdown();
-            McpCloudflareTunnelManager.StopForHostShutdown();
+            McpTransportSupervisor.StopForHostShutdown();
         }
 
         private static McpTransportProvider LoadProvider()
@@ -173,7 +160,10 @@ namespace QS3D.BricsCAD.V25
         private const string ControlPlaneApiKeyEnvironment = "CONTROL_PLANE_API_KEY";
         private const string OpenAiApiKeyEnvironment = "OPENAI_API_KEY";
         private const string LocalBearerEnvironment = "QS3D_TUNNEL_MCP_AUTH";
+        private const string LocalTunnelAuthorizationHeader = "X-QS3D-MCP-Local-Authorization";
         private const string ExpectedSha256Environment = "QS3D_OPENAI_TUNNEL_CLIENT_SHA256";
+        // 0.0.11 is the first tunnel-client line with mcp.extra_headers and mcp.discovery_extra_headers.
+        private static readonly Version MinimumSupportedTunnelClientVersion = new Version(0, 0, 11);
         private const int MaxDiagnosticLines = 80;
         private const int WatchdogPeriodMilliseconds = 5000;
         private const int UnreadyRestartThreshold = 3;
@@ -183,6 +173,9 @@ namespace QS3D.BricsCAD.V25
             "^tunnel_[0-9a-f]{32}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex Sha256Regex = new Regex(
             "^[0-9a-fA-F]{64}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        private static readonly Regex TunnelClientVersionRegex = new Regex(
+            "(?<![0-9])v?([0-9]{1,5})\\.([0-9]{1,5})\\.([0-9]{1,5})(?:[-+][0-9A-Za-z.-]{1,64})?(?![0-9])",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
         private static readonly Regex ApiKeyRegex = new Regex(
             "\\bsk-[A-Za-z0-9_\\-]{8,}\\b", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex AuthorizationRegex = new Regex(
@@ -227,6 +220,7 @@ namespace QS3D.BricsCAD.V25
         }
 
         public static bool IsConfigured => IsValidTunnelId(SavedTunnelId) && IsUsableClientPath(SavedClientPath);
+        internal static Process? OwnedProcess { get { lock (Sync) return _process; } }
 
         public static bool IsRunning
         {
@@ -360,6 +354,14 @@ namespace QS3D.BricsCAD.V25
                 McpCloudflareTunnelManager.StopForHostShutdown();
                 StopProcessOnly();
                 ClearDiagnostics();
+                string staleCleanup;
+                if (!McpTransportSupervisor.TryCleanupStaleOwnedProcess(
+                        McpTransportProvider.OpenAiSecureTunnel, clientPath, out staleCleanup))
+                {
+                    message = staleCleanup;
+                    SetLastError(message);
+                    return false;
+                }
 
                 var startInfo = new ProcessStartInfo
                 {
@@ -421,6 +423,16 @@ namespace QS3D.BricsCAD.V25
                     return false;
                 }
 
+                string ownerError;
+                if (!McpTransportSupervisor.RegisterOwnedProcess(
+                        McpTransportProvider.OpenAiSecureTunnel, process, clientPath, out ownerError))
+                {
+                    message = "Không thể xác minh quyền sở hữu tunnel-client: " + ownerError;
+                    SetLastError(message);
+                    StopProcessOnly();
+                    return false;
+                }
+
                 WriteTextVerified(AutoStartFile, "1");
                 McpTransportCoordinator.SetSelectedProvider(McpTransportProvider.OpenAiSecureTunnel);
                 EnsureWatchdogStarted();
@@ -433,6 +445,11 @@ namespace QS3D.BricsCAD.V25
                 message = LastError;
                 return false;
             }
+        }
+
+        internal static bool StartForSupervisor(out string message)
+        {
+            return Start(SavedTunnelId, string.Empty, out message);
         }
 
         public static void TryAutoStart()
@@ -548,9 +565,10 @@ namespace QS3D.BricsCAD.V25
             yaml.AppendLine("    - channel: main");
             yaml.AppendLine("      url: " + YamlQuote(localEndpoint.ToString()));
             yaml.AppendLine("  extra_headers:");
-            yaml.AppendLine("    Authorization: env:" + LocalBearerEnvironment);
+            yaml.AppendLine("    " + LocalTunnelAuthorizationHeader + ": env:" + LocalBearerEnvironment);
+            yaml.AppendLine("    Content-Type: application/json");
             yaml.AppendLine("  discovery_extra_headers:");
-            yaml.AppendLine("    Authorization: env:" + LocalBearerEnvironment);
+            yaml.AppendLine("    " + LocalTunnelAuthorizationHeader + ": env:" + LocalBearerEnvironment);
             File.WriteAllText(ConfigPath, yaml.ToString(), new UTF8Encoding(false));
         }
 
@@ -664,6 +682,7 @@ namespace QS3D.BricsCAD.V25
             {
                 if (!_watchdogEnabled || _stopping) return false;
             }
+            if (McpTransportSupervisor.IsManaging) return false;
             if (ReadText(AutoStartFile) != "1") return false;
             if (McpTransportCoordinator.SelectedProvider != McpTransportProvider.OpenAiSecureTunnel) return false;
             return IsConfigured;
@@ -748,7 +767,11 @@ namespace QS3D.BricsCAD.V25
                 }
                 dispose = true;
             }
-            if (dispose) { try { process.Dispose(); } catch { } }
+            if (dispose)
+            {
+                McpTransportSupervisor.ClearOwnedProcess(McpTransportProvider.OpenAiSecureTunnel);
+                try { process.Dispose(); } catch { }
+            }
         }
 
         private static void StopProcessOnly()
@@ -764,11 +787,26 @@ namespace QS3D.BricsCAD.V25
             }
             if (process != null)
             {
+                var exitConfirmed = false;
                 try { process.EnableRaisingEvents = false; } catch { }
                 try { process.CancelOutputRead(); } catch { }
                 try { process.CancelErrorRead(); } catch { }
-                try { if (!process.HasExited) process.Kill(); } catch { }
-                try { process.WaitForExit(1500); } catch { }
+                try
+                {
+                    if (process.HasExited)
+                    {
+                        exitConfirmed = true;
+                    }
+                    else
+                    {
+                        process.Kill();
+                        exitConfirmed = process.WaitForExit(1500);
+                        if (exitConfirmed) exitConfirmed = process.HasExited;
+                    }
+                }
+                catch { exitConfirmed = false; }
+                if (exitConfirmed)
+                    McpTransportSupervisor.ClearOwnedProcess(McpTransportProvider.OpenAiSecureTunnel);
                 try { process.Dispose(); } catch { }
             }
             lock (Sync) _stopping = false;
@@ -788,6 +826,12 @@ namespace QS3D.BricsCAD.V25
             if (!TryReadVersion(path, out version))
             {
                 error = "file không chạy được với --version như tunnel-client.";
+                return false;
+            }
+            string versionError;
+            if (!IsSupportedTunnelClientVersion(version, out versionError))
+            {
+                error = versionError;
                 return false;
             }
 
@@ -838,6 +882,43 @@ namespace QS3D.BricsCAD.V25
                 return false;
             }
             summary = "version=" + version + "; SHA-256 verified via " + ExpectedSha256Environment + "=" + actual.ToLowerInvariant();
+            return true;
+        }
+
+        private static bool IsSupportedTunnelClientVersion(string versionText, out string error)
+        {
+            error = string.Empty;
+            Version parsed;
+            if (!TryParseTunnelClientVersion(versionText, out parsed))
+            {
+                error = "tunnel-client version is unsupported: --version output did not contain a bounded semantic version.";
+                return false;
+            }
+            if (parsed.CompareTo(MinimumSupportedTunnelClientVersion) < 0)
+            {
+                error = "tunnel-client version is unsupported: found " + parsed
+                        + ", minimum required for MCP runtime/discovery static headers is "
+                        + MinimumSupportedTunnelClientVersion + ".";
+                return false;
+            }
+            return true;
+        }
+
+        private static bool TryParseTunnelClientVersion(string versionText, out Version version)
+        {
+            version = new Version(0, 0, 0);
+            var match = TunnelClientVersionRegex.Match((versionText ?? string.Empty).Trim());
+            if (!match.Success) return false;
+            int major;
+            int minor;
+            int patch;
+            if (!int.TryParse(match.Groups[1].Value, out major)
+                || !int.TryParse(match.Groups[2].Value, out minor)
+                || !int.TryParse(match.Groups[3].Value, out patch))
+                return false;
+            if (major < 0 || minor < 0 || patch < 0 || major > 65535 || minor > 65535 || patch > 65535)
+                return false;
+            version = new Version(major, minor, patch);
             return true;
         }
 

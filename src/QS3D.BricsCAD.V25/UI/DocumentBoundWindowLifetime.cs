@@ -33,6 +33,7 @@ namespace QS3D.BricsCAD.V25.UI
             private int _documentCloseStarted;
             private int _windowClosedDuringQuiescence;
             private string _projectId = string.Empty;
+            private string _drawingFingerprint = string.Empty;
 
             public Registration(Window window, Document document)
             {
@@ -75,6 +76,7 @@ namespace QS3D.BricsCAD.V25.UI
                     Volatile.Write(ref _documentCloseStarted, 0);
                     Volatile.Write(ref _windowClosedDuringQuiescence, 0);
                     _projectId = string.Empty;
+                    _drawingFingerprint = string.Empty;
                     throw;
                 }
             }
@@ -112,10 +114,28 @@ namespace QS3D.BricsCAD.V25.UI
                 document = null!;
                 try
                 {
+                    // Managed wrapper identity is authoritative while the original wrapper remains
+                    // live. A recycled native address must not let a different wrapper win merely
+                    // because DocumentManager happens to enumerate it first.
                     foreach (Document candidate in BcadApplication.DocumentManager)
                     {
                         if (candidate == null || candidate.IsDisposed) continue;
+                        if (!ReferenceEquals(candidate, _lifecycleDocument)) continue;
+                        if (!MatchesNativeDatabase(candidate)) break;
+                        document = candidate;
+                        return true;
+                    }
+
+                    // BricsCAD may legitimately replace the managed wrapper while preserving the
+                    // same native document. Native identity therefore remains a candidate filter,
+                    // but wrapper drift is admitted only when immutable semantic drawing affinity
+                    // proves that the replacement still represents the bound drawing.
+                    foreach (Document candidate in BcadApplication.DocumentManager)
+                    {
+                        if (candidate == null || candidate.IsDisposed) continue;
+                        if (ReferenceEquals(candidate, _lifecycleDocument)) continue;
                         if (!MatchesNativeDatabase(candidate)) continue;
+                        if (!MatchesBoundDocumentAffinity(candidate)) continue;
                         document = candidate;
                         return true;
                     }
@@ -127,6 +147,31 @@ namespace QS3D.BricsCAD.V25.UI
                 }
 
                 return false;
+            }
+
+            private bool MatchesBoundDocumentAffinity(Document candidate)
+            {
+                if (!_projectAffinityBound ||
+                    string.IsNullOrWhiteSpace(_projectId) ||
+                    string.IsNullOrWhiteSpace(_drawingFingerprint))
+                    return false;
+
+                try
+                {
+                    if (!ProjectContextCoordinator.TryGetReadOnly(candidate, out var project)) return false;
+                    return string.Equals(
+                               project.ProjectId ?? string.Empty,
+                               _projectId,
+                               StringComparison.OrdinalIgnoreCase) &&
+                           string.Equals(
+                               project.DrawingFingerprint ?? string.Empty,
+                               _drawingFingerprint,
+                               StringComparison.OrdinalIgnoreCase);
+                }
+                catch
+                {
+                    return false;
+                }
             }
 
             private bool HasAnotherLiveDocument()
@@ -170,7 +215,14 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 if (_projectAffinityBound) return;
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project)) return;
-                _projectId = project.ProjectId ?? string.Empty;
+
+                var projectId = project.ProjectId ?? string.Empty;
+                var drawingFingerprint = project.DrawingFingerprint ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(projectId) || string.IsNullOrWhiteSpace(drawingFingerprint))
+                    return;
+
+                _projectId = projectId;
+                _drawingFingerprint = drawingFingerprint;
                 _projectAffinityBound = true;
             }
 
@@ -199,8 +251,7 @@ namespace QS3D.BricsCAD.V25.UI
                                 return true;
                             }
 
-                            if (ProjectContextCoordinator.TryGetReadOnly(document, out var project) &&
-                                string.Equals(project.ProjectId ?? string.Empty, _projectId, StringComparison.OrdinalIgnoreCase))
+                            if (MatchesBoundDocumentAffinity(document))
                                 return true;
 
                             closeForProjectChange = true;
@@ -329,10 +380,12 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
             {
-                // The shared coordinator rejects host-quiescing native events before dereferencing
-                // e.Document. Re-check here so the registration remains fail-closed if state changes.
+                // The shared coordinator has already matched this registration to the destroying
+                // document by managed lifecycle reference or by the safe live-wrapper native fallback.
+                // Do not reopen the event's managed Document here: native teardown may advance between
+                // affinity proof and callback dispatch, turning a proven match into a false negative.
                 if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
-                if (!MatchesNativeDatabase(e.Document)) return;
+
                 var deferForFinalDocument = !HasAnotherLiveDocument();
                 lock (_documentAccessGate)
                 {
@@ -340,9 +393,6 @@ namespace QS3D.BricsCAD.V25.UI
                     if (Interlocked.Exchange(ref _invalidated, 1) != 0) return;
                 }
 
-                // BricsCAD may surface a different managed Document wrapper for the same native
-                // database during destruction. Match the stable native database identity captured
-                // at bind time so wrapper drift still closes this window, without using mutable paths.
                 TryCloseWindow(deferForFinalDocument);
             }
 

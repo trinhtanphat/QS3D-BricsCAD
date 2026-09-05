@@ -68,9 +68,7 @@ namespace QS3D.Core.Domain
             dependentIds.ExceptWith(referencedIds);
             var dependentElements = projectElements.Where(x => dependentIds.Contains(x.Id)).ToList();
 
-            project.Touch();
-            floor.Name = normalizedName;
-            if (elevationChanged) floor.ElevationM = elevationM;
+            floor.ApplyPersistedUpdate(normalizedName, nameChanged, elevationM, elevationChanged);
             foreach (var element in referencedElements)
             {
                 if (elevationChanged) MarkVerticalPlacementChanged(project, element);
@@ -302,7 +300,8 @@ namespace QS3D.Core.Domain
                     if (observed > MaxMutationTargetCount)
                         throw new InvalidOperationException("Floor mutation target collection exceeds the supported " + MaxMutationTargetCount + " element limit.");
                     if (knownTargetCount.HasValue && observed > knownTargetCount.Value)
-                        continue;
+                        throw new InvalidOperationException(
+                            "Floor mutation target collection known count does not match the observed target traversal.");
 
                     var element = enumerator.Current;
                     if (element == null)

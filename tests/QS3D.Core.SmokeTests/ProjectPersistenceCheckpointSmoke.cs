@@ -174,7 +174,7 @@ namespace QS3D.Core.SmokeTests
             Equal(1, checkpoint.ElementIds.Count, "Consistent multi-contract Count evidence was rejected.");
             Equal("e1", checkpoint.ElementIds[0], "Consistent Count capture changed canonical caller identity text.");
             Equal(1, source.EnumerationCount, "Consistent Count source was not enumerated exactly once.");
-            AssertEachKnownCountReadOnce(source, "consistent Count evidence");
+            AssertEachKnownCountReadSevenTimes(source, "consistent Count evidence");
             True(checkpoint.Matches(project), "Checkpoint from consistent Count evidence did not match its source project.");
         }
 
@@ -183,8 +183,8 @@ namespace QS3D.Core.SmokeTests
             var project = BuildLargeProject("P-DISHONEST", 10000);
             var source = new DishonestReadOnlyCollection(1, 10001);
             Throws<InvalidOperationException>(() => ProjectPersistenceCheckpoint.Capture(project, source));
-            Equal(10001, source.YieldCount, "Streaming guard did not stop at the first disallowed entry.");
-            False(source.RequestedAfterLimit, "Streaming guard requested an entry after the first disallowed one.");
+            Equal(2, source.YieldCount, "Known Count guard did not stop after probing the first entry beyond the reported Count.");
+            False(source.RequestedAfterLimit, "Known Count guard requested an entry after the first disallowed one.");
         }
 
         private static void AcceptsExactBoundaryAndPreservesCaseInsensitiveIdentity()
@@ -240,6 +240,13 @@ namespace QS3D.Core.SmokeTests
             Equal(1, source.GenericCountReads, scenario + " did not read ICollection<T>.Count exactly once.");
             Equal(1, source.ReadOnlyCountReads, scenario + " did not read IReadOnlyCollection<T>.Count exactly once.");
             Equal(1, source.NonGenericCountReads, scenario + " did not read ICollection.Count exactly once.");
+        }
+
+        private static void AssertEachKnownCountReadSevenTimes(MultiContractCollection source, string scenario)
+        {
+            Equal(7, source.GenericCountReads, scenario + " did not fence ICollection<T>.Count throughout traversal.");
+            Equal(7, source.ReadOnlyCountReads, scenario + " did not fence IReadOnlyCollection<T>.Count throughout traversal.");
+            Equal(7, source.NonGenericCountReads, scenario + " did not fence ICollection.Count throughout traversal.");
         }
 
         private sealed class ThrowingOversizeCollection : ICollection<string>

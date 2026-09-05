@@ -24,6 +24,7 @@ namespace QS3D.BricsCAD.V25
         private const int MaxHeaderBytes = 64 * 1024;
         private const int MaxBodyBytes = 1024 * 1024;
         private const int MaxConcurrentClients = 16;
+        private const int AdmissionRejectWriteTimeoutMilliseconds = 1000;
         private const int MaxSessions = 128;
         private const string ModernProtocolVersion = "2026-07-28";
         private const string ProtocolVersion = "2025-11-25";
@@ -32,6 +33,8 @@ namespace QS3D.BricsCAD.V25
         private const string ServerVersion = "embedded-7";
         private const string BearerEnvironment = "QS3D_MCP_BEARER_TOKEN";
         private const string TokenFileName = "mcp-bearer-token.txt";
+        private const string LocalTunnelAuthorizationHeader = "X-QS3D-MCP-Local-Authorization";
+        private const string EmbeddedListenerProcessLeaseKey = "QS3D.BricsCAD.V25.McpEmbeddedServer.ListenerLease";
 
         private static readonly object Sync = new object();
         private static readonly object SessionSync = new object();
@@ -39,6 +42,7 @@ namespace QS3D.BricsCAD.V25
         private static readonly SemaphoreSlim ClientSlots = new SemaphoreSlim(MaxConcurrentClients, MaxConcurrentClients);
         private static readonly ConcurrentDictionary<string, SessionState> Sessions =
             new ConcurrentDictionary<string, SessionState>(StringComparer.Ordinal);
+        private static readonly Action ProcessLeaseStopAction = StopForProcessLease;
 
         private static TcpListener? _listener;
         private static Thread? _listenerThread;
@@ -69,20 +73,100 @@ namespace QS3D.BricsCAD.V25
             lock (Sync)
             {
                 if (_listener != null && !_stopping) return;
-                EnsureBearerToken();
-                _stopping = false;
-                _lastError = string.Empty;
-                _lastOAuthMcpActivityUtc = DateTime.MinValue;
-                _lastOAuthMcpMethod = string.Empty;
-                _lastOAuthMcpPublicUrl = string.Empty;
-                McpCadAgentRuntime.ResetForServerStart();
-                int boundPort;
-                var listener = StartLoopbackListener(out boundPort);
-                Volatile.Write(ref _boundPort, boundPort);
-                _listener = listener;
-                _listenerThread = new Thread(() => ServeLoop(listener)) { IsBackground = true, Name = "QS3D MCP loopback server v2" };
-                _listenerThread.Start();
+                lock (AppDomain.CurrentDomain)
+                {
+                    StopPreviousProcessLease();
+                    EnsureBearerToken();
+                    _stopping = false;
+                    _lastError = string.Empty;
+                    _lastOAuthMcpActivityUtc = DateTime.MinValue;
+                    _lastOAuthMcpMethod = string.Empty;
+                    _lastOAuthMcpPublicUrl = string.Empty;
+                    McpCadAgentRuntime.ResetForServerStart();
+                    int boundPort;
+                    var listener = StartLoopbackListener(out boundPort);
+                    Volatile.Write(ref _boundPort, boundPort);
+                    _listener = listener;
+                    _listenerThread = new Thread(() => ServeLoop(listener)) { IsBackground = true, Name = "QS3D MCP loopback server v2" };
+                    _listenerThread.Start();
+                    PublishProcessLease();
+                }
             }
+        }
+
+        private static void StopPreviousProcessLease()
+        {
+            var domain = AppDomain.CurrentDomain;
+            var previous = domain.GetData(EmbeddedListenerProcessLeaseKey) as Action;
+            if (previous != null && !ReferenceEquals(previous, ProcessLeaseStopAction))
+            {
+                try
+                {
+                    previous();
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        "QS3D MCP could not stop the previous embedded listener generation through the registered process lease.",
+                        ex);
+                }
+            }
+
+            // The first upgrade from a build that predates the lease has no AppDomain callback.
+            // Stop any older loaded generation of this type before binding the preferred port.
+            var currentAssembly = typeof(McpEmbeddedServer).Assembly;
+            var currentAssemblyName = currentAssembly.GetName().Name;
+            var currentTypeName = typeof(McpEmbeddedServer).FullName;
+            foreach (var assembly in domain.GetAssemblies())
+            {
+                if (ReferenceEquals(assembly, currentAssembly)) continue;
+                if (!string.Equals(assembly.GetName().Name, currentAssemblyName, StringComparison.Ordinal)) continue;
+                try
+                {
+                    var previousType = assembly.GetType(currentTypeName, false, false);
+                    if (previousType == null) continue;
+                    var stop = previousType.GetMethod(
+                        "Stop",
+                        System.Reflection.BindingFlags.Static
+                        | System.Reflection.BindingFlags.Public
+                        | System.Reflection.BindingFlags.NonPublic);
+                    if (stop != null && stop.GetParameters().Length == 0) stop.Invoke(null, null);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        "QS3D MCP could not stop the previous embedded listener generation through the loaded-assembly fallback.",
+                        ex);
+                }
+            }
+
+            // Keep the known-generation lease published until every required stop succeeds. If any
+            // stop fails, Start() aborts and the next attempt can retry the same handoff instead of
+            // silently falling through to a secondary loopback port.
+            domain.SetData(EmbeddedListenerProcessLeaseKey, null);
+        }
+
+        private static void PublishProcessLease()
+        {
+            lock (AppDomain.CurrentDomain)
+            {
+                AppDomain.CurrentDomain.SetData(EmbeddedListenerProcessLeaseKey, ProcessLeaseStopAction);
+            }
+        }
+
+        private static void ReleaseProcessLease()
+        {
+            lock (AppDomain.CurrentDomain)
+            {
+                var current = AppDomain.CurrentDomain.GetData(EmbeddedListenerProcessLeaseKey);
+                if (ReferenceEquals(current, ProcessLeaseStopAction))
+                    AppDomain.CurrentDomain.SetData(EmbeddedListenerProcessLeaseKey, null);
+            }
+        }
+
+        private static void StopForProcessLease()
+        {
+            StopCore(false);
         }
 
         private static TcpListener StartLoopbackListener(out int boundPort)
@@ -120,6 +204,11 @@ namespace QS3D.BricsCAD.V25
 
         public static void Stop()
         {
+            StopCore(true);
+        }
+
+        private static void StopCore(bool releaseProcessLease)
+        {
             Thread? thread;
             lock (Sync)
             {
@@ -136,6 +225,7 @@ namespace QS3D.BricsCAD.V25
             {
                 try { thread.Join(1000); } catch { }
             }
+            if (releaseProcessLease) ReleaseProcessLease();
         }
 
         public static string GetBearerToken() { EnsureBearerToken(); lock (Sync) return _bearerToken; }
@@ -177,7 +267,7 @@ namespace QS3D.BricsCAD.V25
                     client.NoDelay = true;
                     if (!ClientSlots.Wait(0))
                     {
-                        try { client.Close(); } catch { }
+                        TryWriteOverloadResponse(client);
                         client = null;
                         continue;
                     }
@@ -187,14 +277,14 @@ namespace QS3D.BricsCAD.V25
                 catch (SocketException ex)
                 {
                     if (!OwnsListener(listener)) return;
-                    SetLastError("socket: " + ex.Message);
+                    SetLastTransportError(TransportErrorKind.Socket, ex);
                     Thread.Sleep(100);
                 }
                 catch (ObjectDisposedException) { return; }
                 catch (Exception ex)
                 {
                     if (!OwnsListener(listener)) return;
-                    SetLastError("listener: " + ex.Message);
+                    SetLastTransportError(TransportErrorKind.Listener, ex);
                     Thread.Sleep(100);
                 }
                 finally { try { if (client != null) client.Dispose(); } catch { } }
@@ -225,8 +315,24 @@ namespace QS3D.BricsCAD.V25
                     }
                 }
             }
-            catch (Exception ex) { SetLastError("request: " + ex.Message); }
+            catch (Exception ex) { SetLastTransportError(TransportErrorKind.Request, ex); }
             finally { ClientSlots.Release(); }
+        }
+
+        private static void TryWriteOverloadResponse(TcpClient client)
+        {
+            if (client == null) return;
+            try
+            {
+                using (var stream = client.GetStream())
+                {
+                    stream.WriteTimeout = AdmissionRejectWriteTimeoutMilliseconds;
+                    TryWriteResponse(stream, 503, "Service Unavailable",
+                        "{\"error\":\"MCP server is at concurrent-client capacity; retry later.\"}", null);
+                }
+            }
+            catch { }
+            finally { try { client.Close(); } catch { } }
         }
 
         private static HttpRequest? ReadRequest(NetworkStream stream)
@@ -327,6 +433,7 @@ namespace QS3D.BricsCAD.V25
                    || string.Equals(name, "Content-Type", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "Transfer-Encoding", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "Authorization", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(name, LocalTunnelAuthorizationHeader, StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "Origin", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "Mcp-Session-Id", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(name, "MCP-Protocol-Version", StringComparison.OrdinalIgnoreCase)
@@ -362,6 +469,7 @@ namespace QS3D.BricsCAD.V25
 
         private static bool IsAllowedOrigin(IDictionary<string, string> headers, string publicMcpUrl)
         {
+            if (headers == null) return false;
             string origin;
             if (!headers.TryGetValue("Origin", out origin)) return true;
             if (string.IsNullOrWhiteSpace(origin)) return false;
@@ -476,9 +584,12 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
+            var trustedOpenAiTunnelRequest = IsValidLocalTunnelAuthorization(request.Headers);
             string contentType;
-            if (!request.Headers.TryGetValue("Content-Type", out contentType)
-                || !IsJsonContentType(contentType))
+            var hasJsonContentType =
+                request.Headers.TryGetValue("Content-Type", out contentType)
+                && IsJsonContentType(contentType);
+            if (!hasJsonContentType && !trustedOpenAiTunnelRequest)
             {
                 WriteResponse(stream, 415, "Unsupported Media Type", "{\"error\":\"Content-Type application/json is required\"}", null);
                 return;
@@ -803,12 +914,16 @@ namespace QS3D.BricsCAD.V25
                 Tool("qs3d_status", "Deprecated compatibility alias for QS3D domain-only status.", ""),
                 Tool("qs3d_domain_status", "Read QS3D business-domain health and context without CAD host fields.", ""),
                 Tool("cad_active_document", "Read privacy-safe active document identity without local filesystem path.", ""),
+                Tool("cad_mutation_status", "Read mutation acknowledgement state for one bounded actionId.", ActionIdProperty(), "actionId"),
                 Tool("cad_selection", "Read current implied selection handles/types/layers.", ""),
                 Tool("cad_database_snapshot", "Read bounded ModelSpace entity snapshot.", "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":1000}"),
                 Tool("cad_entity_inspect", "Inspect one entity by hexadecimal handle.", "\"handle\":{\"type\":\"string\",\"maxLength\":32}", "handle"),
                 Tool("cad_view_state", "Read command-active and current view/window state.", ""),
-                Tool("cad_wait_idle", "Wait until BricsCAD CMDACTIVE becomes zero.", "\"timeoutMs\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":30000}"),
+                Tool("cad_wait_idle", "Wait until BricsCAD CMDACTIVE becomes zero.", "\"timeoutMs\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":7000,\"default\":5000}"),
                 Tool("cad_sysvar", "Read one privacy-safe allowlisted BricsCAD system variable.", "\"name\":{\"type\":\"string\",\"enum\":[\"CMDACTIVE\",\"INSUNITS\",\"CLAYER\",\"CTAB\",\"TILEMODE\",\"DWGNAME\",\"CVPORT\",\"ORTHOMODE\",\"OSMODE\"]}", "name"),
+                Tool("cad_writer_acquire", "Acquire the process-global DWG writer lease for a bounded multi-step MCP mutation workflow.", "\"leaseSeconds\":{\"type\":\"integer\",\"minimum\":15,\"maximum\":300,\"default\":120}"),
+                Tool("cad_writer_status", "Read process-global DWG writer lease/native-command barrier status without exposing tokens.", ""),
+                Tool("cad_writer_release", "Release the active DWG writer lease using the matching opaque token.", "", "writerToken"),
                 Tool("cad_create_line", "Create native Line in ModelSpace.", Numeric("x1","y1","z1","x2","y2","z2") + CommonLayerConfirm(), "x1","y1","x2","y2","confirmMutation"),
                 Tool("cad_create_circle", "Create native Circle in ModelSpace.", Numeric("x","y","z","radius") + CommonLayerConfirm(), "x","y","radius","confirmMutation"),
                 Tool("cad_create_arc", "Create native Arc in ModelSpace from center/radius/start/end degrees.", Numeric("x","y","z","radius","startAngleDeg","endAngleDeg") + CommonLayerConfirm(), "x","y","radius","startAngleDeg","endAngleDeg","confirmMutation"),
@@ -854,19 +969,38 @@ namespace QS3D.BricsCAD.V25
                     return ToolSuccess("{\"protocol\":\"" + ModernProtocolVersion + "\",\"legacyProtocol\":\"" + ProtocolVersion + "\",\"serverVersion\":\"" + ServerVersion
                         + "\",\"endpoint\":\"" + JsonEscape(Endpoint.ToString())
                         + "\",\"publicUrl\":\"" + JsonEscape(publicUrl) + "\",\"auth\":\"oauth2.1+legacy_bearer\",\"singleRepository\":true,"
-                        + "\"fullCadAgent\":true,\"structuredContent\":true,\"modernMetaEnvelope\":true,\"toolAnnotations\":true,\"automationStopped\":"
+                        + "\"fullCadAgent\":true,\"supportsStructuredContent\":true,\"modernMetaEnvelope\":true,\"toolAnnotations\":true,\"automationStopped\":"
                         + (McpCadAgentRuntime.AutomationStopped ? "true" : "false") + "}");
                 }
+                if (string.Equals(tool, "cad_writer_acquire", StringComparison.Ordinal))
+                    return ToolSuccess(McpCadMutationCoordinator.AcquireWriterLease(
+                        WriterLeaseSeconds(arguments),
+                        detail => McpCadAgentRuntime.AuditDomainMutation("cad_writer_acquire", detail)));
+                if (string.Equals(tool, "cad_writer_status", StringComparison.Ordinal))
+                    return ToolSuccess(McpCadMutationCoordinator.StatusJson());
+                if (string.Equals(tool, "cad_writer_release", StringComparison.Ordinal))
+                    return ToolSuccess(McpCadMutationCoordinator.ReleaseWriterLease(
+                        McpTopLevelJson.ExtractString(arguments ?? "{}", "writerToken"),
+                        detail => McpCadAgentRuntime.AuditDomainMutation("cad_writer_release", detail)));
                 var runtimeResult = McpCadAgentRuntime.Call(tool, arguments);
                 if (string.Equals(tool, "desktop_screenshot", StringComparison.Ordinal))
                     return ScreenshotToolSuccess(runtimeResult);
                 return ToolSuccess(runtimeResult);
             }
-            catch (McpToolContractException ex) { return ToolError(ex.Code, McpToolCapabilityContract.LaneName(ex.Lane), ex.Message); }
+            catch (McpToolContractException ex)
+            {
+                var lane = McpToolCapabilityContract.LaneName(ex.Lane);
+                var repairJson = McpSelfHealingRepairRuntime.RecordFailure(
+                    tool, ex.Code, lane, ex.Message, ex, true);
+                return ToolError(ex.Code, lane, ex.Message, repairJson);
+            }
             catch (Exception ex)
             {
                 var failure = McpToolCapabilityContract.ClassifyFailure(tool, ex);
-                return ToolError(failure.Code, McpToolCapabilityContract.LaneName(failure.Lane), failure.Message);
+                var lane = McpToolCapabilityContract.LaneName(failure.Lane);
+                var repairJson = McpSelfHealingRepairRuntime.RecordFailure(
+                    tool, failure.Code, lane, failure.Message, ex, false);
+                return ToolError(failure.Code, lane, failure.Message, repairJson);
             }
         }
 
@@ -905,6 +1039,16 @@ namespace QS3D.BricsCAD.V25
             return value;
         }
 
+        private static int WriterLeaseSeconds(string json)
+        {
+            int value;
+            bool found;
+            string error;
+            if (!McpTopLevelJson.TryExtractInteger(json ?? "{}", "leaseSeconds", out value, out found, out error))
+                throw new InvalidOperationException(error);
+            return found ? value : 120;
+        }
+
         private static string ToolSuccess(string jsonValue)
         {
             var raw = string.IsNullOrWhiteSpace(jsonValue) ? "{}" : jsonValue.Trim();
@@ -916,9 +1060,19 @@ namespace QS3D.BricsCAD.V25
         private static bool LooksLikeJsonValue(string value)
         {
             if (string.IsNullOrWhiteSpace(value)) return false;
-            var first = value[0];
-            var last = value[value.Length - 1];
-            return (first == '{' && last == '}') || (first == '[' && last == ']');
+            var trimmed = value.Trim();
+            if (trimmed.Length < 2) return false;
+            var first = trimmed[0];
+            var last = trimmed[trimmed.Length - 1];
+            if (!((first == '{' && last == '}') || (first == '[' && last == ']'))) return false;
+
+            string raw;
+            bool found;
+            string error;
+            if (!McpTopLevelJson.TryFindPropertyValue("{\"value\":" + trimmed + "}", "value", out raw, out found, out error))
+                return false;
+            return found && string.IsNullOrEmpty(error)
+                && string.Equals(raw, trimmed, StringComparison.Ordinal);
         }
 
         private static bool LooksLikeJsonObject(string value)
@@ -928,15 +1082,16 @@ namespace QS3D.BricsCAD.V25
             return trimmed.Length >= 2 && trimmed[0] == '{' && trimmed[trimmed.Length - 1] == '}';
         }
 
-        private static string ToolError(string code, string lane, string message)
+        private static string ToolError(string code, string lane, string message, string? repairJson = null)
         {
             var safeCode = string.IsNullOrWhiteSpace(code) ? McpToolCapabilityContract.ToolFailedCode : code;
             var safeLane = string.IsNullOrWhiteSpace(lane) ? "unknown" : lane;
             var safeMessage = string.IsNullOrWhiteSpace(message) ? "MCP tool failed." : message;
+            var repair = string.IsNullOrWhiteSpace(repairJson) ? string.Empty : ",\"repair\":" + repairJson;
             return "{\"content\":[{\"type\":\"text\",\"text\":\"" + JsonEscape(safeCode + ": " + safeMessage)
                    + "\"}],\"structuredContent\":{\"error\":{\"code\":\"" + JsonEscape(safeCode)
                    + "\",\"lane\":\"" + JsonEscape(safeLane) + "\",\"message\":\"" + JsonEscape(safeMessage)
-                   + "\"}},\"isError\":true}";
+                   + "\"" + repair + "}},\"isError\":true}";
         }
 
         private static string ExecutionModeProperties()
@@ -945,10 +1100,50 @@ namespace QS3D.BricsCAD.V25
                    + ",\"execution_mode\":{\"type\":\"string\",\"enum\":[\"AUTO\",\"CAD_DIRECT\",\"QS3D_DOMAIN\"]}";
         }
 
-        private static string MergeToolProperties(string properties)
+        private static string WriterTokenProperty()
         {
-            var modes = ExecutionModeProperties();
-            return string.IsNullOrWhiteSpace(properties) ? modes : modes + "," + properties;
+            return "\"writerToken\":{\"type\":\"string\",\"pattern\":\"^[0-9A-Fa-f]{32}$\",\"minLength\":32,\"maxLength\":32}";
+        }
+
+        private static string ActionIdProperty()
+        {
+            return "\"actionId\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":128,\"description\":\"Stable retry identity used to query or replay mutation acknowledgement.\"}";
+        }
+
+        private static bool SupportsMutationAck(string name)
+        {
+            var tool = name ?? string.Empty;
+            switch (tool)
+            {
+                case "cad_create_line":
+                case "cad_create_circle":
+                case "cad_create_arc":
+                case "cad_create_polyline":
+                case "cad_create_text":
+                case "cad_create_mtext":
+                case "cad_entity_transform":
+                case "cad_entity_delete":
+                case "cad_entity_set_layer":
+                case "cad_layer":
+                case "cad_command_sequence":
+                case "qs3d_run_command":
+                case "qs3d_place_single_footing":
+                case "cad_ui_click":
+                case "cad_ui_type":
+                case "cad_ui_key":
+                    return true;
+            }
+            if (McpQs3dDomainRuntime.IsTool(tool)) return McpQs3dDomainRuntime.RequiresMutation(tool);
+            if (McpCadDirectModelRuntime.IsTool(tool)) return McpCadDirectModelRuntime.RequiresMutation(tool);
+            if (McpDesktopAutomationRuntime.IsTool(tool)) return McpDesktopAutomationRuntime.RequiresMutation(tool);
+            return false;
+        }
+
+        private static string MergeToolProperties(string name, string properties)
+        {
+            var common = ExecutionModeProperties() + "," + WriterTokenProperty();
+            if (SupportsMutationAck(name)) common += "," + ActionIdProperty();
+            return string.IsNullOrWhiteSpace(properties) ? common : common + "," + properties;
         }
 
         private static string Tool(string name, string description, string properties, params string[] required)
@@ -957,20 +1152,31 @@ namespace QS3D.BricsCAD.V25
                 ? string.Empty
                 : ",\"required\":[\"" + string.Join("\",\"", required) + "\"]";
             return "{\"name\":\"" + JsonEscape(name) + "\",\"description\":\"" + JsonEscape(description)
-                   + "\",\"inputSchema\":{\"type\":\"object\",\"properties\":{" + MergeToolProperties(properties)
+                   + "\",\"inputSchema\":{\"type\":\"object\",\"properties\":{" + MergeToolProperties(name, properties)
                    + "},\"additionalProperties\":false" + requiredJson + "},\"annotations\":" + ToolAnnotations(name) + "}";
         }
 
         private static string WithExecutionModeProperties(string descriptor)
         {
             var raw = (descriptor ?? string.Empty).Trim();
-            if (!LooksLikeJsonObject(raw) || raw.IndexOf("\"executionMode\"", StringComparison.Ordinal) >= 0) return raw;
+            if (!LooksLikeJsonObject(raw)) return raw;
+            string name;
+            try { name = McpTopLevelJson.ExtractString(raw, "name"); }
+            catch (InvalidOperationException) { return raw; }
+            var additions = new List<string>();
+            if (raw.IndexOf("\"executionMode\"", StringComparison.Ordinal) < 0)
+                additions.Add(ExecutionModeProperties());
+            if (raw.IndexOf("\"writerToken\"", StringComparison.Ordinal) < 0)
+                additions.Add(WriterTokenProperty());
+            if (SupportsMutationAck(name) && raw.IndexOf("\"actionId\"", StringComparison.Ordinal) < 0)
+                additions.Add(ActionIdProperty());
+            if (additions.Count == 0) return raw;
             const string marker = "\"properties\":{";
             var index = raw.IndexOf(marker, StringComparison.Ordinal);
             if (index < 0) return raw;
             var insertion = index + marker.Length;
-            var modes = ExecutionModeProperties();
-            var suffix = insertion < raw.Length && raw[insertion] == '}' ? modes : modes + ",";
+            var common = string.Join(",", additions);
+            var suffix = insertion < raw.Length && raw[insertion] == '}' ? common : common + ",";
             return raw.Insert(insertion, suffix);
         }
 
@@ -1008,12 +1214,14 @@ namespace QS3D.BricsCAD.V25
                 case "qs3d_status":
                 case "qs3d_domain_status":
                 case "cad_active_document":
+                case "cad_mutation_status":
                 case "cad_selection":
                 case "cad_database_snapshot":
                 case "cad_entity_inspect":
                 case "cad_view_state":
                 case "cad_wait_idle":
                 case "cad_sysvar":
+                case "cad_writer_status":
                 case "cad_command_catalog":
                 case "cad_audit_tail":
                 case "desktop_cursor_position":
@@ -1145,17 +1353,45 @@ namespace QS3D.BricsCAD.V25
             return McpTopLevelJson.TryFindPropertyValue(json, property, out raw, out found, out error);
         }
 
+        private static bool IsValidLocalTunnelAuthorization(IDictionary<string, string> headers)
+        {
+            if (McpTransportCoordinator.SelectedProvider != McpTransportProvider.OpenAiSecureTunnel) return false;
+            string authorization;
+            if (!headers.TryGetValue(LocalTunnelAuthorizationHeader, out authorization)) return false;
+            string token;
+            if (!TryExtractBearerToken(authorization, out token)) return false;
+            return ConstantTimeEquals(token, GetBearerToken());
+        }
+
         private static bool Authorize(IDictionary<string, string> headers, string publicMcpUrl, out bool oauthAccessToken)
         {
             oauthAccessToken = false;
+
+            if (McpTransportCoordinator.SelectedProvider == McpTransportProvider.OpenAiSecureTunnel
+                && headers.ContainsKey(LocalTunnelAuthorizationHeader))
+            {
+                return IsValidLocalTunnelAuthorization(headers);
+            }
+
             string authorization;
             if (!headers.TryGetValue("Authorization", out authorization)) return false;
-            const string prefix = "Bearer ";
-            if (!authorization.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
-            if (ConstantTimeEquals(authorization.Substring(prefix.Length).Trim(), GetBearerToken())) return true;
+            string bearerToken;
+            if (!TryExtractBearerToken(authorization, out bearerToken)) return false;
+            if (ConstantTimeEquals(bearerToken, GetBearerToken())) return true;
             if (!McpOAuthAuthorizationServer.TryValidateAccessToken(headers, publicMcpUrl, GetBearerToken())) return false;
             oauthAccessToken = true;
             return true;
+        }
+
+        private static bool TryExtractBearerToken(string authorization, out string token)
+        {
+            token = string.Empty;
+            const string prefix = "Bearer ";
+            if (string.IsNullOrWhiteSpace(authorization)
+                || !authorization.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return false;
+            token = authorization.Substring(prefix.Length).Trim();
+            return token.Length > 0;
         }
 
         private static void RecordOAuthMcpActivity(string method, string publicMcpUrl)
@@ -1402,7 +1638,6 @@ namespace QS3D.BricsCAD.V25
 
                 if (File.Exists(path)) File.Replace(tempPath, path, null, true);
                 else File.Move(tempPath, path);
-
                 var verified = File.ReadAllText(path, Encoding.UTF8).Trim();
                 if (!ConstantTimeEquals(verified, token))
                     throw new InvalidOperationException("MCP bearer token persistence verification failed.");
@@ -1446,7 +1681,34 @@ namespace QS3D.BricsCAD.V25
             return builder.ToString();
         }
 
-        private static void SetLastError(string message) { lock (Sync) _lastError = message ?? string.Empty; }
+        private enum TransportErrorKind
+        {
+            Socket,
+            Listener,
+            Request
+        }
+
+        private static void SetLastTransportError(TransportErrorKind kind, Exception exception)
+        {
+            string code;
+            switch (kind)
+            {
+                case TransportErrorKind.Socket:
+                    var socket = exception as SocketException;
+                    code = socket == null
+                        ? "socket:error"
+                        : "socket:" + socket.SocketErrorCode.ToString();
+                    break;
+                case TransportErrorKind.Listener:
+                    code = "listener:error";
+                    break;
+                default:
+                    code = "request:error";
+                    break;
+            }
+
+            lock (Sync) _lastError = code;
+        }
 
         private sealed class SessionState
         {

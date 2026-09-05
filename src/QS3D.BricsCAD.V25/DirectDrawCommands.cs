@@ -45,6 +45,8 @@ namespace QS3D.BricsCAD.V25
     {
         private const double PlanarityToleranceM = 0.005d;
         private const double UcsAxisTolerance = 1e-9d;
+        private const string OperationFailureSuffix = " lỗi: không thể hoàn tất thao tác. Vui lòng thử lại.";
+        private const string PostCommitUiWarning = "Direct Draw đã commit nhưng đồng bộ giao diện chưa hoàn tất. Hãy refresh giao diện.";
 
         [CommandMethod("QS3DDRAWWALL", CommandFlags.Modal)]
         public void DrawWall()
@@ -92,6 +94,8 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWWALLADV", () =>
             {
                 RequireModelSpace(document);
+                var promptUnit = (object)CadUnitService.GetLengthUnit(document);
+                var promptUcs = document.Editor.CurrentUserCoordinateSystem;
                 var points = AcquirePath(document, "Tường tùy chỉnh", minimumPoints: 2, close: false);
                 if (points == null) return;
 
@@ -104,6 +108,7 @@ namespace QS3D.BricsCAD.V25
                 if (!heightM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Tường so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.ArchitecturalWall, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
+                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWWALLADV");
 
                 ExecuteDirect(
                     document,
@@ -165,6 +170,8 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWBEAMADV", () =>
             {
                 RequireModelSpace(document);
+                var promptUnit = (object)CadUnitService.GetLengthUnit(document);
+                var promptUcs = document.Editor.CurrentUserCoordinateSystem;
                 var points = AcquireFixedPath(document, "Dầm tùy chỉnh", 2);
                 if (points == null) return;
 
@@ -177,6 +184,7 @@ namespace QS3D.BricsCAD.V25
                 if (!heightM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Dầm so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.Beam, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
+                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWBEAMADV");
 
                 ExecuteDirect(
                     document,
@@ -235,6 +243,8 @@ namespace QS3D.BricsCAD.V25
             Guard(document, "QS3DDRAWSLABADV", () =>
             {
                 RequireModelSpace(document);
+                var promptUnit = (object)CadUnitService.GetLengthUnit(document);
+                var promptUcs = document.Editor.CurrentUserCoordinateSystem;
                 var points = AcquirePath(document, "Sàn tùy chỉnh", minimumPoints: 3, close: true);
                 if (points == null) return;
 
@@ -245,6 +255,7 @@ namespace QS3D.BricsCAD.V25
                 if (!thicknessM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Sàn so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.Slab, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
+                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWSLABADV");
 
                 ExecuteDirect(
                     document,
@@ -328,6 +339,7 @@ namespace QS3D.BricsCAD.V25
                 if (!heightM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Cột so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.Column, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
+                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWCOLUMNADV");
 
                 ExecuteDirect(
                     document,
@@ -783,10 +795,11 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                try { document.Editor.WriteMessage("\nQS3D " + status + " UI sync warning: " + ex.Message); }
+                try { document.Editor.WriteMessage("\nQS3D " + PostCommitUiWarning); }
                 catch { }
+                TrySetPaletteStatus(PostCommitUiWarning);
             }
         }
 
@@ -801,11 +814,18 @@ namespace QS3D.BricsCAD.V25
         private static void Guard(Document document, string operation, Action action)
         {
             try { action(); }
-            catch (Exception ex)
+            catch (Exception)
             {
-                document.Editor.WriteMessage("\n" + operation + " error: " + ex.Message);
-                PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message);
+                try { document.Editor.WriteMessage("\n" + operation + OperationFailureSuffix); }
+                catch { }
+                TrySetPaletteStatus(operation + OperationFailureSuffix);
             }
+        }
+
+        private static void TrySetPaletteStatus(string status)
+        {
+            try { PaletteCoordinator.SetStatus(status); }
+            catch { }
         }
     }
 }

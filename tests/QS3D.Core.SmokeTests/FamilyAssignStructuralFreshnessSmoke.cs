@@ -14,7 +14,7 @@ namespace QS3D.Core.SmokeTests
             RemovedTargetFamilyDuringLazyEnumerationFailsClosed();
             UnrelatedDuplicateFamilyDuringLazyEnumerationFailsClosed();
             UnrelatedDuplicateElementDuringLazyEnumerationFailsClosed();
-            TargetDefaultsChangedDuringLazyEnumerationUseCurrentSnapshot();
+            TargetDefaultsChangedDuringLazyEnumerationFailClosed();
             MalformedTargetDefaultsDuringLazyEnumerationFailClosed();
         }
 
@@ -96,21 +96,23 @@ namespace QS3D.Core.SmokeTests
             Equal(beforeUpdated, element.UpdatedUtc, "duplicate-element target timestamp");
         }
 
-        private static void TargetDefaultsChangedDuringLazyEnumerationUseCurrentSnapshot()
+        private static void TargetDefaultsChangedDuringLazyEnumerationFailClosed()
         {
             var project = CreateProject("P-FAMILY-STRUCT-5", out var family, out var element);
+            element.MarkClean(ElementDirtyFlags.All);
             var beforeVersion = project.ChangeVersion;
+            var beforeUpdated = element.UpdatedUtc;
 
-            var changed = ProjectFamilyService.Assign(
-                project,
-                family.Id,
-                YieldThenChangeTargetMaterial(family, element));
+            ThrowsContaining<InvalidOperationException>(
+                () => ProjectFamilyService.Assign(project, family.Id, YieldThenChangeTargetMaterial(family, element)),
+                "Project changed while Family assignment targets were being enumerated");
 
-            Equal(1, changed, "target-default refresh assignment count");
-            Equal(beforeVersion + 1L, project.ChangeVersion, "target-default refresh project revision");
-            Equal("Concrete", family.Properties["Material"], "target-default refresh current Family material");
-            Equal(family.Id, element.FamilyId, "target-default refresh FamilyId");
-            Equal("Concrete", element.Properties["Material"], "target-default refresh inherited material");
+            Equal(beforeVersion + 1L, project.ChangeVersion, "target-default external mutation project revision");
+            Equal("Concrete", family.Properties["Material"], "target-default current Family material");
+            Equal(string.Empty, element.FamilyId, "target-default stale assignment FamilyId");
+            False(element.Properties.ContainsKey("Material"), "target-default stale assignment inherited property");
+            Equal(ElementDirtyFlags.None, element.Dirty, "target-default stale assignment dirty flags");
+            Equal(beforeUpdated, element.UpdatedUtc, "target-default stale assignment timestamp");
         }
 
         private static void MalformedTargetDefaultsDuringLazyEnumerationFailClosed()
@@ -122,9 +124,10 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining<InvalidOperationException>(
                 () => ProjectFamilyService.Assign(project, family.Id, YieldThenAddMalformedTargetDefault(family, element)),
-                "non-canonical property key");
+                "Project changed while Family assignment targets were being enumerated");
 
-            Equal(beforeVersion, project.ChangeVersion, "malformed-target-default project revision");
+            Equal(beforeVersion + 1L, project.ChangeVersion, "malformed-target-default external mutation project revision");
+            Equal("Invalid", family.Properties[" Material "], "malformed-target-default external mutation");
             Equal(string.Empty, element.FamilyId, "malformed-target-default FamilyId");
             False(element.Properties.ContainsKey("Material"), "malformed-target-default inherited property");
             Equal(ElementDirtyFlags.None, element.Dirty, "malformed-target-default dirty flags");

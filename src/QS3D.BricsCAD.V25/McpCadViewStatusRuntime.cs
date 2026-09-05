@@ -24,6 +24,8 @@ namespace QS3D.BricsCAD.V25
         private const double MinViewSize = 1e-6;
         private const double MaxViewSize = 1e12;
         private const double MinDirectionLength = 1e-9;
+        private const double ViewAspectRelativeTolerance = 1e-6;
+        private const double ViewDirectionComponentTolerance = 1e-9;
         private const double TwoPi = Math.PI * 2d;
         private static readonly object CommandGate = new object();
         private static readonly Dictionary<Document, CommandTracker> CommandTrackers =
@@ -64,12 +66,12 @@ namespace QS3D.BricsCAD.V25
                 "confirmMutation");
             yield return Tool(
                 "cad_view_fit_entities",
-                "Directly fit the active BricsCAD view to up to 100 exact hexadecimal entity handles supplied as a comma-separated string. Requires confirmMutation=true.",
+                "Directly fit the active BricsCAD view to up to 100 exact hexadecimal entity handles. Live entities with unusable geometric extents are skipped and reported while valid entities still fit. Requires confirmMutation=true.",
                 "\"handlesCsv\":{\"type\":\"string\",\"maxLength\":1800},\"padding\":{\"type\":\"number\",\"minimum\":1.0,\"maximum\":2.0}," + ConfirmMutationProperty(),
                 "handlesCsv", "confirmMutation");
             yield return Tool(
                 "cad_view_set",
-                "Directly set active BricsCAD view center/width/height and optionally a bounded view direction/twist. Requires confirmMutation=true.",
+                "Directly set active BricsCAD view center/width/height when the requested aspect matches the active viewport. Optional direction may only restate the current direction; direction transitions fail closed. Requires confirmMutation=true.",
                 "\"centerX\":{\"type\":\"number\"},\"centerY\":{\"type\":\"number\"},\"width\":{\"type\":\"number\",\"exclusiveMinimum\":0},\"height\":{\"type\":\"number\",\"exclusiveMinimum\":0},"
                 + "\"directionX\":{\"type\":\"number\"},\"directionY\":{\"type\":\"number\"},\"directionZ\":{\"type\":\"number\"},\"twistRadians\":{\"type\":\"number\",\"minimum\":-6.283185307179586,\"maximum\":6.283185307179586},"
                 + ConfirmMutationProperty(),
@@ -107,9 +109,10 @@ namespace QS3D.BricsCAD.V25
         {
             var padding = NumberOptional(body, "padding", 1.08d, 1d, 2d);
             var document = RequireDocument();
+            RequireViewMutationIdle();
             using (document.LockDocument())
             {
-                document.Database.UpdateExt(false);
+                RequireViewMutationIdle();
                 var extents = RequireFiniteExtents(
                     new Extents3d(document.Database.Extmin, document.Database.Extmax),
                     "drawing extents");
@@ -122,11 +125,15 @@ namespace QS3D.BricsCAD.V25
             var handles = ParseHandlesCsv(McpTopLevelJson.ExtractString(body, "handlesCsv"));
             var padding = NumberOptional(body, "padding", 1.12d, 1d, 2d);
             var document = RequireDocument();
+            RequireViewMutationIdle();
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
+                RequireViewMutationIdle();
                 var hasExtents = false;
                 var combined = new Extents3d();
+                var skippedHandles = new List<string>();
+                var fittedCount = 0;
                 foreach (var handle in handles)
                 {
                     ObjectId id;
@@ -139,18 +146,36 @@ namespace QS3D.BricsCAD.V25
                         throw new InvalidOperationException("Handle does not identify a live entity: " + HandleText(handle));
                     Extents3d extents;
                     try { extents = RequireFiniteExtents(entity.GeometricExtents, "entity " + HandleText(handle)); }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
-                        throw new InvalidOperationException(
-                            "Entity has no usable geometric extents: " + HandleText(handle) + ". " + ex.Message,
-                            ex);
+                        skippedHandles.Add(HandleText(handle));
+                        continue;
                     }
                     if (!hasExtents) { combined = extents; hasExtents = true; }
                     else combined.AddExtents(extents);
+                    fittedCount++;
                 }
-                if (!hasExtents) throw new InvalidOperationException("No usable entity extents were supplied.");
-                return ApplyExtents(document, combined, padding, "entities", handles.Count);
+                if (!hasExtents)
+                    throw new InvalidOperationException(
+                        "No usable entity extents were supplied. Skipped live handles with unusable extents: "
+                        + string.Join(",", skippedHandles) + ".");
+                var result = ApplyExtents(document, combined, padding, "entities", fittedCount);
+                return AppendFitWarnings(result, handles.Count, skippedHandles);
             }
+        }
+
+        private static string AppendFitWarnings(string result, int requestedEntityCount, List<string> skippedHandles)
+        {
+            var json = result.Substring(0, result.Length - 1)
+                       + ",\"requestedEntityCount\":" + requestedEntityCount.ToString(CultureInfo.InvariantCulture)
+                       + ",\"skippedEntityCount\":" + skippedHandles.Count.ToString(CultureInfo.InvariantCulture)
+                       + ",\"skippedHandles\":[";
+            for (var i = 0; i < skippedHandles.Count; i++)
+            {
+                if (i > 0) json += ",";
+                json += "\"" + Escape(skippedHandles[i]) + "\"";
+            }
+            return json + "]}";
         }
 
         private static string SetView(string body)
@@ -183,21 +208,51 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("twistRadians must be between -2π and 2π.");
 
             var document = RequireDocument();
+            RequireViewMutationIdle();
             using (document.LockDocument())
             using (var view = document.Editor.GetCurrentView())
             {
+                RequireCompatibleViewAspect(view, width, height);
+                if (direction.HasValue) RequireCompatibleViewDirection(view, direction.Value);
                 view.CenterPoint = new Point2d(centerX, centerY);
                 view.Width = width;
                 view.Height = height;
-                if (direction.HasValue) view.ViewDirection = direction.Value;
                 if (hasTwist) view.ViewTwist = twist;
+                RequireViewMutationIdle();
                 document.Editor.SetCurrentView(view);
             }
             return CurrentViewJson(document, "set");
         }
 
+        private static void RequireCompatibleViewAspect(ViewTableRecord currentView, double requestedWidth, double requestedHeight)
+        {
+            var currentWidth = PositiveViewSize(currentView.Width, "current view width");
+            var currentHeight = PositiveViewSize(currentView.Height, "current view height");
+            var currentAspect = currentWidth / currentHeight;
+            var requestedAspect = requestedWidth / requestedHeight;
+            var scale = Math.Max(1d, Math.Abs(currentAspect));
+            if (!IsFinite(currentAspect) || !IsFinite(requestedAspect)
+                || Math.Abs(requestedAspect - currentAspect) > ViewAspectRelativeTolerance * scale)
+                throw new InvalidOperationException(
+                    "requested view aspect is incompatible with the active viewport aspect; cad_view_set refuses to let BricsCAD normalize width/height silently.");
+        }
+
+        private static void RequireCompatibleViewDirection(ViewTableRecord currentView, Vector3d requestedDirection)
+        {
+            var current = currentView.ViewDirection;
+            if (!IsFinite(current.X) || !IsFinite(current.Y) || !IsFinite(current.Z) || current.Length < MinDirectionLength)
+                throw new InvalidOperationException("Current view direction is invalid; direct view mutation is blocked.");
+            var normalized = current.GetNormal();
+            if (Math.Abs(normalized.X - requestedDirection.X) > ViewDirectionComponentTolerance
+                || Math.Abs(normalized.Y - requestedDirection.Y) > ViewDirectionComponentTolerance
+                || Math.Abs(normalized.Z - requestedDirection.Z) > ViewDirectionComponentTolerance)
+                throw new InvalidOperationException(
+                    "requested view direction differs from the active view; cad_view_set refuses direction transitions that may invoke LookFrom/modal UI.");
+        }
+
         private static string ApplyExtents(Document document, Extents3d worldExtents, double padding, string source, int entityCount)
         {
+            RequireViewMutationIdle();
             using (var view = document.Editor.GetCurrentView())
             {
                 var worldToEye = Matrix3d.PlaneToWorld(view.ViewDirection);
@@ -212,6 +267,7 @@ namespace QS3D.BricsCAD.V25
                     (eye.MinPoint.Y + eye.MaxPoint.Y) / 2d);
                 view.Width = PositiveViewSize(rawWidth * padding, "computed width");
                 view.Height = PositiveViewSize(rawHeight * padding, "computed height");
+                RequireViewMutationIdle();
                 document.Editor.SetCurrentView(view);
             }
             var result = CurrentViewJson(document, source);
@@ -426,6 +482,21 @@ namespace QS3D.BricsCAD.V25
                     + minimum.ToString("R", CultureInfo.InvariantCulture) + " and "
                     + maximum.ToString("R", CultureInfo.InvariantCulture) + ".");
             return value;
+        }
+
+        private static void RequireViewMutationIdle()
+        {
+            var raw = Convert.ToString(Application.GetSystemVariable("CMDACTIVE"), CultureInfo.InvariantCulture) ?? string.Empty;
+            int active;
+            if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out active) && active == 0) return;
+            var commandNames = SafeCommandNames(
+                Convert.ToString(Application.GetSystemVariable("CMDNAMES"), CultureInfo.InvariantCulture) ?? string.Empty);
+            var modal = (active & 8) != 0;
+            throw new InvalidOperationException(
+                modal
+                    ? "BricsCAD view update is blocked by modal/dialog state (CMDACTIVE bit 8). Dismiss the modal locally before retrying; MCP will not enter the view mutation while this state is active."
+                    : "BricsCAD view update is busy while another command is active. Wait for cad_wait_idle/CMDACTIVE=0 before retrying the view mutation."
+                + (commandNames.Length == 0 ? string.Empty : " Active command: " + commandNames + "."));
         }
 
         private static Document RequireDocument()

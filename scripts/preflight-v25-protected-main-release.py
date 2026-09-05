@@ -19,6 +19,15 @@ def require(text: str, tokens: tuple[str, ...], label: str, failures: list[str])
             failures.append(f"{label} missing contract marker: {token}")
 
 
+def contains_executable_line(text: str, token: str) -> bool:
+    token_lower = token.lower()
+    return any(
+        token_lower in line.lower()
+        for line in text.splitlines()
+        if not line.lstrip().startswith("#")
+    )
+
+
 def main() -> int:
     failures = []
     prepare = PREPARE.read_text(encoding="utf-8")
@@ -33,18 +42,45 @@ def main() -> int:
         "git config user.name",
         "git config user.email",
         "HEAD:refs/heads/main",
+        "sync-preview-release-version.ps1",
+        "git diff --name-only",
     )
     for token in forbidden_prepare:
-        if token.lower() in prepare.lower():
-            failures.append(f"release preparation must not contain protected-main write primitive: {token}")
+        if contains_executable_line(prepare, token):
+            failures.append(f"release preparation must not contain protected-main/unstable-source primitive: {token}")
+
+    for stale in (
+        "function Get-CommittedProductVersion",
+        "$committedProductVersion = Get-CommittedProductVersion",
+        "Merge the version update to protected main before publishing.",
+    ):
+        if stale in prepare:
+            failures.append(f"release preparation retained stale committed-version admission: {stale}")
 
     require(
         prepare,
         (
-            "sync-preview-release-version.ps1",
+            "validate-preview-release-sequence.ps1",
             "preflight-runtime-product-version-identity.py",
+            "$workspaceVersionPaths = @(",
+            "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj",
+            "src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj",
+            "src/QS3D.Core/QS3D.Core.csproj",
+            "function Set-WorkspaceProductVersion",
+            "$productVersion = $tag.Substring(1)",
+            "Set-WorkspaceProductVersion -ReleaseTagValue $tag",
+            "Runtime product-version identity preflight failed after workspace synchronization.",
+            "$expectedProductVersion = $tag.Substring(1)",
+            "$finalStatus.Count -ne 0 -and $finalStatus.Count -ne $workspaceVersionPaths.Count",
+            "Workspace version synchronization must either be a no-op or produce exactly three bounded project modifications.",
+            "Workspace ProductVersion is already synchronized",
+            "if ($finalStatus.Count -eq $workspaceVersionPaths.Count)",
+            "Unexpected release-preparation workspace change",
+            "$releaseRelevantPathspecs = @(",
+            "external/QS3D-Platform",
+            "git diff --quiet --no-ext-diff $range -- @releaseRelevantPathspecs",
             "Release workspace HEAD must remain the protected-main source commit",
-            "No commit, push, branch-protection bypass, or main mutation was performed by release preparation.",
+            "No commit, push, branch-protection bypass, or protected-main mutation was performed by release preparation.",
             "Write-Output $releaseBase",
         ),
         "release preparation",
@@ -125,8 +161,8 @@ def main() -> int:
         return 1
 
     print("PASS: V25 preview release and pre-merge compile contracts are protected-main safe.")
-    print(" - preview version synchronization is workspace-only")
-    print(" - source HEAD/provenance remains an exact protected-main commit")
+    print(" - manual preview identity may already be synchronized or is derived only in the bounded V25/V26/Core workspace; protected main is never mutated")
+    print(" - source HEAD/provenance remains an exact protected-main commit and release drift uses Git pathspec semantics")
     print(" - canonical core check compiles V25 through locked, held-verified reference generations with immutable Action refs")
     return 0
 

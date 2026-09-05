@@ -33,10 +33,16 @@ def main():
         ("element.SourceHandles.Count == 0", "explicit SourceHandles precedence"),
         ("AutoRoomLifecycle.IsAutoRoom(element)", "Auto Room selection guard"),
         ("AutoRoomLifecycle.BoundarySourceHandlesKey", "boundary provenance slot"),
-        ("boundaryHandles.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)", "boundary handle tokenization"),
+        ("MaxBoundarySourceHandleCount = 5000", "boundary ownership count ceiling"),
+        ("GetCanonicalBoundarySourceHandles(element, boundaryHandles)", "bounded canonical boundary tokenization"),
+        ("MaxBoundarySourceHandleCount + 1", "fail-fast bounded split sentinel"),
+        ("AutoRoomLifecycle.NormalizeSourceHandles(tokens)", "canonical boundary provenance validation"),
         ("Add(handle, element, AutoRoomLifecycle.BoundarySourceHandlesKey", "fail-closed semantic ownership channel"),
     ):
         require(resolver, token, label, errors)
+
+    if "boundaryHandles.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)" in resolver:
+        errors.append("Auto Room semantic selection must not restore unbounded RemoveEmptyEntries boundary tokenization")
 
     if "BoundarySourceHandles" in policy:
         errors.append("Auto Room boundary provenance must not be promoted into global generated ownership")
@@ -65,7 +71,7 @@ def main():
             print("ERROR:", error)
         print("FAILED with", len(errors), "error(s).")
         return 1
-    print("PASS: canonical semantic selection preserves Auto Room boundary provenance without promoting shared boundaries to generated ownership or overriding explicit SourceHandles.")
+    print("PASS: canonical semantic selection preserves bounded, canonical Auto Room boundary provenance without promoting shared boundaries to generated ownership or overriding explicit SourceHandles.")
     return 0
 
 

@@ -42,8 +42,17 @@ namespace QS3D.Core.Persistence
             var capturedFloors = CaptureFloorReferences(project);
             var capturedFamilies = CaptureFamilyReferences(project);
             var capturedElements = CaptureElementReferences(project);
+            var detached = CreateDetachedCopy(project);
+            RequireEquivalentDetachedState(detached, project);
+            ValidateCapturedReferenceGeneration(
+                project,
+                capturedZones,
+                capturedFloors,
+                capturedFamilies,
+                capturedElements);
+            RequireEquivalentDetachedState(detached, project);
             return new ProjectStateSnapshot(
-                CreateDetachedCopy(project),
+                detached,
                 project,
                 capturedZones,
                 capturedFloors,
@@ -131,6 +140,177 @@ namespace QS3D.Core.Persistence
                 result.Add(element.Id, element);
             }
             return result;
+        }
+
+        private static void ValidateCapturedReferenceGeneration(
+            ProjectState project,
+            IReadOnlyDictionary<string, ZoneDefinition> capturedZones,
+            IReadOnlyDictionary<string, FloorDefinition> capturedFloors,
+            IReadOnlyDictionary<string, ProjectFamily> capturedFamilies,
+            IReadOnlyDictionary<string, ProjectElement> capturedElements)
+        {
+            if (project.Zones.Count != capturedZones.Count
+                || project.Floors.Count != capturedFloors.Count
+                || project.Families.Count != capturedFamilies.Count
+                || project.Elements.Count != capturedElements.Count)
+                throw new InvalidOperationException("Cannot capture a project whose collection generation changed during snapshot materialization.");
+
+            foreach (var zone in project.Zones)
+            {
+                if (zone == null
+                    || string.IsNullOrWhiteSpace(zone.Id)
+                    || !capturedZones.TryGetValue(zone.Id, out var captured)
+                    || !ReferenceEquals(zone, captured))
+                    throw new InvalidOperationException("Cannot capture a project whose zone generation changed during snapshot materialization.");
+            }
+
+            foreach (var floor in project.Floors)
+            {
+                if (floor == null
+                    || string.IsNullOrWhiteSpace(floor.Id)
+                    || !capturedFloors.TryGetValue(floor.Id, out var captured)
+                    || !ReferenceEquals(floor, captured))
+                    throw new InvalidOperationException("Cannot capture a project whose floor generation changed during snapshot materialization.");
+            }
+
+            foreach (var family in project.Families)
+            {
+                if (family == null
+                    || string.IsNullOrWhiteSpace(family.Id)
+                    || !capturedFamilies.TryGetValue(family.Id, out var captured)
+                    || !ReferenceEquals(family, captured))
+                    throw new InvalidOperationException("Cannot capture a project whose family generation changed during snapshot materialization.");
+            }
+
+            foreach (var element in project.Elements)
+            {
+                if (element == null
+                    || string.IsNullOrWhiteSpace(element.Id)
+                    || !capturedElements.TryGetValue(element.Id, out var captured)
+                    || !ReferenceEquals(element, captured))
+                    throw new InvalidOperationException("Cannot capture a project whose element generation changed during snapshot materialization.");
+            }
+
+            if (project.Zones.Count != capturedZones.Count
+                || project.Floors.Count != capturedFloors.Count
+                || project.Families.Count != capturedFamilies.Count
+                || project.Elements.Count != capturedElements.Count)
+                throw new InvalidOperationException("Cannot capture a project whose collection generation changed during snapshot validation.");
+        }
+
+        private static void RequireEquivalentDetachedState(ProjectState expected, ProjectState actual)
+        {
+            if (expected.SchemaVersion != actual.SchemaVersion
+                || !string.Equals(expected.ProjectId, actual.ProjectId, StringComparison.Ordinal)
+                || !string.Equals(expected.Name, actual.Name, StringComparison.Ordinal)
+                || !string.Equals(expected.DrawingPath, actual.DrawingPath, StringComparison.Ordinal)
+                || !string.Equals(expected.DrawingFingerprint, actual.DrawingFingerprint, StringComparison.Ordinal)
+                || !string.Equals(expected.ActiveZoneId, actual.ActiveZoneId, StringComparison.Ordinal)
+                || !string.Equals(expected.ActiveFloorId, actual.ActiveFloorId, StringComparison.Ordinal)
+                || expected.UpdatedUtc != actual.UpdatedUtc
+                || expected.ChangeVersion != actual.ChangeVersion)
+                throw new InvalidOperationException("Cannot capture a project whose persisted scalar state changed during snapshot materialization.");
+
+            RequireEquivalentMap(expected.Metadata, actual.Metadata, "project metadata");
+            RequireEquivalentSequence(expected.Zones, actual.Zones,
+                (left, right) => string.Equals(left.Id, right.Id, StringComparison.Ordinal)
+                    && string.Equals(left.Name, right.Name, StringComparison.Ordinal),
+                "zones");
+            RequireEquivalentSequence(expected.Floors, actual.Floors,
+                (left, right) => string.Equals(left.Id, right.Id, StringComparison.Ordinal)
+                    && string.Equals(left.Name, right.Name, StringComparison.Ordinal)
+                    && left.ElevationM.Equals(right.ElevationM),
+                "floors");
+            RequireEquivalentSequence(expected.Families, actual.Families,
+                (left, right) => string.Equals(left.Id, right.Id, StringComparison.Ordinal)
+                    && string.Equals(left.Name, right.Name, StringComparison.Ordinal)
+                    && left.Category == right.Category,
+                "families");
+            for (var i = 0; i < expected.Families.Count; i++)
+                RequireEquivalentMap(expected.Families[i].Properties, actual.Families[i].Properties, "family properties");
+
+            RequireEquivalentSequence(expected.QuantityRules, actual.QuantityRules,
+                (left, right) => string.Equals(left.Id, right.Id, StringComparison.Ordinal)
+                    && left.Category == right.Category
+                    && string.Equals(left.OutputName, right.OutputName, StringComparison.Ordinal)
+                    && string.Equals(left.Expression, right.Expression, StringComparison.Ordinal)
+                    && string.Equals(left.Version, right.Version, StringComparison.Ordinal),
+                "quantity rules");
+
+            RequireEquivalentSequence(expected.Elements, actual.Elements,
+                (left, right) => string.Equals(left.Id, right.Id, StringComparison.Ordinal)
+                    && left.Category == right.Category
+                    && string.Equals(left.FamilyId, right.FamilyId, StringComparison.Ordinal)
+                    && string.Equals(left.FloorId, right.FloorId, StringComparison.Ordinal)
+                    && string.Equals(left.ZoneId, right.ZoneId, StringComparison.Ordinal)
+                    && string.Equals(left.DrawingFingerprint, right.DrawingFingerprint, StringComparison.Ordinal)
+                    && left.Dirty == right.Dirty
+                    && left.UpdatedUtc == right.UpdatedUtc,
+                "elements");
+            for (var i = 0; i < expected.Elements.Count; i++)
+            {
+                var left = expected.Elements[i];
+                var right = actual.Elements[i];
+                RequireEquivalentSequence(left.SourceHandles, right.SourceHandles,
+                    (a, b) => string.Equals(a, b, StringComparison.Ordinal), "element source handles");
+                RequireEquivalentSequence(left.DependsOn, right.DependsOn,
+                    (a, b) => string.Equals(a, b, StringComparison.Ordinal), "element dependencies");
+                RequireEquivalentMap(left.Properties, right.Properties, "element properties");
+                RequireEquivalentDoubleMap(left.Quantities, right.Quantities, "element quantities");
+            }
+
+            RequireEquivalentSequence(expected.AuditEvents, actual.AuditEvents,
+                (left, right) => left.Utc == right.Utc
+                    && string.Equals(left.Action, right.Action, StringComparison.Ordinal)
+                    && string.Equals(left.ElementId, right.ElementId, StringComparison.Ordinal)
+                    && string.Equals(left.Detail, right.Detail, StringComparison.Ordinal)
+                    && string.Equals(left.Actor, right.Actor, StringComparison.Ordinal)
+                    && string.Equals(left.CorrelationId, right.CorrelationId, StringComparison.Ordinal),
+                "audit events");
+        }
+
+        private static void RequireEquivalentMap(
+            IDictionary<string, string> expected,
+            IDictionary<string, string> actual,
+            string label)
+        {
+            if (expected.Count != actual.Count)
+                throw new InvalidOperationException("Cannot capture a project whose " + label + " changed during snapshot materialization.");
+            foreach (var item in expected)
+            {
+                if (!actual.TryGetValue(item.Key, out var actualValue)
+                    || !string.Equals(item.Value, actualValue, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Cannot capture a project whose " + label + " changed during snapshot materialization.");
+            }
+        }
+
+        private static void RequireEquivalentDoubleMap(
+            IDictionary<string, double> expected,
+            IDictionary<string, double> actual,
+            string label)
+        {
+            if (expected.Count != actual.Count)
+                throw new InvalidOperationException("Cannot capture a project whose " + label + " changed during snapshot materialization.");
+            foreach (var item in expected)
+            {
+                if (!actual.TryGetValue(item.Key, out var actualValue) || !item.Value.Equals(actualValue))
+                    throw new InvalidOperationException("Cannot capture a project whose " + label + " changed during snapshot materialization.");
+            }
+        }
+
+        private static void RequireEquivalentSequence<T>(
+            IList<T> expected,
+            IList<T> actual,
+            Func<T, T, bool> equivalent,
+            string label)
+        {
+            if (expected.Count != actual.Count)
+                throw new InvalidOperationException("Cannot capture a project whose " + label + " changed during snapshot materialization.");
+            for (var i = 0; i < expected.Count; i++)
+            {
+                if (!equivalent(expected[i], actual[i]))
+                    throw new InvalidOperationException("Cannot capture a project whose " + label + " changed during snapshot materialization.");
+            }
         }
 
         private static void CopyInto(
@@ -241,6 +421,7 @@ namespace QS3D.Core.Persistence
 
         private static void ValidateCollectionEntries(ProjectState source)
         {
+            RequireSupportedSchemaVersion(source);
             RequireSupportedCount(source.Metadata.Count, "metadata", MaximumSnapshotNestedEntries);
             RequireSupportedCount(source.Zones.Count, "zones", MaximumSnapshotTopLevelEntries);
             RequireSupportedCount(source.Floors.Count, "floors", MaximumSnapshotTopLevelEntries);
@@ -255,12 +436,14 @@ namespace QS3D.Core.Persistence
             RequireNoNullEntries(source.Elements, "element");
             RequireNoNullEntries(source.QuantityRules, "quantity rule");
             RequireNoNullEntries(source.AuditEvents, "audit event");
+            AuditTrail.ValidateSnapshotHistory(source);
 
             RequireUniqueIds(source.Zones, x => x.Id, "zone");
             RequireUniqueIds(source.Floors, x => x.Id, "floor");
             RequireUniqueIds(source.Families, x => x.Id, "family");
             RequireUniqueIds(source.Elements, x => x.Id, "element");
             RequireUniqueIds(source.QuantityRules, x => x.Id, "quantity rule");
+            RequireResolvedActiveContext(source);
 
             foreach (var family in source.Families)
             {
@@ -274,9 +457,29 @@ namespace QS3D.Core.Persistence
                 RequireSupportedCount(element.DependsOn.Count, "element " + element.Id + " dependencies", MaximumSnapshotNestedEntries);
                 RequireSupportedCount(element.Properties.Count, "element " + element.Id + " properties", MaximumSnapshotNestedEntries);
                 RequireSupportedCount(element.Quantities.Count, "element " + element.Id + " quantities", MaximumSnapshotNestedEntries);
+                RequireCanonicalRelationIdentities(element.SourceHandles, element.Id, "source handle");
+                RequireCanonicalRelationIdentities(element.DependsOn, element.Id, "dependency id");
                 RequireCanonicalElementProperties(element);
                 RequireCanonicalQuantities(element);
             }
+        }
+
+        private static void RequireSupportedSchemaVersion(ProjectState source)
+        {
+            if (source.SchemaVersion <= 0)
+                throw new InvalidOperationException("Cannot snapshot a project with a non-positive schema version: " + source.SchemaVersion + ".");
+            if (source.SchemaVersion > ProjectState.CurrentSchemaVersion)
+                throw new InvalidOperationException(
+                    "Cannot snapshot a project with schema version " + source.SchemaVersion
+                    + " newer than supported version " + ProjectState.CurrentSchemaVersion + ".");
+        }
+
+        private static void RequireResolvedActiveContext(ProjectState source)
+        {
+            if (source.ActiveZoneId.Length != 0 && source.FindZone(source.ActiveZoneId) == null)
+                throw new InvalidOperationException("Cannot snapshot a project whose active zone does not exist: " + source.ActiveZoneId + ".");
+            if (source.ActiveFloorId.Length != 0 && source.FindFloor(source.ActiveFloorId) == null)
+                throw new InvalidOperationException("Cannot snapshot a project whose active floor does not exist: " + source.ActiveFloorId + ".");
         }
 
         private static void RequireCanonicalFamilyProperties(ProjectFamily family)
@@ -288,6 +491,31 @@ namespace QS3D.Core.Persistence
             catch (ArgumentException ex)
             {
                 throw new InvalidOperationException("Cannot snapshot Family " + family.Id + " with invalid property state.", ex);
+            }
+        }
+
+        private static void RequireCanonicalRelationIdentities(IEnumerable<string> values, string elementId, string role)
+        {
+            foreach (var value in values)
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                    throw new InvalidOperationException("Cannot snapshot element " + elementId + " with an empty " + role + ".");
+                if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Cannot snapshot element " + elementId + " with a non-canonical " + role + ": '" + value + "'.");
+                if (HasControlCharacter(value))
+                    throw new InvalidOperationException("Cannot snapshot element " + elementId + " with a " + role + " containing control characters.");
+                try
+                {
+                    XmlConvert.VerifyXmlChars(value);
+                }
+                catch (XmlException ex)
+                {
+                    throw new InvalidOperationException("Cannot snapshot element " + elementId + " with a " + role + " containing malformed XML text.", ex);
+                }
+                catch (ArgumentException ex)
+                {
+                    throw new InvalidOperationException("Cannot snapshot element " + elementId + " with a " + role + " containing malformed XML text.", ex);
+                }
             }
         }
 
@@ -338,6 +566,8 @@ namespace QS3D.Core.Persistence
                     throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a quantity name containing control characters.");
 
                 var canonicalName = quantity.Key.Trim();
+                if (!string.Equals(canonicalName, quantity.Key, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Cannot snapshot element " + element.Id + " with a non-canonical quantity name: '" + quantity.Key + "'.");
                 try
                 {
                     XmlConvert.VerifyXmlChars(canonicalName);
@@ -433,11 +663,12 @@ namespace QS3D.Core.Persistence
             if (!string.Equals(source.Id, target.Id, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Cannot restore family state into a different family id.");
 
-            _ = ProjectFamilyService.SnapshotProperties(source, "Snapshot", "snapshot materialization");
-            target.Name = source.Name;
-            target.Category = source.Category;
-            target.Properties.Clear();
-            foreach (var property in source.Properties) target.Properties[property.Key] = property.Value;
+            var snapshotProperties = ProjectFamilyService.SnapshotProperties(
+                source,
+                "Snapshot",
+                "snapshot materialization",
+                preserveNullValues: true);
+            target.RestoreSnapshotState(source.Name, source.Category, snapshotProperties);
         }
 
         private static ProjectElement CloneElement(ProjectElement source)

@@ -77,12 +77,12 @@ namespace QS3D.Core.SmokeTests
         private static void TransientCountDriftAfterMaterializationFailsClosed()
         {
             var source = new SequencedCountCollection<EstimateLine>(
-                new[] { 1, 1, 2, 1 },
+                new[] { 1, 1, 1, 2, 1 },
                 CreateLine(1));
 
             AssertCountChanged(() => FrozenEstimateProjection.Create(source));
             Assert(source.CurrentReads == 1, "Post-materialization drift must occur after exactly one caller Current read.");
-            Assert(source.CountReads == 3, "Post-materialization drift must be caught by the row checkpoint.");
+            Assert(source.CountReads == 4, "Post-materialization drift must be caught by the row checkpoint after the pre-traversal rebind.");
         }
 
         private static void HonestCountedSourceRemainsAccepted()
@@ -90,11 +90,11 @@ namespace QS3D.Core.SmokeTests
             var source = new StableReadOnlyCollection<EstimateLine>(1, CreateLine(1));
             var projection = FrozenEstimateProjection.Create(source);
 
-            Assert(source.CountReads == 4,
-                "Honest one-line counted source must bind admission, pre-Current, post-row, and final Count evidence.");
-            Assert(source.GetEnumeratorCalls == 1, "Honest counted source must be traversed once.");
-            Assert(source.MoveNextCalls == 2, "Honest one-line source must complete exactly one traversal.");
-            Assert(source.CurrentReads == 1, "Honest one-line source must read Current exactly once.");
+            Assert(source.CountReads == 11,
+                "Honest one-line counted source must bind Count across both admitted and semantic replay traversals plus final publication evidence.");
+            Assert(source.GetEnumeratorCalls == 2, "Honest counted source must perform one admitted traversal plus one semantic replay.");
+            Assert(source.MoveNextCalls == 4, "Honest one-line counted source must complete both admitted and replay traversals.");
+            Assert(source.CurrentReads == 2, "Honest one-line counted source must materialize one row on each guarded traversal.");
             Assert(projection.Rows.Count == 1, "Honest counted source lost its estimate row.");
         }
 

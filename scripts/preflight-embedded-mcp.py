@@ -111,8 +111,13 @@ def main() -> int:
     require(runtime, "CadWorkCancelledBeforeStart = 2", errors, "CAD dispatch cancelled-before-start state")
     require(runtime, "Interlocked.CompareExchange(ref item.DispatchState, CadWorkRunning, CadWorkQueued)", errors, "atomic CAD start claim")
     require(runtime, "Interlocked.CompareExchange(ref item.DispatchState, CadWorkCancelledBeforeStart, CadWorkQueued)", errors, "atomic timeout cancellation")
-    require(runtime, "completion is uncertain", errors, "timeout completion uncertainty")
-    require(runtime, "Do not retry automatically", errors, "timeout no-auto-retry contract")
+    require(runtime, "item.DetachAfterStartedTimeout();", errors, "started CAD callback bounded completion handoff")
+    require(runtime, "throw new CadStartedTimeoutException(item);", errors, "started CAD response deadline")
+    require(runtime, "McpCadMutationCoordinator.DetachMutationForDeferredCompletion(writerScope)", errors, "started mutation writer detachment")
+    require(runtime, "timeout.TransferWriterScope(deferredWriterScope);", errors, "started mutation terminal writer handoff")
+    require(runtime, "completion continues without replay", errors, "timeout no-replay contract")
+    forbid(runtime, "item.Done.Wait();", errors, "unbounded started CAD callback wait")
+    forbid(runtime, "item.Abandoned", errors, "racy CAD completion abandoned handoff")
 
     for text, surface in ((server, "network MCP transport"), (runtime, "CAD runtime"), (domain, "QS3D domain runtime")):
         forbid(text, "Process.Start(", errors, f"arbitrary process launch from {surface}")
@@ -148,7 +153,9 @@ def main() -> int:
     require(plugin, "TryCleanup(McpTransportCoordinator.StopAllForHostShutdown);", errors, "provider-aware MCP transport teardown")
     require(plugin, "TryCleanup(McpEmbeddedServer.Stop);", errors, "embedded MCP teardown")
     require(plugin, 'ReportOptionalStartupFailure("MCP server", ex)', errors, "fail-soft MCP startup")
-    require(plugin, 'ReportOptionalStartupFailure("MCP transport", ex)', errors, "fail-soft MCP transport startup")
+    require(plugin, 'ReportOptionalStartupFailure("MCP tunnel autostart", ex)', errors, "fail-soft preferred MCP tunnel autostart")
+    require(plugin, "McpTransportAgentCenterAugmenter.Start();", errors, "transport Agent Center startup")
+    require(plugin, 'ReportOptionalStartupFailure("MCP transport Agent Center", ex)', errors, "fail-soft transport Agent Center startup")
 
     for command in (
         "QS3DMCPSETTINGSHTTP", "QS3DMCPDOCSHTTP", "QS3DMCPCHECKHTTP", "QS3DAIDASHBOARDHTTP",

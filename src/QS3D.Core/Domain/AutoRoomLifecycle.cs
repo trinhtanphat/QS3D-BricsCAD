@@ -63,11 +63,24 @@ namespace QS3D.Core.Domain
                         "Auto Room source handles cannot exceed " + MaxSourceHandleInputCount + " input entries.");
                 inputCount++;
                 if (string.IsNullOrWhiteSpace(raw)) continue;
-                var canonical = GeneratedHandleIdentity.Normalize(raw);
+                var canonical = CanonicalizeSourceHandle(raw);
                 if (canonical.Length > 0) normalized.Add(canonical);
             }
 
             return string.Join(";", normalized.OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
+        }
+
+        private static string CanonicalizeSourceHandle(string raw)
+        {
+            var canonical = GeneratedHandleIdentity.Normalize(raw);
+            if (canonical.Length == 0) return canonical;
+
+            var trimmed = raw.Trim();
+            if (!string.Equals(canonical, trimmed, StringComparison.Ordinal)) return canonical;
+
+            return canonical.Any(ch => !char.IsLetterOrDigit(ch))
+                ? canonical.ToUpperInvariant()
+                : canonical;
         }
 
         private static IReadOnlyList<string> ParseSourceHandleText(string? raw)
@@ -236,10 +249,10 @@ namespace QS3D.Core.Domain
         {
             if (room == null) throw new ArgumentNullException(nameof(room));
             var normalizedSourceSignature = NormalizeSourceHandleText(sourceSignature);
-            room.Properties[BoundaryStateKey] = BoundaryStateActive;
-            room.Properties[BoundarySourceSignatureKey] = normalizedSourceSignature;
-            room.Properties.Remove("BoundaryStaleUtc");
-            room.Properties.Remove("BoundaryStaleReason");
+            room.SetProperty(BoundarySourceSignatureKey, normalizedSourceSignature);
+            room.SetProperty(BoundaryStateKey, BoundaryStateActive);
+            room.RemoveProperty("BoundaryStaleUtc");
+            room.RemoveProperty("BoundaryStaleReason");
         }
 
         public static int SyncFamilyDefaults(ProjectState project, ProjectElement room, ProjectFamily family)

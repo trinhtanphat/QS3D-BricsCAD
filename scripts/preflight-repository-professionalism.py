@@ -37,6 +37,7 @@ MAX_ORCHESTRATION_SCAN_BYTES = MAX_REPOSITORY_TEXT_BYTES
 MAX_OPEN_IDENTITY_ATTEMPTS = 2
 WINDOWS_REPARSE_POINT_ATTRIBUTE = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x0400)
 SELF_PATH = "scripts/preflight-repository-professionalism.py"
+HYBRID_COORDINATOR = "hybrid-pr-coordinator.yml"
 
 
 def _metadata_type_error(metadata) -> str | None:
@@ -133,8 +134,6 @@ def read_repository_text(path: Path, root: Path = ROOT, maximum_bytes: int = MAX
     except UnicodeDecodeError as exc:
         return None, f"is not valid UTF-8: {exc}"
 
-    # Match Path.read_text()/TextIOWrapper universal-newline semantics so repository
-    # contract markers remain platform-independent after the bounded binary read.
     return text.replace("\r\n", "\n").replace("\r", "\n"), None
 
 
@@ -346,9 +345,10 @@ def main() -> int:
     if "paths:" in pr_trigger or "paths-ignore:" in pr_trigger:
         failures.append("shared CI pull_request trigger must always emit protected-main required contexts and must not use path filters")
 
-    forbidden_merge_tokens = (
-        "pull_request_target:", "gh pr merge", "enablepullrequestautomerge", "enable-pull-request-auto-merge",
+    globally_forbidden_merge_tokens = (
+        "pull_request_target:", "gh pr merge", "enable-pull-request-auto-merge",
     )
+    native_automerge_token = "enablepullrequestautomerge"
     workflows_dir = ROOT / ".github" / "workflows"
     workflow_paths = sorted(
         (path for path in workflows_dir.iterdir() if path.suffix.lower() in {".yml", ".yaml"}),
@@ -360,11 +360,32 @@ def main() -> int:
             failures.append(f"unsafe workflow source for autonomous-merge scan: {workflow.name}: {error}")
             continue
         lowered = text.lower()
-        for token in forbidden_merge_tokens:
+        for token in globally_forbidden_merge_tokens:
             if token in lowered:
                 failures.append(f"{workflow.name}: autonomous main-merge primitive is forbidden by repository governance: {token}")
-        if re.search(r"repos/[^\s\"']+/pulls/[^\s\"']+/merge", lowered):
+        if native_automerge_token in lowered and workflow.name != HYBRID_COORDINATOR:
+            failures.append(
+                f"{workflow.name}: GitHub native auto-merge arming is reserved for {HYBRID_COORDINATOR}"
+            )
+        if re.search(r"repos/[^\s\"']+/pulls/[^\s\"']+/merge(?:[\s\"']|$)", lowered):
             failures.append(f"{workflow.name}: direct pull-request merge API call is forbidden by repository governance")
+
+        if workflow.name == HYBRID_COORDINATOR:
+            require(
+                text,
+                (
+                    "name: QS3D Hybrid PR Coordinator",
+                    '  "pull_request":', '  "push":',
+                    "enablePullRequestAutoMerge", "QS3D_AUTOMERGE_TOKEN",
+                    "/update-branch", "expected_head_sha", "no-automerge",
+                    "head.repo.full_name", "base.ref", "draft",
+                    "group: qs3d-hybrid-pr-coordinator", "cancel-in-progress: false",
+                ),
+                "hybrid PR coordinator",
+                failures,
+            )
+            if "contents: write" in text or "actions: write" in text:
+                failures.append(f"{HYBRID_COORDINATOR}: workflow-level write permissions must stay narrow")
 
     if failures:
         print("Repository professionalism preflight FAILED")
@@ -381,7 +402,7 @@ def main() -> int:
     print(" - every task/integration branch push and every PR can emit stable required contexts while non-build changes avoid redundant Core/V25 builds")
     print(" - synthetic generated fixtures are treated as build-relevant validation inputs")
     print(" - external scheduler/controller-worker orchestration artifacts are kept out of the QS3D source tree")
-    print(" - no workflow implements autonomous PR-to-main merging")
+    print(f" - only {HYBRID_COORDINATOR} may arm GitHub native auto-merge; direct PR merge primitives remain forbidden")
     return 0
 
 

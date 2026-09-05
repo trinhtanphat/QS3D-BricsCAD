@@ -2,11 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using Bricscad.ApplicationServices;
@@ -48,6 +52,9 @@ namespace QS3D.BricsCAD.V25
         private const string ArgoTokenEnd = "-----END ARGO TUNNEL TOKEN-----";
         private const int CommandTimeoutMs = 60000;
         private const int LoginTimeoutMs = 10 * 60 * 1000;
+        private const int PublicReadinessTimeoutMs = 30000;
+        private const int PublicProbeTimeoutMs = 4000;
+        private const int PublicProbeRetryDelayMs = 1000;
         private const int MaxCapturedOutput = 256 * 1024;
         private const int MaxCertificateBytes = 1024 * 1024;
         private static readonly object Sync = new object();
@@ -61,8 +68,13 @@ namespace QS3D.BricsCAD.V25
         private static Process? _process;
         private static string _lastMessage = string.Empty;
         private static string _lastError = string.Empty;
+        private static string _lastRouteState = "route=unknown";
+        private static string _lastDnsState = "dns=unknown";
+        private static string _lastHttpsState = "https=unknown";
+        private static bool _publicReady;
         private static bool _certificateImportNeeded;
         private static int _setupOperationActive;
+        private static int _autoStartWorkerActive;
 
         private static string SettingsDirectory => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "QS3D", "MCP", "CloudflareAccount");
@@ -70,6 +82,7 @@ namespace QS3D.BricsCAD.V25
         private static string HostnamePath => Path.Combine(SettingsDirectory, "hostname.txt");
         private static string ConfigPath => Path.Combine(SettingsDirectory, "config.yml");
         private static string AutoStartPath => Path.Combine(SettingsDirectory, "autostart.txt");
+        private static string RouteProofPath => Path.Combine(SettingsDirectory, "route-proof.txt");
 
         public static string CloudflaredPath => McpCloudflareTunnelManager.CloudflaredPath;
         public static string CloudflaredDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cloudflared");
@@ -78,9 +91,12 @@ namespace QS3D.BricsCAD.V25
         public static bool IsSetupBusy => Volatile.Read(ref _setupOperationActive) != 0;
         public static bool CertificateImportNeeded { get { lock (Sync) return _certificateImportNeeded; } }
         public static string SavedHostname => ReadText(HostnamePath);
-        public static string PublicMcpUrl => IsRunning && !string.IsNullOrWhiteSpace(SavedHostname) ? "https://" + SavedHostname + "/mcp" : string.Empty;
+        public static bool IsPublicReady { get { lock (Sync) return _publicReady; } }
+        public static string PublicMcpUrl => IsRunning && IsPublicReady && !string.IsNullOrWhiteSpace(SavedHostname) ? "https://" + SavedHostname + "/mcp" : string.Empty;
         public static string LastMessage { get { lock (Sync) return _lastMessage; } }
         public static string LastError { get { lock (Sync) return _lastError; } }
+        public static bool IsConfigured => !string.IsNullOrWhiteSpace(CloudflaredPath) && !string.IsNullOrWhiteSpace(SavedHostname);
+        internal static Process? OwnedProcess { get { lock (Sync) return _process; } }
 
         public static bool IsRunning
         {
@@ -256,7 +272,7 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
-            SetState("Đang xác minh tunnel Cloudflare và DNS route...", string.Empty);
+            SetState("Đang xác minh tunnel Cloudflare, DNS và HTTPS public...", string.Empty);
             ThreadPool.QueueUserWorkItem(_ =>
             {
                 try
@@ -274,6 +290,7 @@ namespace QS3D.BricsCAD.V25
         public static bool StartSaved(out string error)
         {
             error = string.Empty;
+            SetPublicReady(false);
             McpEmbeddedServer.EnsureStarted();
             var executable = CloudflaredPath;
             var id = ReadText(TunnelIdPath);
@@ -290,6 +307,7 @@ namespace QS3D.BricsCAD.V25
                 error = "Named Tunnel credentials không còn tồn tại. Hãy cấu hình lại tunnel.";
                 return false;
             }
+            if (!EnsureDnsRoute(executable, id, hostname, out error)) return false;
             try
             {
                 WriteCanonicalConfig(id, hostname, credentials);
@@ -300,14 +318,44 @@ namespace QS3D.BricsCAD.V25
                 return false;
             }
             McpCloudflareTunnelManager.StopForHostShutdown();
-            return StartProcess(executable, "tunnel --config \"" + ConfigPath + "\" run " + id, out error);
+            return StartProcess(executable, "tunnel --config \"" + ConfigPath + "\" run " + id, hostname, out error);
+        }
+
+        internal static bool StartForSupervisor(out string error)
+        {
+            return StartSaved(out error);
         }
 
         public static void TryAutoStart()
         {
             if (ReadText(AutoStartPath) != "1") return;
-            string ignored;
-            StartSaved(out ignored);
+            if (Interlocked.CompareExchange(ref _autoStartWorkerActive, 1, 0) != 0) return;
+
+            try
+            {
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        if (ReadText(AutoStartPath) != "1") return;
+                        string ignored;
+                        StartSaved(out ignored);
+                    }
+                    catch (Exception ex)
+                    {
+                        SetState("Named Tunnel auto-start failed.", ex.Message);
+                    }
+                    finally
+                    {
+                        Interlocked.Exchange(ref _autoStartWorkerActive, 0);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Interlocked.Exchange(ref _autoStartWorkerActive, 0);
+                SetState("Named Tunnel auto-start scheduling failed.", ex.Message);
+            }
         }
 
         public static void StopForHostShutdown() => StopProcess();
@@ -324,6 +372,8 @@ namespace QS3D.BricsCAD.V25
             return "running=" + IsRunning
                    + "; authenticated=" + IsAuthenticated
                    + "; setupBusy=" + IsSetupBusy
+                   + "; publicReady=" + IsPublicReady
+                   + "; " + ReadinessSummary()
                    + (CertificateImportNeeded ? "; certImportNeeded=true" : string.Empty)
                    + (string.IsNullOrWhiteSpace(McpPublicEndpointResolver.Resolve()) ? string.Empty : "; public=" + McpPublicEndpointResolver.Resolve())
                    + (string.IsNullOrWhiteSpace(LastError) ? string.Empty : "; error=" + LastError);
@@ -332,6 +382,7 @@ namespace QS3D.BricsCAD.V25
         private static bool Provision(string executable, string hostname, out string error)
         {
             error = string.Empty;
+            SetPublicReady(false);
             McpEmbeddedServer.EnsureStarted();
 
             string tunnelId;
@@ -343,14 +394,7 @@ namespace QS3D.BricsCAD.V25
                 return false;
             }
 
-            string output;
-            string routeError;
-            if (!RunCommand(executable, "tunnel route dns " + tunnelId + " " + hostname, CommandTimeoutMs, out output, out routeError))
-            {
-                error = "Không tạo được DNS route. QS3D không tự bỏ qua xung đột DNS vì hostname có thể đang trỏ sang tunnel khác. "
-                        + FirstUsefulError(routeError, output, "Hãy kiểm tra hostname trong Cloudflare Dashboard rồi thử lại.");
-                return false;
-            }
+            if (!EnsureDnsRoute(executable, tunnelId, hostname, out error)) return false;
 
             try
             {
@@ -367,7 +411,7 @@ namespace QS3D.BricsCAD.V25
 
             McpCloudflareTunnelManager.StopForHostShutdown();
             StopProcess();
-            return StartProcess(executable, "tunnel --config \"" + ConfigPath + "\" run " + tunnelId, out error);
+            return StartProcess(executable, "tunnel --config \"" + ConfigPath + "\" run " + tunnelId, hostname, out error);
         }
 
         private static void WriteCanonicalConfig(string tunnelId, string hostname, string credentials)
@@ -494,6 +538,211 @@ namespace QS3D.BricsCAD.V25
                    || combined.IndexOf("copy it to the following path", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
+        private static bool EnsureDnsRoute(string executable, string tunnelId, string hostname, out string error)
+        {
+            error = string.Empty;
+            string output;
+            string routeError;
+            if (RunCommand(executable, "tunnel route dns " + tunnelId + " " + hostname, CommandTimeoutMs, out output, out routeError))
+            {
+                SetRouteState("route=ready");
+                return true;
+            }
+
+            var existingConflict = LooksLikeExistingRouteConflict(output, routeError);
+            SetRouteState(existingConflict ? "route=conflict" : "route=error");
+            error = existingConflict
+                ? "DNS route bị xung đột với record hiện hữu. QS3D sẽ không ghi đè record đó và sẽ không coi endpoint là sẵn sàng."
+                : "Không re-assert được DNS route. " + FirstUsefulError(routeError, output, "Cloudflare tunnel route dns failed.");
+            return false;
+        }
+
+        private static bool WaitForPublicReadiness(string hostname, out string error)
+        {
+            error = string.Empty;
+            var watch = Stopwatch.StartNew();
+            var dnsState = "dns=pending";
+            var httpsState = "https=pending";
+            lock (Sync)
+            {
+                _publicReady = false;
+                _lastDnsState = dnsState;
+                _lastHttpsState = httpsState;
+            }
+
+            while (watch.ElapsedMilliseconds < PublicReadinessTimeoutMs)
+            {
+                if (!IsRunning)
+                {
+                    error = "Named Tunnel đã dừng trước khi public endpoint sẵn sàng (" + ReadinessSummary() + ").";
+                    return false;
+                }
+
+                var dnsReady = ProbePublicDns(hostname, out dnsState);
+                var httpsReady = false;
+                if (dnsReady)
+                    httpsReady = ProbePublicHttps(hostname, out httpsState);
+                else
+                    httpsState = "https=waiting-for-dns";
+
+                lock (Sync)
+                {
+                    _lastDnsState = dnsState;
+                    _lastHttpsState = httpsState;
+                }
+
+                if (dnsReady && httpsReady)
+                {
+                    lock (Sync) _publicReady = true;
+                    error = string.Empty;
+                    return true;
+                }
+
+                var remaining = PublicReadinessTimeoutMs - (int)Math.Min(PublicReadinessTimeoutMs, watch.ElapsedMilliseconds);
+                if (remaining <= 0) break;
+                Thread.Sleep(Math.Min(PublicProbeRetryDelayMs, remaining));
+            }
+
+            error = "Named Tunnel public readiness quá thời gian chờ (" + ReadinessSummary() + ").";
+            return false;
+        }
+
+        private static bool ProbePublicDns(string hostname, out string state)
+        {
+            state = "dns=error";
+            try
+            {
+                var task = Task.Factory.StartNew(
+                    () => Dns.GetHostAddresses(hostname),
+                    CancellationToken.None,
+                    TaskCreationOptions.DenyChildAttach,
+                    TaskScheduler.Default);
+                if (!task.Wait(PublicProbeTimeoutMs))
+                {
+                    state = "dns=timeout";
+                    return false;
+                }
+                var addresses = task.Result;
+                if (addresses == null || addresses.Length == 0)
+                {
+                    state = "dns=no-address";
+                    return false;
+                }
+                state = "dns=resolved";
+                return true;
+            }
+            catch (Exception)
+            {
+                state = "dns=error";
+                return false;
+            }
+        }
+
+        private static bool ProbePublicHttps(string hostname, out string state)
+        {
+            state = "https=error";
+            HttpWebResponse? response = null;
+            try
+            {
+                var uri = new Uri("https://" + hostname + "/mcp", UriKind.Absolute);
+#pragma warning disable SYSLIB0014
+                var request = (HttpWebRequest)WebRequest.Create(uri);
+#pragma warning restore SYSLIB0014
+                request.Method = "GET";
+                request.AllowAutoRedirect = false;
+                request.KeepAlive = false;
+                request.Timeout = PublicProbeTimeoutMs;
+                request.ReadWriteTimeout = PublicProbeTimeoutMs;
+                request.UserAgent = "QS3D-MCP-readiness";
+                request.Accept = "application/json, text/event-stream";
+                response = (HttpWebResponse)request.GetResponse();
+                var statusCode = (int)response.StatusCode;
+                if (statusCode >= 200 && statusCode < 500)
+                {
+                    state = "https=http-" + statusCode.ToString();
+                    return true;
+                }
+                state = "https=http-" + statusCode.ToString();
+                return false;
+            }
+            catch (WebException ex)
+            {
+                var httpResponse = ex.Response as HttpWebResponse;
+                if (httpResponse != null)
+                {
+                    try
+                    {
+                        var statusCode = (int)httpResponse.StatusCode;
+                        state = "https=http-" + statusCode.ToString();
+                        return statusCode >= 200 && statusCode < 500;
+                    }
+                    finally { httpResponse.Close(); }
+                }
+                state = ex.Status == WebExceptionStatus.Timeout ? "https=timeout" : "https=network-or-tls-error";
+                return false;
+            }
+            catch (Exception)
+            {
+                state = "https=error";
+                return false;
+            }
+            finally
+            {
+                try { response?.Close(); } catch { }
+            }
+        }
+
+        private static bool LooksLikeExistingRouteConflict(string output, string error)
+        {
+            var combined = (output ?? string.Empty) + "\n" + (error ?? string.Empty);
+            return combined.IndexOf("already exists", StringComparison.OrdinalIgnoreCase) >= 0
+                   || combined.IndexOf("exists with that host", StringComparison.OrdinalIgnoreCase) >= 0
+                   || combined.IndexOf("record with that host", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool HasExpectedLocalRouteProof(string tunnelId, string hostname)
+        {
+            var expected = BuildRouteProof(tunnelId, hostname);
+            if (string.Equals(ReadText(RouteProofPath), expected, StringComparison.OrdinalIgnoreCase)) return true;
+
+            var savedId = ReadText(TunnelIdPath);
+            var savedHostname = McpCloudflareTunnelManager.NormalizeHostname(ReadText(HostnamePath));
+            if (!string.Equals(savedId, tunnelId, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(savedHostname, hostname, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            try
+            {
+                if (!File.Exists(ConfigPath)) return false;
+                var config = File.ReadAllText(ConfigPath, Encoding.UTF8);
+                return config.IndexOf("tunnel: " + tunnelId, StringComparison.OrdinalIgnoreCase) >= 0
+                       && config.IndexOf("- hostname: " + hostname, StringComparison.OrdinalIgnoreCase) >= 0
+                       && config.IndexOf("credentials-file:", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            catch { return false; }
+        }
+
+        private static string BuildRouteProof(string tunnelId, string hostname)
+        {
+            return (tunnelId ?? string.Empty).Trim().ToLowerInvariant() + "|"
+                   + (hostname ?? string.Empty).Trim().ToLowerInvariant();
+        }
+
+        private static void SetRouteState(string state)
+        {
+            lock (Sync) _lastRouteState = state ?? "route=unknown";
+        }
+
+        private static void SetPublicReady(bool ready)
+        {
+            lock (Sync) _publicReady = ready;
+        }
+
+        private static string ReadinessSummary()
+        {
+            lock (Sync) return _lastRouteState + "; " + _lastDnsState + "; " + _lastHttpsState;
+        }
+
         private static bool RunCommand(string executable, string arguments, int timeoutMs, out string output, out string error)
         {
             output = string.Empty;
@@ -565,10 +814,17 @@ namespace QS3D.BricsCAD.V25
             };
         }
 
-        private static bool StartProcess(string executable, string arguments, out string error)
+        private static bool StartProcess(string executable, string arguments, string hostname, out string error)
         {
             error = string.Empty;
             StopProcess();
+            string staleCleanup;
+            if (!McpTransportSupervisor.TryCleanupStaleOwnedProcess(
+                    McpTransportProvider.CloudflareNamedTunnel, executable, out staleCleanup))
+            {
+                error = staleCleanup;
+                return false;
+            }
             Process? process = null;
             try
             {
@@ -585,6 +841,9 @@ namespace QS3D.BricsCAD.V25
                 lock (Sync)
                 {
                     _process = process;
+                    _publicReady = false;
+                    _lastDnsState = "dns=pending";
+                    _lastHttpsState = "https=pending";
                     _lastMessage = "Named Tunnel đang kết nối...";
                     _lastError = string.Empty;
                 }
@@ -592,12 +851,36 @@ namespace QS3D.BricsCAD.V25
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
                 process.EnableRaisingEvents = true;
-                if (process.HasExited) HandleProcessExit(process);
-                return IsRunning;
+                if (process.HasExited)
+                {
+                    HandleProcessExit(process);
+                    error = string.IsNullOrWhiteSpace(LastError) ? "Named Tunnel đã dừng ngay sau khi khởi động." : LastError;
+                    return false;
+                }
+                string ownerError;
+                if (!McpTransportSupervisor.RegisterOwnedProcess(
+                        McpTransportProvider.CloudflareNamedTunnel, process, executable, out ownerError))
+                {
+                    error = "Không thể xác minh quyền sở hữu cloudflared: " + ownerError;
+                    StopProcess();
+                    return false;
+                }
+                if (!WaitForPublicReadiness(hostname, out error))
+                {
+                    StopProcess();
+                    SetState(error, error);
+                    return false;
+                }
+                SetState("Named Tunnel public endpoint sẵn sàng (" + ReadinessSummary() + ").", string.Empty);
+                return IsRunning && IsPublicReady;
             }
             catch (Exception ex)
             {
-                lock (Sync) { if (ReferenceEquals(_process, process)) _process = null; }
+                lock (Sync)
+                {
+                    if (ReferenceEquals(_process, process)) _process = null;
+                    _publicReady = false;
+                }
                 try { process?.Dispose(); } catch { }
                 error = ex.Message;
                 SetState(error, error);
@@ -616,6 +899,7 @@ namespace QS3D.BricsCAD.V25
                 {
                     owned = true;
                     _process = null;
+                    _publicReady = false;
                     if (exitCode.HasValue && exitCode.Value != 0 && string.IsNullOrWhiteSpace(_lastError))
                         _lastError = "Named Tunnel exited with code " + exitCode.Value.ToString() + ".";
                     _lastMessage = exitCode.HasValue
@@ -623,7 +907,11 @@ namespace QS3D.BricsCAD.V25
                         : "Named Tunnel đã dừng.";
                 }
             }
-            if (owned) { try { process.Dispose(); } catch { } }
+            if (owned)
+            {
+                McpTransportSupervisor.ClearOwnedProcess(McpTransportProvider.CloudflareNamedTunnel);
+                try { process.Dispose(); } catch { }
+            }
         }
 
         private static void HandleRunLine(Process process, string? line, bool stderr)
@@ -644,11 +932,31 @@ namespace QS3D.BricsCAD.V25
         private static void StopProcess()
         {
             Process? process;
-            lock (Sync) { process = _process; _process = null; }
+            lock (Sync)
+            {
+                process = _process;
+                _process = null;
+                _publicReady = false;
+            }
             if (process == null) return;
+            var exitConfirmed = false;
             try { process.EnableRaisingEvents = false; } catch { }
-            try { if (!process.HasExited) process.Kill(); } catch { }
-            try { if (!process.HasExited) process.WaitForExit(2000); } catch { }
+            try
+            {
+                if (process.HasExited)
+                {
+                    exitConfirmed = true;
+                }
+                else
+                {
+                    process.Kill();
+                    exitConfirmed = process.WaitForExit(2000);
+                    if (exitConfirmed) exitConfirmed = process.HasExited;
+                }
+            }
+            catch { exitConfirmed = false; }
+            if (exitConfirmed)
+                McpTransportSupervisor.ClearOwnedProcess(McpTransportProvider.CloudflareNamedTunnel);
             try { process.Dispose(); } catch { }
         }
 
@@ -706,7 +1014,25 @@ namespace QS3D.BricsCAD.V25
 
     internal sealed class McpCloudflareAccountSetupWindow : Window
     {
-        private readonly TextBox _hostname = new TextBox { Margin = new Thickness(0, 4, 0, 8) };
+        private enum OnboardingButtonKind { Primary, Secondary, Danger, Utility }
+
+        private static readonly Brush CanvasBrush = Brush(Color.FromRgb(13, 17, 23));
+        private static readonly Brush CardBrush = Brush(Color.FromRgb(22, 27, 34));
+        private static readonly Brush RaisedBrush = Brush(Color.FromRgb(33, 38, 45));
+        private new static readonly Brush BorderBrush = Brush(Color.FromRgb(48, 54, 61));
+        private static readonly Brush TextPrimaryBrush = Brush(Color.FromRgb(240, 246, 252));
+        private static readonly Brush TextSecondaryBrush = Brush(Color.FromRgb(139, 148, 158));
+        private static readonly Brush AccentBrush = Brush(Color.FromRgb(47, 129, 247));
+        private static readonly Brush AccentHoverBrush = Brush(Color.FromRgb(56, 139, 253));
+        private static readonly Brush AccentPressedBrush = Brush(Color.FromRgb(31, 111, 235));
+        private static readonly Brush DangerBrush = Brush(Color.FromRgb(248, 81, 73));
+        private static readonly Brush DangerSoftBrush = Brush(Color.FromRgb(73, 29, 32));
+        private static readonly Brush SuccessBrush = Brush(Color.FromRgb(63, 185, 80));
+        private static readonly Brush DisabledBrush = Brush(Color.FromRgb(33, 38, 45));
+        private static readonly Brush DisabledTextBrush = Brush(Color.FromRgb(110, 118, 129));
+        private static readonly Brush FocusBrush = Brush(Color.FromRgb(88, 166, 255));
+
+        private readonly TextBox _hostname = new TextBox { Margin = new Thickness(0, 6, 0, 10) };
         private DispatcherTimer? _quickUrlTimer;
         private int _quickUrlPollTicks;
         private int _connectOperationActive;
@@ -715,79 +1041,298 @@ namespace QS3D.BricsCAD.V25
         public McpCloudflareAccountSetupWindow()
         {
             Title = "QS3D - Kết nối ChatGPT MCP";
-            Width = 620;
-            Height = 520;
-            MinWidth = 540;
-            MinHeight = 440;
+            Width = 720;
+            Height = 650;
+            MinWidth = 620;
+            MinHeight = 520;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            WindowStyle = WindowStyle.SingleBorderWindow;
+            Background = CanvasBrush;
+            Foreground = TextPrimaryBrush;
+            FontFamily = new FontFamily("Segoe UI");
+            UseLayoutRounding = true;
+            SnapsToDevicePixels = true;
             Closed += (_, __) => StopQuickUrlPolling();
 
-            var panel = new StackPanel { Margin = new Thickness(18) };
+            ConfigureTextBox(_hostname);
+
+            var panel = new StackPanel { Margin = new Thickness(24, 22, 24, 22) };
+            panel.Children.Add(new TextBlock
+            {
+                Text = "QS3D · ChatGPT Connect",
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = AccentHoverBrush,
+                Margin = new Thickness(0, 0, 0, 6)
+            });
             panel.Children.Add(new TextBlock
             {
                 Text = "ChatGPT ↔ QS3D ↔ BricsCAD",
-                FontSize = 20,
+                FontSize = 24,
                 FontWeight = FontWeights.Bold,
-                Margin = new Thickness(0, 0, 0, 4)
+                Foreground = TextPrimaryBrush,
+                Margin = new Thickness(0, 0, 0, 7)
             });
             panel.Children.Add(new TextBlock
             {
                 Text = "Bấm một nút để kết nối. QS3D tự lo MCP và Cloudflare; cấu hình cố định chỉ cần khi bạn muốn URL riêng dùng lâu dài. QS3D không hỏi và không lưu mật khẩu Cloudflare.",
                 TextWrapping = TextWrapping.Wrap,
+                FontSize = 13,
+                LineHeight = 20,
+                Foreground = TextSecondaryBrush,
                 Margin = new Thickness(0, 0, 0, 14)
             });
+            panel.Children.Add(CreateStatusBadge());
 
-            var connect = Button("Kết nối ChatGPT", (_, __) => ConnectChatGpt());
-            connect.FontWeight = FontWeights.Bold;
-            connect.MinHeight = 52;
-            panel.Children.Add(connect);
-            panel.Children.Add(Button("Sao chép cấu hình ChatGPT", (_, __) => CopyConfig()));
-            panel.Children.Add(Button("Mở ChatGPT", (_, __) => McpCloudflareAccountTunnelManager.OpenChatGpt()));
-            panel.Children.Add(Button("Ngắt kết nối", (_, __) => Disconnect()));
+            var primaryCard = new Border
+            {
+                Background = CardBrush,
+                BorderBrush = BorderBrush,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(14),
+                Margin = new Thickness(0, 14, 0, 10)
+            };
+            var primaryActions = new StackPanel();
+            var connect = Button("Kết nối ChatGPT", (_, __) => ConnectChatGpt(), OnboardingButtonKind.Primary);
+            connect.FontWeight = FontWeights.SemiBold;
+            connect.FontSize = 14;
+            connect.MinHeight = 50;
+            primaryActions.Children.Add(connect);
 
-            var advancedPanel = new StackPanel { Margin = new Thickness(8, 8, 0, 4) };
-            advancedPanel.Children.Add(Button("Cài / cập nhật Cloudflare Tunnel", (_, __) => InstallCloudflared()));
-            advancedPanel.Children.Add(Button("Đăng nhập Cloudflare", (_, __) => Login()));
+            var secondaryGrid = new Grid { Margin = new Thickness(0, 4, 0, 0) };
+            secondaryGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            secondaryGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            var copy = Button("Sao chép cấu hình ChatGPT", (_, __) => CopyConfig(), OnboardingButtonKind.Secondary);
+            copy.Margin = new Thickness(0, 4, 4, 4);
+            secondaryGrid.Children.Add(copy);
+            var open = Button("Mở ChatGPT", (_, __) => McpCloudflareAccountTunnelManager.OpenChatGpt(), OnboardingButtonKind.Secondary);
+            open.Margin = new Thickness(4, 4, 0, 4);
+            Grid.SetColumn(open, 1);
+            secondaryGrid.Children.Add(open);
+            primaryActions.Children.Add(secondaryGrid);
+            primaryActions.Children.Add(Button("Ngắt kết nối", (_, __) => Disconnect(), OnboardingButtonKind.Danger));
+            primaryCard.Child = primaryActions;
+            panel.Children.Add(primaryCard);
+
+            var advancedPanel = new StackPanel { Margin = new Thickness(12, 10, 12, 12) };
+            advancedPanel.Children.Add(Button("Cài / cập nhật Cloudflare Tunnel", (_, __) => InstallCloudflared(), OnboardingButtonKind.Secondary));
+            advancedPanel.Children.Add(Button("Đăng nhập Cloudflare", (_, __) => Login(), OnboardingButtonKind.Secondary));
             advancedPanel.Children.Add(new TextBlock
             {
-                Text = "Hostname public (ví dụ qs3d.example.com):",
-                Margin = new Thickness(0, 8, 0, 0)
+                Text = "Hostname public (ví dụ qs3d.example.com)",
+                Foreground = TextSecondaryBrush,
+                FontSize = 12,
+                Margin = new Thickness(2, 8, 0, 0)
             });
             _hostname.Text = McpCloudflareAccountTunnelManager.SavedHostname;
             advancedPanel.Children.Add(_hostname);
-            advancedPanel.Children.Add(Button("Tạo / reuse Named Tunnel", (_, __) => Provision()));
-            advancedPanel.Children.Add(Button("Mở Cloudflare Dashboard", (_, __) => McpCloudflareAccountTunnelManager.OpenCloudflareDashboard()));
+            advancedPanel.Children.Add(Button("Tạo / reuse Named Tunnel", (_, __) => Provision(), OnboardingButtonKind.Secondary));
+            advancedPanel.Children.Add(Button("Mở Cloudflare Dashboard", (_, __) => McpCloudflareAccountTunnelManager.OpenCloudflareDashboard(), OnboardingButtonKind.Utility));
 
-            panel.Children.Add(new Expander
+            var advanced = new Expander
             {
                 Header = "Kết nối cố định (tùy chọn)",
                 IsExpanded = false,
-                Margin = new Thickness(0, 12, 0, 4),
+                Foreground = TextPrimaryBrush,
+                Background = CardBrush,
+                Margin = new Thickness(0),
                 Content = advancedPanel
-            });
+            };
+            panel.Children.Add(CreateAdvancedCard(advancedPanel, advanced));
 
-            panel.Children.Add(Button("Kiểm tra MCP local", (_, __) => Probe()));
-            panel.Children.Add(Button("Chi tiết kỹ thuật", (_, __) => ShowTechnicalDetails()));
-            panel.Children.Add(Button("Đóng", (_, __) => Close()));
+            var utilityGrid = new Grid { Margin = new Thickness(0, 10, 0, 0) };
+            utilityGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            utilityGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            utilityGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var probe = Button("Kiểm tra MCP local", (_, __) => Probe(), OnboardingButtonKind.Utility);
+            probe.Margin = new Thickness(0, 4, 4, 4);
+            utilityGrid.Children.Add(probe);
+            var details = Button("Chi tiết kỹ thuật", (_, __) => ShowTechnicalDetails(), OnboardingButtonKind.Utility);
+            details.Margin = new Thickness(4, 4, 4, 4);
+            Grid.SetColumn(details, 1);
+            utilityGrid.Children.Add(details);
+            var close = Button("Đóng", (_, __) => Close(), OnboardingButtonKind.Utility);
+            close.MinWidth = 82;
+            close.Margin = new Thickness(4, 4, 0, 4);
+            Grid.SetColumn(close, 2);
+            utilityGrid.Children.Add(close);
+            panel.Children.Add(utilityGrid);
 
             Content = new ScrollViewer
             {
+                Background = CanvasBrush,
                 Content = panel,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
             };
         }
 
+        private static Brush Brush(Color color)
+        {
+            var brush = new SolidColorBrush(color);
+            brush.Freeze();
+            return brush;
+        }
+
+        private UIElement CreateStatusBadge()
+        {
+            var publicUrl = McpPublicEndpointResolver.Resolve();
+            var connected = (McpCloudflareAccountTunnelManager.IsRunning || McpCloudflareTunnelManager.IsRunning)
+                            && !string.IsNullOrWhiteSpace(publicUrl);
+            var dot = new Border
+            {
+                Width = 8,
+                Height = 8,
+                CornerRadius = new CornerRadius(4),
+                Background = connected ? SuccessBrush : TextSecondaryBrush,
+                Margin = new Thickness(0, 1, 8, 0)
+            };
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            row.Children.Add(dot);
+            row.Children.Add(new TextBlock
+            {
+                Text = connected ? "Đã kết nối · endpoint sẵn sàng" : "Chưa kết nối · sẵn sàng thiết lập",
+                Foreground = connected ? TextPrimaryBrush : TextSecondaryBrush,
+                FontWeight = FontWeights.SemiBold,
+                FontSize = 12
+            });
+            return new Border
+            {
+                Background = RaisedBrush,
+                BorderBrush = BorderBrush,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(999),
+                Padding = new Thickness(10, 6, 12, 6),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Child = row
+            };
+        }
+
+        private UIElement CreateAdvancedCard(StackPanel advancedPanel, Expander advanced)
+        {
+            _ = advancedPanel;
+            return new Border
+            {
+                Background = CardBrush,
+                BorderBrush = BorderBrush,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(12, 8, 12, 8),
+                Margin = new Thickness(0, 2, 0, 2),
+                Child = advanced
+            };
+        }
+
+        private static void ConfigureTextBox(TextBox textBox)
+        {
+            textBox.Background = CanvasBrush;
+            textBox.Foreground = TextPrimaryBrush;
+            textBox.BorderBrush = BorderBrush;
+            textBox.BorderThickness = new Thickness(1);
+            textBox.CaretBrush = TextPrimaryBrush;
+            textBox.Padding = new Thickness(10, 7, 10, 7);
+            textBox.MinHeight = 36;
+            textBox.FontSize = 13;
+        }
+
         private static Button Button(string text, RoutedEventHandler handler)
+        {
+            return Button(text, handler, OnboardingButtonKind.Secondary);
+        }
+
+        private static Button Button(string text, RoutedEventHandler handler, OnboardingButtonKind kind)
         {
             var button = new Button
             {
                 Content = text,
                 Margin = new Thickness(0, 4, 0, 4),
-                MinHeight = 34,
-                Padding = new Thickness(10, 5, 10, 5)
+                MinHeight = 38,
+                Padding = new Thickness(13, 7, 13, 7),
+                BorderThickness = new Thickness(1),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Template = CreateButtonTemplate(),
+                FocusVisualStyle = null
             };
+            ApplyButtonPalette(button, kind);
             button.Click += handler;
             return button;
+        }
+
+        private static void ApplyButtonPalette(Button button, OnboardingButtonKind kind)
+        {
+            Brush background;
+            Brush foreground;
+            Brush border;
+            switch (kind)
+            {
+                case OnboardingButtonKind.Primary:
+                    background = AccentBrush;
+                    foreground = Brushes.White;
+                    border = AccentBrush;
+                    break;
+                case OnboardingButtonKind.Danger:
+                    background = DangerSoftBrush;
+                    foreground = Brush(Color.FromRgb(255, 123, 114));
+                    border = DangerBrush;
+                    break;
+                case OnboardingButtonKind.Utility:
+                    background = CanvasBrush;
+                    foreground = TextSecondaryBrush;
+                    border = BorderBrush;
+                    break;
+                default:
+                    background = RaisedBrush;
+                    foreground = TextPrimaryBrush;
+                    border = BorderBrush;
+                    break;
+            }
+            button.Background = background;
+            button.Foreground = foreground;
+            button.BorderBrush = border;
+            button.Tag = kind;
+        }
+
+        private static ControlTemplate CreateButtonTemplate()
+        {
+            var template = new ControlTemplate(typeof(Button));
+            var border = new FrameworkElementFactory(typeof(Border));
+            border.Name = "chrome";
+            border.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding("Background") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
+            border.SetBinding(Border.BorderBrushProperty, new System.Windows.Data.Binding("BorderBrush") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
+            border.SetBinding(Border.BorderThicknessProperty, new System.Windows.Data.Binding("BorderThickness") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
+            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(8));
+            border.SetValue(Border.SnapsToDevicePixelsProperty, true);
+            var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
+            presenter.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            presenter.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+            presenter.SetBinding(ContentPresenter.MarginProperty, new System.Windows.Data.Binding("Padding") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
+            border.AppendChild(presenter);
+            template.VisualTree = border;
+
+            var hover = new Trigger { Property = IsMouseOverProperty, Value = true };
+            hover.Setters.Add(new Setter(BackgroundProperty, AccentHoverBrush));
+            hover.Setters.Add(new Setter(ForegroundProperty, Brushes.White));
+            hover.Setters.Add(new Setter(BorderBrushProperty, AccentHoverBrush));
+            template.Triggers.Add(hover);
+
+            var pressed = new Trigger { Property = System.Windows.Controls.Button.IsPressedProperty, Value = true };
+            pressed.Setters.Add(new Setter(BackgroundProperty, AccentPressedBrush));
+            pressed.Setters.Add(new Setter(ForegroundProperty, Brushes.White));
+            pressed.Setters.Add(new Setter(BorderBrushProperty, AccentPressedBrush));
+            template.Triggers.Add(pressed);
+
+            var focused = new Trigger { Property = IsKeyboardFocusedProperty, Value = true };
+            focused.Setters.Add(new Setter(BorderBrushProperty, FocusBrush));
+            focused.Setters.Add(new Setter(BorderThicknessProperty, new Thickness(2)));
+            template.Triggers.Add(focused);
+
+            var disabled = new Trigger { Property = IsEnabledProperty, Value = false };
+            disabled.Setters.Add(new Setter(BackgroundProperty, DisabledBrush));
+            disabled.Setters.Add(new Setter(ForegroundProperty, DisabledTextBrush));
+            disabled.Setters.Add(new Setter(BorderBrushProperty, BorderBrush));
+            template.Triggers.Add(disabled);
+            return template;
         }
 
         private void ConnectChatGpt()
@@ -853,8 +1398,8 @@ namespace QS3D.BricsCAD.V25
                 if (!string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.SavedHostname)
                     && McpCloudflareAccountTunnelManager.StartSaved(out namedError))
                 {
-                    _lastUiDetail = "Named Tunnel started for " + McpCloudflareAccountTunnelManager.SavedHostname;
-                    Notify("Đã kết nối", "Đã dùng kết nối Cloudflare cố định đã lưu. ChatGPT ↔ QS3D ↔ BricsCAD sẵn sàng.");
+                    _lastUiDetail = "Named Tunnel ready for " + McpCloudflareAccountTunnelManager.SavedHostname;
+                    Notify("Đã kết nối", "Đã xác minh DNS và HTTPS cho kết nối Cloudflare cố định. ChatGPT ↔ QS3D ↔ BricsCAD sẵn sàng.");
                     EndConnectOperation();
                     return;
                 }
@@ -981,7 +1526,7 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
-            Notify("Đang cấu hình", "QS3D đang tạo hoặc reuse Named Tunnel và DNS route...");
+            Notify("Đang cấu hình", "QS3D đang tạo/reuse Named Tunnel, re-assert DNS và kiểm tra HTTPS /mcp...");
             McpCloudflareAccountTunnelManager.BeginProvision(_hostname.Text, (ok, message) =>
             {
                 try
@@ -1107,6 +1652,7 @@ namespace QS3D.BricsCAD.V25
                    + "\nCertificate import needed: " + McpCloudflareAccountTunnelManager.CertificateImportNeeded
                    + "\nSetup busy: " + McpCloudflareAccountTunnelManager.IsSetupBusy
                    + "\nNamed tunnel: " + (McpCloudflareAccountTunnelManager.IsRunning ? "RUNNING" : "STOPPED")
+                   + "\nNamed public ready: " + McpCloudflareAccountTunnelManager.IsPublicReady
                    + "\nQuick/token tunnel: " + (McpCloudflareTunnelManager.IsRunning ? "RUNNING" : "STOPPED")
                    + "\nPublic MCP: " + (string.IsNullOrWhiteSpace(publicUrl) ? "chưa có" : publicUrl)
                    + (string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.LastMessage) ? string.Empty : "\nStatus: " + McpCloudflareAccountTunnelManager.LastMessage)
@@ -1144,26 +1690,33 @@ namespace QS3D.BricsCAD.V25
             Topmost = true;
             Owner = owner;
             WindowStartupLocation = WindowStartupLocation.Manual;
+            Background = Brushes.Transparent;
+            AllowsTransparency = true;
 
             var panel = new StackPanel();
             panel.Children.Add(new TextBlock
             {
                 Text = title,
-                FontWeight = FontWeights.Bold,
-                FontSize = 15,
+                FontWeight = FontWeights.SemiBold,
+                FontSize = 14,
+                Foreground = new SolidColorBrush(Color.FromRgb(240, 246, 252)),
                 Margin = new Thickness(0, 0, 0, 6)
             });
             panel.Children.Add(new TextBlock
             {
                 Text = message,
-                TextWrapping = TextWrapping.Wrap
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 12.5,
+                LineHeight = 19,
+                Foreground = new SolidColorBrush(Color.FromRgb(139, 148, 158))
             });
             Content = new Border
             {
-                BorderBrush = SystemColors.ActiveBorderBrush,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(48, 54, 61)),
                 BorderThickness = new Thickness(1),
-                Background = SystemColors.WindowBrush,
-                Padding = new Thickness(14),
+                CornerRadius = new CornerRadius(10),
+                Background = new SolidColorBrush(Color.FromRgb(22, 27, 34)),
+                Padding = new Thickness(15, 13, 15, 13),
                 Child = panel
             };
 

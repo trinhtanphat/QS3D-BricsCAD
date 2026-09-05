@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml;
 using QS3D.Core.Domain;
 using QS3D.Core.Reporting;
 
@@ -162,15 +163,29 @@ namespace QS3D.Core.Revisions
             var sourceChangeVersion = project.ChangeVersion;
             if (sourceChangeVersion < 0) throw new InvalidOperationException("Project change version cannot be negative.");
 
+            var first = CapturePass(project, identity);
+            RequireStableProject(project, projectId, sourceChangeVersion);
+            var second = CapturePass(project, identity);
+            RequireStableProject(project, projectId, sourceChangeVersion);
+
+            if (new RevisionService().Compare(first.SemanticRevision, second.SemanticRevision).Count != 0)
+                throw new InvalidOperationException("Project nested state changed while the quantity report revision snapshot was being captured.");
+            if (!RowsExactlyEqual(first.Rows, second.Rows))
+                throw new InvalidOperationException("Project quantity report rows changed while the quantity report revision snapshot was being captured.");
+
+            var result = new QuantityReportRevisionSnapshot(projectId, identity, sourceChangeVersion, second.SemanticRevision, second.Rows);
+            ValidateSnapshot(result, "captured");
+            return result;
+        }
+
+        private static CapturePassResult CapturePass(ProjectState project, string identity)
+        {
             var revision = new RevisionService().Capture(project, identity);
             var rows = ProjectQuantityReportBuilder.Detail(project)
                 .Select(ToSnapshotRow)
                 .OrderBy(x => x.StableKey, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.StableKey, StringComparer.Ordinal)
                 .ToList();
-
-            if (project.ChangeVersion != sourceChangeVersion)
-                throw new InvalidOperationException("Project changed while the quantity report revision snapshot was being captured.");
 
             var revisionIds = new HashSet<string>(
                 revision.Elements.Select(x => CanonicalIdentity(x.ElementId, "revision element id")),
@@ -179,9 +194,67 @@ namespace QS3D.Core.Revisions
                 if (!revisionIds.Contains(row.StableKey))
                     throw new InvalidOperationException("Quantity report row has no matching semantic revision element: " + row.StableKey + ".");
 
-            var result = new QuantityReportRevisionSnapshot(projectId, identity, sourceChangeVersion, revision, rows);
-            ValidateSnapshot(result, "captured");
-            return result;
+            return new CapturePassResult(revision, rows);
+        }
+
+        private static void RequireStableProject(ProjectState project, string projectId, long sourceChangeVersion)
+        {
+            if (!string.Equals(CanonicalIdentity(project.ProjectId, "project id"), projectId, StringComparison.Ordinal) ||
+                project.ChangeVersion != sourceChangeVersion)
+            {
+                throw new InvalidOperationException("Project changed while the quantity report revision snapshot was being captured.");
+            }
+        }
+
+        private static bool RowsExactlyEqual(
+            IReadOnlyList<QuantityReportRevisionRowSnapshot> left,
+            IReadOnlyList<QuantityReportRevisionRowSnapshot> right)
+        {
+            if (left.Count != right.Count) return false;
+            for (var i = 0; i < left.Count; i++)
+                if (!RowExactlyEqual(left[i], right[i])) return false;
+            return true;
+        }
+
+        private static bool RowExactlyEqual(QuantityReportRevisionRowSnapshot left, QuantityReportRevisionRowSnapshot right)
+        {
+            return
+                string.Equals(left.StableKey, right.StableKey, StringComparison.Ordinal) &&
+                string.Equals(left.Floor, right.Floor, StringComparison.Ordinal) &&
+                string.Equals(left.Zone, right.Zone, StringComparison.Ordinal) &&
+                string.Equals(left.Category, right.Category, StringComparison.Ordinal) &&
+                string.Equals(left.FamilyId, right.FamilyId, StringComparison.Ordinal) &&
+                string.Equals(left.FamilyName, right.FamilyName, StringComparison.Ordinal) &&
+                string.Equals(left.ElementName, right.ElementName, StringComparison.Ordinal) &&
+                string.Equals(left.Material, right.Material, StringComparison.Ordinal) &&
+                string.Equals(left.Note, right.Note, StringComparison.Ordinal) &&
+                left.Count == right.Count &&
+                left.GrossConcreteM3.Equals(right.GrossConcreteM3) &&
+                left.DeductionM3.Equals(right.DeductionM3) &&
+                left.NetConcreteM3.Equals(right.NetConcreteM3) &&
+                left.FormworkM2.Equals(right.FormworkM2) &&
+                left.LengthM.Equals(right.LengthM) &&
+                left.OuterPerimeterM.Equals(right.OuterPerimeterM) &&
+                left.InnerPerimeterM.Equals(right.InnerPerimeterM) &&
+                left.DoorAreaM2.Equals(right.DoorAreaM2) &&
+                left.SideAreaM2.Equals(right.SideAreaM2) &&
+                left.BottomAreaM2.Equals(right.BottomAreaM2) &&
+                left.TopAreaM2.Equals(right.TopAreaM2) &&
+                left.OtherAreaM2.Equals(right.OtherAreaM2) &&
+                Nullable.Equals(left.DensityKgM3, right.DensityKgM3) &&
+                Nullable.Equals(left.MassKg, right.MassKg);
+        }
+
+        private sealed class CapturePassResult
+        {
+            internal CapturePassResult(RevisionSnapshot semanticRevision, IReadOnlyList<QuantityReportRevisionRowSnapshot> rows)
+            {
+                SemanticRevision = semanticRevision ?? throw new ArgumentNullException(nameof(semanticRevision));
+                Rows = rows ?? throw new ArgumentNullException(nameof(rows));
+            }
+
+            internal RevisionSnapshot SemanticRevision { get; }
+            internal IReadOnlyList<QuantityReportRevisionRowSnapshot> Rows { get; }
         }
 
         public QuantityReportRevisionDiff Compare(QuantityReportRevisionSnapshot before, QuantityReportRevisionSnapshot after)
@@ -347,6 +420,14 @@ namespace QS3D.Core.Revisions
             if (!string.Equals(raw, raw.Trim(), StringComparison.Ordinal))
                 throw new InvalidOperationException(label + " must not contain surrounding whitespace: " + raw + ".");
             if (raw.Any(char.IsControl)) throw new InvalidOperationException(label + " contains control characters.");
+            try
+            {
+                XmlConvert.VerifyXmlChars(raw);
+            }
+            catch (XmlException ex)
+            {
+                throw new InvalidOperationException(label + " contains characters that are invalid in XML.", ex);
+            }
             return raw;
         }
     }

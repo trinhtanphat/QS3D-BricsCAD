@@ -26,7 +26,11 @@ portability = read(PORTABILITY)
 
 for token in (
     "public sealed class SemanticChangeReviewBuilder",
-    "new RevisionService().Compare(before, after)",
+    'RevisionSnapshotDetacher.Capture(before, "semantic review before")',
+    'RevisionSnapshotDetacher.Capture(after, "semantic review after")',
+    'Index(beforeSnapshot, "before")',
+    'Index(afterSnapshot, "after")',
+    "new RevisionService().Compare(beforeSnapshot, afterSnapshot)",
     "SemanticChangeFieldKind.Identity",
     "SemanticChangeFieldKind.Property",
     "SemanticChangeFieldKind.Quantity",
@@ -45,7 +49,21 @@ for token in (
     if token not in source:
         errors.append("semantic change review source missing contract token: " + token)
 
+build = source.find("public SemanticChangeReview Build")
+detach_before = source.find('RevisionSnapshotDetacher.Capture(before, "semantic review before")', build)
+detach_after = source.find('RevisionSnapshotDetacher.Capture(after, "semantic review after")', detach_before)
+index_before = source.find('Index(beforeSnapshot, "before")', detach_after)
+index_after = source.find('Index(afterSnapshot, "after")', index_before)
+compare = source.find("new RevisionService().Compare(beforeSnapshot, afterSnapshot)", index_after)
+if min(build, detach_before, detach_after, index_before, index_after, compare) < 0 or not (
+    build < detach_before < detach_after < index_before < index_after < compare
+):
+    errors.append("semantic change review must detach both caller snapshots before indexing and comparison")
+
 for forbidden in (
+    'Index(before, "before")',
+    'Index(after, "after")',
+    "new RevisionService().Compare(before, after)",
     "Bricscad.",
     "Teigha.",
     "Autodesk.",
@@ -54,7 +72,7 @@ for forbidden in (
     "QuantityRevisionReport().Build",
 ):
     if forbidden in source:
-        errors.append("semantic change review must remain Core presentation-only and not duplicate quantity/native authority: " + forbidden)
+        errors.append("semantic change review must remain detached/Core presentation-only and not duplicate quantity/native authority: " + forbidden)
 
 for token in (
     "GeneratedHandleOwnershipPolicy.IsOwnerSlot(normalized)",
@@ -70,6 +88,7 @@ for token in (
     "GroupsStableSemanticChangesWithoutHandleAuthority",
     "ReviewOrderingIsDeterministic",
     "MalformedSnapshotsFailClosed",
+    "ReviewUsesOneDetachedCategoryGeneration",
     'a.Properties["GeneratedSolidHandle"]',
     'a.Properties["BoundarySourceHandles"]',
     'a.Properties["QS3D.GeneratedSolid.StaleSnapshot"]',
@@ -97,4 +116,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: semantic change review groups RevisionService deltas by stable semantic ID and reuses the Interchange property portability policy so SourceHandles and drawing-local generated/handle-bearing properties stay out of portable review content.")
+print("PASS: semantic change review detaches both caller snapshots before category indexing and RevisionService comparison, and reuses the Interchange property portability policy so SourceHandles and drawing-local generated/handle-bearing properties stay out of portable review content.")

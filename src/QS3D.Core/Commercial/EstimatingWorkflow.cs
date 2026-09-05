@@ -183,6 +183,7 @@ namespace QS3D.Core.Commercial
             var postTraversalKnownCount = SnapshotKnownCount(lines);
             if (postTraversalKnownCount != knownCount)
                 throw new InvalidOperationException("Estimating portfolio known line count changed during enumeration.");
+            RequireStableKnownCountGeneration(lines, knownCount, snapshot);
 
             snapshot.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.LineId, right.LineId));
             _lines = new ReadOnlyCollection<EstimatingLine>(snapshot.ToArray());
@@ -198,19 +199,75 @@ namespace QS3D.Core.Commercial
             return line;
         }
 
+        internal bool TryGetLine(string lineId, out EstimatingLine line)
+        {
+            lineId = CommercialGuard.RequireToken(lineId, nameof(lineId));
+            return _byId.TryGetValue(lineId, out line);
+        }
+
         public decimal PricedTotal
         {
             get
             {
-                decimal total = 0m;
+                var total = new CommercialExactDecimalAccumulator();
                 for (var i = 0; i < _lines.Count; i++)
                 {
                     var amount = _lines[i].Amount;
                     if (amount.HasValue)
-                        total = CommercialGuard.Add(total, amount.Value, "Estimating portfolio total");
+                        total.Add(amount.Value, "Estimating portfolio total");
                 }
-                return total;
+                return total.ToDecimal("Estimating portfolio total");
             }
+        }
+
+        private static void RequireStableKnownCountGeneration(
+            IEnumerable<EstimatingLine> lines,
+            int? expectedKnownCount,
+            IReadOnlyList<EstimatingLine> snapshot)
+        {
+            if (!expectedKnownCount.HasValue)
+                return;
+
+            var index = 0;
+            using (var enumerator = lines.GetEnumerator())
+            {
+                while (true)
+                {
+                    RequireKnownCountStable(lines, expectedKnownCount);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireKnownCountStable(lines, expectedKnownCount);
+                    if (index >= snapshot.Count)
+                        throw new InvalidOperationException("Estimating portfolio line content changed during enumeration.");
+                    var current = enumerator.Current;
+                    RequireKnownCountStable(lines, expectedKnownCount);
+                    if (current == null || !EstimatingLineStateEquals(snapshot[index], current))
+                        throw new InvalidOperationException("Estimating portfolio line content changed during enumeration.");
+                    index++;
+                }
+            }
+
+            if (index != snapshot.Count || SnapshotKnownCount(lines) != expectedKnownCount)
+                throw new InvalidOperationException("Estimating portfolio line content changed during enumeration.");
+        }
+
+        private static bool EstimatingLineStateEquals(EstimatingLine left, EstimatingLine right)
+        {
+            return string.Equals(left.LineId, right.LineId, StringComparison.Ordinal) &&
+                string.Equals(left.QuantitySourceId, right.QuantitySourceId, StringComparison.Ordinal) &&
+                string.Equals(left.QuantityRevision, right.QuantityRevision, StringComparison.Ordinal) &&
+                left.Quantity == right.Quantity &&
+                string.Equals(left.Unit, right.Unit, StringComparison.Ordinal) &&
+                string.Equals(left.CostCode, right.CostCode, StringComparison.Ordinal) &&
+                string.Equals(left.RateSourceId, right.RateSourceId, StringComparison.Ordinal) &&
+                string.Equals(left.RateRevision, right.RateRevision, StringComparison.Ordinal) &&
+                left.ReferencedRate == right.ReferencedRate &&
+                left.OverrideRate == right.OverrideRate &&
+                string.Equals(left.OverrideReason, right.OverrideReason, StringComparison.Ordinal) &&
+                left.IsBlocked == right.IsBlocked &&
+                string.Equals(left.BlockReason, right.BlockReason, StringComparison.Ordinal) &&
+                left.IsStale == right.IsStale &&
+                string.Equals(left.StaleReason, right.StaleReason, StringComparison.Ordinal);
         }
 
         private static void RequireKnownCountStable(IEnumerable<EstimatingLine> lines, int? expectedKnownCount)
@@ -304,6 +361,14 @@ namespace QS3D.Core.Commercial
             var postTraversalLineIdCount = SnapshotKnownCount(lineIds, MaximumSelectedLines, "selected-line");
             if (postTraversalLineIdCount != lineIdKnownCount)
                 throw new InvalidOperationException("Bulk rate assignment selected-line known count changed during enumeration.");
+            RequireStableKnownCountGeneration(
+                lineIds,
+                lineIdKnownCount,
+                ids,
+                MaximumSelectedLines,
+                "selected-line",
+                (left, right) => string.Equals(left, right, StringComparison.Ordinal),
+                "Bulk rate assignment selected-line content changed during enumeration.");
             if (ids.Count == 0) throw new ArgumentException("Bulk rate assignment requires at least one selected line.", nameof(lineIds));
             LineIds = new ReadOnlyCollection<string>(ids.ToArray());
 
@@ -338,6 +403,14 @@ namespace QS3D.Core.Commercial
             var postTraversalUnitRateCount = SnapshotKnownCount(unitRates, MaximumUnitRates, "unit-rate");
             if (postTraversalUnitRateCount != unitRateKnownCount)
                 throw new InvalidOperationException("Bulk rate assignment unit-rate known count changed during enumeration.");
+            RequireStableKnownCountGeneration(
+                unitRates,
+                unitRateKnownCount,
+                rates,
+                MaximumUnitRates,
+                "unit-rate",
+                UnitRateAssignmentStateEquals,
+                "Bulk rate assignment unit-rate content changed during enumeration.");
             UnitRates = new ReadOnlyCollection<UnitRateAssignment>(rates.ToArray());
         }
 
@@ -346,6 +419,48 @@ namespace QS3D.Core.Commercial
         public string RateSourceId { get; }
         public string RateRevision { get; }
         public IReadOnlyList<UnitRateAssignment> UnitRates { get; }
+
+        private static void RequireStableKnownCountGeneration<T>(
+            IEnumerable<T> values,
+            int? expectedKnownCount,
+            IReadOnlyList<T> snapshot,
+            int maximum,
+            string subject,
+            Func<T, T, bool> equals,
+            string driftMessage)
+        {
+            if (!expectedKnownCount.HasValue)
+                return;
+
+            var index = 0;
+            using (var enumerator = values.GetEnumerator())
+            {
+                while (true)
+                {
+                    RequireKnownCountStable(values, expectedKnownCount, maximum, subject);
+                    if (!enumerator.MoveNext())
+                        break;
+                    RequireKnownCountStable(values, expectedKnownCount, maximum, subject);
+                    if (index >= snapshot.Count)
+                        throw new InvalidOperationException(driftMessage);
+                    var current = enumerator.Current;
+                    RequireKnownCountStable(values, expectedKnownCount, maximum, subject);
+                    if (!equals(snapshot[index], current))
+                        throw new InvalidOperationException(driftMessage);
+                    index++;
+                }
+            }
+
+            if (index != snapshot.Count || SnapshotKnownCount(values, maximum, subject) != expectedKnownCount)
+                throw new InvalidOperationException(driftMessage);
+        }
+
+        private static bool UnitRateAssignmentStateEquals(UnitRateAssignment left, UnitRateAssignment right)
+        {
+            return left != null && right != null &&
+                string.Equals(left.Unit, right.Unit, StringComparison.Ordinal) &&
+                left.Rate == right.Rate;
+        }
 
         private static void RequireKnownCountStable<T>(IEnumerable<T> values, int? expectedKnownCount, int maximum, string subject)
         {
@@ -448,12 +563,17 @@ namespace QS3D.Core.Commercial
             var unmatched = new List<string>();
             var blocked = new List<string>();
             var replacements = 0;
-            decimal before = 0m;
-            decimal after = 0m;
+            var before = new CommercialExactDecimalAccumulator();
+            var after = new CommercialExactDecimalAccumulator();
 
             for (var i = 0; i < request.LineIds.Count; i++)
             {
-                var line = portfolio.GetLine(request.LineIds[i]);
+                var selectedLineId = request.LineIds[i];
+                if (!portfolio.TryGetLine(selectedLineId, out var line))
+                {
+                    unmatched.Add(selectedLineId);
+                    continue;
+                }
                 sourceLines.Add(line);
                 if (!units.TryGetValue(line.Unit, out var aggregate))
                 {
@@ -461,17 +581,17 @@ namespace QS3D.Core.Commercial
                     units.Add(line.Unit, aggregate);
                 }
                 aggregate.Count++;
-                aggregate.Quantity = CommercialGuard.Add(aggregate.Quantity, line.Quantity, "Bulk rate assignment unit quantity");
+                aggregate.Quantity.Add(line.Quantity, "Bulk rate assignment unit quantity");
 
                 var oldAmount = line.Amount;
                 if (oldAmount.HasValue)
-                    before = CommercialGuard.Add(before, oldAmount.Value, "Bulk rate assignment total before");
+                    before.Add(oldAmount.Value, "Bulk rate assignment total before");
 
-                if (line.IsBlocked)
+                if (line.IsBlocked || line.IsStale)
                 {
                     blocked.Add(line.LineId);
                     if (oldAmount.HasValue)
-                        after = CommercialGuard.Add(after, oldAmount.Value, "Bulk rate assignment total after blocked line");
+                        after.Add(oldAmount.Value, "Bulk rate assignment total after blocked line");
                     continue;
                 }
 
@@ -479,19 +599,22 @@ namespace QS3D.Core.Commercial
                 {
                     unmatched.Add(line.LineId);
                     if (oldAmount.HasValue)
-                        after = CommercialGuard.Add(after, oldAmount.Value, "Bulk rate assignment total after unmatched line");
+                        after.Add(oldAmount.Value, "Bulk rate assignment total after unmatched line");
                     continue;
                 }
 
                 if (line.CostCode.Length != 0 || line.ReferencedRate.HasValue || line.OverrideRate.HasValue)
                     replacements++;
                 var newAmount = CommercialGuard.Multiply(line.Quantity, rate, "Bulk rate assignment preview amount");
-                after = CommercialGuard.Add(after, newAmount, "Bulk rate assignment total after");
+                after.Add(newAmount, "Bulk rate assignment total after");
             }
 
             var distribution = new List<UnitDistributionItem>();
             foreach (var pair in units)
-                distribution.Add(new UnitDistributionItem(pair.Value.Unit, pair.Value.Count, pair.Value.Quantity));
+                distribution.Add(new UnitDistributionItem(
+                    pair.Value.Unit,
+                    pair.Value.Count,
+                    pair.Value.Quantity.ToDecimal("Bulk rate assignment unit quantity")));
             distribution.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.Unit, right.Unit));
             unmatched.Sort(StringComparer.OrdinalIgnoreCase);
             blocked.Sort(StringComparer.OrdinalIgnoreCase);
@@ -504,8 +627,8 @@ namespace QS3D.Core.Commercial
                 new ReadOnlyCollection<UnitDistributionItem>(distribution.ToArray()),
                 new ReadOnlyCollection<string>(unmatched.ToArray()),
                 new ReadOnlyCollection<string>(blocked.ToArray()),
-                before,
-                after);
+                before.ToDecimal("Bulk rate assignment total before"),
+                after.ToDecimal("Bulk rate assignment total after"));
         }
 
         public EstimatingPortfolio CommitBulkRateAssignment(
@@ -734,10 +857,14 @@ namespace QS3D.Core.Commercial
 
         private sealed class UnitAccumulator
         {
-            internal UnitAccumulator(string unit) { Unit = unit; }
+            internal UnitAccumulator(string unit)
+            {
+                Unit = unit;
+                Quantity = new CommercialExactDecimalAccumulator();
+            }
             internal string Unit { get; }
             internal int Count { get; set; }
-            internal decimal Quantity { get; set; }
+            internal CommercialExactDecimalAccumulator Quantity { get; }
         }
     }
 }

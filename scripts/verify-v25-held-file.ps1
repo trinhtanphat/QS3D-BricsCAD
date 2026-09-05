@@ -92,6 +92,7 @@ try {
                 throw 'Destination is required for Copy.'
             }
             $destinationFull = Get-CanonicalFullPath -LiteralPath $Destination
+            Assert-NoReparseAncestor -LiteralPath $destinationFull
             $parent = Split-Path -Parent $destinationFull
             if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
                 throw "Held V25 release copy destination parent does not exist: $parent"

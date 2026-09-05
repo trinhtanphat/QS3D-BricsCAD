@@ -71,7 +71,7 @@ def main() -> int:
         "live Cloudflare tunnel list": (account, 'RunCommand(executable, "tunnel list"'),
         "exact tunnel-name comparison": (account, "string.Equals(parts[1], name, StringComparison.OrdinalIgnoreCase)"),
         "missing tunnel credential fail-closed": (account, "máy này thiếu credential"),
-        "DNS conflict fail-closed": (account, "QS3D không tự bỏ qua xung đột DNS"),
+        "DNS conflict fail-closed": (account, 'SetRouteState(existingConflict ? "route=conflict" : "route=error")'),
         "hostname-scoped ingress": (account, '"ingress:\\r\\n"'),
         "canonical named config writer": (account, "WriteCanonicalConfig"),
         "saved tunnel rewrites canonical config": (account, "WriteCanonicalConfig(id, hostname, credentials)"),
@@ -139,8 +139,11 @@ def main() -> int:
         "runtime cancelled-before-start state": (runtime, "CadWorkCancelledBeforeStart = 2"),
         "runtime atomic start claim": (runtime, "Interlocked.CompareExchange(ref item.DispatchState, CadWorkRunning, CadWorkQueued)"),
         "runtime atomic timeout cancellation": (runtime, "Interlocked.CompareExchange(ref item.DispatchState, CadWorkCancelledBeforeStart, CadWorkQueued)"),
-        "runtime uncertain timeout truth": (runtime, "completion is uncertain"),
-        "runtime no-auto-retry truth": (runtime, "Do not retry automatically"),
+        "runtime started-work bounded handoff": (runtime, "item.DetachAfterStartedTimeout();"),
+        "runtime started-work response deadline": (runtime, "throw new CadStartedTimeoutException(item);"),
+        "runtime mutation writer detachment": (runtime, "McpCadMutationCoordinator.DetachMutationForDeferredCompletion(writerScope)"),
+        "runtime terminal writer handoff": (runtime, "timeout.TransferWriterScope(deferredWriterScope);"),
+        "runtime no-replay truth": (runtime, "completion continues without replay"),
         "QS3D domain mutation stop recheck": (domain, "McpCadAgentRuntime.EnsureCurrentMutationRunning();"),
         "QS3D domain command validation": (domain, "Regex.IsMatch(command, McpCadAgentRuntime.Qs3dCommandPattern"),
         "QS3D domain command dispatch": (domain, 'document.SendStringToExecute(command + "\\n", true, false, true);'),
@@ -150,6 +153,11 @@ def main() -> int:
     for label, (text, token) in required.items():
         if token not in text:
             errors.append(f"missing {label}: {token}")
+
+    if "item.Abandoned" in runtime or "public int Abandoned" in runtime:
+        errors.append("runtime restored the racy abandoned completion-handle handoff")
+    if "item.Done.Wait();" in runtime:
+        errors.append("runtime restored an unbounded started-work completion wait")
 
     handle_request_start = server.find("private static void HandleRequest(")
     origin_check = server.find("if (!IsAllowedOrigin(request.Headers, publicMcpUrl))", handle_request_start)
@@ -246,9 +254,26 @@ def main() -> int:
         "CreateLine", "CreateCircle", "CreateArc", "CreatePolyline", "CreateText", "CreateMText",
         "TransformEntity", "DeleteEntity", "SetEntityLayer", "LayerAction", "RunCadCommandSequence",
     )
+    add_entity = method_block(runtime, "private static string AddEntity(")
+    add_entity_dispatches = bool(
+        add_entity
+        and "private static string AddEntity(Func<Entity> entityFactory, string layer, string auditTool)" in add_entity
+        and "return InvokeCadMutation(() =>" in add_entity
+        and "var entity = entityFactory();" in add_entity
+    )
+    factory_mutation_methods = {
+        "CreateLine", "CreateCircle", "CreateArc", "CreatePolyline", "CreateText", "CreateMText",
+    }
     for method in native_mutation_methods:
         block = method_block(runtime, f"private static string {method}(")
-        if not block or "return InvokeCadMutation(" not in block:
+        direct_dispatch = bool(block and "return InvokeCadMutation(" in block)
+        factory_dispatch = bool(
+            block
+            and method in factory_mutation_methods
+            and "return AddEntity(" in block
+            and add_entity_dispatches
+        )
+        if not block or not (direct_dispatch or factory_dispatch):
             errors.append(f"native CAD mutation {method} bypasses the mutation-aware CAD dispatcher")
 
     normalize_command = method_block(runtime, "private static string NormalizeCadCommandToken(")
@@ -297,8 +322,20 @@ def main() -> int:
         errors.append("MCP JSON parser accepts non-RFC Unicode whitespace via char.IsWhiteSpace")
     if ".Trim()" in top_level_json:
         errors.append("MCP JSON parser must not normalize non-RFC Unicode whitespace via string.Trim")
-    if 'IndexOf("already exists"' in account:
-        errors.append("Cloudflare DNS conflict must not be silently accepted via 'already exists'")
+
+    ensure_dns_route = method_block(account, "private static bool EnsureDnsRoute(")
+    if not ensure_dns_route:
+        errors.append("cannot inspect Cloudflare DNS route re-assertion")
+    else:
+        if "LooksLikeExistingRouteConflict(output, routeError)" not in ensure_dns_route:
+            errors.append("Cloudflare DNS route re-assertion does not classify existing-record conflicts")
+        if 'SetRouteState(existingConflict ? "route=conflict" : "route=error")' not in ensure_dns_route:
+            errors.append("Cloudflare DNS route conflicts do not remain distinguishable from generic route errors")
+        if "HasExpectedLocalRouteProof" in ensure_dns_route or "hadExpectedLocalProof" in ensure_dns_route:
+            errors.append("Cloudflare DNS route conflict can still be bypassed by stale local route/config proof")
+        if "return false;" not in ensure_dns_route:
+            errors.append("Cloudflare DNS route failure path no longer fails closed")
+
     if '"Bearer token: " + McpEmbeddedServer.GetBearerToken()' in connector:
         errors.append("legacy settings must not render the raw bearer token; use explicit copy action")
     if '"1. Run QS3DMCPACCOUNTSETUP.' in connector:

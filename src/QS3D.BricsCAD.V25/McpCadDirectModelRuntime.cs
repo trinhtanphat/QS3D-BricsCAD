@@ -20,6 +20,8 @@ namespace QS3D.BricsCAD.V25
     /// </summary>
     internal static class McpCadDirectModelRuntime
     {
+        private const int DbmodPersistentContentMask = 1 | 4 | 32;
+
         private static readonly HashSet<string> Tools = new HashSet<string>(StringComparer.Ordinal)
         {
             "cad_create_box",
@@ -49,20 +51,28 @@ namespace QS3D.BricsCAD.V25
 
         internal static bool IsTool(string? tool)
         {
-            return Tools.Contains(tool ?? string.Empty) || McpCadViewStatusRuntime.IsTool(tool);
+            return Tools.Contains(tool ?? string.Empty)
+                   || McpCadLayerStateRuntime.IsTool(tool)
+                   || McpCadViewStatusRuntime.IsTool(tool);
         }
 
         internal static bool RequiresMutation(string? tool)
         {
+            if (McpCadLayerStateRuntime.IsTool(tool)) return McpCadLayerStateRuntime.RequiresMutation(tool);
             if (McpCadViewStatusRuntime.IsTool(tool)) return McpCadViewStatusRuntime.RequiresMutation(tool);
             return Tools.Contains(tool ?? string.Empty);
         }
 
         internal static bool CanHandleCadCommandSequence(string arguments)
         {
-            var command = NormalizeCommandToken(McpTopLevelJson.ExtractString(arguments ?? "{}", "command"));
-            return string.Equals(command, "EXTRUDE", StringComparison.Ordinal)
-                   || string.Equals(command, "QSAVE", StringComparison.Ordinal);
+            var body = string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments;
+            var command = NormalizeCommandToken(McpTopLevelJson.ExtractString(body, "command"));
+            if (string.Equals(command, "EXTRUDE", StringComparison.Ordinal)
+                || string.Equals(command, "QSAVE", StringComparison.Ordinal))
+                return true;
+            string layoutAction;
+            string layoutName;
+            return TryParseDirectLayoutCommand(command, McpTopLevelJson.ExtractString(body, "inputs"), out layoutAction, out layoutName);
         }
 
         internal static IEnumerable<string> ToolDescriptors()
@@ -82,7 +92,7 @@ namespace QS3D.BricsCAD.V25
             yield return BooleanDescriptor("cad_boolean_intersect", "Intersect target Solid3d with tool Solid3d; the tool solid is consumed after success.");
             yield return Descriptor(
                 "cad_save",
-                "Synchronously save the active rooted DWG and report success only after DBMOD is clean.",
+                "Synchronously save the active rooted DWG and report success after persistent DBMOD content is clean; window/view bits may remain.",
                 ConfirmProperty(),
                 "\"confirmMutation\"");
             yield return Descriptor(
@@ -90,6 +100,7 @@ namespace QS3D.BricsCAD.V25
                 "Safely save the active drawing to an absolute writable .dwg path after overwrite and protected-directory checks.",
                 "\"path\":{\"type\":\"string\",\"maxLength\":1024},\"overwrite\":{\"type\":\"boolean\"}," + ConfirmProperty(),
                 "\"path\",\"confirmMutation\"");
+            foreach (var descriptor in McpCadLayerStateRuntime.ToolDescriptors()) yield return descriptor;
             foreach (var descriptor in McpCadViewStatusRuntime.ToolDescriptors()) yield return descriptor;
         }
 
@@ -97,6 +108,20 @@ namespace QS3D.BricsCAD.V25
         {
             if (!IsTool(tool)) throw new InvalidOperationException("Unknown direct MCP CAD model tool: " + tool);
             var body = string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments;
+            if (McpCadLayerStateRuntime.IsTool(tool))
+            {
+                var mutation = McpCadLayerStateRuntime.RequiresMutation(tool);
+                if (mutation)
+                {
+                    RequireConfirmedMutation(body, tool);
+                    EnsureAutomationRunning();
+                }
+                return McpDiagnosticHub.InvokeInCadContext(() =>
+                {
+                    if (mutation) EnsureAutomationRunning();
+                    return McpCadLayerStateRuntime.CallInCadContext(tool, body);
+                });
+            }
             if (McpCadViewStatusRuntime.IsTool(tool))
             {
                 var mutation = McpCadViewStatusRuntime.RequiresMutation(tool);
@@ -114,6 +139,7 @@ namespace QS3D.BricsCAD.V25
 
             RequireConfirmedMutation(body, tool);
             EnsureAutomationRunning();
+            if (string.Equals(tool, "cad_save", StringComparison.Ordinal)) return Save();
             return McpDiagnosticHub.InvokeInCadContext(() =>
             {
                 EnsureAutomationRunning();
@@ -125,7 +151,6 @@ namespace QS3D.BricsCAD.V25
                     case "cad_boolean_union": result = Boolean(body, BooleanOperationType.BoolUnite, "union"); break;
                     case "cad_boolean_subtract": result = Boolean(body, BooleanOperationType.BoolSubtract, "subtract"); break;
                     case "cad_boolean_intersect": result = Boolean(body, BooleanOperationType.BoolIntersect, "intersect"); break;
-                    case "cad_save": result = Save(); break;
                     case "cad_save_as": result = SaveAs(body); break;
                     default: throw new InvalidOperationException("Unknown direct MCP CAD model tool: " + tool);
                 }
@@ -138,28 +163,41 @@ namespace QS3D.BricsCAD.V25
             var body = string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments;
             RequireConfirmedMutation(body, "cad_command_sequence");
             var command = NormalizeCommandToken(McpTopLevelJson.ExtractString(body, "command"));
+            var rawInputs = McpTopLevelJson.ExtractString(body, "inputs");
+            string layoutAction;
+            string layoutName;
+            var directLayout = TryParseDirectLayoutCommand(command, rawInputs, out layoutAction, out layoutName);
             EnsureAutomationRunning();
             if (!string.Equals(command, "QSAVE", StringComparison.Ordinal)
-                && !string.Equals(command, "EXTRUDE", StringComparison.Ordinal))
-                throw new InvalidOperationException("Direct multi-stage command grammar currently supports EXTRUDE and synchronous QSAVE only.");
+                && !string.Equals(command, "EXTRUDE", StringComparison.Ordinal)
+                && !directLayout)
+                throw new InvalidOperationException("Direct multi-stage command grammar currently supports EXTRUDE, synchronous QSAVE, and bounded LAYOUT/-LAYOUT NEW/SET/DELETE only.");
             var inputs = string.Equals(command, "EXTRUDE", StringComparison.Ordinal)
-                ? NormalizeExtrudeInputs(McpTopLevelJson.ExtractString(body, "inputs"))
+                ? NormalizeExtrudeInputs(rawInputs)
                 : string.Empty;
+            if (string.Equals(command, "QSAVE", StringComparison.Ordinal)) return SaveCadCommandSequence();
             return McpDiagnosticHub.InvokeInCadContext(() =>
             {
                 EnsureAutomationRunning();
-                if (string.Equals(command, "QSAVE", StringComparison.Ordinal))
-                {
-                    Save();
-                    return "{\"accepted\":true,\"completed\":true,\"saved\":true,\"command\":\"QSAVE\",\"inputChars\":0}";
-                }
+                if (directLayout)
+                    return ExecuteDirectLayoutCommand(command, layoutAction, layoutName);
                 var document = RequireDocument();
                 var script = "_.EXTRUDE\n" + inputs;
                 if (!script.EndsWith("\n", StringComparison.Ordinal)) script += "\n";
-                document.SendStringToExecute(script, true, false, true);
+                McpCadMutationCoordinator.QueueNativeCommand(
+                    document,
+                    command,
+                    () => document.SendStringToExecute(script, true, false, true),
+                    detail => McpCadAgentRuntime.AuditDomainMutation("cad_command_sequence", detail));
                 McpDiagnosticHub.Record("mcp", "info", "cad-command-sequence", "command=EXTRUDE; boundedMultiStage=true; inputChars=" + inputs.Length.ToString(CultureInfo.InvariantCulture), document);
                 return "{\"accepted\":true,\"command\":\"EXTRUDE\",\"multiStage\":true,\"inputChars\":" + inputs.Length.ToString(CultureInfo.InvariantCulture) + "}";
             });
+        }
+
+        private static string SaveCadCommandSequence()
+        {
+            Save();
+            return "{\"accepted\":true,\"completed\":true,\"saved\":true,\"command\":\"QSAVE\",\"inputChars\":0}";
         }
 
         private static string CreateBox(string body)
@@ -212,27 +250,21 @@ namespace QS3D.BricsCAD.V25
             {
                 var source = OpenEntity(transaction, document.Database, handle, OpenMode.ForRead) as Curve;
                 if (source == null) throw new InvalidOperationException("cad_extrude requires a curve entity handle.");
-                Region? region = null;
+                var sourceClone = source.Clone() as Curve;
+                if (sourceClone == null)
+                    throw new InvalidOperationException("Could not clone the extrusion source Curve for transient kernel evaluation.");
                 var solid = new Solid3d();
                 try
                 {
-                    var regions = Region.CreateFromCurves(new DBObjectCollection { source });
-                    if (regions == null || regions.Count != 1 || !(regions[0] is Region generatedRegion))
-                    {
-                        if (regions != null)
-                            foreach (DBObject item in regions) item.Dispose();
-                        throw new InvalidOperationException("Source curve must form exactly one closed planar region for cad_extrude.");
-                    }
-                    region = generatedRegion;
                     solid.SetDatabaseDefaults(document.Database);
-                    solid.CreateExtrudedSolid(region, new Vector3d(0d, 0d, height), new SweepOptions());
+                    solid.CreateExtrudedSolid(sourceClone, new Vector3d(0d, 0d, height), new SweepOptions());
                     ApplyLayer(transaction, document.Database, solid, string.IsNullOrWhiteSpace(requestedLayer) ? source.Layer : requestedLayer);
                     var model = ModelSpace(transaction, document.Database, OpenMode.ForWrite);
                     var id = model.AppendEntity(solid);
                     transaction.AddNewlyCreatedDBObject(solid, true);
                     transaction.Commit();
                     var resultHandle = id.Handle.ToString();
-                    RecordMutation(document, "cad-extrude", "handle=" + resultHandle + "; sourceHandle=" + handle + "; regionSource=database-resident");
+                    RecordMutation(document, "cad-extrude", "handle=" + resultHandle + "; sourceHandle=" + handle + "; kernelSource=transient-curve-clone");
                     return "{\"created\":true,\"handle\":\"" + Escape(resultHandle) + "\",\"type\":\"Solid3d\",\"sourceHandle\":\"" + Escape(handle) + "\"}";
                 }
                 catch
@@ -242,7 +274,7 @@ namespace QS3D.BricsCAD.V25
                 }
                 finally
                 {
-                    region?.Dispose();
+                    sourceClone.Dispose();
                 }
             }
         }
@@ -262,37 +294,44 @@ namespace QS3D.BricsCAD.V25
                 var operand = OpenEntity(transaction, document.Database, toolHandle, OpenMode.ForWrite) as Solid3d;
                 if (target == null || operand == null)
                     throw new InvalidOperationException("Boolean operations require two live Solid3d entity handles.");
+                var targetClone = target.Clone() as Solid3d;
+                if (targetClone == null)
+                    throw new InvalidOperationException("Could not clone the boolean target Solid3d for transient kernel evaluation.");
                 var operandClone = operand.Clone() as Solid3d;
                 if (operandClone == null)
+                {
+                    targetClone.Dispose();
                     throw new InvalidOperationException("Could not clone the boolean tool Solid3d for transient kernel evaluation.");
+                }
+                var handedOver = false;
                 try
                 {
                     EnsureAutomationRunning();
-                    target.BooleanOperation(operation, operandClone);
+                    targetClone.BooleanOperation(operation, operandClone);
+                    target.HandOverTo(targetClone, true, true);
+                    handedOver = true;
                     if (!operand.IsErased) operand.Erase();
                     transaction.Commit();
-                    RecordMutation(document, "cad-boolean", "targetHandle=" + targetHandle + "; consumedHandle=" + toolHandle + "; operation=" + operationName + "; operand=transient-clone");
+                    RecordMutation(document, "cad-boolean", "targetHandle=" + targetHandle + "; consumedHandle=" + toolHandle + "; operation=" + operationName + "; target=transient-clone; operand=transient-clone; result=handed-over");
                     return "{\"updated\":true,\"resultHandle\":\"" + Escape(targetHandle) + "\",\"consumedHandle\":\"" + Escape(toolHandle) + "\",\"operation\":\"" + operationName + "\"}";
                 }
                 finally
                 {
                     operandClone.Dispose();
+                    if (!handedOver) targetClone.Dispose();
                 }
             }
         }
 
         private static string Save()
         {
-            var document = RequireDocument();
-            var filename = document.Database.Filename ?? string.Empty;
-            if (!Path.IsPathRooted(filename))
-                throw new InvalidOperationException("Active drawing has no existing local path. Use cad_save_as first.");
-            RequireIdle();
             EnsureAutomationRunning();
-            using (document.LockDocument()) document.Database.SaveAs(filename, DwgVersion.Current);
-            WaitForCleanDbmod();
-            RecordMutation(document, "cad-save", "completed=true; fileName=" + SafeLeaf(filename) + "; route=SaveAs-current-path");
-            return "{\"saved\":true,\"completed\":true,\"fileName\":\"" + Escape(SafeLeaf(filename)) + "\"}";
+            var result = McpNativeCurrentDocumentSave.SaveCurrentDocument(
+                EnsureAutomationRunning,
+                detail => McpCadAgentRuntime.AuditDomainMutation("cad_save", detail));
+            return "{\"saved\":true,\"completed\":true,\"fileName\":\"" + Escape(result.FileName)
+                   + "\",\"route\":\"native-QSAVE-current-document\",\"dbmodAfterSave\":"
+                   + result.DbmodAfterSave.ToString(CultureInfo.InvariantCulture) + "}";
         }
 
         private static string SaveAs(string body)
@@ -317,11 +356,92 @@ namespace QS3D.BricsCAD.V25
             if (!Path.IsPathRooted(actual)
                 || !string.Equals(Path.GetFullPath(actual), fullPath, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("BricsCAD SaveAs returned but the active database path did not match the requested target.");
-            WaitForCleanDbmod();
+            var dbmodAfterSave = WaitForSavedContentDbmod();
             var leaf = SafeLeaf(fullPath);
-            RecordMutation(document, "cad-save-as", "completed=true; fileName=" + leaf + "; overwrite=" + overwrite);
+            RecordMutation(document, "cad-save-as", "completed=true; fileName=" + leaf + "; overwrite=" + overwrite
+                + "; dbmodAfterSave=" + dbmodAfterSave.ToString(CultureInfo.InvariantCulture));
             return "{\"saved\":true,\"completed\":true,\"saveAs\":true,\"fileName\":\"" + Escape(leaf)
-                   + "\",\"overwroteExisting\":" + (existed ? "true" : "false") + "}";
+                   + "\",\"overwroteExisting\":" + (existed ? "true" : "false")
+                   + ",\"dbmodAfterSave\":" + dbmodAfterSave.ToString(CultureInfo.InvariantCulture) + "}";
+        }
+
+        private static bool TryParseDirectLayoutCommand(string command, string input, out string action, out string layoutName)
+        {
+            action = string.Empty;
+            layoutName = string.Empty;
+            if (!string.Equals(command, "-LAYOUT", StringComparison.Ordinal)
+                && !string.Equals(command, "LAYOUT", StringComparison.Ordinal))
+                return false;
+            var value = (input ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
+            if (value.Length == 0 || value.Length > 2048 || value.IndexOf('\0') >= 0 || value.IndexOf('\u001b') >= 0 || value.IndexOf('\u0003') >= 0)
+                return false;
+            var parts = new List<string>();
+            foreach (var raw in value.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var part = raw.Trim();
+                if (part.Length > 0) parts.Add(part);
+            }
+            if (parts.Count != 2) return false;
+            var option = NormalizeCommandToken(parts[0]);
+            if (option == "N" || option == "NEW") action = "NEW";
+            else if (option == "S" || option == "SET") action = "SET";
+            else if (option == "D" || option == "DELETE") action = "DELETE";
+            else return false;
+            layoutName = parts[1].Trim();
+            if (layoutName.Length == 0 || layoutName.Length > 255) return false;
+            foreach (var ch in layoutName) if (ch < 32) return false;
+            return true;
+        }
+
+        private static string ExecuteDirectLayoutCommand(string command, string action, string layoutName)
+        {
+            var document = RequireDocument();
+            RequireIdle();
+            EnsureAutomationRunning();
+            using (document.LockDocument())
+            {
+                EnsureAutomationRunning();
+                if (string.Equals(action, "NEW", StringComparison.Ordinal))
+                {
+                    if (LayoutExists(document.Database, layoutName))
+                        throw new InvalidOperationException("Layout already exists: " + layoutName + ".");
+                    LayoutManager.Current.CreateLayout(layoutName);
+                }
+                else if (string.Equals(action, "SET", StringComparison.Ordinal))
+                {
+                    if (!LayoutExists(document.Database, layoutName))
+                        throw new InvalidOperationException("Layout does not exist: " + layoutName + ".");
+                    LayoutManager.Current.CurrentLayout = layoutName;
+                }
+                else if (string.Equals(action, "DELETE", StringComparison.Ordinal))
+                {
+                    if (string.Equals(layoutName, "Model", StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("The Model layout cannot be deleted.");
+                    if (!LayoutExists(document.Database, layoutName))
+                        throw new InvalidOperationException("Layout does not exist: " + layoutName + ".");
+                    if (string.Equals(LayoutManager.Current.CurrentLayout, layoutName, StringComparison.OrdinalIgnoreCase))
+                        LayoutManager.Current.CurrentLayout = "Model";
+                    LayoutManager.Current.DeleteLayout(layoutName);
+                }
+                else
+                {
+                    throw new InvalidOperationException("Unsupported direct layout action.");
+                }
+            }
+            var currentLayout = LayoutManager.Current.CurrentLayout ?? string.Empty;
+            RecordMutation(document, "cad-layout", "completed=true; command=" + command + "; action=" + action + "; layout=" + layoutName + "; route=LayoutManager-direct");
+            return "{\"accepted\":true,\"completed\":true,\"command\":\"" + Escape(command)
+                   + "\",\"action\":\"" + Escape(action) + "\",\"layout\":\"" + Escape(layoutName)
+                   + "\",\"currentLayout\":\"" + Escape(currentLayout) + "\",\"route\":\"LayoutManager-direct\"}";
+        }
+
+        private static bool LayoutExists(Database database, string layoutName)
+        {
+            using (var transaction = database.TransactionManager.StartOpenCloseTransaction())
+            {
+                var dictionary = (DBDictionary)transaction.GetObject(database.LayoutDictionaryId, OpenMode.ForRead);
+                return dictionary.Contains(layoutName);
+            }
         }
 
         private static string NormalizeExtrudeInputs(string input)
@@ -428,20 +548,28 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("Cannot save while a BricsCAD command is active. Wait for idle or cancel the active command before retrying.");
         }
 
-        private static void WaitForCleanDbmod()
+        private static int WaitForSavedContentDbmod()
         {
             var deadline = DateTime.UtcNow.AddSeconds(2);
+            var lastDbmod = -1;
             string raw;
             int dbmod;
             do
             {
                 raw = Convert.ToString(Application.GetSystemVariable("DBMOD"), CultureInfo.InvariantCulture) ?? string.Empty;
-                if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out dbmod) && dbmod == 0)
-                    return;
+                if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out dbmod))
+                {
+                    lastDbmod = dbmod;
+                    // BricsCAD tracks window/view state separately; window/view DBMOD bits may remain after save.
+                    if ((dbmod & DbmodPersistentContentMask) == 0)
+                        return dbmod;
+                }
                 Thread.Sleep(25);
             }
             while (DateTime.UtcNow < deadline);
-            throw new InvalidOperationException("BricsCAD save returned but DBMOD did not settle to zero within 2 seconds; save completion was not confirmed.");
+            throw new InvalidOperationException(
+                "BricsCAD save returned but persistent-content DBMOD bits did not settle within 2 seconds; save completion was not confirmed; dbmod="
+                + (lastDbmod >= 0 ? lastDbmod.ToString(CultureInfo.InvariantCulture) : "unavailable") + ".");
         }
 
         private static void RequireConfirmedMutation(string body, string tool)

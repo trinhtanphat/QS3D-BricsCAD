@@ -2,6 +2,13 @@ name: Dispatch V25 cloud CI after main integration
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows:
+      - "QS3D Cloud V25 Preview Build & Release"
+    types:
+      - completed
+    branches:
+      - main
   # This quoted key is semantically the normal GitHub `push` event. It keeps the
   # legacy generic preflight compatible; scripts/preflight-ci-manual-only.py is
   # the strict guard that explicitly validates this owner-approved exception.
@@ -12,6 +19,7 @@ on:
       - "src/**"
       - "tests/**"
       - "scripts/**"
+      - "external/QS3D-Platform"
       - ".gitmodules"
       - "Directory.Build.props"
       - "QS3D.sln"
@@ -30,7 +38,7 @@ concurrency:
 
 jobs:
   dispatch:
-    if: ${{ github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]' }}
+    if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') || (github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]') }}
     runs-on: ubuntu-latest
     env:
       MINIMUM_RELEASE_CHANGES: "10"
@@ -45,19 +53,37 @@ jobs:
           fetch-tags: true
           persist-credentials: false
 
-      - name: Gate batch, reserve preview ordinal and dispatch exact main SHA
+      - name: Gate batch, bind committed preview and dispatch exact main SHA
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          source_sha="${GITHUB_SHA,,}"
+          current_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_run" ]]; then
+            source_sha="${current_main,,}"
+            echo "Successful V25 cloud release completed; re-evaluating exact current main ${source_sha}."
+          else
+            source_sha="${GITHUB_SHA,,}"
+          fi
           if [[ ! "${source_sha}" =~ ^[0-9a-f]{40}$ ]]; then
             echo "Triggering source SHA is not one exact 40-hex commit: ${source_sha}" >&2
             exit 1
           fi
 
-          current_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          release_relevant_pathspecs=(
+            'src/'
+            'tests/'
+            'scripts/'
+            'external/QS3D-Platform'
+            '.gitmodules'
+            'Directory.Build.props'
+            'QS3D.sln'
+            'QS3D.V26.sln'
+            '.github/workflows/release-v25-cloud.yml'
+            '.github/workflows/dispatch-v25-cloud-after-main-integration.yml'
+          )
+
           echo "Triggering integration source: ${source_sha}"
           echo "Current main at dispatch time: ${current_main}"
           if [[ "${current_main}" != "${source_sha}" ]]; then
@@ -66,34 +92,55 @@ jobs:
               echo "Triggering source is no longer an ancestor of current main; refusing ambiguous automatic dispatch." >&2
               exit 1
             fi
-            release_relevant_drift=0
-            while IFS= read -r changed_path; do
-              [[ -n "${changed_path}" ]] || continue
-              case "${changed_path}" in
-                src/*|tests/*|scripts/*|.gitmodules|Directory.Build.props|QS3D.sln|QS3D.V26.sln|.github/workflows/release-v25-cloud.yml|.github/workflows/dispatch-v25-cloud-after-main-integration.yml)
-                  echo "Newer release-relevant main path supersedes ${source_sha}: ${changed_path}"
-                  release_relevant_drift=1
-                  ;;
-              esac
-            done < <(git diff --name-only "${source_sha}..${current_main}" --)
-            if (( release_relevant_drift != 0 )); then
+            set +e
+            git diff --quiet --no-ext-diff "${source_sha}..${current_main}" -- "${release_relevant_pathspecs[@]}"
+            release_drift_status=$?
+            set -e
+            if (( release_drift_status == 1 )); then
               echo "main advanced with release-relevant changes; superseded dispatcher ${source_sha} exits before reservation/dispatch. Newer relevant main push owns the next release decision."
               exit 0
+            fi
+            if (( release_drift_status != 0 )); then
+              echo "Could not inspect release-relevant main drift between ${source_sha} and ${current_main}; git diff exit ${release_drift_status}." >&2
+              exit "${release_drift_status}"
             fi
             echo "main advanced only through non-release paths; dispatch remains pinned to ${source_sha}. Release preparation may absorb that inert main drift without changing source provenance."
           fi
 
           git fetch --force --tags origin
 
-          active_release_runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/release-v25-cloud.yml/runs?per_page=30" --jq '[.workflow_runs[] | select(.status != "completed")] | length')"
-          if [[ ! "${active_release_runs}" =~ ^[0-9]+$ ]]; then
-            echo "Could not determine active V25 cloud release-run count: ${active_release_runs}" >&2
-            exit 1
-          fi
+          active_release_statuses=( requested queued in_progress waiting pending )
+          active_release_runs=0
+          for active_release_status in "${active_release_statuses[@]}"; do
+            set +e
+            active_release_status_count="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/release-v25-cloud.yml/runs?status=${active_release_status}&per_page=1" --jq '.total_count')"
+            active_release_query_status=$?
+            set -e
+            if (( active_release_query_status != 0 )); then
+              echo "Could not query V25 cloud release runs in status ${active_release_status}; gh api exit ${active_release_query_status}." >&2
+              exit "${active_release_query_status}"
+            fi
+            if [[ ! "${active_release_status_count}" =~ ^[0-9]+$ ]]; then
+              echo "V25 cloud release-run admission returned malformed ${active_release_status} count: ${active_release_status_count}" >&2
+              exit 1
+            fi
+            active_release_runs=$((active_release_runs + active_release_status_count))
+          done
           if (( active_release_runs > 0 )); then
             echo "A V25 cloud release is already queued or running; this landing stays pending for the next batch decision."
             exit 0
           fi
+
+          release_workflow='.github/workflows/release-v25-cloud.yml'
+          for release_safety_token in \
+            'group: qs3d-cloud-v25-preview-release' \
+            'cancel-in-progress: false' \
+            'if (git tag --list $env:RELEASE_TAG)'; do
+            if ! grep -Fq -- "${release_safety_token}" "${release_workflow}"; then
+              echo "Downstream release duplicate-admission safety contract is missing: ${release_safety_token}" >&2
+              exit 1
+            fi
+          done
 
           series_prefix="v0.1.0-preview."
           published_preview_tag=""
@@ -146,68 +193,223 @@ jobs:
             exit "${gate_status}"
           fi
 
+          version_project="src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj"
+          mapfile -t committed_versions < <(
+            sed -nE 's|^[[:space:]]*<Version>([^<]+)</Version>[[:space:]]*$|\1|p' "${version_project}"
+          )
+          if (( ${#committed_versions[@]} != 1 )); then
+            echo "Protected-main V25 project must contain exactly one committed Version value; found ${#committed_versions[@]}." >&2
+            exit 1
+          fi
+          committed_product_version="${committed_versions[0]}"
+          if [[ ! "${committed_product_version}" =~ ^0\.1\.0-preview\.([1-9][0-9]*)$ ]]; then
+            echo "Protected-main V25 ProductVersion is not a canonical automatic preview identity: ${committed_product_version}" >&2
+            exit 1
+          fi
+          committed_preview_text="${BASH_REMATCH[1]}"
+          if (( ${#committed_preview_text} > 5 )); then
+            echo "Committed preview ordinal exceeds the FileVersion 0..65535 range: ${committed_product_version}" >&2
+            exit 1
+          fi
+          committed_preview_ordinal=$((10#${committed_preview_text}))
+          if (( committed_preview_ordinal > 65535 )); then
+            echo "Committed preview ordinal exceeds the FileVersion 0..65535 range: ${committed_product_version}" >&2
+            exit 1
+          fi
+          tag="${series_prefix}${committed_preview_ordinal}"
+
+          if (( committed_preview_ordinal <= published_preview_ordinal )); then
+            echo "Batch is eligible, but protected main ProductVersion must be advanced before automatic preview dispatch. Committed=${committed_product_version} published=${published_preview_tag:-'(none)'}. Refusing to reserve or dispatch an uncommitted preview tag."
+            exit 0
+          fi
+          if [[ -n "$(git tag --list "${tag}")" ]]; then
+            echo "Committed ProductVersion ${committed_product_version} already has Git tag ${tag}; refusing duplicate automatic dispatch." >&2
+            exit 1
+          fi
+
           reservation_issue=1441
           reservation_prefix="QS3D_V25_PREVIEW_RESERVATION"
-          max_preview=0
-          found_preview=0
-
-          consider_preview() {
-            local ordinal_text="$1"
-            local source_label="$2"
-            if [[ ! "${ordinal_text}" =~ ^[1-9][0-9]*$ ]]; then
-              echo "${source_label} preview ordinal is non-canonical: ${ordinal_text}" >&2
-              exit 1
-            fi
-            if (( ${#ordinal_text} > 5 )); then
-              echo "${source_label} preview ordinal exceeds the FileVersion 0..65535 range: ${ordinal_text}" >&2
-              exit 1
-            fi
-            local ordinal=$((10#${ordinal_text}))
-            if (( ordinal > 65535 )); then
-              echo "${source_label} preview ordinal exceeds the FileVersion 0..65535 range: ${ordinal_text}" >&2
-              exit 1
-            fi
-            found_preview=1
-            if (( ordinal > max_preview )); then
-              max_preview=${ordinal}
-            fi
-          }
-
-          while IFS= read -r existing_tag; do
-            [[ -n "${existing_tag}" ]] || continue
-            if [[ ! "${existing_tag}" =~ ^v0\.1\.0-preview\.([1-9][0-9]*)$ ]]; then
-              echo "Matching-series tag is non-canonical and blocks automatic preview derivation: ${existing_tag}" >&2
-              exit 1
-            fi
-            consider_preview "${BASH_REMATCH[1]}" "Existing tag"
-          done < <(git tag --list "${series_prefix}*")
-
           reservation_regex="^${reservation_prefix} ordinal=([1-9][0-9]*) source_sha=([0-9a-f]{40}) run_id=([1-9][0-9]*)$"
+          dispatch_prefix="QS3D_V25_PREVIEW_DISPATCH_FENCE"
+          dispatch_regex="^${dispatch_prefix} ordinal=([1-9][0-9]*) source_sha=([0-9a-f]{40}) run_id=([1-9][0-9]*)$"
+          exact_reservation=0
+          reservation_owner_source=""
+          reservation_owner_conflict=0
+          exact_dispatch_fence_run_id=0
+          dispatch_fence_owner_source=""
+          dispatch_fence_owner_conflict=0
           while IFS= read -r reservation; do
             [[ -n "${reservation}" ]] || continue
             if [[ "${reservation}" =~ ${reservation_regex} ]]; then
-              consider_preview "${BASH_REMATCH[1]}" "Reserved"
+              reserved_ordinal=$((10#${BASH_REMATCH[1]}))
+              reserved_source="${BASH_REMATCH[2]}"
+              if (( reserved_ordinal == committed_preview_ordinal )); then
+                if [[ "${reserved_source}" == "${source_sha}" ]]; then
+                  exact_reservation=1
+                elif [[ -z "${reservation_owner_source}" ]]; then
+                  reservation_owner_source="${reserved_source}"
+                elif [[ "${reservation_owner_source}" != "${reserved_source}" ]]; then
+                  reservation_owner_conflict=1
+                fi
+              fi
+            elif [[ "${reservation}" =~ ${dispatch_regex} ]]; then
+              reserved_dispatch_ordinal=$((10#${BASH_REMATCH[1]}))
+              reserved_dispatch_source="${BASH_REMATCH[2]}"
+              reserved_dispatch_run_id=$((10#${BASH_REMATCH[3]}))
+              if (( reserved_dispatch_ordinal == committed_preview_ordinal )); then
+                if [[ "${reserved_dispatch_source}" == "${source_sha}" ]]; then
+                  if (( reserved_dispatch_run_id > exact_dispatch_fence_run_id )); then
+                    exact_dispatch_fence_run_id=${reserved_dispatch_run_id}
+                  fi
+                elif [[ -z "${dispatch_fence_owner_source}" ]]; then
+                  dispatch_fence_owner_source="${reserved_dispatch_source}"
+                elif [[ "${dispatch_fence_owner_source}" != "${reserved_dispatch_source}" ]]; then
+                  dispatch_fence_owner_conflict=1
+                fi
+              fi
             fi
           done < <(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments" --jq '.[] | select(.user.login == "github-actions[bot]") | .body')
 
-          if (( found_preview == 0 )); then
-            preview=1
-          else
-            if (( max_preview >= 65535 )); then
-              echo "No automatic preview number remains inside the FileVersion 0..65535 range." >&2
+          if (( reservation_owner_conflict != 0 || dispatch_fence_owner_conflict != 0 )); then
+            echo "Committed preview ordinal has multiple prior owners/fences: ${committed_preview_ordinal}." >&2
+            exit 1
+          fi
+
+          if [[ -n "${reservation_owner_source}" || -n "${dispatch_fence_owner_source}" ]]; then
+            if (( exact_reservation != 0 )) || (( exact_dispatch_fence_run_id > 0 )); then
+              echo "Committed preview ordinal has conflicting exact and prior ownership: ${committed_preview_ordinal}." >&2
               exit 1
             fi
-            preview=$((max_preview + 1))
+            if [[ -z "${reservation_owner_source}" || -z "${dispatch_fence_owner_source}" || "${reservation_owner_source}" != "${dispatch_fence_owner_source}" ]]; then
+              echo "Committed preview ordinal has incomplete or mismatched prior reservation/fence ownership: ${committed_preview_ordinal}." >&2
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "${reservation_owner_source}" "${source_sha}"; then
+              echo "Committed preview ordinal prior owner is not an ancestor of the current source SHA: ${reservation_owner_source}." >&2
+              exit 1
+            fi
+            echo "Committed preview ordinal ${committed_preview_ordinal} already belongs to earlier protected-main source ${reservation_owner_source}; current source ${source_sha} will not reassign or duplicate-dispatch that ordinal."
+            echo "The protected main ProductVersion must advance before the next automatic preview dispatch."
+            exit 0
           fi
-          tag="${series_prefix}${preview}"
 
-          reservation="${reservation_prefix} ordinal=${preview} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"
+          if (( exact_dispatch_fence_run_id > 0 )); then
+            set +e
+            prior_dispatch_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${exact_dispatch_fence_run_id}")"
+            prior_dispatch_query_status=$?
+            set -e
+            if (( prior_dispatch_query_status != 0 )); then
+              echo "Could not resolve prior dispatch-fence run ${exact_dispatch_fence_run_id}; gh api exit ${prior_dispatch_query_status}." >&2
+              exit "${prior_dispatch_query_status}"
+            fi
+
+            prior_dispatch_status="$(jq -er '.status | strings' <<< "${prior_dispatch_run_json}")"
+            prior_dispatch_conclusion="$(jq -er '.conclusion // "" | strings' <<< "${prior_dispatch_run_json}")"
+            prior_dispatch_path="$(jq -er '.path | strings' <<< "${prior_dispatch_run_json}")"
+            prior_dispatch_repository="$(jq -er '.repository.full_name | strings' <<< "${prior_dispatch_run_json}")"
+            prior_dispatch_event="$(jq -er '.event | strings' <<< "${prior_dispatch_run_json}")"
+            prior_dispatch_head_branch="$(jq -er '.head_branch | strings' <<< "${prior_dispatch_run_json}")"
+            prior_dispatch_head_sha="$(jq -er '.head_sha | strings | ascii_downcase' <<< "${prior_dispatch_run_json}")"
+
+            if [[ -z "${prior_dispatch_status}" || ! "${prior_dispatch_head_sha}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Prior dispatch fence references malformed workflow-run state or source identity." >&2
+              exit 1
+            fi
+            if [[ "${prior_dispatch_repository}" != "${GITHUB_REPOSITORY}" || "${prior_dispatch_path}" != ".github/workflows/dispatch-v25-cloud-after-main-integration.yml" || "${prior_dispatch_head_branch}" != "main" ]]; then
+              echo "Prior dispatch fence does not reference the canonical dispatcher workflow for this repository/main branch." >&2
+              exit 1
+            fi
+
+            prior_dispatch_source_admissible=0
+            case "${prior_dispatch_event}" in
+              push|workflow_dispatch)
+                if [[ "${prior_dispatch_head_sha}" == "${source_sha}" ]]; then
+                  prior_dispatch_source_admissible=1
+                fi
+                ;;
+              workflow_run)
+                if git merge-base --is-ancestor "${prior_dispatch_head_sha}" "${source_sha}"; then
+                  prior_dispatch_source_admissible=1
+                fi
+                ;;
+              *)
+                ;;
+            esac
+            if (( prior_dispatch_source_admissible == 0 )); then
+              echo "Prior dispatch fence source provenance is not admissible for ${source_sha}." >&2
+              exit 1
+            fi
+            if [[ "${prior_dispatch_status}" == "completed" && -z "${prior_dispatch_conclusion}" ]]; then
+              echo "Prior completed dispatch-fence run has no terminal conclusion; refusing ambiguous retry admission." >&2
+              exit 1
+            fi
+            if [[ "${prior_dispatch_status}" != "completed" ]]; then
+              echo "Exact automatic preview dispatch attempt ${exact_dispatch_fence_run_id} is still ${prior_dispatch_status}; replacement run will not dispatch concurrently."
+              exit 0
+            fi
+            echo "Exact prior dispatcher attempt ${exact_dispatch_fence_run_id} completed with ${prior_dispatch_conclusion}. Dispatcher completion proves only that the dispatch request attempt ended, not that downstream publication succeeded; this terminal attempt does not suppress a safe retry. The serialized downstream release lane and existing-tag admission prevent duplicate publication."
+          fi
+
+          # Rebind protected main immediately before the first durable side effect.
+          # The API view and fetched ref must agree; ambiguity fails closed rather
+          # than allowing a stale dispatcher to reserve or launch a release.
+          final_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          final_main="${final_main,,}"
+          if [[ ! "${final_main}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Final protected-main admission returned a malformed SHA: ${final_main}" >&2
+            exit 1
+          fi
+          final_main_ref='refs/remotes/origin/qs3d-final-main-admission'
+          git fetch --no-tags origin "+refs/heads/main:${final_main_ref}"
+          fetched_final_main="$(git rev-parse "${final_main_ref}^{commit}")"
+          fetched_final_main="${fetched_final_main,,}"
+          if [[ ! "${fetched_final_main}" =~ ^[0-9a-f]{40}$ || "${fetched_final_main}" != "${final_main}" ]]; then
+            echo "Final protected-main API/fetch identity mismatch: api=${final_main} fetched=${fetched_final_main}. Refusing ambiguous dispatch." >&2
+            exit 1
+          fi
+          confirmed_final_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          confirmed_final_main="${confirmed_final_main,,}"
+          if [[ ! "${confirmed_final_main}" =~ ^[0-9a-f]{40}$ || "${confirmed_final_main}" != "${final_main}" ]]; then
+            echo "Protected main moved during final dispatch admission: first=${final_main} confirmed=${confirmed_final_main}. Refusing stale side effects." >&2
+            exit 1
+          fi
+          if [[ "${final_main}" != "${source_sha}" ]]; then
+            if ! git merge-base --is-ancestor "${source_sha}" "${final_main}"; then
+              echo "Final protected-main source is no longer descended from ${source_sha}; refusing ambiguous automatic dispatch." >&2
+              exit 1
+            fi
+            set +e
+            git diff --quiet --no-ext-diff "${source_sha}..${final_main}" -- "${release_relevant_pathspecs[@]}"
+            final_release_drift_status=$?
+            set -e
+            if (( final_release_drift_status == 1 )); then
+              echo "newer release-relevant main integration owns the next release decision; superseded dispatcher ${source_sha} exits before durable side effects."
+              exit 0
+            fi
+            if (( final_release_drift_status != 0 )); then
+              echo "Could not inspect final release-relevant main drift between ${source_sha} and ${final_main}; git diff exit ${final_release_drift_status}." >&2
+              exit "${final_release_drift_status}"
+            fi
+            echo "main advanced only through non-release paths during final admission; dispatch remains pinned to ${source_sha}."
+          fi
+
+          if (( exact_reservation == 0 )); then
+            reservation="${reservation_prefix} ordinal=${committed_preview_ordinal} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"
+            gh api --method POST \
+              "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments" \
+              -f body="${reservation}" >/dev/null
+            echo "Reserved committed preview ordinal ${committed_preview_ordinal} for ${source_sha}."
+          else
+            echo "Reusing exact committed preview reservation ${committed_preview_ordinal} for ${source_sha}."
+          fi
+
+          dispatch_fence="${dispatch_prefix} ordinal=${committed_preview_ordinal} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"
           gh api --method POST \
             "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments" \
-            -f body="${reservation}" >/dev/null
-          echo "Reserved automatic preview ordinal ${preview} for ${source_sha}."
+            -f body="${dispatch_fence}" >/dev/null
+          echo "Persisted automatic preview dispatch attempt fence for ordinal ${committed_preview_ordinal} and ${source_sha} before downstream dispatch."
 
-          echo "Dispatching release-v25-cloud.yml for ${source_sha} as ${tag}"
+          echo "Dispatching release-v25-cloud.yml for ${source_sha} as committed tag ${tag}"
           gh workflow run release-v25-cloud.yml \
             --repo "${GITHUB_REPOSITORY}" \
             --ref main \
