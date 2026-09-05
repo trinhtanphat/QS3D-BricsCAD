@@ -507,10 +507,10 @@ namespace QS3D.LocalQualification.V25
         {
             Context? context = null;
             IDictionary<string, bool> checks = new Dictionary<string, bool>(StringComparer.Ordinal);
-            var status = "PASS"; var stage = phase; var errorCode = "NONE";
-            try { context = BindContext(phase); checks = action(context); }
-            catch (ProbeException ex) { status = "FAIL"; stage = phase; errorCode = ex.Code; }
-            catch { status = "FAIL"; stage = phase; errorCode = "unexpected"; }
+            var status = "PASS"; var stage = phase + "_bind"; var errorCode = "NONE";
+            try { context = BindContext(phase); stage = phase + "_execute"; checks = action(context); stage = phase; }
+            catch (ProbeException ex) { status = "FAIL"; errorCode = ex.Code; }
+            catch (System.Exception ex) { status = "FAIL"; errorCode = NormalizeCode("UNEXPECTED_" + ex.GetType().Name); }
             try { WriteMarker(context ?? ContextFromEnvironment(phase), phase, status, stage, errorCode, checks); }
             catch { try { Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\nLOCAL-022 marker write failed."); } catch { } }
         }

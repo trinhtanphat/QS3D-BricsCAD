@@ -507,15 +507,40 @@ namespace QS3D.LocalQualification.V26
         {
             Context? context = null;
             IDictionary<string, bool> checks = new Dictionary<string, bool>(StringComparer.Ordinal);
-            var status = "PASS"; var stage = phase; var errorCode = "NONE";
-            try { context = BindContext(phase); checks = action(context); }
-            catch (ProbeException ex) { status = "FAIL"; stage = phase; errorCode = ex.Code; }
-            catch { status = "FAIL"; stage = phase; errorCode = "unexpected"; }
+            var status = "PASS"; var stage = phase + "_bind"; var errorCode = "NONE";
+            try { context = BindContext(phase); stage = phase + "_execute"; checks = action(context); stage = phase; }
+            catch (ProbeException ex) { status = "FAIL"; errorCode = ex.Code; WriteFailureDiagnostic(phase, ex); }
+            catch (System.Exception ex) { status = "FAIL"; errorCode = NormalizeCode("UNEXPECTED_" + ex.GetType().Name); WriteFailureDiagnostic(phase, ex); }
             try { WriteMarker(context ?? ContextFromEnvironment(phase), phase, status, stage, errorCode, checks); }
             catch { try { Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\nLOCAL-022 marker write failed."); } catch { } }
         }
 
         private static Context ContextFromEnvironment(string phase) => new Context(null!, RequireNonce(Environment.GetEnvironmentVariable(RunIdVariable)), RequirePath(Environment.GetEnvironmentVariable(RootVariable), "root_missing"), RequirePath(Environment.GetEnvironmentVariable(DrawingVariable), "drawing_missing"), RequirePath(Environment.GetEnvironmentVariable(ProductVariable), "product_path_missing"), null!);
+
+        private static void WriteFailureDiagnostic(string phase, System.Exception error)
+        {
+            // Bounded type/HResult/method metadata only: no exception messages,
+            // argument values, source filenames, drawing paths or credentials.
+            try
+            {
+                var root = RequirePath(Environment.GetEnvironmentVariable(RootVariable), "root_missing");
+                var path = Path.Combine(root, "phase-" + phase + "-diagnostic.private.txt");
+                if (!IsChildPath(root, path) || File.Exists(path)) return;
+                var lines = new List<string>();
+                for (System.Exception? current = error; current != null && lines.Count < 40; current = current.InnerException)
+                {
+                    lines.Add("type=" + NormalizeCode(current.GetType().FullName ?? "UNKNOWN"));
+                    lines.Add("hresult=" + current.HResult.ToString("X8", CultureInfo.InvariantCulture));
+                    foreach (var frame in (new StackTrace(current, false).GetFrames() ?? Array.Empty<StackFrame>()).Take(8))
+                    {
+                        var method = frame.GetMethod();
+                        if (method != null) lines.Add("method=" + NormalizeCode((method.DeclaringType?.FullName ?? "UNKNOWN") + "_" + method.Name));
+                    }
+                }
+                File.WriteAllLines(path, lines, new UTF8Encoding(false));
+            }
+            catch { /* Diagnostic failure cannot replace the native verdict. */ }
+        }
 
         private static void WriteMarker(Context context, string phase, string status, string stage, string errorCode, IDictionary<string, bool> checks)
         {

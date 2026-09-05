@@ -72,3 +72,15 @@ The next LOCAL-022 pair uses packages generated from that same candidate, with V
 The V26 candidate ZIP hash is `7dbf9216e873f2e20c2fae5011785148e9feded944a7b43233b4710b331fd2c5`. A separate provenance file binds this archive to source `43130a49f49676299b865f094a9a6ded482f67ad`. The V26 runner checks that provenance, every extracted ZIP member, the installed .NET 8 Windows Desktop runtime, the V26 host identity, and the four-file probe output. It uses a separate V26 nonce profile and marker schema, preserves an absent or OnCommand-only registration, and restores exact profile state after both native processes.
 
 The frozen source passed Core smoke (`ALL PASS`) and all 1611 discovered feature preflights. The V26 probe rebuild also passed with zero warnings/errors. These are source/build results, not V26 runtime qualification. PR #5770 has since merged as `3fb8cf086` and its issue is closed; the locally packaged source and hashes above remain unchanged and must not be relabelled as a newer main build.
+
+## Same-source native execution, 2026-09-05
+
+Harness `e32fba7b808bbe2a286c5c8b625e061de48d8ea0` ran the frozen same-source pair after the owner explicitly approved temporarily pausing OpenAI tunnel autostart. V25 ran first and cleaned up before V26 started.
+
+- V25: `LOCAL_PASS_BOUNDED`, three verified phases, 01:03:59Z–01:05:16Z. Profile/current pointer, reference fixture and protected settings were preserved; the disposable root was removed.
+- V26: `FAIL_OR_NO_RESULT`, zero verified phases, 01:05:28Z–01:06:17Z. Both native `run` and `saved` markers reported an unexpected exception; cold reopen did not run. The diagnostic token was lowercase while the validator requires uppercase, which obscured the original exception as a sanitization failure. This is not a PASS and the allocation is consumed.
+- V26 cleanup passed: zero hosts, exact profile inventory/current pointer restored, nonce/private drawing removed, protected settings unchanged. The outer pair runner restored the exact original OpenAI autostart byte and timestamp; Cloudflare autostart remained unchanged.
+
+The successor harness classifies unexpected exception types, distinguishes context binding from phase execution, and retains bounded V26 exception type/HResult/method metadata without messages, arguments or paths. No production source was changed to diagnose the native failure.
+
+The existing geometry cells prove volume and bounds, not complete BREP topology or every taper section. Cold semantic identity is bounded to project/family/dimensions/centres and counts, not a frozen element-ID/native-handle inventory. These limitations must not be represented as full LOCAL-022 acceptance.
