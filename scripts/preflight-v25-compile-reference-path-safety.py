@@ -54,9 +54,11 @@ def main() -> int:
         "ExtractDir must not be a filesystem root",
         "ExtractDir must not equal or contain MsiPath",
         "ExtractDir must not equal or contain the MSI cache directory",
-        "No destructive filesystem mutation may occur before the path-overlap and",
-        "reparse-component guards above.",
-        "Remove-Item -LiteralPath $extract -Recurse -Force",
+        "Assert-NoExistingReparseComponent -Path $extract -Label 'ExtractDir'",
+        "The extraction root is single-use.",
+        "if (Test-Path -LiteralPath $extract)",
+        "ExtractDir unexpectedly already exists; refusing pathname reuse",
+        "New-Item -ItemType Directory -Path $extract | Out-Null",
         "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging",
         "Test-PinnedMsiGeneration -Path $staging",
         "[IO.File]::Move($staging, $msi)",
@@ -72,16 +74,26 @@ def main() -> int:
         "Invoke-WebRequest -Uri $candidate.Url -OutFile $msi" not in source,
         "remote MSI bytes must not be downloaded directly to the canonical cache pathname",
     )
+    require(
+        "Remove-Item -LiteralPath $extract -Recurse" not in source,
+        "fresh-only ExtractDir must never be recursively deleted/reused by pathname",
+    )
+    require(
+        "New-Item -ItemType Directory -Path $extract -Force" not in source,
+        "fresh ExtractDir creation must not use -Force because a raced-in generation must fail",
+    )
 
-    cleanup_index = source.index("Remove-Item -LiteralPath $extract -Recurse -Force")
     root_guard_index = source.index("ExtractDir must not be a filesystem root")
     msi_guard_index = source.index("ExtractDir must not equal or contain MsiPath")
     cache_guard_index = source.index("ExtractDir must not equal or contain the MSI cache directory")
     reparse_guard_index = source.index("Assert-NoExistingReparseComponent -Path $extract -Label 'ExtractDir'")
-    require(root_guard_index < cleanup_index, "filesystem-root guard occurs after recursive cleanup")
-    require(msi_guard_index < cleanup_index, "MSI containment guard occurs after recursive cleanup")
-    require(cache_guard_index < cleanup_index, "cache containment guard occurs after recursive cleanup")
-    require(reparse_guard_index < cleanup_index, "reparse-component guard occurs after recursive cleanup")
+    absent_guard_index = source.index("if (Test-Path -LiteralPath $extract)")
+    create_index = source.index("New-Item -ItemType Directory -Path $extract | Out-Null")
+    require(root_guard_index < absent_guard_index, "filesystem-root guard occurs after fresh-root admission")
+    require(msi_guard_index < absent_guard_index, "MSI containment guard occurs after fresh-root admission")
+    require(cache_guard_index < absent_guard_index, "cache containment guard occurs after fresh-root admission")
+    require(reparse_guard_index < absent_guard_index, "reparse-component guard occurs after fresh-root admission")
+    require(absent_guard_index < create_index, "existing ExtractDir refusal must precede fresh creation")
 
     download_index = source.index("Invoke-WebRequest -Uri $candidate.Url -OutFile $staging")
     staged_index = source.index("Test-PinnedMsiGeneration -Path $staging", download_index)
@@ -113,11 +125,11 @@ def main() -> int:
         (r"C:\CACHE\v25.msi", r"c:\cache"),
     )
     for msi, extract in unsafe_cases:
-        require(extraction_is_unsafe(msi, extract), f"unsafe recursive-cleanup overlap was not rejected by contract model: {msi} / {extract}")
+        require(extraction_is_unsafe(msi, extract), f"unsafe extraction overlap was not rejected by contract model: {msi} / {extract}")
 
     require(
-        source.count("Remove-Item -LiteralPath $extract -Recurse -Force") == 1,
-        "unexpected additional recursive extraction cleanup bypasses the guarded path",
+        source.count("New-Item -ItemType Directory -Path $extract | Out-Null") == 1,
+        "fresh extraction root must be created through one non-Force path",
     )
     require(
         "^25\\.2\\.10(?:\\.|$)" in source,
@@ -129,7 +141,8 @@ def main() -> int:
     )
 
     print("PASS: V25 compile-reference acquisition path-safety regression")
-    print(" - recursive extraction cleanup is preceded by root/MSI/cache containment and reparse guards")
+    print(" - root/MSI/cache containment and reparse guards precede fresh-root admission")
+    print(" - pre-existing or raced ExtractDir generations fail closed; recursive pathname cleanup is forbidden")
     print(" - normal shared-CI disjoint paths and safe cache-child extraction remain accepted")
     print(" - filesystem-root, MSI-containing and cache-containing extraction layouts fail closed")
     print(" - remote bytes are staged and held-verified before canonical publication/re-admission")

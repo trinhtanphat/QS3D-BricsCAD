@@ -25,7 +25,6 @@ surface_contract = (
 
 
 def contains_executable_line(text: str, token: str) -> bool:
-    """Match a shell/PowerShell token only on non-comment source lines."""
     token_lower = token.lower()
     return any(
         token_lower in line.lower()
@@ -84,17 +83,34 @@ prepare_tokens = (
     "git reset --hard",
     "git checkout --detach $releaseBase",
     "preflight-runtime-product-version-identity.py",
-    "function Get-CommittedProductVersion",
-    "$committedProductVersion = Get-CommittedProductVersion",
+    "$workspaceVersionPaths = @(",
+    "function Set-WorkspaceProductVersion",
+    "$productVersion = $tag.Substring(1)",
+    "Set-WorkspaceProductVersion -ReleaseTagValue $tag",
+    "Runtime product-version identity preflight failed after workspace synchronization.",
+    "$expectedProductVersion = $tag.Substring(1)",
+    "$finalStatus.Count -ne 0 -and $finalStatus.Count -ne $workspaceVersionPaths.Count",
+    "Workspace version synchronization must either be a no-op or produce exactly three bounded project modifications.",
+    "Workspace ProductVersion is already synchronized",
+    "if ($finalStatus.Count -eq $workspaceVersionPaths.Count)",
+    "Unexpected release-preparation workspace change",
     "Release workspace HEAD must remain the protected-main source commit",
     "$latestMain = Get-RemoteMain",
-    "main advanced through additional non-release paths while validating committed release source",
-    "No commit, push, branch-protection bypass, workspace-only version rewrite, or main mutation was performed by release preparation.",
+    "main advanced through additional non-release paths while validating release source",
+    "No commit, push, branch-protection bypass, or protected-main mutation was performed by release preparation.",
     "Write-Output $releaseBase",
 )
 for token in prepare_tokens:
     if token not in prepare:
         errors.append("release preparation drift contract missing token: " + token)
+
+for stale in (
+    "function Get-CommittedProductVersion",
+    "$committedProductVersion = Get-CommittedProductVersion",
+    "Merge the version update to protected main before publishing.",
+):
+    if stale in prepare:
+        errors.append("manual release retained stale committed-version admission: " + stale)
 
 for forbidden in (
     "git push",
@@ -127,31 +143,15 @@ if workflow:
     reservation = workflow.find('reservation="${reservation_prefix} ordinal=${committed_preview_ordinal} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"', committed_identity)
     dispatch = workflow.find("gh workflow run release-v25-cloud.yml", reservation)
     indexes = (
-        pathspecs,
-        drift_guard,
-        diff_guard,
-        relevant_exit_guard,
-        exit_index,
-        error_guard,
-        inert_continue,
-        committed_identity,
-        reservation,
-        dispatch,
+        pathspecs, drift_guard, diff_guard, relevant_exit_guard, exit_index,
+        error_guard, inert_continue, committed_identity, reservation, dispatch,
     )
     if min(indexes) < 0 or not (
-        pathspecs
-        < drift_guard
-        < diff_guard
-        < relevant_exit_guard
-        < exit_index
-        < error_guard
-        < inert_continue
-        < committed_identity
-        < reservation
-        < dispatch
+        pathspecs < drift_guard < diff_guard < relevant_exit_guard < exit_index < error_guard
+        < inert_continue < committed_identity < reservation < dispatch
     ):
         errors.append(
-            "dispatcher ordering must initialize shared release-relevant Git pathspecs before drift classification, exit only for release-relevant drift, fail on Git errors, continue inert drift, bind committed identity, then reserve and dispatch"
+            "dispatcher ordering must classify drift safely, keep automatic committed identity allocation, then reserve and dispatch"
         )
     if contains_executable_line(workflow, "git diff --name-only"):
         errors.append("dispatcher must not classify release drift from line-oriented pathname output")
@@ -159,17 +159,24 @@ if workflow:
 if prepare:
     checkout_index = prepare.find("git checkout --detach $releaseBase")
     runtime_identity_index = prepare.find("preflight-runtime-product-version-identity.py")
-    committed_index = prepare.find("$committedProductVersion = Get-CommittedProductVersion")
+    sync_index = prepare.find("Set-WorkspaceProductVersion -ReleaseTagValue $tag")
+    post_sync_index = prepare.find("Runtime product-version identity preflight failed after workspace synchronization.")
+    expected_index = prepare.find("$expectedProductVersion = $tag.Substring(1)")
     head_guard_index = prepare.find("Release workspace HEAD must remain the protected-main source commit")
+    bounded_status_index = prepare.find("$finalStatus = @(Get-ReleaseStatusEntries)")
     refetch_index = prepare.find("$latestMain = Get-RemoteMain")
-    retry_index = prepare.find("main advanced through additional non-release paths while validating committed release source")
+    retry_index = prepare.find("main advanced through additional non-release paths while validating release source")
     output_index = prepare.find("Write-Output $releaseBase")
-    indexes = (checkout_index, runtime_identity_index, committed_index, head_guard_index, refetch_index, retry_index, output_index)
+    indexes = (
+        checkout_index, runtime_identity_index, sync_index, post_sync_index, expected_index,
+        head_guard_index, bounded_status_index, refetch_index, retry_index, output_index,
+    )
     if min(indexes) < 0 or not (
-        checkout_index < runtime_identity_index < committed_index < head_guard_index < refetch_index < retry_index < output_index
+        checkout_index < runtime_identity_index < sync_index < post_sync_index < expected_index
+        < head_guard_index < bounded_status_index < refetch_index < retry_index < output_index
     ):
         errors.append(
-            "release preparation must select a safe base, validate committed identity, preserve HEAD, recheck main drift, then output the exact source SHA"
+            "manual release preparation must select safe base, sync bounded tag identity, validate it, preserve HEAD, bound dirty paths, recheck drift, then output exact source SHA"
         )
     if "Start a fresh release run instead of overwriting concurrent work." in prepare:
         errors.append("legacy unconditional main-drift failure must not remain in release preparation")
@@ -182,7 +189,5 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: V25 automation preserves triggering source provenance, uses pathname-safe Git drift classification, "
-    "skips superseded release-relevant dispatches, absorbs only non-release main drift, binds release identity to committed ProductVersion, "
-    "and retries clean committed-source release preparation without writing protected main."
+    "PASS: V25 automation preserves triggering source provenance and pathname-safe drift handling; automatic dispatch keeps committed reservation identity while manual release accepts an already-synchronized preview identity or derives the requested preview identity only in the bounded workspace without writing protected main."
 )

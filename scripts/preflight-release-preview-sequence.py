@@ -89,13 +89,20 @@ def main() -> int:
             fail(f"preview sequence helper is missing required guard token: {token}")
 
     gate_call = "validate-preview-release-sequence.ps1"
-    committed_version_admission = "$committedProductVersion = Get-CommittedProductVersion"
-    if gate_call not in prepare or committed_version_admission not in prepare:
-        fail("release preparation lost the sequence or committed-source version admission call")
-    if prepare.index(gate_call) > prepare.index(committed_version_admission):
-        fail("preview sequence validation must run before committed-source version admission")
+    workspace_sync_call = "Set-WorkspaceProductVersion -ReleaseTagValue $tag"
+    if gate_call not in prepare or workspace_sync_call not in prepare:
+        fail("release preparation lost preview sequence validation or bounded workspace identity synchronization")
+    if prepare.index(gate_call) > prepare.index(workspace_sync_call):
+        fail("preview sequence validation must run before workspace release identity synchronization")
+    for stale in (
+        "function Get-CommittedProductVersion",
+        "$committedProductVersion = Get-CommittedProductVersion",
+        "Merge the version update to protected main before publishing.",
+    ):
+        if stale in prepare:
+            fail(f"release preparation reintroduced stale committed-version admission: {stale}")
     if "sync-preview-release-version.ps1" in prepare:
-        fail("release preparation must not reintroduce workspace-only preview version synchronization")
+        fail("release preparation must keep workspace synchronization in the bounded prepare helper rather than a legacy external rewrite helper")
 
     workflow_prepare = "prepare-v25-cloud-release.ps1"
     publish_step = "- name: Publish GitHub prerelease"

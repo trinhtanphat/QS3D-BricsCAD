@@ -19,24 +19,45 @@ def decide_dispatch(
     dispatch_rows: tuple[tuple[int, str, int], ...],
     run_states: dict[int, tuple[str, str]],
 ) -> str:
-    """Model durable attempt fencing plus terminal recovery for one tag/source tuple."""
-    if any(item_ordinal == ordinal and item_source != source_sha for item_ordinal, item_source in reservation_rows):
-        return "reservation-conflict"
-    if any(
-        item_ordinal == ordinal and item_source != source_sha
-        for item_ordinal, item_source, _ in dispatch_rows
-    ):
-        return "dispatch-conflict"
-
-    exact_run_ids = [
+    """Model immutable prior ownership plus durable exact-attempt recovery."""
+    exact_reservation = any(
+        item_ordinal == ordinal and item_source == source_sha
+        for item_ordinal, item_source in reservation_rows
+    )
+    exact_dispatch_rows = [
         run_id
         for item_ordinal, item_source, run_id in dispatch_rows
         if item_ordinal == ordinal and item_source == source_sha
     ]
-    if not exact_run_ids:
+    prior_reservation_owners = {
+        item_source
+        for item_ordinal, item_source in reservation_rows
+        if item_ordinal == ordinal and item_source != source_sha
+    }
+    prior_dispatch_owners = {
+        item_source
+        for item_ordinal, item_source, _ in dispatch_rows
+        if item_ordinal == ordinal and item_source != source_sha
+    }
+
+    if len(prior_reservation_owners) > 1 or len(prior_dispatch_owners) > 1:
+        return "owner-conflict"
+
+    if prior_reservation_owners or prior_dispatch_owners:
+        if exact_reservation or exact_dispatch_rows:
+            return "exact-prior-conflict"
+        if (
+            not prior_reservation_owners
+            or not prior_dispatch_owners
+            or prior_reservation_owners != prior_dispatch_owners
+        ):
+            return "ownership-mismatch"
+        return "prior-owner-neutral"
+
+    if not exact_dispatch_rows:
         return "dispatch"
 
-    latest_run_id = max(exact_run_ids)
+    latest_run_id = max(exact_dispatch_rows)
     state = run_states.get(latest_run_id)
     if state is None:
         return "status-unknown"
@@ -58,11 +79,18 @@ def main() -> int:
         'dispatch_prefix="QS3D_V25_PREVIEW_DISPATCH_FENCE"',
         'dispatch_regex="^${dispatch_prefix} ordinal=([1-9][0-9]*) source_sha=([0-9a-f]{40}) run_id=([1-9][0-9]*)$"',
         "exact_dispatch_fence_run_id=0",
-        "dispatch_fence_conflict=0",
+        'dispatch_fence_owner_source=""',
+        "dispatch_fence_owner_conflict=0",
+        'reservation_owner_source=""',
+        "reservation_owner_conflict=0",
         "reserved_dispatch_ordinal == committed_preview_ordinal",
         "reserved_dispatch_run_id=$((10#${BASH_REMATCH[3]}))",
         "reserved_dispatch_run_id > exact_dispatch_fence_run_id",
-        "Committed preview ordinal already has a dispatch fence for a different source SHA",
+        'dispatch_fence_owner_source="${reserved_dispatch_source}"',
+        "Committed preview ordinal has multiple prior owners/fences",
+        'if [[ -n "${reservation_owner_source}" || -n "${dispatch_fence_owner_source}" ]]; then',
+        'git merge-base --is-ancestor "${reservation_owner_source}" "${source_sha}"',
+        "will not reassign or duplicate-dispatch that ordinal",
         'prior_dispatch_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${exact_dispatch_fence_run_id}")"',
         "prior_dispatch_query_status=$?",
         "Prior dispatch fence does not reference the canonical dispatcher workflow",
@@ -81,11 +109,12 @@ def main() -> int:
     missing = [token for token in required if token not in source]
     if missing:
         failures.append(
-            "dispatcher lacks recoverable exact tag/source dispatch-attempt fencing; missing: " + ", ".join(missing)
+            "dispatcher lacks immutable prior-owner reconciliation or recoverable exact tag/source attempt fencing; missing: "
+            + ", ".join(missing)
         )
 
     if source.count('actions/runs/${exact_dispatch_fence_run_id}') != 1:
-        failures.append("dispatcher must admit prior attempt state from exactly one workflow-run API snapshot")
+        failures.append("dispatcher must admit prior exact-attempt state from exactly one workflow-run API snapshot")
 
     for token in (
         "group: qs3d-cloud-v25-preview-release",
@@ -103,12 +132,28 @@ def main() -> int:
         )
 
     scan_index = source.find("exact_dispatch_fence_run_id=0")
-    conflict_index = source.find("if (( dispatch_fence_conflict != 0 )); then", scan_index)
-    prior_snapshot_index = source.find("prior_dispatch_run_json=", conflict_index)
-    prior_identity_index = source.find("Prior dispatch fence does not reference the canonical dispatcher workflow", prior_snapshot_index)
-    prior_provenance_index = source.find("Prior dispatch fence source provenance is not admissible", prior_identity_index)
+    multi_owner_index = source.find(
+        "if (( reservation_owner_conflict != 0 || dispatch_fence_owner_conflict != 0 )); then",
+        scan_index,
+    )
+    prior_owner_index = source.find(
+        'if [[ -n "${reservation_owner_source}" || -n "${dispatch_fence_owner_source}" ]]; then',
+        multi_owner_index,
+    )
+    prior_snapshot_index = source.find("prior_dispatch_run_json=", prior_owner_index)
+    prior_identity_index = source.find(
+        "Prior dispatch fence does not reference the canonical dispatcher workflow",
+        prior_snapshot_index,
+    )
+    prior_provenance_index = source.find(
+        "Prior dispatch fence source provenance is not admissible",
+        prior_identity_index,
+    )
     prior_status_index = source.find("prior_dispatch_status=", prior_snapshot_index)
-    active_index = source.find('if [[ "${prior_dispatch_status}" != "completed" ]]; then', prior_provenance_index)
+    active_index = source.find(
+        'if [[ "${prior_dispatch_status}" != "completed" ]]; then',
+        prior_provenance_index,
+    )
     retry_index = source.find(
         "Dispatcher completion proves only that the dispatch request attempt ended, not that downstream publication succeeded",
         active_index,
@@ -118,7 +163,8 @@ def main() -> int:
     dispatch_index = source.find("gh workflow run release-v25-cloud.yml", fence_write_index)
     indexes = (
         scan_index,
-        conflict_index,
+        multi_owner_index,
+        prior_owner_index,
         prior_snapshot_index,
         prior_identity_index,
         prior_provenance_index,
@@ -131,7 +177,8 @@ def main() -> int:
     )
     if min(indexes) < 0 or not (
         scan_index
-        < conflict_index
+        < multi_owner_index
+        < prior_owner_index
         < prior_snapshot_index
         < prior_status_index
         < prior_identity_index
@@ -143,8 +190,18 @@ def main() -> int:
         < dispatch_index
     ):
         failures.append(
-            "dispatcher must scan the ledger, reject conflicts, admit one prior-run snapshot, bind its identity/provenance, stop active attempts, permit terminal recovery, reserve, fence the new attempt, then dispatch"
+            "dispatcher must scan the ledger, reject ambiguous ownership, reconcile a legitimate prior owner before exact retry, bind one exact prior-run snapshot, stop active attempts, permit terminal recovery, reserve, fence, then dispatch"
         )
+
+    prior_owner_end = source.find("if (( exact_dispatch_fence_run_id > 0 )); then", prior_owner_index)
+    if prior_owner_end < 0:
+        failures.append("could not bound prior-owner reconciliation before exact-attempt recovery")
+    else:
+        prior_owner_block = source[prior_owner_index:prior_owner_end]
+        if "exit 0" not in prior_owner_block:
+            failures.append("legitimate prior ownership must make newer main neutral")
+        if 'gh api --method POST' in prior_owner_block or "gh workflow run" in prior_owner_block:
+            failures.append("prior-owner reconciliation must not create a reservation/fence or dispatch")
 
     if "continue-on-error" in source:
         failures.append("dispatcher idempotence must not use continue-on-error")
@@ -152,6 +209,7 @@ def main() -> int:
     ordinal = 10304
     source_sha = "a" * 40
     other_sha = "b" * 40
+    third_sha = "c" * 40
     exact_reservation = ((ordinal, source_sha),)
 
     if decide_dispatch(
@@ -188,6 +246,60 @@ def main() -> int:
     if decide_dispatch(
         ordinal=ordinal,
         source_sha=source_sha,
+        reservation_rows=((ordinal, other_sha),),
+        dispatch_rows=((ordinal, other_sha, 100),),
+        run_states={},
+    ) != "prior-owner-neutral":
+        failures.append("one matching prior reservation/fence owner must stop a newer source neutrally")
+
+    if decide_dispatch(
+        ordinal=ordinal,
+        source_sha=source_sha,
+        reservation_rows=((ordinal, other_sha),),
+        dispatch_rows=(),
+        run_states={},
+    ) != "ownership-mismatch":
+        failures.append("a prior reservation without a matching dispatch fence must fail closed")
+
+    if decide_dispatch(
+        ordinal=ordinal,
+        source_sha=source_sha,
+        reservation_rows=(),
+        dispatch_rows=((ordinal, other_sha, 100),),
+        run_states={},
+    ) != "ownership-mismatch":
+        failures.append("a prior dispatch fence without a matching reservation must fail closed")
+
+    if decide_dispatch(
+        ordinal=ordinal,
+        source_sha=source_sha,
+        reservation_rows=((ordinal, other_sha),),
+        dispatch_rows=((ordinal, third_sha, 100),),
+        run_states={},
+    ) != "ownership-mismatch":
+        failures.append("mismatched prior reservation/fence owners must fail closed")
+
+    if decide_dispatch(
+        ordinal=ordinal,
+        source_sha=source_sha,
+        reservation_rows=((ordinal, other_sha), (ordinal, third_sha)),
+        dispatch_rows=((ordinal, other_sha, 100),),
+        run_states={},
+    ) != "owner-conflict":
+        failures.append("multiple prior owners for one ordinal must fail closed")
+
+    if decide_dispatch(
+        ordinal=ordinal,
+        source_sha=source_sha,
+        reservation_rows=((ordinal, source_sha), (ordinal, other_sha)),
+        dispatch_rows=((ordinal, other_sha, 100),),
+        run_states={},
+    ) != "exact-prior-conflict":
+        failures.append("an exact current-source reservation plus a prior owner must fail closed")
+
+    if decide_dispatch(
+        ordinal=ordinal,
+        source_sha=source_sha,
         reservation_rows=exact_reservation,
         dispatch_rows=((ordinal, source_sha, 100), (ordinal, source_sha, 101)),
         run_states={100: ("completed", "cancelled"), 101: ("in_progress", "")},
@@ -212,30 +324,14 @@ def main() -> int:
     ) != "status-unknown":
         failures.append("missing prior-run status must remain fail closed")
 
-    if decide_dispatch(
-        ordinal=ordinal,
-        source_sha=source_sha,
-        reservation_rows=exact_reservation,
-        dispatch_rows=((ordinal, other_sha, 100),),
-        run_states={100: ("completed", "failure")},
-    ) != "dispatch-conflict":
-        failures.append("same ordinal with a different dispatch-fence source must fail closed")
-
-    if decide_dispatch(
-        ordinal=ordinal,
-        source_sha=source_sha,
-        reservation_rows=((ordinal, other_sha),),
-        dispatch_rows=(),
-        run_states={},
-    ) != "reservation-conflict":
-        failures.append("same ordinal with a different reservation source must remain fail closed")
-
     if failures:
         for failure in failures:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
 
-    print("PASS: automatic V25 preview dispatch is attempt-fenced, identity-bound, terminal-retryable, and duplicate-publication safe")
+    print(
+        "PASS: automatic V25 preview dispatch preserves immutable prior ownership, fences exact attempts, permits terminal retry, and prevents duplicate publication"
+    )
     return 0
 
 

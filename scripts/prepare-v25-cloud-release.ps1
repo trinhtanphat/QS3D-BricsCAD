@@ -35,6 +35,12 @@ $releaseRelevantPathspecs = @(
     '.github/workflows/dispatch-v25-cloud-after-main-integration.yml'
 )
 
+$workspaceVersionPaths = @(
+    'src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj',
+    'src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj',
+    'src/QS3D.Core/QS3D.Core.csproj'
+)
+
 function Get-ReleaseStatusEntries {
     $lines = @(& git status --porcelain=v1 --untracked-files=all -- . ':(exclude).nuget/packages/**')
     if ($LASTEXITCODE -ne 0) {
@@ -104,10 +110,56 @@ function Assert-ReleaseBaseIsSafe {
     }
 }
 
-function Get-CommittedProductVersion {
+function Set-ProjectVersionValue {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$Value,
+        [Parameter(Mandatory = $true)][ref]$Content,
+        [Parameter(Mandatory = $true)][string]$ProjectPath
+    )
+
+    $escapedName = [regex]::Escape($Name)
+    $pattern = "(?s)(<$escapedName>)[^<]*(</$escapedName>)"
+    $current = [string]$Content.Value
+    $matches = [regex]::Matches($current, $pattern)
+    if ($matches.Count -ne 1) {
+        throw "Expected exactly one <$Name> element in '$ProjectPath', found $($matches.Count)."
+    }
+
+    $match = $matches[0]
+    $replacement = $match.Groups[1].Value + $Value + $match.Groups[2].Value
+    $Content.Value = $current.Substring(0, $match.Index) + $replacement + $current.Substring($match.Index + $match.Length)
+}
+
+function Set-WorkspaceProductVersion {
+    param([Parameter(Mandatory = $true)][string]$ReleaseTagValue)
+
+    $tag = $ReleaseTagValue
+    $tagMatch = [regex]::Match($tag, '^v(?<major>[0-9]+)\.(?<minor>[0-9]+)\.(?<patch>[0-9]+)-preview\.(?<ordinal>[1-9][0-9]*)$')
+    if (-not $tagMatch.Success) {
+        throw "Could not derive workspace ProductVersion from release tag '$tag'."
+    }
+
+    $productVersion = $tag.Substring(1)
+    $fileVersion = "$($tagMatch.Groups['major'].Value).$($tagMatch.Groups['minor'].Value).$($tagMatch.Groups['patch'].Value).$($tagMatch.Groups['ordinal'].Value)"
+
+    foreach ($relativePath in $workspaceVersionPaths) {
+        if (-not (Test-Path -LiteralPath $relativePath -PathType Leaf)) {
+            throw "Could not locate workspace project version source: $relativePath"
+        }
+
+        $content = [System.IO.File]::ReadAllText($relativePath)
+        Set-ProjectVersionValue -Name 'Version' -Value $productVersion -Content ([ref]$content) -ProjectPath $relativePath
+        Set-ProjectVersionValue -Name 'FileVersion' -Value $fileVersion -Content ([ref]$content) -ProjectPath $relativePath
+        Set-ProjectVersionValue -Name 'InformationalVersion' -Value $productVersion -Content ([ref]$content) -ProjectPath $relativePath
+        [System.IO.File]::WriteAllText($relativePath, $content, [System.Text.UTF8Encoding]::new($false))
+    }
+}
+
+function Get-CheckedOutProductVersion {
     $projectPath = Join-Path $root 'src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj'
     if (-not (Test-Path -LiteralPath $projectPath -PathType Leaf)) {
-        throw "Could not locate committed V25 project version source: $projectPath"
+        throw "Could not locate checked-out V25 project version source: $projectPath"
     }
 
     [xml]$projectXml = Get-Content -LiteralPath $projectPath -Raw
@@ -120,7 +172,7 @@ function Get-CommittedProductVersion {
             Sort-Object -Unique
     )
     if ($values.Count -ne 1) {
-        throw "Committed V25 project must contain exactly one unambiguous Version value. Found $($values.Count)."
+        throw "Checked-out V25 project must contain exactly one unambiguous Version value. Found $($values.Count)."
     }
     return [string]$values[0]
 }
@@ -155,7 +207,7 @@ try {
 
         $baseStatus = @(Get-ReleaseStatusEntries)
         foreach ($entry in $baseStatus) {
-            throw "Release base must be clean before committed version validation. Unexpected status '$($entry.State)' at $($entry.Path)."
+            throw "Release base must be clean before workspace version synchronization. Unexpected status '$($entry.State)' at $($entry.Path)."
         }
 
         if ($releaseBase -ne $dispatch) {
@@ -167,12 +219,19 @@ try {
             throw 'Runtime product-version identity preflight failed for committed release source.'
         }
 
-        $committedProductVersion = Get-CommittedProductVersion
-        $expectedReleaseTag = "v$committedProductVersion"
-        if (-not [string]::Equals($tag, $expectedReleaseTag, [StringComparison]::Ordinal)) {
-            throw "Committed preview ProductVersion '$committedProductVersion' at protected-main source $releaseBase requires tag '$expectedReleaseTag'; requested '$tag'. Merge the version update to protected main before publishing."
+        Set-WorkspaceProductVersion -ReleaseTagValue $tag
+
+        & python (Join-Path $PSScriptRoot 'preflight-runtime-product-version-identity.py')
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Runtime product-version identity preflight failed after workspace synchronization.'
         }
-        Write-Host "Committed preview ProductVersion '$committedProductVersion' matches requested release tag '$tag' at source $releaseBase."
+
+        $expectedProductVersion = $tag.Substring(1)
+        $checkedOutProductVersion = Get-CheckedOutProductVersion
+        if (-not [string]::Equals($checkedOutProductVersion, $expectedProductVersion, [StringComparison]::Ordinal)) {
+            throw "Workspace ProductVersion '$checkedOutProductVersion' does not match requested release identity '$expectedProductVersion'."
+        }
+        Write-Host "Workspace ProductVersion '$checkedOutProductVersion' matches requested release tag '$tag' at protected-main source $releaseBase."
 
         & git diff --check
         if ($LASTEXITCODE -ne 0) {
@@ -185,8 +244,23 @@ try {
         }
 
         $finalStatus = @(Get-ReleaseStatusEntries)
+        if ($finalStatus.Count -ne 0 -and $finalStatus.Count -ne $workspaceVersionPaths.Count) {
+            throw 'Workspace version synchronization must either be a no-op or produce exactly three bounded project modifications.'
+        }
         foreach ($entry in $finalStatus) {
-            throw "Release preparation must remain clean after committed version validation. Unexpected status '$($entry.State)' at $($entry.Path)."
+            if ($entry.State -ne ' M' -or -not ($workspaceVersionPaths -contains $entry.Path)) {
+                throw "Unexpected release-preparation workspace change '$($entry.State)' at $($entry.Path)."
+            }
+        }
+        if ($finalStatus.Count -eq $workspaceVersionPaths.Count) {
+            foreach ($relativePath in $workspaceVersionPaths) {
+                if (-not ($finalStatus.Path -contains $relativePath)) {
+                    throw "Workspace version synchronization did not modify required project identity source: $relativePath"
+                }
+            }
+        }
+        else {
+            Write-Host "Workspace ProductVersion is already synchronized to '$expectedProductVersion'; no bounded project modifications are required."
         }
 
         $latestMain = Get-RemoteMain
@@ -195,12 +269,12 @@ try {
             if ($attempt -ge $maxAttempts) {
                 throw "main kept advancing through non-release paths during $maxAttempts protected-main release-preparation attempts. Retry from a fresh workflow run."
             }
-            Write-Host "main advanced through additional non-release paths while validating committed release source ($releaseBase -> $latestMain); retrying without writing main."
+            Write-Host "main advanced through additional non-release paths while validating release source ($releaseBase -> $latestMain); retrying without writing main."
             continue
         }
 
-        Write-Host "Release source identity $tag is committed and clean on protected-main source $releaseBase."
-        Write-Host 'No commit, push, branch-protection bypass, workspace-only version rewrite, or main mutation was performed by release preparation.'
+        Write-Host "Release source identity $tag is synchronized only in the bounded workspace on protected-main source $releaseBase."
+        Write-Host 'No commit, push, branch-protection bypass, or protected-main mutation was performed by release preparation.'
         Write-Output $releaseBase
         return
     }

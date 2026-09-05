@@ -283,8 +283,10 @@ namespace QS3D.Core.Domain
         internal void RestorePersistenceState(ElementDirtyFlags dirty, DateTime updatedUtc)
         {
             if ((dirty & ~ElementDirtyFlags.All) != 0) throw new ArgumentOutOfRangeException(nameof(dirty));
+            if (updatedUtc.Kind != DateTimeKind.Utc)
+                throw new ArgumentException("Element persistence timestamp must be UTC.", nameof(updatedUtc));
             Dirty = dirty;
-            UpdatedUtc = updatedUtc.Kind == DateTimeKind.Utc ? updatedUtc : updatedUtc.ToUniversalTime();
+            UpdatedUtc = updatedUtc;
         }
 
         internal void TouchPersistenceState()
