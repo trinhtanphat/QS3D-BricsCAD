@@ -4,6 +4,8 @@ from __future__ import annotations
 from pathlib import Path, PureWindowsPath
 
 SCRIPT = Path(__file__).resolve().with_name("acquire-v25-compile-references.ps1")
+STAGING_OPEN = "$stagingAdmission = Open-PinnedMsiReadLock -Path $staging -ExpectedSha256 $expected"
+DESTINATION_READMIT = "$publishedAdmission = Open-PinnedMsiReadLock -Path $msi -ExpectedSha256 $expected"
 
 
 def require(condition: bool, message: str) -> None:
@@ -60,28 +62,29 @@ def main() -> int:
         "ExtractDir unexpectedly already exists; refusing pathname reuse",
         "New-Item -ItemType Directory -Path $extract | Out-Null",
         "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging",
-        "Test-PinnedMsiGeneration -Path $staging",
-        "[IO.File]::Move($staging, $msi)",
-        "Test-PinnedMsiGeneration -Path $msi -Label 'Published BricsCAD V25 MSI'",
+        STAGING_OPEN,
+        "[IO.FileMode]::CreateNew",
+        "$stagingAdmission.Stream.CopyTo($publishedStream)",
+        "$publishedStream.Flush($true)",
+        DESTINATION_READMIT,
+        "Canonical MSI destination appeared before held-generation publication; refusing destructive replacement.",
         "$msiState = Open-PinnedMsiReadLock -Path $msi",
         "Get-AuthenticodeSignature -FilePath $msiState.Path",
     )
     for token in required_tokens:
         require(token in source, f"missing V25 acquisition path-safety contract token: {token}")
 
-    require("Get-FileHash" not in source, "pathname MSI hashing must remain retired")
-    require(
-        "Invoke-WebRequest -Uri $candidate.Url -OutFile $msi" not in source,
-        "remote MSI bytes must not be downloaded directly to the canonical cache pathname",
-    )
-    require(
-        "Remove-Item -LiteralPath $extract -Recurse" not in source,
-        "fresh-only ExtractDir must never be recursively deleted/reused by pathname",
-    )
-    require(
-        "New-Item -ItemType Directory -Path $extract -Force" not in source,
-        "fresh ExtractDir creation must not use -Force because a raced-in generation must fail",
-    )
+    for forbidden, label in (
+        ("Get-FileHash", "pathname MSI hashing must remain retired"),
+        ("Invoke-WebRequest -Uri $candidate.Url -OutFile $msi", "remote MSI bytes must not be downloaded directly to the canonical cache pathname"),
+        ("Remove-Item -LiteralPath $extract -Recurse", "fresh-only ExtractDir must never be recursively deleted/reused by pathname"),
+        ("New-Item -ItemType Directory -Path $extract -Force", "fresh ExtractDir creation must not use -Force because a raced-in generation must fail"),
+        ("Test-PinnedMsiGeneration -Path $staging", "staging admission must remain held rather than being temporary"),
+        ("[IO.File]::Move($staging, $msi)", "canonical publication must not re-resolve the staging pathname"),
+        ("Remove-Item -LiteralPath $msi -Force", "canonical publication must not destructively remove an unbound destination"),
+        ("[IO.FileMode]::OpenOrCreate", "canonical publication must be fresh-only"),
+    ):
+        require(forbidden not in source, label)
 
     root_guard_index = source.index("ExtractDir must not be a filesystem root")
     msi_guard_index = source.index("ExtractDir must not equal or contain MsiPath")
@@ -96,21 +99,23 @@ def main() -> int:
     require(absent_guard_index < create_index, "existing ExtractDir refusal must precede fresh creation")
 
     download_index = source.index("Invoke-WebRequest -Uri $candidate.Url -OutFile $staging")
-    staged_index = source.index("Test-PinnedMsiGeneration -Path $staging", download_index)
-    publish_index = source.index("[IO.File]::Move($staging, $msi)", staged_index)
-    published_index = source.index("Test-PinnedMsiGeneration -Path $msi -Label 'Published BricsCAD V25 MSI'", publish_index)
+    staged_index = source.index(STAGING_OPEN, download_index)
+    fresh_publish_index = source.index("[IO.FileMode]::CreateNew", staged_index)
+    copy_index = source.index("$stagingAdmission.Stream.CopyTo($publishedStream)", fresh_publish_index)
+    flush_index = source.index("$publishedStream.Flush($true)", copy_index)
+    published_index = source.index(DESTINATION_READMIT, flush_index)
     final_lock_index = source.index("$msiState = Open-PinnedMsiReadLock -Path $msi", published_index)
     signature_index = source.index("Get-AuthenticodeSignature -FilePath $msiState.Path", final_lock_index)
     require(
-        download_index < staged_index < publish_index < published_index < final_lock_index < signature_index,
-        "V25 acquisition must stage -> held-admit -> publish -> canonical re-admit -> final lock -> Authenticode",
+        download_index < staged_index < fresh_publish_index < copy_index < flush_index < published_index < final_lock_index < signature_index,
+        "V25 acquisition must stage -> held-admit -> fresh-copy -> durable-flush -> canonical re-admit -> final lock -> Authenticode",
     )
+    staging_dispose_index = source.find("$stagingAdmission.Stream.Dispose()", staged_index)
+    require(staging_dispose_index < 0 or staging_dispose_index > published_index,
+            "staged admission must remain held until canonical destination is re-admitted")
 
     safe_cases = (
-        (
-            r"D:\a\QS3D-BricsCAD\QS3D-BricsCAD\.cache\bricscad\BricsCAD-V25.2.10-x64.msi",
-            r"D:\a\_temp\BricsCAD-V25-managed-references",
-        ),
+        (r"D:\a\QS3D-BricsCAD\QS3D-BricsCAD\.cache\bricscad\BricsCAD-V25.2.10-x64.msi", r"D:\a\_temp\BricsCAD-V25-managed-references"),
         (r"C:\cache\bricscad\v25.msi", r"C:\work\extract\v25"),
         (r"C:\cache\v25.msi", r"C:\cache\extract"),
     )
@@ -127,25 +132,18 @@ def main() -> int:
     for msi, extract in unsafe_cases:
         require(extraction_is_unsafe(msi, extract), f"unsafe extraction overlap was not rejected by contract model: {msi} / {extract}")
 
-    require(
-        source.count("New-Item -ItemType Directory -Path $extract | Out-Null") == 1,
-        "fresh extraction root must be created through one non-Force path",
-    )
-    require(
-        "^25\\.2\\.10(?:\\.|$)" in source,
-        "pinned V25.2.10 MSI identity validation was removed",
-    )
-    require(
-        "WaitForExit(900000)" in source,
-        "MSI extraction timeout contract changed unexpectedly",
-    )
+    require(source.count("New-Item -ItemType Directory -Path $extract | Out-Null") == 1,
+            "fresh extraction root must be created through one non-Force path")
+    require("^25\\.2\\.10(?:\\.|$)" in source, "pinned V25.2.10 MSI identity validation was removed")
+    require("WaitForExit(900000)" in source, "MSI extraction timeout contract changed unexpectedly")
 
     print("PASS: V25 compile-reference acquisition path-safety regression")
     print(" - root/MSI/cache containment and reparse guards precede fresh-root admission")
     print(" - pre-existing or raced ExtractDir generations fail closed; recursive pathname cleanup is forbidden")
     print(" - normal shared-CI disjoint paths and safe cache-child extraction remain accepted")
     print(" - filesystem-root, MSI-containing and cache-containing extraction layouts fail closed")
-    print(" - remote bytes are staged and held-verified before canonical publication/re-admission")
+    print(" - remote bytes stay held while copied into a fresh-only canonical destination and durably flushed")
+    print(" - canonical bytes are re-admitted before the staging generation is released")
     print(" - final Authenticode consumption remains bound to the held MSI state")
     print(" - version and bounded extraction semantics remain source-guarded")
     return 0
