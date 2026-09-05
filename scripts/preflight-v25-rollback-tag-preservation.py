@@ -46,28 +46,30 @@ if "TagDeleted" in workflow:
     raise SystemExit("V25 release workflow must not require destructive TagDeleted rollback output.")
 
 # Mutation controls: each rollback invariant must be independently detectable by this guard.
-def rejects(mutated: str) -> bool:
-    for token in required.values():
-        if token not in mutated:
-            return True
-    for token in forbidden.values():
-        if token in mutated:
-            return True
-    return False
+def rejects_rollback(mutated: str) -> bool:
+    return any(token not in mutated for token in required.values()) or any(
+        token in mutated for token in forbidden.values()
+    )
 
 for name, token in required.items():
-    mutated = text.replace(token, "__REMOVED__", 1)
-    if not rejects(mutated):
+    mutated = text.replace(token, "__REMOVED__")
+    if not rejects_rollback(mutated):
         raise SystemExit(f"mutation control did not detect removed invariant: {name}")
 
 for name, token in forbidden.items():
     mutated = text + "\n# injected mutation\n" + token + "\n"
-    if not rejects(mutated):
+    if not rejects_rollback(mutated):
         raise SystemExit(f"mutation control did not detect destructive invariant: {name}")
 
+def rejects_workflow(mutated: str) -> bool:
+    return any(token not in mutated for token in workflow_required.values()) or "TagDeleted" in mutated
+
 for name, token in workflow_required.items():
-    if token not in workflow.replace(token, "__REMOVED__", 1):
-        continue
-    raise SystemExit(f"workflow mutation control could not remove invariant: {name}")
+    mutated = workflow.replace(token, "__REMOVED__")
+    if not rejects_workflow(mutated):
+        raise SystemExit(f"workflow mutation control did not detect removed invariant: {name}")
+
+if not rejects_workflow(workflow + "\n# injected mutation\nTagDeleted\n"):
+    raise SystemExit("workflow mutation control did not detect TagDeleted dependency.")
 
 print("PASS V25 rollback preserves exact reusable tag and caller admits safe retry")
