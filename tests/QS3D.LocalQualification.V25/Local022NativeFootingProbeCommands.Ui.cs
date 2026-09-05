@@ -255,7 +255,8 @@ namespace QS3D.LocalQualification.V25
                             _treeScrolled = true;
                             return;
                         }
-                        if (!AwaitAction(item, "click", string.Empty)) return;
+                        if (!AwaitAction(() => FindVisualDescendants<TextBlock>(item).Single(text =>
+                            text.IsVisible && string.Equals(text.Text, "Móng đơn", StringComparison.Ordinal)), "click", string.Empty)) return;
                         if (!item.IsSelected) return;
                         _project = GetOrCreateProject(_context.Document);
                         _familyBaseline = _project.Families.Count;
