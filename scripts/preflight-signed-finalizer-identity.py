@@ -2,6 +2,7 @@
 import ntpath
 from pathlib import Path
 
+# Rollback-only PackageZip deletion is permitted only after the rollback marker.
 ROOT = Path(__file__).resolve().parents[1]
 FINALIZER = ROOT / "scripts" / "finalize-v25-signed-package.ps1"
 
