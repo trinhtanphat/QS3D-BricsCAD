@@ -185,7 +185,7 @@ function Get-SingleV26InstallerAdmission {
     }
 
     $admission = $outputs[0]
-    $requiredProperties = @('Path', 'Sha256', 'Length', 'LastWriteUtcTicks', 'ProductVersion', 'SignerSubject', 'Stream')
+    $requiredProperties = @('Path', 'Sha256', 'Length', 'LastWriteUtcTicks', 'ProductName', 'ProductVersion', 'SignerSubject', 'Stream')
     foreach ($propertyName in $requiredProperties) {
         if ($null -eq $admission -or $null -eq $admission.PSObject.Properties[$propertyName]) {
             if ($null -ne $admission -and $null -ne $admission.PSObject.Properties['Stream']) {
@@ -208,6 +208,61 @@ function Assert-HeldInstallerStable {
         [int64]$current.LastWriteTimeUtc.Ticks -ne [int64]$Held.LastWriteUtcTicks -or
         [int64]$Held.Stream.Length -ne [int64]$Held.Length) {
         throw "BricsCAD V26 MSI generation changed $Phase."
+    }
+}
+
+function Publish-AdmittedV26Installer {
+    param(
+        [Parameter(Mandatory = $true)]$Candidate,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+
+    Assert-HeldInstallerStable -Held $Candidate -Phase 'before canonical cache publication'
+    Assert-NoExistingReparseComponent -Path $Destination -Label 'V26 MSI destination before publication'
+    if (Test-Path -LiteralPath $Destination) {
+        throw 'V26 MSI destination must be fresh before held-byte publication.'
+    }
+
+    $destinationStream = $null
+    $published = $null
+    try {
+        $destinationStream = [IO.File]::Open(
+            $Destination,
+            [IO.FileMode]::CreateNew,
+            [IO.FileAccess]::Write,
+            [IO.FileShare]::None
+        )
+        $Candidate.Stream.Position = 0
+        $Candidate.Stream.CopyTo($destinationStream)
+        $destinationStream.Flush($true)
+        $destinationStream.Dispose()
+        $destinationStream = $null
+
+        Assert-HeldInstallerStable -Held $Candidate -Phase 'after canonical cache byte publication'
+        $published = Get-SingleV26InstallerAdmission -Path $Destination -Expected $Candidate.Sha256
+        if (-not [string]::Equals([string]$published.Sha256, [string]$Candidate.Sha256, [StringComparison]::Ordinal)) {
+            throw 'published V26 MSI digest does not match admitted staged generation'
+        }
+        if (-not [string]::Equals([string]$published.ProductVersion, [string]$Candidate.ProductVersion, [StringComparison]::Ordinal) -or
+            -not [string]::Equals([string]$published.ProductName, [string]$Candidate.ProductName, [StringComparison]::Ordinal)) {
+            throw 'published V26 MSI product identity does not match admitted staged generation'
+        }
+        if (-not [string]::Equals([string]$published.SignerSubject, [string]$Candidate.SignerSubject, [StringComparison]::Ordinal)) {
+            throw 'published V26 MSI signer does not match admitted staged generation'
+        }
+        return $published
+    }
+    catch {
+        if ($null -ne $published) {
+            $published.Stream.Dispose()
+            $published = $null
+        }
+        if ($null -ne $destinationStream) {
+            $destinationStream.Dispose()
+            $destinationStream = $null
+        }
+        Write-Warning 'V26 MSI publication failed after canonical destination creation; leaving the destination untouched for fail-closed re-admission.'
+        throw
     }
 }
 
@@ -254,9 +309,7 @@ if (Test-Path -LiteralPath $msi -PathType Leaf) {
         Write-Host 'Using admitted BricsCAD V26.2.07 installer from Actions cache/local cache.'
     }
     catch {
-        Write-Warning "Cached BricsCAD V26 installer was rejected and will be replaced: $($_.Exception.Message)"
-        $cached = Get-OrdinaryFileOrNull -Path $msi -Label 'rejected BricsCAD V26 MSI'
-        if ($null -ne $cached) { Remove-Item -LiteralPath $cached.FullName -Force }
+        throw "Cached BricsCAD V26 installer was rejected; rejected cached V26 MSI is left untouched because safe replacement requires a fresh canonical destination. $($_.Exception.Message)"
     }
 }
 
@@ -284,16 +337,7 @@ if ($null -eq $admission) {
             Invoke-WebRequest -Uri $candidate.Url -OutFile $staging -MaximumRedirection 10 -TimeoutSec 1800 -UseBasicParsing
             $candidateAdmission = Get-SingleV26InstallerAdmission -Path $staging -Expected $expected
             try {
-                Assert-NoExistingReparseComponent -Path $msi -Label 'V26 MSI destination before publication'
-                if (Test-Path -LiteralPath $msi) {
-                    $existing = Get-OrdinaryFileOrNull -Path $msi -Label 'existing V26 MSI destination'
-                    if ($null -eq $existing) { throw 'V26 MSI destination is not an ordinary file.' }
-                    Remove-Item -LiteralPath $existing.FullName -Force
-                }
-                $candidateAdmission.Stream.Dispose()
-                $candidateAdmission = $null
-                [IO.File]::Move($staging, $msi)
-                $admission = Get-SingleV26InstallerAdmission -Path $msi -Expected $expected
+                $admission = Publish-AdmittedV26Installer -Candidate $candidateAdmission -Destination $msi
                 break
             }
             finally {
