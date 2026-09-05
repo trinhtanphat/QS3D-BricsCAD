@@ -63,7 +63,7 @@ namespace QS3D.Core.Domain
                         "Auto Room source handles cannot exceed " + MaxSourceHandleInputCount + " input entries.");
                 inputCount++;
                 if (string.IsNullOrWhiteSpace(raw)) continue;
-                var canonical = GeneratedHandleIdentity.Normalize(raw);
+                var canonical = GeneratedHandleIdentity.Normalize(raw).ToUpperInvariant();
                 if (canonical.Length > 0) normalized.Add(canonical);
             }
 
