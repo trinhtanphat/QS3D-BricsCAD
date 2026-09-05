@@ -72,6 +72,8 @@ entry = read("src/QS3D.BricsCAD.V26/PluginEntry.cs")
 update_commands = read("src/QS3D.BricsCAD.V26/Updates/UpdateCommands.cs")
 update_center = read("src/QS3D.BricsCAD.V25/Updates/UpdateCenterWindow.cs")
 v26_update_center = preprocess_for_v26(update_center)
+cloudflare_onboarding = read("src/QS3D.BricsCAD.V25/McpCloudflareAccountOnboarding.cs")
+cloudflared_bootstrapper = read("src/QS3D.BricsCAD.V25/McpCloudflaredBootstrapper.cs")
 update_preferences = read("src/QS3D.BricsCAD.V25/Updates/UpdatePreferences.cs")
 v25_release_client = read("src/QS3D.BricsCAD.V25/Updates/GitHubReleaseClient.cs")
 v26_release_client = read("src/QS3D.BricsCAD.V26/Updates/GitHubReleaseClient.cs")
@@ -94,7 +96,7 @@ for token in ("<TargetFramework>net48</TargetFramework>", "QS3D.BricsCAD.V25", "
 
 for token in ('<Project Sdk="Microsoft.NET.Sdk">', "<TargetFramework>net8.0-windows</TargetFramework>", "<UseWPF>true</UseWPF>", "<UseWindowsForms>true</UseWindowsForms>", "<GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>", "<Nullable>annotations</Nullable>", "<AssemblyName>QS3D.BricsCAD.V26</AssemblyName>", "<RootNamespace>QS3D.BricsCAD.V25</RootNamespace>", "BRICSCAD_V26_DIR", "..\\QS3D.BricsCAD.V25\\**\\*.cs", "..\\QS3D.BricsCAD.V25\\PluginEntry.cs", "..\\QS3D.BricsCAD.V25\\Updates\\**\\*.cs", "Updates\\SemanticReleaseVersion.cs", "Updates\\UpdateBootstrapper.cs", "Updates\\UpdateCenterWindow.cs", "Updates\\UpdateCoordinator.cs", "Updates\\UpdatePreferences.cs", "Updates\\UpdateSettingsCommands.cs", "<Reference Include=\"BrxMgd\">", "<Reference Include=\"TD_Mgd\">", "<Reference Include=\"TD_MgdBrep\">", "$(BRICSCAD_V26_DIR)\\TD_MgdBrep.dll", "<Private>false</Private>", "ValidateBricsCadV26References"):
     require(v26, token, "V26 project")
-for token in ("Microsoft.NET.Sdk.WindowsDesktop", "BRICSCAD_V25_DIR", "<TargetFramework>net48</TargetFramework>", "<TargetFrameworks>", "QS3D-BricsCAD-V25.update.json"):
+for token in ("Microsoft.NET.Sdk.WindowsDesktop", "BRICSCAD_V25_DIR", "<TargetFramework>net48</TargetFramework>", "<TargetFrameworks>", "QS3D-BricsCAD-V25.update.json", "<NoWarn>"):
     forbid(v26, token, "V26 project")
 
 for token in ('"QS3D.Core", "src\\QS3D.Core\\QS3D.Core.csproj"', '"QS3D.BricsCAD.V26", "src\\QS3D.BricsCAD.V26\\QS3D.BricsCAD.V26.csproj"', '"QS3D.Core.SmokeTests", "tests\\QS3D.Core.SmokeTests\\QS3D.Core.SmokeTests.csproj"', ".Debug|Any CPU.ActiveCfg = Debug|x64", ".Release|Any CPU.ActiveCfg = Release|x64"):
@@ -116,8 +118,18 @@ for token in ("#if BRICSCAD_V26", "var hasPreviewDownload = false;", "#if !BRICS
     require(update_center, token, "shared Update Center V26 preview isolation")
 for token in ("private bool _previewScheduled;", "private string? _previewScheduledDetail;", "private async System.Threading.Tasks.Task DownloadPreviewAsync"):
     require(update_center, token, "V25 preview scheduling implementation")
-for token in ("_previewScheduled", "_previewScheduledDetail", "DownloadPreviewAsync"):
+for token in ("_previewDownloading", "_previewScheduled", "_previewScheduledDetail", "DownloadPreviewAsync", "UpdateDownloadProgress", "VerifiedReleaseDownloader"):
     forbid(v26_update_center, token, "V26 preprocessed Update Center")
+require(
+    cloudflare_onboarding,
+    "#pragma warning disable SYSLIB0014\n                var request = (HttpWebRequest)WebRequest.Create(uri);\n#pragma warning restore SYSLIB0014",
+    "shared Cloudflare readiness probe targeted net8 compatibility",
+)
+require(
+    cloudflared_bootstrapper,
+    "#pragma warning disable SYSLIB0014\n        private sealed class BoundedWebClient : WebClient",
+    "shared cloudflared downloader targeted net8 compatibility",
+)
 for token in ("#if BRICSCAD_V26", '@"Software\\QS3D\\BricsCAD-V26\\Updates"', '@"Software\\QS3D\\BricsCAD-V25\\Updates"'):
     require(update_preferences, token, "shared host-major update preferences")
 

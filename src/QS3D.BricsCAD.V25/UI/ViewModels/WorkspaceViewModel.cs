@@ -33,6 +33,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         private ProjectState? _project;
         private ProjectFamily? _selectedFamily;
         private ProjectElement? _selectedElement;
+        private Func<ProjectFamily, bool>? _familyPropertyPresenter;
 
         public ObservableCollection<string> Zones { get; } = new ObservableCollection<string>();
         public ObservableCollection<string> Floors { get; } = new ObservableCollection<string>();
@@ -136,9 +137,9 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             {
                 ownedFamily = project.FindFamily(family.Id);
             }
-            catch (InvalidOperationException ex)
+            catch (InvalidOperationException)
             {
-                Status = "Không thể chọn Family: " + ex.Message;
+                ReportMutationFailure("Chọn Family");
                 return;
             }
             if (ownedFamily == null || !ReferenceEquals(ownedFamily, family))
@@ -193,10 +194,10 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 }
                 family = _project.FindFamily(ownedElement.FamilyId);
             }
-            catch (InvalidOperationException ex)
+            catch (InvalidOperationException)
             {
                 _selectedElement = null;
-                Status = "Không thể chọn cấu kiện: " + ex.Message;
+                ReportMutationFailure("Chọn cấu kiện");
                 ShowFamilyProperties();
                 return;
             }
@@ -217,11 +218,19 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             Status = "Instance: " + ownedElement.Id + " • " + family.Name;
         }
 
+        internal void SetFamilyPropertyPresenter(Func<ProjectFamily, bool> presenter)
+        {
+            if (presenter == null) throw new ArgumentNullException(nameof(presenter));
+            if (_familyPropertyPresenter == presenter) return;
+            _familyPropertyPresenter = presenter;
+            LoadCurrentProperties();
+        }
+
         private void LoadCurrentProperties()
         {
             if (_selectedPropertyScope == InstanceScope && _selectedElement != null && _selectedFamily != null)
                 LoadInstanceProperties(_selectedElement, _selectedFamily);
-            else
+            else if (_selectedFamily == null || _familyPropertyPresenter?.Invoke(_selectedFamily) != true)
                 LoadFamilyProperties(_selectedFamily);
         }
 
@@ -332,7 +341,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             }
             catch (Exception ex) when (ex is InvalidOperationException || ex is ArgumentException)
             {
-                Status = "Không thể đổi tên Family: " + ex.Message;
+                ReportMutationFailure("Đổi tên Family");
                 return previous;
             }
         }
@@ -361,7 +370,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             }
             catch (Exception ex) when (ex is InvalidOperationException || ex is ArgumentException)
             {
-                Status = "Không thể cập nhật " + DisplayNameFor(key) + ": " + ex.Message;
+                ReportMutationFailure("Cập nhật " + DisplayNameFor(key));
                 return previousFamilyValue;
             }
         }
@@ -387,9 +396,9 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                     return current;
                 }
             }
-            catch (InvalidOperationException ex)
+            catch (InvalidOperationException)
             {
-                Status = "Không thể cập nhật Instance: " + ex.Message;
+                ReportMutationFailure("Cập nhật Instance");
                 return current;
             }
 
@@ -415,7 +424,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             }
             catch (Exception ex) when (ex is InvalidOperationException || ex is ArgumentException || ex is OverflowException)
             {
-                Status = "Không thể cập nhật " + DisplayNameFor(key) + ": " + ex.Message;
+                ReportMutationFailure("Cập nhật " + DisplayNameFor(key));
                 return current;
             }
 
@@ -453,9 +462,9 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
 
                 row.Value = ToDisplayValue(key, liveFamilyRaw ?? string.Empty);
             }
-            catch (InvalidOperationException ex)
+            catch (InvalidOperationException)
             {
-                Status = "Không thể đặt lại Instance: " + ex.Message;
+                ReportMutationFailure("Đặt lại Instance");
             }
         }
 
@@ -491,11 +500,16 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 project = current;
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Status = operation + " bị từ chối: " + ex.Message;
+                ReportMutationFailure(operation);
                 return false;
             }
+        }
+
+        private void ReportMutationFailure(string operation)
+        {
+            Status = operation + " không hoàn tất. Chi tiết nội bộ đã được ẩn. Hãy Refresh Workspace rồi thử lại.";
         }
 
         private string NormalizePropertyValue(string key, string unit, string previousValue, string value, out bool valid)
@@ -614,6 +628,13 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         private static bool IsNumericProperty(string key)
         {
             if (string.IsNullOrWhiteSpace(key)) return false;
+            // The generic Family view is populated before the dedicated footing rows.
+            // Its initial value normalization must never turn metre values 0/1 into booleans.
+            if (SingleFootingContract.IsDimensionKey(key) || new[]
+                {
+                    "SingleFootingL1M", "SingleFootingW1M", "SingleFootingL2M",
+                    "SingleFootingW2M", "SingleFootingH1M", "SingleFootingH2M"
+                }.Any(candidate => string.Equals(candidate, key, StringComparison.OrdinalIgnoreCase))) return true;
             if (SemanticPropertyUnitClassifier.IsLinearMeterProperty(key) || key.EndsWith("M2", StringComparison.OrdinalIgnoreCase) || key.EndsWith("M3", StringComparison.OrdinalIgnoreCase) ||
                 key.EndsWith("Mm", StringComparison.OrdinalIgnoreCase) || key.EndsWith("Deg", StringComparison.OrdinalIgnoreCase) || key.EndsWith("Count", StringComparison.OrdinalIgnoreCase) ||
                 key.EndsWith("Ratio", StringComparison.OrdinalIgnoreCase) || key.EndsWith("Factor", StringComparison.OrdinalIgnoreCase) || key.EndsWith("Percent", StringComparison.OrdinalIgnoreCase)) return true;

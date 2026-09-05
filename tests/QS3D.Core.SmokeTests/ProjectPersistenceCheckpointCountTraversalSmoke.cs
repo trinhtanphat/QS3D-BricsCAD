@@ -28,7 +28,7 @@ namespace QS3D.Core.SmokeTests
 
             Contains("known element count does not match enumerated element count", error,
                 "Checkpoint did not reject Count=2 with one enumerated element.");
-            Equal(1, source.CountReads, "Known Count was not snapshotted exactly once for under-enumeration.");
+            Equal(7, source.CountReads, "Known Count was not fenced through the complete under-enumeration traversal.");
             Equal(1, source.EnumerationCount, "Under-enumerating source was not traversed exactly once.");
         }
 
@@ -42,7 +42,7 @@ namespace QS3D.Core.SmokeTests
 
             Contains("known element count does not match enumerated element count", error,
                 "Checkpoint did not reject Count=1 with two enumerated elements.");
-            Equal(1, source.CountReads, "Known Count was not snapshotted exactly once for over-enumeration.");
+            Equal(7, source.CountReads, "Known Count was not fenced through the first disallowed MoveNext observation.");
             Equal(1, source.EnumerationCount, "Over-enumerating source was not traversed exactly once.");
         }
 
@@ -54,7 +54,7 @@ namespace QS3D.Core.SmokeTests
             var checkpoint = ProjectPersistenceCheckpoint.Capture(project, source);
 
             Equal(2, checkpoint.ElementIds.Count, "Honest Count source did not capture both elements.");
-            Equal(2, source.CountReads, "Honest known Count was not observed before and after traversal.");
+            Equal(10, source.CountReads, "Honest known Count was not fenced around enumerator acquisition and traversal observations.");
             Equal(1, source.EnumerationCount, "Honest Count source was not traversed exactly once.");
         }
 

@@ -49,16 +49,19 @@ def main() -> None:
     require(source, "$sha256.ComputeHash($sourceBytes)", "admitted-byte SHA-256")
     require(source, 'Write-Host "Template SHA256: $templateHash"', "captured hash publication")
 
-    # Preserve existing V26 parity/output safety architecture while hardening
-    # template admission.
+    # Preserve V26 parity while accepting the stronger #5711 output contract:
+    # one held parent generation, fresh-only final destination, sibling staging,
+    # and atomic first publication. Replacement of an unadmitted leaf is banned.
     for token, label in (
         ("QS3D.BricsCAD.V26.runtimeconfig.json", "V26 runtimeconfig delta"),
         ("Assert-DirectoryAncestorChain -Path $parent", "output ancestor containment"),
-        ("Assert-SafeExistingOutputLeaf -Path $outputFull", "output leaf safety"),
-        ("[IO.File]::Replace($stagePath, $outputFull, $null)", "atomic replacement"),
+        ("$outputParentHandle = Open-AdmittedOutputParent -Path $parent", "held output-parent admission"),
+        ("Assert-AdmittedOutputParentBinding -Admission $outputParentHandle", "held output-parent generation fence"),
+        ("V26 generation output must be fresh", "fresh-only output contract"),
         ("[IO.File]::Move($stagePath, $outputFull)", "atomic first publication"),
     ):
         require(source, token, label)
+    forbid(source, "[IO.File]::Replace($stagePath, $outputFull, $null)", "replacement of unadmitted output generation")
 
     transform_match = re.search(
         r"\$generated\s*=\s*\$text\.Replace\(\s*['\"]V25['\"]\s*,\s*['\"]V26['\"]\s*\)"
@@ -75,9 +78,14 @@ def main() -> None:
     capture_index = source.index("$sourceStream.CopyTo($memory)")
     decode_index = source.index("$utf8.GetString($sourceBytes")
     transform_index = transform_match.start()
+    parent_admission_index = source.index("$outputParentHandle = Open-AdmittedOutputParent -Path $parent")
     publish_index = source.index("[IO.File]::WriteAllText($stagePath")
-    if not open_index < capture_index < decode_index < transform_index < publish_index:
-        raise SystemExit("ERROR: V26 template admission ordering is not open -> capture -> strict decode -> transform -> publish")
+    move_index = source.index("[IO.File]::Move($stagePath, $outputFull)")
+    if not open_index < capture_index < decode_index < transform_index < parent_admission_index < publish_index < move_index:
+        raise SystemExit(
+            "ERROR: V26 template admission ordering is not open -> capture -> strict decode -> transform -> "
+            "held output-parent admission -> stage -> atomic fresh publication"
+        )
 
     print("PASS V26 script template admitted-byte identity guard")
 

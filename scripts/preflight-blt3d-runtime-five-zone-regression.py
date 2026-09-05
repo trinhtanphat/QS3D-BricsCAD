@@ -108,7 +108,8 @@ for token in (
     "columnSplitter.ResizeDirection = GridResizeDirection.Columns;",
     "familyPane.RowDefinitions[0].Height = new GridLength(56, GridUnitType.Star);",
     "familyPane.RowDefinitions[2].Height = new GridLength(44, GridUnitType.Star);",
-    "PropertyList.MinHeight = 120;",
+    "familyPane.RowDefinitions[2].MinHeight = 120;",
+    "PropertyList.MinHeight = 0;",
 ):
     if token not in layout:
         errors.append("side-by-side Model/Family/Properties runtime layout missing: " + token)

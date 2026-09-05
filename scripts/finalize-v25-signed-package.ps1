@@ -296,6 +296,152 @@ function Assert-ZipMatchesPackage {
     }
 }
 
+function Assert-ZipManifestIntegrity {
+    param([string]$ZipPath)
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop
+    $safeZipPath = Assert-SafeFile -Path $ZipPath -Label 'staged PackageZip manifest input'
+    $fileStream = $null
+    $archive = $null
+    $outerHash = $null
+    try {
+        $fileStream = [IO.FileStream]::new(
+            $safeZipPath,
+            [IO.FileMode]::Open,
+            [IO.FileAccess]::Read,
+            [IO.FileShare]::Read
+        )
+        $archive = [IO.Compression.ZipArchive]::new($fileStream, [IO.Compression.ZipArchiveMode]::Read, $true)
+        $seenArchivePaths = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
+        $archivePayloadPaths = [Collections.Generic.List[string]]::new()
+        $manifestEntries = [Collections.Generic.List[object]]::new()
+
+        foreach ($entry in $archive.Entries) {
+            $rawName = $entry.FullName.Replace('\', '/')
+            $isDirectory = [string]::IsNullOrEmpty($entry.Name)
+            $name = if ($isDirectory) { $rawName.TrimEnd('/') } else { $rawName }
+            if ([string]::IsNullOrWhiteSpace($name) -or $name.StartsWith('/') -or $name.Contains(':') -or $name.Contains('\')) {
+                throw "Staged ZIP contains an unsafe entry while validating checksum manifest: $rawName"
+            }
+            $segments = @($name.Split('/'))
+            if (@($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) {
+                throw "Staged ZIP contains an unsafe entry while validating checksum manifest: $rawName"
+            }
+            if ($isDirectory) { continue }
+            if ($seenArchivePaths.ContainsKey($name)) {
+                throw "Staged ZIP contains a case-insensitive duplicate entry while validating checksum manifest: $name"
+            }
+            $seenArchivePaths.Add($name, $entry)
+            if ([string]::Equals($name, 'SHA256SUMS.txt', [StringComparison]::Ordinal)) {
+                $manifestEntries.Add($entry)
+            }
+            else {
+                $archivePayloadPaths.Add($name)
+            }
+        }
+
+        if ($manifestEntries.Count -ne 1) {
+            throw "Staged ZIP must contain exactly one canonical SHA256SUMS.txt entry; found $($manifestEntries.Count)."
+        }
+        $manifestEntry = $manifestEntries[0]
+        if ($manifestEntry.Length -lt 1 -or $manifestEntry.Length -gt 4MB -or $manifestEntry.Length -gt [int]::MaxValue) {
+            throw "Staged ZIP checksum manifest has an invalid bounded size: $($manifestEntry.Length) bytes."
+        }
+
+        $manifestStream = $null
+        $manifestBytes = $null
+        try {
+            $manifestStream = $manifestEntry.Open()
+            $manifestBytes = New-Object byte[] ([int]$manifestEntry.Length)
+            $offset = 0
+            while ($offset -lt $manifestBytes.Length) {
+                $read = $manifestStream.Read($manifestBytes, $offset, $manifestBytes.Length - $offset)
+                if ($read -le 0) { throw 'Staged ZIP checksum manifest ended before its declared length.' }
+                $offset += $read
+            }
+            if ($manifestStream.ReadByte() -ne -1) { throw 'Staged ZIP checksum manifest exceeds its declared length.' }
+            if (@($manifestBytes | Where-Object { $_ -gt 0x7F }).Count -gt 0) {
+                throw 'Staged ZIP checksum manifest must contain ASCII only.'
+            }
+            $manifestText = [Text.Encoding]::ASCII.GetString($manifestBytes)
+        }
+        finally {
+            if ($manifestStream) { $manifestStream.Dispose() }
+            if ($manifestBytes) { [Array]::Clear($manifestBytes, 0, $manifestBytes.Length) }
+        }
+
+        $lines = @([Text.RegularExpressions.Regex]::Split($manifestText, "\r?\n"))
+        while ($lines.Count -gt 0 -and $lines[$lines.Count - 1] -eq '') {
+            if ($lines.Count -eq 1) { $lines = @(); break }
+            $lines = @($lines[0..($lines.Count - 2)])
+        }
+        if ($lines.Count -eq 0) { throw 'Staged ZIP checksum manifest contains no payload records.' }
+
+        $seenManifestPaths = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+        $manifestPayloadPaths = [Collections.Generic.List[string]]::new()
+        foreach ($line in $lines) {
+            if ($line -notmatch '^([0-9A-F]{64})  (.+)$') {
+                throw "Staged ZIP checksum manifest contains a malformed record: $line"
+            }
+            $expectedHash = $Matches[1]
+            $name = $Matches[2]
+            if ($name.StartsWith('/') -or $name.Contains(':') -or $name.Contains('\')) {
+                throw "Staged ZIP checksum manifest contains an unsafe path: $name"
+            }
+            $segments = @($name.Split('/'))
+            if (@($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) {
+                throw "Staged ZIP checksum manifest contains an unsafe path: $name"
+            }
+            if ([string]::Equals($name, 'SHA256SUMS.txt', [StringComparison]::OrdinalIgnoreCase)) {
+                throw 'Staged ZIP checksum manifest must not hash itself.'
+            }
+            if ($seenManifestPaths.ContainsKey($name)) {
+                throw "Staged ZIP checksum manifest contains a case-insensitive duplicate path: $name"
+            }
+            $seenManifestPaths.Add($name, $expectedHash)
+            $manifestPayloadPaths.Add($name)
+        }
+
+        if ($archivePayloadPaths.Count -ne $manifestPayloadPaths.Count) {
+            throw "Staged ZIP checksum manifest coverage mismatch. Archive payload count=$($archivePayloadPaths.Count), manifest count=$($manifestPayloadPaths.Count)."
+        }
+
+        foreach ($name in $archivePayloadPaths) {
+            if (-not $seenManifestPaths.ContainsKey($name)) {
+                throw "Staged ZIP checksum manifest coverage mismatch; missing payload: $name"
+            }
+            $entry = $seenArchivePaths[$name]
+            $stream = $null
+            $hash = $null
+            try {
+                $stream = $entry.Open()
+                $hash = [Security.Cryptography.SHA256]::Create()
+                $digest = $hash.ComputeHash($stream)
+                $actualHash = -join ($digest | ForEach-Object { $_.ToString('X2') })
+                if (-not [string]::Equals($actualHash, $seenManifestPaths[$name], [StringComparison]::Ordinal)) {
+                    throw "Staged ZIP checksum mismatch for payload: $name"
+                }
+            }
+            finally {
+                if ($hash) { $hash.Dispose() }
+                if ($stream) { $stream.Dispose() }
+            }
+        }
+
+        $archive.Dispose()
+        $archive = $null
+        $fileStream.Position = 0
+        $outerHash = [Security.Cryptography.SHA256]::Create()
+        $outerDigest = $outerHash.ComputeHash($fileStream)
+        return (-join ($outerDigest | ForEach-Object { $_.ToString('X2') }))
+    }
+    finally {
+        if ($outerHash) { $outerHash.Dispose() }
+        if ($archive) { $archive.Dispose() }
+        if ($fileStream) { $fileStream.Dispose() }
+    }
+}
+
 function Assert-AuthenticodeSigner {
     param([string]$Path, [string]$ExpectedSigner, [string]$Label)
     $signature = Get-AuthenticodeSignature -FilePath $Path
@@ -410,8 +556,9 @@ $manifestStage = New-SiblingTempPath -TargetPath $hashManifest -Suffix '.stage.t
 $manifestBackup = New-SiblingTempPath -TargetPath $zip -Suffix '.manifest.backup.txt'
 $tempZip = New-SiblingTempPath -TargetPath $zip -Suffix '.stage.zip'
 $zipBackup = New-SiblingTempPath -TargetPath $zip -Suffix '.backup.zip'
+$zipRollbackDiscard = New-SiblingTempPath -TargetPath $zip -Suffix '.zip.rollback-discard'
 
-foreach ($transactionBackup in @($metadataBackup, $manifestBackup, $metadataRollbackDiscard, $zipBackup)) {
+foreach ($transactionBackup in @($metadataBackup, $manifestBackup, $metadataRollbackDiscard, $zipBackup, $zipRollbackDiscard)) {
     if (Test-PathEqualOrContained -Path $transactionBackup -Container $package) {
         throw "Signed-package transaction backup must stay outside PackageDirectory: $transactionBackup"
     }
@@ -420,6 +567,8 @@ foreach ($transactionBackup in @($metadataBackup, $manifestBackup, $metadataRoll
 $metadataPublished = $false
 $manifestDetached = $false
 $manifestPublished = $false
+$zipPublished = $false
+$zipExistedBeforePublish = $false
 $transactionCommitted = $false
 
 try {
@@ -461,14 +610,22 @@ try {
         throw 'Staged ZIP is empty.'
     }
     Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package
-    $stagedZipHash = (Get-FileHash -LiteralPath $tempZip -Algorithm SHA256).Hash.ToUpperInvariant()
+    $stagedZipHash = Assert-ZipManifestIntegrity -ZipPath $tempZip
 
     if (Test-Path -LiteralPath $zip) {
         $zip = Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip'
+        $zipExistedBeforePublish = $true
         [IO.File]::Replace($tempZip, $zip, $zipBackup, $true)
     }
     else {
         [IO.File]::Move($tempZip, $zip)
+    }
+    $zipPublished = $true
+
+    $zip = Assert-SafeFile -Path $zip -Label 'finalized PackageZip'
+    $installedZipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToUpperInvariant()
+    if (-not [string]::Equals($installedZipHash, $stagedZipHash, [StringComparison]::Ordinal)) {
+        throw "Finalized ZIP generation mismatch. Expected $stagedZipHash, got $installedZipHash."
     }
     $transactionCommitted = $true
 
@@ -482,16 +639,47 @@ catch {
     $originalError = $_
     $rollbackErrors = New-Object 'System.Collections.Generic.List[string]'
 
+    if ($zipPublished) {
+        try {
+            $zip = Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip rollback target'
+            if ($zipExistedBeforePublish) {
+                if (-not (Test-Path -LiteralPath $zipBackup -PathType Leaf)) {
+                    throw "original PackageZip backup is unavailable: $zipBackup"
+                }
+                $zipBackup = Assert-SafeFile -Path $zipBackup -Label 'original PackageZip rollback backup'
+                if (Test-Path -LiteralPath $zip -PathType Leaf) {
+                    [IO.File]::Replace($zipBackup, $zip, $zipRollbackDiscard, $true)
+                    if (Test-Path -LiteralPath $zipRollbackDiscard) {
+                        Remove-Item -LiteralPath $zipRollbackDiscard -Force -ErrorAction Stop
+                    }
+                }
+                else {
+                    [IO.File]::Move($zipBackup, $zip)
+                }
+            }
+            elseif (Test-Path -LiteralPath $zip) {
+                Remove-Item -LiteralPath $zip -Force -ErrorAction Stop
+            }
+        }
+        catch { $rollbackErrors.Add("restore original finalized ZIP: $($_.Exception.Message)") }
+    }
+
     if ($manifestPublished -and (Test-Path -LiteralPath $hashManifest)) {
         try { Remove-Item -LiteralPath $hashManifest -Force -ErrorAction Stop }
         catch { $rollbackErrors.Add("remove staged manifest: $($_.Exception.Message)") }
     }
     if ($manifestDetached -and (Test-Path -LiteralPath $manifestBackup)) {
-        try { [IO.File]::Move($manifestBackup, $hashManifest) }
+        try {
+            $manifestBackup = Assert-SafeFile -Path $manifestBackup -Label 'original SHA256SUMS.txt rollback backup'
+            $hashManifest = Assert-SafeOptionalFileTarget -Path $hashManifest -Label 'SHA256SUMS.txt rollback target'
+            [IO.File]::Move($manifestBackup, $hashManifest)
+        }
         catch { $rollbackErrors.Add("restore original manifest: $($_.Exception.Message)") }
     }
     if ($metadataPublished -and (Test-Path -LiteralPath $metadataBackup)) {
         try {
+            $metadataBackup = Assert-SafeFile -Path $metadataBackup -Label 'original PACKAGE-METADATA.json rollback backup'
+            $metadataPath = Assert-SafeFile -Path $metadataPath -Label 'PACKAGE-METADATA.json rollback target'
             [IO.File]::Replace($metadataBackup, $metadataPath, $metadataRollbackDiscard, $true)
             if (Test-Path -LiteralPath $metadataRollbackDiscard) {
                 Remove-Item -LiteralPath $metadataRollbackDiscard -Force -ErrorAction Stop
@@ -506,7 +694,7 @@ catch {
     throw $originalError
 }
 finally {
-    foreach ($temporary in @($metadataStage, $manifestStage, $tempZip, $metadataRollbackDiscard)) {
+    foreach ($temporary in @($metadataStage, $manifestStage, $tempZip, $metadataRollbackDiscard, $zipRollbackDiscard)) {
         if (Test-Path -LiteralPath $temporary) {
             Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
         }

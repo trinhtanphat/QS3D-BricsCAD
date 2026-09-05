@@ -20,8 +20,7 @@ namespace QS3D.Core.SmokeTests
         private static void OversizedFamiliesFailBeforeIndexing()
         {
             var project = new ProjectState("P-BROWSER-QUERY-FAMILY-BOUND", "Browser query family bound");
-            project.Families.Add(null!);
-            AddFamilies(project, MaxFamilies);
+            AddFamilies(project, MaxFamilies + 1);
 
             var error = ThrowsInvalidOperation(() => Filter(project));
             Equal("Project browser query supports at most 10000 family definitions.", error.Message);
@@ -30,8 +29,7 @@ namespace QS3D.Core.SmokeTests
         private static void OversizedFloorsFailBeforeIndexing()
         {
             var project = new ProjectState("P-BROWSER-QUERY-FLOOR-BOUND", "Browser query floor bound");
-            project.Floors.Add(null!);
-            AddFloors(project, MaxReferenceDefinitions);
+            AddFloors(project, MaxReferenceDefinitions + 1);
 
             var error = ThrowsInvalidOperation(() => Filter(project));
             Equal("Project browser query supports at most 2000 floor definitions.", error.Message);
@@ -40,8 +38,7 @@ namespace QS3D.Core.SmokeTests
         private static void OversizedZonesFailBeforeIndexing()
         {
             var project = new ProjectState("P-BROWSER-QUERY-ZONE-BOUND", "Browser query zone bound");
-            project.Zones.Add(null!);
-            AddZones(project, MaxReferenceDefinitions);
+            AddZones(project, MaxReferenceDefinitions + 1);
 
             var error = ThrowsInvalidOperation(() => Filter(project));
             Equal("Project browser query supports at most 2000 zone definitions.", error.Message);

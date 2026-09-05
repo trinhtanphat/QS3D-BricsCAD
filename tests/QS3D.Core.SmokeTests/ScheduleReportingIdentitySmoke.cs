@@ -43,8 +43,10 @@ namespace QS3D.Core.SmokeTests
         {
             var nullFloor = new ProjectState("schedule-null-floor", "Schedule null floor");
             nullFloor.Floors.Add(new FloorDefinition("floor", "Floor", 0d));
-            nullFloor.Floors.Add(null!);
-            AssertAllProjectReportBuildersReject(nullFloor, "floor index 1");
+            var nullFloorVersion = nullFloor.ChangeVersion;
+            ExpectThrows<ArgumentNullException>(() => nullFloor.Floors.Add(null!));
+            if (nullFloor.ChangeVersion != nullFloorVersion)
+                throw new Exception("Rejected null Floor admission must not advance project revision.");
 
             var duplicateFloor = new ProjectState("schedule-duplicate-floor", "Schedule duplicate floor");
             duplicateFloor.Floors.Add(new FloorDefinition("Floor-A", "Floor A", 0d));
@@ -53,8 +55,10 @@ namespace QS3D.Core.SmokeTests
 
             var nullZone = new ProjectState("schedule-null-zone", "Schedule null zone");
             nullZone.Zones.Add(new ZoneDefinition("zone", "Zone"));
-            nullZone.Zones.Add(null!);
-            AssertAllProjectReportBuildersReject(nullZone, "zone index 1");
+            var nullZoneVersion = nullZone.ChangeVersion;
+            ExpectThrows<ArgumentNullException>(() => nullZone.Zones.Add(null!));
+            if (nullZone.ChangeVersion != nullZoneVersion)
+                throw new Exception("Rejected null Zone admission must not advance project revision.");
 
             var duplicateZone = new ProjectState("schedule-duplicate-zone", "Schedule duplicate zone");
             duplicateZone.Zones.Add(new ZoneDefinition("Zone-A", "Zone A"));
@@ -63,8 +67,10 @@ namespace QS3D.Core.SmokeTests
 
             var nullFamily = new ProjectState("schedule-null-family", "Schedule null family");
             nullFamily.Families.Add(new ProjectFamily("family", "Family", ElementCategory.Slab));
-            nullFamily.Families.Add(null!);
-            AssertAllProjectReportBuildersReject(nullFamily, "family index 1");
+            var nullFamilyVersion = nullFamily.ChangeVersion;
+            ExpectThrows<ArgumentNullException>(() => nullFamily.Families.Add(null!));
+            if (nullFamily.ChangeVersion != nullFamilyVersion)
+                throw new Exception("Rejected null Family admission must not advance project revision.");
 
             var duplicateFamily = new ProjectState("schedule-duplicate-family", "Schedule duplicate family");
             duplicateFamily.Families.Add(new ProjectFamily("Family-A", "Family A", ElementCategory.Slab));

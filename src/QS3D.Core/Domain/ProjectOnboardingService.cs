@@ -233,13 +233,20 @@ namespace QS3D.Core.Domain
                 ? CountDrawingUnitOverrideRevisionAdvances(project.Metadata, effectiveUnit)
                 : 0L;
 
-            if (project.Floors.Count == 0 || existingFloorToActivate != null)
+            if (project.Floors.Count == 0)
+            {
+                // Creating the starter Floor persists both the initial active-Floor selection and the catalog insertion.
+                requiredAdvances = checked(requiredAdvances + 2L);
+            }
+            else if (existingFloorToActivate != null)
+            {
                 requiredAdvances = checked(requiredAdvances + 1L);
+            }
 
             foreach (var plan in plans)
             {
                 if (plan.ReusedFamily != null) continue;
-                // One Touch for Create, one for each new default property, and one for Material.
+                // One catalog structural revision for Create, one for each new default property, and one for Material.
                 requiredAdvances = checked(requiredAdvances + 2L + plan.Values.Count);
             }
 

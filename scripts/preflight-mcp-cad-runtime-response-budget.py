@@ -27,17 +27,33 @@ def main() -> int:
     invoke = source[invoke_start:execute_start] if invoke_start >= 0 and execute_start > invoke_start else ""
     for token in (
         "item.Done.Wait(CadDispatchTimeoutMilliseconds)",
-        "Interlocked.Exchange(ref item.Abandoned, 1)",
-        "CadWorkCancelledBeforeStart",
+        "Interlocked.CompareExchange(ref item.DispatchState, CadWorkCancelledBeforeStart, CadWorkQueued)",
         "queued work was cancelled before start",
-        "completion is uncertain",
-        "Do not retry automatically",
+        "item.DetachAfterStartedTimeout()",
+        "throw new CadStartedTimeoutException(item);",
+        "item.DisposeCallerCompletionIfOwned();",
     ):
         if token not in invoke:
             errors.append(f"InvokeCad must preserve bounded fail-closed semantics: {token}")
 
+    if "item.Done.Wait();" in invoke:
+        errors.append("already-started CAD work must not extend the MCP response with an unbounded completion wait")
+    if "item.Abandoned" in invoke or "Interlocked.Exchange(ref item.Abandoned" in invoke:
+        errors.append("InvokeCad must not restore the racy abandoned completion-handle handoff")
     if "Thread.Sleep(" in invoke:
         errors.append("InvokeCad timeout path must not extend the response deadline with Thread.Sleep")
+
+    mutation_start = source.find("private static string Mutation(string body, string tool, Func<string> action)")
+    mutation_end = source.find("private static bool IsDurabilitySaveTool", mutation_start)
+    mutation = source[mutation_start:mutation_end] if mutation_start >= 0 and mutation_end > mutation_start else ""
+    for token in (
+        "catch (CadStartedTimeoutException timeout)",
+        "McpCadMutationCoordinator.DetachMutationForDeferredCompletion(writerScope)",
+        "timeout.TransferWriterScope(deferredWriterScope)",
+        "writerScope = null",
+    ):
+        if token not in mutation:
+            errors.append(f"started timeout must retain writer ownership through deferred completion: {token}")
 
     if not DOC.is_file():
         errors.append(f"missing runbook: {DOC.relative_to(ROOT)}")

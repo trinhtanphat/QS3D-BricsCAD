@@ -11,11 +11,11 @@ namespace QS3D.Core.SmokeTests
 
         internal static void Run()
         {
-            RejectsNullFamilyAcrossTargetOperations();
+            RejectsNullFamilyAtCatalogBoundaryWithoutMutation();
             PreservesValidTargetOperations();
         }
 
-        private static void RejectsNullFamilyAcrossTargetOperations()
+        private static void RejectsNullFamilyAtCatalogBoundaryWithoutMutation()
         {
             var project = new ProjectState("FAMILY-GLOBAL-NULL", "Family global null");
             var source = new ProjectFamily("F1", "Family 1", ElementCategory.Beam);
@@ -23,47 +23,33 @@ namespace QS3D.Core.SmokeTests
             target.Properties["P"] = "V";
             project.Families.Add(source);
             project.Families.Add(target);
-            project.Families.Add(null!);
-            var element = new ProjectElement("E1", ElementCategory.Beam, source.Id, string.Empty, string.Empty);
-            project.Elements.Add(element);
 
-            AssertRejectedWithoutMutation(project, target, element, () => ProjectFamilyService.Duplicate(project, "F2", "F3", "Family 3"));
-            AssertRejectedWithoutMutation(project, target, element, () => ProjectFamilyService.Rename(project, "F2", "Family 2 renamed"));
-            AssertRejectedWithoutMutation(project, target, element, () => ProjectFamilyService.SetProperty(project, "F2", "P", "V2"));
-            AssertRejectedWithoutMutation(project, target, element, () => ProjectFamilyService.RemoveProperty(project, "F2", "P"));
-            AssertRejectedWithoutMutation(project, target, element, () => ProjectFamilyService.Assign(project, "F2", new[] { element }));
-            AssertRejectedWithoutMutation(project, target, element, () => ProjectFamilyService.Delete(project, "F2"));
-            AssertRejectedWithoutMutation(project, target, element, () => ProjectFamilyService.ReferenceCount(project, "F2"));
-        }
-
-        private static void AssertRejectedWithoutMutation(ProjectState project, ProjectFamily target, ProjectElement element, Action action)
-        {
             var familyCount = project.Families.Count;
-            var targetName = target.Name;
-            var targetProperty = target.Properties["P"];
-            var elementFamilyId = element.FamilyId;
             var changeVersion = project.ChangeVersion;
             var updatedUtc = project.UpdatedUtc;
+            var targetName = target.Name;
+            var targetProperty = target.Properties["P"];
 
             try
             {
-                action();
+                project.Families.Add(null!);
             }
-            catch (InvalidOperationException ex)
+            catch (ArgumentNullException ex)
             {
-                if (!string.Equals(ex.Message, "Project family collection contains a null family.", StringComparison.Ordinal))
-                    throw new InvalidOperationException("Family target operation returned an unexpected null-integrity error.", ex);
+                if (!string.Equals(ex.ParamName, "item", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Null Family admission failed for the wrong parameter.", ex);
                 if (project.Families.Count != familyCount ||
+                    project.ChangeVersion != changeVersion ||
+                    project.UpdatedUtc != updatedUtc ||
                     !string.Equals(target.Name, targetName, StringComparison.Ordinal) ||
                     !string.Equals(target.Properties["P"], targetProperty, StringComparison.Ordinal) ||
-                    !string.Equals(element.FamilyId, elementFamilyId, StringComparison.Ordinal) ||
-                    project.ChangeVersion != changeVersion ||
-                    project.UpdatedUtc != updatedUtc)
-                    throw new InvalidOperationException("Rejected Family target operation mutated project state.");
+                    !ReferenceEquals(project.FindFamily("F1"), source) ||
+                    !ReferenceEquals(project.FindFamily("F2"), target))
+                    throw new InvalidOperationException("Rejected null-Family admission mutated project state.");
                 return;
             }
 
-            throw new InvalidOperationException("Family target operation must reject a null Family collection entry.");
+            throw new InvalidOperationException("Family catalog must reject null entries at the admission boundary.");
         }
 
         private static void PreservesValidTargetOperations()

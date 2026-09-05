@@ -516,8 +516,54 @@ jobs:
             throw 'Final draft release asset IDs changed after byte verification; refusing publication.'
           }
 
+          $finalMainResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers
+          $finalMain = ([string]$finalMainResponse.sha).Trim().ToLowerInvariant()
+          if ($finalMain -notmatch '^[0-9a-f]{40}$') {
+            throw "Protected main API returned an invalid final SHA: $finalMain"
+          }
+          $finalMainRef = 'refs/remotes/origin/qs3d-release-final-main'
+          & git fetch --no-tags --force origin "+refs/heads/main:$finalMainRef"
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not fetch protected main for final release admission.'
+          }
+          $fetchedFinalMain = ([string](& git rev-parse --verify $finalMainRef)).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $fetchedFinalMain -notmatch '^[0-9a-f]{40}$') {
+            throw 'Could not resolve fetched protected-main SHA for final release admission.'
+          }
+          if ($fetchedFinalMain -ne $finalMain) {
+            throw "Protected-main API/fetch identity mismatch during final publication admission. API=$finalMain fetched=$fetchedFinalMain"
+          }
+          & git merge-base --is-ancestor $env:SOURCE_SHA $finalMain
+          $finalAncestorStatus = $LASTEXITCODE
+          if ($finalAncestorStatus -ne 0) {
+            throw "Release SOURCE_SHA is no longer an ancestor of protected main during final publication admission: $env:SOURCE_SHA"
+          }
+          Write-Host 'Release SOURCE_SHA remains an ancestor of protected main; publication stays pinned to the already verified SOURCE_SHA even if newer main integrations landed.'
+
           $publishBody = @{ draft = $false } | ConvertTo-Json
           $publishedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body $publishBody
-          if ($publishedRelease.draft -ne $false) {
-            throw 'GitHub prerelease remained a draft after publish request.'
+          if ($publishedRelease.draft -ne $false -or $publishedRelease.prerelease -ne $true) {
+            throw 'GitHub prerelease did not preserve the expected published prerelease state.'
+          }
+          if (-not [string]::Equals(([string]$publishedRelease.tag_name).Trim(), $env:RELEASE_TAG, [StringComparison]::Ordinal) -or
+              -not [string]::Equals(([string]$publishedRelease.target_commitish).Trim(), $env:RELEASE_COMMIT_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Published release tag or target commit changed across final publication; refusing success.'
+          }
+          if (@($publishedRelease.assets).Count -ne $assetSpecs.Count) {
+            throw "Published release asset set changed across final publication. Expected exactly $($assetSpecs.Count) assets, found $(@($publishedRelease.assets).Count)."
+          }
+          $publishedReleaseAssetIds = @()
+          foreach ($spec in $assetSpecs) {
+            $publishedMatches = @($publishedRelease.assets | Where-Object { [string]::Equals([string]$_.name, $spec.Name, [StringComparison]::Ordinal) })
+            if ($publishedMatches.Count -ne 1) {
+              throw "Published release must contain exactly one asset named $($spec.Name), found $($publishedMatches.Count)."
+            }
+            if ([int64]$publishedMatches[0].size -ne $spec.Size) {
+              throw "Published release asset size changed for $($spec.Name). Expected=$($spec.Size), API=$($publishedMatches[0].size)."
+            }
+            $publishedReleaseAssetIds += ([string]$publishedMatches[0].id)
+          }
+          $publishedAssetIdentityDrift = @(Compare-Object -ReferenceObject $verifiedReleaseAssetIds -DifferenceObject $publishedReleaseAssetIds -SyncWindow 0)
+          if ($publishedAssetIdentityDrift.Count -ne 0) {
+            throw 'Published release asset IDs changed after byte verification; refusing success.'
           }

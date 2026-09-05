@@ -74,8 +74,10 @@ else:
     text = panel.read_text(encoding="utf-8")
     for token in (
         "public void SetInspection(IReadOnlyList<EntitySnapshot> snapshots)",
-        "try\n            {\n                SyncFamilyFromSelection();\n            }\n            catch (Exception ex)",
-        'ClearProject("Selection sync semantic lỗi: " + ex.Message);',
+        "try\n            {\n                SyncFamilyFromSelection();\n            }\n            catch (Exception)",
+        "ClearProject(string.Empty);",
+        'ReportWorkspaceFailure("Đồng bộ selection semantic");',
+        "private void ReportWorkspaceFailure(string operation)",
         "if (_inspection.Count != 1)",
         "Selection gồm nhiều đối tượng CAD; inspector giữ scope Family để tránh sửa nhầm Instance.",
         "_viewModel.SetSelectedElement(null);",
@@ -84,6 +86,13 @@ else:
     ):
         if token not in text:
             errors.append("Workspace selection safety missing: " + token)
+    for stale in (
+        'ClearProject("Selection sync semantic lỗi: " + ex.Message);',
+        'SetStatus("Đổi Zone làm việc lỗi: " + ex.Message);',
+        'SetStatus("Đổi tầng làm việc lỗi: " + ex.Message);',
+    ):
+        if stale in text:
+            errors.append("Workspace selection/modeless safety still exposes raw exception detail: " + stale)
 
 if not selection_panel.is_file():
     errors.append("missing WorkspacePanel.SelectionInspection.cs")
@@ -136,4 +145,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Workspace property rows honor Core property-specific dirty/stale invalidation, read-only rows cannot retain reset state, editable same-text commits revalidate live modeless state, Instance reset resolves live Family state, selection scope fails closed, and numeric/boolean editors stay validated.")
+print("PASS: Workspace property rows honor Core property-specific dirty/stale invalidation, read-only rows cannot retain reset state, editable same-text commits revalidate live modeless state, Instance reset resolves live Family state, selection scope fails closed with redacted diagnostics, and numeric/boolean editors stay validated.")

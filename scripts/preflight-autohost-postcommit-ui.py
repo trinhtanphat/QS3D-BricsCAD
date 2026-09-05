@@ -27,16 +27,24 @@ else:
             "regenerated = linked > 0 ? Regenerate(project, regenerationTargets) : 0;",
             "rollback.Restore(project);",
             "FinalizeAutoHostUi(document, summary);",
-            "ReportAutoHostError(document, ex);",
         ):
             if token not in command:
                 errors.append("Auto Host post-commit boundary missing token: " + token)
 
+        legacy_failure = "ReportAutoHostError(document, ex);"
+        redacted_failure = "ReportAutoHostError(document);"
+        if legacy_failure not in command and redacted_failure not in command:
+            errors.append("Auto Host post-commit boundary missing best-effort business failure reporter")
+
         regen = command.find("regenerated = linked > 0 ? Regenerate(project, regenerationTargets) : 0;")
         summary = command.find('var summary = "Auto Host: linked="', regen)
         success = command.find("FinalizeAutoHostUi(document, summary);", summary)
-        outer_catch = command.rfind("catch (System.Exception ex)")
-        failure = command.find("ReportAutoHostError(document, ex);", outer_catch)
+        legacy_catch = command.rfind("catch (System.Exception ex)")
+        redacted_catch = command.rfind("catch (System.Exception)")
+        outer_catch = max(legacy_catch, redacted_catch)
+        failure = command.find(legacy_failure, outer_catch)
+        if failure < 0:
+            failure = command.find(redacted_failure, outer_catch)
         if min(regen, summary, success, outer_catch, failure) < 0 or not regen < summary < success < outer_catch < failure:
             errors.append("Auto Host must finish semantic mutation/regeneration before best-effort summary UI, with business failures routed separately")
 
@@ -54,21 +62,25 @@ else:
             "try { PaletteCoordinator.RefreshProject(); }",
             "try { PaletteCoordinator.SetStatus(summary); }",
             "try { document.Editor.WriteMessage(",
-            "Cảnh báo UI sau Auto Host commit",
         ):
             if token not in success_helper:
                 errors.append("FinalizeAutoHostUi missing best-effort token: " + token)
+        if "Cảnh báo UI sau Auto Host commit" not in success_helper and "PostCommitUiWarning" not in success_helper:
+            errors.append("FinalizeAutoHostUi missing committed-state UI warning")
         if "throw" in success_helper:
             errors.append("FinalizeAutoHostUi must not throw after committed Auto Host mutation")
 
         error_helper = text[report:single]
         for token in (
-            'var message = "QS3DAUTOLINKHOSTS lỗi: " + error.Message;',
             "try { PaletteCoordinator.SetStatus(message); }",
             "try { document.Editor.WriteMessage(",
         ):
             if token not in error_helper:
                 errors.append("ReportAutoHostError missing best-effort failure-report token: " + token)
+        legacy_message = 'var message = "QS3DAUTOLINKHOSTS lỗi: " + error.Message;'
+        redacted_message = "var message = OperationFailure;"
+        if legacy_message not in error_helper and redacted_message not in error_helper:
+            errors.append("ReportAutoHostError missing supported legacy/redacted message construction")
         if "throw" in error_helper:
             errors.append("ReportAutoHostError must not throw while reporting business failure")
 
@@ -86,4 +98,4 @@ if errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("PASS: Auto Host keeps matching/rollback/regeneration semantics intact while committed batch results and business failures use non-throwing UI/reporting boundaries.")
+print("PASS: Auto Host keeps matching/rollback/regeneration semantics intact while committed batch results and business failures use non-throwing UI/reporting boundaries across legacy and redacted reporter shapes.")

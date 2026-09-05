@@ -9,10 +9,26 @@ namespace QS3D.Core.SmokeTests
     {
         public static void Run()
         {
+            CatalogNullsRejectAtAdmission();
             ModelHealthReportsAmbiguityWithoutThrowing();
             ComprehensiveHealthPreservesReportAcrossProviderFailures();
             DependencyHealthRejectsAmbiguousTargets();
             LevelHealthReportsDuplicateLevelReferencesWithoutPendingQualification();
+        }
+
+        private static void CatalogNullsRejectAtAdmission()
+        {
+            var project = new ProjectState("health-null-admission", "Health null admission");
+            var beforeVersion = project.ChangeVersion;
+
+            ThrowsArgumentNullItem(() => project.Floors.Add(null!));
+            ThrowsArgumentNullItem(() => project.Zones.Add(null!));
+            ThrowsArgumentNullItem(() => project.Families.Add(null!));
+
+            if (project.Floors.Count != 0 || project.Zones.Count != 0 || project.Families.Count != 0)
+                throw new Exception("Rejected null catalog entries must not mutate persisted catalogs.");
+            if (project.ChangeVersion != beforeVersion)
+                throw new Exception("Rejected null catalog entries must not advance project revision.");
         }
 
         private static void ModelHealthReportsAmbiguityWithoutThrowing()
@@ -21,9 +37,6 @@ namespace QS3D.Core.SmokeTests
             var issues = new ModelHealthService().Inspect(project);
 
             Has(issues, "NULL_ELEMENT");
-            Has(issues, "NULL_FAMILY");
-            Has(issues, "NULL_FLOOR");
-            Has(issues, "NULL_ZONE");
             Has(issues, "DUPLICATE_ID");
             Has(issues, "DUPLICATE_FAMILY_ID");
             Has(issues, "DUPLICATE_FLOOR_ID");
@@ -58,7 +71,6 @@ namespace QS3D.Core.SmokeTests
         private static void LevelHealthReportsDuplicateLevelReferencesWithoutPendingQualification()
         {
             var project = CorruptProject();
-            project.Floors.Remove(null!);
             project.Elements.Remove(null!);
             var issues = new LevelReferenceHealthService().Inspect(project);
 
@@ -79,14 +91,11 @@ namespace QS3D.Core.SmokeTests
 
             project.Floors.Add(new FloorDefinition("L", "Level A", 0d));
             project.Floors.Add(new FloorDefinition("l", "Level B", 3d));
-            project.Floors.Add(null!);
             project.Zones.Add(new ZoneDefinition("Z", "Zone A"));
             project.Zones.Add(new ZoneDefinition("z", "Zone B"));
-            project.Zones.Add(null!);
 
             project.Families.Add(new ProjectFamily("F", "Door A", ElementCategory.Door));
             project.Families.Add(new ProjectFamily("f", "Door B", ElementCategory.Door));
-            project.Families.Add(null!);
 
             var firstHost = new ProjectElement("H", ElementCategory.ArchitecturalWall, string.Empty, "L", "Z");
             firstHost.Properties["LengthM"] = "3";
@@ -113,6 +122,17 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(door);
             project.Elements.Add(null!);
             return project;
+        }
+
+        private static void ThrowsArgumentNullItem(Action action)
+        {
+            try { action(); }
+            catch (ArgumentNullException ex)
+            {
+                if (string.Equals(ex.ParamName, "item", StringComparison.Ordinal)) return;
+                throw new Exception("Expected ArgumentNullException parameter 'item', actual='" + ex.ParamName + "'.");
+            }
+            throw new Exception("Expected ArgumentNullException for null persisted catalog admission.");
         }
 
         private static void Has(System.Collections.Generic.IEnumerable<ModelHealthIssue> issues, string code)

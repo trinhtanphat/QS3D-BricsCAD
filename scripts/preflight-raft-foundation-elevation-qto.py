@@ -112,7 +112,8 @@ def main():
     require(placement, "top = bottom + thicknessM;", "bottom_level grows upward", failures)
     require(placement, "ApplyFamilyPlacementToElement", "Family placement copied to element metadata", failures)
     require(placement, "element.SetProperty(activeKey, levelId);", "element persists active Level id", failures)
-    require(placement, "element.Properties.Remove(oppositeKey);", "element clears opposite Level id", failures)
+    require(placement, "element.RemoveProperty(oppositeKey);", "element clears opposite Level id through lifecycle API", failures)
+    forbid(placement, "element.Properties.Remove(oppositeKey);", "raw opposite Level removal bypasses element lifecycle", failures)
 
     # Native builders consume the Core raft placement rather than legacy source-relative Z.
     require(cad_vertical, "RaftFoundationLevelPlacement.Resolve(project, element, family)", "native raft placement resolver", failures)

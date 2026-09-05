@@ -43,6 +43,7 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void BindViewModel()
         {
+            _viewModel.SetFamilyPropertyPresenter(TryShowSingleFootingFamilyProperties);
             DataContext = _viewModel;
             var propertyView = CollectionViewSource.GetDefaultView(_viewModel.Properties);
             if (propertyView != null && propertyView.CanGroup)
@@ -202,9 +203,10 @@ namespace QS3D.BricsCAD.V25.UI
                 var active = project.Metadata.TryGetValue("ActiveFamilyId", out var id) ? project.FindFamily(id) : null;
                 FamilyList.SelectedItem = active ?? FamilyList.Items.Cast<object>().OfType<ProjectFamily>().FirstOrDefault();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                ClearProject("Đọc Workspace lỗi: " + ex.Message);
+                ClearProject(string.Empty);
+                ReportWorkspaceFailure("Đọc Workspace");
             }
             finally { _loadingContext = false; }
         }
@@ -220,9 +222,10 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 SyncFamilyFromSelection();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                ClearProject("Selection sync semantic lỗi: " + ex.Message);
+                ClearProject(string.Empty);
+                ReportWorkspaceFailure("Đồng bộ selection semantic");
             }
         }
 
@@ -284,14 +287,14 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (_loadingContext) return;
             try { _viewModel.SetActiveZone(ZoneCombo.SelectedItem as string); }
-            catch (Exception ex) { SetStatus("Đổi Zone làm việc lỗi: " + ex.Message); }
+            catch (Exception) { ReportWorkspaceFailure("Đổi Zone làm việc"); }
         }
 
         private void OnFloorChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_loadingContext) return;
             try { _viewModel.SetActiveFloor(FloorCombo.SelectedItem as string); }
-            catch (Exception ex) { SetStatus("Đổi tầng làm việc lỗi: " + ex.Message); }
+            catch (Exception) { ReportWorkspaceFailure("Đổi tầng làm việc"); }
         }
 
         private void OnModelTreeSelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
@@ -358,7 +361,7 @@ namespace QS3D.BricsCAD.V25.UI
                     basis == null ? "Đã tạo Family “" + family.Name + "”." : "Đã nhân bản Family “" + basis.Name + "” → “" + family.Name + "”.",
                     "Workspace Family create/duplicate");
             }
-            catch (Exception ex) { SetStatus("Tạo/Nhân bản Family lỗi: " + ex.Message); }
+            catch (Exception) { ReportWorkspaceFailure("Tạo/Nhân bản Family"); }
         }
 
         private void OnDeleteClick(object sender, RoutedEventArgs e)
@@ -397,7 +400,7 @@ namespace QS3D.BricsCAD.V25.UI
                     "Đã xóa Family “" + family.Name + "”.",
                     "Workspace Family delete");
             }
-            catch (Exception ex) { SetStatus("Xóa Family lỗi: " + ex.Message); }
+            catch (Exception) { ReportWorkspaceFailure("Xóa Family"); }
         }
 
         private void OnCaptureSelectedClick(object sender, RoutedEventArgs e)
@@ -452,7 +455,7 @@ namespace QS3D.BricsCAD.V25.UI
                 RefreshProject();
                 PaletteCoordinator.RefreshCad();
             }
-            catch (Exception ex) { SetStatus("Làm mới Workspace/CAD lỗi: " + ex.Message); }
+            catch (Exception) { ReportWorkspaceFailure("Làm mới Workspace/CAD"); }
         }
         private void OnLocateSelectedClick(object sender, RoutedEventArgs e) { var count = SelectInspection(); SetStatus("Đã chọn lại " + count + " đối tượng CAD."); if (count > 0) Send("QS3DZOOMSELECTED"); }
         private void OnFocusSelectedClick(object sender, RoutedEventArgs e) { var count = SelectInspection(); if (count <= 0) { SetStatus("Chưa có đối tượng để Focus."); return; } SetStatus("Focus " + count + " đối tượng."); Send("QS3DFOCUS"); }
@@ -467,7 +470,7 @@ namespace QS3D.BricsCAD.V25.UI
                 _viewModel.SetActiveFamily(FamilyList.SelectedItem as ProjectFamily);
                 _viewModel.ShowFamilyProperties();
             }
-            catch (Exception ex) { SetStatus("Đổi Family active lỗi: " + ex.Message); }
+            catch (Exception) { ReportWorkspaceFailure("Đổi Family active"); }
         }
         private void OnFamilySearchChanged(object sender, TextChangedEventArgs e) => ApplyFamilyFilter();
 
@@ -556,16 +559,25 @@ namespace QS3D.BricsCAD.V25.UI
         {
             SetStatus(successMessage);
             try { refresh(); }
-            catch (Exception refreshError)
+            catch (Exception)
             {
-                SetStatus(successMessage + " UI sync warning: " + refreshError.Message);
-                var doc = Application.DocumentManager.MdiActiveDocument;
-                if (doc != null)
-                {
-                    try { doc.Editor.WriteMessage("\nQS3D " + context + " đã commit; UI sync warning: " + refreshError.Message); }
-                    catch { }
-                }
+                ReportWorkspacePostCommitWarning(successMessage, context);
             }
+        }
+
+        private void ReportWorkspaceFailure(string operation)
+        {
+            SetStatus(operation + " không hoàn tất. Chi tiết nội bộ đã được ẩn; hãy Refresh Workspace và thử lại.");
+        }
+
+        private void ReportWorkspacePostCommitWarning(string successMessage, string context)
+        {
+            var warning = successMessage + " " + context + " đã commit; đồng bộ UI chưa hoàn tất. Hãy Refresh Workspace.";
+            SetStatus(warning);
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            try { doc.Editor.WriteMessage("\nQS3D " + warning); }
+            catch { }
         }
 
         private void Send(string command)
@@ -583,7 +595,7 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
             }
             try { document.SendStringToExecute(normalized + " ", true, false, false); }
-            catch (Exception ex) { SetStatus("Không thể gửi lệnh " + normalized + ": " + ex.Message); }
+            catch (Exception) { ReportWorkspaceFailure("Gửi lệnh " + normalized); }
         }
     }
 }
