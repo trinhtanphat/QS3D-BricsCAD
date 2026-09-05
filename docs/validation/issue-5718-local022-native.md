@@ -1,8 +1,10 @@
-# Issue #5718 — LOCAL-022 V25 bounded native qualification
+# Issue #5718 — LOCAL-022 V25/V26 bounded native qualification
 
 ## Verdict
 
-`LOCAL_PASS_BOUNDED` for the automated BricsCAD V25 portion only.
+`LOCAL_PASS_BOUNDED` for the automated BricsCAD V25 and V26 portions on the same frozen product source `43130a49f49676299b865f094a9a6ded482f67ad`. Each host passed run, saved and fresh-process reopen. Aggregate LOCAL-022 remains open for interactive/UI and the additional coverage limits recorded below.
+
+## Earlier official V25 release result
 
 - Product: official `v0.1.0-preview.10308`
 - Product source: `988998bd26c9d0da5915670d9b5adca14b93ecca`
@@ -53,13 +55,13 @@ After the host naturally reached zero, recovery removed only its runner nonce an
 
 This result does not close aggregate LOCAL-022:
 
-- BricsCAD V26 on the same product source is not run by this V25 harness;
+- the earlier V25 harness does not itself qualify V26; the separate same-source V26 result is recorded below;
 - visible Workspace `Móng → Móng đơn → Add`, physical mouse picks, Enter/Esc, dialog cancel and visual six-field layout are not exercised;
 - Quantity UI, Unicode/DPI appearance and unrelated Foundation families are not exercised;
 - no customer/private DWG is used;
 - no MCP request or MCP tool test is issued. The frozen product starts its embedded loopback server as part of `NETLOAD`; the probe immediately pauses and verifies the MCP CAD-mutation and desktop-control boundaries, while both external tunnels remain stopped.
 
-Accordingly, issue #4034 and LOCAL-022 remain open for the V26 and interactive/UI cells.
+Issue #4034 and LOCAL-022 remain open for the interactive/UI cells and the additional coverage limits below; the same-source V26 automated cells now have independent evidence.
 
 ## Same-source V25/V26 successor candidate
 
@@ -67,7 +69,7 @@ The V26 build at official `.10308` source `988998bd26c9d0da5915670d9b5adca14b93e
 
 Issue #5740 / PR #5770 carries the separate source correction at pushed candidate `43130a49f49676299b865f094a9a6ded482f67ad`. It also resolves the exposed V26 `CS0649` download-state warning and two scoped `SYSLIB0014` compatibility warnings. V25 and V26 Release builds passed with zero warnings/errors. The V26 build additionally passed the held-host-reference-generation wrapper.
 
-The next LOCAL-022 pair uses packages generated from that same candidate, with V25 first and full cleanup before V26. Their committed product version is `0.1.0-preview.10307`; they are explicitly `LOCAL_PR_CANDIDATE`, not the official release of that version. The V25 candidate ZIP hash is `4d9869e38682674772196a3e238f115624ff357a276bb0b976000b63c9a833b5`. The prior official `.10308` runtime evidence remains unchanged above. Successor runtime results are pending until fresh allocation receipts exist.
+The LOCAL-022 pair uses packages generated from that same candidate, with V25 first and full cleanup before V26. Their committed product version is `0.1.0-preview.10307`; they are explicitly `LOCAL_PR_CANDIDATE`, not the official release of that version. The V25 candidate ZIP hash is `4d9869e38682674772196a3e238f115624ff357a276bb0b976000b63c9a833b5`. The prior official `.10308` runtime evidence remains unchanged above. The successor results are recorded below.
 
 The V26 candidate ZIP hash is `7dbf9216e873f2e20c2fae5011785148e9feded944a7b43233b4710b331fd2c5`. A separate provenance file binds this archive to source `43130a49f49676299b865f094a9a6ded482f67ad`. The V26 runner checks that provenance, every extracted ZIP member, the installed .NET 8 Windows Desktop runtime, the V26 host identity, and the four-file probe output. It uses a separate V26 nonce profile and marker schema, preserves an absent or OnCommand-only registration, and restores exact profile state after both native processes.
 
@@ -84,3 +86,18 @@ Harness `e32fba7b808bbe2a286c5c8b625e061de48d8ea0` ran the frozen same-source pa
 The successor harness classifies unexpected exception types, distinguishes context binding from phase execution, and retains bounded V26 exception type/HResult/method metadata without messages, arguments or paths. No production source was changed to diagnose the native failure.
 
 The existing geometry cells prove volume and bounds, not complete BREP topology or every taper section. Cold semantic identity is bounded to project/family/dimensions/centres and counts, not a frozen element-ID/native-handle inventory. These limitations must not be represented as full LOCAL-022 acceptance.
+
+## V26 diagnosis and successful fresh allocation
+
+Harness `c91fa60b2655ac9279d0348acf264ad4f2716ca4` produced a fresh consumed V26 `FAIL_OR_NO_RESULT`: context binding passed, but `RunPhase` raised `FileNotFoundException` / HResult `80070002` before executing the matrix. The sanitized stage was `run_execute`. Cleanup and exact autostart restoration passed. This failed allocation was not reused.
+
+The V26 probe was corrected to share only the exact already-loaded, path-verified Core/product assemblies with its own .NET 8 `AssemblyLoadContext`, before phase JIT. The resolver checks the requesting context and complete assembly identity; it does not search disk, reload assemblies, copy dependencies or alter the product package. This resolved the separate-probe assembly-loading failure.
+
+A fresh allocation on harness `628a920b5b943ea1273d3b7132eb758e6f38b709` then returned `LOCAL_PASS_BOUNDED` on licensed BricsCAD V26.2.07, 2026-09-05 01:13:58Z–01:14:42Z. All three exact-schema phase markers passed with every required Boolean check true. V25 and V26 therefore independently qualify the same bounded matrix on product source `43130a49f49676299b865f094a9a6ded482f67ad`.
+
+| Host | Successful harness SHA | Runner SHA-256 | Probe DLL SHA-256 |
+| --- | --- | --- | --- |
+| V25.2.10 | `e32fba7b808bbe2a286c5c8b625e061de48d8ea0` | `e3e4b77ae6d239fb2cfbfddff4f85d5c57d4b12c13124bcc3464c3be36492d58` | `f5111a773159e4dab4f88f68d8652c3d56f9c29b6e23a858701ed2bc3a6eff01` |
+| V26.2.07 | `628a920b5b943ea1273d3b7132eb758e6f38b709` | `11016af66fbc7b9ee0dd3fae2266ff6d3688cfabd9786b8842ca9ee865212adc` | `ce82d507e36ce96b6c98e59982e01d737996ee1cf5d4e271ec63eb66f0855741` |
+
+Final cleanup verification found zero BricsCAD/tunnel processes, both successful private drawing roots and profile recovery files removed, exact per-host profile inventories/current pointers restored, and unchanged reference fixture/product payloads. OpenAI autostart returned to its original byte `1` and original timestamp after each allocation; Cloudflare remained `0`. No MCP request or tunnel functional test was performed. The installed user plugin was not replaced by these local candidate packages.
