@@ -186,14 +186,19 @@ catch {
     throw
 }
 finally {
-    if ($null -ne $generatedStream) {
-        $generatedStream.Dispose()
-        $generatedStream = $null
-    }
     if ($null -eq $primaryFailure) {
+        if ($null -ne $generatedStream) {
+            $generatedStream.Dispose()
+            $generatedStream = $null
+        }
         Remove-V26ManifestTemporaryWorkspaceStrict -ScriptPath $tempScript -RootPath $tempRoot
     }
     else {
+        if ($null -ne $generatedStream) {
+            try { $generatedStream.Dispose() }
+            catch { Write-Verbose "Secondary V26 manifest held-stream cleanup failed while preserving the primary failure: $($_.Exception.Message)" }
+            finally { $generatedStream = $null }
+        }
         Remove-V26ManifestTemporaryWorkspaceBestEffort -ScriptPath $tempScript -RootPath $tempRoot
     }
 }
