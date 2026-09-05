@@ -24,6 +24,8 @@ namespace QS3D.BricsCAD.V25
         private const double MinViewSize = 1e-6;
         private const double MaxViewSize = 1e12;
         private const double MinDirectionLength = 1e-9;
+        private const double ViewAspectRelativeTolerance = 1e-6;
+        private const double ViewDirectionComponentTolerance = 1e-9;
         private const double TwoPi = Math.PI * 2d;
         private static readonly object CommandGate = new object();
         private static readonly Dictionary<Document, CommandTracker> CommandTrackers =
@@ -69,7 +71,7 @@ namespace QS3D.BricsCAD.V25
                 "handlesCsv", "confirmMutation");
             yield return Tool(
                 "cad_view_set",
-                "Directly set active BricsCAD view center/width/height and optionally a bounded view direction/twist. Requires confirmMutation=true.",
+                "Directly set active BricsCAD view center/width/height when the requested aspect matches the active viewport. Optional direction may only restate the current direction; direction transitions fail closed. Requires confirmMutation=true.",
                 "\"centerX\":{\"type\":\"number\"},\"centerY\":{\"type\":\"number\"},\"width\":{\"type\":\"number\",\"exclusiveMinimum\":0},\"height\":{\"type\":\"number\",\"exclusiveMinimum\":0},"
                 + "\"directionX\":{\"type\":\"number\"},\"directionY\":{\"type\":\"number\"},\"directionZ\":{\"type\":\"number\"},\"twistRadians\":{\"type\":\"number\",\"minimum\":-6.283185307179586,\"maximum\":6.283185307179586},"
                 + ConfirmMutationProperty(),
@@ -111,7 +113,6 @@ namespace QS3D.BricsCAD.V25
             using (document.LockDocument())
             {
                 RequireViewMutationIdle();
-                document.Database.UpdateExt(false);
                 var extents = RequireFiniteExtents(
                     new Extents3d(document.Database.Extmin, document.Database.Extmax),
                     "drawing extents");
@@ -211,15 +212,42 @@ namespace QS3D.BricsCAD.V25
             using (document.LockDocument())
             using (var view = document.Editor.GetCurrentView())
             {
+                RequireCompatibleViewAspect(view, width, height);
+                if (direction.HasValue) RequireCompatibleViewDirection(view, direction.Value);
                 view.CenterPoint = new Point2d(centerX, centerY);
                 view.Width = width;
                 view.Height = height;
-                if (direction.HasValue) view.ViewDirection = direction.Value;
                 if (hasTwist) view.ViewTwist = twist;
                 RequireViewMutationIdle();
                 document.Editor.SetCurrentView(view);
             }
             return CurrentViewJson(document, "set");
+        }
+
+        private static void RequireCompatibleViewAspect(ViewTableRecord currentView, double requestedWidth, double requestedHeight)
+        {
+            var currentWidth = PositiveViewSize(currentView.Width, "current view width");
+            var currentHeight = PositiveViewSize(currentView.Height, "current view height");
+            var currentAspect = currentWidth / currentHeight;
+            var requestedAspect = requestedWidth / requestedHeight;
+            var scale = Math.Max(1d, Math.Abs(currentAspect));
+            if (!IsFinite(currentAspect) || !IsFinite(requestedAspect)
+                || Math.Abs(requestedAspect - currentAspect) > ViewAspectRelativeTolerance * scale)
+                throw new InvalidOperationException(
+                    "requested view aspect is incompatible with the active viewport aspect; cad_view_set refuses to let BricsCAD normalize width/height silently.");
+        }
+
+        private static void RequireCompatibleViewDirection(ViewTableRecord currentView, Vector3d requestedDirection)
+        {
+            var current = currentView.ViewDirection;
+            if (!IsFinite(current.X) || !IsFinite(current.Y) || !IsFinite(current.Z) || current.Length < MinDirectionLength)
+                throw new InvalidOperationException("Current view direction is invalid; direct view mutation is blocked.");
+            var normalized = current.GetNormal();
+            if (Math.Abs(normalized.X - requestedDirection.X) > ViewDirectionComponentTolerance
+                || Math.Abs(normalized.Y - requestedDirection.Y) > ViewDirectionComponentTolerance
+                || Math.Abs(normalized.Z - requestedDirection.Z) > ViewDirectionComponentTolerance)
+                throw new InvalidOperationException(
+                    "requested view direction differs from the active view; cad_view_set refuses direction transitions that may invoke LookFrom/modal UI.");
         }
 
         private static string ApplyExtents(Document document, Extents3d worldExtents, double padding, string source, int entityCount)
