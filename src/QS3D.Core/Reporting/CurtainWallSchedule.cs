@@ -40,10 +40,11 @@ namespace QS3D.Core.Reporting
 
             var reportVersion = project.ChangeVersion;
             var elementInstances = project.Elements.ToList();
+            var elementUpdatedUtc = elementInstances.Select(x => x.UpdatedUtc).ToList();
             var floorInstances = project.Floors.ToList();
             var familyInstances = project.Families.ToList();
             var drawingFingerprint = project.DrawingFingerprint;
-            EnsureProjectRevision(project, reportVersion, elementInstances, floorInstances, familyInstances, drawingFingerprint);
+            EnsureProjectRevision(project, reportVersion, elementInstances, elementUpdatedUtc, floorInstances, familyInstances, drawingFingerprint);
 
             var floors = floorInstances.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
             var families = familyInstances.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
@@ -53,7 +54,7 @@ namespace QS3D.Core.Reporting
 
             foreach (var element in elementInstances.Where(x => x.Category == ElementCategory.GlassWall).OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
-                EnsureProjectRevision(project, reportVersion, elementInstances, floorInstances, familyInstances, drawingFingerprint);
+                EnsureProjectRevision(project, reportVersion, elementInstances, elementUpdatedUtc, floorInstances, familyInstances, drawingFingerprint);
                 var floorId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FloorId);
                 var familyId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FamilyId);
                 var floor = floors.TryGetValue(floorId, out var floorName) ? floorName : floorId;
@@ -101,10 +102,10 @@ namespace QS3D.Core.Reporting
                 row.MaximumClearPanelHeightM = Math.Max(row.MaximumClearPanelHeightM, maximumClearPanelHeightM);
                 row.ElementIds.Add(element.Id);
                 ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
-                EnsureProjectRevision(project, reportVersion, elementInstances, floorInstances, familyInstances, drawingFingerprint);
+                EnsureProjectRevision(project, reportVersion, elementInstances, elementUpdatedUtc, floorInstances, familyInstances, drawingFingerprint);
             }
 
-            EnsureProjectRevision(project, reportVersion, elementInstances, floorInstances, familyInstances, drawingFingerprint);
+            EnsureProjectRevision(project, reportVersion, elementInstances, elementUpdatedUtc, floorInstances, familyInstances, drawingFingerprint);
             foreach (var key in order)
             {
                 var row = rows[key];
@@ -118,7 +119,7 @@ namespace QS3D.Core.Reporting
                 if (row.MinimumClearPanelWidthM == double.MaxValue) row.MinimumClearPanelWidthM = 0d;
                 if (row.MinimumClearPanelHeightM == double.MaxValue) row.MinimumClearPanelHeightM = 0d;
             }
-            EnsureProjectRevision(project, reportVersion, elementInstances, floorInstances, familyInstances, drawingFingerprint);
+            EnsureProjectRevision(project, reportVersion, elementInstances, elementUpdatedUtc, floorInstances, familyInstances, drawingFingerprint);
             return order.Select(x => rows[x]).ToList().AsReadOnly();
         }
 
@@ -126,6 +127,7 @@ namespace QS3D.Core.Reporting
             ProjectState project,
             long expectedVersion,
             IReadOnlyList<ProjectElement> elements,
+            IReadOnlyList<DateTime> elementUpdatedUtc,
             IReadOnlyList<FloorDefinition> floors,
             IReadOnlyList<ProjectFamily> families,
             string drawingFingerprint)
@@ -133,10 +135,19 @@ namespace QS3D.Core.Reporting
             if (project.ChangeVersion != expectedVersion ||
                 !string.Equals(project.DrawingFingerprint, drawingFingerprint, StringComparison.Ordinal) ||
                 !SameInstances(project.Elements, elements) ||
+                !SameElementRevisions(elements, elementUpdatedUtc) ||
                 !SameInstances(project.Floors, floors) ||
                 !SameInstances(project.Families, families))
                 throw new InvalidOperationException(
                     "Project changed while the curtain wall schedule was being built; recompute the schedule against the current project state.");
+        }
+
+        private static bool SameElementRevisions(IReadOnlyList<ProjectElement> elements, IReadOnlyList<DateTime> updatedUtc)
+        {
+            if (elements.Count != updatedUtc.Count) return false;
+            for (var index = 0; index < elements.Count; index++)
+                if (elements[index].UpdatedUtc != updatedUtc[index]) return false;
+            return true;
         }
 
         private static bool SameInstances<T>(IList<T> current, IReadOnlyList<T> snapshot) where T : class
