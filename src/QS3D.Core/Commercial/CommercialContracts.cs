@@ -502,18 +502,7 @@ namespace QS3D.Core.Commercial
 
         internal static decimal Multiply(decimal left, decimal right, string label)
         {
-            decimal result;
-            try
-            {
-                result = checked(left * right);
-            }
-            catch (OverflowException ex)
-            {
-                throw new OverflowException(label + " overflowed decimal arithmetic.", ex);
-            }
-            if (left != 0m && right != 0m && result == 0m)
-                throw new OverflowException(label + " underflowed decimal arithmetic.");
-            return result;
+            return CommercialExactDecimalAccumulator.MultiplyExact(left, right, label);
         }
 
         internal static decimal Add(decimal left, decimal right, string label)
