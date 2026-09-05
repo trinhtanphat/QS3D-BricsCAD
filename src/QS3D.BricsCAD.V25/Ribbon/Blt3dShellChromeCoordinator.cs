@@ -18,14 +18,20 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private sealed class HiddenChrome
         {
+            private readonly WeakReference<FrameworkElement> _element;
+
             public HiddenChrome(FrameworkElement element, Visibility visibility)
             {
-                Element = element;
+                _element = new WeakReference<FrameworkElement>(element);
                 Visibility = visibility;
             }
 
-            public FrameworkElement Element { get; }
             public Visibility Visibility { get; }
+
+            public FrameworkElement? TryGetElement()
+            {
+                return _element.TryGetTarget(out var element) ? element : null;
+            }
         }
 
         private static readonly List<HiddenChrome> HiddenElements = new List<HiddenChrome>();
@@ -91,7 +97,11 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
             foreach (var hidden in HiddenElements)
             {
-                try { hidden.Element.Visibility = hidden.Visibility; }
+                var element = hidden.TryGetElement();
+                if (element == null)
+                    continue;
+
+                try { element.Visibility = hidden.Visibility; }
                 catch { }
             }
             HiddenElements.Clear();
@@ -151,8 +161,21 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private static void Hide(FrameworkElement element)
         {
-            if (HiddenElements.Exists(entry => ReferenceEquals(entry.Element, element)))
-                return;
+            // A Ribbon/workspace rebuild can make prior visual-tree generations unreachable. Keep
+            // only weak registrations so this presentation helper never becomes their lifetime owner,
+            // and opportunistically prune collected entries whenever live chrome is registered again.
+            for (var index = HiddenElements.Count - 1; index >= 0; index--)
+            {
+                var current = HiddenElements[index].TryGetElement();
+                if (current == null)
+                {
+                    HiddenElements.RemoveAt(index);
+                    continue;
+                }
+
+                if (ReferenceEquals(current, element))
+                    return;
+            }
 
             HiddenElements.Add(new HiddenChrome(element, element.Visibility));
             element.Visibility = Visibility.Collapsed;
