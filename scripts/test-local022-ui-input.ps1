@@ -181,6 +181,7 @@ Write-Output 'PASS: orchestrator refuses missing consent before inspecting or mo
 
 # Required regression: replay cleanup against in-memory host doubles, never CAD.
 & (Join-Path $PSScriptRoot '../tests/QS3D.LocalQualification.V25/test-ui-quit-boundary.ps1')
+& (Join-Path $PSScriptRoot '../tests/QS3D.LocalQualification.V25/test-ui-placement-boundary.ps1')
 
 # Replay the actual new loop admission before any possible UI input.
 foreach ($major in @(25,26)) {

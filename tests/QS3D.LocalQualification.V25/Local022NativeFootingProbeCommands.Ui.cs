@@ -406,7 +406,11 @@ namespace QS3D.LocalQualification.V25
             private void PlaceCentre(int pointIndex, int expectedNewElements, UiStage next)
             {
                 var observed = NewFamilyElements();
-                var targetPoint = ScreenWorldPoint(_context.Document, _screenPoints[pointIndex]);
+                // Freeze the world target immediately before publishing the physical click,
+                // after hover acknowledgement. Later view changes cannot move that target.
+                _pendingPlacementCentre = CapturePlacementCentre(_pendingPlacementCentre, _requestWritten,
+                    _moveAcknowledged, () => ScreenWorldPoint(_context.Document, _screenPoints[pointIndex]));
+                var targetPoint = _pendingPlacementCentre ?? ScreenWorldPoint(_context.Document, _screenPoints[pointIndex]);
                 var placementTrace = "placement " + pointIndex + " active=" + IsDrawCommandActive() +
                     " count=" + observed.Count + " expected=" + targetPoint + " actual=" +
                     string.Join("|", observed.Select(element => ReadFootprintCenter(_context.Document, element).ToString()));
@@ -420,16 +424,18 @@ namespace QS3D.LocalQualification.V25
                 if (!AwaitAction(point.X, point.Y, "click", string.Empty)) return;
                 var created = NewFamilyElements();
                 if (created.Count != expectedNewElements) return;
-                var expected = ScreenWorldPoint(_context.Document, point);
+                var expected = _pendingPlacementCentre ?? throw new ProbeException("ui_placement_target_not_captured");
                 var match = created.SingleOrDefault(element => SamePoint(ReadFootprintCenter(_context.Document, element), expected));
                 if (match == null) return;
                 var dimensions = expectedNewElements <= 2 ? UiBoxDimensions() : UiEditedDimensions();
                 VerifySolid(_context.Document, match, dimensions, expected, "ui_physical");
                 if (_centres.Count == pointIndex) _centres.Add(expected);
+                _pendingPlacementCentre = null;
                 Advance(next);
             }
 
             private string? _lastPlacementTrace;
+            private Point3d? _pendingPlacementCentre;
 
             private void RequireCancelUnchanged()
             {
@@ -931,9 +937,11 @@ namespace QS3D.LocalQualification.V25
                         origin.X + checked((int)Math.Round(width * fraction[0], MidpointRounding.AwayFromZero)),
                         origin.Y + checked((int)Math.Round(height * fraction[1], MidpointRounding.AwayFromZero)));
                     if (workspaceBounds.Contains(point.X, point.Y)) continue;
-                    var world = document.Editor.PointToWorld(point, viewport);
+                    var drawingClient = ScreenToDrawingClient(document, point, false);
+                    if (!drawingClient.HasValue) continue;
+                    var world = document.Editor.PointToWorld(drawingClient.Value, viewport);
                     var roundTrip = document.Editor.PointToScreen(world, viewport);
-                    if (Math.Abs(roundTrip.X - point.X) > 2 || Math.Abs(roundTrip.Y - point.Y) > 2) continue;
+                    if (Math.Abs(roundTrip.X - drawingClient.Value.X) > 2 || Math.Abs(roundTrip.Y - drawingClient.Value.Y) > 2) continue;
                     if (result.Any(existing => Math.Abs(existing.X - point.X) < 40 && Math.Abs(existing.Y - point.Y) < 40)) continue;
                     result.Add(point);
                     if (result.Count == count) return result;
@@ -942,14 +950,45 @@ namespace QS3D.LocalQualification.V25
             }
         }
 
+        private static Point3d? CapturePlacementCentre(Point3d? pending, bool requestWritten, bool moveAcknowledged, Func<Point3d> readPoint)
+        {
+            if (pending.HasValue) return pending;
+            if (requestWritten) throw new ProbeException("ui_placement_target_not_captured");
+            return moveAcknowledged ? readPoint() : (Point3d?)null;
+        }
+
         private static Point3d ScreenWorldPoint(Bricscad.ApplicationServices.Document document, DrawingPoint point)
         {
             var viewport = Convert.ToInt32(Application.GetSystemVariable("CVPORT"), CultureInfo.InvariantCulture);
-            var mapped = document.Editor.PointToWorld(point, viewport);
+            var drawingClient = ScreenToDrawingClient(document, point, true)
+                ?? throw new ProbeException("ui_drawing_client_point_missing");
+            var mapped = document.Editor.PointToWorld(drawingClient, viewport);
             var roundTrip = document.Editor.PointToScreen(mapped, viewport);
-            if (Math.Abs(roundTrip.X - point.X) > 2 || Math.Abs(roundTrip.Y - point.Y) > 2)
+            if (Math.Abs(roundTrip.X - drawingClient.X) > 2 || Math.Abs(roundTrip.Y - drawingClient.Y) > 2)
                 throw new ProbeException("ui_viewport_roundtrip_changed");
             return new Point3d(mapped.X, mapped.Y, 0d);
+        }
+
+        private static DrawingPoint? ScreenToDrawingClient(Bricscad.ApplicationServices.Document document, DrawingPoint point, bool requireInside)
+        {
+            if (!ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))
+                throw new ProbeException("ui_drawing_document_changed");
+            // sds_protos.h (installed V25/V26 SDK) declares this as HWND, unlike
+            // acedGetAcadDwgView's CView*. Document.Window is the parent frame.
+            var window = GetDrawingViewWindow();
+            GetWindowThreadProcessId(window, out var owner);
+            UiNativeRect bounds;
+            using (var process = Process.GetCurrentProcess())
+                if (window == IntPtr.Zero || owner != (uint)process.Id || !GetClientRect(window, out bounds))
+                    throw new ProbeException("ui_drawing_window_identity");
+            var native = new UiNativePoint { X = point.X, Y = point.Y };
+            if (!ScreenToClient(window, ref native)) throw new ProbeException("ui_drawing_client_mapping");
+            if (native.X < bounds.Left || native.X >= bounds.Right || native.Y < bounds.Top || native.Y >= bounds.Bottom)
+            {
+                if (requireInside) throw new ProbeException("ui_point_outside_drawing_client");
+                return null;
+            }
+            return new DrawingPoint(native.X, native.Y);
         }
 
         private static DrawingPoint CheckedScreenPoint(int x, int y)
@@ -1445,5 +1484,15 @@ namespace QS3D.LocalQualification.V25
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool ClientToScreen(IntPtr window, ref UiNativePoint point);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool ScreenToClient(IntPtr window, ref UiNativePoint point);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+
+        [DllImport("bricscadapi.dll", EntryPoint = "sds_getviewhwnd", CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr GetDrawingViewWindow();
     }
 }
