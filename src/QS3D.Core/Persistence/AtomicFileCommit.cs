@@ -88,10 +88,15 @@ namespace QS3D.Core.Persistence
             RequireSafe(destination, "destination");
             RequireSafe(backup, "backup");
             File.Move(temp, destination);
+            RequireSafe(backup, "backup");
             if (!File.Exists(backup) && !Directory.Exists(backup)) return;
 
-            try { File.Delete(destination); }
-            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            try
+            {
+                RequireSafe(destination, "destination");
+                File.Delete(destination);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException)
             {
                 throw new IOException("A QS3D backup appeared during create-new publication and the new primary could not be rolled back.", ex);
             }
@@ -100,7 +105,18 @@ namespace QS3D.Core.Persistence
 
         public static void TryDelete(string? path)
         {
-            try { if (!string.IsNullOrWhiteSpace(path) && File.Exists(path)) File.Delete(path); }
+            if (string.IsNullOrWhiteSpace(path)) return;
+            try
+            {
+                var cleanupPath = path!;
+                RequireSafe(cleanupPath, "cleanup");
+                if (!File.Exists(cleanupPath)) return;
+                RequireSafe(cleanupPath, "cleanup");
+                File.Delete(cleanupPath);
+            }
+            catch (ArgumentException) { }
+            catch (NotSupportedException) { }
+            catch (InvalidDataException) { }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
         }
@@ -138,10 +154,15 @@ namespace QS3D.Core.Persistence
                 // primary generation. When the primary was already missing, an old
                 // .bak cannot satisfy that contract and must never remain eligible
                 // for LoadWithBackupFallback beside the newly published generation.
+                RequireSafe(backupPath, "backup");
                 if (File.Exists(backupPath) || Directory.Exists(backupPath))
                 {
-                    try { File.Delete(destinationPath); }
-                    catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+                    try
+                    {
+                        RequireSafe(destinationPath, "destination");
+                        File.Delete(destinationPath);
+                    }
+                    catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException)
                     {
                         throw new IOException("A QS3D backup appeared during primary recreation and the new primary could not be rolled back.", ex);
                     }
@@ -197,10 +218,13 @@ namespace QS3D.Core.Persistence
                             RequireSafe(destinationPath, "destination");
                             RequireSafe(backupPath, "backup");
                             if (!File.Exists(destinationPath) && File.Exists(backupPath))
+                            {
+                                RequireSafe(backupPath, "backup");
+                                RequireSafe(destinationPath, "destination");
                                 File.Move(backupPath, destinationPath);
+                            }
                         }
-                        catch (IOException) { }
-                        catch (UnauthorizedAccessException) { }
+                        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException) { }
                     }
                     RestorePreviousBackup(previousBackupSafety, backupPath);
                 }
@@ -222,10 +246,14 @@ namespace QS3D.Core.Persistence
             {
                 RequireSafe(previousBackupPath, "previous-backup safety");
                 RequireSafe(backupPath, "backup");
-                if (!File.Exists(backupPath)) File.Move(previousBackupPath, backupPath);
+                if (!File.Exists(backupPath))
+                {
+                    RequireSafe(previousBackupPath, "previous-backup safety");
+                    RequireSafe(backupPath, "backup");
+                    File.Move(previousBackupPath, backupPath);
+                }
             }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException) { }
         }
 
         private static void Validate(string tempPath, string destinationPath, out string temp, out string destination)
