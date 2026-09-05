@@ -48,6 +48,7 @@ required_smoke = [
     "MarkActiveOverBoundaryFailsClosedBeforeMutation",
     "RemoveEmptyEntriesSemanticsRemainStable",
     "WhitespaceOnlyTokensStillConsumeTheInputEnvelope",
+    "OpaqueCaseEquivalentPermutationsCanonicalizeDeterministically",
     "MaxHandles = 5000",
 ]
 for token in required_smoke:
