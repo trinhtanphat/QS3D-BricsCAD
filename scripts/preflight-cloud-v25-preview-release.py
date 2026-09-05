@@ -16,6 +16,8 @@ CACHE_V6 = "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0"
 CACHE_RESTORE_V6 = "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0"
 CACHE_SAVE_V6 = "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0"
 UPLOAD_ARTIFACT_V7 = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7"
+STAGING_OPEN = "$stagingAdmission = Open-PinnedMsiReadLock -Path $staging -ExpectedSha256 $expected"
+DESTINATION_READMIT = "$publishedAdmission = Open-PinnedMsiReadLock -Path $msi -ExpectedSha256 $expected"
 errors = []
 
 
@@ -162,9 +164,12 @@ else:
         "ExtractDir unexpectedly already exists; refusing pathname reuse",
         "New-Item -ItemType Directory -Path $extract | Out-Null",
         "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging",
-        "Test-PinnedMsiGeneration -Path $staging",
-        "[IO.File]::Move($staging, $msi)",
-        "Test-PinnedMsiGeneration -Path $msi -Label 'Published BricsCAD V25 MSI'",
+        STAGING_OPEN,
+        "[IO.FileMode]::CreateNew",
+        "$stagingAdmission.Stream.CopyTo($publishedStream)",
+        "$publishedStream.Flush($true)",
+        DESTINATION_READMIT,
+        "Canonical MSI destination appeared before held-generation publication; refusing destructive replacement.",
         "$msiState = Open-PinnedMsiReadLock -Path $msi",
         "Get-AuthenticodeSignature -FilePath $msiState.Path",
         "[System.Management.Automation.SignatureStatus]::Valid",
@@ -185,6 +190,10 @@ else:
         "Invoke-WebRequest -Uri $candidate.Url -OutFile $msi",
         "Remove-Item -LiteralPath $extract -Recurse",
         "New-Item -ItemType Directory -Path $extract -Force",
+        "Test-PinnedMsiGeneration -Path $staging",
+        "[IO.File]::Move($staging, $msi)",
+        "Remove-Item -LiteralPath $msi -Force",
+        "[IO.FileMode]::OpenOrCreate",
     ):
         if forbidden in helper:
             errors.append("shared V25 acquisition helper contains forbidden pathname/direct-publication/extract-reuse token: " + forbidden)
@@ -201,16 +210,22 @@ else:
             errors.append("shared V25 acquisition helper must validate existing path components, refuse existing ExtractDir, then create a fresh non-Force extraction root: " + guard)
 
     download_index = helper.find("Invoke-WebRequest -Uri $candidate.Url -OutFile $staging")
-    staged_index = helper.find("Test-PinnedMsiGeneration -Path $staging", download_index if download_index >= 0 else 0)
-    publish_index = helper.find("[IO.File]::Move($staging, $msi)", staged_index if staged_index >= 0 else 0)
-    published_index = helper.find("Test-PinnedMsiGeneration -Path $msi -Label 'Published BricsCAD V25 MSI'", publish_index if publish_index >= 0 else 0)
+    staged_index = helper.find(STAGING_OPEN, download_index if download_index >= 0 else 0)
+    fresh_index = helper.find("[IO.FileMode]::CreateNew", staged_index if staged_index >= 0 else 0)
+    copy_index = helper.find("$stagingAdmission.Stream.CopyTo($publishedStream)", fresh_index if fresh_index >= 0 else 0)
+    flush_index = helper.find("$publishedStream.Flush($true)", copy_index if copy_index >= 0 else 0)
+    published_index = helper.find(DESTINATION_READMIT, flush_index if flush_index >= 0 else 0)
     final_lock_index = helper.find("$msiState = Open-PinnedMsiReadLock -Path $msi", published_index if published_index >= 0 else 0)
     signature_index = helper.find("Get-AuthenticodeSignature -FilePath $msiState.Path", final_lock_index if final_lock_index >= 0 else 0)
     product_index = helper.find("ProductVersion", signature_index if signature_index >= 0 else 0)
     extract_index = helper.find("Start-Process -FilePath msiexec.exe", product_index if product_index >= 0 else 0)
     timeout_index = helper.find("$process.WaitForExit(900000)", extract_index if extract_index >= 0 else 0)
-    if min(download_index, staged_index, publish_index, published_index, final_lock_index, signature_index, product_index, extract_index, timeout_index) < 0 or not download_index < staged_index < publish_index < published_index < final_lock_index < signature_index < product_index < extract_index < timeout_index:
-        errors.append("shared V25 acquisition helper must stage, held-admit, publish/re-admit, then bind Authenticode/MSI identity before bounded extraction")
+    if min(download_index, staged_index, fresh_index, copy_index, flush_index, published_index, final_lock_index, signature_index, product_index, extract_index, timeout_index) < 0 or not download_index < staged_index < fresh_index < copy_index < flush_index < published_index < final_lock_index < signature_index < product_index < extract_index < timeout_index:
+        errors.append("shared V25 acquisition helper must stage, hold, fresh-copy, durably flush/re-admit, then bind Authenticode/MSI identity before bounded extraction")
+
+    staging_dispose_index = helper.find("$stagingAdmission.Stream.Dispose()", staged_index if staged_index >= 0 else 0)
+    if staged_index < 0 or published_index < 0 or (staging_dispose_index >= 0 and staging_dispose_index < published_index):
+        errors.append("shared V25 acquisition helper must retain staged generation until canonical destination re-admission")
 
 if not DOC.is_file():
     errors.append("missing docs/CLOUD-V25-PREVIEW-RELEASE.md")
@@ -239,5 +254,5 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: cloud V25 preview remains manual-only; immutable Actions/cache pins, exact installer URI/digest provenance, held-generation acquisition, fresh-only extraction-root admission, Bricsys Authenticode + MSI identity, bounded extraction, and release/package binding remain fail-closed."
+    "PASS: cloud V25 preview remains manual-only; immutable Actions/cache pins, exact installer URI/digest provenance, held-generation fresh-only canonical publication, fresh-only extraction-root admission, Bricsys Authenticode + MSI identity, bounded extraction, and release/package binding remain fail-closed."
 )
