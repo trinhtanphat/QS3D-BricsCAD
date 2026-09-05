@@ -9,6 +9,7 @@ HELPER = ROOT / "scripts" / "acquire-v26-compile-references.ps1"
 PROVENANCE_HELPER = ROOT / "scripts" / "new-v26-candidate-provenance.ps1"
 CANDIDATE_HELPER = ROOT / "scripts" / "assert-v26-candidate-identity.ps1"
 MANUAL_WORKFLOW = ROOT / ".github" / "workflows" / "release-v26.yml"
+PINNED_HTTP_MIRROR = "http://103.9.157.20/BricsCAD-V26.2.07-1-en_US(x64).msi"
 
 
 def fail(message: str) -> None:
@@ -60,6 +61,28 @@ require_all(
         "V26_RELEASE_REQUEST_PRERELEASE: 'true'",
         "V26_RELEASE_REQUEST_SIGN_PACKAGE: 'false'",
         "RELEASE_RUN_RUNTIME: 'false'",
+    ),
+)
+
+# The V26 cloud lane may use one owner-approved plaintext mirror only after the
+# canonical HTTPS source fails. The mirror is still fully admitted before cache
+# publication; arbitrary HTTP fallback URLs remain forbidden.
+require_all(
+    workflow,
+    WORKFLOW,
+    (
+        f"BRICSCAD_V26_MIRROR_MSI_URL: {PINNED_HTTP_MIRROR}",
+        "-MirrorUrl $env:BRICSCAD_V26_MIRROR_MSI_URL",
+    ),
+)
+require_all(
+    helper,
+    HELPER,
+    (
+        "[string]$MirrorUrl",
+        "Assert-PinnedV26HttpMirrorUrl",
+        f"$expectedMirror = '{PINNED_HTTP_MIRROR}'",
+        "Name = 'pinned-http-mirror'",
     ),
 )
 
