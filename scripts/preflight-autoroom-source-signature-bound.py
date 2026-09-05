@@ -22,7 +22,7 @@ required_source = [
     "var normalized = NormalizeSourceHandleText(signature);",
     "var handles = ParseSourceHandleText(SourceSignature(room));",
     "var normalizedSourceSignature = NormalizeSourceHandleText(sourceSignature);",
-    "room.Properties[BoundarySourceSignatureKey] = normalizedSourceSignature;",
+    "room.SetProperty(BoundarySourceSignatureKey, normalizedSourceSignature);",
 ]
 for token in required_source:
     if token not in source:
@@ -37,7 +37,7 @@ if mark_start < 0 or mark_end < 0:
     raise SystemExit("FAIL: could not isolate AutoRoomLifecycle.MarkActive")
 mark = source[mark_start:mark_end]
 normalize_at = mark.find("var normalizedSourceSignature = NormalizeSourceHandleText(sourceSignature);")
-state_at = mark.find("room.Properties[BoundaryStateKey] = BoundaryStateActive;")
+state_at = mark.find("room.SetProperty(BoundaryStateKey, BoundaryStateActive);")
 if normalize_at < 0 or state_at < 0 or normalize_at > state_at:
     raise SystemExit("FAIL: MarkActive must validate/bound the source signature before lifecycle mutation")
 
