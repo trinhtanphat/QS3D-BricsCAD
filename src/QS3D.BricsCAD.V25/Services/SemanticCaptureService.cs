@@ -124,18 +124,18 @@ namespace QS3D.BricsCAD.V25.Services
             element.SourceHandles.Clear();
             element.SourceHandles.Add(snapshot.Handle);
             element.DrawingFingerprint = project.DrawingFingerprint;
-            element.Properties["Layer"] = snapshot.Layer;
-            foreach (var key in element.Properties.Keys.Where(x => x.StartsWith("CAD.", StringComparison.OrdinalIgnoreCase)).ToList()) element.Properties.Remove(key);
-            foreach (var item in snapshot.Metadata) element.Properties["CAD." + item.Key] = item.Value ?? string.Empty;
+            element.SetProperty("Layer", snapshot.Layer);
+            foreach (var key in element.Properties.Keys.Where(x => x.StartsWith("CAD.", StringComparison.OrdinalIgnoreCase)).ToList()) element.RemovePropertyLifecycle(key);
+            foreach (var item in snapshot.Metadata) element.SetProperty("CAD." + item.Key, item.Value ?? string.Empty);
 
             ReplaceSourceMetric(element, "LengthM", snapshot.LengthDrawingUnits.HasValue ? units.ToMeters(snapshot.LengthDrawingUnits.Value) : (double?)null);
             ReplaceSourceMetric(element, "AreaM2", snapshot.AreaDrawingUnitsSquared.HasValue ? units.AreaToSquareMeters(snapshot.AreaDrawingUnitsSquared.Value) : (double?)null);
             ReplaceSourceMetric(element, MeasuredSolidQuantityPolicy.SurfaceAreaProperty, snapshot.SurfaceAreaDrawingUnitsSquared.HasValue ? units.AreaToSquareMeters(snapshot.SurfaceAreaDrawingUnitsSquared.Value) : (double?)null);
             ReplaceSourceMetric(element, MeasuredSolidQuantityPolicy.VolumeProperty, snapshot.VolumeDrawingUnitsCubed.HasValue ? units.VolumeToCubicMeters(snapshot.VolumeDrawingUnitsCubed.Value) : (double?)null);
-            element.Properties.Remove("VolumeM3");
+            element.RemovePropertyLifecycle("VolumeM3");
             if (snapshot.SurfaceAreaDrawingUnitsSquared.HasValue || snapshot.VolumeDrawingUnitsCubed.HasValue)
-                element.Properties["CAD.SolidMetricSource"] = "Solid3d.MassProperties";
-            else element.Properties.Remove("CAD.SolidMetricSource");
+                element.SetProperty("CAD.SolidMetricSource", "Solid3d.MassProperties");
+            else element.RemovePropertyLifecycle("CAD.SolidMetricSource");
             ApplyFamilyDefaults(element, family);
             element.MarkDirty(ElementDirtyFlags.All);
             Regenerate(project, element);
@@ -183,11 +183,11 @@ namespace QS3D.BricsCAD.V25.Services
         {
             if (!value.HasValue)
             {
-                element.Properties.Remove(key);
+                element.RemovePropertyLifecycle(key);
                 return;
             }
             if (double.IsNaN(value.Value) || double.IsInfinity(value.Value)) throw new InvalidOperationException("CAD source metric must be finite: " + key + ".");
-            element.Properties[key] = value.Value.ToString("R", CultureInfo.InvariantCulture);
+            element.SetProperty(key, value.Value.ToString("R", CultureInfo.InvariantCulture));
         }
 
         public static int GenerateRoomFinishes(Document document)
