@@ -113,11 +113,11 @@ namespace QS3D.BricsCAD.V25
         {
             if (_cleanupInFlightCandidate != null)
                 return false;
+            if (_publicationInFlightCandidate != null)
+                return false;
 
             var candidate = _unpublishedCandidate;
             if (candidate == null) return true;
-            if (ReferenceEquals(_publicationInFlightCandidate, candidate))
-                return false;
             return CloseUnpublishedCandidate(candidate);
         }
 
