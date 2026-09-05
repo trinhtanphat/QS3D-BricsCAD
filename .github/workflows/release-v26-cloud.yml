@@ -8,7 +8,7 @@ on:
         required: false
         type: string
       release_tag:
-        description: "V26 preview tag; required only when confirm_release=RELEASE and must match the committed product version"
+        description: "Optional compatibility hint; V26 cloud publication tag is derived from the source Version as v<sourceVersion>.v26"
         required: false
         type: string
       confirm_release:
@@ -34,10 +34,9 @@ permissions:
 
 concurrency:
   group: qs3d-cloud-v26-preview-release
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
-  BRICSCAD_V26_PUBLIC_MSI_URL: https://storage.googleapis.com/production-boa-storage/ftp/release/en_US/BricsCAD/Windows/26.2.07/BricsCAD-V26.2.07-1-en_US%28x64%29.msi
   BRICSCAD_V26_PINNED_MSI_SHA256: ${{ inputs.installer_sha256 || vars.BRICSCAD_V26_MSI_SHA256 }}
   NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
 
@@ -61,7 +60,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .cache/bricscad/BricsCAD-V26.2.07-x64.msi
-          key: bricscad-v26.2.07-x64-en-us-${{ inputs.installer_sha256 || vars.BRICSCAD_V26_MSI_SHA256 || 'bootstrap' }}
+          key: bricscad-v26.2.07-x64-en-us-${{ inputs.installer_sha256 || vars.BRICSCAD_V26_MSI_SHA256 || 'mirror' }}
           restore-keys: |
             bricscad-v26.2.07-x64-en-us-
 
@@ -69,21 +68,75 @@ jobs:
         if: ${{ inputs.prime_installer_cache || inputs.confirm_release == 'RELEASE' }}
         id: acquire
         shell: powershell
-        env:
-          BRICSCAD_V26_BOOTSTRAP_MSI_URL: ${{ secrets.BRICSCAD_V26_MSI_URL }}
         run: |
           $ErrorActionPreference = 'Stop'
           $msi = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad\BricsCAD-V26.2.07-x64.msi'
-          $result = & .\scripts\acquire-v26-compile-references.ps1 `
-            -MsiPath $msi `
-            -ExpectedSha256 $env:BRICSCAD_V26_PINNED_MSI_SHA256 `
-            -PrimaryUrl $env:BRICSCAD_V26_PUBLIC_MSI_URL `
-            -FallbackUrl $env:BRICSCAD_V26_BOOTSTRAP_MSI_URL | Select-Object -Last 1
-          if ($null -eq $result -or [string]$result.Sha256 -notmatch '^[0-9A-Fa-f]{64}$') {
-            throw 'V26 installer acquisition did not return an exact admitted SHA-256 identity.'
+          $cacheDir = Split-Path -Parent $msi
+          $downloadStartedUtc = [DateTime]::UtcNow
+          $monitorScriptPath = Join-Path $env:RUNNER_TEMP 'qs3d-v26-download-monitor.ps1'
+          @'
+          param(
+              [Parameter(Mandatory = $true)][string]$CacheDir,
+              [Parameter(Mandatory = $true)][string]$MsiPath
+          )
+          $startedUtc = [DateTime]::UtcNow
+          while ($true) {
+              $staging = Get-ChildItem -LiteralPath $CacheDir -Filter '.qs3d-v26-msi-*.tmp' -File -ErrorAction SilentlyContinue |
+                  Sort-Object LastWriteTimeUtc -Descending |
+                  Select-Object -First 1
+              $observedPath = if ($null -ne $staging) {
+                  $staging.FullName
+              }
+              elseif (Test-Path -LiteralPath $MsiPath -PathType Leaf) {
+                  $MsiPath
+              }
+              else {
+                  '<waiting-for-staging-file>'
+              }
+              $bytes = 0
+              if ($observedPath -ne '<waiting-for-staging-file>') {
+                  $observed = Get-Item -LiteralPath $observedPath -Force -ErrorAction SilentlyContinue
+                  if ($null -ne $observed) { $bytes = [int64]$observed.Length }
+              }
+              $elapsed = [DateTime]::UtcNow - $startedUtc
+              Write-Host ("[V26 installer progress] {0:o} elapsed={1:hh\:mm\:ss} bytes={2} path={3}" -f [DateTime]::UtcNow, $elapsed, $bytes, $observedPath)
+              Start-Sleep -Seconds 30
           }
-          "sha256=$(([string]$result.Sha256).ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          Write-Host "Admitted BricsCAD V26.2.07 installer SHA-256: $($result.Sha256)"
+          '@ | Set-Content -LiteralPath $monitorScriptPath -Encoding UTF8
+
+          $monitor = Start-Process -FilePath powershell.exe `
+            -ArgumentList @(
+              '-NoLogo',
+              '-NoProfile',
+              '-ExecutionPolicy', 'Bypass',
+              '-File', ('"' + $monitorScriptPath + '"'),
+              '-CacheDir', ('"' + $cacheDir + '"'),
+              '-MsiPath', ('"' + $msi + '"')
+            ) `
+            -PassThru `
+            -NoNewWindow
+          try {
+            Write-Host ("[V26 installer start] {0:o} source=pinned-http-mirror-only" -f $downloadStartedUtc)
+            $result = & .\scripts\acquire-v26-compile-references.ps1 `
+              -MsiPath $msi `
+              -ExpectedSha256 $env:BRICSCAD_V26_PINNED_MSI_SHA256 `
+              -PrimaryUrl ' ' `
+              -UsePinnedHttpMirror | Select-Object -Last 1
+            if ($null -eq $result -or [string]$result.Sha256 -notmatch '^[0-9A-Fa-f]{64}$') {
+              throw 'V26 installer acquisition did not return an exact admitted SHA-256 identity.'
+            }
+            "sha256=$(([string]$result.Sha256).ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            $downloadElapsed = [DateTime]::UtcNow - $downloadStartedUtc
+            Write-Host ("[V26 installer complete] {0:o} elapsed={1:hh\:mm\:ss} sha256={2}" -f [DateTime]::UtcNow, $downloadElapsed, $result.Sha256)
+            Write-Host "Admitted BricsCAD V26.2.07 installer SHA-256: $($result.Sha256)"
+          }
+          finally {
+            if ($null -ne $monitor -and -not $monitor.HasExited) {
+              Stop-Process -Id $monitor.Id -Force
+              $monitor.WaitForExit()
+            }
+            Remove-Item -LiteralPath $monitorScriptPath -Force -ErrorAction SilentlyContinue
+          }
 
       - name: Save digest-bound BricsCAD V26.2.07 installer cache
         if: ${{ (inputs.prime_installer_cache || inputs.confirm_release == 'RELEASE') && steps.bricscad-msi-cache.outputs.cache-hit != 'true' }}
@@ -105,9 +158,11 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: read
+    outputs:
+      release_tag: ${{ steps.release-identity.outputs.release_tag }}
     env:
       SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
-      RELEASE_TAG: ${{ inputs.release_tag }}
+      REQUESTED_RELEASE_TAG: ${{ inputs.release_tag }}
       RELEASE_RUN_RUNTIME: 'false'
       V26_RELEASE_REQUEST_PRERELEASE: 'true'
       V26_RELEASE_REQUEST_SIGN_PACKAGE: 'false'
@@ -120,6 +175,7 @@ jobs:
           persist-credentials: false
 
       - name: Validate cloud V26 preview request and source identity
+        id: release-identity
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -137,17 +193,6 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $head -ne $sourceSha) {
             throw "Cloud V26 checkout must equal SOURCE_SHA. Expected $sourceSha, got $head."
           }
-          if ([string]::IsNullOrWhiteSpace($env:RELEASE_TAG)) {
-            throw 'release_tag is required when confirm_release=RELEASE.'
-          }
-          $request = & .\scripts\assert-v26-release-request.ps1 `
-            -ReleaseTag $env:RELEASE_TAG `
-            -Prerelease:$true `
-            -RunRuntime:$false `
-            -SignPackage:$false
-          if ($null -eq $request -or -not $request.IsPrerelease) {
-            throw 'Cloud V26 lane accepts preview/prerelease tags only.'
-          }
 
           [xml]$v26Project = Get-Content -LiteralPath 'src\QS3D.BricsCAD.V26\QS3D.BricsCAD.V26.csproj' -Raw
           [xml]$coreProject = Get-Content -LiteralPath 'src\QS3D.Core\QS3D.Core.csproj' -Raw
@@ -156,10 +201,28 @@ jobs:
           if ($v26Versions.Count -ne 1 -or $coreVersions.Count -ne 1) {
             throw 'V26 cloud release requires exactly one source Version in both V26 and Core projects.'
           }
-          $expectedTag = 'v' + $v26Versions[0]
-          if (-not [string]::Equals($env:RELEASE_TAG, $expectedTag, [StringComparison]::Ordinal) -or
-              -not [string]::Equals($v26Versions[0], $coreVersions[0], [StringComparison]::Ordinal)) {
-            throw "V26 cloud release tag/source version mismatch. Expected $expectedTag with matching Core version."
+          $packageTag = 'v' + $v26Versions[0]
+          $expectedCloudTag = $packageTag + '.v26'
+          if (-not [string]::Equals($v26Versions[0], $coreVersions[0], [StringComparison]::Ordinal)) {
+            throw "V26 cloud release tag/source version mismatch. Expected $expectedCloudTag with matching Core version."
+          }
+          $requestedReleaseTag = ([string]$env:REQUESTED_RELEASE_TAG).Trim()
+          if (-not [string]::IsNullOrWhiteSpace($requestedReleaseTag) -and
+              -not [string]::Equals($requestedReleaseTag, $expectedCloudTag, [StringComparison]::Ordinal)) {
+            Write-Warning "Ignoring requested V26 release_tag '$requestedReleaseTag'; source identity requires '$expectedCloudTag'."
+          }
+          $env:RELEASE_TAG = $expectedCloudTag
+          "release_tag=$expectedCloudTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "RELEASE_TAG=$expectedCloudTag" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "V26_PACKAGE_TAG=$packageTag" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          $request = & .\scripts\assert-v26-release-request.ps1 `
+            -ReleaseTag $env:RELEASE_TAG `
+            -Prerelease:$true `
+            -RunRuntime:$false `
+            -SignPackage:$false
+          if ($null -eq $request -or -not $request.IsPrerelease) {
+            throw 'Cloud V26 lane accepts preview/prerelease tags only.'
           }
 
           & git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
@@ -227,8 +290,6 @@ jobs:
       - name: Extract and bind held BricsCAD V26 compile references
         id: v26-references
         shell: powershell
-        env:
-          BRICSCAD_V26_BOOTSTRAP_MSI_URL: ${{ secrets.BRICSCAD_V26_MSI_URL }}
         run: |
           $ErrorActionPreference = 'Stop'
           $msi = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad\BricsCAD-V26.2.07-x64.msi'
@@ -237,8 +298,8 @@ jobs:
             -MsiPath $msi `
             -ExtractDir $extract `
             -ExpectedSha256 $env:BRICSCAD_V26_PINNED_MSI_SHA256 `
-            -PrimaryUrl $env:BRICSCAD_V26_PUBLIC_MSI_URL `
-            -FallbackUrl $env:BRICSCAD_V26_BOOTSTRAP_MSI_URL `
+            -PrimaryUrl ' ' `
+            -UsePinnedHttpMirror `
             -ExtractReferences | Select-Object -Last 1
           if ($null -eq $result -or [string]::IsNullOrWhiteSpace([string]$result.BricsCadDir)) {
             throw 'V26 reference extraction did not return a BricsCAD runtime directory.'
@@ -275,7 +336,7 @@ jobs:
             -MetadataPath 'dist\QS3D-BricsCAD-V26\PACKAGE-METADATA.json' `
             -PluginPath 'dist\QS3D-BricsCAD-V26\QS3D.BricsCAD.V26.dll' `
             -CorePath 'dist\QS3D-BricsCAD-V26\QS3D.Core.dll' `
-            -ReleaseTag $env:RELEASE_TAG | Out-Null
+            -ReleaseTag $env:V26_PACKAGE_TAG | Out-Null
 
       - name: Create V26 package checksum
         shell: powershell
@@ -290,13 +351,14 @@ jobs:
           & .\scripts\new-v26-candidate-provenance.ps1 `
             -PackageZip 'dist\QS3D-BricsCAD-V26.zip' `
             -ReleaseTag $env:RELEASE_TAG `
+            -PackageReleaseTag $env:V26_PACKAGE_TAG `
             -SourceCommit $env:GITHUB_SHA `
             -OutputPath 'dist\QS3D-BricsCAD-V26.provenance.json' | Out-Null
 
       - name: Upload held V26 cloud preview candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: QS3D-BricsCAD-V26-cloud-${{ inputs.release_tag }}-${{ github.sha }}
+          name: QS3D-BricsCAD-V26-cloud-${{ steps.release-identity.outputs.release_tag }}-${{ github.sha }}
           if-no-files-found: error
           retention-days: 14
           path: |
@@ -313,7 +375,7 @@ jobs:
     permissions:
       contents: write
     env:
-      RELEASE_TAG: ${{ inputs.release_tag }}
+      RELEASE_TAG: ${{ needs.qualify.outputs.release_tag }}
       RELEASE_RUN_RUNTIME: 'false'
       V26_RELEASE_REQUEST_PRERELEASE: 'true'
       V26_RELEASE_REQUEST_SIGN_PACKAGE: 'false'
@@ -326,7 +388,7 @@ jobs:
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: QS3D-BricsCAD-V26-cloud-${{ inputs.release_tag }}-${{ github.sha }}
+          name: QS3D-BricsCAD-V26-cloud-${{ needs.qualify.outputs.release_tag }}-${{ github.sha }}
           path: .
 
       - name: Verify and publish held V26 cloud candidate after job boundary
@@ -346,12 +408,17 @@ jobs:
           if (Test-Path -LiteralPath 'dist\QS3D-BricsCAD-V26.update.json') {
             throw 'Unsigned V26 cloud preview candidate unexpectedly contains a signed update manifest.'
           }
+          if (-not $env:RELEASE_TAG.EndsWith('.v26', [StringComparison]::Ordinal)) {
+            throw "V26 cloud publication tag lost its .v26 scope: $env:RELEASE_TAG"
+          }
+          $env:V26_PACKAGE_TAG = $env:RELEASE_TAG.Substring(0, $env:RELEASE_TAG.Length - 4)
           $candidateIdentity = & .\scripts\assert-v26-candidate-identity.ps1 `
             -PackageZip $zip `
             -ChecksumPath $checksum `
             -ProvenancePath $provenance `
             -ExpectedSourceCommit $env:GITHUB_SHA `
             -ExpectedReleaseTag $env:RELEASE_TAG `
+            -ExpectedPackageReleaseTag $env:V26_PACKAGE_TAG `
             -AdmittedScript '.\scripts\publish-v26-release.ps1'
           if ($null -eq $candidateIdentity) {
             throw 'V26 cloud preview candidate semantic admission/publication returned no identity.'

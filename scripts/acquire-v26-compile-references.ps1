@@ -4,6 +4,7 @@ param(
     [string]$ExtractDir = '',
     [string]$ExpectedSha256 = '',
     [Parameter(Mandatory = $true)][string]$PrimaryUrl,
+    [switch]$UsePinnedHttpMirror,
     [string]$FallbackUrl = '',
     [switch]$ExtractReferences
 )
@@ -69,10 +70,26 @@ function Assert-SafeHttpsUrl {
     return $uri
 }
 
+function Assert-PinnedV26HttpMirrorUrl {
+    $expectedMirror = 'http://103.9.157.20/BricsCAD-V26.2.07-1-en_US(x64).msi'
+    $uri = $null
+    if (-not [Uri]::TryCreate($expectedMirror, [UriKind]::Absolute, [ref]$uri) -or
+        $uri.Scheme -ne 'http' -or
+        $uri.Host -ne '103.9.157.20' -or
+        $uri.Port -ne 80 -or
+        -not [string]::Equals($uri.AbsolutePath, '/BricsCAD-V26.2.07-1-en_US(x64).msi', [StringComparison]::Ordinal) -or
+        -not [string]::IsNullOrEmpty($uri.Query) -or
+        -not [string]::IsNullOrEmpty($uri.UserInfo) -or
+        -not [string]::IsNullOrEmpty($uri.Fragment)) {
+        throw 'The built-in V26 HTTP mirror identity is invalid.'
+    }
+    return $expectedMirror
+}
+
 function Open-AdmittedV26Installer {
     param([Parameter(Mandatory = $true)][string]$Path, [string]$Expected = '')
 
-    Assert-NoExistingReparseComponent -Path $Path -Label 'BricsCAD V26 MSI path'
+    [void](Assert-NoExistingReparseComponent -Path $Path -Label 'BricsCAD V26 MSI path')
     $item = Get-OrdinaryFileOrNull -Path $Path -Label 'BricsCAD V26 MSI'
     if ($null -eq $item) { throw 'BricsCAD V26 MSI is missing.' }
     if ([int64]$item.Length -le 100MB) { throw 'BricsCAD V26 MSI is unexpectedly small.' }
@@ -111,11 +128,11 @@ function Open-AdmittedV26Installer {
         $installer = New-Object -ComObject WindowsInstaller.Installer
         $database = $installer.OpenDatabase($canonical, 0)
         $versionView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')
-        $versionView.Execute()
+        [void]$versionView.Execute()
         $versionRecord = $versionView.Fetch()
         $productVersion = if ($versionRecord) { [string]$versionRecord.StringData(1) } else { [string]::Empty }
         $nameView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductName''')
-        $nameView.Execute()
+        [void]$nameView.Execute()
         $nameRecord = $nameView.Fetch()
         $productName = if ($nameRecord) { [string]$nameRecord.StringData(1) } else { [string]::Empty }
         if ($productVersion -notmatch '^26\.2\.07(?:\.|$)') {
@@ -147,6 +164,43 @@ function Open-AdmittedV26Installer {
     }
 }
 
+function Get-SingleV26InstallerAdmission {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [string]$Expected = ''
+    )
+
+    $outputs = @(Open-AdmittedV26Installer -Path $Path -Expected $Expected)
+    if ($outputs.Count -ne 1) {
+        foreach ($output in $outputs) {
+            if ($null -ne $output -and $null -ne $output.PSObject.Properties['Stream']) {
+                $heldStream = $output.PSObject.Properties['Stream'].Value
+                if ($heldStream -is [IO.Stream]) { $heldStream.Dispose() }
+            }
+        }
+        $types = @($outputs | ForEach-Object {
+            if ($null -eq $_) { '<null>' } else { $_.GetType().FullName }
+        })
+        throw "Open-AdmittedV26Installer must emit exactly one admission object. Output types: $($types -join ', ')"
+    }
+
+    $admission = $outputs[0]
+    $requiredProperties = @('Path', 'Sha256', 'Length', 'LastWriteUtcTicks', 'ProductName', 'ProductVersion', 'SignerSubject', 'Stream')
+    foreach ($propertyName in $requiredProperties) {
+        if ($null -eq $admission -or $null -eq $admission.PSObject.Properties[$propertyName]) {
+            if ($null -ne $admission -and $null -ne $admission.PSObject.Properties['Stream']) {
+                $heldStream = $admission.PSObject.Properties['Stream'].Value
+                if ($heldStream -is [IO.Stream]) { $heldStream.Dispose() }
+            }
+            throw "Open-AdmittedV26Installer returned one value, but it is missing required admission property $propertyName."
+        }
+    }
+    if ($admission.Stream -isnot [IO.Stream]) {
+        throw 'Open-AdmittedV26Installer returned one value, but its Stream property is not a held System.IO.Stream.'
+    }
+    return $admission
+}
+
 function Assert-HeldInstallerStable {
     param([Parameter(Mandatory = $true)]$Held, [Parameter(Mandatory = $true)][string]$Phase)
     $current = Get-OrdinaryFileOrNull -Path $Held.Path -Label 'BricsCAD V26 MSI'
@@ -154,6 +208,61 @@ function Assert-HeldInstallerStable {
         [int64]$current.LastWriteTimeUtc.Ticks -ne [int64]$Held.LastWriteUtcTicks -or
         [int64]$Held.Stream.Length -ne [int64]$Held.Length) {
         throw "BricsCAD V26 MSI generation changed $Phase."
+    }
+}
+
+function Publish-AdmittedV26Installer {
+    param(
+        [Parameter(Mandatory = $true)]$Candidate,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+
+    Assert-HeldInstallerStable -Held $Candidate -Phase 'before canonical cache publication'
+    Assert-NoExistingReparseComponent -Path $Destination -Label 'V26 MSI destination before publication'
+    if (Test-Path -LiteralPath $Destination) {
+        throw 'V26 MSI destination must be fresh before held-byte publication.'
+    }
+
+    $destinationStream = $null
+    $published = $null
+    try {
+        $destinationStream = [IO.File]::Open(
+            $Destination,
+            [IO.FileMode]::CreateNew,
+            [IO.FileAccess]::Write,
+            [IO.FileShare]::None
+        )
+        $Candidate.Stream.Position = 0
+        $Candidate.Stream.CopyTo($destinationStream)
+        $destinationStream.Flush($true)
+        $destinationStream.Dispose()
+        $destinationStream = $null
+
+        Assert-HeldInstallerStable -Held $Candidate -Phase 'after canonical cache byte publication'
+        $published = Get-SingleV26InstallerAdmission -Path $Destination -Expected $Candidate.Sha256
+        if (-not [string]::Equals([string]$published.Sha256, [string]$Candidate.Sha256, [StringComparison]::Ordinal)) {
+            throw 'published V26 MSI digest does not match admitted staged generation'
+        }
+        if (-not [string]::Equals([string]$published.ProductVersion, [string]$Candidate.ProductVersion, [StringComparison]::Ordinal) -or
+            -not [string]::Equals([string]$published.ProductName, [string]$Candidate.ProductName, [StringComparison]::Ordinal)) {
+            throw 'published V26 MSI product identity does not match admitted staged generation'
+        }
+        if (-not [string]::Equals([string]$published.SignerSubject, [string]$Candidate.SignerSubject, [StringComparison]::Ordinal)) {
+            throw 'published V26 MSI signer does not match admitted staged generation'
+        }
+        return $published
+    }
+    catch {
+        if ($null -ne $published) {
+            $published.Stream.Dispose()
+            $published = $null
+        }
+        if ($null -ne $destinationStream) {
+            $destinationStream.Dispose()
+            $destinationStream = $null
+        }
+        Write-Warning 'V26 MSI publication failed after canonical destination creation; leaving the destination untouched for fail-closed re-admission.'
+        throw
     }
 }
 
@@ -187,6 +296,17 @@ function Get-ReferenceDirectories {
     return @($directories)
 }
 
+function Get-CompleteV26ReferenceDirectory {
+    param([Parameter(Mandatory = $true)][string]$Root)
+    $candidateDirs = @(Get-ReferenceDirectories -Root $Root)
+    $complete = $candidateDirs | Where-Object {
+        (Test-Path -LiteralPath (Join-Path $_ 'BrxMgd.dll') -PathType Leaf) -and
+        (Test-Path -LiteralPath (Join-Path $_ 'TD_Mgd.dll') -PathType Leaf) -and
+        (Test-Path -LiteralPath (Join-Path $_ 'TD_MgdBrep.dll') -PathType Leaf)
+    } | Select-Object -First 1
+    return [string]$complete
+}
+
 $msi = Get-CanonicalAbsolutePath -Path $MsiPath
 $cacheDir = Get-CanonicalAbsolutePath -Path (Split-Path -Parent $msi)
 Assert-NoExistingReparseComponent -Path $cacheDir -Label 'V26 MSI cache directory'
@@ -196,13 +316,11 @@ New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
 $admission = $null
 if (Test-Path -LiteralPath $msi -PathType Leaf) {
     try {
-        $admission = Open-AdmittedV26Installer -Path $msi -Expected $expected
+        $admission = Get-SingleV26InstallerAdmission -Path $msi -Expected $expected
         Write-Host 'Using admitted BricsCAD V26.2.07 installer from Actions cache/local cache.'
     }
     catch {
-        Write-Warning "Cached BricsCAD V26 installer was rejected and will be replaced: $($_.Exception.Message)"
-        $cached = Get-OrdinaryFileOrNull -Path $msi -Label 'rejected BricsCAD V26 MSI'
-        if ($null -ne $cached) { Remove-Item -LiteralPath $cached.FullName -Force }
+        throw "Cached BricsCAD V26 installer was rejected; rejected cached V26 MSI is left untouched because safe replacement requires a fresh canonical destination. $($_.Exception.Message)"
     }
 }
 
@@ -211,6 +329,10 @@ if ($null -eq $admission) {
     if (-not [string]::IsNullOrWhiteSpace($PrimaryUrl)) {
         [void](Assert-SafeHttpsUrl -Url $PrimaryUrl -Label 'PrimaryUrl')
         $candidates += [pscustomobject]@{ Name = 'canonical-public'; Url = $PrimaryUrl }
+    }
+    if ($UsePinnedHttpMirror) {
+        $pinnedMirror = Assert-PinnedV26HttpMirrorUrl
+        $candidates += [pscustomobject]@{ Name = 'pinned-http-mirror'; Url = $pinnedMirror }
     }
     if (-not [string]::IsNullOrWhiteSpace($FallbackUrl)) {
         [void](Assert-SafeHttpsUrl -Url $FallbackUrl -Label 'FallbackUrl')
@@ -224,18 +346,9 @@ if ($null -eq $admission) {
             Assert-NoExistingReparseComponent -Path $staging -Label 'V26 MSI download staging path'
             Write-Host "Downloading BricsCAD V26.2.07 installer from $($candidate.Name) source."
             Invoke-WebRequest -Uri $candidate.Url -OutFile $staging -MaximumRedirection 10 -TimeoutSec 1800 -UseBasicParsing
-            $candidateAdmission = Open-AdmittedV26Installer -Path $staging -Expected $expected
+            $candidateAdmission = Get-SingleV26InstallerAdmission -Path $staging -Expected $expected
             try {
-                Assert-NoExistingReparseComponent -Path $msi -Label 'V26 MSI destination before publication'
-                if (Test-Path -LiteralPath $msi) {
-                    $existing = Get-OrdinaryFileOrNull -Path $msi -Label 'existing V26 MSI destination'
-                    if ($null -eq $existing) { throw 'V26 MSI destination is not an ordinary file.' }
-                    Remove-Item -LiteralPath $existing.FullName -Force
-                }
-                $candidateAdmission.Stream.Dispose()
-                $candidateAdmission = $null
-                [IO.File]::Move($staging, $msi)
-                $admission = Open-AdmittedV26Installer -Path $msi -Expected $expected
+                $admission = Publish-AdmittedV26Installer -Candidate $candidateAdmission -Destination $msi
                 break
             }
             finally {
@@ -278,19 +391,23 @@ try {
                 throw 'BricsCAD V26 MSI administrative extraction timed out after 15 minutes; owned process tree termination was requested.'
             }
             if ($process.ExitCode -notin @(0, 3010)) {
-                if (Test-Path -LiteralPath $msiLog -PathType Leaf) { Get-Content -LiteralPath $msiLog -Tail 120 }
-                throw "BricsCAD V26 MSI administrative extraction failed with exit code $($process.ExitCode)."
+                $completeReferenceDirAfter1603 = ''
+                if ($process.ExitCode -eq 1603) {
+                    $completeReferenceDirAfter1603 = Get-CompleteV26ReferenceDirectory -Root $extract
+                }
+                if ($process.ExitCode -eq 1603 -and -not [string]::IsNullOrWhiteSpace([string]$completeReferenceDirAfter1603)) {
+                    Write-Warning 'BricsCAD V26 MSI administrative extraction returned exit code 1603 after materializing a complete managed-reference payload; continuing with strict extracted-tree validation.'
+                }
+                else {
+                    if (Test-Path -LiteralPath $msiLog -PathType Leaf) { Get-Content -LiteralPath $msiLog -Tail 120 }
+                    throw "BricsCAD V26 MSI administrative extraction failed with exit code $($process.ExitCode)."
+                }
             }
             Assert-HeldInstallerStable -Held $admission -Phase 'after administrative extraction'
         }
         finally { Remove-Item -LiteralPath $msiLog -Force -ErrorAction SilentlyContinue }
 
-        $candidateDirs = @(Get-ReferenceDirectories -Root $extract)
-        $bricsDir = $candidateDirs | Where-Object {
-            (Test-Path -LiteralPath (Join-Path $_ 'BrxMgd.dll') -PathType Leaf) -and
-            (Test-Path -LiteralPath (Join-Path $_ 'TD_Mgd.dll') -PathType Leaf) -and
-            (Test-Path -LiteralPath (Join-Path $_ 'TD_MgdBrep.dll') -PathType Leaf)
-        } | Select-Object -First 1
+        $bricsDir = Get-CompleteV26ReferenceDirectory -Root $extract
         if ([string]::IsNullOrWhiteSpace([string]$bricsDir)) {
             throw 'BrxMgd.dll, TD_Mgd.dll, and TD_MgdBrep.dll were not found together in one extracted V26 runtime directory.'
         }
