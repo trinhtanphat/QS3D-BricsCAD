@@ -205,6 +205,7 @@ namespace QS3D.LocalQualification.V25
             private HashSet<string>? _firstElementIds;
             private int _stableIdleTicks;
             private bool _treeScrolled;
+            private string? _lastH2Layout;
 
             public UiController(Context context)
             {
@@ -424,6 +425,7 @@ namespace QS3D.LocalQualification.V25
                     case UiStage.EditH2:
                     {
                         var h2 = RequirePropertyEditor(_workspace!, "H2");
+                        TracePropertyLayout(h2);
                         if (!_requestWritten && !PropertyEditorHitMatches(_workspace!, h2)) return;
                         if (!AwaitAction(h2, "text", "1000")) return;
                         if (!string.Equals((h2.Text ?? string.Empty).Trim(), "1000", StringComparison.Ordinal)) return;
@@ -701,6 +703,35 @@ namespace QS3D.LocalQualification.V25
             private void UiTrace(string value)
             {
                 File.AppendAllText(RequireUiChildPath(_context, "ui-trace.private.txt"), DateTime.UtcNow.ToString("O") + " " + value + "\n");
+            }
+
+            private void TracePropertyLayout(TextBox editor)
+            {
+                var parts = new List<string>();
+                DependencyObject? current = editor;
+                while (current != null)
+                {
+                    if (current is FrameworkElement element)
+                    {
+                        var top = element.PointToScreen(new WpfPoint(0, 0));
+                        var item = element.GetType().Name + ":" + element.Name + "@" + top +
+                            " size=" + element.ActualWidth + "," + element.ActualHeight +
+                            " minH=" + element.MinHeight + " clip=" + element.ClipToBounds;
+                        if (element is ScrollViewer scroll)
+                            item += " offset=" + scroll.VerticalOffset + " viewport=" + scroll.ViewportHeight +
+                                " extent=" + scroll.ExtentHeight + " max=" + scroll.ScrollableHeight;
+                        parts.Add(item);
+                    }
+                    if (ReferenceEquals(current, _workspace)) break;
+                    current = VisualTreeHelper.GetParent(current);
+                }
+                var point = ElementCenter(editor);
+                var hit = _workspace!.InputHitTest(_workspace.PointFromScreen(new WpfPoint(point.X, point.Y)));
+                var trace = "h2_layout hit=" + hit?.GetType().Name + " scope=" + RequirePropertyScope(_workspace).SelectedItem +
+                    " text=" + editor.Text + " " + string.Join(" | ", parts);
+                if (string.Equals(trace, _lastH2Layout, StringComparison.Ordinal)) return;
+                UiTrace(trace);
+                _lastH2Layout = trace;
             }
 
             private bool AwaitAction(Func<FrameworkElement> target, string action, string text)
