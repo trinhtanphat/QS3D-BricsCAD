@@ -383,7 +383,7 @@ try {
 
         $msiLog = Join-Path ([IO.Path]::GetTempPath()) ('qs3d-v26-admin-' + [Guid]::NewGuid().ToString('N') + '.log')
         try {
-            $arguments = @('/a', ('"' + $admission.Path + '"'), '/qn', '/norestart', ('TARGETDIR="' + $extract + '"'), 'REBOOT=ReallySuppress', '/L*v', ('"' + $msiLog + '"'))
+            $arguments = @('/a', ('"' + $admission.Path + '"'), '/qn', ('TARGETDIR="' + $extract + '"'), 'REBOOT=ReallySuppress', '/L*v', ('"' + $msiLog + '"'))
             Write-Host 'Starting BricsCAD V26 MSI administrative extraction (15-minute timeout).'
             $process = Start-Process -FilePath msiexec.exe -ArgumentList $arguments -PassThru
             if (-not $process.WaitForExit(900000)) {
