@@ -96,18 +96,20 @@ namespace QS3D.Core.Cost
 
             BillItems = SnapshotBillItems(billItems, knownBillItemCount);
             BuildUpRates = SnapshotBuildUpRates(buildUpRates, knownBuildUpRateCount);
-            RateReferences = new RateReferenceGraph(Bounded(
+            var rateReferenceSnapshot = SnapshotNestedGeneration(
                 rateReferences,
                 MaxRateReferences,
                 "rate references",
-                knownRateReferenceCount));
-            Library = new BqLibraryCatalog(
-                LibraryId,
-                Bounded(
-                    libraryEntries,
-                    MaxLibraryEntries,
-                    "BQ library entries",
-                    knownLibraryEntryCount));
+                knownRateReferenceCount,
+                SameRateReferenceState);
+            var libraryEntrySnapshot = SnapshotNestedGeneration(
+                libraryEntries,
+                MaxLibraryEntries,
+                "BQ library entries",
+                knownLibraryEntryCount,
+                SameLibraryEntryState);
+            RateReferences = new RateReferenceGraph(rateReferenceSnapshot);
+            Library = new BqLibraryCatalog(LibraryId, libraryEntrySnapshot);
 
             new CostAdjustmentService().AdjustByRatios(0m, adjustmentRatioPercent, markupRatioPercent);
             AdjustmentRatioPercent = adjustmentRatioPercent == 0m ? 0m : adjustmentRatioPercent;
@@ -366,6 +368,64 @@ namespace QS3D.Core.Cost
             if (hasConflict)
                 throw new InvalidOperationException("TBQ workspace " + label + " collection reports conflicting known counts.");
             return expected;
+        }
+
+        private static IReadOnlyList<T> SnapshotNestedGeneration<T>(
+            IEnumerable<T> source,
+            int maximum,
+            string label,
+            int? knownCount,
+            Func<T, T, bool> sameState)
+            where T : class
+        {
+            var snapshot = new List<T>();
+            foreach (var item in Bounded(source, maximum, label, knownCount))
+                snapshot.Add(item);
+
+            if (knownCount.HasValue)
+            {
+                var index = 0;
+                foreach (var replayItem in Bounded(source, maximum, label, knownCount))
+                {
+                    if (index >= snapshot.Count || !SameNestedState(snapshot[index], replayItem, sameState))
+                        ThrowNestedContentChanged(label);
+                    index++;
+                }
+                if (index != snapshot.Count)
+                    ThrowNestedContentChanged(label);
+            }
+
+            return new ReadOnlyCollection<T>(snapshot.ToArray());
+        }
+
+        private static bool SameNestedState<T>(T left, T right, Func<T, T, bool> sameState)
+            where T : class
+        {
+            if (left == null || right == null)
+                return left == null && right == null;
+            return sameState(left, right);
+        }
+
+        private static bool SameRateReferenceState(RateReferenceEdge left, RateReferenceEdge right)
+        {
+            return string.Equals(left.SourceRateCode, right.SourceRateCode, StringComparison.Ordinal) &&
+                   left.TargetKind == right.TargetKind &&
+                   string.Equals(left.TargetId, right.TargetId, StringComparison.Ordinal);
+        }
+
+        private static bool SameLibraryEntryState(BqLibraryEntry left, BqLibraryEntry right)
+        {
+            return string.Equals(left.ItemCode, right.ItemCode, StringComparison.Ordinal) &&
+                   string.Equals(left.Description, right.Description, StringComparison.Ordinal) &&
+                   string.Equals(left.Unit, right.Unit, StringComparison.Ordinal) &&
+                   string.Equals(left.CategoryPath, right.CategoryPath, StringComparison.Ordinal) &&
+                   left.ReferenceUnitRate == right.ReferenceUnitRate;
+        }
+
+        private static void ThrowNestedContentChanged(string label)
+        {
+            throw new InvalidOperationException(
+                "TBQ workspace " + label + " content changed across semantic generation replay.");
         }
 
         private static IEnumerable<T> Bounded<T>(IEnumerable<T> source, int maximum, string label, int? knownCount)

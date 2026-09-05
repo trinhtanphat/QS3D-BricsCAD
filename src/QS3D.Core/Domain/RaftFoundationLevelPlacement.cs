@@ -45,8 +45,23 @@ namespace QS3D.Core.Domain
             if (levelId.Length == 0)
                 throw new InvalidOperationException("Móng Bè cần một Tầng/Level đang hoạt động trước khi Add Family.");
             var floor = FindFloor(project, levelId, "Cao độ đầu Móng Bè");
+            ValidateUniqueFloorIds(project);
 
             var before = Snapshot(family.Properties);
+            var candidate = Snapshot(family.Properties);
+            candidate[RaftFoundationPropertySet.ElevationModeKey] = mode;
+            candidate[activeKey] = floor.Id;
+            candidate.Remove(oppositeKey);
+            candidate.Remove(ProjectFloorService.BottomLevelOffsetKey);
+            candidate.Remove(ProjectFloorService.TopLevelOffsetKey);
+            candidate[RaftFoundationPropertySet.BottomOffsetKey] =
+                RaftFoundationPropertySet.ResolveBottomOffsetM(mode, thicknessM).ToString("R", CultureInfo.InvariantCulture);
+
+            // Validate the complete intended state while it is still detached from the live Family.
+            // Project revision-capacity atomicity is owned by the catalog ownership boundary because
+            // one Family can currently have more than one ProjectState mutation subscriber.
+            ResolveCore(project, candidate, null, family.Name);
+
             family.Properties[RaftFoundationPropertySet.ElevationModeKey] = mode;
             family.Properties[activeKey] = floor.Id;
             family.Properties.Remove(oppositeKey);
@@ -54,7 +69,6 @@ namespace QS3D.Core.Domain
             family.Properties.Remove(ProjectFloorService.TopLevelOffsetKey);
             family.Properties[RaftFoundationPropertySet.BottomOffsetKey] =
                 RaftFoundationPropertySet.ResolveBottomOffsetM(mode, thicknessM).ToString("R", CultureInfo.InvariantCulture);
-            Resolve(project, family);
             return !DictionaryEqual(before, family.Properties);
         }
 
@@ -85,26 +99,38 @@ namespace QS3D.Core.Domain
             if (family == null) throw new ArgumentNullException(nameof(family));
             if (element == null) throw new ArgumentNullException(nameof(element));
             var placement = Resolve(project, family);
+            if (!RaftFoundationPropertySet.IsRaftElement(element, family))
+                throw new InvalidOperationException("Cấu kiện không phải Móng Bè.");
+
             var mode = RaftFoundationPropertySet.NormalizeElevationMode(Property(family.Properties, RaftFoundationPropertySet.ElevationModeKey));
             var activeKey = RaftFoundationPropertySet.ActiveLevelKey(mode);
             var oppositeKey = RaftFoundationPropertySet.OppositeLevelKey(mode);
             var levelId = RequiredText(family.Properties, activeKey, "Cao độ đầu Móng Bè");
             var thicknessM = RequirePositive(family.Properties, RaftFoundationPropertySet.ThicknessKey, "Dày Móng Bè");
+            var bottomOffset = RaftFoundationPropertySet.ResolveBottomOffsetM(mode, thicknessM).ToString("R", CultureInfo.InvariantCulture);
+
+            var candidate = Snapshot(element.Properties);
+            candidate[RaftFoundationPropertySet.WorkspaceSubtypeKey] = RaftFoundationPropertySet.SubtypeName;
+            candidate[RaftFoundationPropertySet.ThicknessKey] = thicknessM.ToString("R", CultureInfo.InvariantCulture);
+            candidate[RaftFoundationPropertySet.ElevationModeKey] = mode;
+            candidate[activeKey] = levelId;
+            candidate.Remove(oppositeKey);
+            candidate.Remove(ProjectFloorService.BottomLevelOffsetKey);
+            candidate.Remove(ProjectFloorService.TopLevelOffsetKey);
+            candidate[RaftFoundationPropertySet.BottomOffsetKey] = bottomOffset;
+            var copied = ResolveCore(project, candidate, family.Properties, element.Id);
+            if (!NearlyEqual(copied.BottomElevationM, placement.BottomElevationM) ||
+                !NearlyEqual(copied.TopElevationM, placement.TopElevationM))
+                throw new InvalidOperationException("Placement Móng Bè trên element lệch khỏi Family nguồn.");
 
             element.SetProperty(RaftFoundationPropertySet.WorkspaceSubtypeKey, RaftFoundationPropertySet.SubtypeName);
             element.SetProperty(RaftFoundationPropertySet.ThicknessKey, thicknessM.ToString("R", CultureInfo.InvariantCulture));
             element.SetProperty(RaftFoundationPropertySet.ElevationModeKey, mode);
             element.SetProperty(activeKey, levelId);
-            element.Properties.Remove(oppositeKey);
-            element.Properties.Remove(ProjectFloorService.BottomLevelOffsetKey);
-            element.Properties.Remove(ProjectFloorService.TopLevelOffsetKey);
-            element.SetProperty(
-                RaftFoundationPropertySet.BottomOffsetKey,
-                RaftFoundationPropertySet.ResolveBottomOffsetM(mode, thicknessM).ToString("R", CultureInfo.InvariantCulture));
-            var copied = Resolve(project, element, family);
-            if (!NearlyEqual(copied.BottomElevationM, placement.BottomElevationM) ||
-                !NearlyEqual(copied.TopElevationM, placement.TopElevationM))
-                throw new InvalidOperationException("Placement Móng Bè trên element lệch khỏi Family nguồn.");
+            element.RemoveProperty(oppositeKey);
+            element.RemoveProperty(ProjectFloorService.BottomLevelOffsetKey);
+            element.RemoveProperty(ProjectFloorService.TopLevelOffsetKey);
+            element.SetProperty(RaftFoundationPropertySet.BottomOffsetKey, bottomOffset);
             return copied;
         }
 
