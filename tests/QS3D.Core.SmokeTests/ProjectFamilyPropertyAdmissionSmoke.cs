@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
             RejectsNonPersistablePropertyKeysWithoutMutation();
             RejectsXmlInvalidPropertyValuesWithoutMutation();
             NormalizesNullPropertyValueBeforeMutation();
+            PreservesCaseInsensitiveAndDuplicateSemantics();
+            PreservesRemoveAndClearMutationSemantics();
         }
 
         private static void RejectsNonPersistablePropertyKeysWithoutMutation()
@@ -60,6 +62,46 @@ namespace QS3D.Core.SmokeTests
             family.Properties["Description"] = null;
 #pragma warning restore CS8625
             Equal(beforeVersion + 1L, project.ChangeVersion, "same normalized null value must be a no-op");
+        }
+
+        private static void PreservesCaseInsensitiveAndDuplicateSemantics()
+        {
+            var project = CreateProjectWithFamily(out var family);
+            var beforeVersion = project.ChangeVersion;
+
+            family.Properties.Add("FireRating", "60");
+            Equal(beforeVersion + 1L, project.ChangeVersion, "change version after Add");
+            Equal("60", family.Properties["firerating"], "case-insensitive lookup");
+
+            family.Properties["FIRERATING"] = "90";
+            Equal(beforeVersion + 2L, project.ChangeVersion, "change version after case-insensitive replacement");
+            Equal("90", family.Properties["FireRating"], "replacement value");
+            Equal(1, family.Properties.Count, "case-insensitive replacement count");
+
+            var beforeDuplicateVersion = project.ChangeVersion;
+            Throws<ArgumentException>(() => family.Properties.Add("firerating", "120"));
+            Equal(beforeDuplicateVersion, project.ChangeVersion, "duplicate Add must not mutate persistence state");
+            Equal("90", family.Properties["FireRating"], "duplicate Add must preserve value");
+        }
+
+        private static void PreservesRemoveAndClearMutationSemantics()
+        {
+            var project = CreateProjectWithFamily(out var family);
+            family.Properties.Add("A", "1");
+            family.Properties.Add("B", "2");
+            var beforeRemoveVersion = project.ChangeVersion;
+
+            Equal(false, family.Properties.Remove("missing"), "missing remove result");
+            Equal(beforeRemoveVersion, project.ChangeVersion, "missing remove must be a no-op");
+            Equal(true, family.Properties.Remove("a"), "case-insensitive remove result");
+            Equal(beforeRemoveVersion + 1L, project.ChangeVersion, "successful remove mutation");
+
+            family.Properties.Clear();
+            Equal(beforeRemoveVersion + 2L, project.ChangeVersion, "clear mutation");
+            Equal(0, family.Properties.Count, "clear count");
+
+            family.Properties.Clear();
+            Equal(beforeRemoveVersion + 2L, project.ChangeVersion, "empty clear must be a no-op");
         }
 
         private static ProjectState CreateProjectWithFamily(out ProjectFamily family)
