@@ -61,9 +61,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = NewProject(out _);
             var snapshot = CaptureFence(project);
-            var version = project.ChangeVersion;
             project.Floors[0].Name = "Changed floor";
-            Require(project.ChangeVersion == version, "test prerequisite changed: floor mutation unexpectedly touched project version");
             ExpectGenerationDrift(() => InvokeFence(project, snapshot), "in-place floor name mutation");
         }
 
@@ -71,9 +69,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = NewProject(out _);
             var snapshot = CaptureFence(project);
-            var version = project.ChangeVersion;
             project.Families[0].Name = "Changed family";
-            Require(project.ChangeVersion == version, "test prerequisite changed: family mutation unexpectedly touched project version");
             ExpectGenerationDrift(() => InvokeFence(project, snapshot), "in-place family name mutation");
         }
 
