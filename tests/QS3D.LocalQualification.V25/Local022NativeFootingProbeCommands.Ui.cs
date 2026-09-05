@@ -263,7 +263,9 @@ namespace QS3D.LocalQualification.V25
                         if (!AwaitAction(() => FindVisualDescendants<TextBlock>(item).Single(text =>
                             text.IsVisible && string.Equals(text.Text, "Móng đơn", StringComparison.Ordinal)), "click", string.Empty)) return;
                         if (!item.IsSelected) return;
+                        TraceWorkspaceRoute("selected_before_baseline");
                         _project = GetOrCreateProject(_context.Document);
+                        TraceWorkspaceRoute("selected_after_baseline");
                         _familyBaseline = _project.Families.Count;
                         _semanticBaseline = _project.Elements.Count;
                         _nativeBaseline = CountModelSpaceEntities(_context.Document);
@@ -561,8 +563,21 @@ namespace QS3D.LocalQualification.V25
                 }
             }
 
-            private void OnPhysicalButtonClick(object sender, RoutedEventArgs args) =>
+            private void OnPhysicalButtonClick(object sender, RoutedEventArgs args)
+            {
                 UiTrace("button_click " + _stage + " source=" + args.OriginalSource + " handled=" + args.Handled);
+                TraceWorkspaceRoute("after_button");
+            }
+
+            private void TraceWorkspaceRoute(string label)
+            {
+                var tree = FindVisualDescendants<TreeView>(_workspace!).Single(x => x.Name == "ModelTree");
+                var item = tree.SelectedItem as TreeViewItem;
+                var category = _workspace!.GetType().GetField("_categoryFilter", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(_workspace);
+                UiTrace(label + " tree=" + item?.Header + " tag=" + item?.Tag + " category=" + category +
+                    " families=" + (_project == null ? "unbound" : string.Join(",", _project.Families.Select(x => x.Category.ToString()))));
+                UiTrace(label + " roots=" + string.Join(",", PresentationSource.CurrentSources.Cast<PresentationSource>().Select(x => x.RootVisual?.GetType().FullName)));
+            }
 
             private void UiTrace(string value)
             {
