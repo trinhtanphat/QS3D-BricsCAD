@@ -418,7 +418,7 @@ try {
                 break
             }
             catch {
-                if ($null -ne $process -and $process.HasExited -and $process.ExitCode -eq 1603 -and $attempt -lt $maxAdminExtractionAttempts) {
+                if ($null -ne $process -and $process.HasExited -and $process.ExitCode -eq 1603 -and [string]::IsNullOrWhiteSpace([string]$completeReferenceDirAfter1603) -and $attempt -lt $maxAdminExtractionAttempts) {
                     Write-Warning "BricsCAD V26 MSI administrative extraction attempt $attempt returned exit code 1603 before a complete managed-reference payload was materialized; retrying once with a clean extraction directory."
                     Assert-HeldInstallerStable -Held $admission -Phase "after incomplete administrative extraction attempt $attempt"
                     Start-Sleep -Seconds 5
