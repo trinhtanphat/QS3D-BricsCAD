@@ -339,6 +339,15 @@ function Assert-Qs3dV26InstalledDesktopRuntime {
 
 function Assert-Qs3dV26DotNetRoot {
     $configured = [Environment]::GetEnvironmentVariable("DOTNET_ROOT", "Process")
+    $configuredX64 = [Environment]::GetEnvironmentVariable("DOTNET_ROOT_X64", "Process")
+    if (-not [string]::IsNullOrWhiteSpace($configuredX64)) {
+        if (-not [string]::IsNullOrWhiteSpace($configured) -and
+            -not [string]::Equals([IO.Path]::GetFullPath($configured.Trim()).TrimEnd('\'),
+                [IO.Path]::GetFullPath($configuredX64.Trim()).TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'DOTNET_ROOT and DOTNET_ROOT_X64 must identify the same validated x64 runtime root.'
+        }
+        $configured = $configuredX64
+    }
     if ([string]::IsNullOrWhiteSpace($configured)) {
         Assert-Qs3dV26InstalledDesktopRuntime
         return
@@ -625,6 +634,19 @@ function Read-Phase([string]$Phase) {
 
 function Invoke-NativePhase([string]$Phase, [string[]]$Commands) {
     Assert-Qs3dNoBricsCadProcess
+    # Recheck frozen inputs at every process boundary, including cold reopen.
+    if ((Get-Hash $PackageZip) -ine $expectedPackageSha256 -or
+        (Get-Hash $ProvenancePath) -cne $provenanceHash) { throw 'Frozen candidate archive/provenance changed before launch.' }
+    foreach ($entry in $packageFiles.GetEnumerator()) {
+        if ((Get-Hash (Join-Path $ProductDir $entry.Key)) -cne $entry.Value) { throw 'Frozen product payload changed before launch.' }
+    }
+    foreach ($entry in $probeExtraHashes.GetEnumerator()) {
+        if ((Get-Hash (Join-Path (Split-Path -Parent $ProbeDll) $entry.Key)) -cne $entry.Value) { throw 'Frozen probe payload changed before launch.' }
+    }
+    Assert-Qs3dV26DotNetRoot
+    if (($protectedBefore | ConvertTo-Json -Compress) -cne ((Get-ProtectedState) | ConvertTo-Json -Compress)) {
+        throw 'Protected machine state changed before launch.'
+    }
     $env:QS3D_LOCAL022_V26_PHASE = $Phase
     $scriptPath = Join-Path $privateRoot ($Phase + '.scr')
     $lines = @('FILEDIA', '0', 'CMDECHO', '1', 'TILEMODE', '1', 'INSUNITS', '6', '_.UCS', '_W',

@@ -217,6 +217,17 @@ function Read-Phase([string]$Phase) {
 
 function Invoke-NativePhase([string]$Phase, [string[]]$Commands) {
     Assert-Qs3dNoBricsCadProcess
+    # Recheck frozen inputs at every process boundary, including cold reopen.
+    if ((Get-Hash $PackageZip) -ine $expectedPackageSha256) { throw 'Frozen candidate archive changed before launch.' }
+    foreach ($entry in $packageFiles.GetEnumerator()) {
+        if ((Get-Hash (Join-Path $ProductDir $entry.Key)) -cne $entry.Value) { throw 'Frozen product payload changed before launch.' }
+    }
+    if ((Get-Hash $ProbeDll) -cne $probeHash -or (Get-Hash $probePdb) -cne $probePdbHash) {
+        throw 'Frozen probe payload changed before launch.'
+    }
+    if (($protectedBefore | ConvertTo-Json -Compress) -cne ((Get-ProtectedState) | ConvertTo-Json -Compress)) {
+        throw 'Protected machine state changed before launch.'
+    }
     $env:QS3D_LOCAL022_PHASE = $Phase
     $scriptPath = Join-Path $privateRoot ($Phase + '.scr')
     $lines = @('FILEDIA', '0', 'CMDECHO', '1', 'TILEMODE', '1', 'INSUNITS', '6', '_.UCS', '_W',
