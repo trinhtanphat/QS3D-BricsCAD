@@ -163,7 +163,8 @@ namespace QS3D.BricsCAD.V25
 
         private static string BoundArguments(string? value)
         {
-            var arguments = string.IsNullOrWhiteSpace(value) ? "{}" : value.Trim();
+            var arguments = (value ?? string.Empty).Trim();
+            if (arguments.Length == 0) arguments = "{}";
             if (arguments.Length > MaxArgumentsCharacters || arguments.IndexOf('\0') >= 0)
                 throw new InvalidOperationException("invalid_arguments: arguments exceed the local host boundary.");
             return arguments;
