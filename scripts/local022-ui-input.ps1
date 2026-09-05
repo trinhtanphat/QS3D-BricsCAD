@@ -51,6 +51,7 @@ function Assert-Local022UiAction($Request, [string]$RunId, [int]$Sequence, [int]
     }
     if ($Request.action -isnot [string] -or $Request.text -isnot [string]) { throw 'UI action text type mismatch.' }
     switch -CaseSensitive ($Request.action) {
+        'move' { if ($Request.text -cne '') { throw 'Move cannot carry text.' } }
         'click' { if ($Request.text -cne '') { throw 'Click cannot carry text.' } }
         'text' { if ($Request.text -cnotmatch '^\-?[0-9]{1,7}(\.[0-9]{1,4})?$') { throw 'Only bounded numeric dimension input is allowed.' } }
         'key' { if ($Request.text -cnotin @('ENTER','ESC')) { throw 'Only Enter/Esc termination is allowed.' } }
@@ -139,6 +140,10 @@ public static class Qs3dLocal022Input {
             new INPUT { Data=new UNION { Mouse=new MOUSE { Flags=4 } } }
         });
     }
+    public static void Move(int process, int x, int y) {
+        RequireForeground(process); RequirePoint(process,x,y);
+        if (!SetCursorPos(x,y)) throw new InvalidOperationException("Cannot position test cursor.");
+    }
     public static void Terminate(int process, bool escape) {
         RequireForeground(process);
         ushort key = escape ? (ushort)27 : (ushort)13;
@@ -211,6 +216,7 @@ function Invoke-Local022UiPhysicalAction($Request, [Diagnostics.Process]$Process
     } while ([DateTime]::UtcNow -lt $activationDeadline)
     [Qs3dLocal022Input]::RequireForeground($Process.Id)
     switch -CaseSensitive ($Request.action) {
+        'move' { [Qs3dLocal022Input]::Move($Process.Id, $Request.x, $Request.y) }
         'click' { [Qs3dLocal022Input]::Click($Process.Id, $Request.x, $Request.y) }
         'text' {
             [Qs3dLocal022Input]::Click($Process.Id, $Request.x, $Request.y)

@@ -182,6 +182,8 @@ namespace QS3D.LocalQualification.V25
             private DateTime _deadlineUtc;
             private UiStage _stage;
             private bool _requestWritten;
+            private bool _moveRequested;
+            private bool _moveAcknowledged;
             private int _sequence;
             private FrameworkElement? _workspace;
             private ProjectState? _project;
@@ -260,6 +262,7 @@ namespace QS3D.LocalQualification.V25
                         if (!AwaitAction(() => FindVisualDescendants<TextBlock>(item).Single(text =>
                             text.IsVisible && string.Equals(text.Text, "Móng đơn", StringComparison.Ordinal)), "click", string.Empty)) return;
                         if (!item.IsSelected) return;
+                        _workspace!.RemoveHandler(Mouse.PreviewMouseDownEvent, new MouseButtonEventHandler(OnPhysicalMouse));
                         _project = GetOrCreateProject(_context.Document);
                         _familyBaseline = _project.Families.Count;
                         _semanticBaseline = _project.Elements.Count;
@@ -568,6 +571,22 @@ namespace QS3D.LocalQualification.V25
 
             private bool AwaitAction(int x, int y, string action, string text)
             {
+                if (!_requestWritten && action != "key")
+                {
+                    if (!_moveRequested)
+                    {
+                        _sequence++;
+                        WriteUiAction(_context, _sequence, "move", x, y, string.Empty);
+                        _moveRequested = true;
+                        return false;
+                    }
+                    if (!_moveAcknowledged)
+                    {
+                        if (HasExactUiAck(_context, _sequence)) _moveAcknowledged = true;
+                        // Re-measure next dispatcher tick after hover/scrollbar layout.
+                        return false;
+                    }
+                }
                 if (!_requestWritten)
                 {
                     _sequence++;
@@ -582,6 +601,8 @@ namespace QS3D.LocalQualification.V25
             {
                 _stage = next;
                 _requestWritten = false;
+                _moveRequested = false;
+                _moveAcknowledged = false;
                 _deadlineUtc = DateTime.UtcNow + UiStageTimeout;
             }
 
@@ -901,8 +922,8 @@ namespace QS3D.LocalQualification.V25
         private static void WriteUiAction(Context context, int sequence, string action, int x, int y, string value)
         {
             if (sequence < 1 || sequence > 100) throw new ProbeException("ui_action_sequence_invalid");
-            if (action != "click" && action != "text" && action != "key") throw new ProbeException("ui_action_invalid");
-            if ((action == "click" && value.Length != 0) ||
+            if (action != "move" && action != "click" && action != "text" && action != "key") throw new ProbeException("ui_action_invalid");
+            if (((action == "click" || action == "move") && value.Length != 0) ||
                 (action == "text" && !Regex.IsMatch(value, @"^-?\d{1,7}(\.\d{1,4})?$", RegexOptions.CultureInvariant)) ||
                 (action == "key" && value != "ENTER" && value != "ESC"))
                 throw new ProbeException("ui_action_value_invalid");

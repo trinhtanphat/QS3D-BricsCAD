@@ -16,6 +16,8 @@ function Expect-Rejected([string]$Name, [scriptblock]$Change) {
 }
 $accepted = Assert-Local022UiAction (New-Action) $nonce 1 12345
 if ($accepted.action -cne 'click') { throw 'FAIL: valid click was not retained.' }
+$hover = New-Action; $hover.action='move'
+$null = Assert-Local022UiAction $hover $nonce 1 12345
 Expect-Rejected 'another process' { param($a) $a.target_pid = 54321 }
 Expect-Rejected 'another allocation' { param($a) $a.run_id = 'fedcba9876543210fedcba9876543210' }
 Expect-Rejected 'replayed sequence' { param($a) $a.sequence = 0 }
