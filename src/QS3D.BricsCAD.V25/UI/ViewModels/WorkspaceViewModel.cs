@@ -137,9 +137,9 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             {
                 ownedFamily = project.FindFamily(family.Id);
             }
-            catch (InvalidOperationException ex)
+            catch (InvalidOperationException)
             {
-                Status = "Không thể chọn Family: " + ex.Message;
+                ReportMutationFailure("Chọn Family");
                 return;
             }
             if (ownedFamily == null || !ReferenceEquals(ownedFamily, family))
@@ -194,10 +194,10 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 }
                 family = _project.FindFamily(ownedElement.FamilyId);
             }
-            catch (InvalidOperationException ex)
+            catch (InvalidOperationException)
             {
                 _selectedElement = null;
-                Status = "Không thể chọn cấu kiện: " + ex.Message;
+                ReportMutationFailure("Chọn cấu kiện");
                 ShowFamilyProperties();
                 return;
             }
@@ -341,7 +341,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             }
             catch (Exception ex) when (ex is InvalidOperationException || ex is ArgumentException)
             {
-                Status = "Không thể đổi tên Family: " + ex.Message;
+                ReportMutationFailure("Đổi tên Family");
                 return previous;
             }
         }
@@ -370,7 +370,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             }
             catch (Exception ex) when (ex is InvalidOperationException || ex is ArgumentException)
             {
-                Status = "Không thể cập nhật " + DisplayNameFor(key) + ": " + ex.Message;
+                ReportMutationFailure("Cập nhật " + DisplayNameFor(key));
                 return previousFamilyValue;
             }
         }
@@ -396,9 +396,9 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                     return current;
                 }
             }
-            catch (InvalidOperationException ex)
+            catch (InvalidOperationException)
             {
-                Status = "Không thể cập nhật Instance: " + ex.Message;
+                ReportMutationFailure("Cập nhật Instance");
                 return current;
             }
 
@@ -424,7 +424,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             }
             catch (Exception ex) when (ex is InvalidOperationException || ex is ArgumentException || ex is OverflowException)
             {
-                Status = "Không thể cập nhật " + DisplayNameFor(key) + ": " + ex.Message;
+                ReportMutationFailure("Cập nhật " + DisplayNameFor(key));
                 return current;
             }
 
@@ -462,9 +462,9 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
 
                 row.Value = ToDisplayValue(key, liveFamilyRaw ?? string.Empty);
             }
-            catch (InvalidOperationException ex)
+            catch (InvalidOperationException)
             {
-                Status = "Không thể đặt lại Instance: " + ex.Message;
+                ReportMutationFailure("Đặt lại Instance");
             }
         }
 
@@ -500,11 +500,16 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 project = current;
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Status = operation + " bị từ chối: " + ex.Message;
+                ReportMutationFailure(operation);
                 return false;
             }
+        }
+
+        private void ReportMutationFailure(string operation)
+        {
+            Status = operation + " không hoàn tất. Chi tiết nội bộ đã được ẩn. Hãy Refresh Workspace rồi thử lại.";
         }
 
         private string NormalizePropertyValue(string key, string unit, string previousValue, string value, out bool valid)

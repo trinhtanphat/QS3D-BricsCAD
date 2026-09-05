@@ -31,8 +31,8 @@ namespace QS3D.Core.SmokeTests
             var version = project.ChangeVersion;
             Throws<InvalidOperationException>(() =>
                 new BulkEditService().AssignFamily(project, ReplacePreviousFamilyThenYield(project, previousFamily), "F1"));
-            if (project.ChangeVersion != version)
-                throw new InvalidOperationException("Direct previous-Family replacement unexpectedly advanced ProjectState.ChangeVersion.");
+            if (project.ChangeVersion != version + 1L)
+                throw new InvalidOperationException("Direct previous-Family replacement must advance ProjectState.ChangeVersion exactly once.");
             if (!string.Equals(element.FamilyId, "F0", StringComparison.Ordinal) ||
                 !element.Properties.TryGetValue("Width", out var width) ||
                 !string.Equals(width, "0.4", StringComparison.Ordinal))
@@ -45,8 +45,8 @@ namespace QS3D.Core.SmokeTests
             var version = project.ChangeVersion;
             Throws<InvalidOperationException>(() =>
                 new BulkEditService().AssignFamily(project, RemovePreviousFamilyThenEmpty(project, previousFamily), "F1"));
-            if (project.ChangeVersion != version)
-                throw new InvalidOperationException("Direct previous-Family removal unexpectedly advanced ProjectState.ChangeVersion.");
+            if (project.ChangeVersion != version + 1L)
+                throw new InvalidOperationException("Direct previous-Family removal must advance ProjectState.ChangeVersion exactly once.");
             if (!string.Equals(element.FamilyId, "F0", StringComparison.Ordinal))
                 throw new InvalidOperationException("Bulk Family assignment changed the element before rejecting previous-Family removal.");
         }
