@@ -1055,15 +1055,15 @@ namespace QS3D.BricsCAD.V25
         private static string DescribeEntity(Entity entity, bool extents, bool details)
         {
             var builder = new StringBuilder();
-            var boundedSolidInspect = extents && details && entity is Solid3d;
+            var boundedSolidExtents = extents && entity is Solid3d;
             builder.Append("{\"handle\":\"").Append(Escape(entity.Handle.ToString())).Append("\",\"type\":\"")
                 .Append(Escape(entity.GetType().Name)).Append("\",\"layer\":\"").Append(Escape(entity.Layer)).Append('"');
             if (extents)
             {
                 builder.Append(",\"extents\":");
-                if (boundedSolidInspect) builder.Append("null");
+                if (boundedSolidExtents) builder.Append("null");
                 else try { builder.Append(ExtentsJson(entity.GeometricExtents)); } catch { builder.Append("null"); }
-                if (boundedSolidInspect) builder.Append(",\"extentsDeferred\":true");
+                if (boundedSolidExtents) builder.Append(",\"extentsDeferred\":true");
             }
             if (details)
             {
