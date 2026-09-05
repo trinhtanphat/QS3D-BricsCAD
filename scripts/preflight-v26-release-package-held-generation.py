@@ -42,16 +42,20 @@ def static_failures() -> list[str]:
         "GetAssemblyName($Held.Path)",
         "ReflectionOnlyLoad(",
         "$snapshotPath",
+        "$Held.Stream.CopyTo($process.StandardInput.BaseStream)",
     )
     for token in forbidden:
         if token in source:
-            failures.append(f"assembly semantics reintroduced an unsafe/redundant generation path: {token}")
+            failures.append(f"assembly semantics reintroduced an unsafe/unbounded generation path: {token}")
 
     required_source = (
         "function Initialize-AssemblyVersionProbe",
         "function Get-HeldAssemblyVersion",
         "$Held.Stream.Position = 0",
-        "$Held.Stream.CopyTo($process.StandardInput.BaseStream)",
+        "$deadline = [Diagnostics.Stopwatch]::StartNew()",
+        "$copyTask = $Held.Stream.CopyToAsync($process.StandardInput.BaseStream)",
+        "$copyTask.Wait(",
+        "$copyTask.GetAwaiter().GetResult()",
         "$process.StandardInput.Close()",
         "$process.WaitForExit(",
         "RedirectStandardInput = $true",
