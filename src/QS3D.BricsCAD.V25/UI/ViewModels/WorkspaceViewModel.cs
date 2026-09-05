@@ -33,6 +33,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         private ProjectState? _project;
         private ProjectFamily? _selectedFamily;
         private ProjectElement? _selectedElement;
+        private Func<ProjectFamily, bool>? _familyPropertyPresenter;
 
         public ObservableCollection<string> Zones { get; } = new ObservableCollection<string>();
         public ObservableCollection<string> Floors { get; } = new ObservableCollection<string>();
@@ -217,11 +218,19 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             Status = "Instance: " + ownedElement.Id + " • " + family.Name;
         }
 
+        internal void SetFamilyPropertyPresenter(Func<ProjectFamily, bool> presenter)
+        {
+            if (presenter == null) throw new ArgumentNullException(nameof(presenter));
+            if (_familyPropertyPresenter == presenter) return;
+            _familyPropertyPresenter = presenter;
+            LoadCurrentProperties();
+        }
+
         private void LoadCurrentProperties()
         {
             if (_selectedPropertyScope == InstanceScope && _selectedElement != null && _selectedFamily != null)
                 LoadInstanceProperties(_selectedElement, _selectedFamily);
-            else
+            else if (_selectedFamily == null || _familyPropertyPresenter?.Invoke(_selectedFamily) != true)
                 LoadFamilyProperties(_selectedFamily);
         }
 
@@ -614,6 +623,13 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         private static bool IsNumericProperty(string key)
         {
             if (string.IsNullOrWhiteSpace(key)) return false;
+            // The generic Family view is populated before the dedicated footing rows.
+            // Its initial value normalization must never turn metre values 0/1 into booleans.
+            if (SingleFootingContract.IsDimensionKey(key) || new[]
+                {
+                    "SingleFootingL1M", "SingleFootingW1M", "SingleFootingL2M",
+                    "SingleFootingW2M", "SingleFootingH1M", "SingleFootingH2M"
+                }.Any(candidate => string.Equals(candidate, key, StringComparison.OrdinalIgnoreCase))) return true;
             if (SemanticPropertyUnitClassifier.IsLinearMeterProperty(key) || key.EndsWith("M2", StringComparison.OrdinalIgnoreCase) || key.EndsWith("M3", StringComparison.OrdinalIgnoreCase) ||
                 key.EndsWith("Mm", StringComparison.OrdinalIgnoreCase) || key.EndsWith("Deg", StringComparison.OrdinalIgnoreCase) || key.EndsWith("Count", StringComparison.OrdinalIgnoreCase) ||
                 key.EndsWith("Ratio", StringComparison.OrdinalIgnoreCase) || key.EndsWith("Factor", StringComparison.OrdinalIgnoreCase) || key.EndsWith("Percent", StringComparison.OrdinalIgnoreCase)) return true;
