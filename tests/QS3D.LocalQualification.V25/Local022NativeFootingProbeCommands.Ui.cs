@@ -260,6 +260,18 @@ namespace QS3D.LocalQualification.V25
                             _treeScrolled = true;
                             return;
                         }
+                        var label = FindVisualDescendants<TextBlock>(item).Single(text =>
+                            text.IsVisible && string.Equals(text.Text, "Móng đơn", StringComparison.Ordinal));
+                        if (!_requestWritten && !Contains(ElementBounds(_workspace!), ElementBounds(label)))
+                        {
+                            // Deferred workspace layout can move the row out of view after
+                            // hover. Finish its ACK, then reveal/hover again before clicking.
+                            if (_moveRequested && !HasExactUiAck(_context, _sequence)) return;
+                            _treeScrolled = false;
+                            _moveRequested = false;
+                            _moveAcknowledged = false;
+                            return;
+                        }
                         if (!AwaitAction(() => FindVisualDescendants<TextBlock>(item).Single(text =>
                             text.IsVisible && string.Equals(text.Text, "Móng đơn", StringComparison.Ordinal)), "click", string.Empty)) return;
                         if (!item.IsSelected) return;
