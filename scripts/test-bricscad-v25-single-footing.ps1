@@ -7,8 +7,9 @@ param(
     [Parameter(Mandatory = $true)][string]$ArtifactDir,
     [string]$BricsCadDir = 'C:\Program Files\Bricsys\BricsCAD V25 en_US',
     [string]$Profile = 'QS3D-V25-TEST',
-    [ValidateRange(60, 600)][int]$PhaseTimeoutSeconds = 240,
+    [ValidateRange(60, 3600)][int]$PhaseTimeoutSeconds = 240,
     [switch]$InteractiveUi,
+    [ValidateSet('NATIVE_V1','OBSERVED_CLICK_V2')][string]$UiDriver = 'NATIVE_V1',
     [Parameter(Mandatory = $true)][switch]$ConfirmDisposableCopy
 )
 
@@ -17,6 +18,7 @@ param(
 # claims aggregate V25/V26, private-DWG or full-DPI qualification.
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($UiDriver -cne 'NATIVE_V1' -and -not $InteractiveUi) { throw 'External input requires InteractiveUi.' }
 . (Join-Path $PSScriptRoot 'v25-profile-sandbox.ps1')
 . (Join-Path $PSScriptRoot 'bricscad-runner-window-interop.ps1')
 . (Join-Path $PSScriptRoot 'local022-ui-input.ps1')
@@ -266,9 +268,9 @@ function Invoke-NativePhase([string]$Phase, [string[]]$Commands) {
         # UI markers are atomically published. A failed marker ends input immediately;
         # the existing exact-owned-process finally block performs guarded cleanup.
         if ($InteractiveUi -and (Test-Path -LiteralPath $markerPath)) { [void](Read-Phase $Phase) }
-        [void](Close-Qs3dProxyInformationDialog -Process $process)
+        if ($UiDriver -ceq 'NATIVE_V1') { [void](Close-Qs3dProxyInformationDialog -Process $process) }
         $process.Refresh()
-        if ($InteractiveUi -and -not $process.HasExited -and $Phase -ceq 'ui') {
+        if ($UiDriver -ceq 'NATIVE_V1' -and $InteractiveUi -and -not $process.HasExited -and $Phase -ceq 'ui') {
             if (Invoke-Local022UiPendingAction $ArtifactDir $runId $uiSequence $process $bricscadExe) { $uiSequence++ }
         }
         if ($process.HasExited) {
@@ -380,6 +382,8 @@ $probeSourceHash = Get-Hash $probeSource
 $probeProjectHash = Get-Hash $probeProject
 $runnerHash = Get-Hash $PSCommandPath
 $supplementalInputs = [ordered]@{}
+$observedInputPath = Join-Path $repoRoot 'tests\QS3D.LocalQualification.V25\local022-observed-input.mjs'
+$supplementalInputs[$observedInputPath] = Get-Hash $observedInputPath
 foreach ($inputPath in @((Join-Path $PSScriptRoot 'local022-ui-input.ps1')) + @(Get-ChildItem (Split-Path $probeSource) -Filter '*.cs' -File | Select-Object -ExpandProperty FullName)) {
     $supplementalInputs[$inputPath] = Get-Hash $inputPath
 }
@@ -416,14 +420,14 @@ $freeze = [ordered]@{
     probe_sha256 = $probeHash; probe_pdb_sha256 = $probePdbHash
     probe_source_sha256 = $probeSourceHash; probe_project_sha256 = $probeProjectHash; dotnet_sdk = $dotnetVersion
     runner_sha256 = $runnerHash; harness_git_sha = $harnessSha
-    interactive_ui = [bool]$InteractiveUi; supplemental_input_hashes = @($supplementalInputs.Values)
+    interactive_ui = [bool]$InteractiveUi; ui_driver = $UiDriver; observed_input_sha256 = $supplementalInputs[$observedInputPath]; supplemental_input_hashes = @($supplementalInputs.Values)
     fixture_sha256 = $fixtureHash; host_version = (Get-Item -LiteralPath $bricscadExe).VersionInfo.FileVersion
     host_sha256 = Get-Hash $bricscadExe; pre_existing_host_count = 0
     mcp_test_executed = $false; mcp_requests_issued_by_runner = $false
 }
 $ownedProcesses = [Collections.Generic.List[Diagnostics.Process]]::new()
 $envNames = @('QS3D_LOCAL022_RUN_ID', 'QS3D_LOCAL022_ROOT', 'QS3D_LOCAL022_DRAWING', 'QS3D_LOCAL022_PRODUCT_DLL',
-    'QS3D_LOCAL022_PROBE_DLL', 'QS3D_LOCAL022_PHASE')
+    'QS3D_LOCAL022_PROBE_DLL', 'QS3D_LOCAL022_PHASE', 'QS3D_LOCAL022_UI_DRIVER')
 $envBefore = @{}
 foreach ($name in $envNames) { $envBefore[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 $sandbox = $null
@@ -486,6 +490,7 @@ try {
     $env:QS3D_LOCAL022_DRAWING = $drawing
     $env:QS3D_LOCAL022_PRODUCT_DLL = $pluginDll
     $env:QS3D_LOCAL022_PROBE_DLL = $ProbeDll
+    $env:QS3D_LOCAL022_UI_DRIVER = $UiDriver
     if ($InteractiveUi) {
         $markers += Invoke-NativePhase 'ui' @('OSMODE','0','SNAPMODE','0','DYNMODE','0','QS3D','QL22UI')
         $markers += Read-Phase 'uisaved'
@@ -503,7 +508,7 @@ try {
         try {
             $process.Refresh()
             if (-not $process.HasExited) {
-                [void]$process.CloseMainWindow()
+                if ($UiDriver -ceq 'NATIVE_V1') { [void]$process.CloseMainWindow() }
                 if (-not $process.WaitForExit(10000)) {
                     Stop-Process -Id $process.Id -Force
                     if (-not $process.WaitForExit(10000)) { throw 'Owned native host did not exit.' }
@@ -602,6 +607,7 @@ $receipt = [ordered]@{
     profile_cleanup = $profileReceipt; mcp_test_executed = $false; mcp_requests_issued_by_runner = $false
     aggregate_local022_qualified = $false
     interactive_ui_executed = [bool]$InteractiveUi
+    ui_driver = $UiDriver
 }
 Write-Json (Join-Path $ArtifactDir 'receipt.json') $receipt
 if ($status -cne 'LOCAL_PASS_BOUNDED' -or $failure -or $cleanupFailure) {

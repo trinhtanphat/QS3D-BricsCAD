@@ -15,6 +15,8 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.Windows.Input;
+using Bricscad.EditorInput;
+using QS3D.LocalQualification;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
 using Teigha.DatabaseServices;
@@ -46,6 +48,15 @@ namespace QS3D.LocalQualification.V25
         private static readonly TimeSpan UiStageTimeout = TimeSpan.FromSeconds(25);
         private static UiController? _uiController;
         private static UiRunState? _uiRunState;
+
+        private static bool RequiresPhysicalHover(string? driver)
+        {
+            if (string.IsNullOrEmpty(driver) || string.Equals(driver, "NATIVE_V1", StringComparison.Ordinal)) return true;
+            if (string.Equals(driver, "OBSERVED_CLICK_V2", StringComparison.Ordinal)) return false;
+            throw new ProbeException("ui_driver_invalid");
+        }
+
+        private static bool ObservedClickDriver => !RequiresPhysicalHover(Environment.GetEnvironmentVariable("QS3D_LOCAL022_UI_DRIVER"));
 
         [CommandMethod("QL22UI", CommandFlags.Modal)]
         public void Ui()
@@ -206,12 +217,22 @@ namespace QS3D.LocalQualification.V25
             private int _stableIdleTicks;
             private bool _treeScrolled;
             private string? _lastH2Layout;
+            private readonly PhysicalPickWitness _pickWitness = new PhysicalPickWitness();
+            private string? _pickObservationError;
+            private bool _pickObserverAttached;
+            private readonly bool _observedClickDriver;
+            private readonly TimeSpan _stageTimeout;
 
             public UiController(Context context)
             {
                 _context = context;
+                _observedClickDriver = ObservedClickDriver;
+                // An external observe/action/refresh operator has multiple explicit
+                // focus checks per numeric field. Its separate bounded deadline is
+                // not a retry or relaxation of the native driver deadline.
+                _stageTimeout = _observedClickDriver ? TimeSpan.FromSeconds(180) : UiStageTimeout;
                 _startedUtc = DateTime.UtcNow;
-                _deadlineUtc = _startedUtc + UiStageTimeout;
+                _deadlineUtc = _startedUtc + _stageTimeout;
                 _stage = UiStage.LocateWorkspace;
                 _timer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher.CurrentDispatcher)
                 {
@@ -220,12 +241,18 @@ namespace QS3D.LocalQualification.V25
                 _timer.Tick += OnTick;
             }
 
-            public void Start() => _timer.Start();
+            public void Start()
+            {
+                _context.Document.Editor.PromptedForPoint += OnPromptedForPoint;
+                _pickObserverAttached = true;
+                _timer.Start();
+            }
 
             private void OnTick(object? sender, EventArgs e)
             {
                 try
                 {
+                    if (_pickObservationError != null) throw new ProbeException(_pickObservationError);
                     if (DateTime.UtcNow > _deadlineUtc)
                         throw new ProbeException("ui_timeout_" + _stage.ToString());
                     RequireUiContextStable(_context);
@@ -245,7 +272,14 @@ namespace QS3D.LocalQualification.V25
                         // The host can restore profile window placement after Start-Process's
                         // Maximized hint. Establish actual owned-window state before measuring
                         // any control or publishing the first physical request.
-                        if (!PrepareOwnedUiWindow(ref _preparedWindow, ref _windowReadyAfter, _sequence, DateTime.UtcNow)) return;
+                        if (_observedClickDriver)
+                        {
+                            // External operator prepares/maximizes the observed window.
+                            // This observer must not invoke ShowWindow or inject input.
+                            using (var process = Process.GetCurrentProcess())
+                                if (!IsZoomed(process.MainWindowHandle)) return;
+                        }
+                        else if (!PrepareOwnedUiWindow(ref _preparedWindow, ref _windowReadyAfter, _sequence, DateTime.UtcNow)) return;
                         _workspace = RequireProductionWorkspace(_context.Product);
                         RequireClickable(_workspace, "workspace_not_visible");
                         _workspace.AddHandler(Mouse.PreviewMouseDownEvent, new MouseButtonEventHandler(OnPhysicalMouse), true);
@@ -256,7 +290,7 @@ namespace QS3D.LocalQualification.V25
                     case UiStage.SelectTree:
                     {
                         var item = RequireSingleFootingTree(_workspace!);
-                        if (!_treeScrolled)
+                        if (!_treeScrolled && !_observedClickDriver)
                         {
                             // Scrolling prepares a reachable control; selection itself must
                             // still result from the acknowledged physical click below.
@@ -407,8 +441,11 @@ namespace QS3D.LocalQualification.V25
                             throw new ProbeException("ui_family_scope_reverted");
                         var row = list.Items.Cast<object>().SingleOrDefault(item => IsPropertyRow(item, "H2", "mm"))
                             ?? throw new ProbeException("ui_family_h2_row_missing");
-                        list.ScrollIntoView(row);
-                        _workspace!.UpdateLayout();
+                        if (!_observedClickDriver)
+                        {
+                            list.ScrollIntoView(row);
+                            _workspace!.UpdateLayout();
+                        }
                         Advance(UiStage.EditH2);
                         break;
                     }
@@ -472,7 +509,13 @@ namespace QS3D.LocalQualification.V25
                 // Freeze the world target immediately before publishing the physical click,
                 // after hover acknowledgement. Later view changes cannot move that target.
                 _pendingPlacementCentre = CapturePlacementCentre(_pendingPlacementCentre, _requestWritten,
-                    _moveAcknowledged, () => ScreenWorldPoint(_context.Document, _screenPoints[pointIndex]));
+                    _observedClickDriver || _moveAcknowledged, () => ScreenWorldPoint(_context.Document, _screenPoints[pointIndex]));
+                if (_pendingPlacementCentre.HasValue && !_requestWritten && !_pickWitness.IsArmed)
+                {
+                    var target = _pendingPlacementCentre.Value;
+                    _pickWitness.Arm(_sequence + 1, new PhysicalPickWitness.Point(target.X, target.Y, target.Z),
+                        _semanticBaseline + pointIndex);
+                }
                 var targetPoint = _pendingPlacementCentre ?? ScreenWorldPoint(_context.Document, _screenPoints[pointIndex]);
                 var placementTrace = "placement " + pointIndex + " active=" + IsDrawCommandActive() +
                     " count=" + observed.Count + " expected=" + targetPoint + " actual=" +
@@ -487,6 +530,7 @@ namespace QS3D.LocalQualification.V25
                 if (!AwaitAction(point.X, point.Y, "click", string.Empty)) return;
                 var created = NewFamilyElements();
                 if (created.Count != expectedNewElements) return;
+                _pickWitness.RequireAccepted();
                 var expected = _pendingPlacementCentre ?? throw new ProbeException("ui_placement_target_not_captured");
                 var match = created.SingleOrDefault(element => SamePoint(ReadFootprintCenter(_context.Document, element), expected));
                 if (match == null) return;
@@ -494,7 +538,48 @@ namespace QS3D.LocalQualification.V25
                 VerifySolid(_context.Document, match, dimensions, expected, "ui_physical");
                 if (_centres.Count == pointIndex) _centres.Add(expected);
                 _pendingPlacementCentre = null;
+                _pickWitness.Reset();
                 Advance(next);
+            }
+
+            private void OnPromptedForPoint(object sender, PromptPointResultEventArgs args)
+            {
+                // Observe only; never edit Result, invoke placement, or use generated
+                // geometry as the expected input. Callback failures are latched for
+                // the dispatcher, not thrown through the production GetPoint call.
+                if (_stage != UiStage.FirstCentre && _stage != UiStage.SecondCentre && _stage != UiStage.RepeatCentre)
+                    return;
+                try
+                {
+                    RequireUiContextStable(_context);
+                    if (!_requestWritten || !_pickWitness.IsArmed || args.Result.Status != PromptStatus.OK)
+                        throw new ProbeException("ui_pick_result_without_request");
+                    var index = _stage == UiStage.FirstCentre ? 0 : _stage == UiStage.SecondCentre ? 1 : 2;
+                    var screenTarget = _screenPoints[index];
+                    var cursor = new UiNativePoint();
+                    var cursorMatches = GetCursorPos(out cursor) &&
+                        Math.Abs((long)cursor.X - screenTarget.X) <= 2 && Math.Abs((long)cursor.Y - screenTarget.Y) <= 2;
+                    var sameContext = ReferenceEquals(sender, _context.Document.Editor) &&
+                        _context.Document.Editor.CurrentUserCoordinateSystem.Equals(Matrix3d.Identity) && IsDrawCommandActive();
+                    var point = args.Result.Value;
+                    UiTrace("prompted_point sequence=" + _sequence + " value=" + point +
+                        " cursor=" + cursor.X + "," + cursor.Y + " target=" + screenTarget +
+                        " semantic_count=" + _project?.Elements.Count);
+                    _pickWitness.Observe(_sequence, new PhysicalPickWitness.Point(point.X, point.Y, point.Z),
+                        _project?.Elements.Count ?? -1, sameContext, cursorMatches);
+                }
+                catch (System.Exception error)
+                {
+                    _pickObservationError = "ui_pick_observation_failed";
+                    try { UiTrace("prompted_point_error=" + error.GetType().Name + ":" + error.Message); } catch { }
+                }
+            }
+
+            private void DetachPickObserver()
+            {
+                if (!_pickObserverAttached) return;
+                _context.Document.Editor.PromptedForPoint -= OnPromptedForPoint;
+                _pickObserverAttached = false;
             }
 
             private string? _lastPlacementTrace;
@@ -623,6 +708,7 @@ namespace QS3D.LocalQualification.V25
                     _uiController = null;
                 }
                 _timer.Stop();
+                DetachPickObserver();
                 _context.Document.SendStringToExecute("QS3DSAVE QSAVE QL22UISAVED ", true, false, false);
             }
 
@@ -734,7 +820,7 @@ namespace QS3D.LocalQualification.V25
 
             private bool AwaitAction(int x, int y, string action, string text)
             {
-                if (!_requestWritten && action != "key")
+                if (!_observedClickDriver && !_requestWritten && action != "key")
                 {
                     if (!_moveRequested)
                     {
@@ -753,7 +839,7 @@ namespace QS3D.LocalQualification.V25
                 if (!_requestWritten)
                 {
                     _sequence++;
-                    WriteUiAction(_context, _sequence, action, x, y, text);
+                    WriteUiAction(_context, _sequence, action, x, y, text, _stage.ToString());
                     _requestWritten = true;
                     return false;
                 }
@@ -766,17 +852,19 @@ namespace QS3D.LocalQualification.V25
                 _requestWritten = false;
                 _moveRequested = false;
                 _moveAcknowledged = false;
-                _deadlineUtc = DateTime.UtcNow + UiStageTimeout;
+                _deadlineUtc = DateTime.UtcNow + _stageTimeout;
+                if (_observedClickDriver) UiTrace("observed_stage=" + next);
             }
 
             private void Fail(System.Exception error)
             {
                 _timer.Stop();
+                try { DetachPickObserver(); } catch { }
                 try
                 {
                     RequireUiCleanupContext(_context);
                     var dialog = FindSingleFootingDialog(_context.Product);
-                    if (dialog != null) dialog.Close();
+                    if (!_observedClickDriver && dialog != null) dialog.Close();
                 }
                 catch { }
                 lock (Sync) _uiController = null;
@@ -1197,21 +1285,26 @@ namespace QS3D.LocalQualification.V25
             RequireMcpMutationBoundaryPaused(context.Product);
         }
 
-        private static void WriteUiAction(Context context, int sequence, string action, int x, int y, string value)
+        private static void WriteUiAction(Context context, int sequence, string action, int x, int y, string value, string stage = "")
         {
             if (sequence < 1 || sequence > 100) throw new ProbeException("ui_action_sequence_invalid");
             if (action != "move" && action != "click" && action != "text" && action != "key") throw new ProbeException("ui_action_invalid");
+            var observed = ObservedClickDriver;
+            if (observed && (action == "move" || !Regex.IsMatch(stage, @"\A[A-Za-z][A-Za-z0-9]{0,39}\z", RegexOptions.CultureInvariant)))
+                throw new ProbeException("ui_observed_action_invalid");
             if (((action == "click" || action == "move") && value.Length != 0) ||
                 (action == "text" && !Regex.IsMatch(value, @"^-?\d{1,7}(\.\d{1,4})?$", RegexOptions.CultureInvariant)) ||
                 (action == "key" && value != "ENTER" && value != "ESC"))
                 throw new ProbeException("ui_action_value_invalid");
             CheckedScreenPoint(x, y);
             var path = UiActionPath(context, sequence);
-            var body = "{\"schema\":\"" + UiActionSchema + "\",\"run_id\":\"" + context.RunId +
+            var schema = observed ? "QS3D_LOCAL022_UI_ACTION_V2" : UiActionSchema;
+            var body = "{\"schema\":\"" + schema + "\",\"run_id\":\"" + context.RunId +
                 "\",\"sequence\":" + sequence.ToString(CultureInfo.InvariantCulture) +
                 ",\"action\":\"" + action + "\",\"x\":" + x.ToString(CultureInfo.InvariantCulture) +
                 ",\"y\":" + y.ToString(CultureInfo.InvariantCulture) + ",\"text\":\"" + value +
-                "\",\"target_pid\":" + Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture) + "}";
+                "\",\"target_pid\":" + Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture) +
+                (observed ? ",\"stage\":\"" + stage + "\"" : string.Empty) + "}";
             WriteNewAtomic(path, body);
         }
 
@@ -1223,7 +1316,8 @@ namespace QS3D.LocalQualification.V25
             if (file.Length <= 0 || file.Length > 1024 || (file.Attributes & FileAttributes.ReparsePoint) != 0)
                 throw new ProbeException("ui_ack_file_invalid");
             var actual = File.ReadAllText(path, Encoding.UTF8);
-            var expected = "{\"schema\":\"" + UiAckSchema + "\",\"run_id\":\"" + context.RunId +
+            var schema = ObservedClickDriver ? "QS3D_LOCAL022_UI_ACK_V2" : UiAckSchema;
+            var expected = "{\"schema\":\"" + schema + "\",\"run_id\":\"" + context.RunId +
                 "\",\"sequence\":" + sequence.ToString(CultureInfo.InvariantCulture) + ",\"status\":\"SENT\"}";
             if (!string.Equals(actual, expected, StringComparison.Ordinal))
                 throw new ProbeException("ui_ack_identity_mismatch");
@@ -1653,6 +1747,10 @@ namespace QS3D.LocalQualification.V25
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool ScreenToClient(IntPtr window, ref UiNativePoint point);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetCursorPos(out UiNativePoint point);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);

@@ -16,6 +16,8 @@
     <BricsCadDir Condition="'$(BricsCadDir)' == ''">$(BRICSCAD_V26_DIR)</BricsCadDir>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\QS3D.LocalQualification.V25\Local022UiPhysicalPickWitness.cs"
+             Link="Local022UiPhysicalPickWitness.cs" />
     <Compile Include="..\QS3D.LocalQualification.V25\Local022NativeFootingProbeCommands.Ui.cs"
              Link="Local022NativeFootingProbeCommands.Ui.cs" />
   </ItemGroup>

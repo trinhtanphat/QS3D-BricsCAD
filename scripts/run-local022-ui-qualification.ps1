@@ -5,6 +5,7 @@ param(
     [Parameter(Mandatory=$true)][string]$PackageRoot,
     [string]$V26ProvenancePath,
     [string]$PrecedingV25Receipt,
+    [ValidateSet('NATIVE_V1','OBSERVED_CLICK_V2')][string]$UiDriver = 'NATIVE_V1',
     [Parameter(Mandatory=$true)][switch]$ConfirmTemporaryAutostartPause
 )
 $ErrorActionPreference = 'Stop'
@@ -81,9 +82,10 @@ try {
         ProductSourceSha = $source
         ProbeDll = Join-Path $taskRepo "tests\QS3D.LocalQualification.V$HostMajor\bin\Release\$framework\QS3D.LocalQualification.V$HostMajor.dll"
         ArtifactDir = $runRoot
-        PhaseTimeoutSeconds = 600
+        PhaseTimeoutSeconds = if ($UiDriver -ceq 'OBSERVED_CLICK_V2') { 3600 } else { 600 }
         ConfirmDisposableCopy = $true
         InteractiveUi = $true
+        UiDriver = $UiDriver
     }
     if ($HostMajor -eq 26) { $parameters.ProvenancePath = $V26ProvenancePath }
     & (Join-Path $PSScriptRoot "test-bricscad-v$HostMajor-single-footing.ps1") @parameters

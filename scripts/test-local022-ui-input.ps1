@@ -249,3 +249,6 @@ if (-not $startup) { throw 'FAIL: missing V26 UI startup sequence.' }
     & ([scriptblock]::Create($startup))
 }
 Write-Output 'PASS: actual V26 startup hides only native Tips/Properties before UI qualification; no CAD or input executed.'
+
+& (Join-Path $PSScriptRoot '..\tests\QS3D.LocalQualification.V25\test-ui-pick-witness.ps1')
+& (Join-Path $PSScriptRoot '..\tests\QS3D.LocalQualification.V25\test-ui-observed-protocol.ps1')
