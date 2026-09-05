@@ -94,7 +94,7 @@ namespace QS3D.Core.SmokeTests
         private static void OpaqueCaseEquivalentPermutationsCanonicalizeDeterministically()
         {
             var first = AutoRoomLifecycle.NormalizeSourceHandles(new[] { "room-x", "ZONE-y", "ROOM-X" });
-            var reversed = AutoRoomLifecycle.NormalizeSourceHandles(new[] { "room-x", "zone-Y", "ROOM-X" }.Reverse());
+            var reversed = AutoRoomLifecycle.NormalizeSourceHandles(new[] { "ROOM-X", "zone-Y", "room-x" });
 
             AssertEqual("ROOM-X;ZONE-Y", first, "Opaque Auto Room source handles must have one exact canonical casing.");
             AssertEqual(first, reversed, "Case-equivalent Auto Room source-handle permutations must produce the same persisted signature.");
