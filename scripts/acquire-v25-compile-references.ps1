@@ -314,26 +314,42 @@ else {
     foreach ($candidate in $candidates) {
         if ([string]::IsNullOrWhiteSpace([string]$candidate.Url)) { continue }
         $staging = Join-Path $cacheDir ('.qs3d-v25-msi-' + [Guid]::NewGuid().ToString('N') + '.tmp')
+        $stagingAdmission = $null
+        $publishedStream = $null
+        $publishedAdmission = $null
         try {
             Assert-NoExistingReparseComponent -Path $staging -Label 'MSI download staging path'
             Write-Host "Downloading BricsCAD V25 installer from $($candidate.Name) to isolated staging..."
             Invoke-WebRequest -Uri $candidate.Url -OutFile $staging -MaximumRedirection 10 -TimeoutSec 1200 -UseBasicParsing
-            if (-not (Test-PinnedMsiGeneration -Path $staging -Label "Staged BricsCAD V25 MSI from $($candidate.Name)")) {
-                continue
+            $stagingAdmission = Open-PinnedMsiReadLock -Path $staging -ExpectedSha256 $expected
+
+            # Publication is fresh-only. A canonical cache entry that appeared
+            # after the initial cache admission is not ours to delete or replace.
+            Assert-NoExistingReparseComponent -Path $msi -Label 'MsiPath before held-generation publication'
+            if (Test-Path -LiteralPath $msi) {
+                throw 'Canonical MSI destination appeared before held-generation publication; refusing destructive replacement.'
             }
 
-            Assert-NoExistingReparseComponent -Path $msi -Label 'MsiPath before atomic publication'
-            if (Test-Path -LiteralPath $msi) {
-                $existing = Get-Item -LiteralPath $msi -Force
-                if ($existing.PSIsContainer -or ($existing.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-                    throw 'Canonical MSI destination became a non-ordinary or reparse-backed entry before publication.'
-                }
-                Remove-Item -LiteralPath $msi -Force
+            $publishedStream = [IO.File]::Open(
+                $msi,
+                [IO.FileMode]::CreateNew,
+                [IO.FileAccess]::Write,
+                [IO.FileShare]::None
+            )
+            $stagingAdmission.Stream.Position = 0
+            $stagingAdmission.Stream.CopyTo($publishedStream)
+            $publishedStream.Flush($true)
+            $publishedStream.Dispose()
+            $publishedStream = $null
+
+            # Re-admit the exact canonical bytes immediately after durable
+            # publication while the staging generation is still held.
+            $publishedAdmission = Open-PinnedMsiReadLock -Path $msi -ExpectedSha256 $expected
+            Assert-PinnedMsiStable -State $publishedAdmission -Label 'immediately after held-generation publication'
+            if (-not [string]::Equals([string]$publishedAdmission.Sha256, [string]$stagingAdmission.Sha256, [StringComparison]::Ordinal)) {
+                throw 'Canonical MSI SHA256 does not match the held staging generation after publication.'
             }
-            [IO.File]::Move($staging, $msi)
-            if (-not (Test-PinnedMsiGeneration -Path $msi -Label 'Published BricsCAD V25 MSI')) {
-                throw 'Canonical MSI generation failed held verification immediately after publication.'
-            }
+
             $sourceName = $candidate.Name
             break
         }
@@ -341,6 +357,9 @@ else {
             Write-Warning "BricsCAD V25 installer source failed: $($candidate.Name) • $($_.Exception.Message)"
         }
         finally {
+            if ($null -ne $publishedAdmission) { $publishedAdmission.Stream.Dispose() }
+            if ($null -ne $publishedStream) { $publishedStream.Dispose() }
+            if ($null -ne $stagingAdmission) { $stagingAdmission.Stream.Dispose() }
             Remove-Item -LiteralPath $staging -Force -ErrorAction SilentlyContinue
         }
     }
