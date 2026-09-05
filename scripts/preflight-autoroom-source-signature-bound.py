@@ -3,12 +3,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src" / "QS3D.Core" / "Domain" / "AutoRoomLifecycle.cs"
 SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "AutoRoomSourceSignatureBoundSmoke.cs"
+HANDLE_SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "AutoRoomHandleIdentitySmoke.cs"
 
 source = SOURCE.read_text(encoding="utf-8")
 smoke = SMOKE.read_text(encoding="utf-8")
+handle_smoke = HANDLE_SMOKE.read_text(encoding="utf-8")
 
 required_source = [
     "private const int MaxSourceHandleInputCount = 5000;",
+    "var canonical = CanonicalizeSourceHandle(raw);",
+    "private static string CanonicalizeSourceHandle(string raw)",
+    "var canonical = GeneratedHandleIdentity.Normalize(raw);",
+    "if (!string.Equals(canonical, trimmed, StringComparison.Ordinal)) return canonical;",
+    "canonical.Any(ch => !char.IsLetterOrDigit(ch))",
+    "? canonical.ToUpperInvariant()",
     "private static IReadOnlyList<string> ParseSourceHandleText(string? raw)",
     "for (var index = 0; index <= source.Length; index++)",
     "source[index] != ';'",
@@ -55,4 +63,11 @@ for token in required_smoke:
     if token not in smoke:
         raise SystemExit("FAIL: Auto Room source-signature regression missing: " + token)
 
-print("PASS Auto Room bounded source-signature parsing")
+for token in (
+    "LegacyMalformedAndZeroTokensRemainStable",
+    'Equal("0;0x;xyz", normalized);',
+):
+    if token not in handle_smoke:
+        raise SystemExit("FAIL: Auto Room malformed/zero legacy identity regression missing: " + token)
+
+print("PASS Auto Room bounded source-signature parsing and opaque casing compatibility")
