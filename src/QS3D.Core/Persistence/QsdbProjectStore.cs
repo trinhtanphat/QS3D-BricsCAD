@@ -120,7 +120,6 @@ namespace QS3D.Core.Persistence
                 ActiveZoneId = Value(root, "activeZoneId"),
                 ActiveFloorId = Value(root, "activeFloorId")
             };
-            project.RestorePersistenceState(updatedUtc, changeVersion);
 
             var zones = root.Element("zones");
             if (zones != null)
@@ -204,6 +203,7 @@ namespace QS3D.Core.Persistence
 
             ReadStringMap(root.Element("metadata"), "p", project.Metadata);
             ValidateProject(project);
+            project.RestorePersistenceState(updatedUtc, changeVersion);
             return project;
         }
 

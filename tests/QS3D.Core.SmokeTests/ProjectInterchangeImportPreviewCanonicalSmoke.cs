@@ -54,6 +54,7 @@ namespace QS3D.Core.SmokeTests
             var element = new ProjectElement("E1", ElementCategory.Beam, "FM1", "F1", "Z1");
             element.SourceHandles.Add("AA");
             source.Elements.Add(element);
+            source.UpdatedUtc = new DateTime(2026, 8, 10, 10, 0, 0, DateTimeKind.Utc);
             return ProjectInterchangeJsonExporter.Build(source);
         }
     }
