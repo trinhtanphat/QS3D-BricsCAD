@@ -18,6 +18,7 @@ The previous topology enumerated all releases, re-resolved the tag SHA, and then
 5. Re-resolve the exact tag after cleanup and require the same `WorkflowSha`.
 6. Preserve the exact tag for retry. There is no tag-ref DELETE endpoint, reconciliation helper, or `TagDeleted = $true` success state.
 7. Return truthful `TagCreatedByThisRun` provenance while reporting `TagDeleted = $false`.
+8. Keep the caller compatible with preservation: the V25 release workflow must admit/reuse an exact existing lightweight tag at the workflow SHA and must not depend on a destructive `TagDeleted` result.
 
 ## Deterministic validation
 
@@ -27,6 +28,6 @@ Run:
 python scripts/preflight-v25-rollback-tag-preservation.py
 ```
 
-The auto-discovered guard checks the retained draft identity/deletion gates, exhaustive owner scan, post-cleanup exact-SHA resolution, preservation marker and non-destructive result. Mutation controls verify each required token is independently guarded and reject reintroduction of tag DELETE URI/reconciliation surfaces.
+The auto-discovered guard checks the retained draft identity/deletion gates, exhaustive owner scan, post-cleanup exact-SHA resolution, preservation marker and non-destructive result. Mutation controls verify each required rollback invariant and reject reintroduction of tag DELETE URI/reconciliation surfaces. The same guard also binds the unchanged `release-v25.yml` caller to its exact reusable-tag resolver/acknowledgement and proves the caller does not depend on `TagDeleted`.
 
 This is REMOTE_SAFE release infrastructure validation. It does not claim licensed BricsCAD runtime evidence or production release publication.
