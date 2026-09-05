@@ -19,6 +19,12 @@ def require(text: str, token: str, label: str) -> None:
         sys.exit(1)
 
 
+def find_any(text: str, tokens, start: int = 0) -> int:
+    matches = [text.find(token, start) for token in tokens]
+    matches = [index for index in matches if index >= 0]
+    return min(matches) if matches else -1
+
+
 floors = read("src/QS3D.Core/Domain/ProjectFloorService.cs")
 placement = read("src/QS3D.Core/Domain/ElementVerticalPlacementService.cs")
 geometry_policy = read("src/QS3D.Core/Domain/ElementGeometryPolicy.cs")
@@ -84,20 +90,49 @@ for token in [
     "TopLevelId requires BottomLevelId",
     "sourceBaseElevationM",
     "legacyBottomOffsetM",
-    "bottomLevel.ElevationM",
-    "topLevel.ElevationM",
     "topElevation <= bottomElevation",
     "public static bool HasAnyLevelConfiguration",
 ]:
     require(placement, token, "vertical placement contract")
 
+legacy_floor_resolution = all(
+    token in placement
+    for token in (
+        "var bottomLevel = FindFloor",
+        "bottomLevel.ElevationM",
+        "var topLevel = FindFloor",
+        "topLevel.ElevationM",
+    )
+)
+captured_floor_resolution = all(
+    token in placement
+    for token in (
+        "CaptureFloorGeneration(project)",
+        "FindCapturedFloor(",
+        "bottomLevelElevation",
+        "topLevelElevation",
+        "StringComparer.OrdinalIgnoreCase",
+    )
+)
+if not legacy_floor_resolution and not captured_floor_resolution:
+    print("[FAIL] vertical placement must resolve Bottom/Top Level elevations through either unique live lookup or one fenced captured floor generation")
+    sys.exit(1)
+
 level_lookup = placement.find("var bottomLevelId")
 legacy_branch = placement.find("if (bottomLevelId.Length == 0)", level_lookup)
 legacy_source_validation = placement.find("Finite(sourceBaseElevationM", legacy_branch)
-bottom_resolution = placement.find("var bottomLevel = FindFloor", legacy_source_validation)
+bottom_resolution = find_any(
+    placement,
+    ("var bottomLevel = FindFloor", "var bottomLevelElevation = FindCapturedFloor"),
+    legacy_source_validation,
+)
 bottom_only_branch = placement.find("if (topLevelId.Length == 0)", bottom_resolution)
 bottom_height_validation = placement.find("Positive(legacyHeightM", bottom_only_branch)
-top_resolution = placement.find("var topLevel = FindFloor", bottom_height_validation)
+top_resolution = find_any(
+    placement,
+    ("var topLevel = FindFloor", "var topLevelElevation = FindCapturedFloor"),
+    bottom_height_validation,
+)
 if min(level_lookup, legacy_branch, legacy_source_validation, bottom_resolution, bottom_only_branch, bottom_height_validation, top_resolution) < 0 or not (
     level_lookup < legacy_branch < legacy_source_validation < bottom_resolution < bottom_only_branch < bottom_height_validation < top_resolution
 ):

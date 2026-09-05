@@ -16,8 +16,20 @@ for path in (PLACEMENT, STATE, HEALTH, SMOKE, AMBIGUITY_SMOKE):
 
 if PLACEMENT.is_file():
     text = PLACEMENT.read_text(encoding="utf-8")
-    if "return project.FindFloor(floorId)" not in text:
-        errors.append("ElementVerticalPlacementService must resolve Floor/Level identity through ProjectState.FindFloor.")
+    uses_project_unique_lookup = "return project.FindFloor(floorId)" in text
+    captured_generation_tokens = (
+        "CaptureFloorGeneration(project)",
+        "FindCapturedFloor(",
+        "new Dictionary<string, double>(count, StringComparer.OrdinalIgnoreCase)",
+        "if (floors.ContainsKey(floor.Id))",
+        "project.ChangeVersion",
+        "project.Floors.Count",
+    )
+    uses_captured_unique_lookup = all(token in text for token in captured_generation_tokens)
+    if not uses_project_unique_lookup and not uses_captured_unique_lookup:
+        errors.append(
+            "ElementVerticalPlacementService must resolve Floor/Level identity through either ProjectState.FindFloor or a fenced case-insensitive captured floor generation."
+        )
     if "project.Floors.FirstOrDefault" in text:
         errors.append("ElementVerticalPlacementService still uses first-match Floor lookup and can hide duplicate IDs.")
 
