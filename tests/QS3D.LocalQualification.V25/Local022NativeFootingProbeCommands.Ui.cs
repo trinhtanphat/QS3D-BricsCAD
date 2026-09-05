@@ -14,6 +14,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Windows.Input;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
 using Teigha.DatabaseServices;
@@ -240,6 +241,7 @@ namespace QS3D.LocalQualification.V25
                     case UiStage.LocateWorkspace:
                         _workspace = RequireProductionWorkspace(_context.Product);
                         RequireClickable(_workspace, "workspace_not_visible");
+                        _workspace.AddHandler(Mouse.PreviewMouseDownEvent, new MouseButtonEventHandler(OnPhysicalMouse), true);
                         Advance(UiStage.SelectTree);
                         break;
 
@@ -531,7 +533,21 @@ namespace QS3D.LocalQualification.V25
             {
                 if (_requestWritten) return HasExactUiAck(_context, _sequence);
                 var point = ElementCenter(target);
+                UiTrace("request " + _stage + " " + target.GetType().Name + " " + point + " size=" + target.ActualWidth + "," + target.ActualHeight);
                 return AwaitAction(point.X, point.Y, action, text);
+            }
+
+            private void OnPhysicalMouse(object sender, MouseButtonEventArgs args)
+            {
+                var element = args.OriginalSource as FrameworkElement;
+                UiTrace("mouse " + _stage + " source=" + args.OriginalSource?.GetType().FullName +
+                    " text=" + (element is TextBlock text ? text.Text : element?.Name) +
+                    " position=" + args.GetPosition(_workspace));
+            }
+
+            private void UiTrace(string value)
+            {
+                File.AppendAllText(RequireUiChildPath(_context, "ui-trace.private.txt"), DateTime.UtcNow.ToString("O") + " " + value + "\n");
             }
 
             private bool AwaitAction(Func<FrameworkElement> target, string action, string text)
