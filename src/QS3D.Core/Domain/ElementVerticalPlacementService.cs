@@ -83,7 +83,7 @@ namespace QS3D.Core.Domain
             if (host == null) throw new ArgumentNullException(nameof(host));
             if (opening == null) throw new ArgumentNullException(nameof(opening));
 
-            IReadOnlyDictionary<string, double> floorGeneration = null;
+            IReadOnlyDictionary<string, double>? floorGeneration = null;
             if (LevelReferenceProperty(host, ProjectFloorService.BottomLevelIdKey).Length > 0)
                 floorGeneration = CaptureFloorGeneration(project);
 
@@ -134,7 +134,7 @@ namespace QS3D.Core.Domain
             ProjectElement opening,
             double openingLegacyHeightM,
             double openingLegacySillM,
-            IReadOnlyDictionary<string, double> floorGeneration)
+            IReadOnlyDictionary<string, double>? floorGeneration)
         {
             var openingPlacement = ResolveCore(
                 project,
@@ -186,7 +186,7 @@ namespace QS3D.Core.Domain
             double sourceBaseElevationM,
             double legacyHeightM,
             double legacyBottomOffsetM,
-            IReadOnlyDictionary<string, double> floorGeneration)
+            IReadOnlyDictionary<string, double>? floorGeneration)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (element == null) throw new ArgumentNullException(nameof(element));
