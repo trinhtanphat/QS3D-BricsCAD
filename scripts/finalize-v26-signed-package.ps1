@@ -133,8 +133,8 @@ finally {
         $generatedStream.Dispose()
         $generatedStream = $null
     }
-    if (Test-Path -LiteralPath $tempScript) {
-        Resolve-OrdinaryNonReparseFile -Path $tempScript -Label 'Generated V26 finalizer cleanup target' | Out-Null
-        Remove-Item -LiteralPath $tempScript -Force -ErrorAction Stop
-    }
+    # Cleanup is best-effort so a secondary unlink failure cannot mask the
+    # primary transformer/finalizer failure. FileShare.Read held replacement
+    # closed until the stream was disposed above.
+    if (Test-Path -LiteralPath $tempScript) { Remove-Item -LiteralPath $tempScript -Force -ErrorAction SilentlyContinue }
 }
