@@ -45,7 +45,7 @@ namespace QS3D.Core.Commercial
             CorrelationId = CommercialGuard.RequireOptionalToken(correlationId, nameof(correlationId));
             BeforeSummary = CommercialGuard.RequireOptionalCanonicalText(beforeSummary, nameof(beforeSummary));
             AfterSummary = CommercialGuard.RequireOptionalCanonicalText(afterSummary, nameof(afterSummary));
-            SourceRevisions = CommercialGuard.Snapshot(
+            SourceRevisions = CommercialGuard.SnapshotStableGeneration(
                 sourceRevisions,
                 nameof(sourceRevisions),
                 64,
@@ -354,8 +354,7 @@ namespace QS3D.Core.Commercial
         internal static IReadOnlyList<T> Snapshot<T>(
             IEnumerable<T> source,
             string paramName,
-            int maximum,
-            Func<T, T, bool> semanticEquals = null)
+            int maximum)
             where T : class
         {
             if (source == null) throw new ArgumentNullException(paramName);
@@ -387,9 +386,25 @@ namespace QS3D.Core.Commercial
             if (knownCount.HasValue && result.Count != knownCount.Value)
                 throw new InvalidOperationException(paramName + " known Count does not match completed traversal cardinality.");
             RequireStableSnapshotKnownCount(source, knownCount, paramName, maximum);
-            RequireStableSnapshotGeneration(source, knownCount, result, semanticEquals, paramName, maximum);
 
             return new ReadOnlyCollection<T>(result.ToArray());
+        }
+
+        internal static IReadOnlyList<T> SnapshotStableGeneration<T>(
+            IEnumerable<T> source,
+            string paramName,
+            int maximum,
+            Func<T, T, bool> semanticEquals)
+            where T : class
+        {
+            if (semanticEquals == null) throw new ArgumentNullException(nameof(semanticEquals));
+            if (source == null) throw new ArgumentNullException(paramName);
+
+            var admittedCount = SnapshotKnownCount(source, paramName, maximum);
+            var snapshot = Snapshot(source, paramName, maximum);
+            RequireStableSnapshotKnownCount(source, admittedCount, paramName, maximum);
+            RequireStableSnapshotGeneration(source, admittedCount, snapshot, semanticEquals, paramName, maximum);
+            return snapshot;
         }
 
         internal static void RequireCanProcessNext(int? knownCount, int observedCount, string label)
