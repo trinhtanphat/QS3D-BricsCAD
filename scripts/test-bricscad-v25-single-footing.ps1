@@ -285,7 +285,7 @@ function Invoke-NativePhase([string]$Phase, [string[]]$Commands) {
                 $handoff = $true
             } elseif ($children.Count -gt 1) { throw 'Ambiguous native host handoff.' }
             elseif ($children.Count -eq 0) {
-                throw 'Native host exited without marker or exact child; begin owned cleanup.'
+                throw ("Native host exited without marker or exact child; exit_code=" + $process.ExitCode + "; phase=" + $Phase + "; begin owned cleanup.")
             }
         }
         Start-Sleep -Milliseconds 500

@@ -124,9 +124,14 @@ foreach ($major in @(25,26)) {
     if (-not $exitGuard) { throw 'FAIL: exited owned host waits whole phase without child or marker.' }
     $exitGuard = [scriptblock]::Create(($exitGuard -replace 'elseif', 'if'))
     & {
-        $children = @(); $rejected = $false
-        try { & $exitGuard } catch { $rejected = $_.Exception.Message -ceq 'Native host exited without marker or exact child; begin owned cleanup.' }
-        if (-not $rejected) { throw 'FAIL: missing host did not enter failure cleanup.' }
+        $children = @(); $Phase = 'ui'
+        foreach ($exitCode in @(0, -1073741819)) {
+            $process = [pscustomobject]@{ ExitCode = $exitCode }
+            $rejected = $false
+            $expected = "Native host exited without marker or exact child; exit_code=$exitCode; phase=ui; begin owned cleanup."
+            try { & $exitGuard } catch { $rejected = $_.Exception.Message -ceq $expected }
+            if (-not $rejected) { throw "FAIL: V$major missing host did not preserve exit code $exitCode and phase before cleanup." }
+        }
         $children = @([pscustomobject]@{ProcessId=1}); & $exitGuard
     }
 }
