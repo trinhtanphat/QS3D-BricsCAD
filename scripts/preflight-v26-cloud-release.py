@@ -65,13 +65,12 @@ require_all(
     ),
 )
 
-# The V26 cloud lane may use one owner-approved plaintext mirror only after the
-# canonical HTTPS source fails. The exact URL is owned inside the hardened helper;
-# workflow source only opts into that fixed mirror so the repository-wide immutable
-# Actions guard continues to reject all plaintext HTTP in workflow YAML.
+# The V26 cloud lane uses the owner-approved helper-owned plaintext mirror only
+# through the hardened acquisition helper. The workflow now has three helper call
+# sites: installer admission plus primary/fallback fresh-runner extraction.
 require_all(workflow, WORKFLOW, (PINNED_HTTP_MIRROR_SWITCH,))
-if workflow.count(PINNED_HTTP_MIRROR_SWITCH) != 2:
-    fail("release-v26-cloud.yml must enable the pinned HTTP mirror at both installer acquisition call sites")
+if workflow.count(PINNED_HTTP_MIRROR_SWITCH) != 3:
+    fail("release-v26-cloud.yml must enable the pinned HTTP mirror at all three V26 helper call sites")
 if "http://" in workflow or "-MirrorUrl" in workflow:
     fail("release-v26-cloud.yml must not embed or accept a plaintext HTTP mirror URL; the helper owns the exact mirror")
 require_all(
@@ -119,14 +118,21 @@ for required_property in ("Path", "Sha256", "Stream"):
 if "$admission.Stream -isnot [IO.Stream]" not in helper:
     fail("single-output admission boundary must reject Stream values that are not System.IO.Stream")
 
-# The shared manual-only CI guard rejects OR expressions in job-level guards.
-# Keep cache priming optional at step level, but every job itself is hard manual-only.
+# Jobs remain hard manual-only. The fresh-runner qualify job must additionally use
+# always() because fallback is conditionally skipped after a successful primary;
+# its De Morgan readiness test avoids the repository-wide job-level OR restriction.
 if "installer-cache:\n    if: ${{ github.event_name == 'workflow_dispatch' }}" not in workflow:
     fail("installer-cache job must use the repository's simple hard manual-dispatch guard")
-for job in ("qualify", "release"):
-    marker = f"  {job}:\n    if: ${{{{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' }}}}"
-    if marker not in workflow:
-        fail(f"{job} job must require manual dispatch plus explicit RELEASE confirmation")
+qualify_marker = (
+    "  qualify:\n"
+    "    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' && always() && "
+    "!(needs.v26-reference-primary.outputs.ready != 'true' && needs.v26-reference-fallback.outputs.ready != 'true') }}"
+)
+if qualify_marker not in workflow:
+    fail("qualify job must remain manual RELEASE-only and require a ready primary or fallback V26 handoff")
+release_marker = "  release:\n    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' }}"
+if release_marker not in workflow:
+    fail("release job must require manual dispatch plus explicit RELEASE confirmation")
 
 # V25 owns the unscoped shared preview tags. Cloud V26 publication must therefore
 # append a V26-only prerelease identifier while package ProductVersion remains the
