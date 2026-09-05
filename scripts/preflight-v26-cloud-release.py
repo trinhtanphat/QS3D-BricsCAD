@@ -46,7 +46,7 @@ require_all(
         "actions/cache/restore@",
         "actions/cache/save@",
         "scripts\\acquire-v26-compile-references.ps1",
-        "src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj",
+        "src\\QS3D.BricsCAD.V26\\QS3D.BricsCAD.V26.csproj",
         "scripts\\package-v26.ps1",
         "scripts\\write-v26-package-checksum.ps1",
         "scripts\\new-v26-candidate-provenance.ps1",
