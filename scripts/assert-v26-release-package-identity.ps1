@@ -17,8 +17,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $script:MaxMetadataBytes = 65536
-$script:MaxAssemblyBytes = 256MB
 $script:StrictUtf8 = [Text.UTF8Encoding]::new($false, $true)
+$script:AssemblyProbeProject = Join-Path $PSScriptRoot 'V26ReleaseIdentityProbe\V26ReleaseIdentityProbe.csproj'
 
 function Resolve-OrdinaryNonReparseFile {
     param(
@@ -179,55 +179,128 @@ function Read-BoundedStrictUtf8Stream {
     }
 }
 
-function Get-HeldAssemblyVersion {
+function Invoke-BoundedTextProcess {
     param(
-        [Parameter(Mandatory = $true)]
-        [pscustomobject]$Held,
-
-        [Parameter(Mandatory = $true)]
-        [string]$Label
+        [Parameter(Mandatory = $true)][string]$FileName,
+        [Parameter(Mandatory = $true)][string]$Arguments,
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory,
+        [Parameter(Mandatory = $true)][int]$TimeoutMilliseconds,
+        [Parameter(Mandatory = $true)][string]$Label
     )
 
-    # release-v26.yml intentionally invokes this validator with Windows PowerShell.
-    # ReflectionOnlyLoad(Byte[]) lets the semantic consumer examine the exact bytes
-    # read from the already-admitted held generation without reopening a pathname.
-    if ($PSVersionTable.PSEdition -ne 'Desktop') {
-        throw "$Label held-generation assembly inspection requires Windows PowerShell/.NET Framework."
-    }
-    if ($Held.Stream.Length -gt $script:MaxAssemblyBytes) {
-        throw "$Label exceeds the $($script:MaxAssemblyBytes)-byte assembly safety limit."
-    }
-    if ($Held.Stream.Length -gt [int]::MaxValue) {
-        throw "$Label is too large to materialize safely."
-    }
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $FileName
+    $startInfo.Arguments = $Arguments
+    $startInfo.WorkingDirectory = $WorkingDirectory
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.EnvironmentVariables['DOTNET_CLI_TELEMETRY_OPTOUT'] = '1'
+    $startInfo.EnvironmentVariables['DOTNET_NOLOGO'] = '1'
+    $startInfo.EnvironmentVariables['DOTNET_SKIP_FIRST_TIME_EXPERIENCE'] = '1'
 
-    $Held.Stream.Position = 0
-    $bytes = [byte[]]::new([int]$Held.Stream.Length)
-    $offset = 0
-    while ($offset -lt $bytes.Length) {
-        $read = $Held.Stream.Read($bytes, $offset, $bytes.Length - $offset)
-        if ($read -le 0) {
-            throw "$Label ended before the held file length was read."
-        }
-        $offset += $read
-    }
-    if ($Held.Stream.ReadByte() -ne -1) {
-        throw "$Label held stream changed while its assembly identity was being read."
-    }
-    $Held.Stream.Position = 0
-
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
     try {
-        $assembly = [Reflection.Assembly]::ReflectionOnlyLoad($bytes)
-        return $assembly.GetName().Version
-    }
-    catch {
-        throw "$Label could not be inspected safely from its held generation: $($_.Exception.Message)"
+        if (-not $process.Start()) { throw "$Label could not be started." }
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit($TimeoutMilliseconds)) {
+            try { $process.Kill() } catch { }
+            throw "$Label exceeded its $TimeoutMilliseconds ms timeout."
+        }
+        $stdout = $stdoutTask.GetAwaiter().GetResult()
+        $stderr = $stderrTask.GetAwaiter().GetResult()
+        return [pscustomobject]@{ ExitCode = $process.ExitCode; StdOut = $stdout; StdErr = $stderr }
     }
     finally {
+        $process.Dispose()
+    }
+}
+
+function Initialize-AssemblyVersionProbe {
+    $dotnetCommand = Get-Command dotnet -CommandType Application -ErrorAction Stop
+    $dotnet = [string]$dotnetCommand.Source
+    if ([string]::IsNullOrWhiteSpace($dotnet)) { throw 'dotnet executable could not be resolved for V26 assembly metadata inspection.' }
+
+    $project = (Resolve-Path -LiteralPath $script:AssemblyProbeProject -ErrorAction Stop).Path
+    $quotedProject = '"' + $project + '"'
+    $build = Invoke-BoundedTextProcess `
+        -FileName $dotnet `
+        -Arguments ("build {0} --configuration Release --nologo --verbosity quiet -p:RestoreIgnoreFailedSources=true" -f $quotedProject) `
+        -WorkingDirectory $PSScriptRoot `
+        -TimeoutMilliseconds 120000 `
+        -Label 'V26 assembly metadata probe build'
+    if ($build.ExitCode -ne 0) {
+        $detail = ([string]$build.StdErr + "`n" + [string]$build.StdOut).Trim()
+        if ($detail.Length -gt 4000) { $detail = $detail.Substring($detail.Length - 4000) }
+        throw "V26 assembly metadata probe build failed with exit code $($build.ExitCode): $detail"
+    }
+
+    $probeDll = Join-Path $PSScriptRoot 'V26ReleaseIdentityProbe\bin\Release\net8.0\V26ReleaseIdentityProbe.dll'
+    $probeItem = Resolve-OrdinaryNonReparseFile -Path $probeDll -Label 'V26 assembly metadata probe'
+    return [pscustomobject]@{ Dotnet = $dotnet; Dll = $probeItem.FullName }
+}
+
+function Get-HeldAssemblyVersion {
+    param(
+        [Parameter(Mandatory = $true)][pscustomobject]$Held,
+        [Parameter(Mandatory = $true)][pscustomobject]$Probe,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = [string]$Probe.Dotnet
+    $startInfo.Arguments = '"' + [string]$Probe.Dll + '"'
+    $startInfo.WorkingDirectory = $PSScriptRoot
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardInput = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.EnvironmentVariables['DOTNET_CLI_TELEMETRY_OPTOUT'] = '1'
+    $startInfo.EnvironmentVariables['DOTNET_NOLOGO'] = '1'
+
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    try {
+        if (-not $process.Start()) { throw "$Label metadata probe could not be started." }
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+
+        $Held.Stream.Position = 0
+        $Held.Stream.CopyTo($process.StandardInput.BaseStream)
+        if ($Held.Stream.Position -ne $Held.Stream.Length) {
+            throw "$Label held generation was not streamed completely to the metadata probe."
+        }
+        $process.StandardInput.Close()
+
+        if (-not $process.WaitForExit(30000)) {
+            try { $process.Kill() } catch { }
+            throw "$Label metadata probe exceeded its 30000 ms timeout."
+        }
+
+        $stdout = $stdoutTask.GetAwaiter().GetResult().Trim()
+        $stderr = $stderrTask.GetAwaiter().GetResult().Trim()
+        if ($process.ExitCode -ne 0) {
+            if ($stderr.Length -gt 2000) { $stderr = $stderr.Substring($stderr.Length - 2000) }
+            throw "$Label metadata probe failed with exit code $($process.ExitCode): $stderr"
+        }
+        if ($stdout -notmatch '^QS3D_ASSEMBLY_VERSION:(\d+\.\d+\.\d+\.\d+)$') {
+            throw "$Label metadata probe returned an invalid or ambiguous assembly version marker."
+        }
+        return [Version]::Parse($Matches[1])
+    }
+    finally {
+        try { $process.StandardInput.Close() } catch { }
+        if (-not $process.HasExited) { try { $process.Kill() } catch { } }
+        $process.Dispose()
         $Held.Stream.Position = 0
     }
 }
 
+$assemblyProbe = Initialize-AssemblyVersionProbe
 $heldFiles = New-Object 'System.Collections.Generic.List[object]'
 try {
     # Admit all release-identity inputs first and keep every generation locked
@@ -265,11 +338,11 @@ try {
     }
 
     Assert-LockedPathBinding -Held $pluginHeld -Label 'V26 plugin assembly'
-    $pluginVersion = Get-HeldAssemblyVersion -Held $pluginHeld -Label 'V26 plugin assembly'
+    $pluginVersion = Get-HeldAssemblyVersion -Held $pluginHeld -Probe $assemblyProbe -Label 'V26 plugin assembly'
     Assert-LockedPathBinding -Held $pluginHeld -Label 'V26 plugin assembly'
 
     Assert-LockedPathBinding -Held $coreHeld -Label 'V26 Core assembly'
-    $coreVersion = Get-HeldAssemblyVersion -Held $coreHeld -Label 'V26 Core assembly'
+    $coreVersion = Get-HeldAssemblyVersion -Held $coreHeld -Probe $assemblyProbe -Label 'V26 Core assembly'
     Assert-LockedPathBinding -Held $coreHeld -Label 'V26 Core assembly'
 
     if ($pluginVersion -ne $packageVersion -or $coreVersion -ne $packageVersion) {
