@@ -9,6 +9,8 @@ TARGET = ROOT / "scripts" / "rollback-v26-draft-release.ps1"
 PRESERVE_MARKER = "Preserving exact V26 tag"
 TAG_DELETED_FALSE = "TagDeleted = $false"
 DRAFT_DELETE = "Invoke-RestMethod -Method Delete -Uri $releaseUri"
+OWNERSHIP_CHECK = "Assert-NoReleaseOwnsTag"
+EXACT_TAG_RESOLVE = "Resolve-ExactRemoteTagSha"
 TAG_DELETE = "Invoke-RestMethod -Method Delete -Uri $tagRefUri"
 TAG_DELETE_HELPER = "Assert-TagDeleteCommittedAfterError"
 TAG_DELETE_URI = "$tagRefUri ="
@@ -17,8 +19,8 @@ TAG_DELETE_URI = "$tagRefUri ="
 def validate(text: str) -> list[str]:
     failures: list[str] = []
     for token in (
-        "Assert-NoReleaseOwnsTag",
-        "Resolve-ExactRemoteTagSha",
+        OWNERSHIP_CHECK,
+        EXACT_TAG_RESOLVE,
         DRAFT_DELETE,
         PRESERVE_MARKER,
         TAG_DELETED_FALSE,
@@ -37,9 +39,10 @@ def main() -> int:
     source = TARGET.read_text(encoding="utf-8")
     failures = validate(source)
     mutations = {
-        "draft release ownership deletion": source.replace(DRAFT_DELETE, "# draft delete removed", 1),
-        "release exhaustion": source.replace("Assert-NoReleaseOwnsTag", "Assert-NoReleaseOwnsTag_REMOVED", 1),
-        "preservation marker": source.replace(PRESERVE_MARKER, "deleted tag", 1),
+        "draft release ownership deletion": source.replace(DRAFT_DELETE, "# draft delete removed"),
+        "release exhaustion": source.replace(OWNERSHIP_CHECK, "ReleaseOwnershipCheck_REMOVED"),
+        "exact tag identity recheck": source.replace(EXACT_TAG_RESOLVE, "ExactTagResolve_REMOVED"),
+        "preservation marker": source.replace(PRESERVE_MARKER, "deleted tag"),
         "non-destructive result": source.replace(TAG_DELETED_FALSE, "TagDeleted = $true"),
     }
     for label, mutated in mutations.items():
