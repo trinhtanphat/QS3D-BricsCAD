@@ -71,8 +71,15 @@ for name in ("capture", "reconcile"):
         "MeasuredSolidQuantityPolicy.VolumeProperty",
         '"CAD.SolidMetricSource"',
         '"Solid3d.MassProperties"',
-        'Properties.Remove("VolumeM3")',
     ))
+
+# Semantic capture now owns lifecycle-aware removal; Source Reconcile remains separately guarded on
+# its existing raw removal contract until that lane is explicitly migrated.
+require("capture", ('RemovePropertyLifecycle("VolumeM3")',))
+require("reconcile", ('Properties.Remove("VolumeM3")',))
+if 'element.Properties.Remove("VolumeM3")' in texts.get("capture", ""):
+    errors.append("SemanticCaptureService must not regress Solid3d legacy-volume cleanup to raw Properties.Remove.")
+
 require("policy", (
     'public const string VolumeProperty = "MeasuredSolidVolumeM3"',
     'public const string SurfaceAreaProperty = "MeasuredSolidSurfaceAreaM2"',
@@ -127,4 +134,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: B4D recognition uses live revalidation plus atomic batch commit/rollback while fallback entity-type gates, authoritative project mappings, and native Solid3d mass provenance remain guarded.")
+print("PASS: B4D recognition uses live revalidation plus atomic batch commit/rollback while fallback entity-type gates, authoritative project mappings, native Solid3d mass provenance, and capture property lifecycle remain guarded.")
