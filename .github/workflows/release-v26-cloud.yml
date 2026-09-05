@@ -224,7 +224,7 @@ jobs:
           }
 
   v26-reference-fallback:
-    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' && needs.v26-reference-primary.outputs.ready != 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && always() && inputs.confirm_release == 'RELEASE' && needs.v26-reference-primary.outputs.ready != 'true' }}
     needs:
       - installer-cache
       - v26-reference-primary
@@ -285,7 +285,7 @@ jobs:
         run: '"ready=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append'
 
   qualify:
-    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' && (needs.v26-reference-primary.outputs.ready == 'true' || needs.v26-reference-fallback.outputs.ready == 'true') }}
+    if: ${{ github.event_name == 'workflow_dispatch' && always() && inputs.confirm_release == 'RELEASE' && (needs.v26-reference-primary.outputs.ready == 'true' || needs.v26-reference-fallback.outputs.ready == 'true') }}
     needs:
       - installer-cache
       - v26-reference-primary
