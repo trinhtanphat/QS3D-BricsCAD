@@ -687,9 +687,19 @@ namespace QS3D.LocalQualification.V25
 
         private static Button RequireWorkspaceButton(FrameworkElement workspace, params string[] labels)
         {
-            var matches = FindVisualDescendants<Button>(workspace).Where(button =>
+            // The finish pane also has an Add button. Scope to the production
+            // FamilyList's toolbar and support its icon + TextBlock content.
+            var familyList = FindVisualDescendants<ListBox>(workspace).SingleOrDefault(list =>
+                string.Equals(list.Name, "FamilyList", StringComparison.Ordinal))
+                ?? throw new ProbeException("ui_family_list_missing");
+            DependencyObject? scope = VisualTreeHelper.GetParent(familyList);
+            while (scope != null && !(scope is DockPanel)) scope = VisualTreeHelper.GetParent(scope);
+            if (scope == null) throw new ProbeException("ui_family_toolbar_missing");
+            var matches = FindVisualDescendants<Button>(scope).Where(button =>
                 button.IsVisible && button.IsEnabled && labels.Any(label =>
-                    string.Equals(Convert.ToString(button.Content, CultureInfo.InvariantCulture), label, StringComparison.Ordinal))).ToList();
+                    string.Equals(button.Content as string, label, StringComparison.Ordinal) ||
+                    FindVisualDescendants<TextBlock>(button).Any(text => text.IsVisible &&
+                        string.Equals(text.Text, label, StringComparison.Ordinal)))).ToList();
             if (matches.Count != 1) throw new ProbeException("ui_workspace_button_identity");
             RequireClickable(matches[0], "ui_workspace_button_not_clickable");
             return matches[0];
