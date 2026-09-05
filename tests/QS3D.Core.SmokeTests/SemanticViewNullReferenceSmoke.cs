@@ -8,32 +8,50 @@ namespace QS3D.Core.SmokeTests
     {
         public static void Run()
         {
-            NullFloorReferenceFailsClosed();
-            NullZoneReferenceFailsClosed();
+            NullFloorReferenceRejectsAtCatalogBoundary();
+            NullZoneReferenceRejectsAtCatalogBoundary();
         }
 
-        private static void NullFloorReferenceFailsClosed()
+        private static void NullFloorReferenceRejectsAtCatalogBoundary()
         {
             var project = BuildProject();
-            project.Floors.Add(null!);
+            var beforeCount = project.Floors.Count;
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdatedUtc = project.UpdatedUtc;
 
-            MustFailInvalidOperation(
-                () => SemanticViewPlanner.Build(
-                    project,
-                    new SemanticViewDefinition("VIEW-FLOOR", "Null floor guard", floorId: "F-02")),
-                "Semantic view planning must fail closed when the project floor collection contains a null entry.");
+            MustFailArgumentNull(
+                () => project.Floors.Add(null!),
+                "Null Floor admission must fail closed at the persisted catalog boundary.");
+
+            if (project.Floors.Count != beforeCount ||
+                project.ChangeVersion != beforeVersion ||
+                project.UpdatedUtc != beforeUpdatedUtc)
+                throw new Exception("Rejected null Floor admission mutated persisted project state.");
+
+            _ = SemanticViewPlanner.Build(
+                project,
+                new SemanticViewDefinition("VIEW-FLOOR", "Null floor guard", floorId: "F-02"));
         }
 
-        private static void NullZoneReferenceFailsClosed()
+        private static void NullZoneReferenceRejectsAtCatalogBoundary()
         {
             var project = BuildProject();
-            project.Zones.Add(null!);
+            var beforeCount = project.Zones.Count;
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdatedUtc = project.UpdatedUtc;
 
-            MustFailInvalidOperation(
-                () => SemanticViewPlanner.Build(
-                    project,
-                    new SemanticViewDefinition("VIEW-ZONE", "Null zone guard", zoneId: "Z-A")),
-                "Semantic view planning must fail closed when the project zone collection contains a null entry.");
+            MustFailArgumentNull(
+                () => project.Zones.Add(null!),
+                "Null Zone admission must fail closed at the persisted catalog boundary.");
+
+            if (project.Zones.Count != beforeCount ||
+                project.ChangeVersion != beforeVersion ||
+                project.UpdatedUtc != beforeUpdatedUtc)
+                throw new Exception("Rejected null Zone admission mutated persisted project state.");
+
+            _ = SemanticViewPlanner.Build(
+                project,
+                new SemanticViewDefinition("VIEW-ZONE", "Null zone guard", zoneId: "Z-A"));
         }
 
         private static ProjectState BuildProject()
@@ -45,19 +63,20 @@ namespace QS3D.Core.SmokeTests
             return project;
         }
 
-        private static void MustFailInvalidOperation(Action action, string message)
+        private static void MustFailArgumentNull(Action action, string message)
         {
             try
             {
                 action();
             }
-            catch (InvalidOperationException)
+            catch (ArgumentNullException ex)
             {
-                return;
+                if (string.Equals(ex.ParamName, "item", StringComparison.Ordinal)) return;
+                throw new Exception(message + " Unexpected parameter '" + ex.ParamName + "'.", ex);
             }
             catch (Exception ex)
             {
-                throw new Exception(message + " Expected InvalidOperationException but received " + ex.GetType().Name + ".", ex);
+                throw new Exception(message + " Expected ArgumentNullException but received " + ex.GetType().Name + ".", ex);
             }
 
             throw new Exception(message);

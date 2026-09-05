@@ -361,14 +361,29 @@ namespace QS3D.Core.SmokeTests
         private static void FloorOwnershipMutationDuringEnumerationFailsClosed()
         {
             var project = BuildProject();
-            FreshnessMutationMustFail(
-                project,
-                () =>
-                {
-                    project.Floors.Clear();
-                    project.Floors.Add(new FloorDefinition("F-02", "L02 replacement", 3.6d));
-                },
-                "B-001");
+            var version = project.ChangeVersion;
+            try
+            {
+                SemanticSelectionInspector.Inspect(
+                    project,
+                    new MutatingSelectionSource(
+                        () =>
+                        {
+                            project.Floors.Clear();
+                            project.Floors.Add(new FloorDefinition("F-02", "L02 replacement", 3.6d));
+                        },
+                        "B-001"));
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.IndexOf("Project state changed while materializing semantic selection ids", StringComparison.Ordinal) < 0)
+                    throw new Exception("Unexpected owned Floor-catalog semantic selection freshness rejection: " + ex.Message);
+                Equal(version + 2L, project.ChangeVersion);
+                Equal("L02 replacement", project.FindFloor("F-02")!.Name);
+                return;
+            }
+
+            throw new Exception("Owned Floor-catalog replacement during lazy selection enumeration must fail closed at the project freshness barrier.");
         }
 
         private static void StableLazyEnumerationStillPasses()

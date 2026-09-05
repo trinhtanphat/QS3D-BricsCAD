@@ -24,7 +24,7 @@ namespace QS3D.Core.SmokeTests
 
             Equal(1, result.FamiliesAdded);
             Equal(0, result.FamiliesUpdated);
-            Equal(beforeVersion + 1L, project.ChangeVersion);
+            Equal(beforeVersion + 2L, project.ChangeVersion);
             Equal(beforeAuditCount + 1, project.AuditEvents.Count);
             Equal("template.apply", project.AuditEvents[project.AuditEvents.Count - 1].Action);
 

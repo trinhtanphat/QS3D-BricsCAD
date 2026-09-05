@@ -12,7 +12,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             ValidAndZeroMatchSchedulesAreHealthy();
-            NullIdentityEntriesFailVisibleWhenCatalogIsActive();
+            NullCatalogEntriesRejectAtAdmissionAndElementNullFailsVisible();
             StaleAndAmbiguousReferencesAreReported();
             InvalidTemplateAndCatalogAreReportedReadOnly();
             ComprehensiveHealthIncludesSemanticScheduleProvider();
@@ -31,17 +31,27 @@ namespace QS3D.Core.SmokeTests
             Equal(version, project.ChangeVersion);
         }
 
-        private static void NullIdentityEntriesFailVisibleWhenCatalogIsActive()
+        private static void NullCatalogEntriesRejectAtAdmissionAndElementNullFailsVisible()
         {
             var floorProject = Project();
             SaveIdentityProbe(floorProject, "S-NULL-FLOOR");
-            floorProject.Floors.Add(null!);
-            Throws<InvalidOperationException>(() => new SemanticScheduleHealthService().Inspect(floorProject));
+            var floorCount = floorProject.Floors.Count;
+            var floorVersion = floorProject.ChangeVersion;
+            var floorUpdatedUtc = floorProject.UpdatedUtc;
+            Throws<ArgumentNullException>(() => floorProject.Floors.Add(null!));
+            Equal(floorCount, floorProject.Floors.Count);
+            Equal(floorVersion, floorProject.ChangeVersion);
+            Equal(floorUpdatedUtc, floorProject.UpdatedUtc);
 
             var zoneProject = Project();
             SaveIdentityProbe(zoneProject, "S-NULL-ZONE");
-            zoneProject.Zones.Add(null!);
-            Throws<InvalidOperationException>(() => new SemanticScheduleHealthService().Inspect(zoneProject));
+            var zoneCount = zoneProject.Zones.Count;
+            var zoneVersion = zoneProject.ChangeVersion;
+            var zoneUpdatedUtc = zoneProject.UpdatedUtc;
+            Throws<ArgumentNullException>(() => zoneProject.Zones.Add(null!));
+            Equal(zoneCount, zoneProject.Zones.Count);
+            Equal(zoneVersion, zoneProject.ChangeVersion);
+            Equal(zoneUpdatedUtc, zoneProject.UpdatedUtc);
 
             var elementProject = Project();
             SaveIdentityProbe(elementProject, "S-NULL-ELEMENT");

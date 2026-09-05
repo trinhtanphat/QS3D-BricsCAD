@@ -64,45 +64,33 @@ namespace QS3D.Core.SmokeTests
         private static void NameCanonicalityFailsClosed()
         {
             var canonical = ProjectInterchangeJsonExporter.Build(BuildFixture());
-            RequireError(
-                ProjectInterchangeJsonValidator.Validate(canonical.Replace("\"name\":\"Interchange Validate Smoke\"", "\"name\":\" Interchange Validate Smoke\"")),
-                "NAME_NON_CANONICAL");
-            RequireError(
-                ProjectInterchangeJsonValidator.Validate(canonical.Replace("\"name\":\"Zone 1\"", "\"name\":\"Zone 1 \"")),
-                "NAME_NON_CANONICAL");
-            RequireError(
-                ProjectInterchangeJsonValidator.Validate(canonical.Replace("\"name\":\"L01\"", "\"name\":\" L01 \"")),
-                "NAME_NON_CANONICAL");
-            RequireError(
-                ProjectInterchangeJsonValidator.Validate(canonical.Replace("\"name\":\"B300x500\"", "\"name\":\"B300x500 \"")),
-                "NAME_NON_CANONICAL");
+            RequireError(ProjectInterchangeJsonValidator.Validate(canonical.Replace("\"name\":\"Interchange Validate Smoke\"", "\"name\":\" Interchange Validate Smoke\"")), "NAME_NON_CANONICAL");
+            RequireError(ProjectInterchangeJsonValidator.Validate(canonical.Replace("\"name\":\"Zone 1\"", "\"name\":\"Zone 1 \"")), "NAME_NON_CANONICAL");
+            RequireError(ProjectInterchangeJsonValidator.Validate(canonical.Replace("\"name\":\"L01\"", "\"name\":\" L01 \"")), "NAME_NON_CANONICAL");
+            RequireError(ProjectInterchangeJsonValidator.Validate(canonical.Replace("\"name\":\"B300x500\"", "\"name\":\"B300x500 \"")), "NAME_NON_CANONICAL");
         }
 
         private static void WrongUnitsFailClosed()
         {
-            var json = ProjectInterchangeJsonExporter.Build(BuildFixture())
-                .Replace("\"length\":\"m\"", "\"length\":\"mm\"");
+            var json = ProjectInterchangeJsonExporter.Build(BuildFixture()).Replace("\"length\":\"m\"", "\"length\":\"mm\"");
             RequireError(ProjectInterchangeJsonValidator.Validate(json), "UNIT_LENGTH");
         }
 
         private static void GeneratedOwnershipSmugglingFailsClosed()
         {
-            var json = ProjectInterchangeJsonExporter.Build(BuildFixture())
-                .Replace("\"Mark\":\"B-01\"", "\"GeneratedSolidHandle\":\"DEAD\",\"Mark\":\"B-01\"");
+            var json = ProjectInterchangeJsonExporter.Build(BuildFixture()).Replace("\"Mark\":\"B-01\"", "\"GeneratedSolidHandle\":\"DEAD\",\"Mark\":\"B-01\"");
             RequireError(ProjectInterchangeJsonValidator.Validate(json), "GENERATED_RUNTIME_PROPERTY");
         }
 
         private static void BrokenDependencyFailsClosed()
         {
-            var json = ProjectInterchangeJsonExporter.Build(BuildFixture())
-                .Replace("\"dependencies\": [\"E-ROOT\"]", "\"dependencies\": [\"E-MISSING\"]");
+            var json = ProjectInterchangeJsonExporter.Build(BuildFixture()).Replace("\"dependencies\": [\"E-ROOT\"]", "\"dependencies\": [\"E-MISSING\"]");
             RequireError(ProjectInterchangeJsonValidator.Validate(json), "DEPENDENCY_REF_MISSING");
         }
 
         private static void DependencyCycleFailsClosed()
         {
-            var json = ProjectInterchangeJsonExporter.Build(BuildFixture())
-                .Replace("\"dependencies\": []", "\"dependencies\": [\"E-001\"]");
+            var json = ProjectInterchangeJsonExporter.Build(BuildFixture()).Replace("\"dependencies\": []", "\"dependencies\": [\"E-001\"]");
             RequireError(ProjectInterchangeJsonValidator.Validate(json), "DEPENDENCY_CYCLE");
         }
 
@@ -125,9 +113,7 @@ namespace QS3D.Core.SmokeTests
             var path = Path.Combine(Path.GetTempPath(), "qs3d-interchange-oversize-" + Guid.NewGuid().ToString("N") + ".qs3d.json");
             try
             {
-                using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                    stream.SetLength(ProjectInterchangeJsonValidator.MaxFileBytes + 1L);
-
+                using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None)) stream.SetLength(ProjectInterchangeJsonValidator.MaxFileBytes + 1L);
                 try
                 {
                     ProjectInterchangeJsonValidator.ValidateFile(path);
@@ -135,11 +121,9 @@ namespace QS3D.Core.SmokeTests
                 catch (InvalidDataException ex)
                 {
                     var expected = "Semantic snapshot exceeds the guarded " + ProjectInterchangeJsonValidator.MaxFileBytes.ToString(CultureInfo.InvariantCulture) + " byte limit.";
-                    if (!string.Equals(ex.Message, expected, StringComparison.Ordinal))
-                        throw new Exception("Interchange oversize guard changed its public error contract: " + ex.Message);
+                    if (!string.Equals(ex.Message, expected, StringComparison.Ordinal)) throw new Exception("Interchange oversize guard changed its public error contract: " + ex.Message);
                     return;
                 }
-
                 throw new Exception("Interchange validator must reject files above MaxFileBytes.");
             }
             finally
@@ -156,9 +140,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void EmptyRequiredNamesFailClosed()
         {
-            var json = ProjectInterchangeJsonExporter.Build(BuildFixture())
-                .Replace("\"name\":\"Interchange Validate Smoke\"", "\"name\":\"\"")
-                .Replace("\"name\":\"Zone 1\"", "\"name\":\"\"");
+            var json = ProjectInterchangeJsonExporter.Build(BuildFixture()).Replace("\"name\":\"Interchange Validate Smoke\"", "\"name\":\"\"").Replace("\"name\":\"Zone 1\"", "\"name\":\"\"");
             var result = ProjectInterchangeJsonValidator.Validate(json);
             RequireError(result, "PROJECT_NAME_EMPTY");
             RequireError(result, "NAME_EMPTY");
@@ -168,26 +150,20 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("P-VALIDATE", "Interchange Validate Smoke")
             {
-                DrawingFingerprint = "DWG-FP",
-                UpdatedUtc = new DateTime(2026, 8, 10, 11, 0, 0, DateTimeKind.Utc)
+                DrawingFingerprint = "DWG-FP"
             };
             project.Zones.Add(new ZoneDefinition("Z-1", "Zone 1"));
             project.Floors.Add(new FloorDefinition("FL-1", "L01", 0d));
             project.Families.Add(new ProjectFamily("FAM-1", "B300x500", ElementCategory.Beam));
+            project.UpdatedUtc = new DateTime(2026, 8, 10, 11, 0, 0, DateTimeKind.Utc);
 
-            var root = new ProjectElement("E-ROOT", ElementCategory.Beam, "FAM-1", "FL-1", "Z-1")
-            {
-                DrawingFingerprint = "DWG-FP"
-            };
+            var root = new ProjectElement("E-ROOT", ElementCategory.Beam, "FAM-1", "FL-1", "Z-1") { DrawingFingerprint = "DWG-FP" };
             root.SourceHandles.Add("100");
             root.SetProperty("Mark", "B-00");
             root.SetQuantity("LengthM", 3d);
             project.Elements.Add(root);
 
-            var child = new ProjectElement("E-001", ElementCategory.Beam, "FAM-1", "FL-1", "Z-1")
-            {
-                DrawingFingerprint = "DWG-FP"
-            };
+            var child = new ProjectElement("E-001", ElementCategory.Beam, "FAM-1", "FL-1", "Z-1") { DrawingFingerprint = "DWG-FP" };
             child.SourceHandles.Add("101");
             child.DependsOn.Add("E-ROOT");
             child.SetProperty("Mark", "B-01");
