@@ -185,7 +185,7 @@ function Get-SingleV26InstallerAdmission {
     }
 
     $admission = $outputs[0]
-    $requiredProperties = @('Path', 'Sha256', 'Length', 'LastWriteUtcTicks', 'ProductVersion', 'SignerSubject', 'Stream')
+    $requiredProperties = @('Path', 'Sha256', 'Length', 'LastWriteUtcTicks', 'ProductName', 'ProductVersion', 'SignerSubject', 'Stream')
     foreach ($propertyName in $requiredProperties) {
         if ($null -eq $admission -or $null -eq $admission.PSObject.Properties[$propertyName]) {
             if ($null -ne $admission -and $null -ne $admission.PSObject.Properties['Stream']) {
@@ -261,10 +261,7 @@ function Publish-AdmittedV26Installer {
             $destinationStream.Dispose()
             $destinationStream = $null
         }
-        $ordinary = Get-OrdinaryFileOrNull -Path $Destination -Label 'failed V26 MSI publication destination'
-        if ($null -ne $ordinary) {
-            Remove-Item -LiteralPath $ordinary.FullName -Force
-        }
+        Write-Warning 'V26 MSI publication failed after canonical destination creation; leaving the destination untouched for fail-closed re-admission.'
         throw
     }
 }
@@ -312,9 +309,7 @@ if (Test-Path -LiteralPath $msi -PathType Leaf) {
         Write-Host 'Using admitted BricsCAD V26.2.07 installer from Actions cache/local cache.'
     }
     catch {
-        Write-Warning "Cached BricsCAD V26 installer was rejected and will be replaced: $($_.Exception.Message)"
-        $cached = Get-OrdinaryFileOrNull -Path $msi -Label 'rejected BricsCAD V26 MSI'
-        if ($null -ne $cached) { Remove-Item -LiteralPath $cached.FullName -Force }
+        throw "Cached BricsCAD V26 installer was rejected; rejected cached V26 MSI is left untouched because safe replacement requires a fresh canonical destination. $($_.Exception.Message)"
     }
 }
 
