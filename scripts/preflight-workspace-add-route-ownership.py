@@ -101,6 +101,11 @@ def main() -> int:
     rename = method_body(blt, "private void RenameBlt3dButton")
     require_before(rename, "!IsBlt3dFamilyAddButton(button)", "button.Content = newText;",
                    "Family Add relabeling must preserve the Room finish label")
+    view_model = read(ROOT / "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs")
+    numeric = method_body(view_model, "private static bool IsNumericProperty")
+    require(numeric, "SingleFootingContract.IsDimensionKey(key)", "Canonical footing dimensions must remain numeric at 0/1")
+    for field in ("L1", "W1", "L2", "W2", "H1", "H2"):
+        require(numeric, '"SingleFooting' + field + 'M"', "Legacy footing dimension must remain numeric")
 
     room_rewire = method_body(room, "private void RewireBlt3dRoomAwareAddActions")
     require_before(
