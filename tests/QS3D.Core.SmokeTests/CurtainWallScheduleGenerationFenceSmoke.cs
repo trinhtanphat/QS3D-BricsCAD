@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -17,7 +15,9 @@ namespace QS3D.Core.SmokeTests
             StableGenerationRemainsAccepted();
             DirectElementReplacementIsRejectedWithoutProjectVersionHelp();
             InPlaceCurtainQuantityMutationIsRejected();
-            CatalogGenerationMutationIsRejected();
+            InPlaceFloorNameMutationIsRejected();
+            InPlaceFamilyNameMutationIsRejected();
+            InPlaceProvenanceMutationIsRejected();
             Console.WriteLine("PASS curtain wall schedule generation fence");
         }
 
@@ -30,6 +30,7 @@ namespace QS3D.Core.SmokeTests
             Near(3d, rows[0].TotalWallLengthM, "stable curtain schedule length changed");
             Require(rows[0].Floor == "Floor 1", "stable curtain schedule floor changed");
             Require(rows[0].FamilyName == "Curtain", "stable curtain schedule family changed");
+            Require(rows[0].SourceHandles.Count == 1 && rows[0].SourceHandles[0] == "AA01", "stable curtain schedule provenance changed");
         }
 
         private static void DirectElementReplacementIsRejectedWithoutProjectVersionHelp()
@@ -37,8 +38,7 @@ namespace QS3D.Core.SmokeTests
             var project = NewProject(out var wall);
             var snapshot = CaptureFence(project);
             var version = project.ChangeVersion;
-            var replacement = NewWall("GW-2");
-            project.Elements[0] = replacement;
+            project.Elements[0] = NewWall("GW-2");
             Require(project.ChangeVersion == version, "test prerequisite changed: direct element replacement unexpectedly touched project version");
             ExpectGenerationDrift(() => InvokeFence(project, snapshot), "direct element replacement");
             project.Elements[0] = wall;
@@ -57,44 +57,50 @@ namespace QS3D.Core.SmokeTests
             ExpectGenerationDrift(() => InvokeFence(project, snapshot), "in-place curtain quantity mutation");
         }
 
-        private static void CatalogGenerationMutationIsRejected()
+        private static void InPlaceFloorNameMutationIsRejected()
         {
             var project = NewProject(out _);
             var snapshot = CaptureFence(project);
+            var version = project.ChangeVersion;
             project.Floors[0].Name = "Changed floor";
-            ExpectGenerationDrift(() => InvokeFence(project, snapshot), "catalog generation mutation");
+            Require(project.ChangeVersion == version, "test prerequisite changed: floor mutation unexpectedly touched project version");
+            ExpectGenerationDrift(() => InvokeFence(project, snapshot), "in-place floor name mutation");
         }
 
-        private static FenceSnapshot CaptureFence(ProjectState project)
+        private static void InPlaceFamilyNameMutationIsRejected()
         {
-            var elements = project.Elements.ToList();
-            return new FenceSnapshot(
-                project.ChangeVersion,
-                elements,
-                elements.Select(x => x.UpdatedUtc).ToList(),
-                project.Floors.ToList(),
-                project.Families.ToList(),
-                project.DrawingFingerprint);
+            var project = NewProject(out _);
+            var snapshot = CaptureFence(project);
+            var version = project.ChangeVersion;
+            project.Families[0].Name = "Changed family";
+            Require(project.ChangeVersion == version, "test prerequisite changed: family mutation unexpectedly touched project version");
+            ExpectGenerationDrift(() => InvokeFence(project, snapshot), "in-place family name mutation");
         }
 
-        private static void InvokeFence(ProjectState project, FenceSnapshot snapshot)
+        private static void InPlaceProvenanceMutationIsRejected()
         {
-            var method = typeof(CurtainWallScheduleBuilder).GetMethod(
-                "EnsureProjectRevision",
-                BindingFlags.Static | BindingFlags.NonPublic);
+            var project = NewProject(out var wall);
+            var snapshot = CaptureFence(project);
+            var version = project.ChangeVersion;
+            wall.SourceHandles[0] = "BB02";
+            Require(project.ChangeVersion == version, "test prerequisite changed: provenance mutation unexpectedly touched project version");
+            ExpectGenerationDrift(() => InvokeFence(project, snapshot), "in-place provenance mutation");
+        }
+
+        private static object CaptureFence(ProjectState project)
+        {
+            var method = typeof(CurtainWallScheduleBuilder).GetMethod("CaptureProjectRevision", BindingFlags.Static | BindingFlags.NonPublic);
+            Require(method != null, "Curtain wall schedule semantic snapshot method is missing");
+            return method!.Invoke(null, new object[] { project })!;
+        }
+
+        private static void InvokeFence(ProjectState project, object snapshot)
+        {
+            var method = typeof(CurtainWallScheduleBuilder).GetMethod("EnsureProjectRevision", BindingFlags.Static | BindingFlags.NonPublic);
             Require(method != null, "Curtain wall schedule generation fence method is missing");
             try
             {
-                method!.Invoke(null, new object[]
-                {
-                    project,
-                    snapshot.Version,
-                    snapshot.Elements,
-                    snapshot.ElementUpdatedUtc,
-                    snapshot.Floors,
-                    snapshot.Families,
-                    snapshot.DrawingFingerprint
-                });
+                method!.Invoke(null, new[] { (object)project, snapshot });
             }
             catch (TargetInvocationException ex) when (ex.InnerException != null)
             {
@@ -104,14 +110,10 @@ namespace QS3D.Core.SmokeTests
 
         private static void ExpectGenerationDrift(Action action, string label)
         {
-            try
-            {
-                action();
-            }
+            try { action(); }
             catch (InvalidOperationException ex)
             {
-                Require(
-                    ex.Message.IndexOf("Project changed while the curtain wall schedule was being built", StringComparison.Ordinal) >= 0,
+                Require(ex.Message.IndexOf("Project changed while the curtain wall schedule was being built", StringComparison.Ordinal) >= 0,
                     label + " produced the wrong fail-closed diagnostic: " + ex.Message);
                 return;
             }
@@ -158,32 +160,6 @@ namespace QS3D.Core.SmokeTests
         private static void Require(bool condition, string message)
         {
             if (!condition) throw new InvalidOperationException(message);
-        }
-
-        private sealed class FenceSnapshot
-        {
-            internal FenceSnapshot(
-                long version,
-                IReadOnlyList<ProjectElement> elements,
-                IReadOnlyList<DateTime> elementUpdatedUtc,
-                IReadOnlyList<FloorDefinition> floors,
-                IReadOnlyList<ProjectFamily> families,
-                string drawingFingerprint)
-            {
-                Version = version;
-                Elements = elements;
-                ElementUpdatedUtc = elementUpdatedUtc;
-                Floors = floors;
-                Families = families;
-                DrawingFingerprint = drawingFingerprint;
-            }
-
-            internal long Version { get; }
-            internal IReadOnlyList<ProjectElement> Elements { get; }
-            internal IReadOnlyList<DateTime> ElementUpdatedUtc { get; }
-            internal IReadOnlyList<FloorDefinition> Floors { get; }
-            internal IReadOnlyList<ProjectFamily> Families { get; }
-            internal string DrawingFingerprint { get; }
         }
     }
 }
