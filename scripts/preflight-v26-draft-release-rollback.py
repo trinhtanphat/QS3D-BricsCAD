@@ -28,32 +28,54 @@ def validate(helper_text: str, publisher_text: str) -> list[str]:
         "Assert-DraftDeleteCommittedAfterError -DeleteError $_ -ReleaseUri $releaseUri",
         "function Assert-NoReleaseOwnsTag",
         "releases?per_page=100&page=$page",
-        "A release still owns tag $ReleaseTag; refusing tag deletion.",
+        "A release still owns tag $ReleaseTag; refusing rollback completion.",
         "if (-not $TagCreatedByThisRun)",
+        "Non-owned V26 release tag $ReleaseTag changed during draft rollback; refusing to claim restart safety.",
         "Preserving exact V26 tag $ReleaseTag because this run lacks positive tag-creation ownership proof.",
+        "Owned V26 release tag $ReleaseTag changed during draft rollback; refusing to claim restart safety.",
+        "Preserving exact V26 tag $ReleaseTag at $resolvedPreserved for safe retry; rollback intentionally avoids destructive tag deletion.",
         "TagDeleted = $false",
-        "Remote tag $ReleaseTag changed during rollback; refusing tag deletion.",
-        "Invoke-RestMethod -Method Delete -Uri $tagRefUri",
-        "function Assert-TagDeleteCommittedAfterError",
-        "$remainingTag = Invoke-RestMethod -Method Get -Uri $TagGetUri -Headers $headers",
-        "Assert-TagDeleteCommittedAfterError -DeleteError $_ -TagGetUri $tagGetUri",
     ]
     require_all(helper_text, helper_contract, "helper", errors)
 
-    for forbidden in ["TagWasAbsentBeforeCreate", "releases/tags/", "git push --delete", "git push origin :refs/tags/", "-Force"]:
+    destructive_tag_tokens = [
+        "Invoke-RestMethod -Method Delete -Uri $tagRefUri",
+        "function Assert-TagDeleteCommittedAfterError",
+        "Assert-TagDeleteCommittedAfterError -DeleteError $_ -TagGetUri $tagGetUri",
+        "$tagRefUri =",
+        "$tagGetUri =",
+        "refusing tag deletion.",
+        "changed during rollback; refusing tag deletion.",
+    ]
+    for forbidden in [
+        "TagWasAbsentBeforeCreate",
+        "releases/tags/",
+        "git push --delete",
+        "git push origin :refs/tags/",
+        "-Force",
+        *destructive_tag_tokens,
+    ]:
         if forbidden in helper_text:
             errors.append(f"helper uses stale/broad destructive contract: {forbidden}")
 
     release_delete = helper_text.find("Invoke-RestMethod -Method Delete -Uri $releaseUri")
     release_reconcile = helper_text.find("Assert-DraftDeleteCommittedAfterError -DeleteError $_ -ReleaseUri $releaseUri", release_delete + 1)
     owner_check = helper_text.find("Assert-NoReleaseOwnsTag", release_reconcile + 1)
-    preserve = helper_text.find("Preserving exact V26 tag $ReleaseTag because this run lacks positive tag-creation ownership proof.", owner_check + 1)
-    sha_recheck = helper_text.find("Remote tag $ReleaseTag changed during rollback; refusing tag deletion.", preserve + 1)
-    tag_delete = helper_text.find("Invoke-RestMethod -Method Delete -Uri $tagRefUri", sha_recheck + 1)
-    tag_reconcile = helper_text.find("Assert-TagDeleteCommittedAfterError -DeleteError $_ -TagGetUri $tagGetUri", tag_delete + 1)
-    ordered_helper = [release_delete, release_reconcile, owner_check, preserve, sha_recheck, tag_delete, tag_reconcile]
+    non_owned_branch = helper_text.find("if (-not $TagCreatedByThisRun)", owner_check + 1)
+    non_owned_recheck = helper_text.find("Non-owned V26 release tag $ReleaseTag changed during draft rollback; refusing to claim restart safety.", non_owned_branch + 1)
+    non_owned_preserve = helper_text.find("Preserving exact V26 tag $ReleaseTag because this run lacks positive tag-creation ownership proof.", non_owned_recheck + 1)
+    owned_recheck = helper_text.find("Owned V26 release tag $ReleaseTag changed during draft rollback; refusing to claim restart safety.", non_owned_preserve + 1)
+    owned_preserve = helper_text.find("Preserving exact V26 tag $ReleaseTag at $resolvedPreserved for safe retry; rollback intentionally avoids destructive tag deletion.", owned_recheck + 1)
+    ordered_helper = [release_delete, release_reconcile, owner_check, non_owned_branch, non_owned_recheck, non_owned_preserve, owned_recheck, owned_preserve]
     if min(ordered_helper) < 0 or ordered_helper != sorted(ordered_helper):
-        errors.append("rollback order must remain draft-delete/reconcile -> release-owner scan -> non-owned preservation -> exact-SHA recheck -> tag-delete/reconcile")
+        errors.append("rollback order must remain draft-delete/reconcile -> release-owner scan -> non-owned exact-tag preservation -> owned exact-tag preservation")
+
+    if helper_text.count("$resolvedPreserved = Resolve-ExactRemoteTagSha") < 2:
+        errors.append("rollback must re-resolve the exact remote tag independently in both ownership branches before claiming restart safety")
+    if helper_text.count("TagDeleted = $false") < 2:
+        errors.append("rollback result must report non-destructive TagDeleted=false in both ownership branches")
+    if "TagDeleted = $true" in helper_text:
+        errors.append("rollback must never report destructive tag deletion")
 
     publisher_contract = [
         '$tagRef = "refs/tags/$env:RELEASE_TAG"',
@@ -172,8 +194,11 @@ mutations = {
     "bounded enumeration": (helper, publisher.replace("$maxPages = 20", "$maxPages = [int]::MaxValue", 1)),
     "draft delete reconciliation": (helper.replace("Assert-DraftDeleteCommittedAfterError -DeleteError $_ -ReleaseUri $releaseUri", "# removed", 1), publisher),
     "release-owner scan": (helper.replace("\nAssert-NoReleaseOwnsTag\n", "\n# removed\n", 1), publisher),
-    "non-owned preservation": (helper.replace("if (-not $TagCreatedByThisRun)", "if ($false)", 1), publisher),
-    "tag delete reconciliation": (helper.replace("Assert-TagDeleteCommittedAfterError -DeleteError $_ -TagGetUri $tagGetUri", "# removed", 1), publisher),
+    "non-owned preservation": (helper.replace("Preserving exact V26 tag $ReleaseTag because this run lacks positive tag-creation ownership proof.", "removed non-owned preservation", 1), publisher),
+    "non-owned exact tag": (helper.replace("Non-owned V26 release tag $ReleaseTag changed during draft rollback; refusing to claim restart safety.", "removed non-owned exact tag", 1), publisher),
+    "owned preservation": (helper.replace("Preserving exact V26 tag $ReleaseTag at $resolvedPreserved for safe retry; rollback intentionally avoids destructive tag deletion.", "removed owned preservation", 1), publisher),
+    "owned exact tag": (helper.replace("Owned V26 release tag $ReleaseTag changed during draft rollback; refusing to claim restart safety.", "removed owned exact tag", 1), publisher),
+    "non-destructive result": (helper.replace("TagDeleted = $false", "TagDeleted = $true", 1), publisher),
     "asset identity": (helper, publisher.replace("$verifiedAssetIds[$expectedAsset] = $uploadedAssetId", "# removed", 1)),
     "publish attempt proof": (helper, publisher.replace("$publishPatchAttempted = $true", "$publishPatchAttempted = $false", 1)),
     "published reconciliation": (helper, publisher.replace("$reconciledRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers", "$reconciledRelease = $null", 1)),
@@ -183,4 +208,4 @@ for label, (mutated_helper, mutated_publisher) in mutations.items():
     if not validate(mutated_helper, mutated_publisher):
         raise SystemExit(f"V26 draft rollback mutation probe did not fail closed: {label}")
 
-print("PASS V26 restart-safe tag admission, draft-create acknowledgement recovery, publish reconciliation, rollback, and non-owned tag preservation contract")
+print("PASS V26 restart-safe tag admission, draft-create acknowledgement recovery, publish reconciliation, exact draft rollback, and tag preservation contract")

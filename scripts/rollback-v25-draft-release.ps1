@@ -58,12 +58,12 @@ function Assert-NoReleaseOwnsTag {
         $releases = @(Invoke-RestMethod -Method Get -Uri $listUri -Headers $headers)
         foreach ($candidate in $releases) {
             if ([string]::Equals([string]$candidate.tag_name, $ReleaseTag, [StringComparison]::Ordinal)) {
-                throw "A release still owns tag $ReleaseTag; refusing tag deletion."
+                throw "A release still owns tag $ReleaseTag; refusing rollback completion."
             }
         }
         if ($releases.Count -lt 100) { return }
     }
-    throw "Release enumeration exceeded $maxPages pages while checking tag $ReleaseTag; refusing tag deletion."
+    throw "Release enumeration exceeded $maxPages pages while checking tag $ReleaseTag; refusing rollback completion."
 }
 
 function Assert-DraftDeleteCommittedAfterError {
@@ -84,23 +84,6 @@ function Assert-DraftDeleteCommittedAfterError {
     throw "Exact owned V25 draft $ReleaseId still exists after DELETE error; refusing to assume deletion. Original error: $($DeleteError.Exception.Message)"
 }
 
-function Assert-TagDeleteCommittedAfterError {
-    param([Parameter(Mandatory = $true)]$DeleteError, [Parameter(Mandatory = $true)][string]$TagGetUri)
-    $remainingTag = $null
-    try { $remainingTag = Invoke-RestMethod -Method Get -Uri $TagGetUri -Headers $headers }
-    catch {
-        if (Test-GitHubNotFound -ErrorRecord $_) {
-            Write-Host "V25 tag DELETE acknowledgement was ambiguous, but the exact tag is authoritatively absent; treating tag deletion as committed."
-            return
-        }
-        throw "Unable to reconcile V25 tag DELETE acknowledgement. Delete error: $($DeleteError.Exception.Message) Reconciliation error: $($_.Exception.Message)"
-    }
-    $expectedRef = "refs/tags/$ReleaseTag"
-    if ($null -eq $remainingTag -or -not [string]::Equals([string]$remainingTag.ref, $expectedRef, [StringComparison]::Ordinal)) { throw "V25 tag DELETE reconciliation returned a mismatched ref identity; refusing to assume deletion." }
-    if ($null -eq $remainingTag.object -or -not [string]::Equals([string]$remainingTag.object.sha, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase)) { throw "V25 tag DELETE reconciliation found a moved or ambiguous tag identity; refusing to assume deletion." }
-    throw "Exact owned V25 tag $ReleaseTag still exists after DELETE error; refusing to assume deletion. Original error: $($DeleteError.Exception.Message)"
-}
-
 $resolvedBefore = Resolve-ExactRemoteTagSha
 if (-not [string]::Equals($resolvedBefore, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase)) { throw "Remote tag $ReleaseTag moved to $resolvedBefore; refusing destructive rollback." }
 
@@ -115,38 +98,22 @@ if ($ReleaseId -gt 0) {
     catch { Assert-DraftDeleteCommittedAfterError -DeleteError $_ -ReleaseUri $releaseUri }
 }
 
-# Even when the tag is not deletion-owned, an ambiguous draft POST may have committed without an id.
-# Exhaustive release enumeration therefore precedes the tag-ownership branch and fails closed on any survivor.
+# An ambiguous draft POST can commit without returning an id. Exhaustive release-owner
+# enumeration therefore remains mandatory before claiming rollback completion.
 Assert-NoReleaseOwnsTag
 
-if (-not $TagCreatedByThisRun) {
-    $resolvedPreserved = Resolve-ExactRemoteTagSha
-    if (-not [string]::Equals($resolvedPreserved, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase)) { throw "Non-owned V25 release tag $ReleaseTag changed during draft rollback; refusing to claim restart safety." }
-    Write-Host "Preserving exact V25 tag $ReleaseTag because this run lacks positive tag-creation ownership proof."
-    return [pscustomobject]@{
-        ReleaseId = $ReleaseId
-        ReleaseTag = $ReleaseTag
-        WorkflowSha = $WorkflowSha.ToLowerInvariant()
-        TagCreatedByThisRun = $false
-        DraftDeleted = ($ReleaseId -gt 0)
-        TagDeleted = $false
-    }
-}
-
-$resolvedAfter = Resolve-ExactRemoteTagSha
-if (-not [string]::Equals($resolvedAfter, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase)) { throw "Remote tag $ReleaseTag changed during rollback; refusing tag deletion." }
-
-$escapedReleaseTag = [Uri]::EscapeDataString($ReleaseTag)
-$tagRefUri = "https://api.github.com/repos/$Repository/git/refs/tags/$escapedReleaseTag"
-$tagGetUri = "https://api.github.com/repos/$Repository/git/ref/tags/$escapedReleaseTag"
-try { Invoke-RestMethod -Method Delete -Uri $tagRefUri -Headers $headers | Out-Null }
-catch { Assert-TagDeleteCommittedAfterError -DeleteError $_ -TagGetUri $tagGetUri }
+# Preserve the exact tag for retry regardless of whether this run originally created it.
+# Deleting a reusable exact tag after release-owner enumeration leaves a TOCTOU window in
+# which another actor can attach/create a release against that tag before destructive DELETE.
+$resolvedPreserved = Resolve-ExactRemoteTagSha
+if (-not [string]::Equals($resolvedPreserved, $WorkflowSha, [StringComparison]::OrdinalIgnoreCase)) { throw "V25 release tag $ReleaseTag changed during draft rollback; refusing to claim restart safety." }
+Write-Host "Preserving exact V25 tag $ReleaseTag at $($WorkflowSha.ToLowerInvariant()) for safe retry."
 
 [pscustomobject]@{
     ReleaseId = $ReleaseId
     ReleaseTag = $ReleaseTag
     WorkflowSha = $WorkflowSha.ToLowerInvariant()
-    TagCreatedByThisRun = $true
+    TagCreatedByThisRun = $TagCreatedByThisRun
     DraftDeleted = ($ReleaseId -gt 0)
-    TagDeleted = $true
+    TagDeleted = $false
 }

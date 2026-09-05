@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Xml;
 using QS3D.Core.Services;
 
@@ -24,13 +25,14 @@ namespace QS3D.Core.Domain
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             var normalizedId = Required(id, nameof(id), 64);
+            var canonicalId = CanonicalFloorIdentityId(normalizedId);
             var normalizedName = Required(name, nameof(name), MaxNameLength);
             Finite(elevationM, nameof(elevationM));
             if (project.Floors.Any(x => x == null))
                 throw new InvalidOperationException("Project floor collection contains a null floor.");
             ValidateUniqueFloorIds(project);
             if (project.Floors.Count >= MaxFloors) throw new InvalidOperationException("Project supports at most " + MaxFloors + " floors.");
-            if (project.Floors.Any(x => string.Equals(x.Id, normalizedId, StringComparison.OrdinalIgnoreCase)))
+            if (project.Floors.Any(x => string.Equals(CanonicalFloorIdentityId(x.Id), canonicalId, StringComparison.Ordinal)))
                 throw new InvalidOperationException("Floor id already exists: " + normalizedId);
             EnsureUniqueName(project, normalizedName, string.Empty);
             var floor = new FloorDefinition(normalizedId, normalizedName, elevationM);
@@ -462,13 +464,28 @@ namespace QS3D.Core.Domain
 
         private static void ValidateUniqueFloorIds(ProjectState project)
         {
-            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seenIds = new HashSet<string>(StringComparer.Ordinal);
             foreach (var floor in project.Floors)
             {
                 if (floor == null)
                     throw new InvalidOperationException("Project floor collection contains a null floor.");
-                if (!seenIds.Add(floor.Id))
+                var canonicalId = CanonicalFloorIdentityId(floor.Id);
+                if (!seenIds.Add(canonicalId))
                     throw new InvalidOperationException("Project contains duplicate floor id: " + floor.Id + ".");
+            }
+        }
+
+        private static string CanonicalFloorIdentityId(string value)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            try
+            {
+                normalized = normalized.Normalize(NormalizationForm.FormC);
+                return normalized.ToUpperInvariant().Normalize(NormalizationForm.FormC);
+            }
+            catch (ArgumentException ex)
+            {
+                throw new InvalidOperationException("Project contains a floor id with malformed Unicode.", ex);
             }
         }
 
