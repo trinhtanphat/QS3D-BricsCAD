@@ -1,4 +1,4 @@
-name: TEMP V26 MSI 1603 retry probe
+name: TEMP V26 MSI 1603 diagnostic probe
 
 on:
   push:
@@ -9,7 +9,11 @@ permissions:
   contents: read
 
 jobs:
-  probe:
+  diagnose:
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [1, 2, 3]
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -19,35 +23,52 @@ jobs:
           persist-credentials: false
 
       - name: Restore latest admitted BricsCAD V26.2.07 installer cache
-        id: v26-msi-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .cache/bricscad/BricsCAD-V26.2.07-x64.msi
-          key: bricscad-v26-probe-${{ github.sha }}
+          key: bricscad-v26-diagnostic-${{ github.sha }}-${{ matrix.lane }}
           restore-keys: |
             bricscad-v26.2.07-x64-en-us-
 
-      - name: Probe V26 administrative extraction without publishing
+      - name: Diagnose one fresh-runner administrative extraction
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $msi = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad\BricsCAD-V26.2.07-x64.msi'
           if (-not (Test-Path -LiteralPath $msi -PathType Leaf)) {
-            throw 'No admitted BricsCAD V26.2.07 MSI was restored from Actions cache for the non-publishing probe.'
+            throw 'No BricsCAD V26.2.07 MSI was restored from Actions cache.'
           }
-          $extract = Join-Path $env:RUNNER_TEMP ('qs3d-v26-msi1603-retry-probe-' + [Guid]::NewGuid().ToString('N'))
-          $result = & .\scripts\acquire-v26-compile-references.ps1 `
-            -MsiPath $msi `
-            -ExtractDir $extract `
-            -PrimaryUrl ' ' `
-            -UsePinnedHttpMirror `
-            -ExtractReferences | Select-Object -Last 1
-          if ($null -eq $result -or [string]::IsNullOrWhiteSpace([string]$result.BricsCadDir)) {
-            throw 'V26 retry probe did not return a BricsCAD runtime directory.'
+          $extract = Join-Path $env:RUNNER_TEMP ('qs3d-v26-msi-diagnostic-' + [Guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $extract | Out-Null
+          $log = Join-Path $env:RUNNER_TEMP ('qs3d-v26-msi-diagnostic-' + [Guid]::NewGuid().ToString('N') + '.log')
+          $args = @('/a', ('"' + $msi + '"'), '/qn', ('TARGETDIR="' + $extract + '"'), 'REBOOT=ReallySuppress', '/L*v', ('"' + $log + '"'))
+          Write-Host "Diagnostic lane ${{ matrix.lane }} starting on $env:ImageOS / $env:ImageVersion"
+          $p = Start-Process msiexec.exe -ArgumentList $args -PassThru -Wait
+          Write-Host "msiexec exit code: $($p.ExitCode)"
+          $brics = Get-ChildItem -LiteralPath $extract -Filter BrxMgd.dll -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          $complete = $false
+          if ($null -ne $brics) {
+            $dir = $brics.Directory.FullName
+            $complete = (Test-Path -LiteralPath (Join-Path $dir 'TD_Mgd.dll') -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $dir 'TD_MgdBrep.dll') -PathType Leaf)
           }
-          foreach ($name in @('BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')) {
-            if (-not (Test-Path -LiteralPath (Join-Path $result.BricsCadDir $name) -PathType Leaf)) {
-              throw "V26 retry probe missing required compile reference: $name"
+          Write-Host "complete managed-reference payload: $complete"
+          if ($p.ExitCode -notin @(0, 3010) -and -not ($p.ExitCode -eq 1603 -and $complete)) {
+            Write-Host '--- Windows Installer failure evidence ---'
+            $lines = @(Get-Content -LiteralPath $log -ErrorAction Stop)
+            $hits = for ($i = 0; $i -lt $lines.Count; $i++) {
+              if ($lines[$i] -match 'Return value 3|Error 1[0-9]{3}|CustomAction|InstallValidate|InstallInitialize|InstallFiles|InstallFinalize') { $i }
             }
+            $selected = New-Object 'System.Collections.Generic.SortedSet[int]'
+            foreach ($hit in $hits) {
+              $start = [Math]::Max(0, $hit - 8)
+              $end = [Math]::Min($lines.Count - 1, $hit + 8)
+              for ($j = $start; $j -le $end; $j++) { [void]$selected.Add($j) }
+            }
+            if ($selected.Count -eq 0) {
+              $start = [Math]::Max(0, $lines.Count - 160)
+              for ($j = $start; $j -lt $lines.Count; $j++) { [void]$selected.Add($j) }
+            }
+            foreach ($idx in $selected) { Write-Host $lines[$idx] }
+            throw "Fresh-runner V26 MSI diagnostic lane ${{ matrix.lane }} failed with exit code $($p.ExitCode)."
           }
-          Write-Host "PASS: non-publishing V26 MSI extraction probe produced complete compile references from SHA256 $($result.Sha256)."
+          Write-Host "PASS: fresh-runner diagnostic lane ${{ matrix.lane }} extracted complete V26 references."
