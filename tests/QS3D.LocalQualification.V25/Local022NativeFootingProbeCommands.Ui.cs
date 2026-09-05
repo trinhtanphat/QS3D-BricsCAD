@@ -201,6 +201,7 @@ namespace QS3D.LocalQualification.V25
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             private HashSet<string>? _firstElementIds;
             private int _stableIdleTicks;
+            private bool _treeScrolled;
 
             public UiController(Context context)
             {
@@ -245,6 +246,15 @@ namespace QS3D.LocalQualification.V25
                     case UiStage.SelectTree:
                     {
                         var item = RequireSingleFootingTree(_workspace!);
+                        if (!_treeScrolled)
+                        {
+                            // Scrolling prepares a reachable control; selection itself must
+                            // still result from the acknowledged physical click below.
+                            item.BringIntoView();
+                            _workspace!.UpdateLayout();
+                            _treeScrolled = true;
+                            return;
+                        }
                         if (!AwaitAction(item, "click", string.Empty)) return;
                         if (!item.IsSelected) return;
                         _project = GetOrCreateProject(_context.Document);

@@ -656,7 +656,7 @@ function Invoke-NativePhase([string]$Phase, [string[]]$Commands) {
         'NETLOAD', ('"' + $pluginDll + '"'), 'NETLOAD', ('"' + $ProbeDll + '"')) + $Commands
     [IO.File]::WriteAllLines($scriptPath, $lines, [Text.Encoding]::ASCII)
     $arguments = '"' + $drawing + '" /L /P "' + $sandbox.NonceProfile + '" /B "' + $scriptPath + '"'
-    $windowStyle = if ($InteractiveUi) { 'Normal' } else { 'Hidden' }
+    $windowStyle = if ($InteractiveUi) { 'Maximized' } else { 'Hidden' }
     $process = Start-Process -FilePath $bricscadExe -ArgumentList $arguments -WorkingDirectory $privateRoot -PassThru -WindowStyle $windowStyle
     $ownedProcesses.Add($process)
     $launcherId = $process.Id
