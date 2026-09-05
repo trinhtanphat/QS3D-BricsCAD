@@ -22,13 +22,13 @@ def main() -> int:
     errors = []
     for token in (
         "DescribeEntity(entity, true, true)",
-        "var boundedSolidInspect = extents && details && entity is Solid3d;",
-        "if (boundedSolidInspect) builder.Append(\"null\");",
+        "var boundedSolidExtents = extents && entity is Solid3d;",
+        "if (boundedSolidExtents) builder.Append(\"null\");",
         "else try { builder.Append(ExtentsJson(entity.GeometricExtents)); } catch { builder.Append(\"null\"); }",
-        "if (boundedSolidInspect) builder.Append(\",\\\"extentsDeferred\\\":true\");",
+        "if (boundedSolidExtents) builder.Append(\",\\\"extentsDeferred\\\":true\");",
     ):
         if token not in (inspect + describe):
-            errors.append(f"missing bounded inspect contract: {token}")
+            errors.append(f"missing bounded Solid3d extents contract: {token}")
 
     if "DescribeEntity(entity, true, false)" not in snapshot:
         errors.append("database snapshot must retain its extents=true/details=false call shape")
@@ -41,17 +41,19 @@ def main() -> int:
     else:
         extents_block = describe[extents_start:details_start]
     if "entity.GeometricExtents" not in extents_block:
-        errors.append("lightweight/snapshot entity extents path was removed")
-    if "boundedSolidInspect" not in extents_block:
-        errors.append("Solid3d inspect must bypass synchronous GeometricExtents")
+        errors.append("non-Solid3d entity extents path was removed")
+    if "boundedSolidExtents" not in extents_block:
+        errors.append("all Solid3d read surfaces must bypass synchronous GeometricExtents")
+    if "extents && details && entity is Solid3d" in describe:
+        errors.append("Solid3d extents deferral must not depend on details=true; database snapshot uses details=false")
 
     if errors:
-        print("FAIL: MCP cad_entity_inspect bounded Solid3d guard")
+        print("FAIL: MCP Solid3d entity/snapshot extents guard")
         for error in errors:
             print(" -", error)
         return 1
 
-    print("PASS: cad_entity_inspect bounds Solid3d inspection without forcing synchronous GeometricExtents, while database snapshot retains extents semantics.")
+    print("PASS: cad_entity_inspect and cad_database_snapshot both defer Solid3d GeometricExtents while non-Solid3d extents semantics remain available.")
     return 0
 
 
