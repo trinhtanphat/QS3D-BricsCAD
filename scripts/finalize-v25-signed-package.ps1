@@ -300,9 +300,18 @@ function Assert-ZipManifestIntegrity {
     param([string]$ZipPath)
 
     Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop
+    $safeZipPath = Assert-SafeFile -Path $ZipPath -Label 'staged PackageZip manifest input'
+    $fileStream = $null
     $archive = $null
+    $outerHash = $null
     try {
-        $archive = [IO.Compression.ZipFile]::OpenRead($ZipPath)
+        $fileStream = [IO.FileStream]::new(
+            $safeZipPath,
+            [IO.FileMode]::Open,
+            [IO.FileAccess]::Read,
+            [IO.FileShare]::Read
+        )
+        $archive = [IO.Compression.ZipArchive]::new($fileStream, [IO.Compression.ZipArchiveMode]::Read, $true)
         $seenArchivePaths = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
         $archivePayloadPaths = [Collections.Generic.List[string]]::new()
         $manifestEntries = [Collections.Generic.List[object]]::new()
@@ -418,9 +427,18 @@ function Assert-ZipManifestIntegrity {
                 if ($stream) { $stream.Dispose() }
             }
         }
+
+        $archive.Dispose()
+        $archive = $null
+        $fileStream.Position = 0
+        $outerHash = [Security.Cryptography.SHA256]::Create()
+        $outerDigest = $outerHash.ComputeHash($fileStream)
+        return (-join ($outerDigest | ForEach-Object { $_.ToString('X2') }))
     }
     finally {
+        if ($outerHash) { $outerHash.Dispose() }
         if ($archive) { $archive.Dispose() }
+        if ($fileStream) { $fileStream.Dispose() }
     }
 }
 
@@ -538,8 +556,9 @@ $manifestStage = New-SiblingTempPath -TargetPath $hashManifest -Suffix '.stage.t
 $manifestBackup = New-SiblingTempPath -TargetPath $zip -Suffix '.manifest.backup.txt'
 $tempZip = New-SiblingTempPath -TargetPath $zip -Suffix '.stage.zip'
 $zipBackup = New-SiblingTempPath -TargetPath $zip -Suffix '.backup.zip'
+$zipRollbackDiscard = New-SiblingTempPath -TargetPath $zip -Suffix '.zip.rollback-discard'
 
-foreach ($transactionBackup in @($metadataBackup, $manifestBackup, $metadataRollbackDiscard, $zipBackup)) {
+foreach ($transactionBackup in @($metadataBackup, $manifestBackup, $metadataRollbackDiscard, $zipBackup, $zipRollbackDiscard)) {
     if (Test-PathEqualOrContained -Path $transactionBackup -Container $package) {
         throw "Signed-package transaction backup must stay outside PackageDirectory: $transactionBackup"
     }
@@ -548,6 +567,8 @@ foreach ($transactionBackup in @($metadataBackup, $manifestBackup, $metadataRoll
 $metadataPublished = $false
 $manifestDetached = $false
 $manifestPublished = $false
+$zipPublished = $false
+$zipExistedBeforePublish = $false
 $transactionCommitted = $false
 
 try {
@@ -589,15 +610,22 @@ try {
         throw 'Staged ZIP is empty.'
     }
     Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package
-    Assert-ZipManifestIntegrity -ZipPath $tempZip
-    $stagedZipHash = (Get-FileHash -LiteralPath $tempZip -Algorithm SHA256).Hash.ToUpperInvariant()
+    $stagedZipHash = Assert-ZipManifestIntegrity -ZipPath $tempZip
 
     if (Test-Path -LiteralPath $zip) {
         $zip = Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip'
+        $zipExistedBeforePublish = $true
         [IO.File]::Replace($tempZip, $zip, $zipBackup, $true)
     }
     else {
         [IO.File]::Move($tempZip, $zip)
+    }
+    $zipPublished = $true
+
+    $zip = Assert-SafeFile -Path $zip -Label 'finalized PackageZip'
+    $installedZipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToUpperInvariant()
+    if (-not [string]::Equals($installedZipHash, $stagedZipHash, [StringComparison]::Ordinal)) {
+        throw "Finalized ZIP generation mismatch. Expected $stagedZipHash, got $installedZipHash."
     }
     $transactionCommitted = $true
 
@@ -611,16 +639,47 @@ catch {
     $originalError = $_
     $rollbackErrors = New-Object 'System.Collections.Generic.List[string]'
 
+    if ($zipPublished) {
+        try {
+            $zip = Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip rollback target'
+            if ($zipExistedBeforePublish) {
+                if (-not (Test-Path -LiteralPath $zipBackup -PathType Leaf)) {
+                    throw "original PackageZip backup is unavailable: $zipBackup"
+                }
+                $zipBackup = Assert-SafeFile -Path $zipBackup -Label 'original PackageZip rollback backup'
+                if (Test-Path -LiteralPath $zip -PathType Leaf) {
+                    [IO.File]::Replace($zipBackup, $zip, $zipRollbackDiscard, $true)
+                    if (Test-Path -LiteralPath $zipRollbackDiscard) {
+                        Remove-Item -LiteralPath $zipRollbackDiscard -Force -ErrorAction Stop
+                    }
+                }
+                else {
+                    [IO.File]::Move($zipBackup, $zip)
+                }
+            }
+            elseif (Test-Path -LiteralPath $zip) {
+                Remove-Item -LiteralPath $zip -Force -ErrorAction Stop
+            }
+        }
+        catch { $rollbackErrors.Add("restore original finalized ZIP: $($_.Exception.Message)") }
+    }
+
     if ($manifestPublished -and (Test-Path -LiteralPath $hashManifest)) {
         try { Remove-Item -LiteralPath $hashManifest -Force -ErrorAction Stop }
         catch { $rollbackErrors.Add("remove staged manifest: $($_.Exception.Message)") }
     }
     if ($manifestDetached -and (Test-Path -LiteralPath $manifestBackup)) {
-        try { [IO.File]::Move($manifestBackup, $hashManifest) }
+        try {
+            $manifestBackup = Assert-SafeFile -Path $manifestBackup -Label 'original SHA256SUMS.txt rollback backup'
+            $hashManifest = Assert-SafeOptionalFileTarget -Path $hashManifest -Label 'SHA256SUMS.txt rollback target'
+            [IO.File]::Move($manifestBackup, $hashManifest)
+        }
         catch { $rollbackErrors.Add("restore original manifest: $($_.Exception.Message)") }
     }
     if ($metadataPublished -and (Test-Path -LiteralPath $metadataBackup)) {
         try {
+            $metadataBackup = Assert-SafeFile -Path $metadataBackup -Label 'original PACKAGE-METADATA.json rollback backup'
+            $metadataPath = Assert-SafeFile -Path $metadataPath -Label 'PACKAGE-METADATA.json rollback target'
             [IO.File]::Replace($metadataBackup, $metadataPath, $metadataRollbackDiscard, $true)
             if (Test-Path -LiteralPath $metadataRollbackDiscard) {
                 Remove-Item -LiteralPath $metadataRollbackDiscard -Force -ErrorAction Stop
@@ -635,7 +694,7 @@ catch {
     throw $originalError
 }
 finally {
-    foreach ($temporary in @($metadataStage, $manifestStage, $tempZip, $metadataRollbackDiscard)) {
+    foreach ($temporary in @($metadataStage, $manifestStage, $tempZip, $metadataRollbackDiscard, $zipRollbackDiscard)) {
         if (Test-Path -LiteralPath $temporary) {
             Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
         }

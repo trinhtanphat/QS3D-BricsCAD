@@ -4,8 +4,13 @@
     <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>QS3D.Code.Cli.SmokeTests</AssemblyName>
     <RootNamespace>QS3D.Code.Cli.SmokeTests</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\QS3D.Code.Cli\QS3D.Code.Cli.csproj" />
+    <Compile Include="..\..\src\QS3D.Code.Cli\ConsoleTraceRenderer.cs" Link="Cli\ConsoleTraceRenderer.cs" />
+    <Compile Include="..\..\src\QS3D.Code.Cli\Qs3dCliApplication.cs" Link="Cli\Qs3dCliApplication.cs" />
+    <Compile Include="..\..\src\QS3D.Code.Cli\RepositorySkillLoader.cs" Link="Cli\RepositorySkillLoader.cs" />
+    <Compile Include="..\..\src\QS3D.Core\Agent\Harness\*.cs" LinkBase="Harness" />
   </ItemGroup>
 </Project>

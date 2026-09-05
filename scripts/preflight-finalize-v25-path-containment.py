@@ -74,7 +74,8 @@ if atomic_mode:
         "$manifestBackup = New-SiblingTempPath -TargetPath $zip -Suffix '.manifest.backup.txt'",
         "$tempZip = New-SiblingTempPath -TargetPath $zip",
         "$zipBackup = New-SiblingTempPath -TargetPath $zip",
-        "foreach ($transactionBackup in @($metadataBackup, $manifestBackup, $metadataRollbackDiscard, $zipBackup))",
+        "$zipRollbackDiscard = New-SiblingTempPath -TargetPath $zip -Suffix '.zip.rollback-discard'",
+        "foreach ($transactionBackup in @($metadataBackup, $manifestBackup, $metadataRollbackDiscard, $zipBackup, $zipRollbackDiscard))",
         "Signed-package transaction backup must stay outside PackageDirectory",
         "[IO.File]::Replace($metadataStage, $metadataPath, $metadataBackup, $true)",
         "[IO.File]::Move($hashManifest, $manifestBackup)",
@@ -101,8 +102,10 @@ if atomic_mode:
                 + forbidden_backup
             )
 
-    if "Remove-Item -LiteralPath $zip -Force" in source:
-        errors.append("atomic finalizer must not delete the published ZIP before staged verification")
+    zip_remove = pos("Remove-Item -LiteralPath $zip -Force")
+    rollback_marker = pos("$originalError = $_")
+    if zip_remove >= 0 and (rollback_marker < 0 or zip_remove < rollback_marker):
+        errors.append("atomic finalizer must not delete the published ZIP outside rollback")
 
     package_rechecks = post_should.count("$package = Assert-SafeContainedDirectory -Path $package -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'")
     zip_rechecks = post_should.count("$zip = Assert-SafeContainedOptionalFileTarget -Path $zip -RepositoryRoot $repositoryRoot -Label 'PackageZip'")
