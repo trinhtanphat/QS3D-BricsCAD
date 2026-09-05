@@ -46,9 +46,9 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining<InvalidOperationException>(
                 () => ProjectFamilyService.Assign(project, family.Id, YieldThenRemoveFamily(project, family, element)),
-                "Target Family no longer belongs to the project after assignment target enumeration");
+                "Project changed while Family assignment targets were being enumerated");
 
-            Equal(beforeVersion, project.ChangeVersion, "removed-family project revision");
+            Equal(beforeVersion + 1L, project.ChangeVersion, "removed-family caller structural revision");
             False(project.Families.Contains(family), "removed-family external removal");
             Equal(string.Empty, element.FamilyId, "removed-family FamilyId");
             False(element.Properties.ContainsKey("Material"), "removed-family inherited property");
@@ -66,9 +66,9 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining<InvalidOperationException>(
                 () => ProjectFamilyService.Assign(project, family.Id, YieldThenDuplicateUnrelatedFamily(project, element)),
-                "Project contains duplicate family id: f-other");
+                "Project changed while Family assignment targets were being enumerated");
 
-            Equal(beforeVersion, project.ChangeVersion, "duplicate-family project revision");
+            Equal(beforeVersion + 1L, project.ChangeVersion, "duplicate-family caller structural revision");
             Equal(3, project.Families.Count, "duplicate-family deliberate corruption count");
             Equal(string.Empty, element.FamilyId, "duplicate-family target FamilyId");
             False(element.Properties.ContainsKey("Material"), "duplicate-family inherited property");

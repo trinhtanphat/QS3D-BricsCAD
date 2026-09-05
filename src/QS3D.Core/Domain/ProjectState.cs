@@ -251,19 +251,13 @@ namespace QS3D.Core.Domain
         public event PropertyChangedEventHandler? PropertyChanged;
         internal event Action? PersistenceMutationRequested;
 
-        internal void RestoreSnapshotState(
-            string name,
-            ElementCategory category,
-            IReadOnlyList<KeyValuePair<string, string>> properties)
+        internal void RestoreSnapshotState(string name, ElementCategory category, IReadOnlyList<KeyValuePair<string, string>> properties)
         {
             var nextName = RequireName(name);
             var nextCategory = RequireCategory(category);
             if (properties == null) throw new ArgumentNullException(nameof(properties));
-
             var nextProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var property in properties)
-                nextProperties.Add(property.Key, property.Value);
-
+            foreach (var property in properties) nextProperties.Add(property.Key, property.Value);
             _name = nextName;
             _category = nextCategory;
             _properties.ReplaceSnapshotState(nextProperties);
@@ -285,8 +279,7 @@ namespace QS3D.Core.Domain
         }
         private static ElementCategory RequireCategory(ElementCategory value)
         {
-            if (!Enum.IsDefined(typeof(ElementCategory), value))
-                throw new ArgumentOutOfRangeException(nameof(value), value, "Family category must be a defined ElementCategory.");
+            if (!Enum.IsDefined(typeof(ElementCategory), value)) throw new ArgumentOutOfRangeException(nameof(value), value, "Family category must be a defined ElementCategory.");
             return value;
         }
         private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
@@ -297,11 +290,13 @@ namespace QS3D.Core.Domain
         private readonly List<T> _items = new List<T>();
         private readonly Action<T> _attach;
         private readonly Action<T> _detach;
+        private readonly Action _beforeMutation;
 
-        internal CatalogOwnershipList(Action<T> attach, Action<T> detach)
+        internal CatalogOwnershipList(Action<T> attach, Action<T> detach, Action beforeMutation)
         {
             _attach = attach ?? throw new ArgumentNullException(nameof(attach));
             _detach = detach ?? throw new ArgumentNullException(nameof(detach));
+            _beforeMutation = beforeMutation ?? throw new ArgumentNullException(nameof(beforeMutation));
         }
 
         public T this[int index]
@@ -309,15 +304,15 @@ namespace QS3D.Core.Domain
             get => _items[index];
             set
             {
+                if (value == null) throw new ArgumentNullException(nameof(value));
                 var previous = _items[index];
                 if (ReferenceEquals(previous, value)) return;
-
-                var previousWasLastReference = previous != null && CountReferences(previous) == 1;
-                var valueAlreadyOwned = value != null && ContainsReference(value);
-                _items[index] = value!;
-
-                if (previousWasLastReference) _detach(previous!);
-                if (value != null && !valueAlreadyOwned) _attach(value);
+                var previousWasLastReference = CountReferences(previous) == 1;
+                var valueAlreadyOwned = ContainsReference(value);
+                _beforeMutation();
+                _items[index] = value;
+                if (previousWasLastReference) _detach(previous);
+                if (!valueAlreadyOwned) _attach(value);
             }
         }
 
@@ -326,15 +321,32 @@ namespace QS3D.Core.Domain
 
         public void Add(T item)
         {
-            var alreadyOwned = item != null && ContainsReference(item);
-            _items.Add(item!);
-            if (item != null && !alreadyOwned) _attach(item);
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            var alreadyOwned = ContainsReference(item);
+            _beforeMutation();
+            _items.Add(item);
+            if (!alreadyOwned) _attach(item);
         }
 
         public void Clear()
         {
-            while (_items.Count > 0)
-                RemoveAt(_items.Count - 1);
+            if (_items.Count == 0) return;
+            _beforeMutation();
+            var owned = new List<T>();
+            for (var index = 0; index < _items.Count; index++)
+            {
+                var item = _items[index];
+                var seen = false;
+                for (var ownedIndex = 0; ownedIndex < owned.Count; ownedIndex++)
+                {
+                    if (!ReferenceEquals(owned[ownedIndex], item)) continue;
+                    seen = true;
+                    break;
+                }
+                if (!seen) owned.Add(item);
+            }
+            _items.Clear();
+            for (var index = 0; index < owned.Count; index++) _detach(owned[index]);
         }
 
         public bool Contains(T item) => _items.Contains(item);
@@ -345,9 +357,12 @@ namespace QS3D.Core.Domain
 
         public void Insert(int index, T item)
         {
-            var alreadyOwned = item != null && ContainsReference(item);
-            _items.Insert(index, item!);
-            if (item != null && !alreadyOwned) _attach(item);
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            if (index < 0 || index > _items.Count) throw new ArgumentOutOfRangeException(nameof(index));
+            var alreadyOwned = ContainsReference(item);
+            _beforeMutation();
+            _items.Insert(index, item);
+            if (!alreadyOwned) _attach(item);
         }
 
         public bool Remove(T item)
@@ -361,23 +376,22 @@ namespace QS3D.Core.Domain
         public void RemoveAt(int index)
         {
             var item = _items[index];
-            var detach = item != null && CountReferences(item) == 1;
+            var detach = CountReferences(item) == 1;
+            _beforeMutation();
             _items.RemoveAt(index);
-            if (detach) _detach(item!);
+            if (detach) _detach(item);
         }
 
         private bool ContainsReference(T item)
         {
-            for (var i = 0; i < _items.Count; i++)
-                if (ReferenceEquals(_items[i], item)) return true;
+            for (var i = 0; i < _items.Count; i++) if (ReferenceEquals(_items[i], item)) return true;
             return false;
         }
 
         private int CountReferences(T item)
         {
             var count = 0;
-            for (var i = 0; i < _items.Count; i++)
-                if (ReferenceEquals(_items[i], item)) count++;
+            for (var i = 0; i < _items.Count; i++) if (ReferenceEquals(_items[i], item)) count++;
             return count;
         }
     }
@@ -391,14 +405,15 @@ namespace QS3D.Core.Domain
         private string _activeZoneId = string.Empty;
         private string _activeFloorId = string.Empty;
         private DateTime _updatedUtc = DateTime.UtcNow;
+        private bool _restoringSnapshot;
 
         public ProjectState(string projectId, string name)
         {
             ProjectId = RequireProjectId(projectId);
             _name = string.IsNullOrWhiteSpace(name) ? "QS3D Project" : RequireProjectName(name);
-            Zones = new CatalogOwnershipList<ZoneDefinition>(AttachZone, DetachZone);
-            Floors = new CatalogOwnershipList<FloorDefinition>(AttachFloor, DetachFloor);
-            Families = new CatalogOwnershipList<ProjectFamily>(AttachFamily, DetachFamily);
+            Zones = new CatalogOwnershipList<ZoneDefinition>(AttachZone, DetachZone, Touch);
+            Floors = new CatalogOwnershipList<FloorDefinition>(AttachFloor, DetachFloor, Touch);
+            Families = new CatalogOwnershipList<ProjectFamily>(AttachFamily, DetachFamily, Touch);
             Elements = new List<ProjectElement>();
             QuantityRules = new List<QuantityRule>();
             Metadata = new ProjectMetadataDictionary();
@@ -428,31 +443,14 @@ namespace QS3D.Core.Domain
             set
             {
                 var rawValue = value ?? string.Empty;
-                if (rawValue.Any(char.IsControl))
-                    throw new ArgumentException("Drawing path cannot contain control characters.", nameof(value));
+                if (rawValue.Any(char.IsControl)) throw new ArgumentException("Drawing path cannot contain control characters.", nameof(value));
                 SetPersistedScalar(ref _drawingPath, PersistedTextXml.Verify(rawValue, nameof(value), "Drawing path"));
             }
         }
-        public string DrawingFingerprint
-        {
-            get => _drawingFingerprint;
-            set => SetCanonicalOptionalIdentity(ref _drawingFingerprint, value, "Drawing fingerprint");
-        }
-        public string ActiveZoneId
-        {
-            get => _activeZoneId;
-            set => SetActiveContextId(ref _activeZoneId, value);
-        }
-        public string ActiveFloorId
-        {
-            get => _activeFloorId;
-            set => SetActiveContextId(ref _activeFloorId, value);
-        }
-        public DateTime UpdatedUtc
-        {
-            get => _updatedUtc;
-            set => _updatedUtc = RequireUtcTimestamp(value, nameof(value));
-        }
+        public string DrawingFingerprint { get => _drawingFingerprint; set => SetCanonicalOptionalIdentity(ref _drawingFingerprint, value, "Drawing fingerprint"); }
+        public string ActiveZoneId { get => _activeZoneId; set => SetActiveContextId(ref _activeZoneId, value); }
+        public string ActiveFloorId { get => _activeFloorId; set => SetActiveContextId(ref _activeFloorId, value); }
+        public DateTime UpdatedUtc { get => _updatedUtc; set => _updatedUtc = RequireUtcTimestamp(value, nameof(value)); }
         public long ChangeVersion { get; private set; }
         public IList<ZoneDefinition> Zones { get; }
         public IList<FloorDefinition> Floors { get; }
@@ -471,6 +469,7 @@ namespace QS3D.Core.Domain
 
         public void Touch()
         {
+            if (_restoringSnapshot) return;
             var nextChangeVersion = checked(ChangeVersion + 1L);
             UpdatedUtc = DateTime.UtcNow;
             ChangeVersion = nextChangeVersion;
@@ -479,47 +478,31 @@ namespace QS3D.Core.Domain
         internal void RestorePersistenceState(DateTime updatedUtc, long changeVersion)
         {
             var restoredUpdatedUtc = RequireUtcTimestamp(updatedUtc, nameof(updatedUtc));
-            if (changeVersion < 0L)
-                throw new ArgumentOutOfRangeException(nameof(changeVersion), "Project change version cannot be negative.");
+            if (changeVersion < 0L) throw new ArgumentOutOfRangeException(nameof(changeVersion), "Project change version cannot be negative.");
             _updatedUtc = restoredUpdatedUtc;
             ChangeVersion = changeVersion;
+            _restoringSnapshot = false;
         }
 
-        internal void RestoreSnapshotScalars(
-            string name,
-            string? drawingPath,
-            string? drawingFingerprint,
-            string? activeZoneId,
-            string? activeFloorId)
+        internal void RestoreSnapshotScalars(string name, string? drawingPath, string? drawingFingerprint, string? activeZoneId, string? activeFloorId)
         {
             var restoredName = RequireProjectName(name);
-
             var restoredDrawingPath = drawingPath ?? string.Empty;
-            if (restoredDrawingPath.Any(char.IsControl))
-                throw new ArgumentException("Drawing path cannot contain control characters.", nameof(drawingPath));
+            if (restoredDrawingPath.Any(char.IsControl)) throw new ArgumentException("Drawing path cannot contain control characters.", nameof(drawingPath));
             restoredDrawingPath = PersistedTextXml.Verify(restoredDrawingPath, nameof(drawingPath), "Drawing path");
-
             var restoredDrawingFingerprint = drawingFingerprint ?? string.Empty;
-            if (restoredDrawingFingerprint.Length != 0 && !string.Equals(restoredDrawingFingerprint, restoredDrawingFingerprint.Trim(), StringComparison.Ordinal))
-                throw new ArgumentException("Drawing fingerprint must be empty or canonical without surrounding whitespace.", nameof(drawingFingerprint));
-            if (restoredDrawingFingerprint.Any(char.IsControl))
-                throw new ArgumentException("Drawing fingerprint cannot contain control characters.", nameof(drawingFingerprint));
+            if (restoredDrawingFingerprint.Length != 0 && !string.Equals(restoredDrawingFingerprint, restoredDrawingFingerprint.Trim(), StringComparison.Ordinal)) throw new ArgumentException("Drawing fingerprint must be empty or canonical without surrounding whitespace.", nameof(drawingFingerprint));
+            if (restoredDrawingFingerprint.Any(char.IsControl)) throw new ArgumentException("Drawing fingerprint cannot contain control characters.", nameof(drawingFingerprint));
             restoredDrawingFingerprint = PersistedTextXml.Verify(restoredDrawingFingerprint, nameof(drawingFingerprint), "Drawing fingerprint");
-
             var restoredActiveZoneId = activeZoneId ?? string.Empty;
-            if (restoredActiveZoneId.Length != 0 && !string.Equals(restoredActiveZoneId, restoredActiveZoneId.Trim(), StringComparison.Ordinal))
-                throw new ArgumentException("Active context id must be empty or canonical without surrounding whitespace.", nameof(activeZoneId));
-            if (restoredActiveZoneId.Any(char.IsControl))
-                throw new ArgumentException("Active context id cannot contain control characters.", nameof(activeZoneId));
+            if (restoredActiveZoneId.Length != 0 && !string.Equals(restoredActiveZoneId, restoredActiveZoneId.Trim(), StringComparison.Ordinal)) throw new ArgumentException("Active context id must be empty or canonical without surrounding whitespace.", nameof(activeZoneId));
+            if (restoredActiveZoneId.Any(char.IsControl)) throw new ArgumentException("Active context id cannot contain control characters.", nameof(activeZoneId));
             restoredActiveZoneId = PersistedTextXml.Verify(restoredActiveZoneId, nameof(activeZoneId), "Active context id");
-
             var restoredActiveFloorId = activeFloorId ?? string.Empty;
-            if (restoredActiveFloorId.Length != 0 && !string.Equals(restoredActiveFloorId, restoredActiveFloorId.Trim(), StringComparison.Ordinal))
-                throw new ArgumentException("Active context id must be empty or canonical without surrounding whitespace.", nameof(activeFloorId));
-            if (restoredActiveFloorId.Any(char.IsControl))
-                throw new ArgumentException("Active context id cannot contain control characters.", nameof(activeFloorId));
+            if (restoredActiveFloorId.Length != 0 && !string.Equals(restoredActiveFloorId, restoredActiveFloorId.Trim(), StringComparison.Ordinal)) throw new ArgumentException("Active context id must be empty or canonical without surrounding whitespace.", nameof(activeFloorId));
+            if (restoredActiveFloorId.Any(char.IsControl)) throw new ArgumentException("Active context id cannot contain control characters.", nameof(activeFloorId));
             restoredActiveFloorId = PersistedTextXml.Verify(restoredActiveFloorId, nameof(activeFloorId), "Active context id");
-
+            _restoringSnapshot = true;
             _name = restoredName;
             _drawingPath = restoredDrawingPath;
             _drawingFingerprint = restoredDrawingFingerprint;
@@ -537,20 +520,16 @@ namespace QS3D.Core.Domain
         private void SetActiveContextId(ref string field, string? value)
         {
             var rawValue = value ?? string.Empty;
-            if (rawValue.Length != 0 && !string.Equals(rawValue, rawValue.Trim(), StringComparison.Ordinal))
-                throw new ArgumentException("Active context id must be empty or canonical without surrounding whitespace.", nameof(value));
-            if (rawValue.Any(char.IsControl))
-                throw new ArgumentException("Active context id cannot contain control characters.", nameof(value));
+            if (rawValue.Length != 0 && !string.Equals(rawValue, rawValue.Trim(), StringComparison.Ordinal)) throw new ArgumentException("Active context id must be empty or canonical without surrounding whitespace.", nameof(value));
+            if (rawValue.Any(char.IsControl)) throw new ArgumentException("Active context id cannot contain control characters.", nameof(value));
             SetPersistedScalar(ref field, PersistedTextXml.Verify(rawValue, nameof(value), "Active context id"));
         }
 
         private void SetCanonicalOptionalIdentity(ref string field, string? value, string label)
         {
             var rawValue = value ?? string.Empty;
-            if (rawValue.Length != 0 && !string.Equals(rawValue, rawValue.Trim(), StringComparison.Ordinal))
-                throw new ArgumentException(label + " must be empty or canonical without surrounding whitespace.", nameof(value));
-            if (rawValue.Any(char.IsControl))
-                throw new ArgumentException(label + " cannot contain control characters.", nameof(value));
+            if (rawValue.Length != 0 && !string.Equals(rawValue, rawValue.Trim(), StringComparison.Ordinal)) throw new ArgumentException(label + " must be empty or canonical without surrounding whitespace.", nameof(value));
+            if (rawValue.Any(char.IsControl)) throw new ArgumentException(label + " cannot contain control characters.", nameof(value));
             SetPersistedScalar(ref field, PersistedTextXml.Verify(rawValue, nameof(value), label));
         }
 
@@ -567,28 +546,23 @@ namespace QS3D.Core.Domain
 
         private static DateTime RequireUtcTimestamp(DateTime value, string parameterName)
         {
-            if (value.Kind != DateTimeKind.Utc)
-                throw new ArgumentException("Project persistence timestamp must be UTC.", parameterName);
+            if (value.Kind != DateTimeKind.Utc) throw new ArgumentException("Project persistence timestamp must be UTC.", parameterName);
             return value;
         }
 
         private static string RequireProjectId(string value)
         {
-            if (string.IsNullOrWhiteSpace(value))
-                throw new ArgumentException("Project id is required.", nameof(value));
+            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Project id is required.", nameof(value));
             var normalized = value.Trim();
-            if (normalized.Any(char.IsControl))
-                throw new ArgumentException("Project id cannot contain control characters.", nameof(value));
+            if (normalized.Any(char.IsControl)) throw new ArgumentException("Project id cannot contain control characters.", nameof(value));
             return PersistedTextXml.Verify(normalized, nameof(value), "Project id");
         }
 
         private static string RequireProjectName(string value)
         {
-            if (string.IsNullOrWhiteSpace(value))
-                throw new ArgumentException("Project name is required.", nameof(value));
+            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Project name is required.", nameof(value));
             var normalized = value.Trim();
-            if (normalized.Any(char.IsControl))
-                throw new ArgumentException("Project name cannot contain control characters.", nameof(value));
+            if (normalized.Any(char.IsControl)) throw new ArgumentException("Project name cannot contain control characters.", nameof(value));
             return PersistedTextXml.Verify(normalized, nameof(value), "Project name");
         }
 
