@@ -24,10 +24,6 @@ on:
         required: true
         default: false
         type: boolean
-      installer_url:
-        description: "Optional short-lived HTTPS BricsCAD V26.2.07 MSI bootstrap URL used only on cache miss; never committed"
-        required: false
-        type: string
       installer_sha256:
         description: "Optional exact V26.2.07 MSI SHA-256; BRICSCAD_V26_MSI_SHA256 repository variable is used when omitted"
         required: false
@@ -47,7 +43,7 @@ env:
 
 jobs:
   installer-cache:
-    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.prime_installer_cache || inputs.confirm_release == 'RELEASE') }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: windows-latest
     permissions:
       contents: read
@@ -60,6 +56,7 @@ jobs:
           persist-credentials: false
 
       - name: Restore BricsCAD V26.2.07 installer cache
+        if: ${{ inputs.prime_installer_cache || inputs.confirm_release == 'RELEASE' }}
         id: bricscad-msi-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -69,10 +66,11 @@ jobs:
             bricscad-v26.2.07-x64-en-us-
 
       - name: Acquire and admit BricsCAD V26.2.07 installer
+        if: ${{ inputs.prime_installer_cache || inputs.confirm_release == 'RELEASE' }}
         id: acquire
         shell: powershell
         env:
-          BRICSCAD_V26_BOOTSTRAP_MSI_URL: ${{ inputs.installer_url || secrets.BRICSCAD_V26_MSI_URL }}
+          BRICSCAD_V26_BOOTSTRAP_MSI_URL: ${{ secrets.BRICSCAD_V26_MSI_URL }}
         run: |
           $ErrorActionPreference = 'Stop'
           $msi = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad\BricsCAD-V26.2.07-x64.msi'
@@ -88,13 +86,14 @@ jobs:
           Write-Host "Admitted BricsCAD V26.2.07 installer SHA-256: $($result.Sha256)"
 
       - name: Save digest-bound BricsCAD V26.2.07 installer cache
-        if: ${{ steps.bricscad-msi-cache.outputs.cache-hit != 'true' }}
+        if: ${{ (inputs.prime_installer_cache || inputs.confirm_release == 'RELEASE') && steps.bricscad-msi-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .cache/bricscad/BricsCAD-V26.2.07-x64.msi
           key: bricscad-v26.2.07-x64-en-us-${{ steps.acquire.outputs.sha256 }}
 
       - name: Installer cache result
+        if: ${{ inputs.prime_installer_cache || inputs.confirm_release == 'RELEASE' }}
         shell: powershell
         run: |
           Write-Host "BricsCAD V26.2.07 cache is bound to SHA-256 ${{ steps.acquire.outputs.sha256 }}."
@@ -229,7 +228,7 @@ jobs:
         id: v26-references
         shell: powershell
         env:
-          BRICSCAD_V26_BOOTSTRAP_MSI_URL: ${{ inputs.installer_url || secrets.BRICSCAD_V26_MSI_URL }}
+          BRICSCAD_V26_BOOTSTRAP_MSI_URL: ${{ secrets.BRICSCAD_V26_MSI_URL }}
         run: |
           $ErrorActionPreference = 'Stop'
           $msi = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad\BricsCAD-V26.2.07-x64.msi'
@@ -330,8 +329,10 @@ jobs:
           name: QS3D-BricsCAD-V26-cloud-${{ inputs.release_tag }}-${{ github.sha }}
           path: .
 
-      - name: Verify held V26 cloud candidate after job boundary
+      - name: Verify and publish held V26 cloud candidate after job boundary
         shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $ErrorActionPreference = 'Stop'
           $zip = 'dist\QS3D-BricsCAD-V26.zip'
@@ -353,11 +354,5 @@ jobs:
             -ExpectedReleaseTag $env:RELEASE_TAG `
             -AdmittedScript '.\scripts\publish-v26-release.ps1'
           if ($null -eq $candidateIdentity) {
-            throw 'V26 cloud preview candidate semantic admission returned no identity.'
+            throw 'V26 cloud preview candidate semantic admission/publication returned no identity.'
           }
-
-      - name: Publish V26 cloud preview release
-        shell: powershell
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: .\scripts\publish-v26-release.ps1
