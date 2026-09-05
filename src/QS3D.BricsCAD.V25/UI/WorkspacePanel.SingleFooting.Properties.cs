@@ -9,13 +9,10 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class WorkspacePanel
     {
-        private void ShowSingleFootingFamilyProperties(ProjectFamily family)
+        private bool TryShowSingleFootingFamilyProperties(ProjectFamily family)
         {
             if (family == null || !SingleFootingContract.IsSingleFooting(family))
-            {
-                _viewModel.ShowFamilyProperties();
-                return;
-            }
+                return false;
 
             SingleFootingDimensions dimensions;
             try
@@ -24,9 +21,13 @@ namespace QS3D.BricsCAD.V25.UI
             }
             catch (Exception ex)
             {
-                _viewModel.ShowFamilyProperties();
+                // A malformed specialized family must not fall back to editable
+                // generic keys that bypass its validation/native regeneration.
+                _viewModel.Properties.Clear();
+                AddSingleFootingReadOnlyRow("THÔNG TIN", "Tên Family", family.Name);
+                AddSingleFootingReadOnlyRow("KIỂM TRA", "Thông số không hợp lệ", ex.Message);
                 SetStatus("Móng đơn thiếu bộ thông số hợp lệ: " + ex.Message);
-                return;
+                return true;
             }
 
             _viewModel.Properties.Clear();
@@ -47,6 +48,7 @@ namespace QS3D.BricsCAD.V25.UI
                 "Thể tích hình học",
                 dimensions.VolumeM3.ToString("0.###", CultureInfo.InvariantCulture),
                 "m³");
+            return true;
         }
 
         private void AddSingleFootingReadOnlyRow(string group, string name, string value, string unit = "")
