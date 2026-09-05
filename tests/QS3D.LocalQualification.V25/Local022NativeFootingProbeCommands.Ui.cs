@@ -437,6 +437,15 @@ namespace QS3D.LocalQualification.V25
                     CountModelSpaceEntities(_context.Document) != _nativeBaseline)
                     throw new ProbeException("ui_family_create_cardinality");
                 var created = _project.Families.Where(x => !_baselineFamilyIds.Contains(x.Id)).Take(2).ToList();
+                foreach (var candidate in created)
+                {
+                    UiTrace("created_family_keys=" + string.Join("|", candidate.Properties.Keys.OrderBy(x => x, StringComparer.Ordinal)));
+                    foreach (var field in FieldOrder)
+                    {
+                        var key = "SINGLE_FOOTING_" + field;
+                        UiTrace("created_dimension " + key + "=" + (candidate.Properties.TryGetValue(key, out var raw) ? raw : "<missing>"));
+                    }
+                }
                 if (created.Count != 1 || !FamilyHasDimensions(created[0], UiBoxDimensions()) ||
                     !IsSingleFootingFamily(created[0]))
                     throw new ProbeException("ui_family_create_identity");
