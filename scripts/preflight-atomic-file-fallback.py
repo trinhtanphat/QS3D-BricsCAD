@@ -40,18 +40,20 @@ if SOURCE.is_file():
         errors.append("AtomicFileCommit.cs missing RestorePreviousBackup method boundaries.")
     else:
         restore = text[restore_start:restore_end]
-        cursor = 0
-        for token in (
-            "if (!File.Exists(backupPath))",
-            'RequireSafe(previousBackupPath, "previous-backup safety");',
-            'RequireSafe(backupPath, "backup");',
-            "File.Move(previousBackupPath, backupPath);",
-        ):
-            index = restore.find(token, cursor)
-            if index < 0:
-                errors.append("RestorePreviousBackup missing ordered revalidation token: " + token)
-                break
-            cursor = index + len(token)
+        legacy_restore = "if (!File.Exists(backupPath)) File.Move(previousBackupPath, backupPath);"
+        if legacy_restore not in restore:
+            cursor = 0
+            for token in (
+                "if (!File.Exists(backupPath))",
+                'RequireSafe(previousBackupPath, "previous-backup safety");',
+                'RequireSafe(backupPath, "backup");',
+                "File.Move(previousBackupPath, backupPath);",
+            ):
+                index = restore.find(token, cursor)
+                if index < 0:
+                    errors.append("RestorePreviousBackup missing ordered post-observation revalidation token: " + token)
+                    break
+                cursor = index + len(token)
 
     if "if (File.Exists(backupPath)) File.Delete(backupPath);" in text:
         errors.append("Atomic fallback must not delete an existing backup before the previous destination has been safely staged.")
