@@ -104,6 +104,7 @@ namespace QS3D.BricsCAD.V25
 
             AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
             TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
+            Application.DocumentManager.DocumentBecameCurrent += OnDocumentBecameCurrent;
             Record("qs3d", "info", "diagnostics-start", "Unified MCP/QS3D/BricsCAD diagnostics bridge started.");
             QueueAttachActiveDocument();
             _pollTimer = new Timer(Poll, null, 750, 1000);
@@ -125,6 +126,7 @@ namespace QS3D.BricsCAD.V25
 
             try { if (timer != null) timer.Dispose(); } catch { }
             foreach (var subscription in subscriptions) subscription.Unsubscribe();
+            try { Application.DocumentManager.DocumentBecameCurrent -= OnDocumentBecameCurrent; } catch { }
             try { AppDomain.CurrentDomain.UnhandledException -= OnUnhandledException; } catch { }
             try { TaskScheduler.UnobservedTaskException -= OnUnobservedTaskException; } catch { }
             Record("qs3d", "info", "diagnostics-stop", "Unified diagnostics bridge stopped.");
@@ -297,7 +299,10 @@ namespace QS3D.BricsCAD.V25
             {
                 Record("mcp", "warning", "diagnostic-poll-failed", ex.Message);
             }
+        }
 
+        private static void OnDocumentBecameCurrent(object sender, DocumentCollectionEventArgs e)
+        {
             QueueAttachActiveDocument();
         }
 

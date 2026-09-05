@@ -115,8 +115,21 @@ def main() -> int:
         'McpOpenAiSecureTunnelManager.IsReady': "OpenAI ready status",
         'Không cần public URL': "no-public-URL status",
         'Cloudflare Tunnel đang được tải/cài. Vui lòng chờ; đây không phải lỗi.': "busy install informational UX",
+        'private McpTransportProvider? _renderedConnectionProvider;': "rendered connection-provider pin",
+        '_renderedConnectionProvider = provider;': "connection page provider capture",
+        'CopyUrl(McpTransportProvider.CloudflareNamedTunnel)': "Named Tunnel copy-URL binding",
+        'CopyUrl(McpTransportProvider.CloudflareQuickTunnel)': "Quick Tunnel copy-URL binding",
+        'OpenChatGpt(McpTransportProvider provider)': "provider-bound ChatGPT action",
+        'MarkChatGptRegistered(McpTransportProvider provider)': "provider-bound registration action",
+        'private void CopyUrl(McpTransportProvider provider)': "provider-bound copy-URL action",
+        '_renderedConnectionProvider.Value != provider': "live stale-page provider mismatch detection",
+        'AppendProviderStatusRows(provider,': "provider-scoped status rows",
     }.items():
         need(center, token, label, errors)
+
+    forbid(center, '(_, __) => CopyUrl()', "ambient-provider copy-URL handler", errors)
+    forbid(center, '(_, __) => OpenChatGpt()', "ambient-provider ChatGPT handler", errors)
+    forbid(center, '(_, __) => MarkChatGptRegistered()', "ambient-provider registration handler", errors)
 
     for token, label in {
         'PresentationSource.CurrentSources': "host-safe WPF Agent Center discovery",
@@ -242,7 +255,7 @@ def main() -> int:
             print("ERROR:", error)
         return 1
 
-    print("PASS MCP transport providers / collision-safe split auth / binary trust / bounded installer recovery / single cancel owner / Agent Center diagnostics / restart-safe credential contract / first-run contract")
+    print("PASS MCP transport providers / provider-isolated Agent Center UI / collision-safe split auth / binary trust / bounded installer recovery / single cancel owner / Agent Center diagnostics / restart-safe credential contract / first-run contract")
     return 0
 
 

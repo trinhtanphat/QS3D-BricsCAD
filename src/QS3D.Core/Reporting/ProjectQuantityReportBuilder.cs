@@ -36,12 +36,16 @@ namespace QS3D.Core.Reporting
             var selectedIds = ResolveSelection(project, elementIds);
 
             var reportVersion = project.ChangeVersion;
-            var elements = project.Elements.ToList();
+            var elementInstances = project.Elements.ToList();
+            var elements = elementInstances
+                .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Id, StringComparer.Ordinal)
+                .ToList();
             var floorInstances = project.Floors.ToList();
             var zoneInstances = project.Zones.ToList();
             var familyInstances = project.Families.ToList();
             var drawingFingerprint = project.DrawingFingerprint;
-            EnsureProjectRevision(project, reportVersion, elements, floorInstances, zoneInstances, familyInstances, drawingFingerprint);
+            EnsureProjectRevision(project, reportVersion, elementInstances, floorInstances, zoneInstances, familyInstances, drawingFingerprint);
 
             var floors = floorInstances.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
             var zones = zoneInstances.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
@@ -53,7 +57,7 @@ namespace QS3D.Core.Reporting
 
             foreach (var element in elements)
             {
-                EnsureProjectRevision(project, reportVersion, elements, floorInstances, zoneInstances, familyInstances, drawingFingerprint);
+                EnsureProjectRevision(project, reportVersion, elementInstances, floorInstances, zoneInstances, familyInstances, drawingFingerprint);
                 var elementId = element.Id.Trim();
                 if (selectedIds != null && !selectedIds.Contains(elementId)) continue;
                 if (AutoRoomLifecycle.IsExcludedFromQuantity(project, element)) continue;
@@ -198,10 +202,10 @@ namespace QS3D.Core.Reporting
                     element.Category == ElementCategory.CeilingFinish ? QFirst(element, "TopAreaM2", "AreaM2") : Q(element, "TopAreaM2"),
                     element.Id + "/TopAreaM2");
                 aggregate.OtherAreaM2.Add(QFirst(element, "OtherAreaM2", "MeasuredSurfaceAreaM2"), element.Id + "/OtherAreaM2");
-                EnsureProjectRevision(project, reportVersion, elements, floorInstances, zoneInstances, familyInstances, drawingFingerprint);
+                EnsureProjectRevision(project, reportVersion, elementInstances, floorInstances, zoneInstances, familyInstances, drawingFingerprint);
             }
 
-            EnsureProjectRevision(project, reportVersion, elements, floorInstances, zoneInstances, familyInstances, drawingFingerprint);
+            EnsureProjectRevision(project, reportVersion, elementInstances, floorInstances, zoneInstances, familyInstances, drawingFingerprint);
             foreach (var key in order)
             {
                 var row = rows[key];

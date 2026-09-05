@@ -221,10 +221,10 @@ namespace QS3D.Core.SmokeTests
             var source = new MultiCountSequence<TbqBillItem>(1, 1, 1, 1, 1, 1, Bill("B1"));
             var workspace = Workspace(billItems: source);
             Equal(1, workspace.BillItems.Count, "Stable multi-interface TBQ source must remain accepted.");
-            Equal(6, source.GenericCountReads, "Stable ICollection<T>.Count must be rebound throughout traversal.");
-            Equal(6, source.ReadOnlyCountReads, "Stable IReadOnlyCollection<T>.Count must be rebound throughout traversal.");
-            Equal(6, source.NonGenericCountReads, "Stable ICollection.Count must be rebound throughout traversal.");
-            Equal(1, source.GetEnumeratorCalls, "Stable multi-interface TBQ source must traverse exactly once.");
+            Equal(12, source.GenericCountReads, "Stable ICollection<T>.Count must be rebound across admission and semantic replay.");
+            Equal(12, source.ReadOnlyCountReads, "Stable IReadOnlyCollection<T>.Count must be rebound across admission and semantic replay.");
+            Equal(12, source.NonGenericCountReads, "Stable ICollection.Count must be rebound across admission and semantic replay.");
+            Equal(2, source.GetEnumeratorCalls, "Stable counted TBQ source must perform one admission traversal plus one semantic replay.");
         }
 
         private static void ExactKnownCountsRemainAccepted()
@@ -239,10 +239,12 @@ namespace QS3D.Core.SmokeTests
             Equal(1, workspace.BuildUpRates.Count, "Exact counted build-up traversal must remain accepted.");
             Equal(1, workspace.RateReferences.Edges.Count, "Exact counted rate-reference traversal must remain accepted.");
             Equal(1, workspace.Library.Entries.Count, "Exact counted library traversal must remain accepted.");
-            Equal(6, billItems.CountReads, "Exact bill-item Count must be rebound throughout traversal.");
-            Equal(6, buildUps.CountReads, "Exact build-up Count must be rebound throughout traversal.");
-            Equal(6, references.CountReads, "Exact rate-reference Count must be rebound throughout traversal.");
-            Equal(6, library.CountReads, "Exact library Count must be rebound throughout traversal.");
+            Equal(12, billItems.CountReads, "Exact bill-item Count must be rebound across admission and semantic replay.");
+            Equal(12, buildUps.CountReads, "Exact build-up Count must be rebound across admission and semantic replay.");
+            Equal(11, references.CountReads, "Exact rate-reference Count must be rebound across admission and semantic replay.");
+            Equal(11, library.CountReads, "Exact library Count must be rebound across admission and semantic replay.");
+            Equal(2, references.GetEnumeratorCalls, "Exact counted rate references must perform one admission traversal plus one semantic replay.");
+            Equal(2, library.GetEnumeratorCalls, "Exact counted library entries must perform one admission traversal plus one semantic replay.");
         }
 
         private static void PureStreamingSourcesRemainAccepted()

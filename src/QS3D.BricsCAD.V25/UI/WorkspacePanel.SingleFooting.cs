@@ -148,7 +148,7 @@ namespace QS3D.BricsCAD.V25.UI
                 if (first != null)
                 {
                     _viewModel.SetActiveFamily(first);
-                    ShowSingleFootingFamilyProperties(first);
+                    _viewModel.ShowFamilyProperties();
                     SetStatus("Móng đơn • " + first.Name + " • bấm Vẽ rồi pick tâm móng.");
                 }
                 else
@@ -169,7 +169,7 @@ namespace QS3D.BricsCAD.V25.UI
                 _categoryFilter = ElementCategory.Foundation;
                 _familySubtypeFilter = SingleFootingContract.SubtypeName;
                 _viewModel.SetActiveFamily(family);
-                ShowSingleFootingFamilyProperties(family);
+                _viewModel.ShowFamilyProperties();
                 RefreshSelectedFamilyHighlight();
                 SetStatus("Móng đơn • " + family.Name + " • L1/W1/L2/W2/H1/H2 sẵn sàng chỉnh sửa.");
             }
@@ -271,7 +271,7 @@ namespace QS3D.BricsCAD.V25.UI
                         if (live != null)
                         {
                             _viewModel.SetActiveFamily(live);
-                            ShowSingleFootingFamilyProperties(live);
+                            _viewModel.ShowFamilyProperties();
                         }
                         RefreshSelectedFamilyHighlight();
                     },
