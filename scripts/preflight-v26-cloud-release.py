@@ -9,6 +9,8 @@ HELPER = ROOT / "scripts" / "acquire-v26-compile-references.ps1"
 PROVENANCE_HELPER = ROOT / "scripts" / "new-v26-candidate-provenance.ps1"
 CANDIDATE_HELPER = ROOT / "scripts" / "assert-v26-candidate-identity.ps1"
 MANUAL_WORKFLOW = ROOT / ".github" / "workflows" / "release-v26.yml"
+PINNED_HTTP_MIRROR = "http://103.9.157.20/BricsCAD-V26.2.07-1-en_US(x64).msi"
+PINNED_HTTP_MIRROR_SWITCH = "-UsePinnedHttpMirror"
 
 
 def fail(message: str) -> None:
@@ -62,6 +64,29 @@ require_all(
         "RELEASE_RUN_RUNTIME: 'false'",
     ),
 )
+
+# The V26 cloud lane may use one owner-approved plaintext mirror only after the
+# canonical HTTPS source fails. The exact URL is owned inside the hardened helper;
+# workflow source only opts into that fixed mirror so the repository-wide immutable
+# Actions guard continues to reject all plaintext HTTP in workflow YAML.
+require_all(workflow, WORKFLOW, (PINNED_HTTP_MIRROR_SWITCH,))
+if workflow.count(PINNED_HTTP_MIRROR_SWITCH) != 2:
+    fail("release-v26-cloud.yml must enable the pinned HTTP mirror at both installer acquisition call sites")
+if "http://" in workflow or "-MirrorUrl" in workflow:
+    fail("release-v26-cloud.yml must not embed or accept a plaintext HTTP mirror URL; the helper owns the exact mirror")
+require_all(
+    helper,
+    HELPER,
+    (
+        "[switch]$UsePinnedHttpMirror",
+        "Assert-PinnedV26HttpMirrorUrl",
+        f"$expectedMirror = '{PINNED_HTTP_MIRROR}'",
+        "if ($UsePinnedHttpMirror)",
+        "Name = 'pinned-http-mirror'",
+    ),
+)
+if "[string]$MirrorUrl" in helper:
+    fail("V26 helper must not accept an arbitrary HTTP mirror URL parameter")
 
 # The shared manual-only CI guard rejects OR expressions in job-level guards.
 # Keep cache priming optional at step level, but every job itself is hard manual-only.

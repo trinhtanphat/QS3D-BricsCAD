@@ -236,10 +236,10 @@ namespace QS3D.Core.Domain
         {
             if (room == null) throw new ArgumentNullException(nameof(room));
             var normalizedSourceSignature = NormalizeSourceHandleText(sourceSignature);
-            room.Properties[BoundaryStateKey] = BoundaryStateActive;
-            room.Properties[BoundarySourceSignatureKey] = normalizedSourceSignature;
-            room.Properties.Remove("BoundaryStaleUtc");
-            room.Properties.Remove("BoundaryStaleReason");
+            room.SetProperty(BoundarySourceSignatureKey, normalizedSourceSignature);
+            room.SetProperty(BoundaryStateKey, BoundaryStateActive);
+            room.RemoveProperty("BoundaryStaleUtc");
+            room.RemoveProperty("BoundaryStaleReason");
         }
 
         public static int SyncFamilyDefaults(ProjectState project, ProjectElement room, ProjectFamily family)
