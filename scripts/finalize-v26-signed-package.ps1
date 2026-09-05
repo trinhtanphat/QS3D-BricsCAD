@@ -102,6 +102,7 @@ if (-not (Test-Path -LiteralPath $generator -PathType Leaf)) { throw "V26 script
 # containment boundary to %TEMP% and reject legitimate repo-local dist outputs.
 $tempScript = Join-Path $PSScriptRoot ('.finalize-v26-signed-package.generated.' + [Guid]::NewGuid().ToString('N') + '.ps1')
 $generatedStream = $null
+$primaryFailure = $null
 try {
     & $generator -SourceScript 'finalize-v25-signed-package.ps1' -OutputPath $tempScript
     if (-not $?) { throw 'Could not generate the V26 signed-package finalizer.' }
@@ -128,13 +129,23 @@ try {
     if (-not $?) { throw 'V26 signed-package finalization failed.' }
     Assert-HeldGeneratedScript -Stream $generatedStream -Admitted $generatedItem -ExpectedPath $tempScript
 }
+catch {
+    $primaryFailure = $_
+    throw
+}
 finally {
     if ($null -ne $generatedStream) {
         $generatedStream.Dispose()
         $generatedStream = $null
     }
-    # Cleanup is best-effort so a secondary unlink failure cannot mask the
-    # primary transformer/finalizer failure. FileShare.Read held replacement
-    # closed until the stream was disposed above.
+
+    # A successful main operation still fails closed if the transient leaf was
+    # replaced by a container/reparse object before cleanup. When a primary
+    # generation/finalization failure is already propagating, do not replace it
+    # with a secondary cleanup diagnostic; the overall operation is already
+    # failing closed. The repository-root contract keeps final unlink best-effort.
+    if ($null -eq $primaryFailure -and (Test-Path -LiteralPath $tempScript)) {
+        [void](Resolve-OrdinaryNonReparseFile -Path $tempScript -Label 'Generated V26 finalizer cleanup script')
+    }
     if (Test-Path -LiteralPath $tempScript) { Remove-Item -LiteralPath $tempScript -Force -ErrorAction SilentlyContinue }
 }
