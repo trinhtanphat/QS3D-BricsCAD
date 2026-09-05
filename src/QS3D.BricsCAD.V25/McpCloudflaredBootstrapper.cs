@@ -48,6 +48,7 @@ namespace QS3D.BricsCAD.V25
             public string Source { get; private set; }
         }
 
+#pragma warning disable SYSLIB0014
         private sealed class BoundedWebClient : WebClient
         {
             protected override WebRequest GetWebRequest(Uri address)
@@ -59,6 +60,7 @@ namespace QS3D.BricsCAD.V25
                 return request;
             }
         }
+#pragma warning restore SYSLIB0014
 
         public static string ManagedPath => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
