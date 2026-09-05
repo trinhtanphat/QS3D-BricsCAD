@@ -5,13 +5,18 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 publisher_path = root / "scripts" / "publish-v26-release.ps1"
 gitmodules_path = root / ".gitmodules"
-binding_path = root / "scripts" / "v26-release-gitmodules.sha256"
 publisher = publisher_path.read_text(encoding="utf-8")
 gitmodules = gitmodules_path.read_bytes()
-binding = binding_path.read_text(encoding="ascii").strip() if binding_path.exists() else ""
+
+# Deliberately checked in inside this auto-discovered scripts/ guard. Any
+# legitimate .gitmodules edit must refresh this fingerprint in the same
+# reviewed candidate; the V26 final publication classifier already treats
+# scripts/ as release-relevant, so stale release provenance cannot silently
+# cross changed submodule acquisition metadata while external/ stays fixed.
+EXPECTED_GITMODULES_SHA256 = "c6763e859259d63fc1c7df6ef0c726e7e5bc03af00fd5224a3004dec064ccd6c"
 
 
-def validate(text: str, gitmodules_bytes: bytes, binding_text: str) -> list[str]:
+def validate(text: str, gitmodules_bytes: bytes, expected_digest: str) -> list[str]:
     errors: list[str] = []
     start = text.find("$finalReleaseRelevantPaths = @(")
     if start < 0:
@@ -37,11 +42,11 @@ def validate(text: str, gitmodules_bytes: bytes, binding_text: str) -> list[str]
         if token not in block:
             errors.append(f"V26 final-main release drift classifier missing release-relevant path: {token}")
 
-    expected_binding = f"{hashlib.sha256(gitmodules_bytes).hexdigest()}  .gitmodules"
-    if binding_text != expected_binding:
+    actual_digest = hashlib.sha256(gitmodules_bytes).hexdigest()
+    if actual_digest != expected_digest:
         errors.append(
-            "V26 .gitmodules metadata is not bound through the release-relevant scripts/ classifier: "
-            f"expected '{expected_binding}', found '{binding_text or '<missing>'}'"
+            ".gitmodules changed without refreshing the release-relevant scripts/ binding: "
+            f"expected {expected_digest}, actual {actual_digest}"
         )
 
     required_flow = [
@@ -73,19 +78,19 @@ def validate(text: str, gitmodules_bytes: bytes, binding_text: str) -> list[str]
     return errors
 
 
-canonical_errors = validate(publisher, gitmodules, binding)
+canonical_errors = validate(publisher, gitmodules, EXPECTED_GITMODULES_SHA256)
 if canonical_errors:
     raise SystemExit("V26 release-relevant main-drift contract failed: " + "; ".join(canonical_errors))
 
 mutated_gitmodules = gitmodules + b"# mutation: changed submodule acquisition metadata\n"
-if not validate(publisher, mutated_gitmodules, binding):
+if not validate(publisher, mutated_gitmodules, EXPECTED_GITMODULES_SHA256):
     raise SystemExit("V26 .gitmodules binding mutation probe did not fail closed")
 
 mutated_publisher = publisher.replace("    'scripts/',\n", "", 1)
-if not validate(mutated_publisher, gitmodules, binding):
+if not validate(mutated_publisher, gitmodules, EXPECTED_GITMODULES_SHA256):
     raise SystemExit("V26 release-relevant scripts/ classifier mutation probe did not fail closed")
 
 print(
-    "PASS V26 final publication binds submodule metadata through a release-relevant scripts/ checksum "
-    "and preserves final-main freshness gates"
+    "PASS V26 final publication binds submodule metadata through a release-relevant scripts/ "
+    "fingerprint and preserves final-main freshness gates"
 )
