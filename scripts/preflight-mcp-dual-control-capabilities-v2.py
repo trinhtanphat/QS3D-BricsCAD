@@ -59,6 +59,11 @@ def main() -> int:
             "McpBackgroundHostRuntime.DisableForegroundFromLocalUser()",
             "McpBackgroundHostRuntime.IsForegroundAvailable",
             "DisableForegroundAccessFromLocalUser",
+            "ResolveThemeForeground",
+            "CreateSecondaryForeground",
+            "Window.GetWindow(styleSource)",
+            "IsHitTestVisible = false",
+            "Focusable = false",
         ],
         errors,
     )
@@ -97,11 +102,14 @@ def main() -> int:
     forbidden_augmenter = [
         'TrySetInteractionPolicy("foreground_fallback")',
         "WireResumeForegroundSync",
+        "Foreground = styleSource.Foreground",
+        "background.IsEnabled = false",
+        "backgroundCheck.IsEnabled = false",
     ]
     for token in forbidden_augmenter:
         if token in augmenter:
             errors.append(
-                f"{AUGMENTER_PATH.relative_to(ROOT)} contains forbidden implicit-foreground token: {token}"
+                f"{AUGMENTER_PATH.relative_to(ROOT)} contains forbidden implicit-foreground/theme token: {token}"
             )
 
     if errors:
