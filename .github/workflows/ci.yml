@@ -27,9 +27,9 @@ permissions:
   issues: read
 
 concurrency:
-  # Metadata-only PR edits use a distinct cancellation class. This preserves the repository's
-  # bounded cancel-in-progress behavior without allowing an edited event to cancel code CI.
-  group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata' || 'code' }}
+  # Push and PR code events for the same branch share a cancellation domain. Repository identity
+  # isolates forks with equal branch names, while metadata-only PR edits keep their own class.
+  group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata' || 'code' }}
   cancel-in-progress: true
 
 jobs:
