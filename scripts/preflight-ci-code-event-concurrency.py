@@ -56,11 +56,11 @@ errors = validate(block)
 if errors:
     raise SystemExit("Shared CI code-event concurrency failed closed: " + "; ".join(errors))
 
-# Every safety-bearing identity discriminator is mutation-tested. Removing any one must make the
-# validator reject the workflow; this prevents a future refactor from silently collapsing event
-# families back into a cross-event cancellation domain or dropping fork/branch isolation.
+# Every safety-bearing discriminator is mutation-tested. Remove every occurrence because tokens
+# such as github.event_name and 'pull_request' legitimately occur more than once in the expression;
+# deleting only one occurrence would test parser spelling rather than loss of the contract.
 for token in REQUIRED:
-    mutated = block.replace(token, "", 1)
+    mutated = block.replace(token, "")
     if mutated == block:
         raise SystemExit(f"Concurrency mutation fixture could not remove required token: {token}")
     if not validate(mutated):
