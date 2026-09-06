@@ -34,7 +34,8 @@ permissions:
 
 concurrency:
   group: qs3d-v25-cloud-main-integration
-  cancel-in-progress: true
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   dispatch:
