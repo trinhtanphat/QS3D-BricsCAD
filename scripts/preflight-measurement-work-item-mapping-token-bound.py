@@ -5,7 +5,6 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.Core/Mapping/MeasurementWorkItemMapping.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/MeasurementWorkItemMappingTokenBoundSmoke.cs"
-REGISTRATION = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 errors = []
 
 
@@ -18,7 +17,6 @@ def read(path):
 
 source = read(SOURCE)
 smoke = read(SMOKE)
-registration = read(REGISTRATION)
 
 required_source = [
     "internal const int MaximumTokenLength = 1024;",
@@ -44,6 +42,8 @@ elif not (require_start < length_check < trim_check < xml_check):
     errors.append("mapping token resource bound must execute before trimming/control/XML work")
 
 required_smoke = [
+    "using System.Runtime.CompilerServices;",
+    "[ModuleInitializer]",
     "ExactBoundaryRemainsAcceptedAcrossConstructorSurfaces();",
     "EveryConstructorIdentityRejectsBoundaryPlusOne();",
     "ResolveRejectsBoundaryPlusOneBeforeLookup();",
@@ -52,10 +52,7 @@ required_smoke = [
 ]
 for token in required_smoke:
     if token not in smoke:
-        errors.append("missing deterministic mapping token-bound smoke coverage: " + token)
-
-if "MeasurementWorkItemMappingTokenBoundSmoke.Run();" not in registration:
-    errors.append("mapping token-bound smoke is not registered")
+        errors.append("missing deterministic mapping token-bound smoke contract: " + token)
 
 print("QS3D MeasurementWorkItemMapping token resource-bound preflight")
 if errors:
@@ -63,4 +60,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: mapping identities are capped at 1024 UTF-16 code units across constructor and Resolve admission before downstream canonicality/XML/catalog work.")
+print("PASS: mapping identities are capped at 1024 UTF-16 code units across constructor and Resolve admission before downstream canonicality/XML/catalog work, with deterministic module-initialized regression coverage.")
