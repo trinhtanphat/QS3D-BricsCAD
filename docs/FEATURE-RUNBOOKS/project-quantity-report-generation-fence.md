@@ -7,7 +7,9 @@ Lane-Key: `issue-5906`
 
 Project Quantity reporting must publish a row set from one semantic project generation. The builder therefore captures detached immutable values for the project identity/fingerprint, element relations/properties/quantities/provenance and the Floor/Zone/Family catalog values consumed by the report. Aggregation reads only those frozen values.
 
-The live project is revalidated before and during aggregation and again before publication. A direct element replacement or an in-place mutation to consumed quantity, property, catalog or provenance state must fail closed even when `ProjectState.ChangeVersion` remains unchanged.
+The snapshot also retains the original Element/Floor/Zone/Family instance identities used to define that generation. Live revalidation requires both semantic equality and reference identity, so replacing a consumed object with a new value-equivalent instance is still treated as generation drift.
+
+The live project is revalidated before and during aggregation and again before publication. A direct element/catalog replacement or an in-place mutation to consumed quantity, property, catalog or provenance state must fail closed even when `ProjectState.ChangeVersion` remains unchanged.
 
 Selection contracts, room-finish exclusion, grouping/detail behavior, evidence flags, compensated aggregation, density/mass calculations and diagnostics remain unchanged.
 
@@ -19,7 +21,7 @@ Run the managed smoke suite:
 dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
 ```
 
-The ModuleInitializer regression `ProjectQuantityReportGenerationFenceSmoke` verifies a stable generation and then injects in-place quantity, Family-name and SourceHandles drift immediately after capture. Each drift case must throw the standard recompute diagnostic while proving `ProjectState.ChangeVersion` did not change.
+The ModuleInitializer regression `ProjectQuantityReportGenerationFenceSmoke` verifies a stable generation, injects in-place quantity, Family-name and SourceHandles drift immediately after capture, and replaces Element/Family entries with new value-equivalent instances. Every drift case must throw the standard recompute diagnostic while proving `ProjectState.ChangeVersion` did not change.
 
 Run the focused source guard:
 
@@ -27,7 +29,7 @@ Run the focused source guard:
 python scripts/preflight-project-quantity-report-generation-fence.py
 ```
 
-The focused preflight pins frozen aggregation, copied semantic dictionaries/lists/provenance, repeated generation checks and the deterministic regression cases. Fresh protected `preflight` and `core` checks on the exact candidate SHA are required before merge.
+The focused preflight pins frozen aggregation, copied semantic dictionaries/lists/provenance, original instance identity checks, repeated generation checks and the deterministic regression cases. Fresh protected `preflight` and `core` checks on the exact candidate SHA are required before merge.
 
 ## Runtime boundary
 
