@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
@@ -57,7 +59,7 @@ namespace QS3D.Core.SmokeTests
             var source = new ProjectState("source", "Source");
             source.Zones.Add(new ZoneDefinition("TARGET-ZONE", new string('Z', 121)));
             var family = new ProjectFamily("TARGET-FAM", "Source Family", ElementCategory.Column);
-            family.Properties["LongValue"] = new string('X', 1001);
+            InjectLegacyFamilyProperty(family, "LongValue", new string('X', 1001));
             source.Families.Add(family);
 
             var plan = ProjectInterchangeImportResolutionPlanner.Plan(target, ProjectInterchangeJsonExporter.Build(source), KeepTargetPolicy());
@@ -74,7 +76,7 @@ namespace QS3D.Core.SmokeTests
             var source = new ProjectState("source", "Source");
             source.Zones.Add(new ZoneDefinition("TARGET-ZONE", new string('Z', 121)));
             var family = new ProjectFamily("TARGET-FAM", "Source Family", ElementCategory.Column);
-            family.Properties["LongValue"] = new string('X', 1001);
+            InjectLegacyFamilyProperty(family, "LongValue", new string('X', 1001));
             source.Families.Add(family);
 
             var plan = ProjectInterchangeImportResolutionPlanner.Plan(target, ProjectInterchangeJsonExporter.Build(source), UseSourcePolicy());
@@ -109,6 +111,15 @@ namespace QS3D.Core.SmokeTests
             target.Families.Add(new ProjectFamily("TARGET-FAM", "Target Family", ElementCategory.Column));
             target.Elements.Add(new ProjectElement("TARGET-ELEM", ElementCategory.Column, "TARGET-FAM", "TARGET-FLOOR", "TARGET-ZONE"));
             return target;
+        }
+
+        private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var innerField = family.Properties.GetType().GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Import-resolution legacy fixture could not locate the Family property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Import-resolution legacy fixture Family property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static ProjectInterchangeImportPolicy KeepTargetPolicy() => new ProjectInterchangeImportPolicy
