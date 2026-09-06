@@ -20,6 +20,8 @@ A malformed or otherwise recoverably invalid primary QSDB may fall back to the v
 
 Ordinary invalid primary data must continue to enter backup fallback. Ordinary invalid backup data must continue to aggregate with the primary failure as `InvalidDataException`.
 
+The redirected-path deterministic smokes are part of the compatibility boundary. Both the general persistence redirect smoke and the sidecar revision redirect smoke must require the exact `QS3D.Core.Persistence.PersistencePathSafetyException` type in the non-recoverable `IOException` family. They must not accept legacy `InvalidDataException` path-trust failures or arbitrary unrelated `IOException` values.
+
 ## Regression authority
 
 Run:
@@ -34,7 +36,9 @@ The guard is auto-discovered by `scripts/preflight-all.py` and pins:
 - redirect/reparse rejection sites use the typed exception;
 - QSDB fallback still treats ordinary `InvalidDataException` as recoverable;
 - fallback must not broaden recovery to `IOException` or the typed path-safety exception;
-- primary and backup catches remain filtered through `IsRecoverableDataFailure`.
+- primary and backup catches remain filtered through `IsRecoverableDataFailure`;
+- general persistence redirect smoke requires the exact typed path-safety exception and preserves the project-lock wrapper contract;
+- sidecar primary/backup redirect smoke requires the exact typed path-safety exception and rejects the legacy `ExpectInvalidData` contract.
 
 ## Compatibility boundary
 
