@@ -452,31 +452,39 @@ namespace QS3D.BricsCAD.V25.UI
 
         private bool TryActivateFamilyForWorkspaceAction(ProjectFamily family, string action)
         {
-            var document = Application.DocumentManager.MdiActiveDocument;
-            if (document == null)
+            try
             {
-                SetStatus(action + " đã hủy vì không còn bản vẽ BricsCAD active.");
+                var document = Application.DocumentManager.MdiActiveDocument;
+                if (document == null)
+                {
+                    SetStatus(action + " đã hủy vì không còn bản vẽ BricsCAD active.");
+                    return false;
+                }
+                if (!ExistingProjectMutationContext.TryGet(document, out var project))
+                {
+                    SetStatus(action + " đã hủy vì bản vẽ hiện tại không còn QS3D project hợp lệ. Hãy Refresh Workspace.");
+                    return false;
+                }
+                var ownedFamily = project.FindFamily(family.Id);
+                if (ownedFamily == null || !ReferenceEquals(ownedFamily, family))
+                {
+                    SetStatus(action + " đã hủy vì Family thuộc project/generation cũ. Hãy Refresh Workspace và chọn lại Family.");
+                    return false;
+                }
+                _viewModel.SetActiveFamily(family);
+                var activeFamily = ProjectFamilyActivationService.GetActive(project);
+                if (!ReferenceEquals(activeFamily, ownedFamily))
+                {
+                    SetStatus(action + " đã hủy vì không thể xác nhận Family active trong project hiện tại. Hãy Refresh Workspace.");
+                    return false;
+                }
+                return true;
+            }
+            catch (Exception)
+            {
+                SetStatus(action + " đã hủy vì không thể xác nhận Family hiện hành. Chi tiết nội bộ đã được ẩn; hãy Refresh Workspace.");
                 return false;
             }
-            if (!ExistingProjectMutationContext.TryGet(document, out var project))
-            {
-                SetStatus(action + " đã hủy vì bản vẽ hiện tại không còn QS3D project hợp lệ. Hãy Refresh Workspace.");
-                return false;
-            }
-            var ownedFamily = project.FindFamily(family.Id);
-            if (ownedFamily == null || !ReferenceEquals(ownedFamily, family))
-            {
-                SetStatus(action + " đã hủy vì Family thuộc project/generation cũ. Hãy Refresh Workspace và chọn lại Family.");
-                return false;
-            }
-            _viewModel.SetActiveFamily(family);
-            var activeFamily = ProjectFamilyActivationService.GetActive(project);
-            if (!ReferenceEquals(activeFamily, ownedFamily))
-            {
-                SetStatus(action + " đã hủy vì không thể xác nhận Family active trong project hiện tại. Hãy Refresh Workspace.");
-                return false;
-            }
-            return true;
         }
 
         private void OnWallJunctionsClick(object sender, RoutedEventArgs e) { SetStatus("Phân tích giao tim tường L / T / X trong selection."); Send("QS3DWALLJUNCTIONS"); }
