@@ -65,8 +65,9 @@ namespace QS3D.BricsCAD.V25.UI
                 GridSelection = 1 << 6,
                 WindowClosing = 1 << 7,
                 WindowClosed = 1 << 8,
-                DocumentActivated = 1 << 9,
-                DocumentToBeDestroyed = 1 << 10,
+                DocumentToBeDeactivated = 1 << 9,
+                DocumentActivated = 1 << 10,
+                DocumentToBeDestroyed = 1 << 11,
             }
 
             private readonly CoordinationManagerWindow _window;
@@ -135,6 +136,9 @@ namespace QS3D.BricsCAD.V25.UI
                 review.Children.Add(_status);
             }
 
+            private bool IsOwnerDocumentActive =>
+                ReferenceEquals(Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument, _document);
+
             public void Attach()
             {
                 if (_disposed || _disposeInProgress)
@@ -163,6 +167,8 @@ namespace QS3D.BricsCAD.V25.UI
                     _attachments |= Attachment.WindowClosing;
                     _window.Closed += OnWindowClosed;
                     _attachments |= Attachment.WindowClosed;
+                    Bricscad.ApplicationServices.Application.DocumentManager.DocumentToBeDeactivated += OnDocumentToBeDeactivated;
+                    _attachments |= Attachment.DocumentToBeDeactivated;
                     Bricscad.ApplicationServices.Application.DocumentManager.DocumentActivated += OnDocumentActivated;
                     _attachments |= Attachment.DocumentActivated;
                     Bricscad.ApplicationServices.Application.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;
@@ -226,6 +232,12 @@ namespace QS3D.BricsCAD.V25.UI
             private void RunCleanup(string actionName, Action effect)
             {
                 if (!_attached || _disposeInProgress || _disposed) return;
+                if (!IsOwnerDocumentActive)
+                {
+                    _cleanupBarrier = _session.HasTransientState;
+                    UpdateActionState();
+                    return;
+                }
 
                 try
                 {
@@ -249,6 +261,12 @@ namespace QS3D.BricsCAD.V25.UI
             private void RunValidated(string actionName, Action<IReadOnlyList<ObjectId>> effect)
             {
                 if (!_attached || _disposeInProgress || _disposed) return;
+                if (!IsOwnerDocumentActive)
+                {
+                    _cleanupBarrier = _session.HasTransientState;
+                    UpdateActionState();
+                    return;
+                }
                 if (_cleanupBarrier)
                 {
                     SetStatus("Review mới bị khóa cho tới khi transient state của row trước được dọn sạch.");
@@ -313,7 +331,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             private ProjectState RequireCurrentProject()
             {
-                if (!ReferenceEquals(Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument, _document))
+                if (!IsOwnerDocumentActive)
                     throw new InvalidOperationException("DWG đã đổi; review action không được phép tác động lên document khác.");
 
                 if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
@@ -339,6 +357,12 @@ namespace QS3D.BricsCAD.V25.UI
             private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
             {
                 if (!_attached || _disposeInProgress || _disposed) return;
+                if (!IsOwnerDocumentActive)
+                {
+                    _cleanupBarrier = _session.HasTransientState;
+                    UpdateActionState();
+                    return;
+                }
 
                 // A previous row must never leak presentation state into the next row.
                 var cleanupFailure = _session.TryResetTransientStateBestEffort();
@@ -349,10 +373,47 @@ namespace QS3D.BricsCAD.V25.UI
                 UpdateActionState();
             }
 
+            private void OnDocumentToBeDeactivated(object sender, DocumentCollectionEventArgs e)
+            {
+                if (!_attached || _disposeInProgress || _disposed || !ReferenceEquals(e.Document, _document)) return;
+
+                var cleanupFailure = _session.TryResetTransientStateBestEffort();
+                _cleanupBarrier = cleanupFailure != null || _session.HasTransientState;
+                if (_cleanupBarrier)
+                    SetStatus("Không thể dọn sạch transient review state trước khi đổi DWG; review bị khóa tới khi DWG này hoạt động lại.");
+                UpdateActionState();
+            }
+
             private void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)
             {
-                if (!_attached || _disposeInProgress || _disposed || ReferenceEquals(e.Document, _document)) return;
-                _session.ResetTransientStateBestEffort();
+                if (!_attached || _disposeInProgress || _disposed) return;
+
+                var ownerActive = IsOwnerDocumentActive;
+                if (ownerActive)
+                {
+                    if (_cleanupBarrier || _session.HasTransientState)
+                    {
+                        var cleanupFailure = _session.TryResetTransientStateBestEffort();
+                        _cleanupBarrier = cleanupFailure != null || _session.HasTransientState;
+                        SetStatus(_cleanupBarrier
+                            ? "Transient review cleanup vẫn pending; review CAD tiếp tục bị khóa."
+                            : "Transient review state đã được dọn sạch sau khi DWG hoạt động lại.");
+                    }
+                    UpdateActionState();
+                    return;
+                }
+
+                // The new active document is foreign to this controller. Never clean the
+                // owner session here: Application-level system-variable APIs would target
+                // the foreign active host context. Pre-deactivation owns that cleanup.
+                _cleanupBarrier = _session.HasTransientState;
+                UpdateActionState();
+                if (_cleanupBarrier)
+                {
+                    _status.Text = "Review CAD đang chờ cleanup trên DWG sở hữu; kích hoạt lại DWG đó để retry.";
+                    return;
+                }
+
                 if (_window.IsLoaded) _window.Close();
             }
 
@@ -368,6 +429,16 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 if (!_attached || _disposeInProgress || _disposed) return;
                 if (e.Cancel) return;
+
+                if (!IsOwnerDocumentActive)
+                {
+                    if (!_session.HasTransientState) return;
+                    e.Cancel = true;
+                    _cleanupBarrier = true;
+                    _status.Text = "Không thể đóng Coordination Manager khi cleanup của DWG sở hữu còn pending; kích hoạt lại DWG đó để retry.";
+                    UpdateActionState();
+                    return;
+                }
 
                 var cleanupFailure = _session.TryResetTransientStateBestEffort();
                 if (cleanupFailure == null && !_session.HasTransientState)
@@ -388,21 +459,22 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 if (_disposeInProgress || _disposed) return;
 
+                var ownerActive = IsOwnerDocumentActive;
                 var row = _grid.SelectedItem as CoordinationManagerRow;
                 var actionable = row != null && row.CanLocate;
                 var mutationsAllowed = actionable && !_cleanupBarrier;
-                _highlight.IsEnabled = mutationsAllowed;
-                _isolate.IsEnabled = mutationsAllowed;
-                _section.IsEnabled = mutationsAllowed;
-                _clearHighlight.IsEnabled = _session.HasHighlight;
-                _restoreIsolation.IsEnabled = _session.HasIsolation;
-                _restoreView.IsEnabled = _session.HasSectionView;
+                _highlight.IsEnabled = ownerActive && mutationsAllowed;
+                _isolate.IsEnabled = ownerActive && mutationsAllowed;
+                _section.IsEnabled = ownerActive && mutationsAllowed;
+                _clearHighlight.IsEnabled = ownerActive && _session.HasHighlight;
+                _restoreIsolation.IsEnabled = ownerActive && _session.HasIsolation;
+                _restoreView.IsEnabled = ownerActive && _session.HasSectionView;
             }
 
             private void SetStatus(string message)
             {
                 _status.Text = message ?? string.Empty;
-                if (_status.Text.Length == 0) return;
+                if (_status.Text.Length == 0 || !IsOwnerDocumentActive) return;
                 try { PaletteCoordinator.SetStatus(_status.Text); } catch { }
                 try { _document.Editor.WriteMessage("\nQS3D Coordination review: " + _status.Text); } catch { }
             }
@@ -433,6 +505,8 @@ namespace QS3D.BricsCAD.V25.UI
                     Bricscad.ApplicationServices.Application.DocumentManager.DocumentToBeDestroyed -= OnDocumentToBeDestroyed);
                 TryDetach(Attachment.DocumentActivated, () =>
                     Bricscad.ApplicationServices.Application.DocumentManager.DocumentActivated -= OnDocumentActivated);
+                TryDetach(Attachment.DocumentToBeDeactivated, () =>
+                    Bricscad.ApplicationServices.Application.DocumentManager.DocumentToBeDeactivated -= OnDocumentToBeDeactivated);
                 TryDetach(Attachment.WindowClosed, () => _window.Closed -= OnWindowClosed);
                 TryDetach(Attachment.WindowClosing, () => _window.Closing -= OnWindowClosing);
                 TryDetach(Attachment.GridSelection, () => _grid.SelectionChanged -= OnSelectionChanged);
@@ -496,6 +570,8 @@ namespace QS3D.BricsCAD.V25.UI
             public bool HasIsolation => _isolationActive || _objectIsolationModeBefore != null;
             public bool HasSectionView => _viewBeforeSection != null;
             public bool HasTransientState => HasHighlight || HasIsolation || HasSectionView;
+            private bool IsOwnerDocumentActive =>
+                ReferenceEquals(Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument, _document);
 
             public void Highlight(IReadOnlyList<ObjectId> ids)
             {
@@ -610,6 +686,8 @@ namespace QS3D.BricsCAD.V25.UI
             public void Isolate(IReadOnlyList<ObjectId> ids)
             {
                 RequireTargets(ids);
+                if (!IsOwnerDocumentActive)
+                    throw new InvalidOperationException("Owner DWG is not active; isolation mutation is blocked.");
                 if (HasIsolation)
                 {
                     RestoreIsolation();
@@ -647,9 +725,11 @@ namespace QS3D.BricsCAD.V25.UI
                 if (_destroyed)
                 {
                     _isolationActive = false;
-                    RestoreObjectIsolationModeBestEffort();
+                    _objectIsolationModeBefore = null;
                     return;
                 }
+                if (!IsOwnerDocumentActive)
+                    throw new InvalidOperationException("Owner DWG is not active; isolation cleanup remains pending.");
 
                 _document.SendStringToExecute("_.UNISOLATEOBJECTS ", true, false, false);
                 _isolationActive = false;
@@ -853,7 +933,8 @@ namespace QS3D.BricsCAD.V25.UI
                 _highlighted.Clear();
                 _isolationActive = false;
                 _viewBeforeSection = null;
-                RestoreObjectIsolationModeBestEffort();
+                // The owner document is terminal. Do not publish its saved application-level
+                // OBJECTISOLATIONMODE through whichever different document is now active.
                 _objectIsolationModeBefore = null;
             }
 
@@ -874,6 +955,7 @@ namespace QS3D.BricsCAD.V25.UI
             private bool TryRestoreObjectIsolationModeBestEffort(object? modeBefore)
             {
                 if (modeBefore == null) return true;
+                if (!IsOwnerDocumentActive) return false;
                 try
                 {
                     Bricscad.ApplicationServices.Application.SetSystemVariable("OBJECTISOLATIONMODE", modeBefore);

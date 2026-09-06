@@ -7,20 +7,24 @@ VALIDATOR = ROOT / "scripts" / "assert-v25-release-package-identity.ps1"
 
 def validate(source: str) -> list[str]:
     errors: list[str] = []
+    assembly_equality = (
+        "$pluginIdentity.AssemblyVersion -ne $packageVersion -or "
+        "$coreIdentity.AssemblyVersion -ne $packageVersion"
+    )
     required = [
         "$script:MaxAssemblyBytes = 134217728",
         "function Open-HeldAssemblyFile",
         "function Read-HeldAssemblyBytes",
-        "function Get-HeldAssemblyVersion",
+        "function Get-HeldAssemblyIdentity",
         "QS3D.BricsCAD.V25.dll",
         "QS3D.Core.dll",
         "$packageVersion = [Version]::Parse([string]$metadata.version)",
         "$pluginHeld = Open-HeldAssemblyFile",
         "$coreHeld = Open-HeldAssemblyFile",
-        "$pluginVersion = Get-HeldAssemblyVersion",
-        "$coreVersion = Get-HeldAssemblyVersion",
+        "$pluginIdentity = Get-HeldAssemblyIdentity",
+        "$coreIdentity = Get-HeldAssemblyIdentity",
         "[Reflection.Assembly]::ReflectionOnlyLoad($bytes)",
-        "$pluginVersion -ne $packageVersion -or $coreVersion -ne $packageVersion",
+        assembly_equality,
         "AssemblyVersion = $packageVersion.ToString()",
         "$pluginHeld.Stream.Dispose()",
         "$coreHeld.Stream.Dispose()",
@@ -44,13 +48,13 @@ def validate(source: str) -> list[str]:
         "$pluginHeld = Open-HeldAssemblyFile",
         "$coreHeld = Open-HeldAssemblyFile",
         "$packageVersion = [Version]::Parse([string]$metadata.version)",
-        "$pluginVersion = Get-HeldAssemblyVersion",
-        "$coreVersion = Get-HeldAssemblyVersion",
-        "$pluginVersion -ne $packageVersion -or $coreVersion -ne $packageVersion",
+        "$pluginIdentity = Get-HeldAssemblyIdentity",
+        "$coreIdentity = Get-HeldAssemblyIdentity",
+        assembly_equality,
     ]
     positions = [source.find(token) for token in ordering]
     if all(position >= 0 for position in positions) and positions != sorted(positions):
-        errors.append("held V25 metadata/plugin/Core admission and semantic checks are out of order")
+        errors.append("held V25 metadata/plugin/Core admission and AssemblyVersion checks are out of order")
 
     return errors
 
@@ -79,8 +83,8 @@ def main() -> int:
     )
     assert_rejects_mutation(
         source,
-        "$pluginVersion -ne $packageVersion -or $coreVersion -ne $packageVersion",
-        "$pluginVersion -ne $packageVersion",
+        "$pluginIdentity.AssemblyVersion -ne $packageVersion -or $coreIdentity.AssemblyVersion -ne $packageVersion",
+        "$pluginIdentity.AssemblyVersion -ne $packageVersion",
         "Core assembly version equality",
     )
     assert_rejects_mutation(
@@ -90,7 +94,7 @@ def main() -> int:
         "Core generation lifetime cleanup",
     )
 
-    print("PASS: V25 release package identity binds metadata, plugin, and Core semantic versions to held generations")
+    print("PASS: V25 release package identity binds metadata, plugin, and Core AssemblyVersion to held generations")
     return 0
 
 
