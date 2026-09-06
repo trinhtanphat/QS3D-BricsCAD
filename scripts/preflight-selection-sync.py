@@ -73,10 +73,12 @@ if files["sync"].is_file():
 if files["lifecycle"].is_file():
     text = files["lifecycle"].read_text(encoding="utf-8")
     reconcile = text.find("private static void ReconcileDocument")
-    attach = text.find("SelectionSyncCoordinator.Attach(document);", reconcile)
-    ensure = text.find("EnsureProject(document, refreshUi);", attach)
-    if min(reconcile, attach, ensure) < 0 or not reconcile < attach < ensure:
-        errors.append("selection attachment must remain inside deferred document reconciliation before project/UI refresh")
+    active = text.find("var refreshActiveUi = refreshUi && IsActiveDocument(document);", reconcile)
+    attach = text.find("SelectionSyncCoordinator.Attach(document);", active)
+    ensure = text.find("EnsureProject(document, refreshActiveUi);", attach)
+    refresh = text.find("if (refreshActiveUi) SelectionSyncCoordinator.Refresh(document);", ensure)
+    if min(reconcile, active, attach, ensure, refresh) < 0 or not reconcile < active < attach < ensure < refresh:
+        errors.append("selection attachment must remain inside deferred document reconciliation after the execution-time active-document fence and before project/UI refresh")
 
 print("QS3D selection-sync preflight")
 if errors:
@@ -84,4 +86,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: implied-selection reads are side-effect free, inspector refreshes are visible-only and debounced, and document selection attachment is deferred to the ApplicationIdle lifecycle reconcile boundary.")
+print("PASS: implied-selection reads are side-effect free, inspector refreshes are visible-only and debounced, and document selection attachment is deferred to the ApplicationIdle lifecycle reconcile boundary behind the execution-time active-document UI fence.")
