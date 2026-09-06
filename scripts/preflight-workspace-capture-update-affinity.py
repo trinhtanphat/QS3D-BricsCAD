@@ -51,6 +51,8 @@ for required, message in [
     ("_viewModel.SetActiveFamily(family)", "affinity fence must activate through the canonical Workspace view-model path"),
     ("ProjectFamilyActivationService.GetActive(project)", "affinity fence must read back the canonical active Family"),
     ("ReferenceEquals(activeFamily, ownedFamily)", "affinity fence must verify activation by exact object identity"),
+    ("catch (Exception)", "affinity fence must fail closed instead of surfacing catalog/reload exceptions through WPF event dispatch"),
+    ("Chi tiết nội bộ đã được ẩn", "affinity fence failure must redact internal exception details"),
 ]:
     if required not in affinity:
         errors.append(message)
@@ -61,4 +63,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: Capture Selected and Vẽ/Cập nhật 3D fail closed before side effects unless a selected Family is current and active.")
+print("PASS: Capture Selected and Vẽ/Cập nhật 3D fail closed before side effects unless a selected Family is current and active, and affinity-fence exceptions remain redacted.")
