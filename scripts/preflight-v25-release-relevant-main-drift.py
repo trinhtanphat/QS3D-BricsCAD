@@ -1,18 +1,38 @@
 #!/usr/bin/env python3
 import hashlib
+import subprocess
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 workflow_path = root / ".github" / "workflows" / "release-v25.yml"
-gitmodules_path = root / ".gitmodules"
 workflow = workflow_path.read_text(encoding="utf-8")
-gitmodules = gitmodules_path.read_bytes()
+
+
+def read_tracked_gitmodules_blob() -> bytes:
+    result = subprocess.run(
+        ["git", "show", "HEAD:.gitmodules"],
+        cwd=root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise SystemExit(
+            "V25 release-relevant main-drift contract failed: unable to read canonical HEAD:.gitmodules blob: "
+            + result.stderr.decode("utf-8", errors="replace").strip()
+        )
+    return result.stdout
+
+
+gitmodules = read_tracked_gitmodules_blob()
 
 # Deliberately checked in beside this auto-discovered guard. Any legitimate
 # .gitmodules edit must update this scripts/ file in the same candidate; the
 # V25 final publication classifier already treats scripts/ as release-relevant,
 # so an older release SHA cannot silently publish across changed submodule
 # acquisition metadata even when the external/ gitlink itself is unchanged.
+# Hash the canonical Git blob rather than checkout bytes so Windows line-ending
+# conversion cannot create a false release-drift failure.
 EXPECTED_GITMODULES_SHA256 = "c6763e859259d63fc1c7df6ef0c726e7e5bc03af00fd5224a3004dec064ccd6c"
 
 
@@ -89,6 +109,6 @@ if not validate(mutated_workflow, gitmodules, EXPECTED_GITMODULES_SHA256):
     raise SystemExit("V25 release-relevant scripts/ classifier mutation probe did not fail closed")
 
 print(
-    "PASS V25 final publication binds submodule metadata through a release-relevant scripts/ "
+    "PASS V25 final publication binds canonical tracked submodule metadata through a release-relevant scripts/ "
     "fingerprint and preserves final-main freshness gates"
 )
