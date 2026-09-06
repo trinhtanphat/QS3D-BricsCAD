@@ -224,7 +224,9 @@ try {
 
   $releaseAssets = @('dist\QS3D-BricsCAD-V26.zip', 'dist\QS3D-BricsCAD-V26.zip.sha256', 'dist\QS3D-BricsCAD-V26.provenance.json')
   if ($signPackage) { $releaseAssets += 'dist\QS3D-BricsCAD-V26.update.json' }
-  $uploadBase = $release.upload_url -replace '\{\?name,label\}$', ''
+  $expectedUploadUrl = "https://uploads.github.com/repos/$env:GITHUB_REPOSITORY/releases/$releaseId/assets{?name,label}"
+  if (-not [string]::Equals([string]$release.upload_url, $expectedUploadUrl, [StringComparison]::Ordinal)) { throw "V26 draft upload endpoint does not belong to the admitted repository/release identity." }
+  $uploadBase = $expectedUploadUrl -replace '\{\?name,label\}$', ''
   foreach ($assetPath in $releaseAssets) {
     $name = [IO.Path]::GetFileName($assetPath)
     if ($name -match 'V25') { throw "V25 release asset leaked into V26 publication: $name" }
@@ -259,6 +261,8 @@ try {
       $uploadedAsset = $matches[0]
       $uploadedAssetId = [long]$uploadedAsset.id
       if ($uploadedAssetId -le 0) { throw "Uploaded V26 release asset returned no usable identity for $expectedAsset. Release remains a draft." }
+      $expectedAssetApiUrl = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/assets/$uploadedAssetId"
+      if (-not [string]::Equals([string]$uploadedAsset.url, $expectedAssetApiUrl, [StringComparison]::Ordinal)) { throw "Uploaded V26 release asset API endpoint identity mismatch for $expectedAsset. Release remains a draft." }
       $admittedAsset = $admittedAssets[$expectedAsset]
       if ([long]$admittedAsset.UploadedAssetId -ne $uploadedAssetId) { throw "Uploaded V26 release asset identity changed after held upload for $expectedAsset. Release remains a draft." }
       $expectedLength = [int64]$admittedAssets[$expectedAsset].Length
@@ -266,7 +270,7 @@ try {
       if ($remoteLength -ne $expectedLength) { throw "Uploaded V26 release asset size mismatch for $expectedAsset. Admitted=$expectedLength Remote=$remoteLength. Release remains a draft." }
       $childName = 'asset-' + [Guid]::NewGuid().ToString('N')
       $downloadedAsset = & .\scripts\v26-release-verification-workspace.ps1 -Operation Child -Workspace $verificationWorkspace -ChildName $childName
-      Invoke-WebRequest -Method Get -Uri ([string]$uploadedAsset.url) -Headers $assetDownloadHeaders -OutFile $downloadedAsset -UseBasicParsing
+      Invoke-WebRequest -Method Get -Uri $expectedAssetApiUrl -Headers $assetDownloadHeaders -OutFile $downloadedAsset -UseBasicParsing
       $expectedHash = [string]$admittedAssets[$expectedAsset].Sha256
       $remoteHash = (& .\scripts\verify-v26-held-file.ps1 -Operation Hash -Path $downloadedAsset).Trim()
       if (-not [string]::Equals($expectedHash, $remoteHash, [StringComparison]::OrdinalIgnoreCase)) { throw "Uploaded V26 release asset SHA-256 mismatch for $expectedAsset. Release remains a draft." }
