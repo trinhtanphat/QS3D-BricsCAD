@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 
@@ -20,7 +22,7 @@ namespace QS3D.Core.SmokeTests
         private static void SetPropertyRejectsPaddedExistingKeyBeforeMutation()
         {
             var setup = Create();
-            setup.Family.Properties[" WidthM "] = "1.0";
+            InjectLegacyFamilyProperty(setup.Family, " WidthM ", "1.0");
             setup.Element.Properties["WidthM"] = "1.0";
             setup.Element.MarkClean(ElementDirtyFlags.All);
             var beforeVersion = setup.Project.ChangeVersion;
@@ -43,7 +45,7 @@ namespace QS3D.Core.SmokeTests
         private static void RemovePropertyRejectsPaddedExistingKeyBeforeNoOp()
         {
             var setup = Create();
-            setup.Family.Properties[" WidthM "] = "1.0";
+            InjectLegacyFamilyProperty(setup.Family, " WidthM ", "1.0");
             var beforeVersion = setup.Project.ChangeVersion;
 
             Throws<InvalidOperationException>(() =>
@@ -58,7 +60,7 @@ namespace QS3D.Core.SmokeTests
         private static void SetPropertyRejectsBlankExistingKeyBeforeMutation()
         {
             var setup = Create();
-            setup.Family.Properties[string.Empty] = "legacy";
+            InjectLegacyFamilyProperty(setup.Family, string.Empty, "legacy");
             var beforeVersion = setup.Project.ChangeVersion;
 
             Throws<InvalidOperationException>(() =>
@@ -95,6 +97,15 @@ namespace QS3D.Core.SmokeTests
             var element = new ProjectElement("E-WALL", ElementCategory.ArchitecturalWall, family.Id, string.Empty, string.Empty);
             project.Elements.Add(element);
             return new Setup(project, family, element);
+        }
+
+        private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var innerField = family.Properties.GetType().GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Legacy Family fixture could not locate the property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Legacy Family fixture property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static void Throws<T>(Action action) where T : Exception
