@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             RejectsNonPersistablePropertyKeysWithoutMutation();
             RejectsXmlInvalidPropertyValuesWithoutMutation();
             RejectsNonPersistableAddWithoutMutation();
+            RejectsOversizedPropertyStateWithoutMutation();
             NormalizesNullPropertyValueBeforeMutation();
             PreservesCaseInsensitiveAndDuplicateSemantics();
             PreservesRemoveAndClearMutationSemantics();
@@ -68,6 +69,29 @@ namespace QS3D.Core.SmokeTests
             Equal(0, invalidValueFamily.Properties.Count, "property count after rejected Add value");
             Equal(invalidValueVersion, invalidValueProject.ChangeVersion, "change version after rejected Add value");
             Equal(invalidValueUpdatedUtc, invalidValueProject.UpdatedUtc, "updatedUtc after rejected Add value");
+        }
+
+        private static void RejectsOversizedPropertyStateWithoutMutation()
+        {
+            var oversizedKeyProject = CreateProjectWithFamily(out var oversizedKeyFamily);
+            var oversizedKeyVersion = oversizedKeyProject.ChangeVersion;
+            var oversizedKeyUpdatedUtc = oversizedKeyProject.UpdatedUtc;
+
+            Throws<ArgumentException>(() => oversizedKeyFamily.Properties[new string('K', 121)] = "value");
+
+            Equal(0, oversizedKeyFamily.Properties.Count, "property count after oversized key");
+            Equal(oversizedKeyVersion, oversizedKeyProject.ChangeVersion, "change version after oversized key");
+            Equal(oversizedKeyUpdatedUtc, oversizedKeyProject.UpdatedUtc, "updatedUtc after oversized key");
+
+            var oversizedValueProject = CreateProjectWithFamily(out var oversizedValueFamily);
+            var oversizedValueVersion = oversizedValueProject.ChangeVersion;
+            var oversizedValueUpdatedUtc = oversizedValueProject.UpdatedUtc;
+
+            Throws<ArgumentException>(() => oversizedValueFamily.Properties["Description"] = new string('V', 1001));
+
+            Equal(0, oversizedValueFamily.Properties.Count, "property count after oversized value");
+            Equal(oversizedValueVersion, oversizedValueProject.ChangeVersion, "change version after oversized value");
+            Equal(oversizedValueUpdatedUtc, oversizedValueProject.UpdatedUtc, "updatedUtc after oversized value");
         }
 
         private static void NormalizesNullPropertyValueBeforeMutation()
