@@ -209,6 +209,8 @@ namespace QS3D.Core.Mapping
 
     internal static class MeasurementWorkItemMappingContract
     {
+        internal const int MaximumTokenLength = 1024;
+
         internal static ElementCategory RequireCategory(ElementCategory value, string parameterName)
         {
             if (!Enum.IsDefined(typeof(ElementCategory), value))
@@ -220,6 +222,11 @@ namespace QS3D.Core.Mapping
         {
             if (string.IsNullOrWhiteSpace(value))
                 throw new ArgumentException("Mapping identifier is required.", parameterName);
+
+            if (value.Length > MaximumTokenLength)
+                throw new ArgumentException(
+                    "Mapping identifier must contain at most " + MaximumTokenLength + " UTF-16 code units.",
+                    parameterName);
 
             var trimmed = value.Trim();
             if (!string.Equals(value, trimmed, StringComparison.Ordinal))
