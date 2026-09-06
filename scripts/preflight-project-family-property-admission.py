@@ -68,6 +68,7 @@ required_smoke = (
     "RejectsXmlInvalidPropertyValuesWithoutMutation",
     "RejectsNonPersistableAddWithoutMutation",
     "RejectsOversizedPropertyStateWithoutMutation",
+    "PreservesMaximumPersistableLengths",
     "NormalizesNullPropertyValueBeforeMutation",
     "PreservesCaseInsensitiveAndDuplicateSemantics",
     "PreservesRemoveAndClearMutationSemantics",
