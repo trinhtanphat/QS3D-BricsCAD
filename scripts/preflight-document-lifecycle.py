@@ -99,10 +99,12 @@ else:
     reconcile_start = text.find("private static void ReconcileDocument")
     persistence_start = text.find("private static void AttachProjectPersistence", reconcile_start)
     reconcile = text[reconcile_start:persistence_start] if reconcile_start >= 0 and persistence_start > reconcile_start else ""
-    attach = reconcile.find("SelectionSyncCoordinator.Attach(document);")
-    ensure = reconcile.find("EnsureProject(document, refreshUi);", attach)
-    if min(attach, ensure) < 0 or attach >= ensure:
-        errors.append("deferred reconcile must attach selection before loading/refreshing project UI")
+    active = reconcile.find("var refreshActiveUi = refreshUi && IsActiveDocument(document);")
+    attach = reconcile.find("SelectionSyncCoordinator.Attach(document);", active)
+    ensure = reconcile.find("EnsureProject(document, refreshActiveUi);", attach)
+    refresh = reconcile.find("if (refreshActiveUi) SelectionSyncCoordinator.Refresh(document);", ensure)
+    if min(active, attach, ensure, refresh) < 0 or not active < attach < ensure < refresh:
+        errors.append("deferred reconcile must fence active UI at execution time, attach selection, then load/refresh project UI")
 
 if not selection.is_file():
     errors.append("missing SelectionSyncCoordinator.cs")
@@ -133,4 +135,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: lifecycle startup owns critical native hooks before NETLOAD returns, defers project/selection/UI work to ApplicationIdle, rolls back partial startup, and tears down exact-document ownership synchronously through contained host teardown.")
+print("PASS: lifecycle startup owns critical native hooks before NETLOAD returns, defers project/selection/UI work to ApplicationIdle, fences modeless UI to the execution-time active document, rolls back partial startup, and tears down exact-document ownership synchronously through contained host teardown.")

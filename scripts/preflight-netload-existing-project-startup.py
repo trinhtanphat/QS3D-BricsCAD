@@ -147,9 +147,10 @@ require(lifecycle_idle, "ScheduleLifecycleIdleDrain();", "DocumentLifecycleCoord
 if "StartLifecycleIdleTimer" in lifecycle or "new DispatcherTimer(" in lifecycle or "TimeSpan.FromMilliseconds(1d)" in lifecycle:
     errors.append("DocumentLifecycleCoordinator lifecycle reconciliation must use one-shot ApplicationIdle DispatcherOperation scheduling, not the retired timer cadence")
 for token in (
+    "var refreshActiveUi = refreshUi && IsActiveDocument(document);",
     "SelectionSyncCoordinator.Attach(document);",
-    "EnsureProject(document, refreshUi);",
-    "SelectionSyncCoordinator.Refresh(document);",
+    "EnsureProject(document, refreshActiveUi);",
+    "if (refreshActiveUi) SelectionSyncCoordinator.Refresh(document);",
 ):
     require(lifecycle_reconcile, token, "DocumentLifecycleCoordinator.ReconcileDocument")
 for token in (
@@ -192,4 +193,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: V25 NETLOAD keeps critical save/Undo hooks immediate, defers project/selection UI reconciliation through a coalesced one-shot ApplicationIdle dispatcher operation, preserves contained synchronous teardown, makes Workspace/RightPanel initial refresh one-shot, and avoids duplicate first-show full refresh.")
+print("PASS: V25 NETLOAD keeps critical save/Undo hooks immediate, defers project/selection UI reconciliation through a coalesced one-shot ApplicationIdle dispatcher operation, fences UI publication to the execution-time active document, preserves contained synchronous teardown, makes Workspace/RightPanel initial refresh one-shot, and avoids duplicate first-show full refresh.")
