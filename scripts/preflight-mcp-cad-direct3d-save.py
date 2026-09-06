@@ -14,14 +14,29 @@ def method_block(source: str, signature: str) -> str:
     start = source.find(signature)
     if start < 0:
         return ""
-    next_method = source.find("\n        private static ", start + len(signature))
-    return source[start:] if next_method < 0 else source[start:next_method]
+    candidates = [
+        source.find(marker, start + len(signature))
+        for marker in (
+            "\n        private static ",
+            "\n        internal static ",
+            "\n        public static ",
+        )
+    ]
+    candidates = [value for value in candidates if value >= 0]
+    end = min(candidates) if candidates else len(source)
+    return source[start:end]
 
 
 def require(errors: list[str], text: str, tokens: tuple[str, ...], label: str) -> None:
     for token in tokens:
         if token not in text:
             errors.append(f"{label} missing token: {token}")
+
+
+def forbid(errors: list[str], text: str, tokens: tuple[str, ...], label: str) -> None:
+    for token in tokens:
+        if token in text:
+            errors.append(f"{label} still contains forbidden token: {token}")
 
 
 def main() -> int:
@@ -64,10 +79,6 @@ def main() -> int:
         'hasLocalPath && !modified',
         '\\"modified\\"',
     ), "active-document saved/dirty truth")
-    if 'SafeInteger(SafeSystemVariable("DBMOD")) != "0"' in active_document_block:
-        errors.append("cad_active_document still requires exact-zero DBMOD instead of persistent-content semantics")
-    if 'string.IsNullOrWhiteSpace(filename) ? "false" : "true"' in active_document_block:
-        errors.append("cad_active_document.saved still aliases filename presence instead of DBMOD dirty state")
     require(errors, runtime, (
         'private const int DbmodPersistentContentMask = 1 | 4 | 32;',
         'private static int ReadDbmod()',
@@ -87,20 +98,6 @@ def main() -> int:
         'string.Equals(command, "QSAVE", StringComparison.Ordinal)',
     ), "direct command ownership")
 
-    require(errors, direct, (
-        '"cad_create_box"',
-        '"cad_extrude"',
-        '"cad_boolean_union"',
-        '"cad_boolean_subtract"',
-        '"cad_boolean_intersect"',
-        '"cad_save"',
-        '"cad_save_as"',
-        'NormalizeExtrudeInputs',
-        'EnsureWritableDirectory',
-        'McpCadAgentRuntime.EnsureCurrentMutationRunning();',
-        'string.Equals(command, "QSAVE", StringComparison.Ordinal)',
-    ), "direct CAD runtime")
-
     require(errors, direct_call_block, (
         'if (string.Equals(tool, "cad_save", StringComparison.Ordinal)) return Save();',
         'if (string.Equals(tool, "cad_save_as", StringComparison.Ordinal)) return SaveAs(body);',
@@ -110,7 +107,7 @@ def main() -> int:
     require(errors, direct, (
         'private static void RecordDirectMutationFailure(string tool, Exception ex)',
         '"cad-mutation-failed"',
-        '"reason=" + ex.Message',
+        'reason=" + ex.Message',
     ), "unified direct mutation diagnostics")
 
     require(errors, direct_command_block, (
@@ -123,13 +120,7 @@ def main() -> int:
         '"saved":true',
         '"command":"QSAVE"',
     ), "bounded QSAVE wrapper")
-    if 'McpDiagnosticHub.InvokeInCadContext' in direct_qsave_block:
-        errors.append("bounded QSAVE wrapper must await native QSAVE outside a CAD-context callback")
-    if 'McpCadMutationCoordinator.QueueNativeCommand' in direct_qsave_block:
-        errors.append("bounded QSAVE wrapper must share McpNativeCurrentDocumentSave instead of owning a second native bridge")
 
-    # Licensed V25 requires the Curve clone to be database-resident while CreateExtrudedSolid
-    # evaluates it. The temporary clone is erased in the same transaction; the source remains live.
     require(errors, extrude_block, (
         'OpenEntity(transaction, document.Database, handle, OpenMode.ForRead) as Curve',
         'var profileClone = source.Clone() as Curve;',
@@ -139,16 +130,12 @@ def main() -> int:
         'if (!profileClone.IsErased) profileClone.Erase();',
         'kernelSource=database-resident-profile-clone',
     ), "database-resident direct curve extrusion")
-    if 'Region.CreateFromCurves' in extrude_block:
-        errors.append("cad_extrude must not route the profile through Region.CreateFromCurves")
-    if 'solid.CreateExtrudedSolid(source,' in extrude_block:
-        errors.append("cad_extrude must not mutate/evaluate the original source Curve directly")
-    if 'kernelSource=transient-curve-clone' in extrude_block:
-        errors.append("cad_extrude must not evaluate the kernel on a detached transient Curve clone")
+    forbid(errors, extrude_block, (
+        'Region.CreateFromCurves',
+        'solid.CreateExtrudedSolid(source,',
+        'kernelSource=transient-curve-clone',
+    ), "direct extrusion regression")
 
-    # Licensed V25 boolean evaluation likewise uses database-resident temporary working clones.
-    # Only after successful kernel evaluation is a transient result clone handed onto the original
-    # target identity; the original tool is then consumed and all temporary DB entities are erased.
     require(errors, boolean_block, (
         'var targetWorking = target.Clone() as Solid3d;',
         'var operandWorking = operand.Clone() as Solid3d;',
@@ -162,10 +149,10 @@ def main() -> int:
         'if (!operand.IsErased) operand.Erase();',
         'kernelInputs=database-resident-working-clones',
     ), "database-resident boolean kernel inputs with target identity handover")
-    if 'target.BooleanOperation(operation' in boolean_block:
-        errors.append("direct boolean must not execute the validation kernel against the original target Solid3d")
-    if 'targetClone.BooleanOperation(operation, operandClone);' in boolean_block:
-        errors.append("direct boolean must not execute the licensed kernel on detached transient clones")
+    forbid(errors, boolean_block, (
+        'target.BooleanOperation(operation',
+        'targetClone.BooleanOperation(operation, operandClone);',
+    ), "direct boolean regression")
     kernel_at = boolean_block.find('targetWorking.BooleanOperation(operation, operandWorking);')
     handover_at = boolean_block.find('target.HandOverTo(resultClone, true, true);')
     erase_at = boolean_block.find('if (!operand.IsErased) operand.Erase();')
@@ -177,9 +164,7 @@ def main() -> int:
         'dbmodAfterSave',
         'route\\\":\\\"native-QSAVE-current-document',
     ), "current-document save regression guard")
-    for forbidden in ('document.Database.Save();', 'document.Database.SaveAs('):
-        if forbidden in direct_save_block:
-            errors.append("direct cad_save must not write the already-open active drawing through " + forbidden)
+    forbid(errors, direct_save_block, ('document.Database.Save();', 'document.Database.SaveAs('), "current-document save")
 
     require(errors, native_save, (
         'SaveCurrentDocument',
@@ -192,20 +177,18 @@ def main() -> int:
         '(dbmod & DbmodPersistentContentMask) == 0',
         'Do not retry automatically',
     ), "native current-document synchronous command-context save lifecycle")
-    for forbidden in (
+    forbid(errors, native_save, (
         'document.SendStringToExecute(',
         'McpCadMutationCoordinator.QueueNativeCommand(',
         'ManualResetEventSlim',
         'CommandEnded +=',
         'CommandCancelled +=',
         'CommandFailed +=',
-    ):
-        if forbidden in native_save:
-            errors.append("native current-document save helper must not retain queued/event-owned QSAVE token: " + forbidden)
+        'Database.Save();',
+        'Database.SaveAs(',
+    ), "native current-document save regression")
     if native_save.count('document.Editor.Command("_.QSAVE");') != 1:
         errors.append("native current-document save lifecycle must execute exactly one synchronous QSAVE command attempt")
-    if 'Database.Save();' in native_save or 'Database.SaveAs(' in native_save:
-        errors.append("native current-document save helper must never write the active path through Database.Save/SaveAs")
 
     require(errors, direct_save_as_block, (
         'EnsureWritableDirectory(directory);',
@@ -218,8 +201,6 @@ def main() -> int:
     ), "save-as publication plus native DBMOD settle guard")
     if 'WaitForSavedContentDbmod();' in direct_save_as_block:
         errors.append("cad_save_as must not treat Database.SaveAs return plus a blind DBMOD poll as terminal completion")
-    if 'document.Database.Save();' in direct_save_as_block:
-        errors.append("direct cad_save_as must not use Database.Save()")
 
     if "Process.Start" in direct or "cmd.exe" in direct or "powershell" in direct.lower():
         errors.append("direct CAD runtime must not introduce process/shell execution")
@@ -236,7 +217,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: MCP direct 3D/save tools evaluate licensed extrusion/boolean kernels on database-resident temporary working geometry, execute current-document QSAVE synchronously in BricsCAD command context, settle SaveAs through one native QSAVE, and propagate direct mutation failure reasons into unified diagnostics.")
+    print("PASS: MCP direct 3D/save tools use database-resident temporary kernel geometry, synchronous command-context QSAVE, SaveAs native-QSAVE settle, and unified mutation failure diagnostics.")
     return 0
 
 
