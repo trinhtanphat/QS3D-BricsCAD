@@ -139,23 +139,31 @@ namespace QS3D.BricsCAD.V25
 
             RequireConfirmedMutation(body, tool);
             EnsureAutomationRunning();
-            if (string.Equals(tool, "cad_save", StringComparison.Ordinal)) return Save();
-            return McpDiagnosticHub.InvokeInCadContext(() =>
+            try
             {
-                EnsureAutomationRunning();
-                string result;
-                switch (tool)
+                if (string.Equals(tool, "cad_save", StringComparison.Ordinal)) return Save();
+                if (string.Equals(tool, "cad_save_as", StringComparison.Ordinal)) return SaveAs(body);
+                return McpDiagnosticHub.InvokeInCadContext(() =>
                 {
-                    case "cad_create_box": result = CreateBox(body); break;
-                    case "cad_extrude": result = Extrude(body); break;
-                    case "cad_boolean_union": result = Boolean(body, BooleanOperationType.BoolUnite, "union"); break;
-                    case "cad_boolean_subtract": result = Boolean(body, BooleanOperationType.BoolSubtract, "subtract"); break;
-                    case "cad_boolean_intersect": result = Boolean(body, BooleanOperationType.BoolIntersect, "intersect"); break;
-                    case "cad_save_as": result = SaveAs(body); break;
-                    default: throw new InvalidOperationException("Unknown direct MCP CAD model tool: " + tool);
-                }
-                return result;
-            });
+                    EnsureAutomationRunning();
+                    string result;
+                    switch (tool)
+                    {
+                        case "cad_create_box": result = CreateBox(body); break;
+                        case "cad_extrude": result = Extrude(body); break;
+                        case "cad_boolean_union": result = Boolean(body, BooleanOperationType.BoolUnite, "union"); break;
+                        case "cad_boolean_subtract": result = Boolean(body, BooleanOperationType.BoolSubtract, "subtract"); break;
+                        case "cad_boolean_intersect": result = Boolean(body, BooleanOperationType.BoolIntersect, "intersect"); break;
+                        default: throw new InvalidOperationException("Unknown direct MCP CAD model tool: " + tool);
+                    }
+                    return result;
+                });
+            }
+            catch (Exception ex)
+            {
+                RecordDirectMutationFailure(tool, ex);
+                throw;
+            }
         }
 
         internal static string CallCadCommandSequence(string arguments)
@@ -250,31 +258,33 @@ namespace QS3D.BricsCAD.V25
             {
                 var source = OpenEntity(transaction, document.Database, handle, OpenMode.ForRead) as Curve;
                 if (source == null) throw new InvalidOperationException("cad_extrude requires a curve entity handle.");
-                var sourceClone = source.Clone() as Curve;
-                if (sourceClone == null)
-                    throw new InvalidOperationException("Could not clone the extrusion source Curve for transient kernel evaluation.");
+                var profileClone = source.Clone() as Curve;
+                if (profileClone == null)
+                    throw new InvalidOperationException("Could not clone the extrusion source Curve for database-resident kernel evaluation.");
                 var solid = new Solid3d();
+                var profileAppended = false;
                 try
                 {
-                    solid.SetDatabaseDefaults(document.Database);
-                    solid.CreateExtrudedSolid(sourceClone, new Vector3d(0d, 0d, height), new SweepOptions());
-                    ApplyLayer(transaction, document.Database, solid, string.IsNullOrWhiteSpace(requestedLayer) ? source.Layer : requestedLayer);
                     var model = ModelSpace(transaction, document.Database, OpenMode.ForWrite);
+                    model.AppendEntity(profileClone);
+                    profileAppended = true;
+                    transaction.AddNewlyCreatedDBObject(profileClone, true);
+                    solid.SetDatabaseDefaults(document.Database);
+                    solid.CreateExtrudedSolid(profileClone, new Vector3d(0d, 0d, height), new SweepOptions());
+                    ApplyLayer(transaction, document.Database, solid, string.IsNullOrWhiteSpace(requestedLayer) ? source.Layer : requestedLayer);
                     var id = model.AppendEntity(solid);
                     transaction.AddNewlyCreatedDBObject(solid, true);
+                    if (!profileClone.IsErased) profileClone.Erase();
                     transaction.Commit();
                     var resultHandle = id.Handle.ToString();
-                    RecordMutation(document, "cad-extrude", "handle=" + resultHandle + "; sourceHandle=" + handle + "; kernelSource=transient-curve-clone");
+                    RecordMutation(document, "cad-extrude", "handle=" + resultHandle + "; sourceHandle=" + handle + "; kernelSource=database-resident-profile-clone");
                     return "{\"created\":true,\"handle\":\"" + Escape(resultHandle) + "\",\"type\":\"Solid3d\",\"sourceHandle\":\"" + Escape(handle) + "\"}";
                 }
                 catch
                 {
                     if (solid.ObjectId.IsNull) solid.Dispose();
+                    if (!profileAppended) profileClone.Dispose();
                     throw;
-                }
-                finally
-                {
-                    sourceClone.Dispose();
                 }
             }
         }
@@ -294,31 +304,47 @@ namespace QS3D.BricsCAD.V25
                 var operand = OpenEntity(transaction, document.Database, toolHandle, OpenMode.ForWrite) as Solid3d;
                 if (target == null || operand == null)
                     throw new InvalidOperationException("Boolean operations require two live Solid3d entity handles.");
-                var targetClone = target.Clone() as Solid3d;
-                if (targetClone == null)
-                    throw new InvalidOperationException("Could not clone the boolean target Solid3d for transient kernel evaluation.");
-                var operandClone = operand.Clone() as Solid3d;
-                if (operandClone == null)
+                var targetWorking = target.Clone() as Solid3d;
+                if (targetWorking == null)
+                    throw new InvalidOperationException("Could not clone the boolean target Solid3d for database-resident kernel evaluation.");
+                var operandWorking = operand.Clone() as Solid3d;
+                if (operandWorking == null)
                 {
-                    targetClone.Dispose();
-                    throw new InvalidOperationException("Could not clone the boolean tool Solid3d for transient kernel evaluation.");
+                    targetWorking.Dispose();
+                    throw new InvalidOperationException("Could not clone the boolean tool Solid3d for database-resident kernel evaluation.");
                 }
+                var targetAppended = false;
+                var operandAppended = false;
                 var handedOver = false;
+                Solid3d? resultClone = null;
                 try
                 {
+                    var model = ModelSpace(transaction, document.Database, OpenMode.ForWrite);
+                    model.AppendEntity(targetWorking);
+                    targetAppended = true;
+                    transaction.AddNewlyCreatedDBObject(targetWorking, true);
+                    model.AppendEntity(operandWorking);
+                    operandAppended = true;
+                    transaction.AddNewlyCreatedDBObject(operandWorking, true);
                     EnsureAutomationRunning();
-                    targetClone.BooleanOperation(operation, operandClone);
-                    target.HandOverTo(targetClone, true, true);
+                    targetWorking.BooleanOperation(operation, operandWorking);
+                    resultClone = targetWorking.Clone() as Solid3d;
+                    if (resultClone == null)
+                        throw new InvalidOperationException("Could not clone the boolean result for target identity handover.");
+                    target.HandOverTo(resultClone, true, true);
                     handedOver = true;
+                    if (!targetWorking.IsErased) targetWorking.Erase();
+                    if (!operandWorking.IsErased) operandWorking.Erase();
                     if (!operand.IsErased) operand.Erase();
                     transaction.Commit();
-                    RecordMutation(document, "cad-boolean", "targetHandle=" + targetHandle + "; consumedHandle=" + toolHandle + "; operation=" + operationName + "; target=transient-clone; operand=transient-clone; result=handed-over");
+                    RecordMutation(document, "cad-boolean", "targetHandle=" + targetHandle + "; consumedHandle=" + toolHandle + "; operation=" + operationName + "; kernelInputs=database-resident-working-clones; result=handed-over");
                     return "{\"updated\":true,\"resultHandle\":\"" + Escape(targetHandle) + "\",\"consumedHandle\":\"" + Escape(toolHandle) + "\",\"operation\":\"" + operationName + "\"}";
                 }
                 finally
                 {
-                    operandClone.Dispose();
-                    if (!handedOver) targetClone.Dispose();
+                    if (!targetAppended) targetWorking.Dispose();
+                    if (!operandAppended) operandWorking.Dispose();
+                    if (!handedOver && resultClone != null) resultClone.Dispose();
                 }
             }
         }
@@ -339,30 +365,40 @@ namespace QS3D.BricsCAD.V25
             var requested = McpTopLevelJson.ExtractString(body, "path");
             var fullPath = ValidateSaveAsPath(requested);
             var overwrite = McpTopLevelJson.ExtractBoolean(body, "overwrite");
-            var document = RequireDocument();
-            var current = document.Database.Filename ?? string.Empty;
-            if (Path.IsPathRooted(current)
-                && string.Equals(Path.GetFullPath(current), fullPath, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("cad_save_as target is the active drawing path. Use cad_save instead.");
             var existed = File.Exists(fullPath);
             if (existed && !overwrite)
                 throw new InvalidOperationException("SaveAs target already exists. Set overwrite=true explicitly to replace it.");
             var directory = Path.GetDirectoryName(fullPath) ?? string.Empty;
             EnsureWritableDirectory(directory);
-            RequireIdle();
             EnsureAutomationRunning();
-            using (document.LockDocument()) document.Database.SaveAs(fullPath, DwgVersion.Current);
-            var actual = document.Database.Filename ?? string.Empty;
-            if (!Path.IsPathRooted(actual)
-                || !string.Equals(Path.GetFullPath(actual), fullPath, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("BricsCAD SaveAs returned but the active database path did not match the requested target.");
-            var dbmodAfterSave = WaitForSavedContentDbmod();
+            Document? document = null;
+            McpDiagnosticHub.InvokeInCadContext(() =>
+            {
+                EnsureAutomationRunning();
+                document = RequireDocument();
+                var current = document.Database.Filename ?? string.Empty;
+                if (Path.IsPathRooted(current)
+                    && string.Equals(Path.GetFullPath(current), fullPath, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("cad_save_as target is the active drawing path. Use cad_save instead.");
+                RequireIdle();
+                using (document.LockDocument()) document.Database.SaveAs(fullPath, DwgVersion.Current);
+                var actual = document.Database.Filename ?? string.Empty;
+                if (!Path.IsPathRooted(actual)
+                    || !string.Equals(Path.GetFullPath(actual), fullPath, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("BricsCAD SaveAs returned but the active database path did not match the requested target.");
+                return string.Empty;
+            });
+            var saveResult = McpNativeCurrentDocumentSave.SaveCurrentDocument(
+                EnsureAutomationRunning,
+                detail => McpCadAgentRuntime.AuditDomainMutation("cad_save_as", detail));
             var leaf = SafeLeaf(fullPath);
-            RecordMutation(document, "cad-save-as", "completed=true; fileName=" + leaf + "; overwrite=" + overwrite
-                + "; dbmodAfterSave=" + dbmodAfterSave.ToString(CultureInfo.InvariantCulture));
+            if (document != null)
+                RecordMutation(document, "cad-save-as", "completed=true; fileName=" + leaf + "; overwrite=" + overwrite
+                    + "; route=Database.SaveAs+native-QSAVE; dbmodAfterSave=" + saveResult.DbmodAfterSave.ToString(CultureInfo.InvariantCulture));
             return "{\"saved\":true,\"completed\":true,\"saveAs\":true,\"fileName\":\"" + Escape(leaf)
                    + "\",\"overwroteExisting\":" + (existed ? "true" : "false")
-                   + ",\"dbmodAfterSave\":" + dbmodAfterSave.ToString(CultureInfo.InvariantCulture) + "}";
+                   + ",\"route\":\"Database.SaveAs+native-QSAVE\",\"dbmodAfterSave\":"
+                   + saveResult.DbmodAfterSave.ToString(CultureInfo.InvariantCulture) + "}";
         }
 
         private static bool TryParseDirectLayoutCommand(string command, string input, out string action, out string layoutName)
@@ -588,6 +624,18 @@ namespace QS3D.BricsCAD.V25
         private static void RecordMutation(Document document, string eventName, string detail)
         {
             McpDiagnosticHub.Record("mcp", "info", eventName, detail, document);
+        }
+
+        private static void RecordDirectMutationFailure(string tool, Exception ex)
+        {
+            Document? document = null;
+            try { document = Application.DocumentManager.MdiActiveDocument; } catch { }
+            McpDiagnosticHub.Record(
+                "mcp",
+                "error",
+                "cad-mutation-failed",
+                "tool=" + (tool ?? string.Empty) + "; exception=" + ex.GetType().Name + "; reason=" + ex.Message,
+                document);
         }
 
         private static BlockTableRecord ModelSpace(Transaction transaction, Database database, OpenMode mode)
