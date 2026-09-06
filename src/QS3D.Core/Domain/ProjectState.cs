@@ -131,6 +131,9 @@ namespace QS3D.Core.Domain
 
     public sealed class ProjectFamily : INotifyPropertyChanged
     {
+        private const int MaxPropertyKeyLength = 120;
+        private const int MaxPropertyValueLength = 1000;
+
         private sealed class PersistenceAwarePropertyDictionary : IDictionary<string, string>
         {
             private Dictionary<string, string> _inner = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -277,11 +280,16 @@ namespace QS3D.Core.Domain
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Family property key is required.", nameof(value));
             if (!string.Equals(value, value.Trim(), StringComparison.Ordinal)) throw new ArgumentException("Family property key must be canonical without surrounding whitespace.", nameof(value));
             if (value.Any(char.IsControl)) throw new ArgumentException("Family property key cannot contain control characters.", nameof(value));
+            if (value.Length > MaxPropertyKeyLength) throw new ArgumentException("Family property key must not exceed " + MaxPropertyKeyLength + " characters.", nameof(value));
             return PersistedTextXml.Verify(value, nameof(value), "Family property key");
         }
 
         private static string RequirePropertyValue(string? value)
-            => PersistedTextXml.Verify(value ?? string.Empty, nameof(value), "Family property value");
+        {
+            var persistedValue = value ?? string.Empty;
+            if (persistedValue.Length > MaxPropertyValueLength) throw new ArgumentException("Family property value must not exceed " + MaxPropertyValueLength + " characters.", nameof(value));
+            return PersistedTextXml.Verify(persistedValue, nameof(value), "Family property value");
+        }
 
         private static string RequireId(string value)
         {
