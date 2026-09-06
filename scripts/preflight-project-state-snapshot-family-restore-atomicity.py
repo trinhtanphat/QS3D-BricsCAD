@@ -32,7 +32,7 @@ for token in (
     'family.Properties["NullableNote"] = "mutated";',
     "Snapshot restore must preserve captured ProjectFamily object identity.",
     "Snapshot restore must preserve the captured ProjectFamily property-store object identity.",
-    "Snapshot restore must preserve raw null family property values without canonicalizing them to empty strings.",
+    "Snapshot restore must preserve the canonical empty-string representation of an admitted null family property value.",
 ):
     if token not in smoke:
         errors.append("snapshot family restore regression missing: " + token)
@@ -44,8 +44,6 @@ for token in (
     if token not in registration:
         errors.append("snapshot family restore atomicity smoke registration missing: " + token)
 
-# Snapshot rollback/materialization must not route through externally-observable
-# ProjectFamily setters or persistence-aware dictionary mutation callbacks.
 for token in (
     "internal void RestoreSnapshotState(",
     "var nextName = RequireName(name);",
@@ -61,9 +59,6 @@ for token in (
 if "internal void ReplaceSnapshotState(Dictionary<string, string> replacement)" not in domain:
     errors.append("ProjectFamily property store lacks an internal callback-free snapshot replacement path")
 
-# SnapshotProperties returns one validated, detached, read-only materialization.
-# Restore must consume that exact materialization rather than validating the
-# source dictionary and then enumerating the mutable source a second time.
 for token in (
     "bool preserveNullValues = false",
     "preserveNullValues && pair.Value == null ? null! : normalizedValue",
