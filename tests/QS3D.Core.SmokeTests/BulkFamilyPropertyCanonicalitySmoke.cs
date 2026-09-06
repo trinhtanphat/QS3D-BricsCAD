@@ -65,7 +65,7 @@ namespace QS3D.Core.SmokeTests
         private static void OverBoundTargetValueFailsBeforeMutation()
         {
             var project = NewProject(out _, out var target, out var element);
-            target.Properties["Description"] = new string('x', 1001);
+            InjectLegacyFamilyProperty(target, "Description", new string('x', 1001));
             var beforeVersion = project.ChangeVersion;
             var beforeUpdatedUtc = project.UpdatedUtc;
             var beforeFamilyId = element.FamilyId;
