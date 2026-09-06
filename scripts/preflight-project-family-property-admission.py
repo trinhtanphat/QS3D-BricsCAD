@@ -17,8 +17,12 @@ smoke = SMOKE.read_text(encoding="utf-8")
 required_source = (
     "RequirePropertyKey",
     "RequirePropertyValue",
+    "private const int MaxPropertyKeyLength = 120;",
+    "private const int MaxPropertyValueLength = 1000;",
     "Family property key must be canonical without surrounding whitespace.",
-    "PersistedTextXml.Verify(value ?? string.Empty",
+    "value.Length > MaxPropertyKeyLength",
+    "persistedValue.Length > MaxPropertyValueLength",
+    "PersistedTextXml.Verify(persistedValue",
     "var canonicalKey = RequirePropertyKey(key);",
     "var persistedValue = RequirePropertyValue(value);",
     "var canonicalKey = RequirePropertyKey(property.Key);",
@@ -63,6 +67,7 @@ required_smoke = (
     "RejectsNonPersistablePropertyKeysWithoutMutation",
     "RejectsXmlInvalidPropertyValuesWithoutMutation",
     "RejectsNonPersistableAddWithoutMutation",
+    "RejectsOversizedPropertyStateWithoutMutation",
     "NormalizesNullPropertyValueBeforeMutation",
     "PreservesCaseInsensitiveAndDuplicateSemantics",
     "PreservesRemoveAndClearMutationSemantics",
@@ -71,4 +76,4 @@ for token in required_smoke:
     if token not in smoke:
         fail(f"deterministic smoke must retain {token}")
 
-print("PASS: ProjectFamily properties validate canonical XML-persistable state before mutation while preserving dictionary semantics")
+print("PASS: ProjectFamily properties validate canonical bounded XML-persistable state before mutation while preserving dictionary semantics")
