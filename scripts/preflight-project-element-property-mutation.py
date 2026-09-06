@@ -74,10 +74,12 @@ clear_end = source.index("public void SetQuantity", clear_start)
 clear_properties = source[clear_start:clear_end]
 if "if (_properties.Count == 0) return;" not in clear_properties:
     fail("clearing an already-empty property map must remain a true no-op")
-if "ElementGeometryPolicy.AffectsGeneratedGeometry" not in clear_properties or "ElementGeometryPolicy.AffectsGeneratedOutput" not in clear_properties:
-    fail("ClearProperties must preserve key-sensitive generated geometry/output dirty semantics")
-if "_properties.Clear();" not in clear_properties or "MarkDirtyCore(" not in clear_properties:
-    fail("ClearProperties must clear once and apply one coherent semantic dirty transition")
+if "ElementGeometryPolicy.AffectsGeneratedGeometry" not in clear_properties:
+    fail("ClearProperties must preserve key-sensitive generated-geometry dirty semantics")
+if "_properties.Clear();" not in clear_properties or "MarkDirtyCore(flags, false);" not in clear_properties:
+    fail("ClearProperties must clear once, mark semantic dirty state once, and never repopulate generated-state keys")
+if "MarkDirtyCore(flags, true)" in clear_properties or "MarkGeneratedGeometryStale" in clear_properties:
+    fail("IDictionary.Clear must not synthesize generated-stale bookkeeping after clearing the map")
 
 internal_write_tokens = (
     "_properties[stateKey] = StaleValue;",
