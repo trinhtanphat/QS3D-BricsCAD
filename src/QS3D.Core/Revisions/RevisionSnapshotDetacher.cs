@@ -1,12 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 
 namespace QS3D.Core.Revisions
 {
     internal static class RevisionSnapshotDetacher
     {
-        private const int MaxElements = 100000;
-        private const int MaxEntriesPerCollection = 100000;
+        internal const int MaxElements = 100000;
+        internal const int MaxEntriesPerCollection = 100000;
 
         internal static RevisionSnapshot Capture(RevisionSnapshot source, string label)
         {
@@ -21,7 +22,7 @@ namespace QS3D.Core.Revisions
 
             var elements = source.Elements;
             var elementCount = elements.Count;
-            ValidateCount(elementCount, MaxElements, label + " elements");
+            ValidateCaptureCount(elementCount, MaxElements, label + " elements");
             for (var index = 0; index < elementCount; index++)
             {
                 if (elements.Count != elementCount)
@@ -58,11 +59,27 @@ namespace QS3D.Core.Revisions
             return detached;
         }
 
+        internal static void ValidatePersistenceCardinality(RevisionSnapshot snapshot, string label)
+        {
+            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            var elements = snapshot.Elements ?? throw new InvalidDataException("Revision " + label + " elements collection is null.");
+            ValidatePersistenceCount(elements.Count, MaxElements, label + " elements");
+            for (var index = 0; index < elements.Count; index++)
+            {
+                var element = elements[index];
+                if (element == null) continue;
+                ValidatePersistenceCount(element.Properties?.Count ?? -1, MaxEntriesPerCollection, label + " element " + index + " properties");
+                ValidatePersistenceCount(element.Quantities?.Count ?? -1, MaxEntriesPerCollection, label + " element " + index + " quantities");
+                ValidatePersistenceCount(element.SourceHandles?.Count ?? -1, MaxEntriesPerCollection, label + " element " + index + " source handles");
+                ValidatePersistenceCount(element.Dependencies?.Count ?? -1, MaxEntriesPerCollection, label + " element " + index + " dependencies");
+            }
+        }
+
         private static void CopyMap<T>(IDictionary<string, T> source, IDictionary<string, T> destination, string label)
         {
             if (source == null) throw new InvalidOperationException("Revision " + label + " collection is null.");
             var expectedCount = source.Count;
-            ValidateCount(expectedCount, MaxEntriesPerCollection, label);
+            ValidateCaptureCount(expectedCount, MaxEntriesPerCollection, label);
             var observed = 0;
             using (var enumerator = source.GetEnumerator())
             {
@@ -98,7 +115,7 @@ namespace QS3D.Core.Revisions
         {
             if (source == null) throw new InvalidOperationException("Revision " + label + " collection is null.");
             var expectedCount = source.Count;
-            ValidateCount(expectedCount, MaxEntriesPerCollection, label);
+            ValidateCaptureCount(expectedCount, MaxEntriesPerCollection, label);
             for (var index = 0; index < expectedCount; index++)
             {
                 if (source.Count != expectedCount)
@@ -112,12 +129,20 @@ namespace QS3D.Core.Revisions
                 throw Changed(label, expectedCount, source.Count);
         }
 
-        private static void ValidateCount(int count, int maximum, string label)
+        private static void ValidateCaptureCount(int count, int maximum, string label)
         {
             if (count < 0)
                 throw new InvalidOperationException("Revision " + label + " reported a negative Count.");
             if (count > maximum)
                 throw new InvalidOperationException("Revision " + label + " exceeds the supported bound of " + maximum + " entries.");
+        }
+
+        private static void ValidatePersistenceCount(int count, int maximum, string label)
+        {
+            if (count < 0)
+                throw new InvalidDataException("Revision " + label + " collection is null.");
+            if (count > maximum)
+                throw new InvalidDataException("Revision " + label + " exceeds the supported bound of " + maximum + " entries.");
         }
 
         private static InvalidOperationException Changed(string label, int expected, int observed) =>

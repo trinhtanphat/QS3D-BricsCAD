@@ -25,6 +25,7 @@ namespace QS3D.Core.Revisions
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Revision path is required.", nameof(path));
             if (maximumBytes <= 0L) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
+            RevisionSnapshotDetacher.ValidatePersistenceCardinality(snapshot, "persistence");
             ValidateSnapshot(snapshot);
             var full = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(full);
@@ -140,6 +141,7 @@ namespace QS3D.Core.Revisions
                 snapshot.Elements.Add(item);
             }
             if (snapshot.Elements.GroupBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase).Any(x => x.Count() > 1)) throw new InvalidDataException("Revision contains duplicate element ids.");
+            RevisionSnapshotDetacher.ValidatePersistenceCardinality(snapshot, "loaded persistence");
             return snapshot;
         }
 
