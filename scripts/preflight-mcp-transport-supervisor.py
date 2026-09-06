@@ -63,6 +63,44 @@ for token in (
     require(openai, token, "openai")
     require(cloudflare, token, "cloudflare")
 
+# Cloudflare health must prove the public MCP route, not merely a live cloudflared child. A route
+# that was initially ready can later degrade while the process remains alive, so the supervisor's
+# watchdog must consume restart/failover budget when a fresh bounded DNS/HTTPS probe fails.
+cloudflare_health = re.search(
+    r"internal static bool IsPublicHealthyNow\(\)\s*\{(?P<body>.*?)\n        \}\n\n        public static string Describe\(\)",
+    cloudflare,
+    re.DOTALL,
+)
+if not cloudflare_health:
+    errors.append("cloudflare public health: missing IsPublicHealthyNow bounded re-probe")
+else:
+    health_body = cloudflare_health.group("body")
+    require(health_body, "if (!IsRunning)", "cloudflare public health")
+    require(health_body, "ProbePublicDns(hostname, out dnsState)", "cloudflare public health")
+    require(health_body, "ProbePublicHttps(hostname, out httpsState)", "cloudflare public health")
+    require(health_body, "_publicReady = ready", "cloudflare public health")
+    require(health_body, "return ready", "cloudflare public health")
+
+provider_health = re.search(
+    r"private static bool IsProviderHealthy\(McpTransportProvider provider\)\s*\{(?P<body>.*?)\n        \}\n\n        private static bool IsDurableProvider",
+    supervisor,
+    re.DOTALL,
+)
+if not provider_health:
+    errors.append("supervisor: cannot locate IsProviderHealthy body")
+else:
+    provider_health_body = provider_health.group("body")
+    require(
+        provider_health_body,
+        "McpCloudflareAccountTunnelManager.IsRunning && McpCloudflareAccountTunnelManager.IsPublicHealthyNow()",
+        "cloudflare supervisor health",
+    )
+    forbid(
+        provider_health_body,
+        "if (provider == McpTransportProvider.CloudflareNamedTunnel)\n                return McpCloudflareAccountTunnelManager.IsRunning;",
+        "cloudflare supervisor health",
+    )
+
 # Never regress to broad process enumeration: stale cleanup may terminate only a PID recorded by QS3D
 # and revalidated by process start-time + executable identity.
 for forbidden in (
