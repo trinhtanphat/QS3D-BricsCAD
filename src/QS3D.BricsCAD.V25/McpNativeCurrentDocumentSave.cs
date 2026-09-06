@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using Bricscad.ApplicationServices;
 
 namespace QS3D.BricsCAD.V25
@@ -10,9 +11,8 @@ namespace QS3D.BricsCAD.V25
     /// Synchronous MCP facade over BricsCAD's host-owned native QSAVE lifecycle.
     ///
     /// The active DWG is already owned/open by BricsCAD, so current-document save must not
-    /// reopen or write that same path through Database.Save/SaveAs. Native QSAVE is queued in
-    /// application context, its terminal event is awaited outside that callback, and persistent
-    /// DBMOD content bits are then verified before success is reported.
+    /// reopen or write that same path through Database.Save/SaveAs. Native QSAVE is executed in
+    /// BricsCAD command context, then persistent DBMOD content bits are verified before success.
     /// </summary>
     internal static class McpNativeCurrentDocumentSave
     {
@@ -39,43 +39,36 @@ namespace QS3D.BricsCAD.V25
             ensureRunning();
 
             var operation = new NativeSaveOperation(ensureRunning, audit);
+            McpDiagnosticHub.InvokeInCadContext(() =>
+            {
+                operation.ScheduleInCadContext();
+                return string.Empty;
+            });
+
+            var completion = operation.Completion;
+            if (completion == null)
+                throw new InvalidOperationException("Native BricsCAD QSAVE was not scheduled in command context.");
+
+            if (Task.WaitAny(new[] { completion }, CommandCompletionTimeoutMilliseconds) < 0)
+                throw new TimeoutException(
+                    "Timed out waiting for native BricsCAD QSAVE command-context completion; save completion is uncertain. "
+                    + "Do not retry automatically. Inspect the drawing, DBMOD, audit state and filesystem before another save attempt.");
+
             try
             {
-                McpDiagnosticHub.InvokeInCadContext(() =>
-                {
-                    operation.QueueInCadContext();
-                    return string.Empty;
-                });
-
-                if (!operation.Done.Wait(CommandCompletionTimeoutMilliseconds))
-                    throw new TimeoutException(
-                        "Timed out waiting for native BricsCAD QSAVE to reach a terminal event; save completion is uncertain. "
-                        + "Do not retry automatically. Inspect the drawing, DBMOD, audit state and filesystem before another save attempt.");
-
-                // A terminal event alone is not a truthful success boundary. The callback attempts
-                // to unsubscribe in CAD context, but native event removal can fail. Re-enter CAD
-                // context as a serialization barrier and require all handler ownership to be
-                // proven released before interpreting terminal state or DBMOD as a successful save.
-                if (!operation.DetachBestEffort())
-                    throw new InvalidOperationException(
-                        "Native BricsCAD QSAVE reached a terminal event but terminal handler cleanup could not be confirmed; "
-                        + "save completion is uncertain. Do not retry automatically. Inspect the drawing, DBMOD, audit state and filesystem before another save attempt.");
-
-                if (!string.IsNullOrEmpty(operation.TerminalError))
-                    throw new InvalidOperationException(operation.TerminalError);
-
-                var dbmodAfterSave = WaitForCleanDbmod(operation, ensureRunning);
-                audit?.Invoke("native QSAVE completed; fileName=" + SafeLeaf(operation.FullPath)
-                    + "; dbmodAfterSave=" + dbmodAfterSave.ToString(CultureInfo.InvariantCulture));
-                return new SaveResult(SafeLeaf(operation.FullPath), dbmodAfterSave);
+                completion.GetAwaiter().GetResult();
             }
-            finally
+            catch (Exception ex)
             {
-                // Always serialize cleanup through BricsCAD application context before disposing
-                // the wait handle. If a long-running QSAVE or failed native unsubscribe prevents
-                // proven cleanup, intentionally keep the handle alive for a late callback/retry.
-                if (operation.DetachBestEffort()) operation.Done.Dispose();
+                throw new InvalidOperationException(
+                    "Native BricsCAD QSAVE failed in command context; save completion was not confirmed. Do not retry automatically.",
+                    ex);
             }
+
+            var dbmodAfterSave = WaitForCleanDbmod(operation, ensureRunning);
+            audit?.Invoke("native QSAVE completed; fileName=" + SafeLeaf(operation.FullPath)
+                + "; dbmodAfterSave=" + dbmodAfterSave.ToString(CultureInfo.InvariantCulture));
+            return new SaveResult(SafeLeaf(operation.FullPath), dbmodAfterSave);
         }
 
         private static int WaitForCleanDbmod(NativeSaveOperation operation, Action ensureRunning)
@@ -88,16 +81,7 @@ namespace QS3D.BricsCAD.V25
                 var raw = McpDiagnosticHub.InvokeInCadContext(() =>
                 {
                     ensureRunning();
-                    var document = Application.DocumentManager.MdiActiveDocument;
-                    if (document == null || !ReferenceEquals(document, operation.Document))
-                        throw new InvalidOperationException(
-                            "The active BricsCAD document changed while native QSAVE completion was being verified.");
-
-                    var currentPath = document.Database.Filename ?? string.Empty;
-                    if (!Path.IsPathRooted(currentPath)
-                        || !SamePath(currentPath, operation.FullPath))
-                        throw new InvalidOperationException(
-                            "The active BricsCAD document path changed while native QSAVE completion was being verified.");
+                    operation.EnsureSameActiveDocumentAndPath();
 
                     object value;
                     try { value = Application.GetSystemVariable("DBMOD"); }
@@ -123,7 +107,7 @@ namespace QS3D.BricsCAD.V25
             while (DateTime.UtcNow < deadline);
 
             throw new InvalidOperationException(
-                "Native BricsCAD QSAVE reached a terminal event but persistent DBMOD content bits did not settle; "
+                "Native BricsCAD QSAVE completed in command context but persistent DBMOD content bits did not settle; "
                 + "save completion was not confirmed. DBMOD="
                 + (lastDbmod >= 0 ? lastDbmod.ToString(CultureInfo.InvariantCulture) : "unavailable") + ".");
         }
@@ -147,10 +131,6 @@ namespace QS3D.BricsCAD.V25
         {
             private readonly Action _ensureRunning;
             private readonly Action<string>? _audit;
-            private int _terminalSet;
-            private bool _commandEndedAttached;
-            private bool _commandCancelledAttached;
-            private bool _commandFailedAttached;
 
             internal NativeSaveOperation(Action ensureRunning, Action<string>? audit)
             {
@@ -158,12 +138,11 @@ namespace QS3D.BricsCAD.V25
                 _audit = audit;
             }
 
-            internal readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
             internal Document? Document { get; private set; }
             internal string FullPath { get; private set; } = string.Empty;
-            internal string TerminalError { get; private set; } = string.Empty;
+            internal Task? Completion { get; private set; }
 
-            internal void QueueInCadContext()
+            internal void ScheduleInCadContext()
             {
                 _ensureRunning();
                 var document = Application.DocumentManager.MdiActiveDocument;
@@ -174,7 +153,7 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("Active drawing has no existing local path. Use cad_save_as first.");
                 if (document.IsReadOnly)
                     throw new InvalidOperationException(
-                        "Active drawing is read-only. Native QSAVE was not queued; use an explicit writable Save As target instead.");
+                        "Active drawing is read-only. Native QSAVE was not started; use an explicit writable Save As target instead.");
 
                 int commandActive;
                 try
@@ -184,7 +163,7 @@ namespace QS3D.BricsCAD.V25
                 catch (Exception ex)
                 {
                     throw new InvalidOperationException(
-                        "Could not read BricsCAD CMDACTIVE before native QSAVE; save was not queued.", ex);
+                        "Could not read BricsCAD CMDACTIVE before native QSAVE; save was not started.", ex);
                 }
                 if (commandActive != 0)
                     throw new InvalidOperationException(
@@ -192,149 +171,53 @@ namespace QS3D.BricsCAD.V25
 
                 Document = document;
                 FullPath = Path.GetFullPath(filename);
-                AttachHandlers(document);
-                try
-                {
-                    McpCadMutationCoordinator.QueueNativeCommand(
-                        document,
-                        "QSAVE",
-                        () => document.SendStringToExecute("_.QSAVE\n", true, false, true),
-                        _audit);
-                    _audit?.Invoke("native QSAVE queued; fileName=" + SafeLeaf(FullPath));
-                }
-                catch
-                {
-                    DetachInCadContext();
-                    throw;
-                }
+                _audit?.Invoke("native QSAVE scheduled in command context; fileName=" + SafeLeaf(FullPath));
+                Completion = Application.DocumentManager.ExecuteInCommandContextAsync(
+                    _ => ExecuteQsaveInCommandContext(),
+                    null);
             }
 
-            internal bool DetachBestEffort()
+            private Task ExecuteQsaveInCommandContext()
             {
-                if (Document == null) return true;
+                _ensureRunning();
+                var document = Document;
+                if (document == null)
+                    throw new InvalidOperationException("Native QSAVE lost its active document before command execution.");
+                EnsureSameActiveDocumentAndPath();
+
+                int commandActive;
                 try
                 {
-                    // Even when the terminal handler already detached itself, this empty CAD
-                    // callback is a serialization barrier proving that handler has returned before
-                    // the worker thread disposes Done. Per-handler ownership remains published
-                    // until the matching native unsubscribe actually succeeds.
-                    var detached = false;
-                    McpDiagnosticHub.InvokeInCadContext(() =>
-                    {
-                        detached = DetachInCadContext();
-                        return string.Empty;
-                    });
-                    return detached;
+                    commandActive = Convert.ToInt32(Application.GetSystemVariable("CMDACTIVE"), CultureInfo.InvariantCulture);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Coordinator-owned terminal handlers remain authoritative for writer safety.
-                    // Keep Done alive because a late helper terminal callback may still need it.
-                    return false;
+                    throw new InvalidOperationException(
+                        "Could not read BricsCAD CMDACTIVE in QSAVE command context.", ex);
                 }
+                if (commandActive != 0)
+                    throw new InvalidOperationException(
+                        "BricsCAD became busy before QSAVE entered command context; save was not started.");
+
+                _audit?.Invoke("native QSAVE command-context start; fileName=" + SafeLeaf(FullPath));
+                document.Editor.Command("_.QSAVE");
+                _ensureRunning();
+                EnsureSameActiveDocumentAndPath();
+                _audit?.Invoke("native QSAVE command-context end; fileName=" + SafeLeaf(FullPath));
+                return Task.CompletedTask;
             }
 
-            private void AttachHandlers(Document document)
-            {
-                try
-                {
-                    document.CommandEnded += OnCommandEnded;
-                    _commandEndedAttached = true;
-                    document.CommandCancelled += OnCommandCancelled;
-                    _commandCancelledAttached = true;
-                    document.CommandFailed += OnCommandFailed;
-                    _commandFailedAttached = true;
-                }
-                catch
-                {
-                    if (!DetachInCadContext())
-                        throw new InvalidOperationException(
-                            "Native QSAVE terminal handler attachment failed and rollback could not prove all subscriptions detached.");
-                    throw;
-                }
-            }
-
-            private bool DetachInCadContext()
+            internal void EnsureSameActiveDocumentAndPath()
             {
                 var document = Document;
-                if (document == null) return true;
+                if (document == null || !ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                    throw new InvalidOperationException(
+                        "The active BricsCAD document changed while native QSAVE was executing or being verified.");
 
-                if (_commandEndedAttached)
-                {
-                    try
-                    {
-                        document.CommandEnded -= OnCommandEnded;
-                        _commandEndedAttached = false;
-                    }
-                    catch { }
-                }
-                if (_commandCancelledAttached)
-                {
-                    try
-                    {
-                        document.CommandCancelled -= OnCommandCancelled;
-                        _commandCancelledAttached = false;
-                    }
-                    catch { }
-                }
-                if (_commandFailedAttached)
-                {
-                    try
-                    {
-                        document.CommandFailed -= OnCommandFailed;
-                        _commandFailedAttached = false;
-                    }
-                    catch { }
-                }
-
-                return !_commandEndedAttached && !_commandCancelledAttached && !_commandFailedAttached;
-            }
-
-            private void OnCommandEnded(object sender, CommandEventArgs e)
-            {
-                Complete(sender, e, string.Empty, "ended");
-            }
-
-            private void OnCommandCancelled(object sender, CommandEventArgs e)
-            {
-                Complete(sender, e, "Native BricsCAD QSAVE was cancelled; save completion was not confirmed.", "cancelled");
-            }
-
-            private void OnCommandFailed(object sender, CommandEventArgs e)
-            {
-                Complete(sender, e, "Native BricsCAD QSAVE failed; save completion was not confirmed.", "failed");
-            }
-
-            private void Complete(object sender, CommandEventArgs e, string error, string state)
-            {
-                if (!Matches(sender, e)) return;
-                if (Interlocked.CompareExchange(ref _terminalSet, 1, 0) != 0) return;
-                TerminalError = error;
-                try
-                {
-                    DetachInCadContext();
-                    try { _audit?.Invoke("native QSAVE " + state); }
-                    catch { }
-                }
-                finally
-                {
-                    Done.Set();
-                }
-            }
-
-            private bool Matches(object sender, CommandEventArgs e)
-            {
-                if (Document == null || !ReferenceEquals(sender, Document)) return false;
-                var command = NormalizeCommand(e == null ? string.Empty : e.GlobalCommandName);
-                return string.Equals(command, "QSAVE", StringComparison.OrdinalIgnoreCase);
-            }
-
-            private static string NormalizeCommand(string command)
-            {
-                var value = (command ?? string.Empty).Trim();
-                var index = 0;
-                while (index < value.Length && (value[index] == '_' || value[index] == '.')) index++;
-                return value.Substring(index).ToUpperInvariant();
+                var currentPath = document.Database.Filename ?? string.Empty;
+                if (!Path.IsPathRooted(currentPath) || !SamePath(currentPath, FullPath))
+                    throw new InvalidOperationException(
+                        "The active BricsCAD document path changed while native QSAVE was executing or being verified.");
             }
         }
     }
