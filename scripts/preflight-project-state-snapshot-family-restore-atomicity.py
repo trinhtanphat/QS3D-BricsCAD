@@ -32,7 +32,7 @@ for token in (
     'family.Properties["NullableNote"] = "mutated";',
     "Snapshot restore must preserve captured ProjectFamily object identity.",
     "Snapshot restore must preserve the captured ProjectFamily property-store object identity.",
-    "Snapshot restore must preserve raw null family property values without canonicalizing them to empty strings.",
+    "Snapshot restore must preserve the canonical empty-string representation of an admitted null family property value.",
 ):
     if token not in smoke:
         errors.append("snapshot family restore regression missing: " + token)
