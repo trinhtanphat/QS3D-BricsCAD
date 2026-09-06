@@ -17,6 +17,7 @@ if SOURCE.is_file():
         'PersistencePathSafety.RequireNonRedirected(fullPath, "project read");',
         'PersistencePathSafety.RequireNonRedirected(backupPath, "project backup read");',
         'using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read))',
+        'PersistencePathSafety.RequireExclusiveOpenStillBound(stream, fullPath, "project read");',
     ):
         if token not in text:
             errors.append("QsdbProjectStore.cs missing read-path safety token: " + token)
@@ -34,9 +35,13 @@ if SOURCE.is_file():
     load_document = text.find("private static XDocument LoadDocument")
     load_guard = text.find('PersistencePathSafety.RequireNonRedirected(fullPath, "project read");', load_document)
     open_stream = text.find("new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read)", load_document)
-    second_guard = text.find('PersistencePathSafety.RequireNonRedirected(fullPath, "project read");', load_guard + 1)
-    if min(load_document, load_guard, open_stream, second_guard) < 0 or not (load_document < load_guard < open_stream < second_guard):
-        errors.append("LoadDocument must validate path identity both before and immediately after opening the read handle.")
+    held_generation_guard = text.find('PersistencePathSafety.RequireExclusiveOpenStillBound(stream, fullPath, "project read");', open_stream)
+    length_guard = text.find("stream.Length", open_stream)
+    xml_reader = text.find("XmlReader.Create", open_stream)
+    if min(load_document, load_guard, open_stream, held_generation_guard, length_guard, xml_reader) < 0 or not (
+        load_document < load_guard < open_stream < held_generation_guard < length_guard < xml_reader
+    ):
+        errors.append("LoadDocument must admit the pathname before open and bind the held read handle to that pathname generation before length or XML consumption.")
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
@@ -59,4 +64,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: QSDB primary and backup reads preserve canonical path authority and reject redirected/reparse paths before fallback or XML consumption.")
+print("PASS: QSDB primary and backup reads preserve canonical path authority, bind held primary streams to the admitted pathname generation, and reject redirected/reparse paths before fallback or XML consumption.")
