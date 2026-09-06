@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
@@ -26,7 +28,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("P-VALID", new string('N', MaxNameLength));
             var family = new ProjectFamily("F-VALID", "Family", ElementCategory.ArchitecturalWall);
-            family.Properties["Description"] = new string('V', MaxPropertyValueLength);
+            InjectLegacyFamilyProperty(family, "Description", new string('V', MaxPropertyValueLength));
             project.Families.Add(family);
 
             var json = ProjectInterchangeJsonExporter.Build(project);
@@ -45,7 +47,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("P-PROPERTY-LIMIT", "Property limit");
             var family = new ProjectFamily("F-PROPERTY-LIMIT", "Family", ElementCategory.ArchitecturalWall);
-            family.Properties["Description"] = new string('V', MaxPropertyValueLength + 1);
+            InjectLegacyFamilyProperty(family, "Description", new string('V', MaxPropertyValueLength + 1));
             project.Families.Add(family);
 
             Throws<InvalidDataException>(() => ProjectInterchangeJsonExporter.Build(project));
@@ -67,6 +69,15 @@ namespace QS3D.Core.SmokeTests
             {
                 DeleteDirectory(directory);
             }
+        }
+
+        private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var innerField = family.Properties.GetType().GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Interchange legacy fixture could not locate the Family property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Interchange legacy fixture Family property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static void DeleteDirectory(string directory)
