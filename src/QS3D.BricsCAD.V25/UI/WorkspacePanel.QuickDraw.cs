@@ -3,7 +3,10 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Bricscad.ApplicationServices;
+using QS3D.BricsCAD.V25.Services;
 using QS3D.Core.Domain;
+using Application = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.UI
 {
@@ -122,10 +125,11 @@ namespace QS3D.BricsCAD.V25.UI
                     return;
                 }
 
-                // Reuse the same canonical active-Family write used by other Workspace authoring
-                // actions. Grid is a semantic reference workflow: route the active Grid family to
+                if (!TryActivateFamilyForCommand(family, advanced ? "Vẽ tùy chỉnh" : "Vẽ Nhanh"))
+                    return;
+
+                // Grid is a semantic reference workflow: route the active Grid family to
                 // QS3DGRID so LINE/ARC capture stays in the existing Grid ownership contract.
-                _viewModel.SetActiveFamily(family);
                 if (family.Category == ElementCategory.Grid)
                 {
                     SetStatus("Nhập lưới → " + family.Name + " • chọn " +
@@ -165,7 +169,9 @@ namespace QS3D.BricsCAD.V25.UI
                     return;
                 }
 
-                _viewModel.SetActiveFamily(family);
+                if (!TryActivateFamilyForCommand(family, "Vẽ liên tục"))
+                    return;
+
                 SetStatus("Vẽ liên tục → " + family.Name + " • " + family.Category + " • Enter/ESC để kết thúc");
                 Send("QS3DDRAWACTIVEREPEAT");
             }
@@ -191,10 +197,9 @@ namespace QS3D.BricsCAD.V25.UI
                     return;
                 }
 
-                // Make the selected row the canonical ActiveFamily before dispatch. The command
-                // captures and revalidates this context around point acquisition, so a later
-                // Family/Zone/Floor/property change cannot be committed under stale context.
-                _viewModel.SetActiveFamily(family);
+                if (!TryActivateFamilyForCommand(family, "Vẽ cơ bản " + label))
+                    return;
+
                 SetStatus("Vẽ cơ bản " + label + " → " + family.Name + " • " + family.Category);
                 Send(command);
             }
@@ -202,6 +207,45 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 SetStatus("Không thể bắt đầu Vẽ cơ bản " + label + ". Hãy thử lại hoặc chọn lại Family / Type.");
             }
+        }
+
+        private bool TryActivateFamilyForCommand(ProjectFamily family, string action)
+        {
+            if (family == null)
+            {
+                SetStatus(action + " đã hủy vì Family không còn hợp lệ. Hãy Refresh Workspace.");
+                return false;
+            }
+
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null)
+            {
+                SetStatus(action + " đã hủy vì không còn bản vẽ BricsCAD active.");
+                return false;
+            }
+
+            if (!ExistingProjectMutationContext.TryGet(document, out var project))
+            {
+                SetStatus(action + " đã hủy vì bản vẽ hiện tại không còn QS3D project hợp lệ. Hãy Refresh Workspace.");
+                return false;
+            }
+
+            var ownedFamily = project.FindFamily(family.Id);
+            if (ownedFamily == null || !ReferenceEquals(ownedFamily, family))
+            {
+                SetStatus(action + " đã hủy vì Family thuộc project/generation cũ. Hãy Refresh Workspace và chọn lại Family.");
+                return false;
+            }
+
+            _viewModel.SetActiveFamily(family);
+            var activeFamily = ProjectFamilyActivationService.GetActive(project);
+            if (!ReferenceEquals(activeFamily, ownedFamily))
+            {
+                SetStatus(action + " đã hủy vì không thể xác nhận Family active trong project hiện tại. Hãy Refresh Workspace.");
+                return false;
+            }
+
+            return true;
         }
     }
 }
