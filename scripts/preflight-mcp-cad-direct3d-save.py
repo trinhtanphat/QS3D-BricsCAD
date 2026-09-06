@@ -116,9 +116,12 @@ def main() -> int:
     require(errors, direct_command_block, (
         'if (string.Equals(command, "QSAVE", StringComparison.Ordinal)) return SaveCadCommandSequence();',
     ), "direct QSAVE route")
-    require(errors, direct_qsave_block, (
+    qsave_json = direct_qsave_block.replace("\\", "")
+    require(errors, qsave_json, (
         'Save();',
-        '\\"command\\":\\"QSAVE\\"',
+        '"completed":true',
+        '"saved":true',
+        '"command":"QSAVE"',
     ), "bounded QSAVE wrapper")
     if 'McpDiagnosticHub.InvokeInCadContext' in direct_qsave_block:
         errors.append("bounded QSAVE wrapper must await native QSAVE outside a CAD-context callback")
