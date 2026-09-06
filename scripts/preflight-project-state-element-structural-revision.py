@@ -41,9 +41,12 @@ def main() -> int:
     require_order(structural, "_beforeMutation();\n                _items[index] = value;", "public int Count", "index replacement touches before write")
     require_order(structural, "_beforeMutation();\n            _items.Add(item);", "public void Clear()", "Add touches before write")
     require_order(structural, "_beforeMutation();\n            _items.Insert(index, item);", "public bool Remove(T item)", "Insert touches before write")
+    require_order(structural, "if (index < 0 || index > _items.Count) throw new ArgumentOutOfRangeException(nameof(index));", "_beforeMutation();\n            _items.Insert(index, item);", "Insert validates index before revision")
+    require_order(structural, "if (index < 0 || index >= _items.Count) throw new ArgumentOutOfRangeException(nameof(index));", "_beforeMutation();\n            _items.RemoveAt(index);", "RemoveAt validates index before revision")
 
     require(smoke, "StructuralMutationsAdvanceExactlyOnce();", "deterministic structural smoke")
     require(smoke, "NoOpMutationsDoNotAdvance();", "no-op smoke")
+    require(smoke, "RejectedMutationsDoNotAdvance();", "rejected-mutation atomicity smoke")
     require(smoke, "RevisionOverflowFailsBeforeMutation();", "overflow atomicity smoke")
     require(registration, "ProjectStateElementStructuralRevisionSmoke.Run();", "smoke registration")
     require(curtain, "Equal(checked(originalVersion + 1L), project.ChangeVersion);", "historical Curtain replacement expectation")
