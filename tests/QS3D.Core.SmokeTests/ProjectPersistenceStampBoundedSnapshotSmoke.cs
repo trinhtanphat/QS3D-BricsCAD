@@ -31,14 +31,14 @@ namespace QS3D.Core.SmokeTests
                 modifiers: null)
                 ?? throw new Exception("ProjectPersistenceStamp bounded semantic snapshot admission helper is missing.");
 
-            var snapshot = new StringBuilder();
-            requireCapacity.Invoke(null, new object[] { snapshot, (long)budget });
-            if (snapshot.Length != 0)
+            var snapshot = new StringBuilder("seed");
+            requireCapacity.Invoke(null, new object[] { snapshot, (long)budget - snapshot.Length });
+            if (snapshot.ToString() != "seed")
                 throw new Exception("Persistence stamp capacity admission unexpectedly mutated the semantic snapshot.");
 
             try
             {
-                requireCapacity.Invoke(null, new object[] { snapshot, (long)budget + 1L });
+                requireCapacity.Invoke(null, new object[] { snapshot, (long)budget - snapshot.Length + 1L });
             }
             catch (TargetInvocationException ex) when (ex.InnerException is InvalidOperationException invalid)
             {
@@ -47,7 +47,7 @@ namespace QS3D.Core.SmokeTests
                 return;
             }
 
-            throw new Exception("Persistence stamp accepted semantic snapshot growth beyond its bounded materialization budget.");
+            throw new Exception("Persistence stamp accepted cumulative semantic snapshot growth beyond its bounded materialization budget.");
         }
     }
 }
