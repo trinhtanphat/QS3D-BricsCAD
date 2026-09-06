@@ -59,6 +59,7 @@ function Assert-ProtectedMainStableForPublisherMutation {
   $publisherReleaseRelevantPaths = @(
     '.github/workflows/',
     'scripts/',
+    'tests/',
     'src/QS3D.BricsCAD.V25/',
     'src/QS3D.BricsCAD.V26/',
     'src/QS3D.Core/',
@@ -369,6 +370,7 @@ try {
   $finalReleaseRelevantPaths = @(
     '.github/workflows/',
     'scripts/',
+    'tests/',
     'src/QS3D.BricsCAD.V25/',
     'src/QS3D.BricsCAD.V26/',
     'src/QS3D.Core/',
@@ -446,7 +448,7 @@ catch {
     }
     catch {
       $reconciliationError = $_
-      throw "V26 publication acknowledgement reconciliation failed. Original publication error: $($publicationError.Exception.Message) Reconciliation error: $($reconciliationError.Exception.Message) Manual cleanup is required before retry."
+      throw "V26 publication acknowledgement reconciliation failed. Original publication error: $($publicationError.Exception.Message) Reconciliation error: $($_.Exception.Message) Manual cleanup is required before retry."
     }
   }
 
