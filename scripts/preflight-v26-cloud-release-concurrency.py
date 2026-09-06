@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed if the V26 cloud release workflow can preempt an in-flight release transaction."""
+"""Fail closed if V26 cloud release runs can preempt or replace one another."""
 
 from __future__ import annotations
 
@@ -11,52 +11,84 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "release-v26-cloud.yml"
 
 
+def concurrency_block(text: str) -> str | None:
+    match = re.search(r"(?ms)^concurrency:\s*\n((?:^[ \t]+.*(?:\n|$))+)", text)
+    return None if match is None else match.group(1)
+
+
 def validate(text: str) -> list[str]:
     errors: list[str] = []
-    if "group: qs3d-cloud-v26-preview-release" not in text:
-        errors.append("V26 cloud release must retain one stable workflow concurrency group")
-
-    match = re.search(
-        r"(?ms)^concurrency:\s*\n(?:^[ \t]+.*\n)*?^[ \t]+cancel-in-progress:\s*(true|false)\s*$",
-        text,
-    )
-    if match is None:
-        errors.append("V26 cloud release must declare explicit workflow-level cancel-in-progress policy")
-    elif match.group(1) != "false":
-        errors.append("V26 cloud release transaction must serialize without cancelling an in-flight run")
+    block = concurrency_block(text)
+    if block is None:
+        errors.append("V26 cloud release must declare workflow-level concurrency")
+    else:
+        if not re.search(r"(?m)^  group:\s*qs3d-cloud-v26-preview-release\s*$", block):
+            errors.append("V26 cloud release must retain one stable workflow concurrency group")
+        cancel = re.search(r"(?m)^  cancel-in-progress:\s*(true|false)\s*$", block)
+        if cancel is None:
+            errors.append("V26 cloud release must declare explicit workflow-level cancel-in-progress policy")
+        elif cancel.group(1) != "false":
+            errors.append("V26 cloud release transaction must not cancel an in-flight run")
+        if not re.search(r"(?m)^  queue:\s*max\s*$", block):
+            errors.append("V26 cloud release must queue pending dispatches instead of replacing them")
 
     if not re.search(r"(?m)^  release:\s*$", text):
         errors.append("V26 cloud release workflow must retain the release job guarded by this policy")
     return errors
 
 
-def main() -> int:
-    text = WORKFLOW.read_text(encoding="utf-8")
-    errors = validate(text)
-
-    # Prove the guard catches the unsafe regression instead of merely matching today's file.
+def safe_baseline(text: str) -> str:
     safe = re.sub(
         r"(?m)^(  cancel-in-progress:)\s*(?:true|false)\s*$",
         r"\1 false",
         text,
         count=1,
     )
-    mutated = safe.replace("  cancel-in-progress: false", "  cancel-in-progress: true", 1)
-    if not validate(safe):
-        if not validate(mutated):
-            errors.append("mutation probe failed: preemptible release concurrency was not rejected")
+    block = concurrency_block(safe)
+    if block is not None and not re.search(r"(?m)^  queue:\s*\S+\s*$", block):
+        safe = safe.replace("  cancel-in-progress: false\n", "  cancel-in-progress: false\n  queue: max\n", 1)
     else:
-        # Production is intentionally RED until the workflow is fixed; still validate the mutation harness
-        # against a synthesized safe baseline.
-        if not validate(mutated):
-            errors.append("mutation probe failed: synthesized preemptible concurrency was not rejected")
+        safe = re.sub(r"(?m)^(  queue:)\s*\S+\s*$", r"\1 max", safe, count=1)
+    return safe
+
+
+def require_mutation_rejection(source: str, mutated: str, label: str) -> None:
+    if mutated == source:
+        raise AssertionError("mutation probe could not modify safe concurrency baseline: " + label)
+    if not validate(mutated):
+        raise AssertionError("mutation probe was not rejected: " + label)
+
+
+def main() -> int:
+    text = WORKFLOW.read_text(encoding="utf-8")
+    errors = validate(text)
+
+    safe = safe_baseline(text)
+    if validate(safe):
+        errors.append("mutation harness could not synthesize a safe concurrency baseline")
+    else:
+        require_mutation_rejection(
+            safe,
+            safe.replace("  cancel-in-progress: false", "  cancel-in-progress: true", 1),
+            "running release preemption",
+        )
+        require_mutation_rejection(
+            safe,
+            safe.replace("  queue: max\n", "", 1),
+            "pending release replacement",
+        )
+        require_mutation_rejection(
+            safe,
+            safe.replace("  queue: max", "  queue: single", 1),
+            "single pending release slot",
+        )
 
     if errors:
         for error in errors:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    print("PASS: V26 cloud release concurrency is serialized and non-preemptible.")
+    print("PASS: V26 cloud release concurrency is non-preemptible and pending dispatches queue FIFO.")
     return 0
 
 
