@@ -3,8 +3,8 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+AFFINITY = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.FamilySelectionAffinity.cs"
 PANEL = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs"
-VIEW_MODEL = ROOT / "src/QS3D.BricsCAD.V25/UI/ViewModels/WorkspaceViewModel.cs"
 errors = []
 
 
@@ -15,50 +15,68 @@ def read(path):
     return path.read_text(encoding="utf-8")
 
 
-def method_body(text, signature, next_signature):
+def method_body(text, signature, next_signature=None):
     start = text.find(signature)
     if start < 0:
         errors.append("missing method: " + signature)
         return ""
-    end = text.find(next_signature, start + len(signature))
-    return text[start:end if end >= 0 else len(text)]
+    if next_signature:
+        end = text.find(next_signature, start + len(signature))
+        return text[start:end if end >= 0 else len(text)]
+    return text[start:]
 
 
+affinity = read(AFFINITY)
 panel = read(PANEL)
-view_model = read(VIEW_MODEL)
-selection = method_body(panel, "private void OnFamilySelectionChanged", "private void OnFamilySearchChanged")
-activation = method_body(view_model, "public bool SetActiveFamily(ProjectFamily? family)", "public void ShowFamilyProperties")
-
-if "public bool SetActiveFamily(ProjectFamily? family)" not in view_model:
-    errors.append("SetActiveFamily must expose activation success/failure to UI callers")
+class_handler = method_body(affinity, "private static void OnWorkspaceSelectionChangedClass", "private void OnFamilySelectionChangedWithAffinity")
+selection = method_body(affinity, "private void OnFamilySelectionChangedWithAffinity")
+legacy = method_body(panel, "private void OnFamilySelectionChanged", "private void OnFamilySearchChanged")
 
 for required, message in [
-    ("return false;", "SetActiveFamily must fail closed with false when Family/current-project affinity is not proven"),
-    ("ReferenceEquals(ownedFamily, family)", "SetActiveFamily must retain exact Family object-identity validation"),
-    ("ProjectFamilyActivationService.SetActive(project, family.Id)", "SetActiveFamily must retain canonical project activation"),
-    ("return true;", "SetActiveFamily must report true only after successful canonical activation and property-state update"),
+    ("EventManager.RegisterClassHandler(", "Workspace must register a class-level SelectionChanged fence before the XAML instance handler"),
+    ("typeof(WorkspacePanel)", "class handler must be scoped to WorkspacePanel"),
+    ("Selector.SelectionChangedEvent", "class handler must target Selector.SelectionChangedEvent"),
 ]:
-    if required not in activation:
+    if required not in affinity:
         errors.append(message)
 
-if "var selectedFamily = FamilyList.SelectedItem as ProjectFamily;" not in selection:
-    errors.append("Family selection handler must capture the selected Family explicitly")
-if "if (selectedFamily != null && !_viewModel.SetActiveFamily(selectedFamily))" not in selection:
-    errors.append("Family selection handler must stop property rendering when selected-Family activation is rejected")
-if "RefreshProject();" not in selection:
-    errors.append("Rejected stale Family selection must reconcile Workspace from the current document/project")
+if "ReferenceEquals(e.OriginalSource, panel.FamilyList)" not in class_handler:
+    errors.append("class handler must intercept only FamilyList selection events")
+if "e.Handled = true;" not in class_handler:
+    errors.append("FamilyList event must be marked handled so the stale XAML handler cannot run afterward")
+if "panel.OnFamilySelectionChangedWithAffinity();" not in class_handler:
+    errors.append("class handler must delegate to the affinity-safe Family selection path")
 
-activation_call = selection.find("_viewModel.SetActiveFamily(selectedFamily)")
-show = selection.find("_viewModel.ShowFamilyProperties()")
-if activation_call >= 0 and show >= 0 and activation_call > show:
-    errors.append("Family properties are rendered before selected-Family activation succeeds")
+for required, message in [
+    ("var selectedFamily = FamilyList.SelectedItem as ProjectFamily;", "affinity-safe handler must capture selected Family explicitly"),
+    ("TryActivateFamilyForWorkspaceAction(selectedFamily", "selected Family must pass the canonical document/project/generation activation fence"),
+    ("RefreshProject();", "rejected stale Family selection must reconcile Workspace from the current document/project"),
+    ("_viewModel.ShowFamilyProperties();", "property inspector must render after successful activation"),
+]:
+    if required not in selection:
+        errors.append(message)
 
-rejected = selection.find("!_viewModel.SetActiveFamily(selectedFamily)")
-refresh = selection.find("RefreshProject();", rejected if rejected >= 0 else 0)
-if rejected >= 0 and refresh >= 0:
-    between = selection[rejected:refresh]
+activation = selection.find("TryActivateFamilyForWorkspaceAction(selectedFamily")
+show = selection.find("_viewModel.ShowFamilyProperties();")
+if activation >= 0 and show >= 0 and activation > show:
+    errors.append("Family properties are rendered before selected-Family affinity/activation succeeds")
+
+reject = selection.find("!TryActivateFamilyForWorkspaceAction(selectedFamily")
+refresh = selection.find("RefreshProject();", reject if reject >= 0 else 0)
+if reject < 0:
+    errors.append("affinity-safe handler must branch on failed canonical Family activation")
+elif refresh < 0:
+    errors.append("failed canonical Family activation must refresh/reconcile Workspace")
+else:
+    between = selection[reject:refresh]
     if "ShowFamilyProperties" in between:
-        errors.append("Rejected stale Family path must not repopulate old Family property rows before reconciliation")
+        errors.append("rejected stale Family path must not repopulate old property rows")
+
+# The old XAML handler may remain for compatibility, but it must be pre-empted by the
+# class handler above. Keep this assertion so future edits cannot silently remove the
+# reason the class-level fence exists without updating the regression contract.
+if "_viewModel.SetActiveFamily(FamilyList.SelectedItem as ProjectFamily);" not in legacy:
+    errors.append("legacy Family selection handler shape changed; reassess whether class-level pre-emption is still required")
 
 print("QS3D Workspace Family inspector affinity preflight")
 if errors:
@@ -66,4 +84,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: Family property inspector renders only after selected-Family activation succeeds; stale generation rejection reconciles Workspace before old rows can persist.")
+print("PASS: FamilyList selection is pre-empted before the legacy handler; stale project-generation Families are rejected and reconciled before property rows can render.")
