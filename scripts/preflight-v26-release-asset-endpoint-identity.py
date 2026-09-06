@@ -7,7 +7,7 @@ publisher = publisher_path.read_text(encoding="utf-8")
 
 EXPECTED_UPLOAD = '$expectedUploadUrl = "https://uploads.github.com/repos/$env:GITHUB_REPOSITORY/releases/$releaseId/assets{?name,label}"'
 UPLOAD_CHECK = 'if (-not [string]::Equals([string]$release.upload_url, $expectedUploadUrl, [StringComparison]::Ordinal)) { throw "V26 draft upload endpoint does not belong to the admitted repository/release identity." }'
-UPLOAD_BASE = "$uploadBase = $expectedUploadUrl -replace '\\{\\?name,label\\}$', ''"
+UPLOAD_BASE = "$uploadBase = $expectedUploadUrl -replace '\{\?name,label\}$', ''"
 HELD_UPLOAD = '& .\\scripts\\invoke-v26-held-release-upload.ps1 `'
 EXPECTED_ASSET = '$expectedAssetApiUrl = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/assets/$uploadedAssetId"'
 ASSET_CHECK = 'if (-not [string]::Equals([string]$uploadedAsset.url, $expectedAssetApiUrl, [StringComparison]::Ordinal)) { throw "Uploaded V26 release asset API endpoint identity mismatch for $expectedAsset. Release remains a draft." }'
@@ -75,7 +75,7 @@ for label, literal in (
 
 require_mutation_failure(
     "upload base bypass",
-    publisher.replace(UPLOAD_BASE, "$uploadBase = $release.upload_url -replace '\\{\\?name,label\\}$', ''", 1),
+    publisher.replace(UPLOAD_BASE, "$uploadBase = $release.upload_url -replace '\{\?name,label\}$', ''", 1),
 )
 require_mutation_failure(
     "asset download bypass",
