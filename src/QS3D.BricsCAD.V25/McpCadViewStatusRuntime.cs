@@ -310,6 +310,9 @@ namespace QS3D.BricsCAD.V25
         {
             var now = DateTime.UtcNow;
             var currentAction = McpAgentExperience.CurrentAction ?? string.Empty;
+            var nextStep = currentAction.Length > 0
+                ? McpAgentExperience.NextStep ?? string.Empty
+                : string.Empty;
             var updated = McpAgentExperience.UpdatedUtc;
             var duration = currentAction.Length > 0
                 ? Math.Max(0L, (long)(now - updated).TotalMilliseconds)
@@ -317,7 +320,7 @@ namespace QS3D.BricsCAD.V25
             return "{\"active\":" + (currentAction.Length > 0 ? "true" : "false")
                    + ",\"currentAction\":\"" + Escape(Bound(currentAction, 1200)) + "\""
                    + ",\"actionId\":\"" + Escape(Bound(McpAgentExperience.LastActionId, 128)) + "\""
-                   + ",\"nextStep\":\"" + Escape(Bound(McpAgentExperience.NextStep, 1200)) + "\""
+                   + ",\"nextStep\":\"" + Escape(Bound(nextStep, 1200)) + "\""
                    + ",\"lastError\":\"" + Escape(Bound(McpAgentExperience.LastError, 1200)) + "\""
                    + ",\"terminalState\":\"" + Escape(Bound(McpAgentExperience.LastTerminalState, 64)) + "\""
                    + ",\"durationMs\":" + duration.ToString(CultureInfo.InvariantCulture)
@@ -335,13 +338,15 @@ namespace QS3D.BricsCAD.V25
             var lifecycle = CommandSnapshot(document);
             var activeCommand = lifecycle.ActiveCommand;
             if (activeCommand.Length == 0 && cmdNames.Length > 0) activeCommand = cmdNames;
+            var updatedUtcJson = lifecycle.UpdatedUtc == DateTime.MinValue ? "null"
+                : "\"" + lifecycle.UpdatedUtc.ToString("o", CultureInfo.InvariantCulture) + "\"";
             return "{\"document\":\"" + Escape(SafeDocumentName(document)) + "\""
                    + ",\"cmdActive\":" + cmdActive.ToString(CultureInfo.InvariantCulture)
                    + ",\"active\":" + (cmdActive != 0 ? "true" : "false")
                    + ",\"activeCommand\":\"" + Escape(activeCommand) + "\""
                    + ",\"lastCommand\":\"" + Escape(lifecycle.LastCommand) + "\""
                    + ",\"lastPhase\":\"" + Escape(lifecycle.LastPhase) + "\""
-                   + ",\"updatedUtc\":\"" + lifecycle.UpdatedUtc.ToString("o", CultureInfo.InvariantCulture) + "\"}";
+                   + ",\"updatedUtc\":" + updatedUtcJson + "}";
         }
 
         private static void EnsureCommandTracking(Document document)
