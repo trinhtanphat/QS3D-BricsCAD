@@ -195,8 +195,8 @@ namespace QS3D.Core.Reporting
                 var projectId = project.ProjectId;
                 var drawingFingerprint = project.DrawingFingerprint;
                 var elements = project.Elements.Select(x => ElementSnapshot.Capture(project, x)).ToList().AsReadOnly();
-                var floors = project.Floors.Select(x => new FloorSnapshot(x.Id, x.Name)).ToList().AsReadOnly();
-                var zones = project.Zones.Select(x => new ZoneSnapshot(x.Id, x.Name)).ToList().AsReadOnly();
+                var floors = project.Floors.Select(x => new FloorSnapshot(x, x.Id, x.Name)).ToList().AsReadOnly();
+                var zones = project.Zones.Select(x => new ZoneSnapshot(x, x.Id, x.Name)).ToList().AsReadOnly();
                 var families = project.Families.Select(x => FamilySnapshot.Capture(x)).ToList().AsReadOnly();
                 return new ProjectQuantityGenerationSnapshot(version, projectId, drawingFingerprint, elements, floors, zones, families);
             }
@@ -204,7 +204,8 @@ namespace QS3D.Core.Reporting
 
         private sealed class ElementSnapshot
         {
-            private ElementSnapshot(ProjectElement element, bool excludedFromQuantity, IReadOnlyList<string> resolvedSourceHandles) { Element = element; ExcludedFromQuantity = excludedFromQuantity; ResolvedSourceHandles = resolvedSourceHandles; }
+            private ElementSnapshot(ProjectElement sourceInstance, ProjectElement element, bool excludedFromQuantity, IReadOnlyList<string> resolvedSourceHandles) { SourceInstance = sourceInstance; Element = element; ExcludedFromQuantity = excludedFromQuantity; ResolvedSourceHandles = resolvedSourceHandles; }
+            internal ProjectElement SourceInstance { get; }
             internal ProjectElement Element { get; }
             internal bool ExcludedFromQuantity { get; }
             internal IReadOnlyList<string> ResolvedSourceHandles { get; }
@@ -216,22 +217,23 @@ namespace QS3D.Core.Reporting
                 foreach (var dependency in source.DependsOn) clone.DependsOn.Add(dependency);
                 foreach (var property in source.Properties) clone.Properties.Add(property.Key, property.Value);
                 foreach (var quantity in source.Quantities) clone.Quantities.Add(quantity.Key, quantity.Value);
-                return new ElementSnapshot(clone, AutoRoomLifecycle.IsExcludedFromQuantity(project, source), SourceHandleResolver.Resolve(project, new[] { source.Id }).ToList().AsReadOnly());
+                return new ElementSnapshot(source, clone, AutoRoomLifecycle.IsExcludedFromQuantity(project, source), SourceHandleResolver.Resolve(project, new[] { source.Id }).ToList().AsReadOnly());
             }
         }
 
-        private sealed class FloorSnapshot { internal FloorSnapshot(string id, string name) { Id = id; Name = name; } internal string Id { get; } internal string Name { get; } }
-        private sealed class ZoneSnapshot { internal ZoneSnapshot(string id, string name) { Id = id; Name = name; } internal string Id { get; } internal string Name { get; } }
+        private sealed class FloorSnapshot { internal FloorSnapshot(FloorDefinition sourceInstance, string id, string name) { SourceInstance = sourceInstance; Id = id; Name = name; } internal FloorDefinition SourceInstance { get; } internal string Id { get; } internal string Name { get; } }
+        private sealed class ZoneSnapshot { internal ZoneSnapshot(ZoneDefinition sourceInstance, string id, string name) { SourceInstance = sourceInstance; Id = id; Name = name; } internal ZoneDefinition SourceInstance { get; } internal string Id { get; } internal string Name { get; } }
         private sealed class FamilySnapshot
         {
-            private FamilySnapshot(ProjectFamily family) { Family = family; }
+            private FamilySnapshot(ProjectFamily sourceInstance, ProjectFamily family) { SourceInstance = sourceInstance; Family = family; }
+            internal ProjectFamily SourceInstance { get; }
             internal ProjectFamily Family { get; }
             internal static FamilySnapshot Capture(ProjectFamily source)
             {
                 if (source == null) throw new InvalidOperationException("Project contains a null Family entry.");
                 var clone = new ProjectFamily(source.Id, source.Name, source.Category);
                 foreach (var property in source.Properties) clone.Properties.Add(property.Key, property.Value);
-                return new FamilySnapshot(clone);
+                return new FamilySnapshot(source, clone);
             }
         }
 
@@ -260,13 +262,13 @@ namespace QS3D.Core.Reporting
         private static bool SameElements(ProjectState project, IReadOnlyList<ElementSnapshot> snapshot)
         {
             if (project.Elements.Count != snapshot.Count) return false;
-            for (var index = 0; index < project.Elements.Count; index++) { var current = project.Elements[index]; var frozen = snapshot[index]; if (!SameElement(current, frozen.Element)) return false; if (AutoRoomLifecycle.IsExcludedFromQuantity(project, current) != frozen.ExcludedFromQuantity) return false; if (!SameSequence(SourceHandleResolver.Resolve(project, new[] { current.Id }), frozen.ResolvedSourceHandles, StringComparer.OrdinalIgnoreCase)) return false; }
+            for (var index = 0; index < project.Elements.Count; index++) { var current = project.Elements[index]; var frozen = snapshot[index]; if (!ReferenceEquals(current, frozen.SourceInstance)) return false; if (!SameElement(current, frozen.Element)) return false; if (AutoRoomLifecycle.IsExcludedFromQuantity(project, current) != frozen.ExcludedFromQuantity) return false; if (!SameSequence(SourceHandleResolver.Resolve(project, new[] { current.Id }), frozen.ResolvedSourceHandles, StringComparer.OrdinalIgnoreCase)) return false; }
             return true;
         }
         private static bool SameElement(ProjectElement current, ProjectElement frozen) => current != null && string.Equals(current.Id, frozen.Id, StringComparison.Ordinal) && current.Category == frozen.Category && string.Equals(current.FamilyId, frozen.FamilyId, StringComparison.Ordinal) && string.Equals(current.FloorId, frozen.FloorId, StringComparison.Ordinal) && string.Equals(current.ZoneId, frozen.ZoneId, StringComparison.Ordinal) && string.Equals(current.DrawingFingerprint, frozen.DrawingFingerprint, StringComparison.Ordinal) && SameSequence(current.SourceHandles, frozen.SourceHandles, StringComparer.Ordinal) && SameSequence(current.DependsOn, frozen.DependsOn, StringComparer.Ordinal) && SameDictionary(current.Properties, frozen.Properties, StringComparer.Ordinal) && SameQuantityDictionary(current.Quantities, frozen.Quantities);
-        private static bool SameFloors(IList<FloorDefinition> current, IReadOnlyList<FloorSnapshot> snapshot) { if (current.Count != snapshot.Count) return false; for (var i = 0; i < current.Count; i++) if (current[i] == null || !string.Equals(current[i].Id, snapshot[i].Id, StringComparison.Ordinal) || !string.Equals(current[i].Name, snapshot[i].Name, StringComparison.Ordinal)) return false; return true; }
-        private static bool SameZones(IList<ZoneDefinition> current, IReadOnlyList<ZoneSnapshot> snapshot) { if (current.Count != snapshot.Count) return false; for (var i = 0; i < current.Count; i++) if (current[i] == null || !string.Equals(current[i].Id, snapshot[i].Id, StringComparison.Ordinal) || !string.Equals(current[i].Name, snapshot[i].Name, StringComparison.Ordinal)) return false; return true; }
-        private static bool SameFamilies(IList<ProjectFamily> current, IReadOnlyList<FamilySnapshot> snapshot) { if (current.Count != snapshot.Count) return false; for (var i = 0; i < current.Count; i++) { var live = current[i]; var frozen = snapshot[i].Family; if (live == null || !string.Equals(live.Id, frozen.Id, StringComparison.Ordinal) || !string.Equals(live.Name, frozen.Name, StringComparison.Ordinal) || live.Category != frozen.Category || !SameDictionary(live.Properties, frozen.Properties, StringComparer.Ordinal)) return false; } return true; }
+        private static bool SameFloors(IList<FloorDefinition> current, IReadOnlyList<FloorSnapshot> snapshot) { if (current.Count != snapshot.Count) return false; for (var i = 0; i < current.Count; i++) if (current[i] == null || !ReferenceEquals(current[i], snapshot[i].SourceInstance) || !string.Equals(current[i].Id, snapshot[i].Id, StringComparison.Ordinal) || !string.Equals(current[i].Name, snapshot[i].Name, StringComparison.Ordinal)) return false; return true; }
+        private static bool SameZones(IList<ZoneDefinition> current, IReadOnlyList<ZoneSnapshot> snapshot) { if (current.Count != snapshot.Count) return false; for (var i = 0; i < current.Count; i++) if (current[i] == null || !ReferenceEquals(current[i], snapshot[i].SourceInstance) || !string.Equals(current[i].Id, snapshot[i].Id, StringComparison.Ordinal) || !string.Equals(current[i].Name, snapshot[i].Name, StringComparison.Ordinal)) return false; return true; }
+        private static bool SameFamilies(IList<ProjectFamily> current, IReadOnlyList<FamilySnapshot> snapshot) { if (current.Count != snapshot.Count) return false; for (var i = 0; i < current.Count; i++) { var live = current[i]; var frozen = snapshot[i].Family; if (live == null || !ReferenceEquals(live, snapshot[i].SourceInstance) || !string.Equals(live.Id, frozen.Id, StringComparison.Ordinal) || !string.Equals(live.Name, frozen.Name, StringComparison.Ordinal) || live.Category != frozen.Category || !SameDictionary(live.Properties, frozen.Properties, StringComparer.Ordinal)) return false; } return true; }
         private static bool SameSequence(IEnumerable<string> current, IEnumerable<string> snapshot, StringComparer comparer) { using var left = current.GetEnumerator(); using var right = snapshot.GetEnumerator(); while (true) { var hasLeft = left.MoveNext(); var hasRight = right.MoveNext(); if (hasLeft != hasRight) return false; if (!hasLeft) return true; if (!comparer.Equals(left.Current, right.Current)) return false; } }
         private static bool SameDictionary(IDictionary<string, string> current, IDictionary<string, string> snapshot, StringComparer valueComparer) { if (current.Count != snapshot.Count) return false; foreach (var item in snapshot) if (!current.TryGetValue(item.Key, out var value) || !valueComparer.Equals(value, item.Value)) return false; return true; }
         private static bool SameQuantityDictionary(IDictionary<string, double> current, IDictionary<string, double> snapshot) { if (current.Count != snapshot.Count) return false; foreach (var item in snapshot) if (!current.TryGetValue(item.Key, out var value) || !value.Equals(item.Value)) return false; return true; }
