@@ -14,6 +14,8 @@ FETCHED = "$fetchedPublisherMain = ([string](& git rev-parse --verify $publisher
 IDENTITY = "[string]::Equals($fetchedPublisherMain, $publisherMain, [StringComparison]::Ordinal)"
 ANCESTRY = '& git merge-base --is-ancestor $env:GITHUB_SHA $publisherMain'
 DIFF = '& git diff --quiet --no-ext-diff "$env:GITHUB_SHA..$publisherMain" -- @publisherReleaseRelevantPaths'
+DIFF_DRIFT = "if ($LASTEXITCODE -eq 1) {\n    throw \"newer release-relevant protected main supersedes this V26 publisher transaction before $Phase\"\n  }"
+DIFF_FAIL_CLOSED = "if ($LASTEXITCODE -ne 0) {\n    throw \"Could not classify protected-main V26 publisher drift before $Phase. git diff exit=$LASTEXITCODE\"\n  }"
 SECOND_GET = '$confirmedPublisherMainResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers'
 SECOND_RAW = "$confirmedPublisherMain = [string]$confirmedPublisherMainResponse.sha"
 SECOND_CANONICAL = "if ($confirmedPublisherMain -notmatch '^[0-9a-f]{40}$')"
@@ -48,6 +50,8 @@ def validate(publisher: str) -> None:
         (IDENTITY, "API/fetch identity binding"),
         (ANCESTRY, "workflow-source ancestry proof"),
         (DIFF, "release-relevant drift classification"),
+        (DIFF_DRIFT, "release-relevant drift rejection"),
+        (DIFF_FAIL_CLOSED, "fail-closed git classification handling"),
         (SECOND_GET, "second protected-main API read"),
         (SECOND_RAW, "second raw protected-main SHA binding"),
         (SECOND_CANONICAL, "second protected-main canonical validation"),
@@ -55,8 +59,6 @@ def validate(publisher: str) -> None:
     ):
         require(token in block, f"V26 publisher mutation admission missing {label}.")
 
-    require("$LASTEXITCODE -eq 1" in block and "$LASTEXITCODE -ne 0" in block,
-            "V26 publisher mutation admission must distinguish release drift from git classification failure and fail closed.")
     require("src/QS3D.BricsCAD.V26/" in block and ".github/workflows/" in block and "scripts/" in block,
             "V26 publisher mutation admission must classify the release-relevant path set.")
     require("throw" in block.lower(), "V26 publisher mutation admission must fail closed.")
@@ -105,7 +107,7 @@ for token, label in (
 ):
     expect_failure(publisher.replace(token, "# removed by mutation probe", 1), label)
 
-expect_failure(publisher.replace("$LASTEXITCODE -ne 0", "$LASTEXITCODE -eq 0", 1),
+expect_failure(publisher.replace(DIFF_FAIL_CLOSED, "if ($LASTEXITCODE -eq 0) { throw 'fail-open mutation probe' }", 1),
                "fail-open git classification")
 
 # Remove one admission call from each mutation boundary; every phase must remain independently fenced.
