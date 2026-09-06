@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed source guard for issue #5457 multi-transport supervision.
-
-This guard is intentionally deterministic. It validates the lifecycle/failover contract in source
-without claiming live concurrent Cloudflare/OpenAI qualification; that boundary remains LOCAL_ONLY.
-"""
+"""Fail-closed source guard for issue #5457/#5917 multi-transport supervision."""
 from pathlib import Path
 import re
 import sys
@@ -63,36 +59,51 @@ for token in (
     require(openai, token, "openai")
     require(cloudflare, token, "cloudflare")
 
-# Cloudflare health must prove the public MCP route, not merely a live cloudflared child. A route
-# that was initially ready can later degrade while the process remains alive, so the supervisor's
-# watchdog must consume restart/failover budget when a fresh bounded DNS/HTTPS probe fails.
+# Cloudflare health must prove the public MCP route, not merely a live cloudflared child. Keep the
+# bounded re-probe in the supervisor so watchdog/failover health and process ownership remain one
+# state machine without reopening the large onboarding surface.
 cloudflare_health = re.search(
-    r"internal static bool IsPublicHealthyNow\(\)\s*\{(?P<body>.*?)\n        \}\n\n        public static string Describe\(\)",
-    cloudflare,
+    r"private static bool IsCloudflarePublicHealthy\(\)\s*\{(?P<body>.*?)\n        \}\n\n        private static bool IsReachableMcpStatus",
+    supervisor,
     re.DOTALL,
 )
 if not cloudflare_health:
-    errors.append("cloudflare public health: missing IsPublicHealthyNow bounded re-probe")
+    errors.append("cloudflare public health: missing bounded supervisor re-probe")
 else:
     health_body = cloudflare_health.group("body")
-    require(health_body, "if (!IsRunning)", "cloudflare public health")
-    require(health_body, "ProbePublicDns(hostname, out dnsState)", "cloudflare public health")
-    require(health_body, "ProbePublicHttps(hostname, out httpsState)", "cloudflare public health")
-    require(health_body, "_publicReady = ready", "cloudflare public health")
-    require(health_body, "return ready", "cloudflare public health")
+    require(health_body, "McpCloudflareAccountTunnelManager.SavedHostname", "cloudflare public health")
+    require(health_body, "McpCloudflareTunnelManager.NormalizeHostname", "cloudflare public health")
+    require(health_body, "Dns.BeginGetHostAddresses", "cloudflare public health")
+    require(health_body, "WaitOne(CloudflarePublicProbeTimeoutMilliseconds)", "cloudflare public health")
+    require(health_body, 'WebRequest.Create("https://" + hostname + "/mcp")', "cloudflare public health")
+    require(health_body, "request.AllowAutoRedirect = false", "cloudflare public health")
+    require(health_body, "request.Timeout = CloudflarePublicProbeTimeoutMilliseconds", "cloudflare public health")
+    require(health_body, "IsReachableMcpStatus", "cloudflare public health")
+
+status_helper = re.search(
+    r"private static bool IsReachableMcpStatus\(HttpStatusCode status\)\s*\{(?P<body>.*?)\n        \}",
+    supervisor,
+    re.DOTALL,
+)
+if not status_helper:
+    errors.append("cloudflare public health: missing bounded HTTP status classifier")
+else:
+    status_body = status_helper.group("body")
+    for token in ("200", "400", "401", "403", "404", "405"):
+        require(status_body, token, "cloudflare public health status")
 
 provider_health = re.search(
-    r"private static bool IsProviderHealthy\(McpTransportProvider provider\)\s*\{(?P<body>.*?)\n        \}\n\n        private static bool IsDurableProvider",
+    r"private static bool IsProviderHealthy\(McpTransportProvider provider\)\s*\{(?P<body>.*?)\n        \}\n\n        private static bool IsCloudflarePublicHealthy",
     supervisor,
     re.DOTALL,
 )
 if not provider_health:
-    errors.append("supervisor: cannot locate IsProviderHealthy body")
+    errors.append("supervisor: cannot locate IsProviderHealthy body before public-health probe")
 else:
     provider_health_body = provider_health.group("body")
     require(
         provider_health_body,
-        "McpCloudflareAccountTunnelManager.IsRunning && McpCloudflareAccountTunnelManager.IsPublicHealthyNow()",
+        "McpCloudflareAccountTunnelManager.IsRunning && IsCloudflarePublicHealthy()",
         "cloudflare supervisor health",
     )
     forbid(
@@ -114,11 +125,6 @@ for forbidden in (
 for token in ("StartTime", "MainModule", "Path.GetFullPath"):
     require(supervisor, token, "owned-process identity")
 
-# Fresh child registration must not synchronously query Process.MainModule. On the BricsCAD/.NET
-# runtime that accessor can fail transiently immediately after Process.Start(), which turns a
-# successfully launched tunnel into an ownership-persistence failure. Registration already has the
-# exact trust-verified executable path used to spawn the child; persist that expected path, then keep
-# MainModule + start-time revalidation on the later stale-cleanup boundary before any Kill().
 register_owned = re.search(
     r"internal static bool RegisterOwnedProcess\(.*?\)\s*\{(?P<body>.*?)\n        \}\n\n        internal static bool TryCleanupStaleOwnedProcess",
     supervisor,
@@ -145,8 +151,6 @@ else:
     require(cleanup_body, "process.MainModule", "stale owned-process cleanup")
     require(cleanup_body, "process.Kill()", "stale owned-process cleanup")
 
-# StopProvider must not erase a crash-surviving sidecar unconditionally. The sidecar is the proof used
-# on the next start to identify and safely terminate only a QS3D-owned orphan process.
 stop_provider = re.search(
     r"private static void StopProvider\(McpTransportProvider provider\)\s*\{(?P<body>.*?)\n        \}\n\n        internal static bool TryGetFallbackProvider",
     supervisor,
@@ -157,8 +161,6 @@ if not stop_provider:
 elif "ClearOwnedProcess(provider)" in stop_provider.group("body"):
     errors.append("supervisor: StopProvider must preserve crash-surviving ownership sidecar")
 
-# Provider stop paths must clear ownership metadata only after the child is confirmed exited.
-# A kill exception or WaitForExit timeout must retain the sidecar for the next identity-safe cleanup.
 for text, provider_token, label in (
     (openai, "McpTransportProvider.OpenAiSecureTunnel", "openai owned-process stop"),
     (cloudflare, "McpTransportProvider.CloudflareNamedTunnel", "cloudflare owned-process stop"),
