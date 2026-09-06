@@ -17,7 +17,8 @@ def require(text: str, token: str, label: str) -> None:
 
 
 def validate(text: str) -> None:
-    require(text, "AssemblyInformationalVersionAttribute", "held informational-version inspection")
+    informational_lookup = "$_.AttributeType.FullName -eq 'System.Reflection.AssemblyInformationalVersionAttribute'"
+    require(text, informational_lookup, "held informational-version attribute lookup")
     require(text, "ProductVersion = $informationalVersion", "held ProductVersion identity result")
     require(text, "$pluginIdentity.ProductVersion", "plugin ProductVersion comparison")
     require(text, "$coreIdentity.ProductVersion", "Core ProductVersion comparison")
@@ -48,7 +49,11 @@ def validate(text: str) -> None:
 
     # Mutation/adversarial controls: every identity limb must be independently necessary.
     mutations = {
-        "informational attribute removed": text.replace("AssemblyInformationalVersionAttribute", "AssemblyTitleAttribute", 1),
+        "informational attribute lookup removed": text.replace(
+            informational_lookup,
+            "$_.AttributeType.FullName -eq 'System.Reflection.AssemblyTitleAttribute'",
+            1,
+        ),
         "plugin product equality removed": text.replace(product_check, "if ($false -or", 1),
         "core product equality removed": text.replace(core_product_check, "$false)", 1),
         "held-byte inspection removed": text.replace("ReflectionOnlyLoad($bytes)", "ReflectionOnlyLoad([byte[]]::new(0))", 1),
@@ -64,7 +69,11 @@ def validate(text: str) -> None:
 
 
 def validate_without_mutations(text: str) -> None:
-    require(text, "AssemblyInformationalVersionAttribute", "held informational-version inspection")
+    require(
+        text,
+        "$_.AttributeType.FullName -eq 'System.Reflection.AssemblyInformationalVersionAttribute'",
+        "held informational-version attribute lookup",
+    )
     require(text, "ReflectionOnlyLoad($bytes)", "exact-held-byte reflection-only inspection")
     require(text, "if (-not [string]::Equals($pluginIdentity.ProductVersion, $productVersion, [StringComparison]::Ordinal) -or", "plugin ProductVersion equality")
     require(text, "-not [string]::Equals($coreIdentity.ProductVersion, $productVersion, [StringComparison]::Ordinal))", "Core ProductVersion equality")
