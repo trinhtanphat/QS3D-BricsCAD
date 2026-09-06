@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using QS3D.Core.Persistence;
 
@@ -7,7 +8,8 @@ namespace QS3D.Core.SmokeTests
 {
     internal static class ProjectPersistenceStampBoundedSnapshotSmoke
     {
-        public static void Run()
+        [ModuleInitializer]
+        internal static void Initialize()
         {
             RejectsSemanticSnapshotGrowthBeyondMaterializationBudget();
         }
