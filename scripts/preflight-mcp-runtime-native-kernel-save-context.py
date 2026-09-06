@@ -56,6 +56,7 @@ def main() -> int:
     forbid(errors, extrude, (
         "kernelSource=transient-curve-clone",
         "solid.CreateExtrudedSolid(sourceClone",
+        "Region.CreateFromCurves",
     ), "licensed extrusion regression")
 
     require(errors, boolean, (
@@ -77,16 +78,21 @@ def main() -> int:
     ), "licensed boolean regression")
 
     require(errors, native_save, (
+        "Application.DocumentManager.ExecuteInCommandContextAsync(",
         "document.Editor.Command(\"_.QSAVE\");",
+        "Task.WaitAny(",
         "WaitForCleanDbmod",
         "Do not retry automatically",
         "DbmodPersistentContentMask = 1 | 4 | 32",
-    ), "synchronous native QSAVE")
+    ), "synchronous native QSAVE command context")
     forbid(errors, native_save, (
         "document.SendStringToExecute(",
         "McpCadMutationCoordinator.QueueNativeCommand(",
         "ManualResetEventSlim",
-    ), "queued QSAVE regression")
+        "CommandEnded +=",
+        "CommandCancelled +=",
+        "CommandFailed +=",
+    ), "queued/event-owned QSAVE regression")
     if "Database.Save();" in native_save or "Database.SaveAs(" in native_save:
         errors.append("current-document QSAVE helper must never write the active path through Database.Save/SaveAs")
 
@@ -105,7 +111,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: MCP direct 3D kernels use database-resident working inputs, current-document save executes one synchronous native QSAVE with DBMOD verification, and QS3D status binds only an existing persisted project on a cold cache.")
+    print("PASS: MCP direct 3D kernels use database-resident working inputs, current-document save executes one synchronous native QSAVE in command context with DBMOD verification, and QS3D status binds only an existing persisted project on a cold cache.")
     return 0
 
 
