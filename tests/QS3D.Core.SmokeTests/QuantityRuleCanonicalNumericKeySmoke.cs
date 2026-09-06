@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Rules;
 
@@ -35,7 +37,7 @@ namespace QS3D.Core.SmokeTests
         private static void PaddedFamilyNumericKeyFailsClosed()
         {
             var project = CreateProject(out var family, out var element);
-            family.Properties[" Width "] = "2.5";
+            InjectLegacyFamilyProperty(family, " Width ", "2.5");
 
             ThrowsNonCanonical(() => new QuantityRuleEngine().ApplyMatching(project, element), "family padded numeric key");
         }
@@ -54,6 +56,15 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(element);
             project.QuantityRules.Add(new QuantityRule("rule-1", ElementCategory.Room, "Result", "Width", "1"));
             return project;
+        }
+
+        private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var innerField = family.Properties.GetType().GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Legacy Family fixture could not locate the property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Legacy Family fixture property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static void ThrowsNonCanonical(Action action, string scope)

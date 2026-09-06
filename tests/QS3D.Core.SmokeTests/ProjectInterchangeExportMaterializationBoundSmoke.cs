@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
 using QS3D.Core.Persistence;
@@ -20,7 +22,7 @@ namespace QS3D.Core.SmokeTests
             var family = new ProjectFamily("F-BOUND", "Bounded Family", ElementCategory.Beam);
             var value = new string('x', 32768);
             for (var i = 0; i < 600; i++)
-                family.Properties["P" + i.ToString("D4", System.Globalization.CultureInfo.InvariantCulture)] = value;
+                InjectLegacyFamilyProperty(family, "P" + i.ToString("D4", System.Globalization.CultureInfo.InvariantCulture), value);
             project.Families.Add(family);
 
             try
@@ -57,6 +59,15 @@ namespace QS3D.Core.SmokeTests
             var validation = ProjectInterchangeJsonValidator.Validate(first);
             if (!validation.IsValid)
                 throw new Exception("Ordinary bounded semantic snapshot must remain canonically valid.");
+        }
+
+        private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var innerField = family.Properties.GetType().GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Interchange-bound legacy fixture could not locate the Family property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Interchange-bound legacy fixture Family property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
     }
 }
