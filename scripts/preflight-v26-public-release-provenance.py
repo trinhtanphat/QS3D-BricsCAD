@@ -24,8 +24,16 @@ def main() -> None:
         "V26 publisher must retain verified remote asset IDs before publication",
     )
     require(
-        "Invoke-WebRequest -Method Get -Uri ([string]$uploadedAsset.url)" in text,
-        "V26 publisher must download uploaded assets for byte verification before publication",
+        '$expectedAssetApiUrl = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/assets/$uploadedAssetId"' in text,
+        "V26 publisher must derive the canonical asset API endpoint from repository and uploaded asset identity",
+    )
+    require(
+        "[string]::Equals([string]$uploadedAsset.url, $expectedAssetApiUrl, [StringComparison]::Ordinal)" in text,
+        "V26 publisher must reject uploaded asset API endpoint identity drift before byte verification",
+    )
+    require(
+        "Invoke-WebRequest -Method Get -Uri $expectedAssetApiUrl" in text,
+        "V26 publisher must download uploaded assets through the verified canonical asset API endpoint",
     )
     require(
         "Assert-PublishedReleaseMatchesVerifiedTransaction" in text,

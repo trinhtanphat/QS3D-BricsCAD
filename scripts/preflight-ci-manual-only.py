@@ -42,7 +42,13 @@ def _same_opened_file(before, opened):
     opened_ino = getattr(opened, "st_ino", 0)
     if before_dev and before_ino and opened_dev and opened_ino:
         return (before_dev, before_ino) == (opened_dev, opened_ino)
-    return True
+
+    generation_fields = ("st_size", "st_mtime_ns", "st_ctime_ns")
+    before_generation = tuple(getattr(before, field, None) for field in generation_fields)
+    opened_generation = tuple(getattr(opened, field, None) for field in generation_fields)
+    if any(value is None for value in before_generation + opened_generation):
+        return False
+    return before_generation == opened_generation
 
 
 def _read_validated_workflow_source(path, root):
@@ -470,7 +476,7 @@ for path, text in workflow_sources:
         )
 
         require_tokens(text, (
-            "contents: read", "actions: write", "cancel-in-progress: true",
+            "contents: read", "actions: write", "cancel-in-progress: false", "queue: max",
             "github.actor != 'github-actions[bot]'", "github.event.workflow_run.conclusion == 'success'",
             "github.event.workflow_run.head_branch == 'main'", "gh workflow run release-v25-cloud.yml", "--ref main",
             'source_sha="${GITHUB_SHA,,}"', 'source_sha="${current_main,,}"', '-f source_sha="${source_sha}"', "confirm_release=RELEASE",
@@ -481,7 +487,7 @@ for path, text in workflow_sources:
         ), path.name)
         for forbidden in (
             "GITHUB_RUN_NUMBER", "10000 +", '-f source_sha="${current_main}"', "contents: write",
-            "max_preview", "preview=$((max_preview + 1))",
+            "max_preview", "preview=$((max_preview + 1))", "cancel-in-progress: true",
         ):
             if forbidden in text:
                 errors.append(f"{path.name}: dispatcher contains forbidden source/publish token: {forbidden}")

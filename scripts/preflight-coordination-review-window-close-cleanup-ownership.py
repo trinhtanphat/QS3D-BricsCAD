@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.BricsCAD.V25/UI/CoordinationManagerReviewUi.cs"
 text = SOURCE.read_text(encoding="utf-8")
 errors = []
+owner_affine = "IsOwnerDocumentActive" in text and "DocumentToBeDeactivated" in text
 
 
 def require(condition: bool, message: str) -> None:
@@ -40,20 +41,33 @@ if handler is not None:
     live_pos = body.find(live_guard)
     pre_cancel_pos = body.find(pre_cancel_guard)
     cleanup_pos = body.find("var cleanupFailure = _session.TryResetTransientStateBestEffort();")
-    debt_pos = body.find("_session.HasTransientState")
-    cancel_pos = body.find("e.Cancel = true;")
-    barrier_pos = body.find("_cleanupBarrier = true;")
-    state_pos = body.find("UpdateActionState();")
+    debt_pos = body.find("_session.HasTransientState", cleanup_pos if cleanup_pos >= 0 else 0)
+    cancel_pos = body.find("e.Cancel = true;", debt_pos if debt_pos >= 0 else 0)
+    barrier_pos = body.find("_cleanupBarrier = true;", debt_pos if debt_pos >= 0 else 0)
+    state_pos = body.find("UpdateActionState();", max(cancel_pos, barrier_pos) if max(cancel_pos, barrier_pos) >= 0 else 0)
     require(pre_cancel_pos > live_pos,
             "incoming Closing cancellation must be respected after the controller liveness guard")
     require(cleanup_pos > pre_cancel_pos and debt_pos > cleanup_pos,
-            "pre-cancelled close must return before any transient cleanup or ownership inspection")
+            "pre-cancelled close must return before any transient cleanup and active-owner cleanup must inspect residual ownership after the cleanup attempt")
     require(cancel_pos > debt_pos and barrier_pos > debt_pos,
             "failed close cleanup must cancel close and preserve an explicit cleanup barrier")
     require(state_pos > barrier_pos,
             "cancelled close must refresh cleanup controls after retaining ownership")
     require("e.Cancel = false;" not in body,
             "close admission must not override another Closing subscriber's cancellation")
+
+    if owner_affine:
+        inactive_pos = body.find("if (!IsOwnerDocumentActive)", pre_cancel_pos)
+        inactive_debt = body.find("_session.HasTransientState", inactive_pos)
+        inactive_cancel = body.find("e.Cancel = true;", inactive_pos)
+        inactive_barrier = body.find("_cleanupBarrier = true;", inactive_pos)
+        inactive_state = body.find("UpdateActionState();", inactive_pos)
+        require(0 <= pre_cancel_pos < inactive_pos < inactive_debt < cleanup_pos,
+                "owner-affine close must inspect inactive-owner cleanup debt only after honoring prior cancellation and before native cleanup")
+        require(inactive_debt < inactive_cancel < cleanup_pos and inactive_debt < inactive_barrier < cleanup_pos,
+                "inactive-owner close must veto closure and retain cleanup ownership without touching native state")
+        require(inactive_state > inactive_barrier and inactive_state < cleanup_pos,
+                "inactive-owner close veto must refresh UI while retaining cleanup debt")
 
 attach = re.search(
     r"public void Attach\(\)\s*\{(?P<body>.*?)\n\s*\}\n\n\s*private static Button AddButton",

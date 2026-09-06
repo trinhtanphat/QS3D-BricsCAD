@@ -98,7 +98,7 @@ namespace QS3D.Core.SmokeTests
             IsEmpty(project.ActiveZoneId, label + " active zone id");
             IsEmpty(project.ActiveFloorId, label + " active floor id");
             IsEmpty(project.Metadata["NullMetadata"], label + " project metadata value");
-            IsNull(project.Families[0].Properties["NullFamilyProperty"], label + " family property value");
+            IsEmpty(project.Families[0].Properties["NullFamilyProperty"], label + " family property value");
 
             var element = project.Elements[0];
             IsEmpty(element.FamilyId, label + " element family id");

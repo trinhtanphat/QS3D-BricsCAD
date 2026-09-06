@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Rules;
 using QS3D.Core.Templates;
@@ -142,7 +144,7 @@ namespace QS3D.Core.SmokeTests
             updatedBeam.Properties["WidthM"] = "0.350";
             profile.Families.Add(updatedBeam);
             var invalidSlab = new ProjectFamily("foreign-slab", "S120", ElementCategory.Slab);
-            invalidSlab.Properties[string.Empty] = "invalid";
+            InjectLegacyFamilyProperty(invalidSlab, string.Empty, "invalid");
             profile.Families.Add(invalidSlab);
 
             var versionBefore = project.ChangeVersion;
@@ -158,6 +160,15 @@ namespace QS3D.Core.SmokeTests
             Equal(versionBefore, project.ChangeVersion, "Rollback did not restore ChangeVersion.");
             Equal(auditsBefore, project.AuditEvents.Count, "Rollback appended an audit event.");
             Equal(updatedBefore, project.UpdatedUtc, "Rollback did not restore UpdatedUtc.");
+        }
+
+        private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var innerField = family.Properties.GetType().GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Family-template-import legacy fixture could not locate the Family property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Family-template-import legacy fixture Family property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static void Property(ProjectFamily family, string key, string expected)

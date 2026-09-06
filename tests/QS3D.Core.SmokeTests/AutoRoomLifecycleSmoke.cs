@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Reporting;
 
@@ -221,7 +222,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = NewProject();
             var previousFamily = project.FindFamily("room") ?? throw new Exception("Missing room family.");
-            previousFamily.Properties["HeightM"] = new string('X', 1001);
+            InjectLegacyFamilyProperty(previousFamily, "HeightM", new string('X', 1001));
             var targetFamily = new ProjectFamily("room-next-invalid-prev", "Next Room", ElementCategory.Room);
             targetFamily.Properties["HeightM"] = "3.6";
             targetFamily.Properties["WidthM"] = "5.0";
@@ -259,7 +260,7 @@ namespace QS3D.Core.SmokeTests
             var previousFamily = project.FindFamily("room") ?? throw new Exception("Missing room family.");
             previousFamily.Properties["HeightM"] = "3.0";
             var targetFamily = new ProjectFamily("room-invalid", "Invalid Room", ElementCategory.Room);
-            targetFamily.Properties[key] = value;
+            InjectLegacyFamilyProperty(targetFamily, key, value);
             project.Families.Add(targetFamily);
 
             var room = AutoRoom("R-INVALID", "A;B;C", project);
@@ -286,6 +287,15 @@ namespace QS3D.Core.SmokeTests
             Equal(beforeRoomUpdatedUtc, room.UpdatedUtc);
             Equal(beforeChangeVersion, project.ChangeVersion);
             Equal(beforeProjectUpdatedUtc, project.UpdatedUtc);
+        }
+
+        private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var innerField = family.Properties.GetType().GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Legacy Family fixture could not locate the property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Legacy Family fixture property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static string Snapshot(IDictionary<string, string> values)
