@@ -18,6 +18,7 @@ session_start = text.find("private sealed class TransientReviewSession : IDispos
 if session_start < 0:
     raise SystemExit("TransientReviewSession was not found")
 session = text[session_start:]
+owner_affine = "private bool IsOwnerDocumentActive" in session
 
 # A successful UNISOLATE queue and a failed OBJECTISOLATIONMODE restore are
 # independent cleanup outcomes. UI/session ownership must remain visible while
@@ -44,6 +45,10 @@ queue = restore.find('SendStringToExecute("_.UNISOLATEOBJECTS ", true, false, fa
 release_command = restore.find("_isolationActive = false;", queue)
 if not (0 <= retry_without_command < mode_retry < queue < release_command):
     raise SystemExit("RestoreIsolation must retry pending mode compensation without re-queueing UNISOLATE and release command ownership only after queue success")
+if owner_affine:
+    owner_guard = restore.find("if (!IsOwnerDocumentActive)")
+    if owner_guard < 0 or owner_guard >= queue:
+        raise SystemExit("owner-affine RestoreIsolation must refuse inactive-owner mutation before queueing UNISOLATE")
 
 mode_restore = method_body(
     "private void RestoreObjectIsolationModeBestEffort()",
@@ -75,6 +80,11 @@ for token in (
 ):
     if token not in try_restore:
         raise SystemExit(f"native mode restore attempt must report success/failure without throwing: {token}")
+if owner_affine:
+    owner_guard = try_restore.find("if (!IsOwnerDocumentActive) return false;")
+    native_write = try_restore.find('Application.SetSystemVariable("OBJECTISOLATIONMODE", modeBefore);')
+    if owner_guard < 0 or native_write < 0 or owner_guard >= native_write:
+        raise SystemExit("owner-affine mode restore must fail closed before application-level OBJECTISOLATIONMODE mutation")
 
 isolate = method_body(
     "public void Isolate(IReadOnlyList<ObjectId> ids)",
@@ -101,14 +111,25 @@ if success_publish_at <= queue_at:
     raise SystemExit("successful Isolate mode ownership must still publish only after native queue success")
 if "TryRestoreObjectIsolationModeBestEffort(modeBefore);\n                    throw;" in isolate:
     raise SystemExit("failed Isolate launch still discards the mode-compensation result")
+if owner_affine:
+    owner_guard = isolate.find("if (!IsOwnerDocumentActive)")
+    mode_read = isolate.find('GetSystemVariable("OBJECTISOLATIONMODE")')
+    if owner_guard < 0 or mode_read < 0 or owner_guard >= mode_read:
+        raise SystemExit("owner-affine Isolate must reject inactive-owner mutation before reading/writing application-level isolation mode")
 
 abandon = method_body(
     "public void AbandonDestroyedDocumentState()",
     "private void RestoreImpliedSelectionBestEffort(ObjectId[] impliedSelectionBefore)",
 )
 restore_attempt = abandon.find("RestoreObjectIsolationModeBestEffort();")
-explicit_abandon = abandon.find("_objectIsolationModeBefore = null;", restore_attempt)
-if restore_attempt < 0 or explicit_abandon < restore_attempt:
-    raise SystemExit("destroyed-document path must attempt mode restore before explicitly abandoning remaining mode ownership")
+explicit_abandon = abandon.find("_objectIsolationModeBefore = null;")
+if owner_affine:
+    if restore_attempt >= 0:
+        raise SystemExit("owner-affine destroyed-document path must not publish saved OBJECTISOLATIONMODE through a foreign active document")
+    if explicit_abandon < 0:
+        raise SystemExit("owner-affine destroyed-document path must explicitly abandon terminal mode ownership")
+else:
+    if restore_attempt < 0 or explicit_abandon < restore_attempt:
+        raise SystemExit("legacy destroyed-document path must attempt mode restore before explicitly abandoning remaining mode ownership")
 
 print("PASS coordination review isolation mode restore and failed-launch rollback retry ownership")

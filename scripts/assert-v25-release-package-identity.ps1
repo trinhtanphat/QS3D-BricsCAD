@@ -178,25 +178,205 @@ function Read-HeldAssemblyBytes {
     return $bytes
 }
 
-function Get-HeldAssemblyVersion {
+function Get-HeldAssemblyIdentity {
     param([pscustomobject]$Held, [string]$Label)
 
     Assert-HeldAssemblyBinding -Held $Held -Label $Label
     $bytes = Read-HeldAssemblyBytes -Held $Held -Label $Label
     try {
-        # ReflectionOnlyLoad consumes the exact held bytes and does not execute
-        # candidate assembly code or reopen the package pathname.
+        # ReflectionOnlyLoad consumes the exact held bytes. CustomAttributesData
+        # reads metadata without executing candidate code or reopening the package pathname.
         $assembly = [Reflection.Assembly]::ReflectionOnlyLoad($bytes)
-        $version = $assembly.GetName().Version
+        $assemblyVersion = $assembly.GetName().Version
+        if ($null -eq $assemblyVersion) {
+            throw "$Label has no managed assembly version."
+        }
+
+        $informationalAttributes = @(
+            $assembly.GetCustomAttributesData() |
+                Where-Object { $_.AttributeType.FullName -eq 'System.Reflection.AssemblyInformationalVersionAttribute' }
+        )
+        if ($informationalAttributes.Count -ne 1) {
+            throw "$Label must contain exactly one AssemblyInformationalVersionAttribute; found $($informationalAttributes.Count)."
+        }
+        $constructorArguments = @($informationalAttributes[0].ConstructorArguments)
+        if ($constructorArguments.Count -ne 1 -or $constructorArguments[0].ArgumentType.FullName -ne 'System.String') {
+            throw "$Label AssemblyInformationalVersionAttribute must contain one string argument."
+        }
+        $informationalVersion = ([string]$constructorArguments[0].Value).Trim()
+        if ([string]::IsNullOrWhiteSpace($informationalVersion) -or
+            -not [string]::Equals($informationalVersion, [string]$constructorArguments[0].Value, [StringComparison]::Ordinal)) {
+            throw "$Label informational ProductVersion must be one non-empty canonical string without surrounding whitespace."
+        }
+
+        return [pscustomobject]@{
+            AssemblyVersion = [Version]$assemblyVersion
+            ProductVersion = $informationalVersion
+        }
     }
     catch {
         throw "$Label is not a valid managed assembly for held semantic inspection: $($_.Exception.Message)"
     }
-    if ($null -eq $version) {
-        throw "$Label has no managed assembly version."
+    finally {
+        if ($null -ne $bytes) { [Array]::Clear($bytes, 0, $bytes.Length) }
+        Assert-HeldAssemblyBinding -Held $Held -Label $Label
     }
-    Assert-HeldAssemblyBinding -Held $Held -Label $Label
-    return [Version]$version
+}
+
+function Assert-UniqueTopLevelJsonPropertyNames {
+    param([string]$Text)
+
+    $length = $Text.Length
+    $index = 0
+    while ($index -lt $length -and [char]::IsWhiteSpace($Text[$index])) { $index++ }
+    if ($index -ge $length -or $Text[$index] -ne '{') {
+        throw 'V25 package metadata root must be one JSON object.'
+    }
+    $index++
+    $names = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+
+    while ($true) {
+        while ($index -lt $length -and [char]::IsWhiteSpace($Text[$index])) { $index++ }
+        if ($index -ge $length) {
+            throw 'V25 package metadata JSON object is unterminated.'
+        }
+        if ($Text[$index] -eq '}') {
+            $index++
+            break
+        }
+        if ($Text[$index] -ne '"') {
+            throw 'V25 package metadata root must be one JSON object.'
+        }
+
+        $tokenStart = $index
+        $index++
+        $escaped = $false
+        $closed = $false
+        while ($index -lt $length) {
+            $ch = $Text[$index]
+            if ($escaped) {
+                $escaped = $false
+                $index++
+                continue
+            }
+            if ($ch -eq '\') {
+                $escaped = $true
+                $index++
+                continue
+            }
+            if ($ch -eq '"') {
+                $index++
+                $closed = $true
+                break
+            }
+            $index++
+        }
+        if (-not $closed) {
+            throw 'V25 package metadata JSON property name is unterminated.'
+        }
+
+        $token = $Text.Substring($tokenStart, $index - $tokenStart)
+        try {
+            $decodedName = $token | ConvertFrom-Json -ErrorAction Stop
+        }
+        catch {
+            throw "V25 package metadata JSON property name is invalid: $($_.Exception.Message)"
+        }
+        if (-not ($decodedName -is [string])) {
+            throw 'V25 package metadata JSON property name did not decode to one string.'
+        }
+        $propertyName = [string]$decodedName
+        if (-not $names.Add($propertyName)) {
+            throw "Duplicate top-level JSON property name: $propertyName"
+        }
+
+        while ($index -lt $length -and [char]::IsWhiteSpace($Text[$index])) { $index++ }
+        if ($index -ge $length -or $Text[$index] -ne ':') {
+            throw "V25 package metadata JSON property '$propertyName' is missing a colon."
+        }
+        $index++
+
+        $containerDepth = 0
+        $inString = $false
+        $valueEscaped = $false
+        $valueStarted = $false
+        $rootClosed = $false
+        $commaFound = $false
+        while ($index -lt $length) {
+            $ch = $Text[$index]
+            if ($inString) {
+                if ($valueEscaped) {
+                    $valueEscaped = $false
+                }
+                elseif ($ch -eq '\') {
+                    $valueEscaped = $true
+                }
+                elseif ($ch -eq '"') {
+                    $inString = $false
+                }
+                $index++
+                continue
+            }
+
+            if ($ch -eq '"') {
+                $inString = $true
+                $valueStarted = $true
+                $index++
+                continue
+            }
+            if ($ch -eq '{' -or $ch -eq '[') {
+                $containerDepth++
+                $valueStarted = $true
+                $index++
+                continue
+            }
+            if ($ch -eq ']') {
+                if ($containerDepth -le 0) {
+                    throw "V25 package metadata JSON property '$propertyName' has an unmatched closing bracket."
+                }
+                $containerDepth--
+                $valueStarted = $true
+                $index++
+                continue
+            }
+            if ($ch -eq '}') {
+                if ($containerDepth -gt 0) {
+                    $containerDepth--
+                    $valueStarted = $true
+                    $index++
+                    continue
+                }
+                $index++
+                $rootClosed = $true
+                break
+            }
+            if ($ch -eq ',' -and $containerDepth -eq 0) {
+                $index++
+                $commaFound = $true
+                break
+            }
+            if (-not [char]::IsWhiteSpace($ch)) {
+                $valueStarted = $true
+            }
+            $index++
+        }
+
+        if (-not $valueStarted) {
+            throw "V25 package metadata JSON property '$propertyName' has no value."
+        }
+        if ($inString -or $containerDepth -ne 0) {
+            throw "V25 package metadata JSON property '$propertyName' has an unterminated value."
+        }
+        if ($rootClosed) { break }
+        if (-not $commaFound) {
+            throw 'V25 package metadata JSON object is unterminated.'
+        }
+    }
+
+    while ($index -lt $length -and [char]::IsWhiteSpace($Text[$index])) { $index++ }
+    if ($index -ne $length) {
+        throw 'V25 package metadata root must be one JSON object.'
+    }
 }
 
 if ($ExpectedSourceCommit -notmatch '^[0-9A-Fa-f]{40}$') {
@@ -221,6 +401,7 @@ try {
 
     $text = Read-HeldStrictUtf8Metadata -Held $held
     Assert-HeldMetadataBinding -Held $held
+    Assert-UniqueTopLevelJsonPropertyNames -Text $text
     try {
         $metadata = $text | ConvertFrom-Json -ErrorAction Stop
     }
@@ -244,8 +425,9 @@ try {
     }
 
     $productVersion = ([string]$metadata.productVersion).Trim()
-    if ([string]::IsNullOrWhiteSpace($productVersion)) {
-        throw 'V25 package metadata productVersion is missing.'
+    if ([string]::IsNullOrWhiteSpace($productVersion) -or
+        -not [string]::Equals($productVersion, [string]$metadata.productVersion, [StringComparison]::Ordinal)) {
+        throw 'V25 package metadata productVersion must be one non-empty canonical string without surrounding whitespace.'
     }
     if (-not [string]::IsNullOrWhiteSpace($ExpectedReleaseTag)) {
         if (-not [string]::Equals(('v' + $productVersion), $ExpectedReleaseTag, [StringComparison]::Ordinal)) {
@@ -268,10 +450,14 @@ try {
         throw "PACKAGE-METADATA version is not canonical: $assemblyVersionText"
     }
 
-    $pluginVersion = Get-HeldAssemblyVersion -Held $pluginHeld -Label 'V25 plugin assembly'
-    $coreVersion = Get-HeldAssemblyVersion -Held $coreHeld -Label 'V25 Core assembly'
-    if ($pluginVersion -ne $packageVersion -or $coreVersion -ne $packageVersion) {
-        throw "V25 package managed assembly identity mismatch. Metadata=$packageVersion Plugin=$pluginVersion Core=$coreVersion"
+    $pluginIdentity = Get-HeldAssemblyIdentity -Held $pluginHeld -Label 'V25 plugin assembly'
+    $coreIdentity = Get-HeldAssemblyIdentity -Held $coreHeld -Label 'V25 Core assembly'
+    if ($pluginIdentity.AssemblyVersion -ne $packageVersion -or $coreIdentity.AssemblyVersion -ne $packageVersion) {
+        throw "V25 package managed assembly identity mismatch. Metadata=$packageVersion Plugin=$($pluginIdentity.AssemblyVersion) Core=$($coreIdentity.AssemblyVersion)"
+    }
+    if (-not [string]::Equals($pluginIdentity.ProductVersion, $productVersion, [StringComparison]::Ordinal) -or
+        -not [string]::Equals($coreIdentity.ProductVersion, $productVersion, [StringComparison]::Ordinal)) {
+        throw "V25 held assembly ProductVersion does not match package productVersion. Metadata=$productVersion Plugin=$($pluginIdentity.ProductVersion) Core=$($coreIdentity.ProductVersion)"
     }
 
     Assert-HeldMetadataBinding -Held $held
@@ -281,6 +467,8 @@ try {
         SourceCommit = $metadataSource.ToLowerInvariant()
         ProductVersion = $productVersion
         AssemblyVersion = $packageVersion.ToString()
+        PluginProductVersion = $pluginIdentity.ProductVersion
+        CoreProductVersion = $coreIdentity.ProductVersion
         MetadataBytes = $held.Length
         PluginBytes = $pluginHeld.Length
         CoreBytes = $coreHeld.Length
