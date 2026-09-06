@@ -131,6 +131,9 @@ namespace QS3D.Core.Domain
 
     public sealed class ProjectFamily : INotifyPropertyChanged
     {
+        private const int MaxPropertyKeyLength = 120;
+        private const int MaxPropertyValueLength = 1000;
+
         private sealed class PersistenceAwarePropertyDictionary : IDictionary<string, string>
         {
             private Dictionary<string, string> _inner = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -146,9 +149,11 @@ namespace QS3D.Core.Domain
                 get => _inner[key];
                 set
                 {
-                    if (_inner.TryGetValue(key, out var current) && string.Equals(current, value, StringComparison.Ordinal)) return;
+                    var canonicalKey = RequirePropertyKey(key);
+                    var persistedValue = RequirePropertyValue(value);
+                    if (_inner.TryGetValue(canonicalKey, out var current) && string.Equals(current, persistedValue, StringComparison.Ordinal)) return;
                     _beforeMutation();
-                    _inner[key] = value;
+                    _inner[canonicalKey] = persistedValue;
                 }
             }
 
@@ -159,13 +164,15 @@ namespace QS3D.Core.Domain
 
             public void Add(string key, string value)
             {
-                if (_inner.ContainsKey(key))
+                var canonicalKey = RequirePropertyKey(key);
+                if (_inner.ContainsKey(canonicalKey))
                 {
-                    _inner.Add(key, value);
+                    _inner.Add(canonicalKey, value);
                     return;
                 }
+                var persistedValue = RequirePropertyValue(value);
                 _beforeMutation();
-                _inner.Add(key, value);
+                _inner.Add(canonicalKey, persistedValue);
             }
 
             public void Add(KeyValuePair<string, string> item) => Add(item.Key, item.Value);
@@ -257,10 +264,31 @@ namespace QS3D.Core.Domain
             var nextCategory = RequireCategory(category);
             if (properties == null) throw new ArgumentNullException(nameof(properties));
             var nextProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var property in properties) nextProperties.Add(property.Key, property.Value);
+            foreach (var property in properties)
+            {
+                var canonicalKey = RequirePropertyKey(property.Key);
+                var persistedValue = RequirePropertyValue(property.Value);
+                nextProperties.Add(canonicalKey, persistedValue);
+            }
             _name = nextName;
             _category = nextCategory;
             _properties.ReplaceSnapshotState(nextProperties);
+        }
+
+        private static string RequirePropertyKey(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Family property key is required.", nameof(value));
+            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal)) throw new ArgumentException("Family property key must be canonical without surrounding whitespace.", nameof(value));
+            if (value.Any(char.IsControl)) throw new ArgumentException("Family property key cannot contain control characters.", nameof(value));
+            if (value.Length > MaxPropertyKeyLength) throw new ArgumentException("Family property key must not exceed " + MaxPropertyKeyLength + " characters.", nameof(value));
+            return PersistedTextXml.Verify(value, nameof(value), "Family property key");
+        }
+
+        private static string RequirePropertyValue(string? value)
+        {
+            var persistedValue = value ?? string.Empty;
+            if (persistedValue.Length > MaxPropertyValueLength) throw new ArgumentException("Family property value must not exceed " + MaxPropertyValueLength + " characters.", nameof(value));
+            return PersistedTextXml.Verify(persistedValue, nameof(value), "Family property value");
         }
 
         private static string RequireId(string value)

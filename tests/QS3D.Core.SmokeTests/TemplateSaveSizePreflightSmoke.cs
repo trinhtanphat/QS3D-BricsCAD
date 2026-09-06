@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Templates;
 
@@ -18,7 +20,7 @@ namespace QS3D.Core.SmokeTests
             var path = Path.Combine(root, "nested", "oversized.qs3d-template.xml");
             var profile = new TemplateProfile("T-OVERSIZED", "Oversized template");
             var family = new ProjectFamily("F-OVERSIZED", "Oversized family", ElementCategory.ArchitecturalWall);
-            family.Properties["Payload"] = new string('\u0800', 3 * 1024 * 1024);
+            InjectLegacyFamilyProperty(family, "Payload", new string('\u0800', 3 * 1024 * 1024));
             profile.Families.Add(family);
 
             try
@@ -46,6 +48,15 @@ namespace QS3D.Core.SmokeTests
                 catch (IOException) { }
                 catch (UnauthorizedAccessException) { }
             }
+        }
+
+        private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var innerField = family.Properties.GetType().GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Template-size legacy fixture could not locate the Family property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Template-size legacy fixture Family property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
     }
 }

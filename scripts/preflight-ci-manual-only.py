@@ -42,7 +42,13 @@ def _same_opened_file(before, opened):
     opened_ino = getattr(opened, "st_ino", 0)
     if before_dev and before_ino and opened_dev and opened_ino:
         return (before_dev, before_ino) == (opened_dev, opened_ino)
-    return True
+
+    generation_fields = ("st_size", "st_mtime_ns", "st_ctime_ns")
+    before_generation = tuple(getattr(before, field, None) for field in generation_fields)
+    opened_generation = tuple(getattr(opened, field, None) for field in generation_fields)
+    if any(value is None for value in before_generation + opened_generation):
+        return False
+    return before_generation == opened_generation
 
 
 def _read_validated_workflow_source(path, root):

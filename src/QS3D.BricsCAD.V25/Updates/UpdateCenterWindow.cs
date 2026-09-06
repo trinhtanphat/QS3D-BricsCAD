@@ -1,8 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Media;
 using BricscadApplication = Bricscad.ApplicationServices.Application;
@@ -11,6 +15,7 @@ namespace QS3D.BricsCAD.V25.Updates
 {
     internal sealed class UpdateCenterWindow : Window
     {
+        private const string PreviewInstallButtonText = "Tải & cài đặt";
         private static readonly Brush TextPrimary = new SolidColorBrush(Color.FromRgb(239, 243, 250));
         private static readonly Brush TextSecondary = new SolidColorBrush(Color.FromRgb(178, 189, 207));
         private static readonly Brush TextMuted = new SolidColorBrush(Color.FromRgb(133, 148, 171));
@@ -22,6 +27,9 @@ namespace QS3D.BricsCAD.V25.Updates
         private static readonly Brush CardBackground = new SolidColorBrush(Color.FromRgb(31, 38, 49));
         private static readonly Brush PanelBackground = new SolidColorBrush(Color.FromRgb(19, 24, 32));
         private static readonly Brush BorderStroke = new SolidColorBrush(Color.FromRgb(54, 65, 82));
+        private static readonly Brush PickerHover = new SolidColorBrush(Color.FromRgb(39, 52, 72));
+        private static readonly Brush PickerSelected = new SolidColorBrush(Color.FromRgb(45, 72, 119));
+        private static readonly Brush PickerPopupBackground = new SolidColorBrush(Color.FromRgb(24, 30, 39));
 
         private readonly TextBlock _title;
         private readonly TextBlock _status;
@@ -29,6 +37,8 @@ namespace QS3D.BricsCAD.V25.Updates
         private readonly TextBlock _runtimeIdentity;
         private readonly TextBlock _detail;
         private readonly TextBox _notes;
+        private TextBox? _releaseSearchBox;
+        private readonly ComboBox _releaseVersionPicker;
         private readonly Grid _progressHeader;
         private readonly ProgressBar _progressBar;
         private readonly TextBlock _progressStage;
@@ -38,9 +48,14 @@ namespace QS3D.BricsCAD.V25.Updates
         private readonly Button _refreshButton;
         private readonly Button _updateButton;
         private readonly Button _releaseButton;
+        private IReadOnlyList<UpdateReleaseInfo> _publishedReleases = Array.Empty<UpdateReleaseInfo>();
+        private UpdateReleaseInfo? _selectedRelease;
         private UpdateCheckResult? _result;
         private bool _coordinatorAttached;
         private bool _changingUpdateOnClose;
+        private bool _syncingReleasePicker;
+        private bool _loadingReleaseChoices;
+        private string? _postRestartDiagnostic;
 #if !BRICSCAD_V26
         private bool _previewDownloading;
         private bool _previewScheduled;
@@ -50,16 +65,17 @@ namespace QS3D.BricsCAD.V25.Updates
         internal UpdateCenterWindow()
         {
             Title = "QS3D Update Center";
-            Width = 690;
-            Height = 665;
-            MinWidth = 580;
-            MinHeight = 520;
+            Width = 760;
+            Height = 760;
+            MinWidth = 620;
+            MinHeight = 590;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Background = new SolidColorBrush(Color.FromRgb(20, 25, 33));
             Foreground = TextPrimary;
             FontFamily = new FontFamily("Segoe UI");
 
             var root = new Grid { Margin = new Thickness(26, 22, 26, 22) };
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -92,11 +108,64 @@ namespace QS3D.BricsCAD.V25.Updates
             {
                 Foreground = TextMuted,
                 FontSize = 11,
-                Margin = new Thickness(0, 0, 0, 16),
+                Margin = new Thickness(0, 0, 0, 14),
                 TextWrapping = TextWrapping.Wrap
             };
             Grid.SetRow(_runtimeIdentity, 2);
             root.Children.Add(_runtimeIdentity);
+
+            var pickerPanel = new Grid { Margin = new Thickness(0, 0, 0, 15) };
+            pickerPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            pickerPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var pickerLabel = new TextBlock
+            {
+                Text = "Phiên bản cài đặt",
+                Foreground = TextSecondary,
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(2, 0, 0, 7)
+            };
+            Grid.SetRow(pickerLabel, 0);
+            pickerPanel.Children.Add(pickerLabel);
+
+            _releaseVersionPicker = new ComboBox
+            {
+                Height = 38,
+                Background = PanelBackground,
+                Foreground = TextPrimary,
+                BorderBrush = BorderStroke,
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(11, 0, 42, 0),
+                IsTextSearchEnabled = false,
+                MaxDropDownHeight = 320,
+                FocusVisualStyle = null,
+                Template = CreateReleasePickerTemplate(),
+                ItemContainerStyle = CreateReleaseChoiceItemStyle(),
+                ToolTip = "Chọn release QS3D cần cài đặt"
+            };
+            _releaseVersionPicker.SelectionChanged += (_, __) => OnReleaseSelectionChanged();
+            _releaseVersionPicker.DropDownOpened += (_, __) =>
+            {
+                AttachReleaseSearchBox();
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    AttachReleaseSearchBox();
+                    if (_releaseSearchBox == null) return;
+                    _releaseSearchBox.IsEnabled = _releaseVersionPicker.IsEnabled && !_loadingReleaseChoices;
+                    _releaseSearchBox.Focus();
+                    _releaseSearchBox.SelectAll();
+                }));
+            };
+            _releaseVersionPicker.DropDownClosed += (_, __) =>
+            {
+                if (_releaseSearchBox == null || _releaseSearchBox.Text.Length == 0) return;
+                _releaseSearchBox.Clear();
+            };
+            Grid.SetRow(_releaseVersionPicker, 1);
+            pickerPanel.Children.Add(_releaseVersionPicker);
+            Grid.SetRow(pickerPanel, 3);
+            root.Children.Add(pickerPanel);
 
             var stateCard = new Border
             {
@@ -196,7 +265,7 @@ namespace QS3D.BricsCAD.V25.Updates
             stateStack.Children.Add(_updateOnCloseHelp);
 
             stateCard.Child = stateStack;
-            Grid.SetRow(stateCard, 3);
+            Grid.SetRow(stateCard, 4);
             root.Children.Add(stateCard);
 
             var notesPanel = new Grid { Margin = new Thickness(0, 0, 0, 15) };
@@ -231,7 +300,7 @@ namespace QS3D.BricsCAD.V25.Updates
             };
             Grid.SetRow(_notes, 1);
             notesPanel.Children.Add(_notes);
-            Grid.SetRow(notesPanel, 4);
+            Grid.SetRow(notesPanel, 5);
             root.Children.Add(notesPanel);
 
             var actions = new StackPanel
@@ -242,13 +311,18 @@ namespace QS3D.BricsCAD.V25.Updates
             _releaseButton = MakeButton("Mở trang release", false);
             _releaseButton.Click += (_, __) => OpenReleasePage();
             _refreshButton = MakeButton("Kiểm tra lại", false);
-            _refreshButton.Click += async (_, __) => await UpdateCoordinator.Instance.RefreshAsync();
+            _refreshButton.Click += async (_, __) =>
+            {
+                var refreshed = await UpdateCoordinator.Instance.RefreshAsync();
+                Apply(refreshed);
+                await LoadPublishedReleasesAsync();
+            };
             _updateButton = MakeButton("Cập nhật ngay", true);
             _updateButton.Click += async (_, __) => await HandlePrimaryActionAsync();
             actions.Children.Add(_releaseButton);
             actions.Children.Add(_refreshButton);
             actions.Children.Add(_updateButton);
-            Grid.SetRow(actions, 5);
+            Grid.SetRow(actions, 6);
             root.Children.Add(actions);
 
             Content = root;
@@ -258,7 +332,9 @@ namespace QS3D.BricsCAD.V25.Updates
             {
                 UpdateCoordinator.Instance.StateChanged += OnStateChanged;
                 _coordinatorAttached = true;
+                TryApplyPostRestartReceipt();
                 Apply(UpdateCoordinator.Instance.LastResult);
+                _ = LoadPublishedReleasesAsync();
             }
             catch
             {
@@ -271,10 +347,13 @@ namespace QS3D.BricsCAD.V25.Updates
         {
             if (result == null) return;
             _result = result;
+            if (_selectedRelease == null && result.Release != null)
+                _selectedRelease = result.Release;
 
             var currentOriginal = result.CurrentVersion?.Original ?? "unknown";
             var currentDisplay = ToDisplayVersion(currentOriginal);
             var latest = result.Release?.Tag ?? "—";
+            var targetRelease = _selectedRelease ?? result.Release;
             var assembly = Assembly.GetExecutingAssembly();
             var loadedPath = string.IsNullOrWhiteSpace(assembly.Location) ? "<unknown>" : assembly.Location;
             var buildIdentity = GetBuildIdentity(currentOriginal);
@@ -286,14 +365,14 @@ namespace QS3D.BricsCAD.V25.Updates
                 ? "DLL đang chạy: " + loadedPath
                 : "Build: " + buildIdentity + "    •    DLL đang chạy: " + loadedPath;
             _runtimeIdentity.ToolTip = "Product version đầy đủ: " + currentOriginal + "\n" + loadedPath;
-            _notes.Text = result.Release?.Notes ?? "Ghi chú release sẽ hiển thị ở đây khi có dữ liệu.";
+            _notes.Text = targetRelease?.Notes ?? "Ghi chú release sẽ hiển thị ở đây khi có dữ liệu.";
 
             var checking = result.State == UpdateState.Checking;
-            var hasManualRelease = result.State == UpdateState.ManualInstallRequired && result.Release?.PageUri != null;
+            var hasManualRelease = targetRelease?.PageUri != null;
 #if BRICSCAD_V26
             var hasPreviewDownload = false;
 #else
-            var hasPreviewDownload = result.State == UpdateState.ManualInstallRequired && result.Release?.HasVerifiedPreviewPackage == true;
+            var hasPreviewDownload = targetRelease?.HasVerifiedPreviewPackage == true;
 #endif
 #if !BRICSCAD_V26
             var previewDownloading = _previewDownloading;
@@ -315,6 +394,8 @@ namespace QS3D.BricsCAD.V25.Updates
                 _detail.Text = IsUpdateOnCloseEnabled()
                     ? "Gói preview đã có ZIP + SHA-256 hợp lệ để cài một chạm. Bạn có thể tiếp tục làm việc; QS3D sẽ cài khi bạn tự đóng BricsCAD và sau đó tự mở lại BricsCAD."
                     : "Tải, xác minh SHA-256, đóng BricsCAD an toàn, cài đặt rồi tự mở lại BricsCAD.";
+                if (targetRelease != null)
+                    _detail.Text += " Mục tiêu đã ghim: " + targetRelease.Tag + ".";
             }
             else
 #endif
@@ -322,10 +403,20 @@ namespace QS3D.BricsCAD.V25.Updates
                 _status.Foreground = result.State == UpdateState.Error ? Warning : TextPrimary;
             }
 
+            if (!string.IsNullOrWhiteSpace(_postRestartDiagnostic) && !previewDownloading && !previewScheduled)
+            {
+                _status.Text = "Phát hiện phiên bản QS3D đang load không khớp";
+                _status.Foreground = Warning;
+                _detail.Text = _postRestartDiagnostic;
+            }
+
             _refreshButton.IsEnabled = !previewDownloading && !previewScheduled && !checking && result.State != UpdateState.Scheduled;
             _updateButton.IsEnabled = !previewDownloading && !previewScheduled && (result.CanAutoInstall || hasPreviewDownload || hasManualRelease);
-            _releaseButton.IsEnabled = !previewDownloading && result.Release?.PageUri != null;
+            _releaseButton.IsEnabled = !previewDownloading && targetRelease?.PageUri != null;
             _updateOnCloseCheckBox.IsEnabled = !previewDownloading && !previewScheduled && result.State != UpdateState.Scheduled;
+            if (_releaseSearchBox != null)
+                _releaseSearchBox.IsEnabled = !previewDownloading && !previewScheduled && !_loadingReleaseChoices;
+            _releaseVersionPicker.IsEnabled = !previewDownloading && !previewScheduled && !_loadingReleaseChoices;
 
             if (previewDownloading)
             {
@@ -352,17 +443,19 @@ namespace QS3D.BricsCAD.V25.Updates
                 _updateButton.ToolTip = "Cập nhật đã được lên lịch và đang chờ BricsCAD đóng an toàn.";
                 SetProgress("Sẵn sàng • Chờ BricsCAD đóng", 96, false);
             }
-            else if (hasPreviewDownload)
+            else if (hasPreviewDownload && targetRelease != null)
             {
-                _updateButton.Content = "Tải & cài đặt";
+                _updateButton.Content = IsCurrentRelease(targetRelease)
+                    ? "Cài đặt lại " + targetRelease.Tag
+                    : PreviewInstallButtonText + " " + targetRelease.Tag;
                 _updateButton.ToolTip = IsUpdateOnCloseEnabled()
-                    ? "Tải và xác minh ngay; chỉ cài sau khi bạn tự đóng BricsCAD. BricsCAD sẽ tự mở lại."
-                    : "Tải package preview, xác minh SHA-256, stage an toàn, đóng BricsCAD, cài rồi tự mở lại.";
+                    ? "Tải và xác minh đúng release đã chọn; chỉ cài sau khi bạn tự đóng BricsCAD. BricsCAD sẽ tự mở lại."
+                    : "Tải đúng release đã chọn, xác minh SHA-256, stage an toàn, đóng BricsCAD, cài rồi tự mở lại.";
             }
             else if (hasManualRelease)
             {
                 _updateButton.Content = "Cài thủ công";
-                _updateButton.ToolTip = "Mở GitHub Release để tải bản mới. Release này chưa có package + checksum đủ điều kiện cho tải trực tiếp.";
+                _updateButton.ToolTip = "Mở GitHub Release đã chọn. Release này chưa có package + checksum đủ điều kiện cho tải trực tiếp.";
             }
             else
             {
@@ -383,11 +476,24 @@ namespace QS3D.BricsCAD.V25.Updates
 #if !BRICSCAD_V26
             if (_previewScheduled) return;
 #endif
-            // Never install from a stale window snapshot. A new preview can be published while
-            // Update Center remains open, so resolve the newest release again at click time.
-            var current = await UpdateCoordinator.Instance.RefreshAsync();
-            Apply(current);
+            var selectedRelease = _selectedRelease ?? _result?.Release;
+            if (_selectedRelease != null && selectedRelease != null)
+            {
+#if !BRICSCAD_V26
+                if (selectedRelease.HasVerifiedPreviewPackage)
+                {
+                    await DownloadPreviewAsync(selectedRelease);
+                    return;
+                }
+#endif
+                if (selectedRelease.PageUri != null)
+                {
+                    OpenReleasePage();
+                    return;
+                }
+            }
 
+            var current = _result;
             if (current?.State == UpdateState.ManualInstallRequired && current.Release != null)
             {
 #if !BRICSCAD_V26
@@ -415,9 +521,11 @@ namespace QS3D.BricsCAD.V25.Updates
             Apply(_result);
             _status.Text = "Đang tải và xác minh bản preview…";
             _status.Foreground = AccentSoft;
-            _detail.Text = "QS3D đang tải checksum và package từ đúng GitHub Release. Package chỉ được stage sau khi SHA-256 khớp.";
+            _detail.Text = "QS3D đang tải checksum và package từ đúng GitHub Release đã chọn. Package chỉ được stage sau khi SHA-256 khớp.";
             SetProgress("Đang kết nối GitHub Release…", 3, true);
 
+            var receiptWritten = false;
+            var scheduleAccepted = false;
             try
             {
                 var progress = new Progress<UpdateDownloadProgress>(ApplyDownloadProgress);
@@ -425,22 +533,28 @@ namespace QS3D.BricsCAD.V25.Updates
                 SetProgress("SHA-256 hợp lệ • đang stage payload…", 84, false);
                 _detail.Text = "Package đã tải xong và SHA-256 khớp. QS3D đang tạo backup rollback và chuẩn bị updater tách rời.";
 
+                var expectedAdapterPath = Assembly.GetExecutingAssembly().Location;
+                if (!PreviewInstallReceipt.TryWrite(release.Tag, expectedAdapterPath, out var receiptError))
+                    throw new InvalidOperationException("Không ghi được trạng thái phiên bản cần xác minh sau restart: " + receiptError);
+                receiptWritten = true;
+
                 if (!VerifiedPreviewInstaller.TrySchedule(verified.Path, verified.Sha256, out var installError))
                     throw new InvalidOperationException("Không thể stage package preview: " + installError);
+                scheduleAccepted = true;
 
                 _previewScheduled = true;
                 var restartCopy = " Sau khi thay và kiểm tra hash xong, BricsCAD sẽ tự mở lại đúng bricscad.exe hiện tại.";
                 if (IsUpdateOnCloseEnabled())
                 {
                     _previewScheduledDetail =
-                        "SHA-256 đã xác minh: " + verified.Sha256 +
+                        "Đã ghim " + release.Tag + ". SHA-256 đã xác minh: " + verified.Sha256 +
                         ". Bạn có thể tiếp tục làm việc. Updater sẽ chờ bạn tự đóng BricsCAD, backup DLL hiện tại, thay payload V25/Core, rollback nếu có lỗi." + restartCopy;
                     SetProgress("Sẵn sàng • Chờ bạn đóng BricsCAD", 96, false);
                     return;
                 }
 
                 _previewScheduledDetail =
-                    "SHA-256 đã xác minh: " + verified.Sha256 +
+                    "Đã ghim " + release.Tag + ". SHA-256 đã xác minh: " + verified.Sha256 +
                     ". Updater tách rời đang chờ BricsCAD thoát, sau đó backup DLL hiện tại, thay payload V25/Core và rollback nếu có lỗi." + restartCopy;
                 SetProgress("Đã sẵn sàng • đang yêu cầu BricsCAD đóng…", 97, false);
 
@@ -457,6 +571,8 @@ namespace QS3D.BricsCAD.V25.Updates
             }
             catch (Exception ex)
             {
+                if (receiptWritten && !scheduleAccepted)
+                    PreviewInstallReceipt.TryDelete();
                 MessageBox.Show(
                     this,
                     "Không chuẩn bị được bản preview an toàn: " + ex.Message,
@@ -495,6 +611,174 @@ namespace QS3D.BricsCAD.V25.Updates
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
             }
+        }
+
+        private async System.Threading.Tasks.Task LoadPublishedReleasesAsync()
+        {
+            if (_loadingReleaseChoices) return;
+            _loadingReleaseChoices = true;
+            if (_releaseSearchBox != null)
+                _releaseSearchBox.IsEnabled = false;
+            _releaseVersionPicker.IsEnabled = false;
+            try
+            {
+                var current = _result?.CurrentVersion;
+                var releases = await new GitHubReleaseClient().GetPublishedReleasesAsync();
+                _publishedReleases = releases
+                    .Where(release => release != null)
+                    .Where(release => current == null || current.IsPrerelease || !release.IsPrerelease)
+                    .OrderByDescending(release => release.Version)
+                    .ToArray();
+
+                if (_publishedReleases.Count > 0)
+                {
+                    var retainedTag = _selectedRelease?.Tag;
+                    var retained = string.IsNullOrWhiteSpace(retainedTag)
+                        ? null
+                        : _publishedReleases.FirstOrDefault(release => string.Equals(release.Tag, retainedTag, StringComparison.OrdinalIgnoreCase));
+                    _selectedRelease = retained ?? _publishedReleases[0];
+                }
+                FilterReleaseChoices();
+                if (_result != null) Apply(_result);
+            }
+            catch (Exception ex)
+            {
+                _releaseVersionPicker.ToolTip = "Không tải được lịch sử release: " + ex.Message;
+            }
+            finally
+            {
+                _loadingReleaseChoices = false;
+                if (_releaseSearchBox != null)
+                    _releaseSearchBox.IsEnabled = true;
+                _releaseVersionPicker.IsEnabled = true;
+            }
+        }
+
+        private void AttachReleaseSearchBox()
+        {
+            _releaseVersionPicker.ApplyTemplate();
+            var template = _releaseVersionPicker.Template;
+            if (template == null) return;
+
+            var searchBox = template.FindName("PART_SearchBox", _releaseVersionPicker) as TextBox;
+            if (ReferenceEquals(_releaseSearchBox, searchBox)) return;
+
+            if (_releaseSearchBox != null)
+                _releaseSearchBox.TextChanged -= OnReleaseSearchTextChanged;
+
+            _releaseSearchBox = searchBox;
+            if (_releaseSearchBox == null) return;
+
+            _releaseSearchBox.TextChanged += OnReleaseSearchTextChanged;
+            _releaseSearchBox.IsEnabled = _releaseVersionPicker.IsEnabled && !_loadingReleaseChoices;
+        }
+
+        private void OnReleaseSearchTextChanged(object sender, TextChangedEventArgs e)
+        {
+            FilterReleaseChoices();
+        }
+
+        private void FilterReleaseChoices()
+        {
+            if (_releaseVersionPicker == null) return;
+            var query = (_releaseSearchBox?.Text ?? string.Empty).Trim();
+            var selectedTag = _selectedRelease?.Tag;
+            var latestTag = _publishedReleases.Count == 0 ? null : _publishedReleases[0].Tag;
+
+            _syncingReleasePicker = true;
+            try
+            {
+                _releaseVersionPicker.Items.Clear();
+                ReleaseChoice? selectedChoice = null;
+                foreach (var release in _publishedReleases)
+                {
+                    if (query.Length != 0 &&
+                        release.Tag.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0 &&
+                        release.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        continue;
+                    }
+
+                    var choice = new ReleaseChoice(release, BuildReleaseChoiceText(release, latestTag));
+                    _releaseVersionPicker.Items.Add(choice);
+                    if (!string.IsNullOrWhiteSpace(selectedTag) &&
+                        string.Equals(release.Tag, selectedTag, StringComparison.OrdinalIgnoreCase))
+                        selectedChoice = choice;
+                }
+
+                if (selectedChoice != null)
+                    _releaseVersionPicker.SelectedItem = selectedChoice;
+                else if (_selectedRelease == null && _releaseVersionPicker.Items.Count > 0)
+                    _releaseVersionPicker.SelectedIndex = 0;
+            }
+            finally
+            {
+                _syncingReleasePicker = false;
+            }
+        }
+
+        private string BuildReleaseChoiceText(UpdateReleaseInfo release, string? latestTag)
+        {
+            var labels = new List<string>();
+            if (!string.IsNullOrWhiteSpace(latestTag) && string.Equals(release.Tag, latestTag, StringComparison.OrdinalIgnoreCase))
+                labels.Add("Mới nhất");
+            if (IsCurrentRelease(release))
+                labels.Add("Đang dùng");
+
+            var label = release.Tag;
+            if (labels.Count != 0)
+                label += "  • " + string.Join(" • ", labels);
+            if (release.PublishedUtc > DateTime.MinValue)
+                label += "  • " + release.PublishedUtc.ToLocalTime().ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+            return label;
+        }
+
+        private void OnReleaseSelectionChanged()
+        {
+            if (_syncingReleasePicker) return;
+            var choice = _releaseVersionPicker.SelectedItem as ReleaseChoice;
+            if (choice == null) return;
+            _selectedRelease = choice.Release;
+            _notes.Text = choice.Release.Notes;
+            _releaseButton.IsEnabled = choice.Release.PageUri != null;
+            if (_result != null) Apply(_result);
+        }
+
+        private bool IsCurrentRelease(UpdateReleaseInfo release)
+        {
+            var current = _result?.CurrentVersion?.Original ?? string.Empty;
+            return string.Equals(
+                PreviewInstallReceipt.NormalizeVersion(current),
+                PreviewInstallReceipt.NormalizeVersion(release.Tag),
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void TryApplyPostRestartReceipt()
+        {
+            if (!PreviewInstallReceipt.TryRead(out var receipt, out var readError))
+            {
+                _postRestartDiagnostic = "Không đọc được trạng thái xác minh updater sau restart: " + readError;
+                return;
+            }
+            if (receipt == null || PreviewInstallReceipt.IsFromCurrentProcess(receipt))
+                return;
+
+            var assembly = Assembly.GetExecutingAssembly();
+            var actualPath = string.IsNullOrWhiteSpace(assembly.Location) ? string.Empty : assembly.Location;
+            var informational = assembly.GetCustomAttributes(typeof(AssemblyInformationalVersionAttribute), false)
+                .OfType<AssemblyInformationalVersionAttribute>()
+                .Select(attribute => attribute.InformationalVersion)
+                .FirstOrDefault();
+            var actualVersion = informational ?? assembly.GetName().Version?.ToString() ?? string.Empty;
+
+            if (PreviewInstallReceipt.MatchesLoadedAssembly(receipt, actualVersion, actualPath))
+            {
+                PreviewInstallReceipt.TryDelete();
+                _postRestartDiagnostic = null;
+                return;
+            }
+
+            _postRestartDiagnostic = PreviewInstallReceipt.DescribeMismatch(receipt, actualVersion, actualPath);
         }
 
 #if !BRICSCAD_V26
@@ -582,7 +866,7 @@ namespace QS3D.BricsCAD.V25.Updates
 
         private void OpenReleasePage()
         {
-            var uri = _result?.Release?.PageUri;
+            var uri = _selectedRelease?.PageUri ?? _result?.Release?.PageUri;
             if (uri == null) return;
             try { Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true }); }
             catch (Exception ex)
@@ -643,6 +927,216 @@ namespace QS3D.BricsCAD.V25.Updates
                 FocusVisualStyle = null,
                 Template = CreateButtonTemplate(primary, normal)
             };
+        }
+
+        private static ControlTemplate CreateReleasePickerTemplate()
+        {
+            var root = new FrameworkElementFactory(typeof(Grid), "PickerRoot");
+
+            var chrome = new FrameworkElementFactory(typeof(Border), "PickerChrome");
+            chrome.SetValue(Border.BackgroundProperty, PanelBackground);
+            chrome.SetValue(Border.BorderBrushProperty, BorderStroke);
+            chrome.SetValue(Border.BorderThicknessProperty, new Thickness(1));
+            chrome.SetValue(Border.CornerRadiusProperty, new CornerRadius(6));
+            chrome.SetValue(UIElement.SnapsToDevicePixelsProperty, true);
+            root.AppendChild(chrome);
+
+            var selection = new FrameworkElementFactory(typeof(ContentPresenter), "SelectionPresenter");
+            selection.SetValue(FrameworkElement.MarginProperty, new Thickness(12, 0, 42, 0));
+            selection.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            selection.SetValue(ContentPresenter.RecognizesAccessKeyProperty, true);
+            selection.SetValue(UIElement.IsHitTestVisibleProperty, false);
+            selection.SetValue(TextElement.ForegroundProperty, TextPrimary);
+            selection.SetBinding(ContentPresenter.ContentProperty, new Binding("SelectionBoxItem")
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent)
+            });
+            selection.SetBinding(ContentPresenter.ContentTemplateProperty, new Binding("SelectionBoxItemTemplate")
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent)
+            });
+            root.AppendChild(selection);
+
+            var arrow = new FrameworkElementFactory(typeof(TextBlock), "PickerArrow");
+            arrow.SetValue(TextBlock.TextProperty, "▾");
+            arrow.SetValue(TextBlock.ForegroundProperty, AccentSoft);
+            arrow.SetValue(TextBlock.FontSizeProperty, 14d);
+            arrow.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Right);
+            arrow.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            arrow.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 0, 13, 1));
+            arrow.SetValue(UIElement.IsHitTestVisibleProperty, false);
+            root.AppendChild(arrow);
+
+            var toggleChrome = new FrameworkElementFactory(typeof(Border));
+            toggleChrome.SetValue(Border.BackgroundProperty, Brushes.Transparent);
+            var toggleTemplate = new ControlTemplate(typeof(ToggleButton)) { VisualTree = toggleChrome };
+            var toggle = new FrameworkElementFactory(typeof(ToggleButton), "PickerToggle");
+            toggle.SetValue(Control.TemplateProperty, toggleTemplate);
+            toggle.SetValue(Control.FocusVisualStyleProperty, null);
+            toggle.SetValue(UIElement.FocusableProperty, false);
+            toggle.SetBinding(ToggleButton.IsCheckedProperty, new Binding("IsDropDownOpen")
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent),
+                Mode = BindingMode.TwoWay
+            });
+            root.AppendChild(toggle);
+
+            var popup = new FrameworkElementFactory(typeof(Popup), "PART_Popup");
+            popup.SetValue(Popup.AllowsTransparencyProperty, true);
+            popup.SetValue(Popup.StaysOpenProperty, false);
+            popup.SetValue(Popup.PlacementProperty, PlacementMode.Bottom);
+            popup.SetValue(Popup.PopupAnimationProperty, PopupAnimation.Fade);
+            popup.SetBinding(Popup.IsOpenProperty, new Binding("IsDropDownOpen")
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent),
+                Mode = BindingMode.TwoWay
+            });
+            popup.SetBinding(Popup.PlacementTargetProperty, new Binding
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent)
+            });
+            popup.SetBinding(FrameworkElement.WidthProperty, new Binding("ActualWidth")
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent)
+            });
+
+            var popupChrome = new FrameworkElementFactory(typeof(Border), "PopupChrome");
+            popupChrome.SetValue(Border.BackgroundProperty, PickerPopupBackground);
+            popupChrome.SetValue(Border.BorderBrushProperty, BorderStroke);
+            popupChrome.SetValue(Border.BorderThicknessProperty, new Thickness(1));
+            popupChrome.SetValue(Border.CornerRadiusProperty, new CornerRadius(7));
+            popupChrome.SetValue(Border.PaddingProperty, new Thickness(7));
+            popupChrome.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 4, 0, 0));
+
+            var popupStack = new FrameworkElementFactory(typeof(StackPanel));
+            popupStack.SetValue(StackPanel.OrientationProperty, Orientation.Vertical);
+
+            var searchBox = new FrameworkElementFactory(typeof(TextBox), "PART_SearchBox");
+            searchBox.SetValue(FrameworkElement.HeightProperty, 36d);
+            searchBox.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 0, 0, 7));
+            searchBox.SetValue(Control.PaddingProperty, new Thickness(10, 0, 10, 0));
+            searchBox.SetValue(Control.BackgroundProperty, PanelBackground);
+            searchBox.SetValue(Control.ForegroundProperty, TextPrimary);
+            searchBox.SetValue(Control.BorderBrushProperty, BorderStroke);
+            searchBox.SetValue(Control.BorderThicknessProperty, new Thickness(1));
+            searchBox.SetValue(TextBox.CaretBrushProperty, AccentSoft);
+            searchBox.SetValue(TextBox.SelectionBrushProperty, PickerSelected);
+            searchBox.SetValue(Control.FontSizeProperty, 12d);
+            searchBox.SetValue(Control.ToolTipProperty, "Tìm phiên bản…");
+            searchBox.SetValue(Control.TemplateProperty, CreateReleaseSearchBoxTemplate());
+            popupStack.AppendChild(searchBox);
+
+            var scroller = new FrameworkElementFactory(typeof(ScrollViewer), "ReleaseScroller");
+            scroller.SetValue(FrameworkElement.MaxHeightProperty, 255d);
+            scroller.SetValue(ScrollViewer.CanContentScrollProperty, true);
+            scroller.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty, ScrollBarVisibility.Auto);
+            scroller.SetValue(ScrollViewer.HorizontalScrollBarVisibilityProperty, ScrollBarVisibility.Disabled);
+            scroller.SetValue(Control.BackgroundProperty, PickerPopupBackground);
+            var itemsPresenter = new FrameworkElementFactory(typeof(ItemsPresenter));
+            scroller.AppendChild(itemsPresenter);
+            popupStack.AppendChild(scroller);
+
+            popupChrome.AppendChild(popupStack);
+            popup.AppendChild(popupChrome);
+            root.AppendChild(popup);
+
+            var template = new ControlTemplate(typeof(ComboBox)) { VisualTree = root };
+            var focusTrigger = new Trigger { Property = UIElement.IsKeyboardFocusWithinProperty, Value = true };
+            focusTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, AccentSoft, "PickerChrome"));
+            template.Triggers.Add(focusTrigger);
+            var openTrigger = new Trigger { Property = ComboBox.IsDropDownOpenProperty, Value = true };
+            openTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, AccentSoft, "PickerChrome"));
+            openTrigger.Setters.Add(new Setter(TextBlock.ForegroundProperty, TextPrimary, "PickerArrow"));
+            template.Triggers.Add(openTrigger);
+            var disabledTrigger = new Trigger { Property = UIElement.IsEnabledProperty, Value = false };
+            disabledTrigger.Setters.Add(new Setter(UIElement.OpacityProperty, 0.48, "PickerRoot"));
+            template.Triggers.Add(disabledTrigger);
+            return template;
+        }
+
+        private static ControlTemplate CreateReleaseSearchBoxTemplate()
+        {
+            var chrome = new FrameworkElementFactory(typeof(Border), "SearchChrome");
+            chrome.SetValue(Border.BackgroundProperty, PanelBackground);
+            chrome.SetValue(Border.BorderBrushProperty, BorderStroke);
+            chrome.SetValue(Border.BorderThicknessProperty, new Thickness(1));
+            chrome.SetValue(Border.CornerRadiusProperty, new CornerRadius(5));
+
+            var grid = new FrameworkElementFactory(typeof(Grid));
+            var contentHost = new FrameworkElementFactory(typeof(ScrollViewer), "PART_ContentHost");
+            contentHost.SetValue(FrameworkElement.MarginProperty, new Thickness(10, 0, 10, 0));
+            contentHost.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            grid.AppendChild(contentHost);
+
+            var placeholder = new FrameworkElementFactory(typeof(TextBlock), "SearchPlaceholder");
+            placeholder.SetValue(TextBlock.TextProperty, "Tìm phiên bản…");
+            placeholder.SetValue(TextBlock.ForegroundProperty, TextMuted);
+            placeholder.SetValue(TextBlock.FontSizeProperty, 12d);
+            placeholder.SetValue(FrameworkElement.MarginProperty, new Thickness(10, 0, 10, 0));
+            placeholder.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            placeholder.SetValue(UIElement.IsHitTestVisibleProperty, false);
+            placeholder.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
+            grid.AppendChild(placeholder);
+            chrome.AppendChild(grid);
+
+            var template = new ControlTemplate(typeof(TextBox)) { VisualTree = chrome };
+            var emptyTrigger = new Trigger { Property = TextBox.TextProperty, Value = string.Empty };
+            emptyTrigger.Setters.Add(new Setter(UIElement.VisibilityProperty, Visibility.Visible, "SearchPlaceholder"));
+            template.Triggers.Add(emptyTrigger);
+            var focusTrigger = new Trigger { Property = UIElement.IsKeyboardFocusedProperty, Value = true };
+            focusTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, AccentSoft, "SearchChrome"));
+            template.Triggers.Add(focusTrigger);
+            var disabledTrigger = new Trigger { Property = UIElement.IsEnabledProperty, Value = false };
+            disabledTrigger.Setters.Add(new Setter(UIElement.OpacityProperty, 0.5, "SearchChrome"));
+            template.Triggers.Add(disabledTrigger);
+            return template;
+        }
+
+        private static Style CreateReleaseChoiceItemStyle()
+        {
+            var style = new Style(typeof(ComboBoxItem));
+            style.Setters.Add(new Setter(Control.ForegroundProperty, TextPrimary));
+            style.Setters.Add(new Setter(Control.BackgroundProperty, PanelBackground));
+            style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(11, 9, 11, 9)));
+            style.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
+            style.Setters.Add(new Setter(Control.FocusVisualStyleProperty, null));
+
+            var chrome = new FrameworkElementFactory(typeof(Border), "ItemChrome");
+            chrome.SetValue(Border.BackgroundProperty, PanelBackground);
+            chrome.SetValue(Border.CornerRadiusProperty, new CornerRadius(5));
+            chrome.SetBinding(Border.PaddingProperty, new Binding("Padding")
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent)
+            });
+
+            var content = new FrameworkElementFactory(typeof(ContentPresenter));
+            content.SetValue(ContentPresenter.RecognizesAccessKeyProperty, true);
+            content.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            content.SetBinding(ContentPresenter.ContentProperty, new Binding("Content")
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent)
+            });
+            content.SetBinding(TextElement.ForegroundProperty, new Binding("Foreground")
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent)
+            });
+            chrome.AppendChild(content);
+
+            var template = new ControlTemplate(typeof(ComboBoxItem)) { VisualTree = chrome };
+            var selectedTrigger = new Trigger { Property = ComboBoxItem.IsSelectedProperty, Value = true };
+            selectedTrigger.Setters.Add(new Setter(Border.BackgroundProperty, PickerSelected, "ItemChrome"));
+            selectedTrigger.Setters.Add(new Setter(Control.ForegroundProperty, TextPrimary));
+            template.Triggers.Add(selectedTrigger);
+            var hoverTrigger = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
+            hoverTrigger.Setters.Add(new Setter(Border.BackgroundProperty, PickerHover, "ItemChrome"));
+            hoverTrigger.Setters.Add(new Setter(Control.ForegroundProperty, TextPrimary));
+            template.Triggers.Add(hoverTrigger);
+            var disabledTrigger = new Trigger { Property = UIElement.IsEnabledProperty, Value = false };
+            disabledTrigger.Setters.Add(new Setter(UIElement.OpacityProperty, 0.45, "ItemChrome"));
+            template.Triggers.Add(disabledTrigger);
+
+            style.Setters.Add(new Setter(Control.TemplateProperty, template));
+            return style;
         }
 
         private static ControlTemplate CreateCheckBoxTemplate()
@@ -730,6 +1224,19 @@ namespace QS3D.BricsCAD.V25.Updates
             disabledTrigger.Setters.Add(new Setter(UIElement.OpacityProperty, 0.56, "Chrome"));
             template.Triggers.Add(disabledTrigger);
             return template;
+        }
+
+        private sealed class ReleaseChoice
+        {
+            internal ReleaseChoice(UpdateReleaseInfo release, string display)
+            {
+                Release = release;
+                Display = display ?? release.Tag;
+            }
+
+            internal UpdateReleaseInfo Release { get; }
+            internal string Display { get; }
+            public override string ToString() => Display;
         }
     }
 
