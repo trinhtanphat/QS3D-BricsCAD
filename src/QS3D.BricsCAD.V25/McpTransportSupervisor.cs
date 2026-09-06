@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Net;
 using System.Text;
 using System.Threading;
 
@@ -42,6 +43,7 @@ namespace QS3D.BricsCAD.V25
         private const int SupervisorPeriodMilliseconds = 5000;
         private const int RestartBackoffBaseSeconds = 5;
         private const int RestartBackoffMaxSeconds = 120;
+        private const int CloudflarePublicProbeTimeoutMilliseconds = 4000;
 
         private static readonly object Sync = new object();
         private static Timer? _timer;
@@ -114,7 +116,12 @@ namespace QS3D.BricsCAD.V25
                 EnsureTimerUnsafe();
             }
 
-            RunOneIteration("autostart");
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0) return;
+                try { RunOneIteration("autostart"); }
+                finally { Interlocked.Exchange(ref _busy, 0); }
+            });
         }
 
         internal static void StopForHostShutdown()
@@ -347,8 +354,62 @@ namespace QS3D.BricsCAD.V25
             if (provider == McpTransportProvider.OpenAiSecureTunnel)
                 return McpOpenAiSecureTunnelManager.IsRunning && McpOpenAiSecureTunnelManager.IsReady;
             if (provider == McpTransportProvider.CloudflareNamedTunnel)
-                return McpCloudflareAccountTunnelManager.IsRunning;
+                return McpCloudflareAccountTunnelManager.IsRunning && IsCloudflarePublicHealthy();
             return false;
+        }
+
+        private static bool IsCloudflarePublicHealthy()
+        {
+            var hostname = McpCloudflareTunnelManager.NormalizeHostname(
+                McpCloudflareAccountTunnelManager.SavedHostname);
+            if (string.IsNullOrWhiteSpace(hostname)) return false;
+
+            try
+            {
+                var dnsTask = Dns.GetHostAddressesAsync(hostname);
+                if (!dnsTask.Wait(CloudflarePublicProbeTimeoutMilliseconds)) return false;
+                var addresses = dnsTask.Result;
+                var usableAddress = false;
+                foreach (var address in addresses)
+                {
+                    if (IPAddress.IsLoopback(address)
+                        || IPAddress.Any.Equals(address)
+                        || IPAddress.IPv6Any.Equals(address)) continue;
+                    usableAddress = true;
+                    break;
+                }
+                if (!usableAddress) return false;
+            }
+            catch { return false; }
+
+            try
+            {
+                var request = (HttpWebRequest)WebRequest.Create("https://" + hostname + "/mcp");
+                request.Method = "GET";
+                request.AllowAutoRedirect = false;
+                request.Timeout = CloudflarePublicProbeTimeoutMilliseconds;
+                request.ReadWriteTimeout = CloudflarePublicProbeTimeoutMilliseconds;
+                using (var response = (HttpWebResponse)request.GetResponse())
+                    return IsReachableMcpStatus(response.StatusCode);
+            }
+            catch (WebException ex)
+            {
+                var response = ex.Response as HttpWebResponse;
+                if (response == null) return false;
+                using (response) return IsReachableMcpStatus(response.StatusCode);
+            }
+            catch { return false; }
+        }
+
+        private static bool IsReachableMcpStatus(HttpStatusCode status)
+        {
+            var code = (int)status;
+            return (code >= 200 && code < 300)
+                   || code == 400
+                   || code == 401
+                   || code == 403
+                   || code == 404
+                   || code == 405;
         }
 
         private static bool IsDurableProvider(McpTransportProvider provider)
