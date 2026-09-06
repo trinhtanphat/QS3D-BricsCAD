@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Media;
 using QS3D.Core.Domain;
 
 namespace QS3D.BricsCAD.V25.UI
@@ -10,23 +11,42 @@ namespace QS3D.BricsCAD.V25.UI
     {
         static WorkspacePanel()
         {
+            // The XAML SelectionChanged handler is attached to the ListBox source itself.
+            // Register on ListBox (not WorkspacePanel) so this class handler runs before
+            // that instance handler. The callback filters back to this panel's FamilyList.
             EventManager.RegisterClassHandler(
-                typeof(WorkspacePanel),
+                typeof(ListBox),
                 Selector.SelectionChangedEvent,
-                new SelectionChangedEventHandler(OnWorkspaceSelectionChangedClass),
+                new SelectionChangedEventHandler(OnFamilyListSelectionChangedClass),
                 true);
         }
 
-        private static void OnWorkspaceSelectionChangedClass(object sender, SelectionChangedEventArgs e)
+        private static void OnFamilyListSelectionChangedClass(object sender, SelectionChangedEventArgs e)
         {
-            if (!(sender is WorkspacePanel panel) || !ReferenceEquals(e.OriginalSource, panel.FamilyList))
+            if (!(sender is ListBox familyList) ||
+                !string.Equals(familyList.Name, "FamilyList", StringComparison.Ordinal))
                 return;
 
-            // Class handlers run before the XAML instance handler. Marking the FamilyList
-            // event handled prevents the legacy void SetActiveFamily path from rendering
-            // property rows when activation was rejected for a stale project generation.
+            var panel = FindOwningWorkspacePanel(familyList);
+            if (panel == null || !ReferenceEquals(familyList, panel.FamilyList))
+                return;
+
+            // A ListBox class handler runs before the source ListBox's instance/XAML
+            // handler. Suppress that legacy void SetActiveFamily path and route through
+            // the affinity-safe path below instead.
             e.Handled = true;
             panel.OnFamilySelectionChangedWithAffinity();
+        }
+
+        private static WorkspacePanel? FindOwningWorkspacePanel(DependencyObject current)
+        {
+            DependencyObject? node = current;
+            while (node != null)
+            {
+                if (node is WorkspacePanel panel) return panel;
+                node = VisualTreeHelper.GetParent(node);
+            }
+            return null;
         }
 
         private void OnFamilySelectionChangedWithAffinity()
