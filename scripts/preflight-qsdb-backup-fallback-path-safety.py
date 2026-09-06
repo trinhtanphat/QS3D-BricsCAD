@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 STORE = ROOT / "src" / "QS3D.Core" / "Persistence" / "QsdbProjectStore.cs"
 SAFETY = ROOT / "src" / "QS3D.Core" / "Persistence" / "PersistencePathSafety.cs"
+REDIRECT_SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "PersistenceRedirectedPathSmoke.cs"
 
 
 def fail(message: str) -> None:
@@ -13,6 +14,7 @@ def fail(message: str) -> None:
 
 store = STORE.read_text(encoding="utf-8")
 safety = SAFETY.read_text(encoding="utf-8")
+redirect_smoke = REDIRECT_SMOKE.read_text(encoding="utf-8")
 
 exception_token = "internal sealed class PersistencePathSafetyException : IOException"
 if exception_token not in safety:
@@ -43,4 +45,13 @@ if "catch (Exception primary) when (IsRecoverableDataFailure(primary))" not in f
 if "catch (Exception backup) when (IsRecoverableDataFailure(backup))" not in fallback:
     fail("backup corruption aggregation must remain filtered through IsRecoverableDataFailure")
 
-print("PASS: QSDB backup fallback keeps corrupt-data recovery while path-safety failures remain fail-closed IO failures")
+if '"QS3D.Core.Persistence.PersistencePathSafetyException"' not in redirect_smoke:
+    fail("redirected-path smoke must expect the exact typed persistence path-safety exception")
+if "exception is IOException" not in redirect_smoke:
+    fail("redirected-path smoke must retain the non-recoverable IO exception-family contract")
+if "if (exception is InvalidDataException) return true;" in redirect_smoke:
+    fail("redirected-path smoke must not accept the old recoverable InvalidDataException path-trust contract")
+if "return exception is InvalidOperationException && IsRedirectRefusal(exception.InnerException);" not in redirect_smoke:
+    fail("redirected project-lock smoke must preserve typed path refusal through the lock wrapper")
+
+print("PASS: QSDB backup fallback keeps corrupt-data recovery while path-safety failures remain fail-closed typed IO failures")
