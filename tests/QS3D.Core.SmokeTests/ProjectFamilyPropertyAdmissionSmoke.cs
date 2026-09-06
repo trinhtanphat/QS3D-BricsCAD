@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             RejectsXmlInvalidPropertyValuesWithoutMutation();
             RejectsNonPersistableAddWithoutMutation();
             RejectsOversizedPropertyStateWithoutMutation();
+            PreservesMaximumPersistableLengths();
             NormalizesNullPropertyValueBeforeMutation();
             PreservesCaseInsensitiveAndDuplicateSemantics();
             PreservesRemoveAndClearMutationSemantics();
@@ -92,6 +93,20 @@ namespace QS3D.Core.SmokeTests
             Equal(0, oversizedValueFamily.Properties.Count, "property count after oversized value");
             Equal(oversizedValueVersion, oversizedValueProject.ChangeVersion, "change version after oversized value");
             Equal(oversizedValueUpdatedUtc, oversizedValueProject.UpdatedUtc, "updatedUtc after oversized value");
+        }
+
+        private static void PreservesMaximumPersistableLengths()
+        {
+            var project = CreateProjectWithFamily(out var family);
+            var key = new string('K', 120);
+            var value = new string('V', 1000);
+            var beforeVersion = project.ChangeVersion;
+
+            family.Properties[key] = value;
+
+            Equal(1, family.Properties.Count, "property count at maximum persistence bounds");
+            Equal(value, family.Properties[key], "property value at maximum persistence bounds");
+            Equal(beforeVersion + 1L, project.ChangeVersion, "change version at maximum persistence bounds");
         }
 
         private static void NormalizesNullPropertyValueBeforeMutation()
