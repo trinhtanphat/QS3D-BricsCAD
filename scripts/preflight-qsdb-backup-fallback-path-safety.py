@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 STORE = ROOT / "src" / "QS3D.Core" / "Persistence" / "QsdbProjectStore.cs"
 SAFETY = ROOT / "src" / "QS3D.Core" / "Persistence" / "PersistencePathSafety.cs"
 REDIRECT_SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "PersistenceRedirectedPathSmoke.cs"
+SIDECAR_REDIRECT_SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "ProjectSidecarRevisionRedirectSmoke.cs"
 
 
 def fail(message: str) -> None:
@@ -15,6 +16,7 @@ def fail(message: str) -> None:
 store = STORE.read_text(encoding="utf-8")
 safety = SAFETY.read_text(encoding="utf-8")
 redirect_smoke = REDIRECT_SMOKE.read_text(encoding="utf-8")
+sidecar_redirect_smoke = SIDECAR_REDIRECT_SMOKE.read_text(encoding="utf-8")
 
 exception_token = "internal sealed class PersistencePathSafetyException : IOException"
 if exception_token not in safety:
@@ -53,5 +55,14 @@ if "if (exception is InvalidDataException) return true;" in redirect_smoke:
     fail("redirected-path smoke must not accept the old recoverable InvalidDataException path-trust contract")
 if "return exception is InvalidOperationException && IsRedirectRefusal(exception.InnerException);" not in redirect_smoke:
     fail("redirected project-lock smoke must preserve typed path refusal through the lock wrapper")
+
+if '"QS3D.Core.Persistence.PersistencePathSafetyException"' not in sidecar_redirect_smoke:
+    fail("sidecar redirected-path smoke must expect the exact typed persistence path-safety exception")
+if "exception is IOException" not in sidecar_redirect_smoke:
+    fail("sidecar redirected-path smoke must retain the non-recoverable IO exception-family contract")
+if "ExpectInvalidData" in sidecar_redirect_smoke or "catch (InvalidDataException)" in sidecar_redirect_smoke:
+    fail("sidecar redirected-path smoke must not preserve the old recoverable InvalidDataException trust contract")
+if "ExpectPathSafetyRefusal" not in sidecar_redirect_smoke:
+    fail("sidecar primary and backup redirect checks must use the typed path-safety refusal helper")
 
 print("PASS: QSDB backup fallback keeps corrupt-data recovery while path-safety failures remain fail-closed typed IO failures")
