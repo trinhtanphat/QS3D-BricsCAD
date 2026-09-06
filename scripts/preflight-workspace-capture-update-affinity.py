@@ -25,26 +25,35 @@ def method_body(text, signature, next_signature):
 
 workspace = read(WORKSPACE)
 capture = method_body(workspace, "private void OnCaptureSelectedClick", "private void OnView3DClick")
-build3d = method_body(workspace, "private void OnView3DClick", "private void OnWallJunctionsClick")
+build3d = method_body(workspace, "private void OnView3DClick", "private bool TryActivateFamilyForWorkspaceAction")
+affinity = method_body(workspace, "private bool TryActivateFamilyForWorkspaceAction", "private void OnWallJunctionsClick")
 
 for label, body in [("Capture Selected", capture), ("Vẽ/Cập nhật 3D", build3d)]:
-    if "TryActivateFamilyForCommand(family" not in body:
-        errors.append(label + " must fail closed through the canonical selected-Family affinity fence")
-    activation = body.find("TryActivateFamilyForCommand")
+    if "family != null" not in body:
+        errors.append(label + " must preserve category-only operation while fencing every selected Family")
+    if "TryActivateFamilyForWorkspaceAction(family" not in body:
+        errors.append(label + " must fail closed through the selected-Family affinity fence")
+    activation = body.find("TryActivateFamilyForWorkspaceAction")
     send = body.find("Send(")
     if activation >= 0 and send >= 0 and activation > send:
         errors.append(label + " dispatch occurs before selected-Family affinity validation")
 
 restore = build3d.find("SelectInspectionSemanticSourcesForBuild()")
-activation = build3d.find("TryActivateFamilyForCommand")
+activation = build3d.find("TryActivateFamilyForWorkspaceAction")
 if restore >= 0 and activation >= 0 and activation > restore:
     errors.append("Vẽ/Cập nhật 3D restores inspection semantic sources before selected-Family affinity validation")
 
-# Category-only workflows intentionally remain legal. Only a non-null selected Family must
-# pass the exact current-document/project-generation activation fence before side effects.
-for label, body in [("Capture Selected", capture), ("Vẽ/Cập nhật 3D", build3d)]:
-    if "family != null" not in body:
-        errors.append(label + " must preserve category-only operation while fencing selected Family")
+for required, message in [
+    ("Application.DocumentManager.MdiActiveDocument", "affinity fence must bind to the current active document"),
+    ("ExistingProjectMutationContext.TryGet(document, out var project)", "affinity fence must require an existing current-document project"),
+    ("project.FindFamily(family.Id)", "affinity fence must resolve the Family in the current project generation"),
+    ("ReferenceEquals(ownedFamily, family)", "affinity fence must require exact Family object identity"),
+    ("_viewModel.SetActiveFamily(family)", "affinity fence must activate through the canonical Workspace view-model path"),
+    ("ProjectFamilyActivationService.GetActive(project)", "affinity fence must read back the canonical active Family"),
+    ("ReferenceEquals(activeFamily, ownedFamily)", "affinity fence must verify activation by exact object identity"),
+]:
+    if required not in affinity:
+        errors.append(message)
 
 print("QS3D Workspace Capture/Build3D Family affinity preflight")
 if errors:
