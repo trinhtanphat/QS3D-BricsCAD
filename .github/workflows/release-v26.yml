@@ -37,6 +37,7 @@ permissions:
 concurrency:
   group: qs3d-manual-v26-release
   cancel-in-progress: false
+  queue: max
 
 jobs:
   qualify:
