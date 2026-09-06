@@ -284,7 +284,6 @@ jobs:
         with:
           path: .cache/bricscad-v26-hostrefs
           key: qs3d-v26-hostrefs-v1-${{ github.run_id }}-fallback
-          fail-on-cache-miss: true
 
       - name: Mark fallback V26 reference handoff ready
         id: ready
