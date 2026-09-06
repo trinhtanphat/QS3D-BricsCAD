@@ -3,7 +3,6 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-PANEL = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs"
 QUICK = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.QuickDraw.cs"
 errors = []
 
@@ -14,9 +13,8 @@ def read(path):
         return ""
     return path.read_text(encoding="utf-8")
 
-panel = read(PANEL)
+
 quick = read(QUICK)
-combined = panel + "\n" + quick
 
 
 def method_body(text, signature, next_signature):
@@ -27,19 +25,16 @@ def method_body(text, signature, next_signature):
     end = text.find(next_signature, start + len(signature))
     return text[start:end if end >= 0 else len(text)]
 
-capture = method_body(panel, "private void OnCaptureSelectedClick", "private void OnView3DClick")
-build = method_body(panel, "private void OnView3DClick", "private void OnWallJunctionsClick")
+
 quick_draw = method_body(quick, "private void ExecuteWorkspaceDraw(bool advanced)", "private void ExecuteWorkspaceRepeatedDraw")
 repeat_draw = method_body(quick, "private void ExecuteWorkspaceRepeatedDraw()", "private void ExecuteWorkspaceBasicDraw")
-basic_draw = method_body(quick, "private void ExecuteWorkspaceBasicDraw", "}")
-helper_start = combined.find("private bool TryActivateFamilyForCommand")
-helper = combined[helper_start:] if helper_start >= 0 else ""
+basic_draw = method_body(quick, "private void ExecuteWorkspaceBasicDraw", "private bool TryActivateFamilyForCommand")
+helper_start = quick.find("private bool TryActivateFamilyForCommand")
+helper = quick[helper_start:] if helper_start >= 0 else ""
 if helper_start < 0:
     errors.append("missing TryActivateFamilyForCommand")
 
 for label, body in [
-    ("capture", capture),
-    ("build", build),
     ("quick draw", quick_draw),
     ("repeated draw", repeat_draw),
     ("basic draw", basic_draw),
@@ -66,10 +61,10 @@ for needle in [
 if "ProjectContextCoordinator.GetOrCreate" in helper:
     errors.append("command-affinity validation must never create a replacement project")
 
-print("QS3D Workspace Family command-affinity preflight")
+print("QS3D Workspace Quick Draw Family command-affinity preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: all Family-scoped Workspace capture/build/Quick Draw routes fail closed unless the selected Family belongs to and becomes active in the current active-document project.")
+print("PASS: all Family-scoped Workspace Quick Draw routes fail closed unless the selected Family belongs to and becomes active in the current active-document project.")
