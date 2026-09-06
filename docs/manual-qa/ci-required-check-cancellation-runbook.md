@@ -4,7 +4,7 @@
 
 A task-branch update can emit both `push` and `pull_request(synchronize)` runs for the same commit SHA. GitHub creates check-runs as soon as jobs are materialized. If those two event families share one `cancel-in-progress` concurrency group, the losing run leaves `cancelled` job contexts attached to the candidate SHA.
 
-Protected-main rules require stable `preflight` and `core` contexts. A cancelled duplicate of either required name can therefore block merge even when the surviving run has the same exact SHA and completed those contexts successfully. PR #5962 / commit `59841875ffc6e32ddeabb52dfd604fc6583ac1be38` reproduced this: Shared CI run `34059071502` passed, while losing push run `34059070007` left cancelled `preflight` and `core` contexts and merge was rejected.
+Protected-main rules require stable `preflight` and `core` contexts. A cancelled duplicate of either required name can therefore block merge even when the surviving run has the same exact SHA and completed those contexts successfully. PR #5962 / commit `59841875ffc6e32e17d1c987ce612768529f787e` reproduced this: Shared CI run `34059071502` passed, while losing push run `34059070007` left cancelled `preflight` and `core` contexts and merge was rejected.
 
 ## Contract
 
