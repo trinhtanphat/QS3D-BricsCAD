@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Units;
 
@@ -207,7 +208,7 @@ namespace QS3D.Core.SmokeTests
                 ProjectFamilyService.SetProperty(project, beam.Id, "WidthM", "0.3");
                 ProjectFamilyService.SetProperty(project, beam.Id, "HeightM", "0.5");
                 ProjectFamilyService.SetProperty(project, beam.Id, "BottomOffsetM", "0");
-                beam.Properties["Material"] = malformed[index];
+                InjectLegacyFamilyProperty(beam, "Material", malformed[index]);
 
                 var materials = Materials();
                 materials.Remove(ElementCategory.Beam);
@@ -236,6 +237,15 @@ namespace QS3D.Core.SmokeTests
             True(ids.SequenceEqual(project.Families.Select(x => x.Id).OrderBy(x => x, StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase), "Repeat must not duplicate Families.");
             Equal(0, second.CreatedFamilyIds.Count, "Repeat should create no Families.");
             Equal(6, second.ReusedFamilyIds.Count, "Repeat should reuse all starter Families.");
+        }
+
+        private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var innerField = family.Properties.GetType().GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Project-onboarding legacy fixture could not locate the Family property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Project-onboarding legacy fixture Family property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static Dictionary<ElementCategory, string> Materials()

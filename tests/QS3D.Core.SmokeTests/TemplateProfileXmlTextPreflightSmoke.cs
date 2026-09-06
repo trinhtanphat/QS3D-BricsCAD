@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Templates;
@@ -37,14 +39,14 @@ namespace QS3D.Core.SmokeTests
         private static void InvalidPropertyValueFailsBeforeFilesystemMutation()
         {
             var profile = Profile("TPL-PROPERTY-CONTROL");
-            Family(profile).Properties["Note"] = "bad\u0001value";
+            InjectLegacyFamilyProperty(Family(profile), "Note", "bad\u0001value");
             AssertPreflightFailure(profile, "invalid-property-control");
         }
 
         private static void LoneSurrogateFailsBeforeFilesystemMutation()
         {
             var profile = Profile("TPL-LONE-SURROGATE");
-            Family(profile).Properties["Note"] = new string(new[] { '\uD800' });
+            InjectLegacyFamilyProperty(Family(profile), "Note", new string(new[] { '\uD800' }));
             AssertPreflightFailure(profile, "invalid-property-surrogate");
         }
 
@@ -85,6 +87,15 @@ namespace QS3D.Core.SmokeTests
             var family = new ProjectFamily("F-XML-TEXT", "XML Text Family", ElementCategory.Beam);
             profile.Families.Add(family);
             return family;
+        }
+
+        private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var innerField = family.Properties.GetType().GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Legacy template XML fixture could not locate the Family property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Legacy template XML fixture Family property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static void AssertPreflightFailure(TemplateProfile profile, string suffix)

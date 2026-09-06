@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.SmokeTests
@@ -88,7 +90,7 @@ namespace QS3D.Core.SmokeTests
             var oldFamily = ProjectFamilyService.Create(project, "old", "Cột cũ", ElementCategory.Column);
             oldFamily.Properties["WidthM"] = "0.4";
             var target = ProjectFamilyService.Create(project, "target", "Cột mới", ElementCategory.Column);
-            target.Properties["Material"] = new string('X', 1001);
+            InjectLegacyFamilyProperty(target, "Material", new string('X', 1001));
             var element = new ProjectElement("c-invalid", ElementCategory.Column, oldFamily.Id, "floor", "zone");
             element.Properties["WidthM"] = "0.4";
             element.MarkClean(ElementDirtyFlags.All);
@@ -127,7 +129,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("p-dup-invalid", "Family duplicate invariants");
             var source = ProjectFamilyService.Create(project, "source", "Nguồn", ElementCategory.GlassWall);
-            source.Properties["Material"] = new string('X', 1001);
+            InjectLegacyFamilyProperty(source, "Material", new string('X', 1001));
             var beforeVersion = project.ChangeVersion;
             var beforeCount = project.Families.Count;
 
@@ -135,6 +137,15 @@ namespace QS3D.Core.SmokeTests
             if (project.Families.Count != beforeCount) throw new Exception("Rejected Family duplicate must not add a partial clone.");
             if (project.FindFamily("clone") != null) throw new Exception("Rejected Family duplicate left a discoverable clone.");
             if (project.ChangeVersion != beforeVersion) throw new Exception("Rejected Family duplicate must not advance ChangeVersion.");
+        }
+
+        private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var innerField = family.Properties.GetType().GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Legacy Family service fixture could not locate the property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Legacy Family service fixture property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static void Throws<T>(Action action) where T : Exception
