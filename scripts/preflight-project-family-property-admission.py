@@ -38,6 +38,19 @@ write = indexer.find("_inner[canonicalKey] = persistedValue")
 if min(validate_key, validate_value, callback, write) < 0 or not (validate_key < validate_value < callback < write):
     fail("family property indexer must validate/normalize before persistence callback and write")
 
+add_start = source.index("public void Add(string key, string value)", indexer_end)
+add_end = source.index("public void Add(KeyValuePair<string, string> item)", add_start)
+add = source[add_start:add_end]
+add_validate_key = add.find("RequirePropertyKey(key)")
+add_duplicate_check = add.find("_inner.ContainsKey(canonicalKey)")
+add_validate_value = add.find("RequirePropertyValue(value)")
+add_callback = add.find("_beforeMutation()")
+add_write = add.find("_inner.Add(canonicalKey, persistedValue)")
+if min(add_validate_key, add_duplicate_check, add_validate_value, add_callback, add_write) < 0 or not (
+    add_validate_key < add_duplicate_check < add_validate_value < add_callback < add_write
+):
+    fail("family property Add must validate key, preserve duplicate precedence, then validate value before persistence callback and write")
+
 restore_start = source.index("internal void RestoreSnapshotState")
 restore_end = source.index("private static string RequirePropertyKey", restore_start)
 restore = source[restore_start:restore_end]
@@ -49,6 +62,7 @@ if restore.find("RequirePropertyKey(property.Key)") > restore.find("_properties.
 required_smoke = (
     "RejectsNonPersistablePropertyKeysWithoutMutation",
     "RejectsXmlInvalidPropertyValuesWithoutMutation",
+    "RejectsNonPersistableAddWithoutMutation",
     "NormalizesNullPropertyValueBeforeMutation",
     "PreservesCaseInsensitiveAndDuplicateSemantics",
     "PreservesRemoveAndClearMutationSemantics",
