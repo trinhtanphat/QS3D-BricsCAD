@@ -13,8 +13,17 @@ def method_block(source: str, signature: str) -> str:
     start = source.find(signature)
     if start < 0:
         return ""
-    next_method = source.find("\n        private static ", start + len(signature))
-    return source[start:] if next_method < 0 else source[start:next_method]
+    candidates = [
+        source.find(marker, start + len(signature))
+        for marker in (
+            "\n        private static ",
+            "\n        internal static ",
+            "\n        public static ",
+        )
+    ]
+    candidates = [value for value in candidates if value >= 0]
+    end = min(candidates) if candidates else len(source)
+    return source[start:end]
 
 
 def require(errors: list[str], text: str, tokens: tuple[str, ...], label: str) -> None:
@@ -77,12 +86,14 @@ def main() -> int:
     forbid(errors, boolean, (
         "targetClone.BooleanOperation(operation, operandClone);",
         "target=transient-clone; operand=transient-clone",
+        "target.BooleanOperation(operation",
     ), "licensed boolean regression")
 
     require(errors, native_save, (
         "Application.DocumentManager.ExecuteInCommandContextAsync(",
         "document.Editor.Command(\"_.QSAVE\");",
         "Task.WaitAny(",
+        "completion.GetAwaiter().GetResult();",
         "WaitForCleanDbmod",
         "Do not retry automatically",
         "DbmodPersistentContentMask = 1 | 4 | 32",
@@ -94,9 +105,11 @@ def main() -> int:
         "CommandEnded +=",
         "CommandCancelled +=",
         "CommandFailed +=",
+        "Database.Save();",
+        "Database.SaveAs(",
     ), "queued/event-owned QSAVE regression")
-    if "Database.Save();" in native_save or "Database.SaveAs(" in native_save:
-        errors.append("current-document QSAVE helper must never write the active path through Database.Save/SaveAs")
+    if native_save.count('document.Editor.Command("_.QSAVE");') != 1:
+        errors.append("current-document QSAVE must have exactly one synchronous command attempt")
 
     require(errors, save_as, (
         "McpDiagnosticHub.InvokeInCadContext(() =>",
@@ -116,7 +129,7 @@ def main() -> int:
     require(errors, direct, (
         "private static void RecordDirectMutationFailure(string tool, Exception ex)",
         '"cad-mutation-failed"',
-        '"reason=" + ex.Message',
+        'reason=" + ex.Message',
     ), "unified direct failure diagnostics")
 
     require(errors, status, (
@@ -134,7 +147,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: MCP direct 3D kernels use database-resident working inputs, current-document save executes one synchronous native QSAVE in command context, SaveAs settles through native QSAVE, direct failures propagate to unified diagnostics, and QS3D status binds only an existing persisted project on a cold cache.")
+    print("PASS: MCP direct kernels use database-resident working inputs, current-document save executes one synchronous native QSAVE, SaveAs settles through native QSAVE, direct failures reach unified diagnostics, and status binds only an existing persisted project.")
     return 0
 
 
