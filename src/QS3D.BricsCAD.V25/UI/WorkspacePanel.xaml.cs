@@ -408,7 +408,15 @@ namespace QS3D.BricsCAD.V25.UI
             var family = FamilyList.SelectedItem as ProjectFamily;
             var category = _categoryFilter ?? family?.Category;
             if (!category.HasValue) { SetStatus("Chọn một nhóm mô hình hoặc Family trước khi bóc đối tượng CAD."); return; }
-            if (family != null && family.Category == category.Value) _viewModel.SetActiveFamily(family);
+            if (family != null)
+            {
+                if (family.Category != category.Value)
+                {
+                    SetStatus("Bóc từ chọn đã hủy vì Family không còn thuộc nhóm mô hình đang chọn. Hãy Refresh Workspace.");
+                    return;
+                }
+                if (!TryActivateFamilyForWorkspaceAction(family, "Bóc từ chọn")) return;
+            }
             var command = CommandFor(category);
             SetStatus("Bóc từ chọn → " + category.Value);
             Send(command);
@@ -428,11 +436,57 @@ namespace QS3D.BricsCAD.V25.UI
                 SetStatus(Cad.NativeBuildCapability.UnsupportedMessage(category.Value));
                 return;
             }
-            if (family != null && family.Category == category.Value) _viewModel.SetActiveFamily(family);
+            if (family != null)
+            {
+                if (family.Category != category.Value)
+                {
+                    SetStatus("Vẽ/Cập nhật 3D đã hủy vì Family không còn thuộc nhóm mô hình đang chọn. Hãy Refresh Workspace.");
+                    return;
+                }
+                if (!TryActivateFamilyForWorkspaceAction(family, "Vẽ/Cập nhật 3D")) return;
+            }
             var restoredSources = SelectInspectionSemanticSourcesForBuild();
             SetStatus("Vẽ/Cập nhật 3D: " + (family?.Name ?? category.Value.ToString()) + (restoredSources > 0 ? " • source " + restoredSources : string.Empty));
             Send("QS3DBUILD3D");
         }
+
+        private bool TryActivateFamilyForWorkspaceAction(ProjectFamily family, string action)
+        {
+            try
+            {
+                var document = Application.DocumentManager.MdiActiveDocument;
+                if (document == null)
+                {
+                    SetStatus(action + " đã hủy vì không còn bản vẽ BricsCAD active.");
+                    return false;
+                }
+                if (!ExistingProjectMutationContext.TryGet(document, out var project))
+                {
+                    SetStatus(action + " đã hủy vì bản vẽ hiện tại không còn QS3D project hợp lệ. Hãy Refresh Workspace.");
+                    return false;
+                }
+                var ownedFamily = project.FindFamily(family.Id);
+                if (ownedFamily == null || !ReferenceEquals(ownedFamily, family))
+                {
+                    SetStatus(action + " đã hủy vì Family thuộc project/generation cũ. Hãy Refresh Workspace và chọn lại Family.");
+                    return false;
+                }
+                _viewModel.SetActiveFamily(family);
+                var activeFamily = ProjectFamilyActivationService.GetActive(project);
+                if (!ReferenceEquals(activeFamily, ownedFamily))
+                {
+                    SetStatus(action + " đã hủy vì không thể xác nhận Family active trong project hiện tại. Hãy Refresh Workspace.");
+                    return false;
+                }
+                return true;
+            }
+            catch (Exception)
+            {
+                SetStatus(action + " đã hủy vì không thể xác nhận Family hiện hành. Chi tiết nội bộ đã được ẩn; hãy Refresh Workspace.");
+                return false;
+            }
+        }
+
         private void OnWallJunctionsClick(object sender, RoutedEventArgs e) { SetStatus("Phân tích giao tim tường L / T / X trong selection."); Send("QS3DWALLJUNCTIONS"); }
         private void OnWallJunction3DClick(object sender, RoutedEventArgs e) { SetStatus("Tạo/cập nhật dedicated Wall Junction 3D trong selection."); Send("QS3DWALLJUNCTION3D"); }
         private void OnWallSnapPreviewClick(object sender, RoutedEventArgs e) { SetStatus("Xem trước kế hoạch snap đầu mút tường; chưa sửa CAD."); Send("QS3DWALLSNAPPREVIEW"); }
