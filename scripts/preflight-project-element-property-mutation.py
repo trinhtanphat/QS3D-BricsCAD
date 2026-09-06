@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DOMAIN = ROOT / "src" / "QS3D.Core" / "Domain"
 ELEMENT = DOMAIN / "ProjectElement.cs"
 FACADE = DOMAIN / "ProjectElementPropertyDictionary.cs"
+STORE = ROOT / "src" / "QS3D.Core" / "Persistence" / "QsdbProjectStore.cs"
 
 
 def fail(message: str) -> None:
@@ -13,6 +14,7 @@ def fail(message: str) -> None:
 
 
 source = ELEMENT.read_text(encoding="utf-8")
+store = STORE.read_text(encoding="utf-8")
 if not FACADE.exists():
     fail("ProjectElement public property mutations require a dedicated semantic IDictionary facade")
 facade = FACADE.read_text(encoding="utf-8")
@@ -38,10 +40,12 @@ required_facade = (
     "_owner.AddProperty(key, value)",
     "_owner.RemoveProperty(key)",
     "_owner.ClearProperties()",
+    "internal void SetPersistenceValue(string key, string value)",
+    "_values.Add(key, value)",
 )
 for token in required_facade:
     if token not in facade:
-        fail(f"public IDictionary mutation must route through ProjectElement semantics: {token}")
+        fail(f"public IDictionary mutation must route through ProjectElement semantics while persistence retains an explicit bypass: {token}")
 
 set_start = source.index("public void SetProperty")
 set_end = source.index("internal void AddProperty", set_start)
@@ -71,7 +75,7 @@ clear_properties = source[clear_start:clear_end]
 if "if (_properties.Count == 0) return;" not in clear_properties:
     fail("clearing an already-empty property map must remain a true no-op")
 if "ElementGeometryPolicy.AffectsGeneratedGeometry" not in clear_properties or "ElementGeometryPolicy.AffectsGeneratedOutput" not in clear_properties:
-    fail("ClearProperties must preserve key-sensitive generated geometry/output invalidation semantics")
+    fail("ClearProperties must preserve key-sensitive generated geometry/output dirty semantics")
 if "_properties.Clear();" not in clear_properties or "MarkDirtyCore(" not in clear_properties:
     fail("ClearProperties must clear once and apply one coherent semantic dirty transition")
 
@@ -87,4 +91,12 @@ for token in internal_write_tokens:
     if token not in source:
         fail(f"generated-state internal bookkeeping must bypass the public semantic facade to avoid recursive dirty transitions: {token}")
 
-print("PASS: ProjectElement public property-map mutations preserve validation, dirty tracking, generated-output invalidation, and no-op semantics")
+read_map_start = store.index("private static void ReadStringMap")
+read_map_end = store.index("private static string RequiredCanonical", read_map_start)
+read_map = store[read_map_start:read_map_end]
+if "target is ProjectElementPropertyDictionary elementProperties" not in read_map or "elementProperties.SetPersistenceValue(key, value);" not in read_map:
+    fail("QSDB property hydration must bypass public semantic mutation so persisted generated-state properties are not synthesized during load")
+if read_map.index("target is ProjectMetadataDictionary") > read_map.index("target is ProjectElementPropertyDictionary"):
+    fail("existing project metadata persistence handling must remain first and explicit")
+
+print("PASS: ProjectElement public property-map mutations preserve semantic tracking while QSDB hydration remains side-effect free")
