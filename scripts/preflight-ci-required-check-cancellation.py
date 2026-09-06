@@ -27,10 +27,6 @@ def main() -> int:
     except (OSError, UnicodeError) as exc:
         fail(f"could not read {WORKFLOW.relative_to(ROOT)} safely: {exc}")
 
-    # Both event families remain intentional: push provides exact-head branch evidence and PR
-    # provides protected-branch required contexts. Their required check identities must not share
-    # a cancellation domain, because GitHub records the losing run's jobs as cancelled check-runs
-    # on the same candidate SHA and repository rules reject that SHA even if the survivor passes.
     require(r'^\s*"push":\s*$', text, "Shared CI must retain task/integration branch push validation")
     require(r'^\s*"pull_request":\s*$', text, "Shared CI must retain pull-request validation")
 
@@ -40,27 +36,29 @@ def main() -> int:
     body = concurrency.group("body")
     if "cancel-in-progress: true" not in body:
         fail("same-event superseded validation must remain cancellable")
-    if "github.event_name" not in body:
-        fail("concurrency identity must include event class so push cannot cancel PR required contexts")
-    if "'push'" not in body or "'pull_request'" not in body:
-        fail("concurrency identity must distinguish push and pull_request code validation")
-    if "'metadata'" not in body:
-        fail("pull_request edited metadata must remain isolated from code validation")
+    for token in ("github.event_name", "'push'", "'pull_request'", "'metadata'", "'dispatch'"):
+        if token not in body:
+            fail(f"concurrency identity is missing required event-class token {token}")
 
-    # Required PR contexts stay stable for rulesets; push jobs get distinct display names so a
-    # cancelled/successful branch run can neither block nor satisfy the PR-only required contexts.
-    require(
-        r"(?ms)^\s{2}preflight:\s*\n\s{4}name:\s*\$\{\{\s*github\.event_name\s*==\s*'push'\s*&&\s*'branch-preflight'\s*\|\|\s*'preflight'\s*\}\}",
-        text,
-        "preflight job must expose branch-preflight for push and stable preflight for PR",
+    # Only pull_request code validation may own the protected ruleset's stable required names.
+    # Push, PR metadata edits and workflow_dispatch can be cancelled or rerun for the same SHA;
+    # their names must therefore be non-required so they cannot satisfy or poison PR admission.
+    preflight_name = (
+        "name: ${{ github.event_name == 'push' && 'branch-preflight' || "
+        "github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata-preflight' || "
+        "github.event_name == 'pull_request' && 'preflight' || 'dispatch-preflight' }}"
     )
-    require(
-        r"(?ms)^\s{2}core:\s*\n\s{4}name:\s*\$\{\{\s*github\.event_name\s*==\s*'push'\s*&&\s*'branch-core'\s*\|\|\s*'core'\s*\}\}",
-        text,
-        "core job must expose branch-core for push and stable core for PR",
+    core_name = (
+        "name: ${{ github.event_name == 'push' && 'branch-core' || "
+        "github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata-core' || "
+        "github.event_name == 'pull_request' && 'core' || 'dispatch-core' }}"
     )
+    if text.count(preflight_name) != 1:
+        fail("preflight required context must be exclusive to pull_request code validation")
+    if text.count(core_name) != 1:
+        fail("core required context must be exclusive to pull_request code validation")
 
-    print("PASS: Shared CI separates push cancellation/check identities from PR required contexts.")
+    print("PASS: only PR code validation owns required preflight/core contexts; other cancellable event classes are isolated.")
     return 0
 
 
