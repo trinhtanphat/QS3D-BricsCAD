@@ -5,7 +5,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpCloudflareAccountOnboarding.cs"
+SUPERVISOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpTransportSupervisor.cs"
+PLUGIN = ROOT / "src" / "QS3D.BricsCAD.V25" / "PluginEntry.cs"
 text = SOURCE.read_text(encoding="utf-8")
+supervisor = SUPERVISOR.read_text(encoding="utf-8")
+plugin = PLUGIN.read_text(encoding="utf-8")
 
 start = text.find("public static void TryAutoStart()")
 end = text.find("public static void StopForHostShutdown()", start)
@@ -40,4 +44,24 @@ for token in [
     if token not in text:
         raise SystemExit(f"Cloudflare readiness fail-closed contract drifted: {token}")
 
-print("PASS Cloudflare automatic startup is background/coalesced while readiness remains fail closed")
+# Production startup no longer calls the Cloudflare helper directly. Pin the actual route from
+# PluginEntry -> coordinator -> supervisor so a future supervisor cannot reintroduce synchronous
+# network/DNS/public-readiness work on BricsCAD's initialization thread while this helper stays green.
+if "McpTransportCoordinator.TryAutoStartPreferred();" not in plugin:
+    raise SystemExit("PluginEntry must keep transport autostart behind the coordinator")
+
+supervisor_start = supervisor.find("internal static void TryAutoStartPreferred(McpTransportProvider preferredProvider)")
+supervisor_end = supervisor.find("internal static void StopForHostShutdown()", supervisor_start)
+if supervisor_start < 0 or supervisor_end <= supervisor_start:
+    raise SystemExit("could not locate supervisor TryAutoStartPreferred boundary")
+supervisor_body = supervisor[supervisor_start:supervisor_end]
+supervisor_queue_at = supervisor_body.find("ThreadPool.QueueUserWorkItem")
+supervisor_run_at = supervisor_body.find('RunOneIteration("autostart")')
+if supervisor_queue_at < 0:
+    raise SystemExit("production supervisor autostart must queue the first iteration off the BricsCAD startup thread")
+if supervisor_run_at < 0 or supervisor_run_at < supervisor_queue_at:
+    raise SystemExit("production supervisor autostart may run only inside queued background work")
+if "Interlocked.CompareExchange(ref _busy, 1, 0)" not in supervisor_body:
+    raise SystemExit("queued supervisor autostart must share the watchdog coalescing fence")
+
+print("PASS Cloudflare automatic startup is background/coalesced on both helper and production supervisor routes")

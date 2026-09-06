@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
@@ -17,7 +19,7 @@ namespace QS3D.Core.SmokeTests
         {
             var target = NewProject("target", ElementCategory.Column, "TARGET-FAM", "Target Family", "TARGET-ELEM");
             var source = NewProject("source", ElementCategory.Beam, "SOURCE-FAM", "Source Family", "SOURCE-ELEM");
-            source.Families.Single().Properties["LongValue"] = new string('X', 1001);
+            InjectLegacyFamilyProperty(source.Families.Single(), "LongValue", new string('X', 1001));
             var json = ProjectInterchangeJsonExporter.Build(source);
             var zones = target.Zones.Count;
             var floors = target.Floors.Count;
@@ -53,6 +55,15 @@ namespace QS3D.Core.SmokeTests
             project.Families.Add(new ProjectFamily(familyId, familyName, category));
             project.Elements.Add(new ProjectElement(elementId, category, familyId, id + "-floor", id + "-zone"));
             return project;
+        }
+
+        private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var innerField = family.Properties.GetType().GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Remap compatibility legacy fixture could not locate the Family property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Remap compatibility legacy fixture Family property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static void Equal<T>(T expected, T actual)

@@ -198,7 +198,7 @@ namespace QS3D.Core.SmokeTests
 
             var blankFamilyProject = BuildProject();
             var blankFamily = blankFamilyProject.FindFamily("FAM-B")!;
-            blankFamily.Properties["   "] = "legacy";
+            InjectLegacyFamilyProperty(blankFamily, "   ", "legacy");
             var blankFamilyVersion = blankFamilyProject.ChangeVersion;
             MustFail(
                 () => SemanticSelectionInspector.Inspect(blankFamilyProject, new[] { "B-001" }),
@@ -208,7 +208,7 @@ namespace QS3D.Core.SmokeTests
 
             var paddedFamilyProject = BuildProject();
             var paddedFamily = paddedFamilyProject.FindFamily("FAM-B")!;
-            paddedFamily.Properties[" FireRating "] = "R90";
+            InjectLegacyFamilyProperty(paddedFamily, " FireRating ", "R90");
             var paddedFamilyVersion = paddedFamilyProject.ChangeVersion;
             MustFail(
                 () => SemanticSelectionInspector.Inspect(paddedFamilyProject, new[] { "B-001" }),
@@ -602,6 +602,17 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(first);
             project.Elements.Add(second);
             return project;
+        }
+
+        private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var innerField = family.Properties.GetType().GetField(
+                "_inner",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Legacy Family fixture could not locate the property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Legacy Family fixture property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static void MustFail(Action action, string message)

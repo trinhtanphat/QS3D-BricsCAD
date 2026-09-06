@@ -73,7 +73,7 @@ def main() -> int:
     failures: list[str] = []
 
     required = (
-        "cancel-in-progress: true",
+        "cancel-in-progress: false",
         "release_workflow='.github/workflows/release-v25-cloud.yml'",
         "Downstream release duplicate-admission safety contract is missing",
         'dispatch_prefix="QS3D_V25_PREVIEW_DISPATCH_FENCE"',
@@ -95,8 +95,8 @@ def main() -> int:
         "prior_dispatch_query_status=$?",
         "Prior dispatch fence does not reference the canonical dispatcher workflow",
         "Prior dispatch fence source provenance is not admissible",
-        'prior_dispatch_status="$(jq -er \'.status | strings\' <<< "${prior_dispatch_run_json}")"',
-        'prior_dispatch_conclusion="$(jq -er \'.conclusion // "" | strings\' <<< "${prior_dispatch_run_json}")"',
+        "prior_dispatch_status=\"$(jq -er '.status | strings' <<< \"${prior_dispatch_run_json}\")\"",
+        "prior_dispatch_conclusion=\"$(jq -er '.conclusion // \"\" | strings' <<< \"${prior_dispatch_run_json}\")\"",
         'if [[ "${prior_dispatch_status}" != "completed" ]]; then',
         "Dispatcher completion proves only that the dispatch request attempt ended, not that downstream publication succeeded",
         "this terminal attempt does not suppress a safe retry",

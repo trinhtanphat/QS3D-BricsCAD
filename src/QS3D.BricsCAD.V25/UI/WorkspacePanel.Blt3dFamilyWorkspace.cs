@@ -27,6 +27,7 @@ namespace QS3D.BricsCAD.V25.UI
         private static readonly bool Blt3dFamilyWorkspaceBootstrapRegistered =
             RegisterBlt3dFamilyWorkspaceBootstrap();
 
+        private int _blt3dFamilyWorkspaceAttachmentGeneration;
         private bool _blt3dFamilyWorkspaceApplied;
         private Border? _blt3dFamilyModeChooser;
         private TextBlock? _blt3dFamilyModeTitle;
@@ -38,15 +39,31 @@ namespace QS3D.BricsCAD.V25.UI
                 FrameworkElement.LoadedEvent,
                 new RoutedEventHandler(OnBlt3dFamilyWorkspaceLoaded),
                 true);
+            EventManager.RegisterClassHandler(
+                typeof(WorkspacePanel),
+                FrameworkElement.UnloadedEvent,
+                new RoutedEventHandler(OnBlt3dFamilyWorkspaceUnloaded),
+                true);
             return true;
         }
 
         private static void OnBlt3dFamilyWorkspaceLoaded(object sender, RoutedEventArgs e)
         {
             if (!(sender is WorkspacePanel panel)) return;
+            var capturedGeneration = ++panel._blt3dFamilyWorkspaceAttachmentGeneration;
             panel.Dispatcher.BeginInvoke(
                 DispatcherPriority.Loaded,
-                new Action(panel.ApplyBlt3dFamilyWorkspace));
+                new Action(() =>
+                {
+                    if (panel.IsLoaded && panel._blt3dFamilyWorkspaceAttachmentGeneration == capturedGeneration)
+                        panel.ApplyBlt3dFamilyWorkspace();
+                }));
+        }
+
+        private static void OnBlt3dFamilyWorkspaceUnloaded(object sender, RoutedEventArgs e)
+        {
+            if (sender is WorkspacePanel panel)
+                panel._blt3dFamilyWorkspaceAttachmentGeneration++;
         }
 
         private void ApplyBlt3dFamilyWorkspace()
