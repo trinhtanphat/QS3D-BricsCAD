@@ -2,6 +2,15 @@
 
 ## Verdict
 
+Current owner authorization (2026-09-06, afternoon): the owner explicitly said
+"continue all" and allowed direct mouse/keyboard operation on this machine.
+This supersedes the earlier background-only restriction below. Resume fresh
+V25-first/V26 physical UI qualification through supported Computer Use, using
+the frozen product, unique disposable allocation and exact pushed harness.
+Preserve all consumed failures; do not infer that license stability or duplicate
+Ui() entry is fixed. MCP testing stays paused. No aggregate PASS or merge is
+authorized by this permission alone; actual acceptance is still required.
+
 Current owner boundary (2026-09-06): background-only work; no mouse/keyboard input, window activation or screenshots on the owner's interactive desktop. All such automation is stopped and no BricsCAD test process remains. Do not launch another physical-UI allocation on that desktop. Background-safe repository tests/builds/CI can continue, but they cannot replace physical-UI acceptance or establish an aggregate PASS. Resumption requires a genuinely isolated licensed interactive test session with explicit owner agreement, or separately supplied real operator evidence.
 
 Latest V25 allocation45 on pushed harness `53d1173b3ac251af8e47cf1558c86511467213f0` reached SelectTree, then failed `ui_bind / UI_STATE_PREEXISTS` before any acceptance input. This shows the one-shot UI entry point was invoked while its state already existed; the initiating cause is not established. No license notice was observed in this allocation and the earlier license failure is not relabelled as resolved. Zero phases qualified; full cleanup and original autostart restoration passed. Do not replay45 or weaken the duplicate-state guard.
