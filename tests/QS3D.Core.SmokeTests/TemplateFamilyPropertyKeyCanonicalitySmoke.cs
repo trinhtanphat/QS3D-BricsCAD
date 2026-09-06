@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Templates;
@@ -19,7 +21,7 @@ namespace QS3D.Core.SmokeTests
         private static void RejectsMalformedKey(string key, string label)
         {
             var project = new ProjectState("P-TEMPLATE-PROP-" + label, "Template family property key");
-            var profile = ProfileWithProperty(key, "0.2");
+            var profile = ProfileWithLegacyProperty(key, "0.2");
             var beforeUpdated = project.UpdatedUtc;
             var beforeVersion = project.ChangeVersion;
             var beforeAudits = project.AuditEvents.Count;
@@ -50,6 +52,19 @@ namespace QS3D.Core.SmokeTests
             var profile = new TemplateProfile("T-PROP", "Template property key");
             var family = new ProjectFamily("F-WALL", "Wall", ElementCategory.ArchitecturalWall);
             family.Properties[key] = value;
+            profile.Families.Add(family);
+            return profile;
+        }
+
+        private static TemplateProfile ProfileWithLegacyProperty(string key, string value)
+        {
+            var profile = new TemplateProfile("T-PROP", "Template property key");
+            var family = new ProjectFamily("F-WALL", "Wall", ElementCategory.ArchitecturalWall);
+            var innerField = family.Properties.GetType().GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("Legacy template Family fixture could not locate the property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new Exception("Legacy template Family fixture property backing dictionary had an unexpected type.");
+            inner[key] = value;
             profile.Families.Add(family);
             return profile;
         }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Xml.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
@@ -223,7 +224,7 @@ namespace QS3D.Core.SmokeTests
             var target = new ProjectFamily("TARGET", "Target", ElementCategory.ArchitecturalWall);
             target.Properties["ThicknessM"] = "0.3";
             var previous = new ProjectFamily("PREV", "Previous", ElementCategory.ArchitecturalWall);
-            previous.Properties[" ThicknessM "] = "0.2";
+            InjectLegacyFamilyProperty(previous, " ThicknessM ", "0.2");
             project.Families.Add(target);
             project.Families.Add(previous);
 
@@ -393,9 +394,18 @@ namespace QS3D.Core.SmokeTests
             if (setup.Project.UpdatedUtc != beforeUpdated) throw new Exception(operation + " touched project timestamp on a rejected dangling-family batch.");
         }
 
+        private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var innerField = family.Properties.GetType().GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Family-assignment legacy fixture could not locate the Family property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Family-assignment legacy fixture Family property backing dictionary had an unexpected type.");
+            inner[key] = value;
+        }
+
         private static void SetRawFamilyId(ProjectElement element, string value)
         {
-            var field = typeof(ProjectElement).GetField("_familyId", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            var field = typeof(ProjectElement).GetField("_familyId", BindingFlags.Instance | BindingFlags.NonPublic)
                 ?? throw new Exception("ProjectElement FamilyId backing field was not found for the raw identity fixture.");
             if (field.FieldType != typeof(string))
                 throw new Exception("ProjectElement FamilyId backing field must remain a string.");
