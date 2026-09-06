@@ -25,7 +25,7 @@ The constructor applies the bound independently to:
 
 ## Deterministic acceptance matrix
 
-`MeasurementWorkItemMappingTokenBoundSmoke` proves:
+`MeasurementWorkItemMappingTokenBoundSmoke` runs as a module initializer and proves:
 
 1. exactly 1024 UTF-16 code units remain accepted across all constructor identity surfaces and Resolve;
 2. 1025 code units fail closed on each constructor identity surface;
@@ -33,7 +33,7 @@ The constructor applies the bound independently to:
 4. an oversized token with an XML-invalid tail reports the length boundary first, proving ordering;
 5. existing whitespace/control/XML-invalid in-bound rejection remains active.
 
-`scripts/preflight-measurement-work-item-mapping-token-bound.py` pins the production constant, constructor/Resolve coverage, validation ordering, smoke matrix, and smoke registration.
+`scripts/preflight-measurement-work-item-mapping-token-bound.py` pins the production constant, constructor/Resolve coverage, validation ordering, smoke matrix, and module-initializer execution contract.
 
 ## Runtime boundary
 
