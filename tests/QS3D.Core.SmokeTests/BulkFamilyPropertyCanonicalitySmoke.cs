@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
 
@@ -17,7 +19,7 @@ namespace QS3D.Core.SmokeTests
         private static void MalformedTargetDefaultsFailBeforeMutation()
         {
             var project = NewProject(out var previous, out var target, out var element);
-            target.Properties[" ThicknessM "] = "0.30";
+            InjectLegacyFamilyProperty(target, " ThicknessM ", "0.30");
             var beforeVersion = project.ChangeVersion;
             var beforeUpdatedUtc = project.UpdatedUtc;
             var beforeElementUpdatedUtc = element.UpdatedUtc;
@@ -40,7 +42,7 @@ namespace QS3D.Core.SmokeTests
         private static void MalformedPreviousDefaultsFailBeforeMutation()
         {
             var project = NewProject(out var previous, out var target, out var element);
-            previous.Properties[" OldDefault "] = "legacy";
+            InjectLegacyFamilyProperty(previous, " OldDefault ", "legacy");
             element.Properties[" OldDefault "] = "legacy";
             var beforeVersion = project.ChangeVersion;
             var beforeUpdatedUtc = project.UpdatedUtc;
@@ -127,6 +129,15 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(element);
             element.MarkClean(ElementDirtyFlags.All);
             return project;
+        }
+
+        private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var innerField = family.Properties.GetType().GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("Legacy Family fixture could not locate the property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new Exception("Legacy Family fixture property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static void Equal(string expected, string actual, string message)
