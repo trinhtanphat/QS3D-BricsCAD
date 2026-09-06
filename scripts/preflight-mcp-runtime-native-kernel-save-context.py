@@ -58,52 +58,50 @@ def main() -> int:
 
     require(errors, extrude, (
         "var profileClone = source.Clone() as Curve;",
-        "model.AppendEntity(profileClone);",
-        "transaction.AddNewlyCreatedDBObject(profileClone, true);",
-        "solid.CreateExtrudedSolid(profileClone, new Vector3d(0d, 0d, height), new SweepOptions());",
-        "if (!profileClone.IsErased) profileClone.Erase();",
-        "kernelSource=database-resident-profile-clone",
-    ), "database-resident extrusion profile")
+        "Region.CreateFromCurves(new DBObjectCollection { profileClone })",
+        "solid.Extrude(region, height, 0d);",
+        "region?.Dispose();",
+        "profileClone.Dispose();",
+        "kernelSource=transient-region",
+    ), "V25 transient-region extrusion profile")
     forbid(errors, extrude, (
+        "model.AppendEntity(profileClone);",
+        "solid.CreateExtrudedSolid(profileClone",
+        "kernelSource=database-resident-profile-clone",
         "kernelSource=transient-curve-clone",
-        "solid.CreateExtrudedSolid(sourceClone",
-        "Region.CreateFromCurves",
-    ), "licensed extrusion regression")
+    ), "licensed Circle extrusion regression")
 
     require(errors, boolean, (
-        "var targetWorking = target.Clone() as Solid3d;",
-        "var operandWorking = operand.Clone() as Solid3d;",
+        "var operandClone = operand.Clone() as Solid3d;",
+        "target.BooleanOperation(operation, operandClone);",
+        "if (!operand.IsErased) operand.Erase();",
+        "operandClone.Dispose();",
+        "kernelTarget=database-resident; kernelOperand=transient-clone",
+    ), "V25 boolean target/transient-operand topology")
+    forbid(errors, boolean, (
         "model.AppendEntity(targetWorking);",
         "model.AppendEntity(operandWorking);",
         "targetWorking.BooleanOperation(operation, operandWorking);",
-        "resultClone = targetWorking.Clone() as Solid3d;",
-        "target.HandOverTo(resultClone, true, true);",
-        "if (!targetWorking.IsErased) targetWorking.Erase();",
-        "if (!operandWorking.IsErased) operandWorking.Erase();",
-        "if (!operand.IsErased) operand.Erase();",
+        "target.HandOverTo(resultClone",
         "kernelInputs=database-resident-working-clones",
-    ), "database-resident boolean working set")
-    forbid(errors, boolean, (
-        "targetClone.BooleanOperation(operation, operandClone);",
-        "target=transient-clone; operand=transient-clone",
-        "target.BooleanOperation(operation",
-    ), "licensed boolean regression")
+    ), "licensed boolean eInvalidInput regression")
 
     require(errors, native_save, (
         "Application.DocumentManager.ExecuteInCommandContextAsync(",
-        "var completionSource = new TaskCompletionSource<object?>",
-        "Completion = completionSource.Task;",
-        "completionSource.TrySetResult(null);",
-        "completionSource.TrySetException(ex);",
+        "Completion = Application.DocumentManager.ExecuteInCommandContextAsync(",
+        "_ => ExecuteQsaveInCommandContext(),",
+        "EnsureCommandContextAutomationNotStopped();",
         "document.Editor.Command(\"_.QSAVE\");",
         "Task.WaitAny(",
         "completion.GetAwaiter().GetResult();",
         "WaitForCleanDbmod",
         "Do not retry automatically",
         "DbmodPersistentContentMask = 1 | 4 | 32",
-    ), "synchronous native QSAVE command context")
+    ), "single-owner synchronous native QSAVE command context")
     forbid(errors, native_save, (
-        "Completion = Application.DocumentManager.ExecuteInCommandContextAsync(",
+        "TaskCompletionSource",
+        "TrySetResult",
+        "TrySetException",
         "document.SendStringToExecute(",
         "McpCadMutationCoordinator.QueueNativeCommand(",
         "ManualResetEventSlim",
@@ -112,7 +110,10 @@ def main() -> int:
         "CommandFailed +=",
         "Database.Save();",
         "Database.SaveAs(",
-    ), "queued/event-owned QSAVE regression")
+    ), "queued/double-owned QSAVE regression")
+    execute_qsave = method_block(native_save, "private Task ExecuteQsaveInCommandContext()")
+    if "_ensureRunning();" in execute_qsave:
+        errors.append("QSAVE command-context callback must not re-enter the transport mutation execution lease")
     if native_save.count('document.Editor.Command("_.QSAVE");') != 1:
         errors.append("current-document QSAVE must have exactly one synchronous command attempt")
 
@@ -152,7 +153,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: MCP direct kernels use database-resident working inputs, current-document save executes one synchronous native QSAVE, SaveAs settles through native QSAVE, direct failures reach unified diagnostics, and status binds only an existing persisted project.")
+    print("PASS: MCP direct kernels use V25-safe transient-region/operand topology, current-document save owns one observed native QSAVE task without mutation-lease escape, SaveAs settles through native QSAVE, direct failures reach unified diagnostics, and status binds only an existing persisted project.")
     return 0
 
 
