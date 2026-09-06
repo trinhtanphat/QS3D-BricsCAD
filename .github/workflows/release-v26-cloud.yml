@@ -35,6 +35,7 @@ permissions:
 concurrency:
   group: qs3d-cloud-v26-preview-release
   cancel-in-progress: false
+  queue: max
 
 env:
   BRICSCAD_V26_PINNED_MSI_SHA256: ${{ inputs.installer_sha256 || vars.BRICSCAD_V26_MSI_SHA256 }}
