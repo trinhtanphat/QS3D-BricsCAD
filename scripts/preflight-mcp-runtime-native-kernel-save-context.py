@@ -47,53 +47,50 @@ def main() -> int:
     boolean = method_block(direct, "private static string Boolean")
     save_as = method_block(direct, "private static string SaveAs")
     status = method_block(domain, "internal static string BuildStatusJson")
-    schedule_start = native_save.find("internal void ScheduleInCadContext()")
-    schedule_end = native_save.find("private Task ExecuteQsaveInCommandContext()", schedule_start)
-    schedule = native_save[schedule_start:schedule_end] if schedule_start >= 0 and schedule_end > schedule_start else ""
-    execute_qsave = method_block(native_save, "private Task ExecuteQsaveInCommandContext()")
+    queue_start = native_save.find("internal void QueueInCadContext()")
+    queue_end = native_save.find("internal bool DetachBestEffort()", queue_start)
+    queue = native_save[queue_start:queue_end] if queue_start >= 0 and queue_end > queue_start else ""
 
     require(errors, extrude, (
+        "Region.CreateFromCurves(new DBObjectCollection { source })",
+        "model.AppendEntity(region);", "transaction.AddNewlyCreatedDBObject(region, true);",
+        "solid.Extrude(region, height, 0d);", "if (!region.IsErased) region.Erase();",
+        "kernelSource=database-resident-region",
+    ), "V25 database-resident-region extrusion profile")
+    forbid(errors, extrude, (
         "var profileClone = source.Clone() as Curve;",
         "Region.CreateFromCurves(new DBObjectCollection { profileClone })",
-        "solid.Extrude(region, height, 0d);",
-        "region?.Dispose();", "profileClone.Dispose();", "kernelSource=transient-region",
-    ), "V25 transient-region extrusion profile")
-    forbid(errors, extrude, (
-        "model.AppendEntity(profileClone);", "solid.CreateExtrudedSolid(profileClone",
+        "solid.CreateExtrudedSolid(profileClone", "kernelSource=transient-region",
         "kernelSource=database-resident-profile-clone", "kernelSource=transient-curve-clone",
-    ), "licensed Circle extrusion regression")
+    ), "licensed closed-polyline extrusion regression")
 
     require(errors, boolean, (
-        "var operandClone = operand.Clone() as Solid3d;", "target.BooleanOperation(operation, operandClone);",
-        "if (!operand.IsErased) operand.Erase();", "operandClone.Dispose();",
-        "kernelTarget=database-resident; kernelOperand=transient-clone",
-    ), "V25 boolean target/transient-operand topology")
+        "target.BooleanOperation(operation, operand);",
+        "if (!operand.IsErased) operand.Erase();",
+        "kernelTarget=database-resident; kernelOperand=database-resident",
+    ), "V25 boolean resident target/resident operand topology")
     forbid(errors, boolean, (
+        "var operandClone = operand.Clone() as Solid3d;", "target.BooleanOperation(operation, operandClone);",
         "model.AppendEntity(targetWorking);", "model.AppendEntity(operandWorking);",
         "targetWorking.BooleanOperation(operation, operandWorking);", "target.HandOverTo(resultClone",
-        "kernelInputs=database-resident-working-clones",
+        "kernelOperand=transient-clone", "kernelInputs=database-resident-working-clones",
     ), "licensed boolean eInvalidInput regression")
 
     require(errors, native_save, (
-        "Application.DocumentManager.ExecuteInCommandContextAsync(",
-        "var completionSource = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);",
-        "Completion = completionSource.Task;", "completionSource.TrySetResult(null);",
-        "completionSource.TrySetException(ex);", "EnsureCommandContextAutomationNotStopped();",
-        "document.Editor.Command(\"_.QSAVE\");", "Task.WaitAny(", "completion.GetAwaiter().GetResult();",
+        "ManualResetEventSlim", "McpCadMutationCoordinator.QueueNativeCommand(",
+        "document.SendStringToExecute(\"_.QSAVE\\n\", true, false, true)",
+        "CommandEnded += OnCommandEnded", "CommandCancelled += OnCommandCancelled", "CommandFailed += OnCommandFailed",
+        "EnsureCommandContextAutomationNotStopped();", "Done.Wait(", "TerminalError",
         "WaitForCleanDbmod", "Do not retry automatically", "DbmodPersistentContentMask = 1 | 4 | 32",
-    ), "V25 ExecutionResult-compatible synchronous native QSAVE")
+    ), "V25 event-owned native QSAVE")
     forbid(errors, native_save, (
-        "Completion = Application.DocumentManager.ExecuteInCommandContextAsync(",
-        "document.SendStringToExecute(", "McpCadMutationCoordinator.QueueNativeCommand(",
-        "ManualResetEventSlim", "CommandEnded +=", "CommandCancelled +=", "CommandFailed +=",
-        "Database.Save();", "Database.SaveAs(",
-    ), "queued/host-result QSAVE regression")
-    if "throw;" in schedule:
-        errors.append("QSAVE scheduling callback must capture callback failures into Completion without rethrowing an unobserved host fault")
-    if "_ensureRunning();" in execute_qsave:
-        errors.append("QSAVE command-context callback must not re-enter the transport mutation execution lease")
-    if native_save.count('document.Editor.Command("_.QSAVE");') != 1:
-        errors.append("current-document QSAVE must have exactly one synchronous command attempt")
+        "Application.DocumentManager.ExecuteInCommandContextAsync(", "TaskCompletionSource",
+        "document.Editor.Command(\"_.QSAVE\")", "Database.Save();", "Database.SaveAs(",
+    ), "command-context QSAVE regression")
+    if not queue:
+        errors.append("QSAVE queue block is missing")
+    if native_save.count('document.SendStringToExecute("_.QSAVE\\n", true, false, true)') != 1:
+        errors.append("current-document QSAVE must have exactly one queued command attempt")
 
     require(errors, save_as, (
         "McpDiagnosticHub.InvokeInCadContext(() =>", "document.Database.SaveAs(fullPath, DwgVersion.Current);",
@@ -109,7 +106,7 @@ def main() -> int:
         print("ERROR: licensed MCP runtime regression guard failed:")
         for error in errors: print(" -", error)
         return 1
-    print("PASS: V25 kernels use transient-region/operand topology and QSAVE uses an observed TCS completion signal compatible with BricsCAD ExecutionResult, without callback rethrow or mutation-lease escape.")
+    print("PASS: V25 kernels use database-resident Region/operand topology and QSAVE uses event-owned terminal completion without mutation-lease escape.")
     return 0
 
 
