@@ -98,6 +98,7 @@ namespace QS3D.Core.SmokeTests
             child.DependsOn.Add(root.Id);
             child.SetProperty("Mark", "B-01");
             project.Elements.Add(child);
+            project.UpdatedUtc = new DateTime(2026, 8, 10, 10, 11, 12, DateTimeKind.Utc);
             return ProjectInterchangeJsonExporter.Build(project);
         }
     }

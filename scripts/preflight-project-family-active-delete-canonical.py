@@ -51,14 +51,15 @@ def main():
         print("ERROR: cannot isolate ProjectFamilyService.Delete().")
         return 1
     delete_body = source[delete_start:reference_start]
-    if ".Trim()" not in delete_body or "project.Touch();" not in delete_body:
-        print("ERROR: Delete() must canonicalize active identity before the existing mutation boundary.")
+    structural_remove = "project.Families.Remove(family)"
+    if ".Trim()" not in delete_body or structural_remove not in delete_body:
+        print("ERROR: Delete() must canonicalize active identity before the Family structural mutation boundary.")
         return 1
-    if delete_body.find(".Trim()") > delete_body.find("project.Touch();"):
-        print("ERROR: ActiveFamilyId canonical guard must run before project mutation.")
+    if delete_body.find(".Trim()") > delete_body.find(structural_remove):
+        print("ERROR: ActiveFamilyId canonical guard must run before Family structural mutation.")
         return 1
 
-    print("PASS: active Family deletion uses the same trimmed, case-insensitive identity as activation reads and remains covered by module-registered smoke tests.")
+    print("PASS: active Family deletion uses the same trimmed, case-insensitive identity as activation reads, guards before structural removal, and remains covered by module-registered smoke tests.")
     return 0
 
 

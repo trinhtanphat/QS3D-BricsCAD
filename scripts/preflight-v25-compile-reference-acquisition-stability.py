@@ -13,10 +13,15 @@ REQUIRED = (
     "$sha.ComputeHash($stream)",
     "'.qs3d-v25-msi-' + [Guid]::NewGuid().ToString('N') + '.tmp'",
     "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging",
-    "Test-PinnedMsiGeneration -Path $staging",
-    "Assert-NoExistingReparseComponent -Path $msi -Label 'MsiPath before atomic publication'",
-    "[IO.File]::Move($staging, $msi)",
-    "Test-PinnedMsiGeneration -Path $msi -Label 'Published BricsCAD V25 MSI'",
+    "$stagingAdmission = Open-PinnedMsiReadLock -Path $staging -ExpectedSha256 $expected",
+    "Assert-NoExistingReparseComponent -Path $msi -Label 'MsiPath before held-generation publication'",
+    "[IO.FileMode]::CreateNew",
+    "$stagingAdmission.Stream.CopyTo($publishedStream)",
+    "$publishedStream.Flush($true)",
+    "$publishedAdmission = Open-PinnedMsiReadLock -Path $msi -ExpectedSha256 $expected",
+    "Assert-PinnedMsiStable -State $publishedAdmission -Label 'immediately after held-generation publication'",
+    "[string]$publishedAdmission.Sha256, [string]$stagingAdmission.Sha256",
+    "$stagingAdmission.Stream.Dispose()",
     "Remove-Item -LiteralPath $staging -Force -ErrorAction SilentlyContinue",
     "function Assert-PinnedMsiStable",
     "before Authenticode verification",
@@ -33,6 +38,8 @@ REQUIRED = (
 FORBIDDEN = (
     "Get-FileHash",
     "Invoke-WebRequest -Uri $candidate.Url -OutFile $msi",
+    "[IO.File]::Move($staging, $msi)",
+    "Remove-Item -LiteralPath $msi -Force",
     "Get-ChildItem -LiteralPath $extract -Recurse -File -Filter 'BrxMgd.dll'",
 )
 
@@ -47,11 +54,20 @@ def validate(text: str) -> list[str]:
             failures.append(f"unsafe acquisition path/traversal marker remains: {token}")
 
     download = text.find("Invoke-WebRequest -Uri $candidate.Url -OutFile $staging")
-    staged_admission = text.find("Test-PinnedMsiGeneration -Path $staging")
-    publish = text.find("[IO.File]::Move($staging, $msi)")
-    published_admission = text.find("Test-PinnedMsiGeneration -Path $msi -Label 'Published BricsCAD V25 MSI'")
-    if not (0 <= download < staged_admission < publish < published_admission):
-        failures.append("remote MSI must be staged, held-verified, atomically published, then held-verified again")
+    staged_admission = text.find("$stagingAdmission = Open-PinnedMsiReadLock -Path $staging -ExpectedSha256 $expected")
+    fresh_publish = text.find("[IO.FileMode]::CreateNew", staged_admission)
+    copy_from_held = text.find("$stagingAdmission.Stream.CopyTo($publishedStream)", fresh_publish)
+    durable_flush = text.find("$publishedStream.Flush($true)", copy_from_held)
+    published_admission = text.find("$publishedAdmission = Open-PinnedMsiReadLock -Path $msi -ExpectedSha256 $expected", durable_flush)
+    digest_match = text.find("[string]$publishedAdmission.Sha256, [string]$stagingAdmission.Sha256", published_admission)
+    staged_dispose = text.find("$stagingAdmission.Stream.Dispose()", digest_match)
+    if not (
+        0 <= download < staged_admission < fresh_publish < copy_from_held < durable_flush
+        < published_admission < digest_match < staged_dispose
+    ):
+        failures.append(
+            "remote MSI must stay held from staged admission through fresh-only durable publication, canonical re-admission, and digest comparison"
+        )
 
     lock = text.find("$msiState = Open-PinnedMsiReadLock")
     signature = text.find("Get-AuthenticodeSignature -FilePath $msiState.Path")
@@ -71,9 +87,14 @@ def main() -> int:
         "[IO.FileShare]::Read",
         "$sha.ComputeHash($stream)",
         "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging",
-        "Test-PinnedMsiGeneration -Path $staging",
-        "[IO.File]::Move($staging, $msi)",
-        "Test-PinnedMsiGeneration -Path $msi -Label 'Published BricsCAD V25 MSI'",
+        "$stagingAdmission = Open-PinnedMsiReadLock -Path $staging -ExpectedSha256 $expected",
+        "[IO.FileMode]::CreateNew",
+        "$stagingAdmission.Stream.CopyTo($publishedStream)",
+        "$publishedStream.Flush($true)",
+        "$publishedAdmission = Open-PinnedMsiReadLock -Path $msi -ExpectedSha256 $expected",
+        "Assert-PinnedMsiStable -State $publishedAdmission -Label 'immediately after held-generation publication'",
+        "[string]$publishedAdmission.Sha256, [string]$stagingAdmission.Sha256",
+        "$stagingAdmission.Stream.Dispose()",
         "after Authenticode verification",
         "after Windows Installer metadata verification",
         "after administrative extraction",
@@ -91,6 +112,13 @@ def main() -> int:
     if not validate(direct_download):
         failures.append("guard mutation escaped direct-to-canonical MSI download")
 
+    pathname_publish = text.replace(
+        "$stagingAdmission.Stream.CopyTo($publishedStream)",
+        "[IO.File]::Move($staging, $msi)",
+    )
+    if not validate(pathname_publish):
+        failures.append("guard mutation escaped pathname File.Move publication")
+
     pathname_hash = text.replace(
         "$state = Open-PinnedMsiReadLock -Path $Path -ExpectedSha256 $expected",
         "$actual = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash",
@@ -106,7 +134,7 @@ def main() -> int:
 
     print("PASS: V25 compile-reference MSI admission and trust stay generation-bound.")
     print(" - cache and staged downloads are hashed through held read generations")
-    print(" - remote bytes are staged before atomic canonical publication")
+    print(" - staged bytes remain held through fresh-only durable canonical publication and re-admission")
     print(" - Authenticode, MSI metadata, and msiexec stay inside the final generation lock")
     print(" - extracted-tree discovery rejects reparse-backed traversal")
     return 0

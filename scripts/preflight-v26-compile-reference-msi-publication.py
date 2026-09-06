@@ -19,7 +19,7 @@ def validate(text: str) -> list[str]:
     required = (
         "function Publish-AdmittedV26Installer",
         "rejected cached V26 MSI is left untouched because safe replacement requires a fresh canonical destination",
-        "[IO.FileMode]::CreateNew",
+        "$Destination,\n            [IO.FileMode]::CreateNew",
         "$Candidate.Stream.Position = 0",
         "$Candidate.Stream.CopyTo($destinationStream)",
         "$destinationStream.Flush($true)",
@@ -58,7 +58,7 @@ def main() -> int:
         raise SystemExit("\n".join(errors))
 
     probes = {
-        "fresh-only destination": text.replace("[IO.FileMode]::CreateNew", "[IO.FileMode]::Create", 1),
+        "fresh-only destination": text.replace("$Destination,\n            [IO.FileMode]::CreateNew", "$Destination,\n            [IO.FileMode]::Create", 1),
         "held admitted source": text.replace("$Candidate.Stream.CopyTo($destinationStream)", "[IO.File]::OpenRead($Candidate.Path).CopyTo($destinationStream)", 1),
         "durable flush": text.replace("$destinationStream.Flush($true)", "$destinationStream.Flush()", 1),
         "post-publication admission": text.replace("Get-SingleV26InstallerAdmission -Path $Destination -Expected $Candidate.Sha256", "$null", 1),

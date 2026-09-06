@@ -280,6 +280,7 @@ def build_child_env(source=None):
     child_env = dict(os.environ if source is None else source)
     for name in PYTHON_ENVIRONMENT_CONTROLS:
         child_env.pop(name, None)
+    child_env["PYTHONHASHSEED"] = "0"
     child_env["PYTHONUTF8"] = "1"
     child_env["PYTHONIOENCODING"] = "utf-8"
     child_env["PYTHONNOUSERSITE"] = "1"

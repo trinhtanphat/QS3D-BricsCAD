@@ -38,7 +38,8 @@ require(lifecycle, "CancelLifecycleIdleDrain();", "lifecycle drain cancellation"
 require(lifecycle, "operation.Abort();", "queued lifecycle operation abort")
 require(lifecycle, "PaletteCoordinator.ResetForNoDocument();", "last-document palette reset")
 require(lifecycle, "ScheduleReconcile(active, true);", "remaining-document deferred rebind")
-require(lifecycle, "EnsureProject(document, refreshUi);", "deferred project reconcile")
+require(lifecycle, "var refreshActiveUi = refreshUi && IsActiveDocument(document);", "execution-time active-document reconcile fence")
+require(lifecycle, "EnsureProject(document, refreshActiveUi);", "deferred project reconcile")
 require(lifecycle, "PaletteCoordinator.ResetForUnavailableProject(message);", "project-load failure workspace reset")
 
 if "StartLifecycleIdleTimer" in lifecycle or "new DispatcherTimer(" in lifecycle or "TimeSpan.FromMilliseconds(1d)" in lifecycle:
@@ -60,8 +61,12 @@ require(workspace, "_inspection = Array.Empty<EntitySnapshot>();", "workspace in
 require(workspace, "InspectionList.ItemsSource = _inspection;", "workspace inspection rebinding")
 require(workspace, "_viewModel = new WorkspaceViewModel();", "workspace semantic callback reset")
 require(workspace, "FamilyList.SelectedItem = null;", "workspace family selection clear")
-require(workspace, 'ClearProject("Đọc Workspace lỗi: " + ex.Message);', "direct workspace refresh fail-closed")
+require(workspace, "ClearProject(string.Empty);", "direct workspace refresh fail-closed clear")
+require(workspace, 'ReportWorkspaceFailure("Đọc Workspace");', "direct workspace refresh redacted diagnostic")
+require(workspace, "private void ReportWorkspaceFailure(string operation)", "workspace redacted failure helper")
 
+if 'ClearProject("Đọc Workspace lỗi: " + ex.Message);' in workspace:
+    errors.append("direct Workspace refresh must not publish raw exception details")
 if "EnsureProject(active, true);" in lifecycle:
     errors.append("DocumentDestroyed must not synchronously load/rebind project UI before BricsCAD returns to idle")
 
@@ -71,4 +76,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: destroyed or unavailable projects cannot leave stale Workspace semantic callbacks; no-document visibility is preserved and remaining drawings rebind through the one-shot ApplicationIdle reconcile boundary.")
+print("PASS: destroyed or unavailable projects cannot leave stale Workspace semantic callbacks; no-document visibility is preserved, direct refresh fails closed with redacted diagnostics, and remaining drawings rebind through the one-shot ApplicationIdle reconcile boundary.")

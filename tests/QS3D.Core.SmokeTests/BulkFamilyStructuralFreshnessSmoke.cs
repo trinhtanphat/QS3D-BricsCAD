@@ -25,9 +25,9 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining<InvalidOperationException>(
                 () => new BulkEditService().AssignFamily(project, YieldThenRemoveFamily(project, family, element.Id), family.Id),
-                "Target Family no longer belongs to the project after bulk assignment target enumeration");
+                "Bulk Family target-id enumeration changed the project while targets were being enumerated");
 
-            Equal(beforeVersion, project.ChangeVersion, "removed-family project revision");
+            Equal(beforeVersion + 1L, project.ChangeVersion, "removed-family project revision");
             False(project.Families.Contains(family), "removed-family caller side effect");
             Equal(string.Empty, element.FamilyId, "removed-family FamilyId");
             Equal(0, element.Properties.Count, "removed-family property count");
@@ -44,9 +44,9 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining<InvalidOperationException>(
                 () => new BulkEditService().AssignFamily(project, YieldThenReplaceFamily(project, family, element.Id), family.Id),
-                "Target Family no longer belongs to the project after bulk assignment target enumeration");
+                "Bulk Family target-id enumeration changed the project while targets were being enumerated");
 
-            Equal(beforeVersion, project.ChangeVersion, "replaced-family project revision");
+            Equal(beforeVersion + 2L, project.ChangeVersion, "replaced-family project revision");
             False(project.Families.Contains(family), "replaced-family original instance");
             Equal(string.Empty, element.FamilyId, "replaced-family FamilyId");
             Equal(0, element.Properties.Count, "replaced-family property count");

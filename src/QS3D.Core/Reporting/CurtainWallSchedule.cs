@@ -37,16 +37,30 @@ namespace QS3D.Core.Reporting
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
             ReportingProjectIdentityGuard.RequireUniqueElementIds(project, "Curtain wall schedule");
-            var floors = project.Floors.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
-            var families = project.Families.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
+
+            // Preserve the historical fail-closed admission check on the live collection.
+            // CaptureProjectRevision repeats this validation while freezing the authoritative
+            // generation, so a mutation between admission and capture cannot publish mixed state.
+            foreach (var element in project.Elements)
+            {
+                if (element.Category != ElementCategory.GlassWall) continue;
+                RequireClearPanelEnvelope(element, out _, out _, out _, out _);
+            }
+
+            var snapshot = CaptureProjectRevision(project);
+            EnsureProjectRevision(project, snapshot);
+
+            var floors = snapshot.Floors.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
+            var families = snapshot.Families.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
             var rows = new Dictionary<string, CurtainWallScheduleRow>(StringComparer.OrdinalIgnoreCase);
             var accumulators = new Dictionary<string, CurtainWallAggregateState>(StringComparer.OrdinalIgnoreCase);
             var order = new List<string>();
 
-            foreach (var element in project.Elements.Where(x => x.Category == ElementCategory.GlassWall).OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
+            foreach (var element in snapshot.Elements.Where(x => x.Category == ElementCategory.GlassWall).OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
-                var floorId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FloorId);
-                var familyId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FamilyId);
+                EnsureProjectRevision(project, snapshot);
+                var floorId = element.FloorId;
+                var familyId = element.FamilyId;
                 var floor = floors.TryGetValue(floorId, out var floorName) ? floorName : floorId;
                 families.TryGetValue(familyId, out var familyDefinition);
                 if (familyDefinition != null && familyDefinition.Category != element.Category)
@@ -65,8 +79,8 @@ namespace QS3D.Core.Reporting
                 {
                     row = new CurtainWallScheduleRow
                     {
-                        ProjectId = project.ProjectId,
-                        DrawingFingerprint = project.DrawingFingerprint,
+                        ProjectId = snapshot.ProjectId,
+                        DrawingFingerprint = snapshot.DrawingFingerprint,
                         Floor = floor,
                         FamilyName = family
                     };
@@ -77,9 +91,9 @@ namespace QS3D.Core.Reporting
 
                 var aggregate = accumulators[key];
                 row.WallCount = checked(row.WallCount + 1);
-                row.PanelCount = AddInt(row.PanelCount, QInt(element, "CurtainPanelCount"), element.Id + "/CurtainPanelCount");
-                row.VerticalFrameCount = AddInt(row.VerticalFrameCount, QInt(element, "CurtainVerticalFrameCount"), element.Id + "/CurtainVerticalFrameCount");
-                row.HorizontalFrameCount = AddInt(row.HorizontalFrameCount, QInt(element, "CurtainHorizontalFrameCount"), element.Id + "/CurtainHorizontalFrameCount");
+                row.PanelCount = AddInt(row.PanelCount, element.PanelCount, element.Id + "/CurtainPanelCount");
+                row.VerticalFrameCount = AddInt(row.VerticalFrameCount, element.VerticalFrameCount, element.Id + "/CurtainVerticalFrameCount");
+                row.HorizontalFrameCount = AddInt(row.HorizontalFrameCount, element.HorizontalFrameCount, element.Id + "/CurtainHorizontalFrameCount");
                 aggregate.TotalWallLengthM.Add(Q(element, "LengthM"), element.Id + "/LengthM");
                 aggregate.GrossWallAreaM2.Add(Q(element, "GrossWallAreaM2"), element.Id + "/GrossWallAreaM2");
                 aggregate.OpeningAreaM2.Add(Q(element, "OpeningAreaM2"), element.Id + "/OpeningAreaM2");
@@ -92,8 +106,10 @@ namespace QS3D.Core.Reporting
                 row.MaximumClearPanelHeightM = Math.Max(row.MaximumClearPanelHeightM, maximumClearPanelHeightM);
                 row.ElementIds.Add(element.Id);
                 ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
+                EnsureProjectRevision(project, snapshot);
             }
 
+            EnsureProjectRevision(project, snapshot);
             foreach (var key in order)
             {
                 var row = rows[key];
@@ -107,7 +123,106 @@ namespace QS3D.Core.Reporting
                 if (row.MinimumClearPanelWidthM == double.MaxValue) row.MinimumClearPanelWidthM = 0d;
                 if (row.MinimumClearPanelHeightM == double.MaxValue) row.MinimumClearPanelHeightM = 0d;
             }
+            EnsureProjectRevision(project, snapshot);
             return order.Select(x => rows[x]).ToList().AsReadOnly();
+        }
+
+        private static CurtainScheduleSnapshot CaptureProjectRevision(ProjectState project)
+        {
+            return new CurtainScheduleSnapshot(
+                project.ChangeVersion,
+                project.ProjectId,
+                project.DrawingFingerprint,
+                project.Elements.Select(CurtainElementSnapshot.Capture).ToList().AsReadOnly(),
+                project.Floors.Select(x => new CurtainFloorSnapshot(x.Id, x.Name)).ToList().AsReadOnly(),
+                project.Families.Select(x => new CurtainFamilySnapshot(x.Id, x.Name, x.Category)).ToList().AsReadOnly());
+        }
+
+        private static void EnsureProjectRevision(ProjectState project, CurtainScheduleSnapshot snapshot)
+        {
+            if (project.ChangeVersion != snapshot.Version ||
+                !string.Equals(project.ProjectId, snapshot.ProjectId, StringComparison.Ordinal) ||
+                !string.Equals(project.DrawingFingerprint, snapshot.DrawingFingerprint, StringComparison.Ordinal) ||
+                !SameElements(project.Elements, snapshot.Elements) ||
+                !SameFloors(project.Floors, snapshot.Floors) ||
+                !SameFamilies(project.Families, snapshot.Families))
+                throw new InvalidOperationException(
+                    "Project changed while the curtain wall schedule was being built; recompute the schedule against the current project state.");
+        }
+
+        private static bool SameElements(IList<ProjectElement> current, IReadOnlyList<CurtainElementSnapshot> snapshot)
+        {
+            if (current.Count != snapshot.Count) return false;
+            for (var index = 0; index < current.Count; index++)
+                if (!snapshot[index].Matches(current[index])) return false;
+            return true;
+        }
+
+        private static bool SameFloors(IList<FloorDefinition> current, IReadOnlyList<CurtainFloorSnapshot> snapshot)
+        {
+            if (current.Count != snapshot.Count) return false;
+            for (var index = 0; index < current.Count; index++)
+                if (!snapshot[index].Matches(current[index])) return false;
+            return true;
+        }
+
+        private static bool SameFamilies(IList<ProjectFamily> current, IReadOnlyList<CurtainFamilySnapshot> snapshot)
+        {
+            if (current.Count != snapshot.Count) return false;
+            for (var index = 0; index < current.Count; index++)
+                if (!snapshot[index].Matches(current[index])) return false;
+            return true;
+        }
+
+        private static string NormalizeReferenceId(string value)
+        {
+            return ReportingProjectIdentityGuard.NormalizeReferenceId(value);
+        }
+
+        private static bool SameSourceHandles(IList<string> current, IReadOnlyList<string> snapshot)
+        {
+            if (current.Count != snapshot.Count) return false;
+            for (var index = 0; index < current.Count; index++)
+                if (!string.Equals(current[index], snapshot[index], StringComparison.Ordinal)) return false;
+            return true;
+        }
+
+        private static bool SameQuantity(ProjectElement element, string key, double expected)
+        {
+            if (!element.Quantities.TryGetValue(key, out var value)) value = 0d;
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d) return false;
+            return value.Equals(expected);
+        }
+
+        private static int QInt(ProjectElement element, string key)
+        {
+            var value = Q(element, key);
+            var rounded = Math.Round(value);
+            if (Math.Abs(value - rounded) > 1e-9d || rounded > int.MaxValue)
+                throw new InvalidOperationException(element.Id + "/" + key + " must be an integer quantity within range.");
+            return (int)rounded;
+        }
+
+        private static double Q(ProjectElement element, string key)
+        {
+            if (!element.Quantities.TryGetValue(key, out var value)) return 0d;
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
+                throw new InvalidOperationException(element.Id + "/" + key + " must be finite and non-negative.");
+            return value;
+        }
+
+        private static double Q(CurtainElementSnapshot element, string key)
+        {
+            switch (key)
+            {
+                case "LengthM": return element.LengthM;
+                case "GrossWallAreaM2": return element.GrossWallAreaM2;
+                case "OpeningAreaM2": return element.OpeningAreaM2;
+                case "CurtainNetGlassAreaM2": return element.NetGlassAreaM2;
+                case "CurtainFrameFaceAreaM2": return element.FrameFaceAreaM2;
+                case "CurtainFrameLengthM": return element.FrameLengthM;
+                default: throw new InvalidOperationException(element.Id + "/" + key + " is not a frozen Curtain Wall schedule quantity.");
+            }
         }
 
         private static void RequireClearPanelEnvelope(
@@ -130,6 +245,26 @@ namespace QS3D.Core.Reporting
                     element.Id + "/CurtainClearPanelHeightM minimum cannot exceed maximum.");
         }
 
+        private static void RequireClearPanelEnvelope(
+            CurtainElementSnapshot element,
+            out double minimumWidthM,
+            out double maximumWidthM,
+            out double minimumHeightM,
+            out double maximumHeightM)
+        {
+            minimumWidthM = element.MinimumClearPanelWidthM;
+            maximumWidthM = element.MaximumClearPanelWidthM;
+            minimumHeightM = element.MinimumClearPanelHeightM;
+            maximumHeightM = element.MaximumClearPanelHeightM;
+
+            if (minimumWidthM > maximumWidthM)
+                throw new InvalidOperationException(
+                    element.Id + "/CurtainClearPanelWidthM minimum cannot exceed maximum.");
+            if (minimumHeightM > maximumHeightM)
+                throw new InvalidOperationException(
+                    element.Id + "/CurtainClearPanelHeightM minimum cannot exceed maximum.");
+        }
+
         private static string GroupKey(string floorId, string familyId)
         {
             var floor = floorId ?? string.Empty;
@@ -138,27 +273,128 @@ namespace QS3D.Core.Reporting
                    family.Length.ToString(CultureInfo.InvariantCulture) + ":" + family;
         }
 
-        private static double Q(ProjectElement element, string key)
-        {
-            if (!element.Quantities.TryGetValue(key, out var value)) return 0d;
-            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d)
-                throw new InvalidOperationException(element.Id + "/" + key + " must be finite and non-negative.");
-            return value;
-        }
-
-        private static int QInt(ProjectElement element, string key)
-        {
-            var value = Q(element, key);
-            var rounded = Math.Round(value);
-            if (Math.Abs(value - rounded) > 1e-9d || rounded > int.MaxValue)
-                throw new InvalidOperationException(element.Id + "/" + key + " must be an integer quantity within range.");
-            return (int)rounded;
-        }
-
         private static int AddInt(int left, int right, string label)
         {
             try { return checked(left + right); }
             catch (OverflowException ex) { throw new OverflowException(label + " overflowed.", ex); }
+        }
+
+        private sealed class CurtainScheduleSnapshot
+        {
+            internal CurtainScheduleSnapshot(long version, string projectId, string drawingFingerprint, IReadOnlyList<CurtainElementSnapshot> elements, IReadOnlyList<CurtainFloorSnapshot> floors, IReadOnlyList<CurtainFamilySnapshot> families)
+            {
+                Version = version;
+                ProjectId = projectId;
+                DrawingFingerprint = drawingFingerprint;
+                Elements = elements;
+                Floors = floors;
+                Families = families;
+            }
+
+            internal long Version { get; }
+            internal string ProjectId { get; }
+            internal string DrawingFingerprint { get; }
+            internal IReadOnlyList<CurtainElementSnapshot> Elements { get; }
+            internal IReadOnlyList<CurtainFloorSnapshot> Floors { get; }
+            internal IReadOnlyList<CurtainFamilySnapshot> Families { get; }
+        }
+
+        private sealed class CurtainFloorSnapshot
+        {
+            internal CurtainFloorSnapshot(string id, string name) { Id = id; Name = name; }
+            internal string Id { get; }
+            internal string Name { get; }
+            internal bool Matches(FloorDefinition current) =>
+                string.Equals(current.Id, Id, StringComparison.Ordinal) &&
+                string.Equals(current.Name, Name, StringComparison.Ordinal);
+        }
+
+        private sealed class CurtainFamilySnapshot
+        {
+            internal CurtainFamilySnapshot(string id, string name, ElementCategory category) { Id = id; Name = name; Category = category; }
+            internal string Id { get; }
+            internal string Name { get; }
+            internal ElementCategory Category { get; }
+            internal bool Matches(ProjectFamily current) =>
+                string.Equals(current.Id, Id, StringComparison.Ordinal) &&
+                string.Equals(current.Name, Name, StringComparison.Ordinal) &&
+                current.Category == Category;
+        }
+
+        private sealed class CurtainElementSnapshot
+        {
+            private CurtainElementSnapshot(ProjectElement element)
+            {
+                Id = element.Id;
+                Category = element.Category;
+                FloorId = NormalizeReferenceId(element.FloorId);
+                FamilyId = NormalizeReferenceId(element.FamilyId);
+                UpdatedUtc = element.UpdatedUtc;
+                LengthM = Q(element, "LengthM");
+                GrossWallAreaM2 = Q(element, "GrossWallAreaM2");
+                OpeningAreaM2 = Q(element, "OpeningAreaM2");
+                NetGlassAreaM2 = Q(element, "CurtainNetGlassAreaM2");
+                FrameFaceAreaM2 = Q(element, "CurtainFrameFaceAreaM2");
+                FrameLengthM = Q(element, "CurtainFrameLengthM");
+                PanelCount = QInt(element, "CurtainPanelCount");
+                VerticalFrameCount = QInt(element, "CurtainVerticalFrameCount");
+                HorizontalFrameCount = QInt(element, "CurtainHorizontalFrameCount");
+                RequireClearPanelEnvelope(
+                    element,
+                    out var minimumClearPanelWidthM,
+                    out var maximumClearPanelWidthM,
+                    out var minimumClearPanelHeightM,
+                    out var maximumClearPanelHeightM);
+                MinimumClearPanelWidthM = minimumClearPanelWidthM;
+                MaximumClearPanelWidthM = maximumClearPanelWidthM;
+                MinimumClearPanelHeightM = minimumClearPanelHeightM;
+                MaximumClearPanelHeightM = maximumClearPanelHeightM;
+                SourceHandles = element.SourceHandles.ToList().AsReadOnly();
+            }
+
+            internal static CurtainElementSnapshot Capture(ProjectElement element) => new CurtainElementSnapshot(element);
+            internal string Id { get; }
+            internal ElementCategory Category { get; }
+            internal string FloorId { get; }
+            internal string FamilyId { get; }
+            internal DateTime UpdatedUtc { get; }
+            internal double LengthM { get; }
+            internal double GrossWallAreaM2 { get; }
+            internal double OpeningAreaM2 { get; }
+            internal double NetGlassAreaM2 { get; }
+            internal double FrameFaceAreaM2 { get; }
+            internal double FrameLengthM { get; }
+            internal int PanelCount { get; }
+            internal int VerticalFrameCount { get; }
+            internal int HorizontalFrameCount { get; }
+            internal double MinimumClearPanelWidthM { get; }
+            internal double MaximumClearPanelWidthM { get; }
+            internal double MinimumClearPanelHeightM { get; }
+            internal double MaximumClearPanelHeightM { get; }
+            internal IReadOnlyList<string> SourceHandles { get; }
+
+            internal bool Matches(ProjectElement current)
+            {
+                return string.Equals(current.Id, Id, StringComparison.Ordinal) &&
+                       current.Category == Category &&
+                       string.Equals(NormalizeReferenceId(current.FloorId), FloorId, StringComparison.Ordinal) &&
+                       string.Equals(NormalizeReferenceId(current.FamilyId), FamilyId, StringComparison.Ordinal) &&
+                       current.UpdatedUtc == UpdatedUtc &&
+                       SameQuantity(current, "LengthM", LengthM) &&
+                       SameQuantity(current, "GrossWallAreaM2", GrossWallAreaM2) &&
+                       SameQuantity(current, "OpeningAreaM2", OpeningAreaM2) &&
+                       SameQuantity(current, "CurtainNetGlassAreaM2", NetGlassAreaM2) &&
+                       SameQuantity(current, "CurtainFrameFaceAreaM2", FrameFaceAreaM2) &&
+                       SameQuantity(current, "CurtainFrameLengthM", FrameLengthM) &&
+                       SameQuantity(current, "CurtainPanelCount", PanelCount) &&
+                       SameQuantity(current, "CurtainVerticalFrameCount", VerticalFrameCount) &&
+                       SameQuantity(current, "CurtainHorizontalFrameCount", HorizontalFrameCount) &&
+                       SameQuantity(current, "CurtainMinClearPanelWidthM", MinimumClearPanelWidthM) &&
+                       SameQuantity(current, "CurtainMaxClearPanelWidthM", MaximumClearPanelWidthM) &&
+                       SameQuantity(current, "CurtainMinClearPanelHeightM", MinimumClearPanelHeightM) &&
+                       SameQuantity(current, "CurtainMaxClearPanelHeightM", MaximumClearPanelHeightM) &&
+                       SameSourceHandles(current.SourceHandles, SourceHandles);
+            }
         }
 
         private sealed class CurtainWallAggregateState

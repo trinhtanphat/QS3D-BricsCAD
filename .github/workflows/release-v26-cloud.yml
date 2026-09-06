@@ -152,9 +152,144 @@ jobs:
           Write-Host "BricsCAD V26.2.07 cache is bound to SHA-256 ${{ steps.acquire.outputs.sha256 }}."
           Write-Host 'The MSI is retained only in GitHub Actions cache; it is not uploaded as a QS3D artifact or release asset.'
 
-  qualify:
+  v26-reference-primary:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' }}
     needs: installer-cache
+    runs-on: windows-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+    outputs:
+      ready: ${{ steps.classify.outputs.ready }}
+    env:
+      BRICSCAD_V26_PINNED_MSI_SHA256: ${{ needs.installer-cache.outputs.msi_sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Restore exact admitted BricsCAD V26.2.07 installer
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/bricscad/BricsCAD-V26.2.07-x64.msi
+          key: bricscad-v26.2.07-x64-en-us-${{ needs.installer-cache.outputs.msi_sha256 }}
+          fail-on-cache-miss: true
+
+      - name: Extract and validate primary V26 host-reference handoff
+        id: prepare
+        continue-on-error: true
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msi = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad\BricsCAD-V26.2.07-x64.msi'
+          $extract = Join-Path $env:RUNNER_TEMP ('v26p-' + [Guid]::NewGuid().ToString('N'))
+          $result = & .\scripts\acquire-v26-compile-references.ps1 `
+            -MsiPath $msi `
+            -ExtractDir $extract `
+            -ExpectedSha256 $env:BRICSCAD_V26_PINNED_MSI_SHA256 `
+            -PrimaryUrl ' ' `
+            -UsePinnedHttpMirror `
+            -ExtractReferences | Select-Object -Last 1
+          if ($null -eq $result -or [string]::IsNullOrWhiteSpace([string]$result.BricsCadDir)) {
+            throw 'Primary V26 reference extraction did not return a BricsCAD runtime directory.'
+          }
+          & .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $result.BricsCadDir | Out-Null
+          $handoff = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad-v26-hostrefs'
+          if (Test-Path -LiteralPath $handoff) { Remove-Item -LiteralPath $handoff -Recurse -Force }
+          New-Item -ItemType Directory -Path $handoff | Out-Null
+          foreach ($name in @('bricscad.exe', 'BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')) {
+            Copy-Item -LiteralPath (Join-Path $result.BricsCadDir $name) -Destination (Join-Path $handoff $name)
+          }
+          & .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $handoff | Out-Null
+
+      - name: Save primary run-bound V26 host-reference handoff
+        id: handoff-save
+        if: ${{ steps.prepare.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/bricscad-v26-hostrefs
+          key: qs3d-v26-hostrefs-v1-${{ github.run_id }}-primary
+
+      - name: Classify primary V26 reference handoff
+        id: classify
+        if: ${{ always() }}
+        shell: powershell
+        run: |
+          $ready = ('${{ steps.prepare.outcome }}' -eq 'success') -and ('${{ steps.handoff-save.outcome }}' -eq 'success')
+          "ready=$($ready.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          if (-not $ready) {
+            Write-Warning 'Primary V26 reference runner did not produce a run-bound handoff; the fresh-runner fallback is required.'
+          }
+
+  v26-reference-fallback:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' && always() && needs.v26-reference-primary.outputs.ready != 'true' }}
+    needs:
+      - installer-cache
+      - v26-reference-primary
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    outputs:
+      ready: ${{ steps.ready.outputs.ready }}
+    env:
+      BRICSCAD_V26_PINNED_MSI_SHA256: ${{ needs.installer-cache.outputs.msi_sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Restore exact admitted BricsCAD V26.2.07 installer
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/bricscad/BricsCAD-V26.2.07-x64.msi
+          key: bricscad-v26.2.07-x64-en-us-${{ needs.installer-cache.outputs.msi_sha256 }}
+          fail-on-cache-miss: true
+
+      - name: Extract and validate fallback V26 host-reference handoff
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msi = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad\BricsCAD-V26.2.07-x64.msi'
+          $extract = Join-Path $env:RUNNER_TEMP ('v26f-' + [Guid]::NewGuid().ToString('N'))
+          $result = & .\scripts\acquire-v26-compile-references.ps1 `
+            -MsiPath $msi `
+            -ExtractDir $extract `
+            -ExpectedSha256 $env:BRICSCAD_V26_PINNED_MSI_SHA256 `
+            -PrimaryUrl ' ' `
+            -UsePinnedHttpMirror `
+            -ExtractReferences | Select-Object -Last 1
+          if ($null -eq $result -or [string]::IsNullOrWhiteSpace([string]$result.BricsCadDir)) {
+            throw 'Fallback V26 reference extraction did not return a BricsCAD runtime directory.'
+          }
+          & .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $result.BricsCadDir | Out-Null
+          $handoff = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad-v26-hostrefs'
+          if (Test-Path -LiteralPath $handoff) { Remove-Item -LiteralPath $handoff -Recurse -Force }
+          New-Item -ItemType Directory -Path $handoff | Out-Null
+          foreach ($name in @('bricscad.exe', 'BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')) {
+            Copy-Item -LiteralPath (Join-Path $result.BricsCadDir $name) -Destination (Join-Path $handoff $name)
+          }
+          & .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $handoff | Out-Null
+
+      - name: Save fallback run-bound V26 host-reference handoff
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/bricscad-v26-hostrefs
+          key: qs3d-v26-hostrefs-v1-${{ github.run_id }}-fallback
+
+      - name: Mark fallback V26 reference handoff ready
+        id: ready
+        shell: powershell
+        run: '"ready=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append'
+
+  qualify:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' && always() && !(needs.v26-reference-primary.outputs.ready != 'true' && needs.v26-reference-fallback.outputs.ready != 'true') }}
+    needs:
+      - installer-cache
+      - v26-reference-primary
+      - v26-reference-fallback
     runs-on: windows-latest
     permissions:
       contents: read
@@ -249,12 +384,20 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
-      - name: Restore exact admitted BricsCAD V26.2.07 installer
-        id: exact-v26-msi-cache
+      - name: Restore run-bound V26 host-reference handoff from primary runner
+        if: ${{ needs.v26-reference-primary.outputs.ready == 'true' }}
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: .cache/bricscad/BricsCAD-V26.2.07-x64.msi
-          key: bricscad-v26.2.07-x64-en-us-${{ needs.installer-cache.outputs.msi_sha256 }}
+          path: .cache/bricscad-v26-hostrefs
+          key: qs3d-v26-hostrefs-v1-${{ github.run_id }}-primary
+          fail-on-cache-miss: true
+
+      - name: Restore run-bound V26 host-reference handoff from fallback runner
+        if: ${{ needs.v26-reference-primary.outputs.ready != 'true' && needs.v26-reference-fallback.outputs.ready == 'true' }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/bricscad-v26-hostrefs
+          key: qs3d-v26-hostrefs-v1-${{ github.run_id }}-fallback
           fail-on-cache-miss: true
 
       - name: Manual-only CI policy gate
@@ -287,24 +430,14 @@ jobs:
       - name: Deterministic Core smoke tests
         run: dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
 
-      - name: Extract and bind held BricsCAD V26 compile references
+      - name: Bind run-bound BricsCAD V26 compile references
         id: v26-references
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          $msi = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad\BricsCAD-V26.2.07-x64.msi'
-          $extract = Join-Path $env:RUNNER_TEMP ("bricscad-v26-reference-extract-" + [Guid]::NewGuid().ToString('N'))
-          $result = & .\scripts\acquire-v26-compile-references.ps1 `
-            -MsiPath $msi `
-            -ExtractDir $extract `
-            -ExpectedSha256 $env:BRICSCAD_V26_PINNED_MSI_SHA256 `
-            -PrimaryUrl ' ' `
-            -UsePinnedHttpMirror `
-            -ExtractReferences | Select-Object -Last 1
-          if ($null -eq $result -or [string]::IsNullOrWhiteSpace([string]$result.BricsCadDir)) {
-            throw 'V26 reference extraction did not return a BricsCAD runtime directory.'
-          }
-          "BRICSCAD_V26_DIR=$($result.BricsCadDir)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $references = Join-Path $env:GITHUB_WORKSPACE '.cache\bricscad-v26-hostrefs'
+          & .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $references | Out-Null
+          "BRICSCAD_V26_DIR=$references" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           $statePath = Join-Path $env:RUNNER_TEMP 'qs3d-cloud-v26-host-reference-state.json'
           "V26_HOST_REFERENCE_STATE=$statePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 

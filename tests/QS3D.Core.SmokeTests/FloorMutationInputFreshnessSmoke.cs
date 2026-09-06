@@ -98,9 +98,9 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining<InvalidOperationException>(
                 () => ProjectFloorService.Assign(project, floor.Id, YieldThenRemoveFloor(project, floor, element)),
-                "Target Floor no longer belongs to the project after Floor mutation target enumeration");
+                "Project changed while Floor mutation targets were being enumerated");
 
-            Equal(beforeVersion, project.ChangeVersion);
+            Equal(beforeVersion + 1L, project.ChangeVersion);
             False(project.Floors.Contains(floor));
             Equal(string.Empty, element.FloorId);
             Equal(ElementDirtyFlags.None, element.Dirty);

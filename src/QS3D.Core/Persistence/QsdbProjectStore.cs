@@ -13,6 +13,7 @@ namespace QS3D.Core.Persistence
     public sealed class QsdbProjectStore
     {
         private const long MaxProjectFileBytes = 64L * 1024L * 1024L;
+        private const string BackupRecoveryReason = "Primary QSDB was invalid; loaded validated backup.";
 
         public void Save(ProjectState project, string path)
         {
@@ -120,7 +121,6 @@ namespace QS3D.Core.Persistence
                 ActiveZoneId = Value(root, "activeZoneId"),
                 ActiveFloorId = Value(root, "activeFloorId")
             };
-            project.RestorePersistenceState(updatedUtc, changeVersion);
 
             var zones = root.Element("zones");
             if (zones != null)
@@ -204,6 +204,7 @@ namespace QS3D.Core.Persistence
 
             ReadStringMap(root.Element("metadata"), "p", project.Metadata);
             ValidateProject(project);
+            project.RestorePersistenceState(updatedUtc, changeVersion);
             return project;
         }
 
@@ -224,7 +225,7 @@ namespace QS3D.Core.Persistence
                 try
                 {
                     var project = Load(backupPath);
-                    return new ProjectLoadResult(project, backupPath, true, primary.Message);
+                    return new ProjectLoadResult(project, backupPath, true, BackupRecoveryReason);
                 }
                 catch (Exception backup) when (IsRecoverableDataFailure(backup))
                 {

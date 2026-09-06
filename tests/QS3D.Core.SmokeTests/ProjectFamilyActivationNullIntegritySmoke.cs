@@ -11,44 +11,40 @@ namespace QS3D.Core.SmokeTests
 
         internal static void Run()
         {
-            RejectsNullFamilyAcrossActivationApis();
+            RejectsNullFamilyAtCatalogBoundaryWithoutMutation();
             PreservesValidActivationRead();
         }
 
-        private static void RejectsNullFamilyAcrossActivationApis()
+        private static void RejectsNullFamilyAtCatalogBoundaryWithoutMutation()
         {
             var project = new ProjectState("FAMILY-ACTIVE-NULL", "Family activation null");
-            project.Families.Add(new ProjectFamily("F1", "Family 1", ElementCategory.Beam));
-            project.Families.Add(null!);
+            var family = new ProjectFamily("F1", "Family 1", ElementCategory.Beam);
+            project.Families.Add(family);
             project.Metadata["ActiveFamilyId"] = "F1";
 
-            AssertRejectedWithoutMutation(project, () => { _ = ProjectFamilyActivationService.GetActive(project); });
-            AssertRejectedWithoutMutation(project, () => ProjectFamilyActivationService.SetActive(project, "F1"));
-            AssertRejectedWithoutMutation(project, () => ProjectFamilyActivationService.ClearIfMissing(project));
-        }
-
-        private static void AssertRejectedWithoutMutation(ProjectState project, Action action)
-        {
-            var active = project.Metadata["ActiveFamilyId"];
             var changeVersion = project.ChangeVersion;
             var updatedUtc = project.UpdatedUtc;
+            var familyCount = project.Families.Count;
 
             try
             {
-                action();
+                project.Families.Add(null!);
             }
-            catch (InvalidOperationException ex)
+            catch (ArgumentNullException ex)
             {
-                if (!string.Equals(ex.Message, "Project family collection contains a null family.", StringComparison.Ordinal))
-                    throw new InvalidOperationException("Family activation returned an unexpected null-integrity error.", ex);
-                if (!string.Equals(project.Metadata["ActiveFamilyId"], active, StringComparison.Ordinal) ||
-                    project.ChangeVersion != changeVersion ||
-                    project.UpdatedUtc != updatedUtc)
-                    throw new InvalidOperationException("Rejected null-Family activation operation mutated project state.");
+                if (!string.Equals(ex.ParamName, "item", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Null Family admission failed for the wrong parameter.", ex);
+                if (project.ChangeVersion != changeVersion ||
+                    project.UpdatedUtc != updatedUtc ||
+                    project.Families.Count != familyCount)
+                    throw new InvalidOperationException("Rejected null-Family admission mutated project catalog state.");
+                if (!string.Equals(project.Metadata["ActiveFamilyId"], "F1", StringComparison.Ordinal) ||
+                    !ReferenceEquals(ProjectFamilyActivationService.GetActive(project), family))
+                    throw new InvalidOperationException("Rejected null-Family admission changed valid activation state.");
                 return;
             }
 
-            throw new InvalidOperationException("Family activation API must reject null Family entries.");
+            throw new InvalidOperationException("Family catalog must reject null entries at the admission boundary.");
         }
 
         private static void PreservesValidActivationRead()
