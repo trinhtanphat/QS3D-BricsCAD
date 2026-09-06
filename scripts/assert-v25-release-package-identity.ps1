@@ -223,6 +223,162 @@ function Get-HeldAssemblyIdentity {
     }
 }
 
+function Assert-UniqueTopLevelJsonPropertyNames {
+    param([string]$Text)
+
+    $length = $Text.Length
+    $index = 0
+    while ($index -lt $length -and [char]::IsWhiteSpace($Text[$index])) { $index++ }
+    if ($index -ge $length -or $Text[$index] -ne '{') {
+        throw 'V25 package metadata root must be one JSON object.'
+    }
+    $index++
+    $names = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+
+    while ($true) {
+        while ($index -lt $length -and [char]::IsWhiteSpace($Text[$index])) { $index++ }
+        if ($index -ge $length) {
+            throw 'V25 package metadata JSON object is unterminated.'
+        }
+        if ($Text[$index] -eq '}') {
+            $index++
+            break
+        }
+        if ($Text[$index] -ne '"') {
+            throw 'V25 package metadata root must be one JSON object.'
+        }
+
+        $tokenStart = $index
+        $index++
+        $escaped = $false
+        $closed = $false
+        while ($index -lt $length) {
+            $ch = $Text[$index]
+            if ($escaped) {
+                $escaped = $false
+                $index++
+                continue
+            }
+            if ($ch -eq '\') {
+                $escaped = $true
+                $index++
+                continue
+            }
+            if ($ch -eq '"') {
+                $index++
+                $closed = $true
+                break
+            }
+            $index++
+        }
+        if (-not $closed) {
+            throw 'V25 package metadata JSON property name is unterminated.'
+        }
+
+        $token = $Text.Substring($tokenStart, $index - $tokenStart)
+        try {
+            $decodedName = $token | ConvertFrom-Json -ErrorAction Stop
+        }
+        catch {
+            throw "V25 package metadata JSON property name is invalid: $($_.Exception.Message)"
+        }
+        if (-not ($decodedName -is [string])) {
+            throw 'V25 package metadata JSON property name did not decode to one string.'
+        }
+        $propertyName = [string]$decodedName
+        if (-not $names.Add($propertyName)) {
+            throw "Duplicate top-level JSON property name: $propertyName"
+        }
+
+        while ($index -lt $length -and [char]::IsWhiteSpace($Text[$index])) { $index++ }
+        if ($index -ge $length -or $Text[$index] -ne ':') {
+            throw "V25 package metadata JSON property '$propertyName' is missing a colon."
+        }
+        $index++
+
+        $containerDepth = 0
+        $inString = $false
+        $valueEscaped = $false
+        $valueStarted = $false
+        $rootClosed = $false
+        $commaFound = $false
+        while ($index -lt $length) {
+            $ch = $Text[$index]
+            if ($inString) {
+                if ($valueEscaped) {
+                    $valueEscaped = $false
+                }
+                elseif ($ch -eq '\') {
+                    $valueEscaped = $true
+                }
+                elseif ($ch -eq '"') {
+                    $inString = $false
+                }
+                $index++
+                continue
+            }
+
+            if ($ch -eq '"') {
+                $inString = $true
+                $valueStarted = $true
+                $index++
+                continue
+            }
+            if ($ch -eq '{' -or $ch -eq '[') {
+                $containerDepth++
+                $valueStarted = $true
+                $index++
+                continue
+            }
+            if ($ch -eq ']') {
+                if ($containerDepth -le 0) {
+                    throw "V25 package metadata JSON property '$propertyName' has an unmatched closing bracket."
+                }
+                $containerDepth--
+                $valueStarted = $true
+                $index++
+                continue
+            }
+            if ($ch -eq '}') {
+                if ($containerDepth -gt 0) {
+                    $containerDepth--
+                    $valueStarted = $true
+                    $index++
+                    continue
+                }
+                $index++
+                $rootClosed = $true
+                break
+            }
+            if ($ch -eq ',' -and $containerDepth -eq 0) {
+                $index++
+                $commaFound = $true
+                break
+            }
+            if (-not [char]::IsWhiteSpace($ch)) {
+                $valueStarted = $true
+            }
+            $index++
+        }
+
+        if (-not $valueStarted) {
+            throw "V25 package metadata JSON property '$propertyName' has no value."
+        }
+        if ($inString -or $containerDepth -ne 0) {
+            throw "V25 package metadata JSON property '$propertyName' has an unterminated value."
+        }
+        if ($rootClosed) { break }
+        if (-not $commaFound) {
+            throw 'V25 package metadata JSON object is unterminated.'
+        }
+    }
+
+    while ($index -lt $length -and [char]::IsWhiteSpace($Text[$index])) { $index++ }
+    if ($index -ne $length) {
+        throw 'V25 package metadata root must be one JSON object.'
+    }
+}
+
 if ($ExpectedSourceCommit -notmatch '^[0-9A-Fa-f]{40}$') {
     throw 'ExpectedSourceCommit must be one exact 40-hex Git commit SHA.'
 }
@@ -245,6 +401,7 @@ try {
 
     $text = Read-HeldStrictUtf8Metadata -Held $held
     Assert-HeldMetadataBinding -Held $held
+    Assert-UniqueTopLevelJsonPropertyNames -Text $text
     try {
         $metadata = $text | ConvertFrom-Json -ErrorAction Stop
     }

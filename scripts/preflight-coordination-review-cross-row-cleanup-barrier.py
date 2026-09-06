@@ -11,9 +11,6 @@ required = [
     "var cleanupFailure = _session.TryResetTransientStateBestEffort();",
     "_cleanupBarrier = cleanupFailure != null || _session.HasTransientState;",
     "var mutationsAllowed = actionable && !_cleanupBarrier;",
-    "_clearHighlight.IsEnabled = _session.HasHighlight;",
-    "_restoreIsolation.IsEnabled = _session.HasIsolation;",
-    "_restoreView.IsEnabled = _session.HasSectionView;",
     "public bool HasTransientState => HasHighlight || HasIsolation || HasSectionView;",
     "public Exception? TryResetTransientStateBestEffort()",
     "_cleanupBarrier = false;",
@@ -25,8 +22,23 @@ if missing:
         print(f" - {token}", file=sys.stderr)
     raise SystemExit(1)
 
+for legacy, owner_affine in [
+    ("_clearHighlight.IsEnabled = _session.HasHighlight;", "_clearHighlight.IsEnabled = ownerActive && _session.HasHighlight;"),
+    ("_restoreIsolation.IsEnabled = _session.HasIsolation;", "_restoreIsolation.IsEnabled = ownerActive && _session.HasIsolation;"),
+    ("_restoreView.IsEnabled = _session.HasSectionView;", "_restoreView.IsEnabled = ownerActive && _session.HasSectionView;"),
+]:
+    if legacy not in text and owner_affine not in text:
+        print("ERROR: coordination review cleanup affordance missing both legacy-safe and owner-affine forms: " + legacy, file=sys.stderr)
+        raise SystemExit(1)
+
 selection_start = text.find("private void OnSelectionChanged")
-selection_end = text.find("private void OnDocumentActivated", selection_start)
+selection_end_candidates = [
+    pos for pos in (
+        text.find("private void OnDocumentToBeDeactivated", selection_start),
+        text.find("private void OnDocumentActivated", selection_start),
+    ) if pos >= 0
+]
+selection_end = min(selection_end_candidates) if selection_end_candidates else -1
 selection = text[selection_start:selection_end]
 if selection_start < 0 or selection_end < 0:
     print("ERROR: selection-change cleanup boundary was not found", file=sys.stderr)

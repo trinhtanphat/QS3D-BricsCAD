@@ -26,16 +26,25 @@ if validated_failure not in text:
 # Preserve the fail-closed UX and retry affordances around the corrected state transition.
 for contract in (
     'if (_cleanupBarrier)',
-    '_highlight.IsEnabled = mutationsAllowed;',
-    '_isolate.IsEnabled = mutationsAllowed;',
-    '_section.IsEnabled = mutationsAllowed;',
-    '_clearHighlight.IsEnabled = _session.HasHighlight;',
-    '_restoreIsolation.IsEnabled = _session.HasIsolation;',
-    '_restoreView.IsEnabled = _session.HasSectionView;',
     'var cleanupFailure = _session.TryResetTransientStateBestEffort();',
 ):
     if contract not in text:
         failures.append("review cleanup/action-state contract changed unexpectedly: " + contract)
+
+for legacy, owner_affine in (
+    ('_highlight.IsEnabled = mutationsAllowed;', '_highlight.IsEnabled = ownerActive && mutationsAllowed;'),
+    ('_isolate.IsEnabled = mutationsAllowed;', '_isolate.IsEnabled = ownerActive && mutationsAllowed;'),
+    ('_section.IsEnabled = mutationsAllowed;', '_section.IsEnabled = ownerActive && mutationsAllowed;'),
+    ('_clearHighlight.IsEnabled = _session.HasHighlight;', '_clearHighlight.IsEnabled = ownerActive && _session.HasHighlight;'),
+    ('_restoreIsolation.IsEnabled = _session.HasIsolation;', '_restoreIsolation.IsEnabled = ownerActive && _session.HasIsolation;'),
+    ('_restoreView.IsEnabled = _session.HasSectionView;', '_restoreView.IsEnabled = ownerActive && _session.HasSectionView;'),
+):
+    if legacy not in text and owner_affine not in text:
+        failures.append("review cleanup/action-state contract changed unexpectedly: " + legacy)
+
+if "ownerActive &&" in text:
+    if "var ownerActive = IsOwnerDocumentActive;" not in text:
+        failures.append("owner-affine action state must derive button enablement from IsOwnerDocumentActive")
 
 if failures:
     for failure in failures:
