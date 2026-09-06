@@ -260,31 +260,39 @@ namespace QS3D.BricsCAD.V25
                 if (source == null) throw new InvalidOperationException("cad_extrude requires a curve entity handle.");
                 var profileClone = source.Clone() as Curve;
                 if (profileClone == null)
-                    throw new InvalidOperationException("Could not clone the extrusion source Curve for database-resident kernel evaluation.");
+                    throw new InvalidOperationException("Could not clone the extrusion source Curve for transient region evaluation.");
+                Region? region = null;
                 var solid = new Solid3d();
-                var profileAppended = false;
                 try
                 {
-                    var model = ModelSpace(transaction, document.Database, OpenMode.ForWrite);
-                    model.AppendEntity(profileClone);
-                    profileAppended = true;
-                    transaction.AddNewlyCreatedDBObject(profileClone, true);
+                    var regions = Region.CreateFromCurves(new DBObjectCollection { profileClone });
+                    if (regions == null || regions.Count != 1 || !(regions[0] is Region generatedRegion))
+                    {
+                        if (regions != null)
+                            foreach (DBObject item in regions) item.Dispose();
+                        throw new InvalidOperationException("Source curve must form exactly one closed planar region for cad_extrude.");
+                    }
+                    region = generatedRegion;
                     solid.SetDatabaseDefaults(document.Database);
-                    solid.CreateExtrudedSolid(profileClone, new Vector3d(0d, 0d, height), new SweepOptions());
+                    solid.Extrude(region, height, 0d);
                     ApplyLayer(transaction, document.Database, solid, string.IsNullOrWhiteSpace(requestedLayer) ? source.Layer : requestedLayer);
+                    var model = ModelSpace(transaction, document.Database, OpenMode.ForWrite);
                     var id = model.AppendEntity(solid);
                     transaction.AddNewlyCreatedDBObject(solid, true);
-                    if (!profileClone.IsErased) profileClone.Erase();
                     transaction.Commit();
                     var resultHandle = id.Handle.ToString();
-                    RecordMutation(document, "cad-extrude", "handle=" + resultHandle + "; sourceHandle=" + handle + "; kernelSource=database-resident-profile-clone");
+                    RecordMutation(document, "cad-extrude", "handle=" + resultHandle + "; sourceHandle=" + handle + "; kernelSource=transient-region");
                     return "{\"created\":true,\"handle\":\"" + Escape(resultHandle) + "\",\"type\":\"Solid3d\",\"sourceHandle\":\"" + Escape(handle) + "\"}";
                 }
                 catch
                 {
                     if (solid.ObjectId.IsNull) solid.Dispose();
-                    if (!profileAppended) profileClone.Dispose();
                     throw;
+                }
+                finally
+                {
+                    region?.Dispose();
+                    profileClone.Dispose();
                 }
             }
         }
@@ -304,47 +312,21 @@ namespace QS3D.BricsCAD.V25
                 var operand = OpenEntity(transaction, document.Database, toolHandle, OpenMode.ForWrite) as Solid3d;
                 if (target == null || operand == null)
                     throw new InvalidOperationException("Boolean operations require two live Solid3d entity handles.");
-                var targetWorking = target.Clone() as Solid3d;
-                if (targetWorking == null)
-                    throw new InvalidOperationException("Could not clone the boolean target Solid3d for database-resident kernel evaluation.");
-                var operandWorking = operand.Clone() as Solid3d;
-                if (operandWorking == null)
-                {
-                    targetWorking.Dispose();
-                    throw new InvalidOperationException("Could not clone the boolean tool Solid3d for database-resident kernel evaluation.");
-                }
-                var targetAppended = false;
-                var operandAppended = false;
-                var handedOver = false;
-                Solid3d? resultClone = null;
+                var operandClone = operand.Clone() as Solid3d;
+                if (operandClone == null)
+                    throw new InvalidOperationException("Could not clone the boolean tool Solid3d for transient kernel evaluation.");
                 try
                 {
-                    var model = ModelSpace(transaction, document.Database, OpenMode.ForWrite);
-                    model.AppendEntity(targetWorking);
-                    targetAppended = true;
-                    transaction.AddNewlyCreatedDBObject(targetWorking, true);
-                    model.AppendEntity(operandWorking);
-                    operandAppended = true;
-                    transaction.AddNewlyCreatedDBObject(operandWorking, true);
                     EnsureAutomationRunning();
-                    targetWorking.BooleanOperation(operation, operandWorking);
-                    resultClone = targetWorking.Clone() as Solid3d;
-                    if (resultClone == null)
-                        throw new InvalidOperationException("Could not clone the boolean result for target identity handover.");
-                    target.HandOverTo(resultClone, true, true);
-                    handedOver = true;
-                    if (!targetWorking.IsErased) targetWorking.Erase();
-                    if (!operandWorking.IsErased) operandWorking.Erase();
+                    target.BooleanOperation(operation, operandClone);
                     if (!operand.IsErased) operand.Erase();
                     transaction.Commit();
-                    RecordMutation(document, "cad-boolean", "targetHandle=" + targetHandle + "; consumedHandle=" + toolHandle + "; operation=" + operationName + "; kernelInputs=database-resident-working-clones; result=handed-over");
+                    RecordMutation(document, "cad-boolean", "targetHandle=" + targetHandle + "; consumedHandle=" + toolHandle + "; operation=" + operationName + "; kernelTarget=database-resident; kernelOperand=transient-clone");
                     return "{\"updated\":true,\"resultHandle\":\"" + Escape(targetHandle) + "\",\"consumedHandle\":\"" + Escape(toolHandle) + "\",\"operation\":\"" + operationName + "\"}";
                 }
                 finally
                 {
-                    if (!targetAppended) targetWorking.Dispose();
-                    if (!operandAppended) operandWorking.Dispose();
-                    if (!handedOver && resultClone != null) resultClone.Dispose();
+                    operandClone.Dispose();
                 }
             }
         }
