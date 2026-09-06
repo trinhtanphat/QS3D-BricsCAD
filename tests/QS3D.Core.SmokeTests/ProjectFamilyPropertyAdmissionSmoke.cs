@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             RejectsNonPersistablePropertyKeysWithoutMutation();
             RejectsXmlInvalidPropertyValuesWithoutMutation();
+            RejectsNonPersistableAddWithoutMutation();
             NormalizesNullPropertyValueBeforeMutation();
             PreservesCaseInsensitiveAndDuplicateSemantics();
             PreservesRemoveAndClearMutationSemantics();
@@ -44,6 +45,29 @@ namespace QS3D.Core.SmokeTests
             Equal(0, family.Properties.Count, "property count after rejected value");
             Equal(beforeVersion, project.ChangeVersion, "change version after rejected value");
             Equal(beforeUpdatedUtc, project.UpdatedUtc, "updatedUtc after rejected value");
+        }
+
+        private static void RejectsNonPersistableAddWithoutMutation()
+        {
+            var invalidKeyProject = CreateProjectWithFamily(out var invalidKeyFamily);
+            var invalidKeyVersion = invalidKeyProject.ChangeVersion;
+            var invalidKeyUpdatedUtc = invalidKeyProject.UpdatedUtc;
+
+            Throws<ArgumentException>(() => invalidKeyFamily.Properties.Add(" FireRating ", "60"));
+
+            Equal(0, invalidKeyFamily.Properties.Count, "property count after rejected Add key");
+            Equal(invalidKeyVersion, invalidKeyProject.ChangeVersion, "change version after rejected Add key");
+            Equal(invalidKeyUpdatedUtc, invalidKeyProject.UpdatedUtc, "updatedUtc after rejected Add key");
+
+            var invalidValueProject = CreateProjectWithFamily(out var invalidValueFamily);
+            var invalidValueVersion = invalidValueProject.ChangeVersion;
+            var invalidValueUpdatedUtc = invalidValueProject.UpdatedUtc;
+
+            Throws<ArgumentException>(() => invalidValueFamily.Properties.Add("FireRating", "bad\u0001value"));
+
+            Equal(0, invalidValueFamily.Properties.Count, "property count after rejected Add value");
+            Equal(invalidValueVersion, invalidValueProject.ChangeVersion, "change version after rejected Add value");
+            Equal(invalidValueUpdatedUtc, invalidValueProject.UpdatedUtc, "updatedUtc after rejected Add value");
         }
 
         private static void NormalizesNullPropertyValueBeforeMutation()
