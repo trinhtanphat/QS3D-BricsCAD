@@ -311,7 +311,7 @@ namespace QS3D.Core.Persistence
 
             using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
-                PersistencePathSafety.RequireExclusiveOpenStillBound(stream, fullPath, "project read");
+                PersistencePathSafety.RequireNonRedirected(fullPath, "project read");
                 if (stream.Length > MaxProjectFileBytes)
                     throw new InvalidDataException("QSDB project exceeds the maximum supported file size of 64 MiB.");
 
