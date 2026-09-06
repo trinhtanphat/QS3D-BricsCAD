@@ -539,7 +539,33 @@ jobs:
           if ($finalAncestorStatus -ne 0) {
             throw "Release SOURCE_SHA is no longer an ancestor of protected main during final publication admission: $env:SOURCE_SHA"
           }
-          Write-Host 'Release SOURCE_SHA remains an ancestor of protected main; publication stays pinned to the already verified SOURCE_SHA even if newer main integrations landed.'
+          $finalReleaseRelevantPaths = @(
+            'src/',
+            'tests/',
+            'scripts/',
+            'external/QS3D-Platform',
+            '.gitmodules',
+            'Directory.Build.props',
+            'QS3D.sln',
+            '.github/workflows/release-v25-cloud.yml'
+          )
+          & git diff --quiet --no-ext-diff $env:SOURCE_SHA $finalMain -- $finalReleaseRelevantPaths
+          $finalReleaseDriftStatus = $LASTEXITCODE
+          if ($finalReleaseDriftStatus -eq 1) {
+            throw "Protected main contains release-relevant changes after SOURCE_SHA; refusing stale V25 cloud publication. SOURCE_SHA=$env:SOURCE_SHA finalMain=$finalMain"
+          }
+          if ($finalReleaseDriftStatus -ne 0) {
+            throw "Could not classify SOURCE_SHA..finalMain release-relevant drift; refusing publication. git diff exit=$finalReleaseDriftStatus"
+          }
+          $publishMainResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers
+          $publishMain = ([string]$publishMainResponse.sha).Trim().ToLowerInvariant()
+          if ($publishMain -notmatch '^[0-9a-f]{40}$') {
+            throw "Protected main API returned an invalid publish-time SHA: $publishMain"
+          }
+          if ($publishMain -ne $finalMain) {
+            throw "Protected main changed after final release-relevant drift classification; refusing publication. classified=$finalMain current=$publishMain"
+          }
+          Write-Host "Release SOURCE_SHA remains an ancestor of protected main, no release-relevant drift was found, and protected main remained stable through final publication admission: $finalMain"
 
           $publishBody = @{ draft = $false } | ConvertTo-Json
           $publishedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body $publishBody
