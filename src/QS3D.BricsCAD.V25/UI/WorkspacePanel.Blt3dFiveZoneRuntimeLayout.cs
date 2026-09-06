@@ -22,6 +22,7 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class WorkspacePanel
     {
         private static readonly bool Blt3dFiveZoneRuntimeLayoutRegistered = RegisterBlt3dFiveZoneRuntimeLayout();
+        private int _blt3dFiveZoneRuntimeLayoutAttachmentGeneration;
         private GridSplitter? _blt3dRuntimeColumnSplitter;
 
         // WorkspacePanel.CompactShell.cs already owns the type's single explicit static constructor.
@@ -35,6 +36,11 @@ namespace QS3D.BricsCAD.V25.UI
                 FrameworkElement.LoadedEvent,
                 new RoutedEventHandler(OnBlt3dFiveZoneRuntimeLayoutLoaded),
                 true);
+            EventManager.RegisterClassHandler(
+                typeof(WorkspacePanel),
+                FrameworkElement.UnloadedEvent,
+                new RoutedEventHandler(OnBlt3dFiveZoneRuntimeLayoutUnloaded),
+                true);
             return true;
         }
 
@@ -43,9 +49,20 @@ namespace QS3D.BricsCAD.V25.UI
             if (!(sender is WorkspacePanel panel) || !Blt3dFiveZoneRuntimeLayoutRegistered)
                 return;
 
+            var capturedGeneration = ++panel._blt3dFiveZoneRuntimeLayoutAttachmentGeneration;
             panel.Dispatcher.BeginInvoke(
                 DispatcherPriority.SystemIdle,
-                new Action(panel.ApplyBlt3dFiveZoneRuntimeLayout));
+                new Action(() =>
+                {
+                    if (panel.IsLoaded && panel._blt3dFiveZoneRuntimeLayoutAttachmentGeneration == capturedGeneration)
+                        panel.ApplyBlt3dFiveZoneRuntimeLayout();
+                }));
+        }
+
+        private static void OnBlt3dFiveZoneRuntimeLayoutUnloaded(object sender, RoutedEventArgs e)
+        {
+            if (sender is WorkspacePanel panel)
+                panel._blt3dFiveZoneRuntimeLayoutAttachmentGeneration++;
         }
 
         private void ApplyBlt3dFiveZoneRuntimeLayout()
