@@ -2,7 +2,7 @@
 
 ## Verdict
 
-Latest observed UI result: V25 allocation37 is `LOCAL_PASS_BOUNDED` on exact harness `b5fcbfb673810e22b3ac5792a579284c20a75a56` and frozen product `87aff7fec452f9a8dd9f641ef84d143edc73514d`, including all three UI/save/cold-reopen phases. V26 allocation40 on harness `a281679b40e74895b4ce33d423f19a94927fb037` and the same product now starts from a `Default` nonce clone and loads QS3D/probe, but the WPF panes remain blank and the unchanged guard fails `UI_TIMEOUT_SELECTTREE`. Zero requests/ACKs and zero qualified phases. Full cleanup and original autostart restoration passed. Prior V26 startup no-results38/39 remain consumed. Details below; aggregate qualification remains open.
+Latest observed UI result: V25 allocation37 remains `LOCAL_PASS_BOUNDED` on exact harness `b5fcbfb673810e22b3ac5792a579284c20a75a56` and frozen product `87aff7fec452f9a8dd9f641ef84d143edc73514d`, including UI/save/cold-reopen. On harness `2cd842653d0d080171e01693f7dc1cc1f09061e9`, V26 allocation41 passed UI19/19 and save8/8, but its cold host stalled before QS3D and was intentionally stopped after native diagnosis. Fresh42 reached real placement/Family regeneration, then failed the pre-geometry witness after the view changed to oblique3D. Both are consumed `FAIL_OR_NO_RESULT` with full cleanup/autostart restoration. A pre-click ray/plane projection correction now passes deterministic regression and both SDK builds, but needs fresh V25-first/V26 licensed qualification. No aggregate PASS is claimed.
 
 `LOCAL_PASS_BOUNDED` for the automated BricsCAD V25 and V26 portions on the same frozen product source `43130a49f49676299b865f094a9a6ded482f67ad`. Each host passed run, saved and fresh-process reopen. Aggregate LOCAL-022 remains open for interactive/UI and the additional coverage limits recorded below.
 
@@ -382,3 +382,68 @@ and zero BricsCAD processes. The original OpenAI autostart byte/hash/timestamp w
 restored exactly; no MCP request was issued. V25 allocation37 remains accepted on
 its own candidate. Do not repeat40 unchanged or claim that the remaining V26 UI,
 save/cold-reopen, cross-DPI/Quantity/private-DWG/topology matrix has passed.
+
+### V26 allocations41/42 — physical progress and separate remaining failures
+
+Both used harness `2cd842653d0d080171e01693f7dc1cc1f09061e9`, the unchanged
+`87aff7fec452f9a8dd9f641ef84d143edc73514d` product, a `Default` nonce clone,
+`OBSERVED_CLICK_V2 / PAUSE_FOR_OPERATOR_V1`, and V26 probe SHA-256
+`760043ed228c006de0be8f3a62353dea40fa4dde6f57afc2c0082d9f999e4cbd`.
+
+Allocation40's private heap showed the intended Foundation tree row outside the
+scroll viewport. In41, a real scrollbar-thumb drag brought Móng đơn into view and
+the unchanged containment/hit guard immediately published request1. The panes
+were visible; no programmatic BringIntoView or product change was used. Real
+scrolling also exposed the Family H2 editor. This resolves the clipped-target
+condition, not the cause of40's previously observed blank pixels.
+
+- `ui-scroll-v26-41`, RunId `298828e1e39c4bbab7ac07de33f9c81d`, ran
+  `2026-09-05T23:30:56.8804764Z`–`2026-09-06T00:28:48.0005117Z`.
+  All21 physical actions/ACKs completed, and actual `ui`19/19 and `uisaved`8/8
+  markers passed. All three independent points were latched before clicking and
+  matched native Editor results before geometry. Family H2 changed0→1000mm,
+  existing solids regenerated and former generated handles were erased.
+  `phases_verified=2`; no cold marker exists.
+- Its fresh cold process started `2026-09-06T00:03:45.395189Z`. Native stack
+  snapshots at00:20:41Z and00:27:57Z show the same main-thread wait in
+  `UIAutomationCore!OverlappedIOManager::AddChannel_AnyThread`, through
+  `AddWorkQueueChannel / SetupConnectionEvents / HandleHookMessage`, nested
+  inside `lispex` initialization / `cadapp!CaApp::loadLispex`. New threads wait in
+  `ntdll!LdrpInitializeThread / LdrpDrainWorkQueue`; QS3D/coreclr are absent.
+  This supports a native startup/UIA loader interaction, but does not identify
+  the initiating accessibility client or prove a QS3D defect. Resetting the
+  session's JS kernel did not release the wait. At00:28:47Z the operator
+  intentionally stopped only the exact identity-checked owned cold PID. This is
+  **not** a spontaneous crash or an expired3600-second timeout.
+- `ui-quiet-start-v26-42`, RunId `07861e74c2ab430fa39b47ced36dd21c`, ran
+  `2026-09-06T00:29:57.6920349Z`–`2026-09-06T01:21:02.3516372Z`. No Computer Use
+  query was made during startup; by the first module inspection it had loaded
+  QS3D/probe and shown the drawing window. This single success does not prove
+  that UIA observation caused41's stall. Real Add/Cancel/six numeric inputs/two
+  centres/Enter/Family H2 edit and regeneration completed through ACK19. During
+  an inter-turn gap the view changed from top to oblique3D without an agent
+  view-change action. The third click was physically sent at the requested
+  screen coordinate, but the independent witness rejected `pick_target_mismatch`:
+  expected `(6.536382877543484,0.1535076787139963,0)`, Editor result
+  `(2.8217524589707095,3.8681380972867703,0)`. The actual marker is
+  `FAIL / ui_repeatcentre / UI_PICK_OBSERVATION_FAILED`. No ACK20 was written,
+  no Escape21 was sent after failure, and no phase/save/cold PASS is claimed.
+
+For both41/42 the finally blocks verified zero BricsCAD processes, removed the
+owned disposable subtree/nonce, restored the exact original profile inventory
+and current pointer, preserved protected state, and restored the original
+OpenAI autostart byte/hash/timestamp. Cloudflare stayed paused; no MCP request
+was issued. Native diagnostic dumps/tools remain private and ignored; only this
+sanitized account is published.
+
+The shared runner had flattened `PointToWorld` by replacing Z with0. In an
+oblique orthographic view this changes the click ray instead of intersecting it
+with the fixture's WCS XY plane. A host-free regression executes the actual
+mapper and fails the old implementation, then passes the corrected ray/plane
+intersection. It covers top/oblique/scaled/reversed view directions, plane drift,
+perspective/parallel rejection, nonfinite inputs and screen roundtrip failure.
+The correction preserves pre-click latching and the unchanged strict independent
+Editor witness; it never derives an expected point from created geometry or a
+post-click result. Actual V25/V26 SDK builds and the full focused runner suite
+pass. These are not licensed PASS; fresh V25-first/V26 allocations are required.
+Reference: [BricsCAD view properties](https://developer.bricsys.com/bricscad/help/en_US/CurVer/DevRef/source/html/c45a56d0-f28d-2723-590d-f1810f4f48c0.htm).

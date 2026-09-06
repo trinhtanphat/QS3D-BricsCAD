@@ -1240,13 +1240,37 @@ namespace QS3D.LocalQualification.V25
         private static Point3d ScreenWorldPoint(Bricscad.ApplicationServices.Document document, DrawingPoint point)
         {
             var viewport = Convert.ToInt32(Application.GetSystemVariable("CVPORT"), CultureInfo.InvariantCulture);
+            if (viewport <= 1) throw new ProbeException("ui_model_viewport_missing");
+            // The fixture and product matrix use the world XY pick plane. Refuse a
+            // different UCS/elevation rather than silently claiming another plane.
+            if (!document.Editor.CurrentUserCoordinateSystem.Equals(Matrix3d.Identity) ||
+                Convert.ToDouble(Application.GetSystemVariable("ELEVATION"), CultureInfo.InvariantCulture) != 0d)
+                throw new ProbeException("ui_pick_plane_changed");
             var drawingClient = ScreenToDrawingClient(document, point, true)
                 ?? throw new ProbeException("ui_drawing_client_point_missing");
             var mapped = document.Editor.PointToWorld(drawingClient, viewport);
-            var roundTrip = document.Editor.PointToScreen(mapped, viewport);
-            if (Math.Abs(roundTrip.X - drawingClient.X) > 2 || Math.Abs(roundTrip.Y - drawingClient.Y) > 2)
-                throw new ProbeException("ui_viewport_roundtrip_changed");
-            return new Point3d(mapped.X, mapped.Y, 0d);
+            using (var view = document.Editor.GetCurrentView())
+            {
+                var direction = view.ViewDirection;
+                foreach (var value in new[] { mapped.X, mapped.Y, mapped.Z, direction.X, direction.Y, direction.Z })
+                    if (double.IsNaN(value) || double.IsInfinity(value)) throw new ProbeException("ui_pick_projection_nonfinite");
+                var scale = Math.Max(Math.Abs(direction.X), Math.Max(Math.Abs(direction.Y), Math.Abs(direction.Z)));
+                if (view.PerspectiveEnabled || Math.Abs(direction.Z) <= scale * 1e-10)
+                    throw new ProbeException("ui_pick_projection_unsupported");
+                // PointToWorld returns a point on the view plane. For an oblique
+                // view, dropping Z moves off the click ray. Intersect that ray
+                // with Z=0 instead; compute and latch this BEFORE physical input.
+                var target = new Point3d(mapped.X - mapped.Z * (direction.X / direction.Z),
+                    mapped.Y - mapped.Z * (direction.Y / direction.Z), 0d);
+                foreach (var value in new[] { target.X, target.Y })
+                    if (double.IsNaN(value) || double.IsInfinity(value)) throw new ProbeException("ui_pick_projection_nonfinite");
+                var roundTrip = document.Editor.PointToScreen(target, viewport);
+                if (double.IsNaN(roundTrip.X) || double.IsNaN(roundTrip.Y) ||
+                    double.IsInfinity(roundTrip.X) || double.IsInfinity(roundTrip.Y) ||
+                    Math.Abs(roundTrip.X - drawingClient.X) > 2 || Math.Abs(roundTrip.Y - drawingClient.Y) > 2)
+                    throw new ProbeException("ui_viewport_roundtrip_changed");
+                return target;
+            }
         }
 
         private static DrawingPoint? ScreenToDrawingClient(Bricscad.ApplicationServices.Document document, DrawingPoint point, bool requireInside)
