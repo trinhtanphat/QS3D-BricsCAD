@@ -87,10 +87,20 @@ def main():
 
     for token in (
         '"qs3d_status"', '"qs3d_domain_status"', '"qs3d_run_command"', '"qs3d_place_single_footing"',
-        "ProjectContextCoordinator.TryGetCached", "SingleFootingCommands.PlaceActiveSingleFootingAt",
+        "SingleFootingCommands.PlaceActiveSingleFootingAt",
         "McpCadAgentRuntime.Qs3dCommandPattern", "RecordFailure", "RecordSuccess",
     ):
         require(errors, token in domain, "QS3D domain runtime lost token: " + token)
+
+    # Legacy status may read only cached context; the newer cold-cache-safe path may bind only an
+    # already persisted project. Neither topology may fabricate a project through GetOrCreate.
+    cached_context = "ProjectContextCoordinator.TryGetCached" in domain
+    persisted_context = "ExistingProjectMutationContext.TryGet(document, out project)" in domain
+    require(errors, cached_context or persisted_context,
+            "QS3D domain status lost both cached and persisted-existing context resolution")
+    if persisted_context:
+        require(errors, "No persisted QS3D project context" in domain,
+                "persisted-existing context path must report missing persisted context truthfully")
     for forbidden in ("ProjectContextCoordinator.GetOrCreate", "SafeDocumentName", "currentLayer", "activeDocument"):
         require(errors, forbidden not in domain,
                 "QS3D domain status must not bind/create or leak CAD host status field: " + forbidden)
