@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Rules;
@@ -33,7 +35,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = ProjectWithRule("LengthM");
             var family = new ProjectFamily("F-PAD", "Padded family", ElementCategory.Beam);
-            family.Properties[" LengthM "] = "3.5";
+            InjectLegacyFamilyProperty(family, " LengthM ", "3.5");
             project.Families.Add(family);
             var element = new ProjectElement("E-FAMILY-PAD", ElementCategory.Beam, family.Id, "", "");
             project.Elements.Add(element);
@@ -70,6 +72,15 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("quantity-rule-key-smoke", "Quantity rule key smoke");
             project.QuantityRules.Add(new QuantityRule("RULE-1", ElementCategory.Beam, "Computed", expression, "1"));
             return project;
+        }
+
+        private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var innerField = family.Properties.GetType().GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Legacy Family fixture could not locate the property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Legacy Family fixture property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static void ExpectInvalid(Action action)

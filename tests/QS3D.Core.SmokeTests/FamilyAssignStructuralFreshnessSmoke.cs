@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 
@@ -124,9 +125,9 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining<InvalidOperationException>(
                 () => ProjectFamilyService.Assign(project, family.Id, YieldThenAddMalformedTargetDefault(family, element)),
-                "Project changed while Family assignment targets were being enumerated");
+                "Target Family contains a non-canonical property key");
 
-            Equal(beforeVersion + 1L, project.ChangeVersion, "malformed-target-default external mutation project revision");
+            Equal(beforeVersion, project.ChangeVersion, "malformed-target-default legacy injection must not get ChangeVersion help");
             Equal("Invalid", family.Properties[" Material "], "malformed-target-default external mutation");
             Equal(string.Empty, element.FamilyId, "malformed-target-default FamilyId");
             False(element.Properties.ContainsKey("Material"), "malformed-target-default inherited property");
@@ -178,7 +179,16 @@ namespace QS3D.Core.SmokeTests
         private static IEnumerable<ProjectElement> YieldThenAddMalformedTargetDefault(ProjectFamily family, ProjectElement element)
         {
             yield return element;
-            family.Properties[" Material "] = "Invalid";
+            InjectLegacyFamilyProperty(family, " Material ", "Invalid");
+        }
+
+        private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var innerField = family.Properties.GetType().GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("Legacy Family fixture could not locate the property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new Exception("Legacy Family fixture property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static void False(bool value, string label)
