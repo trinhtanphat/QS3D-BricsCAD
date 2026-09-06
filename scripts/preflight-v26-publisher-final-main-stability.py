@@ -24,6 +24,20 @@ CALL = "Assert-ProtectedMainStableForPublisherMutation"
 TAG_POST = "$createdTag = Invoke-RestMethod -Method Post -Uri $tagRefUri"
 RELEASE_POST = '$release = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases"'
 UPLOAD = "& .\\scripts\\invoke-v26-held-release-upload.ps1"
+REQUIRED_RELEASE_PATHS = (
+    ".github/workflows/",
+    "scripts/",
+    "tests/",
+    "src/QS3D.BricsCAD.V25/",
+    "src/QS3D.BricsCAD.V26/",
+    "src/QS3D.Core/",
+    "samples/generated/",
+    "Directory.Build.props",
+    "Directory.Build.targets",
+    "VERSION",
+    "installer/",
+    "external/",
+)
 
 
 def require(condition: bool, message: str) -> None:
@@ -59,8 +73,15 @@ def validate(publisher: str) -> None:
     ):
         require(token in block, f"V26 publisher mutation admission missing {label}.")
 
-    require("src/QS3D.BricsCAD.V26/" in block and ".github/workflows/" in block and "scripts/" in block,
-            "V26 publisher mutation admission must classify the release-relevant path set.")
+    classifier_start = block.find("$publisherReleaseRelevantPaths = @(")
+    classifier_end = block.find("\n  )", classifier_start)
+    require(classifier_start >= 0 and classifier_end > classifier_start,
+            "V26 publisher mutation admission must define a bounded release-relevant path set.")
+    classifier = block[classifier_start:classifier_end]
+    for required_path in REQUIRED_RELEASE_PATHS:
+        require(classifier.count(f"'{required_path}'") == 1,
+                f"V26 publisher mutation admission requires exactly one {required_path} release-relevant root.")
+
     require("throw" in block.lower(), "V26 publisher mutation admission must fail closed.")
 
     tag_post = publisher.find(TAG_POST)
@@ -109,6 +130,11 @@ for token, label in (
 
 expect_failure(publisher.replace(DIFF_FAIL_CLOSED, "if ($LASTEXITCODE -eq 0) { throw 'fail-open mutation probe' }", 1),
                "fail-open git classification")
+
+# Removing the test harness from release-relevant drift must fail closed: newer deterministic
+# qualification/smoke coverage can supersede an older publisher transaction even when product
+# source bytes did not move.
+expect_failure(publisher.replace("    'tests/',\n", "", 1), "test harness release-root removal")
 
 # Remove one admission call from each mutation boundary; every phase must remain independently fenced.
 for marker, label in ((TAG_POST, "tag boundary"), (RELEASE_POST, "draft boundary"), (UPLOAD, "asset boundary")):
