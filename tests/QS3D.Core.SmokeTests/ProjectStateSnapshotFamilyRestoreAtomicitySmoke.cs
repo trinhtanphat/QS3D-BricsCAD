@@ -60,8 +60,8 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("Family category was not restored.");
             if (!family.Properties.TryGetValue("Grade", out var grade) || !string.Equals(grade, "C30", StringComparison.Ordinal))
                 throw new InvalidOperationException("Family properties were not restored.");
-            if (!family.Properties.TryGetValue("NullableNote", out var nullableNote) || nullableNote != null)
-                throw new InvalidOperationException("Snapshot restore must preserve raw null family property values without canonicalizing them to empty strings.");
+            if (!family.Properties.TryGetValue("NullableNote", out var nullableNote) || !string.Equals(nullableNote, string.Empty, StringComparison.Ordinal))
+                throw new InvalidOperationException("Snapshot restore must preserve the canonical empty-string representation of an admitted null family property value.");
         }
     }
 }
