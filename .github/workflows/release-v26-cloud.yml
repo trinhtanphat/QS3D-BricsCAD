@@ -55,15 +55,20 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
+      - name: Validate exact BricsCAD V26.2.07 installer digest
+        if: ${{ inputs.prime_installer_cache || inputs.confirm_release == 'RELEASE' }}
+        shell: powershell
+        run: |
+          $expected = [string]$env:BRICSCAD_V26_PINNED_MSI_SHA256
+          if ($expected -notmatch '^[0-9A-Fa-f]{64}$') { throw 'Exact V26 installer SHA-256 is required.' }
+
       - name: Restore BricsCAD V26.2.07 installer cache
         if: ${{ inputs.prime_installer_cache || inputs.confirm_release == 'RELEASE' }}
         id: bricscad-msi-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .cache/bricscad/BricsCAD-V26.2.07-x64.msi
-          key: bricscad-v26.2.07-x64-en-us-${{ inputs.installer_sha256 || vars.BRICSCAD_V26_MSI_SHA256 || 'mirror' }}
-          restore-keys: |
-            bricscad-v26.2.07-x64-en-us-
+          key: bricscad-v26.2.07-x64-en-us-${{ inputs.installer_sha256 || vars.BRICSCAD_V26_MSI_SHA256 }}
 
       - name: Acquire and admit BricsCAD V26.2.07 installer
         if: ${{ inputs.prime_installer_cache || inputs.confirm_release == 'RELEASE' }}
