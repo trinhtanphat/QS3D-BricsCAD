@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Reflection;
 using System.Xml.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
@@ -31,7 +33,7 @@ namespace QS3D.Core.SmokeTests
 
             var profile = new TemplateProfile("T-OVERSIZED", "Oversized template");
             var family = new ProjectFamily("F-OVERSIZED", "Oversized wall", ElementCategory.ArchitecturalWall);
-            family.Properties["Payload"] = new string('x', 8 * 1024 * 1024);
+            InjectLegacyFamilyProperty(family, "Payload", new string('x', 8 * 1024 * 1024));
             profile.Families.Add(family);
 
             try
@@ -63,7 +65,7 @@ namespace QS3D.Core.SmokeTests
 
             var profile = new TemplateProfile("T-ESCAPED-OVERSIZED", "Escaped oversized template");
             var family = new ProjectFamily("F-ESCAPED-OVERSIZED", "Escaped oversized wall", ElementCategory.ArchitecturalWall);
-            family.Properties["Payload"] = new string('&', 2 * 1024 * 1024);
+            InjectLegacyFamilyProperty(family, "Payload", new string('&', 2 * 1024 * 1024));
             profile.Families.Add(family);
 
             try
@@ -164,6 +166,15 @@ namespace QS3D.Core.SmokeTests
                 TryDelete(path);
                 TryDelete(path + ".bak");
             }
+        }
+
+        private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var innerField = family.Properties.GetType().GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Template-apply legacy fixture could not locate the Family property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Template-apply legacy fixture Family property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static void TryDelete(string path)

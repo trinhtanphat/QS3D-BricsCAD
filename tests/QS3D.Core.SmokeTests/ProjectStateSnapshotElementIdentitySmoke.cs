@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Xml.Linq;
 using QS3D.Core.Domain;
@@ -86,7 +87,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("snapshot-invalid-family-property-" + label.Replace(" ", "-"), "Invalid Family property fixture");
             var family = new ProjectFamily("F1", "Family", ElementCategory.Room);
-            family.Properties[key] = value;
+            InjectLegacyFamilyProperty(family, key, value);
             project.Families.Add(family);
             var originalChangeVersion = project.ChangeVersion;
             var originalProjectUpdatedUtc = project.UpdatedUtc;
@@ -220,6 +221,17 @@ namespace QS3D.Core.SmokeTests
             Require(!ReferenceEquals(detached, project) && !ReferenceEquals(detachedElement, element), "CreateDetachedCopy aliased canonical state.");
             detachedElement.SetProperty("Name", "Detached"); detachedElement.SourceHandles.Add("DETACHED");
             Require(element.Properties["Name"] == "Canonical" && element.SourceHandles.Count == 0, "Detached mutation leaked into canonical element.");
+        }
+
+        private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var innerField = family.Properties.GetType().GetField(
+                "_inner",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Legacy Family fixture could not locate the property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Legacy Family fixture property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static void ExpectInvalidOperation(Action action, string message)

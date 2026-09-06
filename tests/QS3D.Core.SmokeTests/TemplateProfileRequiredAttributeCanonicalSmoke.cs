@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Xml.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Rules;
@@ -95,7 +97,7 @@ namespace QS3D.Core.SmokeTests
             {
                 var profile = new TemplateProfile("TPL-BOUND", "Bounded save");
                 var family = new ProjectFamily("F-BOUND", "Bounded family", ElementCategory.ArchitecturalWall);
-                family.Properties["Payload"] = propertyValue;
+                InjectLegacyFamilyProperty(family, "Payload", propertyValue);
                 profile.Families.Add(family);
 
                 Throws<InvalidDataException>(() => new TemplateProfileStore().Save(profile, path), message);
@@ -159,6 +161,15 @@ namespace QS3D.Core.SmokeTests
         {
             foreach (var property in family.Properties) return property.Key;
             throw new Exception("Fixture family has no properties.");
+        }
+
+        private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
+        {
+            var innerField = family.Properties.GetType().GetField("_inner", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Template-required-attribute legacy fixture could not locate the Family property backing dictionary.");
+            var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Template-required-attribute legacy fixture Family property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static void Set(XElement element, string attribute, string value) => element.SetAttributeValue(attribute, value);
