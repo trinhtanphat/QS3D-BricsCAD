@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.BricsCAD.V25/UI/CoordinationManagerReviewUi.cs"
 text = SOURCE.read_text(encoding="utf-8")
 errors = []
+owner_affine = "DocumentToBeDeactivated" in text and "IsOwnerDocumentActive" in text
 
 
 def require(condition: bool, message: str) -> None:
@@ -35,7 +36,7 @@ if attach is not None:
     body = attach.group("body")
     require("try" in body and "catch" in body,
             "Attach must be transactional")
-    subscriptions = (
+    subscriptions = [
         ("_highlight.Click += OnHighlight;", "_attachments |= Attachment.Highlight;"),
         ("_clearHighlight.Click += OnClearHighlight;", "_attachments |= Attachment.ClearHighlight;"),
         ("_isolate.Click += OnIsolate;", "_attachments |= Attachment.Isolate;"),
@@ -45,9 +46,16 @@ if attach is not None:
         ("_grid.SelectionChanged += OnSelectionChanged;", "_attachments |= Attachment.GridSelection;"),
         ("_window.Closing += OnWindowClosing;", "_attachments |= Attachment.WindowClosing;"),
         ("_window.Closed += OnWindowClosed;", "_attachments |= Attachment.WindowClosed;"),
+    ]
+    if owner_affine:
+        subscriptions.append((
+            "Application.DocumentManager.DocumentToBeDeactivated += OnDocumentToBeDeactivated;",
+            "_attachments |= Attachment.DocumentToBeDeactivated;",
+        ))
+    subscriptions.extend([
         ("Application.DocumentManager.DocumentActivated += OnDocumentActivated;", "_attachments |= Attachment.DocumentActivated;"),
         ("Application.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;", "_attachments |= Attachment.DocumentToBeDestroyed;"),
-    )
+    ])
     cursor = -1
     for add, own in subscriptions:
         add_pos = body.find(add, cursor + 1)
@@ -104,14 +112,21 @@ if detach is not None:
     body = detach.group("body")
     destroyed = body.find("Attachment.DocumentToBeDestroyed")
     activated = body.find("Attachment.DocumentActivated")
+    deactivated = body.find("Attachment.DocumentToBeDeactivated")
     closed = body.find("Attachment.WindowClosed")
     closing = body.find("Attachment.WindowClosing")
     grid = body.find("Attachment.GridSelection")
     highlight = body.find("Attachment.Highlight")
     require(min(destroyed, activated, closed, closing, grid, highlight) >= 0,
             "DetachHandlersBestEffort must cover external, cancellable-window, terminal-window and local handler ownership")
-    require(destroyed < activated < closed < closing < grid < highlight,
-            "Detach must break BricsCAD publisher roots before window and local WPF handler cleanup")
+    if owner_affine:
+        require(deactivated >= 0,
+                "owner-affine lifecycle must detach DocumentToBeDeactivated ownership")
+        require(destroyed < activated < deactivated < closed < closing < grid < highlight,
+                "Detach must break BricsCAD publisher roots before window and local WPF handler cleanup")
+    else:
+        require(destroyed < activated < closed < closing < grid < highlight,
+                "Detach must break BricsCAD publisher roots before window and local WPF handler cleanup")
 
 try_detach = re.search(
     r"private void TryDetach\(Attachment attachment, Action detach\)\s*\{(?P<body>.*?)\n\s*\}\n\n\s*private void DisposeSessionBestEffort",
@@ -152,13 +167,20 @@ require(closing is not None,
 if closing is not None:
     body = closing.group("body")
     cleanup = body.find("_session.TryResetTransientStateBestEffort()")
-    debt = body.find("_session.HasTransientState")
-    cancel = body.find("e.Cancel = true;")
-    barrier = body.find("_cleanupBarrier = true;")
+    debt = body.find("_session.HasTransientState", cleanup if cleanup >= 0 else 0)
+    cancel = body.find("e.Cancel = true;", debt if debt >= 0 else 0)
+    barrier = body.find("_cleanupBarrier = true;", debt if debt >= 0 else 0)
     require(0 <= cleanup < debt < cancel < barrier,
             "failed window-close cleanup must retain controller/UI retry ownership")
     require("e.Cancel = false;" not in body,
             "review close handler must not override cancellation from another subscriber")
+    if owner_affine:
+        pre_cancel = body.find("if (e.Cancel) return;")
+        inactive = body.find("if (!IsOwnerDocumentActive)")
+        inactive_debt = body.find("_session.HasTransientState", inactive)
+        inactive_cancel = body.find("e.Cancel = true;", inactive)
+        require(0 <= pre_cancel < inactive < inactive_debt < inactive_cancel < cleanup,
+                "inactive-owner close path must respect prior cancellation and retain cleanup debt without native cleanup")
 
 # Preserve the pre-existing safety boundary: native CAD effects are reached only after
 # current-document/project identity and persisted issue/relink/full-pair validation.
