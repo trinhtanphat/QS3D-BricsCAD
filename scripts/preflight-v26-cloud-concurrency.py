@@ -18,11 +18,15 @@ workflow = WORKFLOW.read_text(encoding="utf-8")
 
 if "group: qs3d-cloud-v26-preview-release" not in workflow:
     fail("V26 cloud workflow must retain the canonical concurrency group")
-if "cancel-in-progress: true" not in workflow:
-    fail("a fresh V26 cloud dispatch must supersede a stale in-progress run")
-if "cancel-in-progress: false" in workflow:
-    fail("V26 cloud workflow must not queue indefinitely behind stale installer acquisition")
+if "cancel-in-progress: false" not in workflow:
+    fail("V26 cloud release transactions must not be preempted by later dispatches")
+if "cancel-in-progress: true" in workflow:
+    fail("V26 cloud workflow must not cancel an in-flight release transaction")
+if "queue: max" not in workflow:
+    fail("V26 cloud workflow must retain multiple pending release dispatches")
+if "queue: single" in workflow:
+    fail("V26 cloud workflow must not replace an older pending release dispatch")
 if "workflow_dispatch:" not in workflow:
     fail("V26 cloud workflow must remain manually dispatched")
 
-print("V26 cloud concurrency preflight passed.")
+print("V26 cloud concurrency preflight passed: in-flight releases are preserved and pending dispatches are retained.")
