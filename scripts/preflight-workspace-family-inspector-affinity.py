@@ -28,22 +28,27 @@ def method_body(text, signature, next_signature=None):
 
 affinity = read(AFFINITY)
 panel = read(PANEL)
-class_handler = method_body(affinity, "private static void OnWorkspaceSelectionChangedClass", "private void OnFamilySelectionChangedWithAffinity")
+class_handler = method_body(affinity, "private static void OnFamilyListSelectionChangedClass", "private static WorkspacePanel? FindOwningWorkspacePanel")
 selection = method_body(affinity, "private void OnFamilySelectionChangedWithAffinity")
 legacy = method_body(panel, "private void OnFamilySelectionChanged", "private void OnFamilySearchChanged")
 
 for required, message in [
-    ("EventManager.RegisterClassHandler(", "Workspace must register a class-level SelectionChanged fence before the XAML instance handler"),
-    ("typeof(WorkspacePanel)", "class handler must be scoped to WorkspacePanel"),
+    ("EventManager.RegisterClassHandler(", "Workspace must register a class-level SelectionChanged fence"),
+    ("typeof(ListBox)", "class handler must be registered on ListBox so it runs before the source ListBox instance/XAML handler"),
     ("Selector.SelectionChangedEvent", "class handler must target Selector.SelectionChangedEvent"),
+    ("FindOwningWorkspacePanel(familyList)", "global ListBox class handler must resolve and restrict itself to an owning WorkspacePanel"),
 ]:
     if required not in affinity:
         errors.append(message)
 
-if "ReferenceEquals(e.OriginalSource, panel.FamilyList)" not in class_handler:
-    errors.append("class handler must intercept only FamilyList selection events")
+if "sender is ListBox familyList" not in class_handler:
+    errors.append("class handler must require a ListBox routed-event source")
+if "string.Equals(familyList.Name, \"FamilyList\", StringComparison.Ordinal)" not in class_handler:
+    errors.append("global ListBox class handler must reject unrelated ListBox controls by name")
+if "ReferenceEquals(familyList, panel.FamilyList)" not in class_handler:
+    errors.append("class handler must prove the source is the exact FamilyList owned by the resolved WorkspacePanel")
 if "e.Handled = true;" not in class_handler:
-    errors.append("FamilyList event must be marked handled so the stale XAML handler cannot run afterward")
+    errors.append("FamilyList event must be marked handled before its stale instance/XAML handler can run")
 if "panel.OnFamilySelectionChangedWithAffinity();" not in class_handler:
     errors.append("class handler must delegate to the affinity-safe Family selection path")
 
@@ -72,9 +77,8 @@ else:
     if "ShowFamilyProperties" in between:
         errors.append("rejected stale Family path must not repopulate old property rows")
 
-# The old XAML handler may remain for compatibility, but it must be pre-empted by the
-# class handler above. Keep this assertion so future edits cannot silently remove the
-# reason the class-level fence exists without updating the regression contract.
+# The old XAML handler remains as compatibility fallback. This assertion intentionally
+# fails if that shape changes so the source-level class-handler pre-emption is reviewed.
 if "_viewModel.SetActiveFamily(FamilyList.SelectedItem as ProjectFamily);" not in legacy:
     errors.append("legacy Family selection handler shape changed; reassess whether class-level pre-emption is still required")
 
@@ -84,4 +88,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: FamilyList selection is pre-empted before the legacy handler; stale project-generation Families are rejected and reconciled before property rows can render.")
+print("PASS: source ListBox class handler pre-empts the legacy FamilyList handler; stale project-generation Families are rejected and reconciled before property rows render.")
