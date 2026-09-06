@@ -38,9 +38,10 @@ namespace QS3D.BricsCAD.V25
             if (ensureRunning == null) throw new ArgumentNullException(nameof(ensureRunning));
             ensureRunning();
 
-            var operation = new NativeSaveOperation(ensureRunning, audit);
+            var operation = new NativeSaveOperation(audit);
             McpDiagnosticHub.InvokeInCadContext(() =>
             {
+                EnsureCommandContextAutomationNotStopped();
                 operation.ScheduleInCadContext();
                 return string.Empty;
             });
@@ -65,6 +66,7 @@ namespace QS3D.BricsCAD.V25
                     ex);
             }
 
+            ensureRunning();
             var dbmodAfterSave = WaitForCleanDbmod(operation, ensureRunning);
             audit?.Invoke("native QSAVE completed; fileName=" + SafeLeaf(operation.FullPath)
                 + "; dbmodAfterSave=" + dbmodAfterSave.ToString(CultureInfo.InvariantCulture));
@@ -80,7 +82,7 @@ namespace QS3D.BricsCAD.V25
                 ensureRunning();
                 var raw = McpDiagnosticHub.InvokeInCadContext(() =>
                 {
-                    ensureRunning();
+                    EnsureCommandContextAutomationNotStopped();
                     operation.EnsureSameActiveDocumentAndPath();
 
                     object value;
@@ -112,6 +114,13 @@ namespace QS3D.BricsCAD.V25
                 + (lastDbmod >= 0 ? lastDbmod.ToString(CultureInfo.InvariantCulture) : "unavailable") + ".");
         }
 
+        private static void EnsureCommandContextAutomationNotStopped()
+        {
+            if (McpCadAgentRuntime.AutomationStopped)
+                throw new InvalidOperationException(
+                    "Automation was emergency-stopped before native QSAVE completed; save completion was not confirmed. Do not retry automatically.");
+        }
+
         private static bool SamePath(string left, string right)
         {
             try
@@ -129,12 +138,10 @@ namespace QS3D.BricsCAD.V25
 
         private sealed class NativeSaveOperation
         {
-            private readonly Action _ensureRunning;
             private readonly Action<string>? _audit;
 
-            internal NativeSaveOperation(Action ensureRunning, Action<string>? audit)
+            internal NativeSaveOperation(Action<string>? audit)
             {
-                _ensureRunning = ensureRunning;
                 _audit = audit;
             }
 
@@ -144,7 +151,7 @@ namespace QS3D.BricsCAD.V25
 
             internal void ScheduleInCadContext()
             {
-                _ensureRunning();
+                EnsureCommandContextAutomationNotStopped();
                 var document = Application.DocumentManager.MdiActiveDocument;
                 if (document == null) throw new InvalidOperationException("No active BricsCAD document.");
 
@@ -172,29 +179,14 @@ namespace QS3D.BricsCAD.V25
                 Document = document;
                 FullPath = Path.GetFullPath(filename);
                 _audit?.Invoke("native QSAVE scheduled in command context; fileName=" + SafeLeaf(FullPath));
-
-                var completionSource = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-                Completion = completionSource.Task;
-                Application.DocumentManager.ExecuteInCommandContextAsync(
-                    async _ =>
-                    {
-                        try
-                        {
-                            await ExecuteQsaveInCommandContext();
-                            completionSource.TrySetResult(null);
-                        }
-                        catch (Exception ex)
-                        {
-                            completionSource.TrySetException(ex);
-                            throw;
-                        }
-                    },
+                Completion = Application.DocumentManager.ExecuteInCommandContextAsync(
+                    _ => ExecuteQsaveInCommandContext(),
                     null);
             }
 
             private Task ExecuteQsaveInCommandContext()
             {
-                _ensureRunning();
+                EnsureCommandContextAutomationNotStopped();
                 var document = Document;
                 if (document == null)
                     throw new InvalidOperationException("Native QSAVE lost its active document before command execution.");
@@ -216,7 +208,7 @@ namespace QS3D.BricsCAD.V25
 
                 _audit?.Invoke("native QSAVE command-context start; fileName=" + SafeLeaf(FullPath));
                 document.Editor.Command("_.QSAVE");
-                _ensureRunning();
+                EnsureCommandContextAutomationNotStopped();
                 EnsureSameActiveDocumentAndPath();
                 _audit?.Invoke("native QSAVE command-context end; fileName=" + SafeLeaf(FullPath));
                 return Task.CompletedTask;
