@@ -57,9 +57,9 @@ namespace QS3D.BricsCAD.V25
                 try
                 {
                     ProjectState project;
-                    contextAvailable = ProjectContextCoordinator.TryGetCached(document, out project);
+                    contextAvailable = ExistingProjectMutationContext.TryGet(document, out project);
                     if (!contextAvailable)
-                        contextReason = "No cached QS3D project context. Open or bind QS3D business context before using qs3d_* mutations.";
+                        contextReason = "No persisted QS3D project context. Open or bind QS3D business context before using qs3d_* mutations.";
                 }
                 catch (Exception ex)
                 {
