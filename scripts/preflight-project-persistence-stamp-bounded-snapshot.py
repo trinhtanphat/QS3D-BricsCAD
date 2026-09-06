@@ -11,17 +11,23 @@ for anchor in [
     "private const int MaximumSnapshotCharacters = 64 * 1024 * 1024;",
     "private static void RequireSnapshotCapacity(StringBuilder snapshot, long additionalCharacters)",
     "Persistence stamp semantic snapshot exceeds the supported 64 Mi-character materialization budget.",
+    "if (additionalCharacters > MaximumSnapshotCharacters - (long)snapshot.Length)",
 ]:
     if anchor not in stamp:
         raise SystemExit(f"persistence stamp bounded snapshot preflight failed: missing production anchor {anchor!r}")
 
-for method in ["AppendSequenceCount", "AppendInt32", "AppendDouble", "AppendString"]:
-    start = stamp.find(f"private static void {method}")
-    if start < 0:
-        raise SystemExit(f"persistence stamp bounded snapshot preflight failed: missing {method}")
-    end = stamp.find("\n        }", start)
-    if end < 0 or "RequireSnapshotCapacity(snapshot," not in stamp[start:end]:
-        raise SystemExit(f"persistence stamp bounded snapshot preflight failed: {method} is not budget-admitted before append")
+if stamp.count("RequireSnapshotCapacity(snapshot, encoded.Length);") < 3:
+    raise SystemExit("persistence stamp bounded snapshot preflight failed: scalar framing appenders are not all budget-admitted")
+
+for anchor in [
+    'const string encodedNull = "S-1:";',
+    "RequireSnapshotCapacity(snapshot, encodedNull.Length);",
+    'var prefix = "S" + value.Length.ToString(CultureInfo.InvariantCulture) + ":";',
+    "RequireSnapshotCapacity(snapshot, (long)prefix.Length + value.Length);",
+    "snapshot.Append(prefix).Append(value);",
+]:
+    if anchor not in stamp:
+        raise SystemExit(f"persistence stamp bounded snapshot preflight failed: missing string-framing budget anchor {anchor!r}")
 
 if "new StringBuilder()" not in stamp:
     raise SystemExit("persistence stamp bounded snapshot preflight failed: semantic snapshot materialization shape changed unexpectedly")
