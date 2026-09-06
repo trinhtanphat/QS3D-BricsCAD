@@ -88,7 +88,7 @@ def main() -> int:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    print("PASS: V26 cloud release concurrency is non-preemptible and pending dispatches queue FIFO.")
+    print("PASS: V26 cloud release concurrency is non-preemptible and retains multiple pending dispatches without replacement.")
     return 0
 
 
