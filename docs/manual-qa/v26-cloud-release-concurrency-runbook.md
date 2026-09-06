@@ -5,7 +5,7 @@ Lane-Key: issue-5907
 
 ## Safety invariant
 
-The V26 cloud release workflow uses one stable workflow-level concurrency group. It must neither cancel an already-running release transaction nor replace an older pending release dispatch when newer manual dispatches arrive. The active transaction runs to completion, while pending dispatches remain queued and execute FIFO under the same group.
+The V26 cloud release workflow uses one stable workflow-level concurrency group. It must neither cancel an already-running release transaction nor replace an older pending release dispatch when newer manual dispatches arrive. The active transaction runs to completion, while multiple pending dispatches remain retained in the concurrency queue instead of replacing one another.
 
 ## Hosted qualification
 
@@ -19,4 +19,4 @@ The V26 cloud release workflow uses one stable workflow-level concurrency group.
 
 ## Adversarial scenario
 
-Dispatch V26 release A and let it enter the release transaction. While A is still running, dispatch release B and then release C. A must remain running. B must remain pending when C is submitted; C must not replace or cancel B. After A reaches a terminal state, B must start before C, and each queued run must independently execute every release admission gate against its own exact workflow SHA before publication.
+Dispatch V26 release A and let it enter the release transaction. While A is still running, dispatch release B and then release C. A must remain running. B must remain queued when C is submitted; C must not replace or cancel B. After capacity becomes available, both retained runs must remain eligible to proceed through the concurrency group, and each run that starts must independently execute every release admission gate against its own exact workflow SHA before publication. Do not treat observed runner start timestamps as a stronger ordering guarantee than GitHub documents for queued concurrency.
