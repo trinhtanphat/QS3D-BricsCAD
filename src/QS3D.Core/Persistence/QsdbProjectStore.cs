@@ -465,6 +465,8 @@ namespace QS3D.Core.Persistence
                         throw new InvalidDataException("QSDB project metadata exceeds or violates the supported persisted metadata contract.", ex);
                     }
                 }
+                else if (target is ProjectElementPropertyDictionary elementProperties)
+                    elementProperties.SetPersistenceValue(key, value);
                 else
                     target[key] = value;
             }
