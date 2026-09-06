@@ -35,7 +35,7 @@ function Assert-ProtectedMainStableForPublisherMutation {
   $publisherMainResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers
   $publisherMain = [string]$publisherMainResponse.sha
   if ($publisherMain -notmatch '^[0-9a-f]{40}$') {
-    throw "Protected main API returned an invalid V26 publisher-admission SHA before $Phase: $publisherMain"
+    throw "Protected main API returned an invalid V26 publisher-admission SHA before ${Phase}: $publisherMain"
   }
 
   $publisherMainRef = 'refs/remotes/origin/qs3d-v26-publisher-admitted-main'
@@ -53,7 +53,7 @@ function Assert-ProtectedMainStableForPublisherMutation {
 
   & git merge-base --is-ancestor $env:GITHUB_SHA $publisherMain
   if ($LASTEXITCODE -ne 0) {
-    throw "V26 release workflow SHA is no longer an ancestor of protected main before $Phase: $env:GITHUB_SHA"
+    throw "V26 release workflow SHA is no longer an ancestor of protected main before ${Phase}: $env:GITHUB_SHA"
   }
 
   $publisherReleaseRelevantPaths = @(
@@ -80,7 +80,7 @@ function Assert-ProtectedMainStableForPublisherMutation {
   $confirmedPublisherMainResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers
   $confirmedPublisherMain = [string]$confirmedPublisherMainResponse.sha
   if ($confirmedPublisherMain -notmatch '^[0-9a-f]{40}$') {
-    throw "Protected main confirmation returned an invalid V26 publisher-admission SHA before $Phase: $confirmedPublisherMain"
+    throw "Protected main confirmation returned an invalid V26 publisher-admission SHA before ${Phase}: $confirmedPublisherMain"
   }
   if (-not [string]::Equals($confirmedPublisherMain, $publisherMain, [StringComparison]::Ordinal)) {
     throw "Protected main moved during V26 publisher admission before $Phase. Before=$publisherMain after=$confirmedPublisherMain"
