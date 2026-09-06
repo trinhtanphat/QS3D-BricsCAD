@@ -15,6 +15,8 @@ namespace QS3D.Core.SmokeTests
             RejectsInPlaceQuantityMutationWithoutProjectVersionChange();
             RejectsInPlaceFamilyNameMutationWithoutProjectVersionChange();
             RejectsInPlaceSourceHandleMutationWithoutProjectVersionChange();
+            RejectsEquivalentElementReplacementWithoutProjectVersionChange();
+            RejectsEquivalentFamilyReplacementWithoutProjectVersionChange();
         }
 
         private static void StableGenerationPublishesFrozenValues()
@@ -57,6 +59,39 @@ namespace QS3D.Core.SmokeTests
             if (project.ChangeVersion != version) throw new InvalidOperationException("Direct provenance mutation unexpectedly changed ProjectState.ChangeVersion; regression no longer exercises the bypass.");
         }
 
+        private static void RejectsEquivalentElementReplacementWithoutProjectVersionChange()
+        {
+            var project = BuildProject();
+            var version = project.ChangeVersion;
+            SetSnapshotHook(p =>
+            {
+                var source = p.Elements[0];
+                var replacement = new ProjectElement(source.Id, source.Category, source.FamilyId, source.FloorId, source.ZoneId) { DrawingFingerprint = source.DrawingFingerprint };
+                foreach (var handle in source.SourceHandles) replacement.SourceHandles.Add(handle);
+                foreach (var dependency in source.DependsOn) replacement.DependsOn.Add(dependency);
+                foreach (var property in source.Properties) replacement.Properties.Add(property.Key, property.Value);
+                foreach (var quantity in source.Quantities) replacement.Quantities.Add(quantity.Key, quantity.Value);
+                p.Elements[0] = replacement;
+            });
+            ExpectGenerationDrift(project, "equivalent element instance replacement");
+            if (project.ChangeVersion != version) throw new InvalidOperationException("Equivalent element replacement unexpectedly changed ProjectState.ChangeVersion; regression no longer exercises the instance-identity bypass.");
+        }
+
+        private static void RejectsEquivalentFamilyReplacementWithoutProjectVersionChange()
+        {
+            var project = BuildProject();
+            var version = project.ChangeVersion;
+            SetSnapshotHook(p =>
+            {
+                var source = p.Families[0];
+                var replacement = new ProjectFamily(source.Id, source.Name, source.Category);
+                foreach (var property in source.Properties) replacement.Properties.Add(property.Key, property.Value);
+                p.Families[0] = replacement;
+            });
+            ExpectGenerationDrift(project, "equivalent family instance replacement");
+            if (project.ChangeVersion != version) throw new InvalidOperationException("Equivalent family replacement unexpectedly changed ProjectState.ChangeVersion; regression no longer exercises the instance-identity bypass.");
+        }
+
         private static ProjectState BuildProject()
         {
             var project = new ProjectState("P-QTY-GEN", "Project quantity generation fence") { DrawingFingerprint = "FP-QTY-GEN" };
@@ -84,7 +119,7 @@ namespace QS3D.Core.SmokeTests
             try
             {
                 _ = ProjectQuantityReportBuilder.Group(project);
-                throw new InvalidOperationException("Project quantity generation fence accepted in-place " + label + " drift.");
+                throw new InvalidOperationException("Project quantity generation fence accepted " + label + " drift.");
             }
             catch (InvalidOperationException ex) when (ex.Message.IndexOf("Project changed while the quantity report was being built", StringComparison.Ordinal) >= 0)
             {
