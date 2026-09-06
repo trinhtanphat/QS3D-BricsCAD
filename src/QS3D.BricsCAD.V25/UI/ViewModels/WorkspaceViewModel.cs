@@ -460,9 +460,21 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                     return;
                 }
 
+                ProjectSemanticMutationExecutor.Execute(
+                    project,
+                    "Workspace single-instance property reset",
+                    () =>
+                    {
+                        element.Properties.Remove(key);
+                        project.Touch();
+                        return 0;
+                    });
+
+                row.CanReset = false;
                 row.Value = ToDisplayValue(key, liveFamilyRaw ?? string.Empty);
+                Status = "Đã đặt lại " + DisplayNameFor(key) + " về kế thừa Family.";
             }
-            catch (InvalidOperationException)
+            catch (Exception ex) when (ex is InvalidOperationException || ex is ArgumentException || ex is OverflowException)
             {
                 ReportMutationFailure("Đặt lại Instance");
             }
