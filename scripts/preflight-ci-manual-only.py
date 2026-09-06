@@ -470,7 +470,7 @@ for path, text in workflow_sources:
         )
 
         require_tokens(text, (
-            "contents: read", "actions: write", "cancel-in-progress: true",
+            "contents: read", "actions: write", "cancel-in-progress: false", "queue: max",
             "github.actor != 'github-actions[bot]'", "github.event.workflow_run.conclusion == 'success'",
             "github.event.workflow_run.head_branch == 'main'", "gh workflow run release-v25-cloud.yml", "--ref main",
             'source_sha="${GITHUB_SHA,,}"', 'source_sha="${current_main,,}"', '-f source_sha="${source_sha}"', "confirm_release=RELEASE",
@@ -481,7 +481,7 @@ for path, text in workflow_sources:
         ), path.name)
         for forbidden in (
             "GITHUB_RUN_NUMBER", "10000 +", '-f source_sha="${current_main}"', "contents: write",
-            "max_preview", "preview=$((max_preview + 1))",
+            "max_preview", "preview=$((max_preview + 1))", "cancel-in-progress: true",
         ):
             if forbidden in text:
                 errors.append(f"{path.name}: dispatcher contains forbidden source/publish token: {forbidden}")
