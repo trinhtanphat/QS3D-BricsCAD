@@ -34,8 +34,10 @@ def validate(text: str) -> list[str]:
         body = gate.group("body")
         if "BRICSCAD_V26_PINNED_MSI_SHA256" not in body:
             errors.append("V26 installer digest gate must validate the effective pinned digest environment value")
-        if "^[0-9A-Fa-f]{64}$" not in body and "^[0-9A-F]{64}$" not in body:
+        if "^[0-9A-Fa-f]{64}$" not in body:
             errors.append("V26 installer digest gate must require exactly 64 hexadecimal SHA-256 characters")
+        if ".Trim()" in body or ".trim()" in body:
+            errors.append("V26 installer digest admission must validate the raw value without whitespace normalization")
 
     gate_pos = job.find("- name: Validate exact BricsCAD V26.2.07 installer digest")
     restore_pos = job.find("- name: Restore BricsCAD V26.2.07 installer cache")
@@ -77,17 +79,12 @@ def safe_baseline(text: str) -> str:
             "        if: ${{ inputs.prime_installer_cache || inputs.confirm_release == 'RELEASE' }}\n"
             "        shell: powershell\n"
             "        run: |\n"
-            "          $expected = ([string]$env:BRICSCAD_V26_PINNED_MSI_SHA256).Trim()\n"
+            "          $expected = [string]$env:BRICSCAD_V26_PINNED_MSI_SHA256\n"
             "          if ($expected -notmatch '^[0-9A-Fa-f]{64}$') { throw 'Exact V26 installer SHA-256 is required.' }\n\n"
         )
         text = text.replace(marker, gate + marker, 1)
     text = text.replace(" || 'mirror'", "", 1)
-    text = re.sub(
-        r"(?m)^          restore-keys:\s*\|\s*\n(?:            .*\n)+",
-        "",
-        text,
-        count=1,
-    )
+    text = re.sub(r"(?m)^          restore-keys:\s*\|\s*\n(?:            .*\n)+", "", text, count=1)
     return text
 
 
@@ -106,10 +103,11 @@ def main() -> int:
     if validate(safe):
         errors.append("mutation harness could not synthesize a safe exact-digest baseline")
     else:
+        require_mutation_rejection(safe, safe.replace("^[0-9A-Fa-f]{64}$", ".*", 1), "non-exact digest admission")
         require_mutation_rejection(
             safe,
-            safe.replace("^[0-9A-Fa-f]{64}$", ".*", 1),
-            "non-exact digest admission",
+            safe.replace("$expected = [string]$env:BRICSCAD_V26_PINNED_MSI_SHA256", "$expected = ([string]$env:BRICSCAD_V26_PINNED_MSI_SHA256).Trim()", 1),
+            "whitespace-normalized digest admission",
         )
         require_mutation_rejection(
             safe,
@@ -128,7 +126,7 @@ def main() -> int:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    print("PASS: V26 installer publication is bound to one exact SHA-256 before cache restore and acquisition.")
+    print("PASS: V26 installer publication is bound to one exact raw SHA-256 before cache restore and acquisition.")
     return 0
 
 
