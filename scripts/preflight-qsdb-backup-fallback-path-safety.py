@@ -6,6 +6,7 @@ STORE = ROOT / "src" / "QS3D.Core" / "Persistence" / "QsdbProjectStore.cs"
 SAFETY = ROOT / "src" / "QS3D.Core" / "Persistence" / "PersistencePathSafety.cs"
 REDIRECT_SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "PersistenceRedirectedPathSmoke.cs"
 SIDECAR_REDIRECT_SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "ProjectSidecarRevisionRedirectSmoke.cs"
+QSDB_READ_REDIRECT_SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "QsdbRedirectedReadPathSmoke.cs"
 
 
 def fail(message: str) -> None:
@@ -17,6 +18,7 @@ store = STORE.read_text(encoding="utf-8")
 safety = SAFETY.read_text(encoding="utf-8")
 redirect_smoke = REDIRECT_SMOKE.read_text(encoding="utf-8")
 sidecar_redirect_smoke = SIDECAR_REDIRECT_SMOKE.read_text(encoding="utf-8")
+qsdb_read_redirect_smoke = QSDB_READ_REDIRECT_SMOKE.read_text(encoding="utf-8")
 
 exception_token = "internal sealed class PersistencePathSafetyException : IOException"
 if exception_token not in safety:
@@ -64,5 +66,16 @@ if "ExpectInvalidData" in sidecar_redirect_smoke or "catch (InvalidDataException
     fail("sidecar redirected-path smoke must not preserve the old recoverable InvalidDataException trust contract")
 if "ExpectPathSafetyRefusal" not in sidecar_redirect_smoke:
     fail("sidecar primary and backup redirect checks must use the typed path-safety refusal helper")
+
+if '"QS3D.Core.Persistence.PersistencePathSafetyException"' not in qsdb_read_redirect_smoke:
+    fail("QSDB redirected-read smoke must expect the exact typed persistence path-safety exception")
+if "exception is IOException" not in qsdb_read_redirect_smoke:
+    fail("QSDB redirected-read smoke must retain the non-recoverable IO exception-family contract")
+if "catch (InvalidDataException" in qsdb_read_redirect_smoke:
+    fail("QSDB redirected-read smoke must not accept the old recoverable InvalidDataException trust contract")
+if "LoadWithBackupFallback(redirected)" not in qsdb_read_redirect_smoke:
+    fail("QSDB redirected-read smoke must pin no-backup-downgrade behavior for a redirected primary")
+if "fallback refusal mutated the corrupt primary" not in qsdb_read_redirect_smoke:
+    fail("QSDB redirected-backup refusal must retain rejected-write neutrality coverage")
 
 print("PASS: QSDB backup fallback keeps corrupt-data recovery while path-safety failures remain fail-closed typed IO failures")
