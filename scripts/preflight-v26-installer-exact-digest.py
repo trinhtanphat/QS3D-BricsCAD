@@ -25,7 +25,7 @@ def validate(text: str) -> list[str]:
     gate = re.search(
         r"(?ms)^      - name: Validate exact BricsCAD V26\.2\.07 installer digest\s*$"
         r".*?^        run: \|\s*$"
-        r"(?P<body>(?:^          .*\n?)+)",
+        r"\n(?P<body>(?:^          [^\n]*\n?)+)",
         job,
     )
     if gate is None:
