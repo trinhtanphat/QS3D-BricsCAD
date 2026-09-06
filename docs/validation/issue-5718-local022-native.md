@@ -2,7 +2,9 @@
 
 ## Verdict
 
-Latest observed UI result: V25 allocation37 remains `LOCAL_PASS_BOUNDED` on exact harness `b5fcbfb673810e22b3ac5792a579284c20a75a56` and frozen product `87aff7fec452f9a8dd9f641ef84d143edc73514d`, including UI/save/cold-reopen. On harness `2cd842653d0d080171e01693f7dc1cc1f09061e9`, V26 allocation41 passed UI19/19 and save8/8, but its cold host stalled before QS3D and was intentionally stopped after native diagnosis. Fresh42 reached real placement/Family regeneration, then failed the pre-geometry witness after the view changed to oblique3D. Both are consumed `FAIL_OR_NO_RESULT` with full cleanup/autostart restoration. A pre-click ray/plane projection correction now passes deterministic regression and both SDK builds, but needs fresh V25-first/V26 licensed qualification. No aggregate PASS is claimed.
+Current blocker: on exact pushed harness `ebc1ceaa3cce5cd878270cae1b2a1753e4223761`, V25 allocation44 completed only SelectTree before BricsCAD displayed "License is no longer valid. The application will quit now." The owned host exited after the notice was dismissed; zero phases qualified and all cleanup/autostart restoration passed. Allocation43 on the same harness had already timed out before any acceptance input during an operator interruption. Both are consumed `FAIL_OR_NO_RESULT`; neither qualifies the new ray/plane mapper. Restore a valid licensed V25 host before a fresh V25-first/V26 run; do not replay43/44 or modify license enforcement.
+
+Earlier bounded UI evidence remains unchanged: V25 allocation37 is `LOCAL_PASS_BOUNDED` on exact harness `b5fcbfb673810e22b3ac5792a579284c20a75a56` and frozen product `87aff7fec452f9a8dd9f641ef84d143edc73514d`, including UI/save/cold-reopen. On harness `2cd842653d0d080171e01693f7dc1cc1f09061e9`, V26 allocation41 passed UI19/19 and save8/8, but its cold host stalled before QS3D and was intentionally stopped after native diagnosis. Fresh42 reached real placement/Family regeneration, then failed the pre-geometry witness after the view changed to oblique3D. A pre-click ray/plane projection correction passes deterministic regression and both SDK builds, but still needs fresh licensed qualification. No aggregate PASS is claimed.
 
 `LOCAL_PASS_BOUNDED` for the automated BricsCAD V25 and V26 portions on the same frozen product source `43130a49f49676299b865f094a9a6ded482f67ad`. Each host passed run, saved and fresh-process reopen. Aggregate LOCAL-022 remains open for interactive/UI and the additional coverage limits recorded below.
 
@@ -447,3 +449,52 @@ Editor witness; it never derives an expected point from created geometry or a
 post-click result. Actual V25/V26 SDK builds and the full focused runner suite
 pass. These are not licensed PASS; fresh V25-first/V26 allocations are required.
 Reference: [BricsCAD view properties](https://developer.bricsys.com/bricscad/help/en_US/CurVer/DevRef/source/html/c45a56d0-f28d-2723-590d-f1810f4f48c0.htm).
+
+### V25 allocations43/44 — interrupted preparation, then explicit license exit
+
+Both allocations used exact pushed harness
+`ebc1ceaa3cce5cd878270cae1b2a1753e4223761`, containing projection fix
+`5cce733ab` and merged main `ce210cf8f318782ce36da10e43372dc1319ee1c8`.
+The frozen product remains `87aff7fec452f9a8dd9f641ef84d143edc73514d`;
+V25 ZIP SHA-256 is
+`6da38fcb3bc5fdb1989e9397fad45da712bf4af6b7690298a2fe83657bcb10ac`, and
+probe DLL SHA-256 is
+`952e72c9f18ab4405cd9369231d54bb13ba1716c61bf725fb5fe59a178afe385`.
+Host is V25.2.10, with `OBSERVED_CLICK_V2 / PAUSE_FOR_OPERATOR_V1`.
+The full focused runner suite passed after the main merge; exact-head push
+run `34003962447` and PR run `34003963366` passed preflight/core. These checks
+do not establish licensed runtime qualification.
+
+- `ui-ray-v25-43`, RunId `ccbf64ae399448cc9aac6c782d2564de`, ran
+  `2026-09-06T01:30:23.8666118Z`–`2026-09-06T01:41:39.7490682Z`.
+  The controller reached SelectTree, but operator work was interrupted before
+  any acceptance action. The unchanged active-stage deadline produced
+  `FAIL / ui_selecttree / UI_TIMEOUT_SELECTTREE`, with zero actions/ACKs and
+  zero verified phases. This is not a projection failure or native crash.
+- `ui-ray-v25-44`, RunId `61b998fbbda74ff295b9cc290ed08425`, ran
+  `2026-09-06T01:42:58.6515748Z`–`2026-09-06T01:50:37.1740124Z`.
+  Real maximize/scrollbar operations exposed Móng đơn. A physical click selected
+  it and ACK1 was written after refreshed visual confirmation. Request2
+  (OpenCancelDialog) was published, but no Add click or ACK2 was sent: the next
+  screenshot showed the Bricsys License Manager's invalid-license/quit notice.
+  The notice was dismissed through its real OK button and the owned host exited
+  with code0, without a phase marker. Runner diagnostics retain that natural
+  exit separately from the visually observed license notice; no product
+  geometry failure is inferred and the ray/plane correction was not exercised.
+
+Both receipts are terminal `FAIL_OR_NO_RESULT`, `phases_verified=0`,
+`aggregate_local022_qualified=false`. The runner verified the owned private
+drawing subtree removed, zero BricsCAD processes, original current-profile
+pointer/inventory restored, nonce removed and protected state unchanged.
+The outer wrapper restored OpenAI autostart to its original byte1 and SHA-256
+`6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b`.
+No MCP request was sent and no license configuration/service was changed.
+Private traces and raw receipts remain ignored; only sanitized evidence is
+published. PR #5738 remains draft because current licensed acceptance is unmet.
+
+Next prerequisite is owner restoration of a valid licensed V25 host. After that,
+use a fresh allocation on a pinned pushed harness, complete V25 UI/save/cold
+reopen and cleanup, then qualify the matching V26 package. Do not rerun consumed
+allocations43/44, reuse allocation37 as evidence for the changed mapper, or
+bypass the V25-first gate. Broader Quantity/DPI/private-DWG/topology limits remain
+open; MCP testing remains paused.
