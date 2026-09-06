@@ -40,6 +40,7 @@ def main() -> int:
     run_block = method_block(runtime, "private static string RunCadCommandSequence")
     active_document_block = method_block(runtime, "private static string BuildActiveDocumentJson")
     call_block = method_block(runtime, "public static string Call")
+    direct_call_block = method_block(direct, "internal static string Call")
     direct_route_block = method_block(direct, "internal static bool CanHandleCadCommandSequence")
     direct_command_block = method_block(direct, "internal static string CallCadCommandSequence")
     direct_qsave_block = method_block(direct, "private static string SaveCadCommandSequence")
@@ -47,7 +48,6 @@ def main() -> int:
     boolean_block = method_block(direct, "private static string Boolean")
     direct_save_block = method_block(direct, "private static string Save()")
     direct_save_as_block = method_block(direct, "private static string SaveAs")
-    dbmod_block = method_block(direct, "private static int WaitForSavedContentDbmod")
 
     require(errors, run_block, (
         'var command = NormalizeCadCommandToken(',
@@ -100,6 +100,18 @@ def main() -> int:
         'McpCadAgentRuntime.EnsureCurrentMutationRunning();',
         'string.Equals(command, "QSAVE", StringComparison.Ordinal)',
     ), "direct CAD runtime")
+
+    require(errors, direct_call_block, (
+        'if (string.Equals(tool, "cad_save", StringComparison.Ordinal)) return Save();',
+        'if (string.Equals(tool, "cad_save_as", StringComparison.Ordinal)) return SaveAs(body);',
+        'catch (Exception ex)',
+        'RecordDirectMutationFailure(tool, ex);',
+    ), "direct mutation failure propagation")
+    require(errors, direct, (
+        'private static void RecordDirectMutationFailure(string tool, Exception ex)',
+        '"cad-mutation-failed"',
+        '"reason=" + ex.Message',
+    ), "unified direct mutation diagnostics")
 
     require(errors, direct_command_block, (
         'if (string.Equals(command, "QSAVE", StringComparison.Ordinal)) return SaveCadCommandSequence();',
@@ -194,26 +206,18 @@ def main() -> int:
 
     require(errors, direct_save_as_block, (
         'EnsureWritableDirectory(directory);',
+        'McpDiagnosticHub.InvokeInCadContext(() =>',
         'document.Database.SaveAs(fullPath, DwgVersion.Current);',
-        'WaitForSavedContentDbmod();',
-        'dbmodAfterSave=',
+        'McpNativeCurrentDocumentSave.SaveCurrentDocument(',
+        'route=Database.SaveAs+native-QSAVE',
+        'dbmodAfterSave',
         'Path.GetFullPath(actual), fullPath',
-    ), "save-as publication guard")
+    ), "save-as publication plus native DBMOD settle guard")
+    if 'WaitForSavedContentDbmod();' in direct_save_as_block:
+        errors.append("cad_save_as must not treat Database.SaveAs return plus a blind DBMOD poll as terminal completion")
     if 'document.Database.Save();' in direct_save_as_block:
         errors.append("direct cad_save_as must not use Database.Save()")
 
-    require(errors, dbmod_block, (
-        'DateTime.UtcNow.AddSeconds(2)',
-        'Application.GetSystemVariable("DBMOD")',
-        '(dbmod & DbmodPersistentContentMask) == 0',
-        'Thread.Sleep(25)',
-        'window/view DBMOD bits may remain after save',
-    ), "bounded SaveAs persistent-content DBMOD completion wait")
-    require(errors, direct, (
-        'private const int DbmodPersistentContentMask = 1 | 4 | 32;',
-    ), "persistent-content DBMOD mask")
-    if 'dbmod == 0' in dbmod_block:
-        errors.append("save completion must not require the entire DBMOD bitmask to become zero")
     if "Process.Start" in direct or "cmd.exe" in direct or "powershell" in direct.lower():
         errors.append("direct CAD runtime must not introduce process/shell execution")
 
@@ -229,7 +233,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: MCP direct 3D/save tools keep QSAVE owned by the bounded direct CAD runtime, evaluate licensed extrusion/boolean kernels on database-resident temporary working geometry while preserving source/target identity, execute current-document QSAVE synchronously in BricsCAD command context, and confirm current-save/SaveAs completion from persistent-content DBMOD bits while allowing residual window/view state.")
+    print("PASS: MCP direct 3D/save tools evaluate licensed extrusion/boolean kernels on database-resident temporary working geometry, execute current-document QSAVE synchronously in BricsCAD command context, settle SaveAs through one native QSAVE, and propagate direct mutation failure reasons into unified diagnostics.")
     return 0
 
 
