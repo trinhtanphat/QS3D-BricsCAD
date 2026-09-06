@@ -64,7 +64,7 @@ namespace QS3D.Core.Mapping
             {
                 if (element.Quantities.Count == 0)
                 {
-                    findings.Add(new MeasurementWorkItemCoverageFinding(
+                    AddFinding(findings, new MeasurementWorkItemCoverageFinding(
                         element.Id,
                         element.Category,
                         null,
@@ -83,7 +83,7 @@ namespace QS3D.Core.Mapping
                     if (!resolution.IsMapped)
                         issues.Add(MeasurementWorkItemCoverageIssue.UnmappedWorkItem);
 
-                    findings.Add(new MeasurementWorkItemCoverageFinding(
+                    AddFinding(findings, new MeasurementWorkItemCoverageFinding(
                         element.Id,
                         element.Category,
                         quantity.Key,
@@ -94,6 +94,19 @@ namespace QS3D.Core.Mapping
             }
 
             return new ReadOnlyCollection<MeasurementWorkItemCoverageFinding>(findings.ToArray());
+        }
+
+        private static void AddFinding(
+            List<MeasurementWorkItemCoverageFinding> findings,
+            MeasurementWorkItemCoverageFinding finding)
+        {
+            if (findings.Count >= MeasurementWorkItemCoverageReport.MaximumFindingCount)
+            {
+                throw new InvalidOperationException(
+                    "Measurement/work-item coverage exceeds the maximum supported finding count of " +
+                    MeasurementWorkItemCoverageReport.MaximumFindingCount + ".");
+            }
+            findings.Add(finding);
         }
 
         private static List<ElementCoverageSnapshot> SnapshotElements(ProjectState project)
