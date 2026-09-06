@@ -2,7 +2,11 @@
 
 ## Verdict
 
-Current blocker: on exact pushed harness `ebc1ceaa3cce5cd878270cae1b2a1753e4223761`, V25 allocation44 completed only SelectTree before BricsCAD displayed "License is no longer valid. The application will quit now." The owned host exited after the notice was dismissed; zero phases qualified and all cleanup/autostart restoration passed. Allocation43 on the same harness had already timed out before any acceptance input during an operator interruption. Both are consumed `FAIL_OR_NO_RESULT`; neither qualifies the new ray/plane mapper. Restore a valid licensed V25 host before a fresh V25-first/V26 run; do not replay43/44 or modify license enforcement.
+Current owner boundary (2026-09-06): background-only work; no mouse/keyboard input, window activation or screenshots on the owner's interactive desktop. All such automation is stopped and no BricsCAD test process remains. Do not launch another physical-UI allocation on that desktop. Background-safe repository tests/builds/CI can continue, but they cannot replace physical-UI acceptance or establish an aggregate PASS. Resumption requires a genuinely isolated licensed interactive test session with explicit owner agreement, or separately supplied real operator evidence.
+
+Latest V25 allocation45 on pushed harness `53d1173b3ac251af8e47cf1558c86511467213f0` reached SelectTree, then failed `ui_bind / UI_STATE_PREEXISTS` before any acceptance input. This shows the one-shot UI entry point was invoked while its state already existed; the initiating cause is not established. No license notice was observed in this allocation and the earlier license failure is not relabelled as resolved. Zero phases qualified; full cleanup and original autostart restoration passed. Do not replay45 or weaken the duplicate-state guard.
+
+Earlier blocker: on exact pushed harness `ebc1ceaa3cce5cd878270cae1b2a1753e4223761`, V25 allocation44 completed only SelectTree before BricsCAD displayed "License is no longer valid. The application will quit now." The owned host exited after the notice was dismissed; zero phases qualified and all cleanup/autostart restoration passed. Allocation43 on the same harness had already timed out before any acceptance input during an operator interruption. Both are consumed `FAIL_OR_NO_RESULT`; neither qualifies the new ray/plane mapper. A valid licensed host is still required; do not replay43/44 or modify license enforcement.
 
 Earlier bounded UI evidence remains unchanged: V25 allocation37 is `LOCAL_PASS_BOUNDED` on exact harness `b5fcbfb673810e22b3ac5792a579284c20a75a56` and frozen product `87aff7fec452f9a8dd9f641ef84d143edc73514d`, including UI/save/cold-reopen. On harness `2cd842653d0d080171e01693f7dc1cc1f09061e9`, V26 allocation41 passed UI19/19 and save8/8, but its cold host stalled before QS3D and was intentionally stopped after native diagnosis. Fresh42 reached real placement/Family regeneration, then failed the pre-geometry witness after the view changed to oblique3D. A pre-click ray/plane projection correction passes deterministic regression and both SDK builds, but still needs fresh licensed qualification. No aggregate PASS is claimed.
 
@@ -498,3 +502,48 @@ reopen and cleanup, then qualify the matching V26 package. Do not rerun consumed
 allocations43/44, reuse allocation37 as evidence for the changed mapper, or
 bypass the V25-first gate. Broader Quantity/DPI/private-DWG/topology limits remain
 open; MCP testing remains paused.
+
+### V25 allocation45 and superseding background-only owner instruction
+
+Before45, read-only process inspection showed the existing RLM service process
+had been replaced at `2026-09-06T02:02:59Z` and its console title no longer had
+the `Select` prefix. No agent action changed RLM or its license configuration.
+This was a material external-state change permitting a fresh check, not proof
+that licensing had recovered. Main `7e332961b49842e8c9da9659dd3d40cc2dea3305`
+was merged into the owned task branch and pushed as
+`53d1173b3ac251af8e47cf1558c86511467213f0`. Focused runner tests and both
+explicit-reference probe rebuilds passed with zero warnings/errors. An initial
+standalone V26 build invocation omitted required ProductDir/BricsCadDir and
+failed validation; the corrected invocation used the frozen product and host
+references, without source changes or relaxed guards.
+
+`ui-ray-v25-45`, RunId `37a3387b53bd49b486f800d3f5430919`, ran
+`2026-09-06T02:08:48.7507511Z`–`2026-09-06T02:10:36.1850189Z` on that exact
+harness and unchanged product `87aff7fec452f9a8dd9f641ef84d143edc73514d`.
+Its V25 probe SHA-256 was
+`9c64f42c44c812895ebf7097f700803da8ac070f8b3f4a9a8b4cfefc7adc060f`.
+The trace reached SelectTree at02:09:41Z; window discovery found the disposable
+drawing. Activation then failed and fresh discovery found no BricsCAD window.
+The actual phase marker was `FAIL / ui_bind / UI_STATE_PREEXISTS`; the runner
+consumed it and cleaned up. No click, key or text acceptance action/ACK exists.
+The source has one matching guard: a second Ui() entry sees an existing
+controller/run state. The startup command list includes QL22UI only once.
+Whether the second invocation came from an operator, command repeat, or another
+source is unproven; no speculative NoHistory/guard change was implemented.
+
+Receipt status is `FAIL_OR_NO_RESULT`, zero verified phases, aggregate false.
+Private drawing removal, zero BricsCAD processes, current-profile/inventory
+restoration, nonce removal, protected state and original autostart hash all
+passed. Exact-head PR run34005511169 and push run34005509287 both passed
+preflight/core. This is not physical UI or license-stability qualification.
+
+The owner then explicitly prohibited use of their mouse, keyboard and screen,
+including foreground activation and screenshots, and requested background-only
+work. This supersedes earlier permission for physical UI on the shared desktop.
+The agent stopped UI automation and reset its Computer Use session; no new host
+was launched. Source/build/CI/evidence work may continue without desktop input.
+Do not substitute programmatic WPF invocation, simulated ACKs or native API-only
+checks for the unexecuted physical cases. Any new licensed UI run requires an
+isolated interactive session agreed with the owner; opening hidden BricsCAD alone
+does not guarantee that license/startup dialogs cannot take foreground focus.
+PR #5738 and aggregate LOCAL-022 remain incomplete; MCP tests remain paused.
