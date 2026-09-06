@@ -41,8 +41,10 @@ def main() -> int:
     domain = DOMAIN.read_text(encoding="utf-8")
     errors: list[str] = []
 
+    call = method_block(direct, "internal static string Call")
     extrude = method_block(direct, "private static string Extrude")
     boolean = method_block(direct, "private static string Boolean")
+    save_as = method_block(direct, "private static string SaveAs")
     status = method_block(domain, "internal static string BuildStatusJson")
 
     require(errors, extrude, (
@@ -65,7 +67,7 @@ def main() -> int:
         "model.AppendEntity(targetWorking);",
         "model.AppendEntity(operandWorking);",
         "targetWorking.BooleanOperation(operation, operandWorking);",
-        "var resultClone = targetWorking.Clone() as Solid3d;",
+        "resultClone = targetWorking.Clone() as Solid3d;",
         "target.HandOverTo(resultClone, true, true);",
         "if (!targetWorking.IsErased) targetWorking.Erase();",
         "if (!operandWorking.IsErased) operandWorking.Erase();",
@@ -96,6 +98,27 @@ def main() -> int:
     if "Database.Save();" in native_save or "Database.SaveAs(" in native_save:
         errors.append("current-document QSAVE helper must never write the active path through Database.Save/SaveAs")
 
+    require(errors, save_as, (
+        "McpDiagnosticHub.InvokeInCadContext(() =>",
+        "document.Database.SaveAs(fullPath, DwgVersion.Current);",
+        "McpNativeCurrentDocumentSave.SaveCurrentDocument(",
+        "route=Database.SaveAs+native-QSAVE",
+        "dbmodAfterSave",
+    ), "SaveAs native completion settle")
+    forbid(errors, save_as, (
+        "WaitForSavedContentDbmod();",
+    ), "SaveAs blind DBMOD polling regression")
+
+    require(errors, call, (
+        "catch (Exception ex)",
+        "RecordDirectMutationFailure(tool, ex);",
+    ), "direct mutation failure routing")
+    require(errors, direct, (
+        "private static void RecordDirectMutationFailure(string tool, Exception ex)",
+        '"cad-mutation-failed"',
+        '"reason=" + ex.Message',
+    ), "unified direct failure diagnostics")
+
     require(errors, status, (
         "ExistingProjectMutationContext.TryGet(document, out project)",
         "No persisted QS3D project context",
@@ -111,7 +134,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: MCP direct 3D kernels use database-resident working inputs, current-document save executes one synchronous native QSAVE in command context with DBMOD verification, and QS3D status binds only an existing persisted project on a cold cache.")
+    print("PASS: MCP direct 3D kernels use database-resident working inputs, current-document save executes one synchronous native QSAVE in command context, SaveAs settles through native QSAVE, direct failures propagate to unified diagnostics, and QS3D status binds only an existing persisted project on a cold cache.")
     return 0
 
 
