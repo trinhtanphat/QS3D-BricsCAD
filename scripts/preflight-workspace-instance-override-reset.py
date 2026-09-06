@@ -21,6 +21,10 @@ def method_body(signature, next_signature):
     end = text.find(next_signature, start + len(signature))
     return text[start:end if end >= 0 else len(text)]
 
+load_body = method_body(
+    "private void LoadInstanceProperties(ProjectElement element, ProjectFamily family)",
+    "private PropertyRowViewModel CreatePropertyRow",
+)
 apply_body = method_body(
     "private string ApplyInstanceProperty(ProjectElement element, ProjectFamily family, string key, string unit, PropertyRowViewModel row, string value)",
     "private void ResetInstanceProperty",
@@ -29,6 +33,11 @@ reset_body = method_body(
     "private void ResetInstanceProperty(ProjectElement element, ProjectFamily family, string key, PropertyRowViewModel row)",
     "private bool TryGetCurrentProjectForMutation",
 )
+
+if "row.CanReset = hasInstance;" not in load_body:
+    errors.append("editable instance rows must expose every persisted instance value as an override, including legacy values equal to Family")
+if "row.CanReset = hasInstance && !string.Equals(current, familyValue, StringComparison.Ordinal);" in load_body:
+    errors.append("legacy equal-to-Family stored overrides must not be hidden from Reset")
 
 for needle in [
     "TryGetCurrentProjectForMutation(\"Đặt lại Instance property\", out var project)",
@@ -74,4 +83,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: Workspace removes semantic instance overrides both on Reset and when an edit collapses back to the live Family value, preserving atomic mutation and stale-affinity guards.")
+print("PASS: Workspace exposes persisted semantic overrides truthfully, removes them on Reset, and collapses edits back to live Family inheritance atomically with stale-affinity guards.")
