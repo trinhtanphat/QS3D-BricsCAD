@@ -152,7 +152,7 @@ def main() -> int:
         'model.AppendEntity(targetWorking);',
         'model.AppendEntity(operandWorking);',
         'targetWorking.BooleanOperation(operation, operandWorking);',
-        'var resultClone = targetWorking.Clone() as Solid3d;',
+        'resultClone = targetWorking.Clone() as Solid3d;',
         'target.HandOverTo(resultClone, true, true);',
         'if (!targetWorking.IsErased) targetWorking.Erase();',
         'if (!operandWorking.IsErased) operandWorking.Erase();',
