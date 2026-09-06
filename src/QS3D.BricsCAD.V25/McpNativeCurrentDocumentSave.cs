@@ -179,8 +179,22 @@ namespace QS3D.BricsCAD.V25
                 Document = document;
                 FullPath = Path.GetFullPath(filename);
                 _audit?.Invoke("native QSAVE scheduled in command context; fileName=" + SafeLeaf(FullPath));
-                Completion = Application.DocumentManager.ExecuteInCommandContextAsync(
-                    _ => ExecuteQsaveInCommandContext(),
+
+                var completionSource = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+                Completion = completionSource.Task;
+                Application.DocumentManager.ExecuteInCommandContextAsync(
+                    async _ =>
+                    {
+                        try
+                        {
+                            await ExecuteQsaveInCommandContext();
+                            completionSource.TrySetResult(null);
+                        }
+                        catch (Exception ex)
+                        {
+                            completionSource.TrySetException(ex);
+                        }
+                    },
                     null);
             }
 
