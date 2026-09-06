@@ -91,6 +91,10 @@ def main() -> int:
 
     require(errors, native_save, (
         "Application.DocumentManager.ExecuteInCommandContextAsync(",
+        "var completionSource = new TaskCompletionSource<object?>",
+        "Completion = completionSource.Task;",
+        "completionSource.TrySetResult(null);",
+        "completionSource.TrySetException(ex);",
         "document.Editor.Command(\"_.QSAVE\");",
         "Task.WaitAny(",
         "completion.GetAwaiter().GetResult();",
@@ -99,6 +103,7 @@ def main() -> int:
         "DbmodPersistentContentMask = 1 | 4 | 32",
     ), "synchronous native QSAVE command context")
     forbid(errors, native_save, (
+        "Completion = Application.DocumentManager.ExecuteInCommandContextAsync(",
         "document.SendStringToExecute(",
         "McpCadMutationCoordinator.QueueNativeCommand(",
         "ManualResetEventSlim",
