@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         {
             StructuralMutationsAdvanceExactlyOnce();
             NoOpMutationsDoNotAdvance();
+            RejectedMutationsDoNotAdvance();
             RevisionOverflowFailsBeforeMutation();
         }
 
@@ -56,6 +57,30 @@ namespace QS3D.Core.SmokeTests
             Equal(emptyVersion, project.ChangeVersion);
         }
 
+        private static void RejectedMutationsDoNotAdvance()
+        {
+            var project = Project();
+            var first = Element("E1");
+            project.Elements.Add(first);
+            var version = project.ChangeVersion;
+            var count = project.Elements.Count;
+
+            Throws<ArgumentNullException>(() => project.Elements.Add(null!));
+            AssertUnchanged(project, version, count, first, "null Add");
+
+            Throws<ArgumentNullException>(() => project.Elements.Insert(0, null!));
+            AssertUnchanged(project, version, count, first, "null Insert");
+
+            Throws<ArgumentOutOfRangeException>(() => project.Elements.Insert(2, Element("out-of-range-insert")));
+            AssertUnchanged(project, version, count, first, "out-of-range Insert");
+
+            Throws<ArgumentOutOfRangeException>(() => project.Elements.RemoveAt(1));
+            AssertUnchanged(project, version, count, first, "out-of-range RemoveAt");
+
+            Throws<ArgumentOutOfRangeException>(() => project.Elements[1] = Element("out-of-range-set"));
+            AssertUnchanged(project, version, count, first, "out-of-range index replacement");
+        }
+
         private static void RevisionOverflowFailsBeforeMutation()
         {
             var project = Project();
@@ -80,6 +105,27 @@ namespace QS3D.Core.SmokeTests
             var before = project.ChangeVersion;
             action();
             Equal(checked(before + 1L), project.ChangeVersion, operation);
+        }
+
+        private static void AssertUnchanged(ProjectState project, long version, int count, ProjectElement first, string operation)
+        {
+            Equal(version, project.ChangeVersion, operation + " revision");
+            Equal(count, project.Elements.Count, operation + " count");
+            if (!ReferenceEquals(first, project.Elements[0])) throw new Exception(operation + ": original element changed.");
+        }
+
+        private static void Throws<TException>(Action action) where TException : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (TException)
+            {
+                return;
+            }
+
+            throw new Exception("Expected " + typeof(TException).Name + ".");
         }
 
         private static ProjectState Project() => new ProjectState("element-structural-revision", "Element structural revision");
