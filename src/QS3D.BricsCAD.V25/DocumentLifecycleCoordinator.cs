@@ -131,25 +131,10 @@ namespace QS3D.BricsCAD.V25
         private static void ReportDocumentDestroyTeardownErrors(Document document, List<Exception> errors)
         {
             if (errors.Count == 0) return;
-
-            const int maxReportedErrors = 3;
-            const int maxErrorMessageLength = 200;
-            var details = new List<string>();
-            for (var i = 0; i < errors.Count && i < maxReportedErrors; i++)
-            {
-                var error = errors[i];
-                var message = error.Message ?? string.Empty;
-                if (message.Length > maxErrorMessageLength)
-                    message = message.Substring(0, maxErrorMessageLength) + "…";
-                details.Add(error.GetType().Name + ": " + message);
-            }
-
-            var omitted = errors.Count - details.Count;
-            var diagnostic = "QS3D document destroy teardown completed with " + errors.Count +
-                " cleanup error(s): " + string.Join(" | ", details);
-            if (omitted > 0)
-                diagnostic += " | +" + omitted + " more";
-            Report(document, diagnostic);
+            Report(
+                document,
+                "QS3D document destroy teardown completed with " + errors.Count +
+                " cleanup error(s). Internal details were hidden.");
         }
 
         private static void OnDocumentDestroyed(object sender, DocumentDestroyedEventArgs e)
@@ -257,13 +242,26 @@ namespace QS3D.BricsCAD.V25
         {
             try
             {
+                var refreshActiveUi = refreshUi && IsActiveDocument(document);
                 SelectionSyncCoordinator.Attach(document);
-                EnsureProject(document, refreshUi);
-                if (refreshUi) SelectionSyncCoordinator.Refresh(document);
+                EnsureProject(document, refreshActiveUi);
+                if (refreshActiveUi) SelectionSyncCoordinator.Refresh(document);
             }
             catch (Exception ex)
             {
                 ReportLifecycleError(document, ex);
+            }
+        }
+
+        private static bool IsActiveDocument(Document document)
+        {
+            try
+            {
+                return ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document);
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -315,7 +313,7 @@ namespace QS3D.BricsCAD.V25
             catch (Exception saveError)
             {
                 var recovery = TryWriteRecovery(document, saveError);
-                Report(document, "QS3D sidecar save failed after DWG save: " + saveError.Message + recovery);
+                Report(document, "DWG save completed, but the QS3D sidecar could not be saved." + recovery);
             }
         }
 
@@ -358,9 +356,10 @@ namespace QS3D.BricsCAD.V25
             {
                 e.Veto();
                 var recovery = TryWriteRecovery(document, saveError);
-                Report(document, "QS3D close cancelled because the sidecar could not be saved: " + saveError.Message + recovery);
+                var message = "The drawing was kept open because QS3D could not save its sidecar." + recovery;
+                Report(document, message);
                 MessageBox.Show(
-                    "The drawing was kept open because QS3D could not save its sidecar.\n\n" + saveError.Message + recovery,
+                    message,
                     "QS3D — Project save failed",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
@@ -371,12 +370,12 @@ namespace QS3D.BricsCAD.V25
         {
             try
             {
-                var path = ProjectContextCoordinator.SaveRecoveryCopy(document, saveError);
-                return " Recovery copy: " + path;
+                ProjectContextCoordinator.SaveRecoveryCopy(document, saveError);
+                return " Recovery copy was written successfully.";
             }
-            catch (Exception recoveryError)
+            catch (Exception)
             {
-                return " Recovery copy also failed: " + recoveryError.Message;
+                return " Recovery copy also failed; internal details were hidden.";
             }
         }
 
@@ -390,13 +389,14 @@ namespace QS3D.BricsCAD.V25
         {
             try { document.Editor.WriteMessage("\n" + message); }
             catch { }
+            if (!IsActiveDocument(document)) return;
             try { PaletteCoordinator.SetStatus(message); }
             catch { }
         }
 
         private static void ReportLifecycleError(Document document, Exception error)
         {
-            Report(document, "QS3D document lifecycle reconcile error: " + error.Message);
+            Report(document, "QS3D document lifecycle reconcile failed. Internal details were hidden.");
         }
 
         private static void EnsureProject(Document? document, bool refreshUi)
@@ -420,19 +420,25 @@ namespace QS3D.BricsCAD.V25
                 FailedProjectReconciliations.Remove(document);
                 if (refreshUi) PaletteCoordinator.RefreshAll();
             }
-            catch (InvalidDataException ex)
+            catch (InvalidDataException)
             {
-                var message = "QS3D project load error: " + ex.Message;
+                const string message = "QS3D project load failed. Internal details were hidden.";
                 RememberStableProjectLoadFailure(document, attemptedRevision, message);
-                try { PaletteCoordinator.ResetForUnavailableProject(message); }
-                catch { }
+                if (refreshUi)
+                {
+                    try { PaletteCoordinator.ResetForUnavailableProject(message); }
+                    catch { }
+                }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 FailedProjectReconciliations.Remove(document);
-                var message = "QS3D project load error: " + ex.Message;
-                try { PaletteCoordinator.ResetForUnavailableProject(message); }
-                catch { }
+                const string message = "QS3D project load failed. Internal details were hidden.";
+                if (refreshUi)
+                {
+                    try { PaletteCoordinator.ResetForUnavailableProject(message); }
+                    catch { }
+                }
             }
         }
 

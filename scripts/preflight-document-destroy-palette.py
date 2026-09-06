@@ -38,7 +38,8 @@ require(lifecycle, "CancelLifecycleIdleDrain();", "lifecycle drain cancellation"
 require(lifecycle, "operation.Abort();", "queued lifecycle operation abort")
 require(lifecycle, "PaletteCoordinator.ResetForNoDocument();", "last-document palette reset")
 require(lifecycle, "ScheduleReconcile(active, true);", "remaining-document deferred rebind")
-require(lifecycle, "EnsureProject(document, refreshUi);", "deferred project reconcile")
+require(lifecycle, "var refreshActiveUi = refreshUi && IsActiveDocument(document);", "execution-time active-document reconcile fence")
+require(lifecycle, "EnsureProject(document, refreshActiveUi);", "deferred project reconcile")
 require(lifecycle, "PaletteCoordinator.ResetForUnavailableProject(message);", "project-load failure workspace reset")
 
 if "StartLifecycleIdleTimer" in lifecycle or "new DispatcherTimer(" in lifecycle or "TimeSpan.FromMilliseconds(1d)" in lifecycle:

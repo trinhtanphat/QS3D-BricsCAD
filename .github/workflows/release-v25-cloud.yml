@@ -26,6 +26,7 @@ permissions:
 concurrency:
   group: qs3d-cloud-v25-preview-release
   cancel-in-progress: false
+  queue: max
 
 jobs:
   release:

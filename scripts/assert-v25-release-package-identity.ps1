@@ -13,6 +13,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $script:MaxMetadataBytes = 65536
+$script:MaxAssemblyBytes = 134217728
 $script:StrictUtf8 = [Text.UTF8Encoding]::new($false, $true)
 
 function Resolve-OrdinaryNonReparseFile {
@@ -110,6 +111,118 @@ function Read-HeldStrictUtf8Metadata {
     }
 }
 
+function Open-HeldAssemblyFile {
+    param([string]$Path, [string]$Label)
+
+    $initial = Resolve-OrdinaryNonReparseFile -Path $Path -Label $Label
+    if ([int64]$initial.Length -le 0 -or [int64]$initial.Length -gt $script:MaxAssemblyBytes) {
+        throw "$Label size is outside the admitted 1..$($script:MaxAssemblyBytes)-byte range."
+    }
+    $stream = [IO.File]::Open(
+        $initial.FullName,
+        [IO.FileMode]::Open,
+        [IO.FileAccess]::Read,
+        [IO.FileShare]::Read
+    )
+    try {
+        $rebound = Resolve-OrdinaryNonReparseFile -Path $initial.FullName -Label $Label
+        if (-not [string]::Equals($initial.FullName, $rebound.FullName, [StringComparison]::OrdinalIgnoreCase) -or
+            $initial.Length -ne $stream.Length -or
+            $rebound.Length -ne $stream.Length -or
+            $initial.LastWriteTimeUtc.Ticks -ne $rebound.LastWriteTimeUtc.Ticks) {
+            throw "$Label changed while its generation lock was being admitted."
+        }
+        return [pscustomobject]@{
+            Path = $rebound.FullName
+            Length = [int64]$stream.Length
+            LastWriteUtcTicks = [int64]$rebound.LastWriteTimeUtc.Ticks
+            Stream = $stream
+        }
+    }
+    catch {
+        $stream.Dispose()
+        throw
+    }
+}
+
+function Assert-HeldAssemblyBinding {
+    param([pscustomobject]$Held, [string]$Label)
+
+    $current = Resolve-OrdinaryNonReparseFile -Path $Held.Path -Label $Label
+    if (-not [string]::Equals($Held.Path, $current.FullName, [StringComparison]::OrdinalIgnoreCase) -or
+        $Held.Length -ne $current.Length -or
+        $Held.Length -ne $Held.Stream.Length -or
+        $Held.LastWriteUtcTicks -ne $current.LastWriteTimeUtc.Ticks) {
+        throw "$Label pathname no longer resolves to the held admitted generation."
+    }
+}
+
+function Read-HeldAssemblyBytes {
+    param([pscustomobject]$Held, [string]$Label)
+
+    if ($Held.Stream.Length -le 0 -or $Held.Stream.Length -gt $script:MaxAssemblyBytes -or $Held.Stream.Length -gt [int]::MaxValue) {
+        throw "$Label held stream size is outside the admitted assembly byte range."
+    }
+    $Held.Stream.Position = 0
+    $bytes = [byte[]]::new([int]$Held.Stream.Length)
+    $offset = 0
+    while ($offset -lt $bytes.Length) {
+        $read = $Held.Stream.Read($bytes, $offset, $bytes.Length - $offset)
+        if ($read -le 0) { throw "$Label ended before its held length was read." }
+        $offset += $read
+    }
+    if ($Held.Stream.ReadByte() -ne -1) {
+        throw "$Label held stream changed while its semantic bytes were being read."
+    }
+    $Held.Stream.Position = 0
+    return $bytes
+}
+
+function Get-HeldAssemblyIdentity {
+    param([pscustomobject]$Held, [string]$Label)
+
+    Assert-HeldAssemblyBinding -Held $Held -Label $Label
+    $bytes = Read-HeldAssemblyBytes -Held $Held -Label $Label
+    try {
+        # ReflectionOnlyLoad consumes the exact held bytes. CustomAttributesData
+        # reads metadata without executing candidate code or reopening the package pathname.
+        $assembly = [Reflection.Assembly]::ReflectionOnlyLoad($bytes)
+        $assemblyVersion = $assembly.GetName().Version
+        if ($null -eq $assemblyVersion) {
+            throw "$Label has no managed assembly version."
+        }
+
+        $informationalAttributes = @(
+            $assembly.GetCustomAttributesData() |
+                Where-Object { $_.AttributeType.FullName -eq 'System.Reflection.AssemblyInformationalVersionAttribute' }
+        )
+        if ($informationalAttributes.Count -ne 1) {
+            throw "$Label must contain exactly one AssemblyInformationalVersionAttribute; found $($informationalAttributes.Count)."
+        }
+        $constructorArguments = @($informationalAttributes[0].ConstructorArguments)
+        if ($constructorArguments.Count -ne 1 -or $constructorArguments[0].ArgumentType.FullName -ne 'System.String') {
+            throw "$Label AssemblyInformationalVersionAttribute must contain one string argument."
+        }
+        $informationalVersion = ([string]$constructorArguments[0].Value).Trim()
+        if ([string]::IsNullOrWhiteSpace($informationalVersion) -or
+            -not [string]::Equals($informationalVersion, [string]$constructorArguments[0].Value, [StringComparison]::Ordinal)) {
+            throw "$Label informational ProductVersion must be one non-empty canonical string without surrounding whitespace."
+        }
+
+        return [pscustomobject]@{
+            AssemblyVersion = [Version]$assemblyVersion
+            ProductVersion = $informationalVersion
+        }
+    }
+    catch {
+        throw "$Label is not a valid managed assembly for held semantic inspection: $($_.Exception.Message)"
+    }
+    finally {
+        if ($null -ne $bytes) { [Array]::Clear($bytes, 0, $bytes.Length) }
+        Assert-HeldAssemblyBinding -Held $Held -Label $Label
+    }
+}
+
 if ($ExpectedSourceCommit -notmatch '^[0-9A-Fa-f]{40}$') {
     throw 'ExpectedSourceCommit must be one exact 40-hex Git commit SHA.'
 }
@@ -120,8 +233,16 @@ if (-not [string]::IsNullOrWhiteSpace($ExpectedReleaseTag) -and $ExpectedRelease
 }
 
 $held = Open-HeldMetadataFile -Path $MetadataPath
+$pluginHeld = $null
+$coreHeld = $null
 try {
     Assert-HeldMetadataBinding -Held $held
+    $packageDirectory = Split-Path -Parent $held.Path
+    $pluginPath = Join-Path $packageDirectory 'QS3D.BricsCAD.V25.dll'
+    $corePath = Join-Path $packageDirectory 'QS3D.Core.dll'
+    $pluginHeld = Open-HeldAssemblyFile -Path $pluginPath -Label 'V25 plugin assembly'
+    $coreHeld = Open-HeldAssemblyFile -Path $corePath -Label 'V25 Core assembly'
+
     $text = Read-HeldStrictUtf8Metadata -Held $held
     Assert-HeldMetadataBinding -Held $held
     try {
@@ -147,8 +268,9 @@ try {
     }
 
     $productVersion = ([string]$metadata.productVersion).Trim()
-    if ([string]::IsNullOrWhiteSpace($productVersion)) {
-        throw 'V25 package metadata productVersion is missing.'
+    if ([string]::IsNullOrWhiteSpace($productVersion) -or
+        -not [string]::Equals($productVersion, [string]$metadata.productVersion, [StringComparison]::Ordinal)) {
+        throw 'V25 package metadata productVersion must be one non-empty canonical string without surrounding whitespace.'
     }
     if (-not [string]::IsNullOrWhiteSpace($ExpectedReleaseTag)) {
         if (-not [string]::Equals(('v' + $productVersion), $ExpectedReleaseTag, [StringComparison]::Ordinal)) {
@@ -156,13 +278,47 @@ try {
         }
     }
 
+    $assemblyVersionText = [string]$metadata.version
+    if ([string]::IsNullOrWhiteSpace($assemblyVersionText) -or
+        -not [string]::Equals($assemblyVersionText, $assemblyVersionText.Trim(), [StringComparison]::Ordinal)) {
+        throw 'V25 package metadata version must be one non-empty canonical managed assembly version.'
+    }
+    try {
+        $packageVersion = [Version]::Parse([string]$metadata.version)
+    }
+    catch {
+        throw "PACKAGE-METADATA version is invalid: $($metadata.version)"
+    }
+    if (-not [string]::Equals($packageVersion.ToString(), $assemblyVersionText, [StringComparison]::Ordinal)) {
+        throw "PACKAGE-METADATA version is not canonical: $assemblyVersionText"
+    }
+
+    $pluginIdentity = Get-HeldAssemblyIdentity -Held $pluginHeld -Label 'V25 plugin assembly'
+    $coreIdentity = Get-HeldAssemblyIdentity -Held $coreHeld -Label 'V25 Core assembly'
+    if ($pluginIdentity.AssemblyVersion -ne $packageVersion -or $coreIdentity.AssemblyVersion -ne $packageVersion) {
+        throw "V25 package managed assembly identity mismatch. Metadata=$packageVersion Plugin=$($pluginIdentity.AssemblyVersion) Core=$($coreIdentity.AssemblyVersion)"
+    }
+    if (-not [string]::Equals($pluginIdentity.ProductVersion, $productVersion, [StringComparison]::Ordinal) -or
+        -not [string]::Equals($coreIdentity.ProductVersion, $productVersion, [StringComparison]::Ordinal)) {
+        throw "V25 held assembly ProductVersion does not match package productVersion. Metadata=$productVersion Plugin=$($pluginIdentity.ProductVersion) Core=$($coreIdentity.ProductVersion)"
+    }
+
     Assert-HeldMetadataBinding -Held $held
+    Assert-HeldAssemblyBinding -Held $pluginHeld -Label 'V25 plugin assembly'
+    Assert-HeldAssemblyBinding -Held $coreHeld -Label 'V25 Core assembly'
     [pscustomobject]@{
         SourceCommit = $metadataSource.ToLowerInvariant()
         ProductVersion = $productVersion
+        AssemblyVersion = $packageVersion.ToString()
+        PluginProductVersion = $pluginIdentity.ProductVersion
+        CoreProductVersion = $coreIdentity.ProductVersion
         MetadataBytes = $held.Length
+        PluginBytes = $pluginHeld.Length
+        CoreBytes = $coreHeld.Length
     }
 }
 finally {
+    if ($null -ne $coreHeld) { $coreHeld.Stream.Dispose() }
+    if ($null -ne $pluginHeld) { $pluginHeld.Stream.Dispose() }
     $held.Stream.Dispose()
 }

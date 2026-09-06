@@ -31,7 +31,7 @@ def main() -> int:
         "if (TryUseStableFailedProjectReconcile(document, refreshUi)) return;",
         "ProjectSidecarRevisionStamp? attemptedRevision = null;",
         "TryCaptureProjectRevision(document, out attemptedRevision);",
-        "catch (InvalidDataException ex)",
+        "catch (InvalidDataException)",
         "RememberStableProjectLoadFailure(document, attemptedRevision, message);",
         "if (ProjectContextCoordinator.TryGetCached(document, out _))",
         "!failed.Revision.Equals(current)",
