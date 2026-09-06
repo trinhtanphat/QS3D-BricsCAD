@@ -13,7 +13,9 @@ REQUIRED_PATHS = (
     ".gitmodules",
     "Directory.Build.props",
     "QS3D.sln",
+    "QS3D.V26.sln",
     ".github/workflows/release-v25-cloud.yml",
+    ".github/workflows/dispatch-v25-cloud-after-main-integration.yml",
 )
 
 
