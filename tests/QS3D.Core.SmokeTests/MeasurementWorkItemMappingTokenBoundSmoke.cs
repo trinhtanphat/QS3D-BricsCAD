@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Mapping;
 
@@ -9,6 +10,7 @@ namespace QS3D.Core.SmokeTests
     {
         private const int MaximumTokenLength = 1024;
 
+        [ModuleInitializer]
         internal static void Run()
         {
             ExactBoundaryRemainsAcceptedAcrossConstructorSurfaces();
