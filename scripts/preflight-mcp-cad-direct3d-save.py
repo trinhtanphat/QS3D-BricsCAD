@@ -124,40 +124,38 @@ def main() -> int:
     require(errors, extrude_block, (
         'OpenEntity(transaction, document.Database, handle, OpenMode.ForRead) as Curve',
         'var profileClone = source.Clone() as Curve;',
-        'model.AppendEntity(profileClone);',
-        'transaction.AddNewlyCreatedDBObject(profileClone, true);',
-        'solid.CreateExtrudedSolid(profileClone, new Vector3d(0d, 0d, height), new SweepOptions());',
-        'if (!profileClone.IsErased) profileClone.Erase();',
-        'kernelSource=database-resident-profile-clone',
-    ), "database-resident direct curve extrusion")
+        'Region.CreateFromCurves(new DBObjectCollection { profileClone })',
+        'solid.Extrude(region, height, 0d);',
+        'region?.Dispose();',
+        'profileClone.Dispose();',
+        'kernelSource=transient-region',
+    ), "V25 transient-region direct curve extrusion")
     forbid(errors, extrude_block, (
-        'Region.CreateFromCurves',
+        'model.AppendEntity(profileClone);',
+        'solid.CreateExtrudedSolid(profileClone',
         'solid.CreateExtrudedSolid(source,',
+        'kernelSource=database-resident-profile-clone',
         'kernelSource=transient-curve-clone',
-    ), "direct extrusion regression")
+    ), "direct extrusion live regression")
 
     require(errors, boolean_block, (
-        'var targetWorking = target.Clone() as Solid3d;',
-        'var operandWorking = operand.Clone() as Solid3d;',
+        'var operandClone = operand.Clone() as Solid3d;',
+        'target.BooleanOperation(operation, operandClone);',
+        'if (!operand.IsErased) operand.Erase();',
+        'operandClone.Dispose();',
+        'kernelTarget=database-resident; kernelOperand=transient-clone',
+    ), "V25 direct boolean target/transient operand")
+    forbid(errors, boolean_block, (
         'model.AppendEntity(targetWorking);',
         'model.AppendEntity(operandWorking);',
         'targetWorking.BooleanOperation(operation, operandWorking);',
-        'resultClone = targetWorking.Clone() as Solid3d;',
-        'target.HandOverTo(resultClone, true, true);',
-        'if (!targetWorking.IsErased) targetWorking.Erase();',
-        'if (!operandWorking.IsErased) operandWorking.Erase();',
-        'if (!operand.IsErased) operand.Erase();',
+        'target.HandOverTo(resultClone',
         'kernelInputs=database-resident-working-clones',
-    ), "database-resident boolean kernel inputs with target identity handover")
-    forbid(errors, boolean_block, (
-        'target.BooleanOperation(operation',
-        'targetClone.BooleanOperation(operation, operandClone);',
-    ), "direct boolean regression")
-    kernel_at = boolean_block.find('targetWorking.BooleanOperation(operation, operandWorking);')
-    handover_at = boolean_block.find('target.HandOverTo(resultClone, true, true);')
+    ), "direct boolean live regression")
+    kernel_at = boolean_block.find('target.BooleanOperation(operation, operandClone);')
     erase_at = boolean_block.find('if (!operand.IsErased) operand.Erase();')
-    if kernel_at < 0 or handover_at < 0 or erase_at < 0 or not (kernel_at < handover_at < erase_at):
-        errors.append("direct boolean ordering must be DB-resident kernel success -> target identity handover -> original tool erase")
+    if kernel_at < 0 or erase_at < 0 or kernel_at > erase_at:
+        errors.append("direct boolean ordering must be target kernel success -> original tool erase")
 
     require(errors, direct_save_block, (
         'McpNativeCurrentDocumentSave.SaveCurrentDocument(',
@@ -168,7 +166,9 @@ def main() -> int:
 
     require(errors, native_save, (
         'SaveCurrentDocument',
-        'Application.DocumentManager.ExecuteInCommandContextAsync(',
+        'Completion = Application.DocumentManager.ExecuteInCommandContextAsync(',
+        '_ => ExecuteQsaveInCommandContext(),',
+        'EnsureCommandContextAutomationNotStopped();',
         'document.Editor.Command("_.QSAVE");',
         'Task.WaitAny(',
         'WaitForCleanDbmod',
@@ -176,8 +176,11 @@ def main() -> int:
         'Application.GetSystemVariable("DBMOD")',
         '(dbmod & DbmodPersistentContentMask) == 0',
         'Do not retry automatically',
-    ), "native current-document synchronous command-context save lifecycle")
+    ), "native current-document single-owner command-context save lifecycle")
     forbid(errors, native_save, (
+        'TaskCompletionSource',
+        'TrySetResult',
+        'TrySetException',
         'document.SendStringToExecute(',
         'McpCadMutationCoordinator.QueueNativeCommand(',
         'ManualResetEventSlim',
@@ -187,6 +190,9 @@ def main() -> int:
         'Database.Save();',
         'Database.SaveAs(',
     ), "native current-document save regression")
+    execute_qsave = method_block(native_save, "private Task ExecuteQsaveInCommandContext()")
+    if '_ensureRunning();' in execute_qsave:
+        errors.append("native QSAVE command callback must not re-enter the transport mutation execution lease")
     if native_save.count('document.Editor.Command("_.QSAVE");') != 1:
         errors.append("native current-document save lifecycle must execute exactly one synchronous QSAVE command attempt")
 
@@ -217,7 +223,7 @@ def main() -> int:
             print(" -", error)
         return 1
 
-    print("PASS: MCP direct 3D/save tools use database-resident temporary kernel geometry, synchronous command-context QSAVE, SaveAs native-QSAVE settle, and unified mutation failure diagnostics.")
+    print("PASS: MCP direct 3D/save tools use V25-safe transient Region/operand kernel boundaries, a single observed synchronous command-context QSAVE, SaveAs native-QSAVE settle, and unified mutation failure diagnostics.")
     return 0
 
 
