@@ -53,7 +53,10 @@ activated = method_body(
     "private void OnDocumentActivated",
     "private void OnDocumentToBeDestroyed")
 if activated:
-    if "ResetTransientStateBestEffort" in activated:
+    foreign_marker = activated.find("The new active document is foreign to this controller")
+    if foreign_marker < 0:
+        errors.append("DocumentActivated must mark the foreign-document branch explicitly")
+    elif "ResetTransientStateBestEffort" in activated[foreign_marker:]:
         errors.append("foreign DocumentActivated handling must not clean owner-document transient CAD state")
     for needle in [
         "IsOwnerDocumentActive",
