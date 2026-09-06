@@ -783,13 +783,31 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 action();
-                _statusText.Text = string.Empty;
-                RefreshFromActiveDocument();
             }
             catch (Exception)
             {
                 _statusText.Text = "Thao tác không thể hoàn tất an toàn. Hãy kiểm tra trạng thái bản vẽ và thử lại.";
                 RefreshStatusControls();
+                return;
+            }
+
+            _statusText.Text = string.Empty;
+            try
+            {
+                RefreshFromActiveDocument();
+            }
+            catch
+            {
+                // The CAD/file action has already succeeded. Start Center is display-only here;
+                // a refresh failure must never turn that success into a false operation failure.
+                try
+                {
+                    RefreshStatusControls();
+                }
+                catch
+                {
+                    // Best-effort display refresh only.
+                }
             }
         }
 
