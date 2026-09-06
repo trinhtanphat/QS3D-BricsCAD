@@ -37,7 +37,7 @@ concurrency:
 
 jobs:
   preflight:
-    name: ${{ github.event_name == 'push' && 'branch-preflight' || 'preflight' }}
+    name: ${{ github.event_name == 'push' && 'branch-preflight' || github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata-preflight' || github.event_name == 'pull_request' && 'preflight' || 'dispatch-preflight' }}
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request' }}
     runs-on: windows-latest
     timeout-minutes: 30
@@ -173,7 +173,7 @@ jobs:
         run: echo "Independent source-validation safety gates completed."
 
   core:
-    name: ${{ github.event_name == 'push' && 'branch-core' || 'core' }}
+    name: ${{ github.event_name == 'push' && 'branch-core' || github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata-core' || github.event_name == 'pull_request' && 'core' || 'dispatch-core' }}
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request' }}
     needs: preflight
     runs-on: windows-latest
