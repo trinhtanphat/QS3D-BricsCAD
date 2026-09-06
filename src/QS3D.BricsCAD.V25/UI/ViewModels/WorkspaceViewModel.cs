@@ -378,7 +378,8 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
         private string ApplyInstanceProperty(ProjectElement element, ProjectFamily family, string key, string unit, PropertyRowViewModel row, string value)
         {
             var familyValue = family.Properties.TryGetValue(key, out var familyRaw) ? familyRaw ?? string.Empty : string.Empty;
-            var current = element.Properties.TryGetValue(key, out var stored) ? stored ?? string.Empty : familyValue;
+            var hasInstanceOverride = element.Properties.TryGetValue(key, out var stored);
+            var current = hasInstanceOverride ? stored ?? string.Empty : familyValue;
             if (!SemanticPropertyEditPolicy.IsEditablePropertyKey(key))
             {
                 Status = "Không thể cập nhật " + DisplayNameFor(key) + ": đây là thuộc tính nguồn/identity/ownership chỉ đọc.";
@@ -404,9 +405,10 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
 
             var next = NormalizePropertyValue(key, unit, current, value, out var valid);
             if (!valid) return current;
-            if (string.Equals(current, next, StringComparison.Ordinal))
+            var resetToFamily = string.Equals(next, familyValue, StringComparison.Ordinal);
+            if (string.Equals(current, next, StringComparison.Ordinal) && (!resetToFamily || !hasInstanceOverride))
             {
-                row.CanReset = !string.Equals(next, familyValue, StringComparison.Ordinal);
+                row.CanReset = hasInstanceOverride && !resetToFamily;
                 return current;
             }
 
@@ -414,10 +416,13 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
             {
                 ProjectSemanticMutationExecutor.Execute(
                     project,
-                    "Workspace single-instance property edit",
+                    resetToFamily ? "Workspace single-instance property inherit" : "Workspace single-instance property edit",
                     () =>
                     {
-                        element.SetProperty(key, next);
+                        if (resetToFamily)
+                            element.Properties.Remove(key);
+                        else
+                            element.SetProperty(key, next);
                         project.Touch();
                         return 0;
                     });
@@ -428,7 +433,7 @@ namespace QS3D.BricsCAD.V25.UI.ViewModels
                 return current;
             }
 
-            row.CanReset = !string.Equals(next, familyValue, StringComparison.Ordinal);
+            row.CanReset = !resetToFamily;
             var displayValue = ToDisplayValue(key, next);
             Status = row.CanReset
                 ? "Instance override: " + DisplayNameFor(key) + " = " + displayValue + (unit.Length > 0 ? " " + unit : string.Empty)
