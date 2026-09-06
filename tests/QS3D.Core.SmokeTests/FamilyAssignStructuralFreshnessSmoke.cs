@@ -125,7 +125,7 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining<InvalidOperationException>(
                 () => ProjectFamilyService.Assign(project, family.Id, YieldThenAddMalformedTargetDefault(family, element)),
-                "Project changed while Family assignment targets were being enumerated");
+                "Target Family contains a non-canonical property key");
 
             Equal(beforeVersion, project.ChangeVersion, "malformed-target-default legacy injection must not get ChangeVersion help");
             Equal("Invalid", family.Properties[" Material "], "malformed-target-default external mutation");
