@@ -31,6 +31,7 @@ def main() -> int:
     window = window_path.read_text(encoding="utf-8")
     receipt = receipt_path.read_text(encoding="utf-8")
 
+    # TDD RED: these tokens intentionally describe behavior production does not yet provide.
     # UI must expose a searchable selector backed by the already-reviewed release history API.
     for needle in (
         "Phiên bản cài đặt",
