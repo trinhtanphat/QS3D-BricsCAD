@@ -284,6 +284,7 @@ jobs:
         with:
           path: .cache/bricscad-v26-hostrefs
           key: qs3d-v26-hostrefs-v1-${{ github.run_id }}-fallback
+          fail-on-cache-miss: true
 
       - name: Mark fallback V26 reference handoff ready
         id: ready
@@ -551,6 +552,54 @@ jobs:
             throw "V26 cloud publication tag lost its .v26 scope: $env:RELEASE_TAG"
           }
           $env:V26_PACKAGE_TAG = $env:RELEASE_TAG.Substring(0, $env:RELEASE_TAG.Length - 4)
+
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+          }
+          $finalMainResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers
+          $finalMain = ([string]$finalMainResponse.sha).Trim().ToLowerInvariant()
+          if ($finalMain -notmatch '^[0-9a-f]{40}$') {
+            throw "Protected main API returned an invalid final SHA: $finalMain"
+          }
+          & git fetch --no-tags origin $finalMain
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not fetch final protected-main commit for V26 publication admission: $finalMain"
+          }
+          & git merge-base --is-ancestor $env:GITHUB_SHA $finalMain
+          $finalAncestorStatus = $LASTEXITCODE
+          if ($finalAncestorStatus -ne 0) {
+            throw "V26 release GITHUB_SHA is no longer an ancestor of protected main during final publication admission: $env:GITHUB_SHA"
+          }
+          $finalReleaseRelevantPaths = @(
+            'src/',
+            'tests/',
+            'scripts/',
+            'external/QS3D-Platform',
+            '.gitmodules',
+            'Directory.Build.props',
+            'QS3D.sln',
+            '.github/workflows/release-v26-cloud.yml'
+          )
+          & git diff --quiet --no-ext-diff $env:GITHUB_SHA $finalMain -- $finalReleaseRelevantPaths
+          $finalReleaseDriftStatus = $LASTEXITCODE
+          if ($finalReleaseDriftStatus -eq 1) {
+            throw "Protected main contains release-relevant changes after the V26 candidate SHA; refusing stale V26 cloud publication. source=$env:GITHUB_SHA finalMain=$finalMain"
+          }
+          if ($finalReleaseDriftStatus -ne 0) {
+            throw "Could not classify V26 GITHUB_SHA..finalMain release-relevant drift; refusing publication. git diff exit=$finalReleaseDriftStatus"
+          }
+          $publishMainResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers
+          $publishMain = ([string]$publishMainResponse.sha).Trim().ToLowerInvariant()
+          if ($publishMain -notmatch '^[0-9a-f]{40}$') {
+            throw "Protected main API returned an invalid publish-time SHA: $publishMain"
+          }
+          if ($publishMain -ne $finalMain) {
+            throw "Protected main changed after final V26 release-relevant drift classification; refusing publication. classified=$finalMain current=$publishMain"
+          }
+          Write-Host "V26 candidate remains an ancestor of protected main, no release-relevant drift was found, and protected main remained stable through final publication admission: $finalMain"
+
           $candidateIdentity = & .\scripts\assert-v26-candidate-identity.ps1 `
             -PackageZip $zip `
             -ChecksumPath $checksum `
