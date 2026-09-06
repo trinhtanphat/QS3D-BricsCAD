@@ -129,7 +129,7 @@ else:
         'gh workflow run release-v25-cloud.yml',
         '-f source_sha="${source_sha}"',
         '-f release_tag="${tag}"',
-        "cancel-in-progress: true",
+        "cancel-in-progress: false",
     )
     for token in required:
         if token not in text:
