@@ -48,35 +48,42 @@ require(
     VALIDATOR,
     [
         "[string]$ExpectedInstallerSha256 = $env:BRICSCAD_V26_PINNED_MSI_SHA256",
-        "$ExpectedInstallerSha256 -cnotmatch '^[0-9a-f]{64}$'",
+        "$ExpectedInstallerSha256 -cnotmatch '^[0-9A-Fa-f]{64}$'",
+        "$expectedInstallerSha256Canonical = $ExpectedInstallerSha256.ToLowerInvariant()",
+        "Get-JsonPropertyOccurrenceCount",
+        "-PropertyName 'installerSha256') -ne 1",
         "$installerSha256 = [string]$provenance.installerSha256",
         "$installerSha256 -cnotmatch '^[0-9a-f]{64}$'",
-        "[string]::Equals($installerSha256, $ExpectedInstallerSha256, [StringComparison]::Ordinal)",
+        "[string]::Equals($installerSha256, $expectedInstallerSha256Canonical, [StringComparison]::Ordinal)",
         "V26 candidate provenance installer digest mismatch",
         "InstallerSha256=$installerSha256",
     ],
 )
 
-# Admission must prove installer identity before publisher parsing/execution.
+# Admission must prove unique/canonical installer identity before publisher parsing/execution.
+unique_check = validator.index("-PropertyName 'installerSha256') -ne 1")
 installer_check = validator.index("$installerSha256 = [string]$provenance.installerSha256")
 script_parse = validator.index("$admittedScriptBlock = $null")
 script_exec = validator.index("& $admittedScriptBlock")
-if not installer_check < script_parse < script_exec:
+if not unique_check < installer_check < script_parse < script_exec:
     raise SystemExit("V26 installer provenance admission must precede admitted publisher parsing/execution")
 
-# The cloud workflow must continue carrying the exact digest produced by installer-cache into
-# downstream jobs; the scripts intentionally consume only that established environment contract.
+# installer-cache remains the sole canonicalizing authority for candidate creation; release-time
+# admission normalizes the already-admitted 64-hex environment value before exact comparison.
 if workflow.count("needs.installer-cache.outputs.msi_sha256") < 2:
-    raise SystemExit("V26 cloud workflow no longer carries the admitted installer digest to downstream jobs")
+    raise SystemExit("V26 cloud workflow no longer carries the admitted installer digest across jobs")
 
 mutations = {
     "generator environment binding": (generator, "[string]$InstallerSha256 = $env:BRICSCAD_V26_PINNED_MSI_SHA256"),
     "generator canonicality": (generator, "$InstallerSha256 -cnotmatch '^[0-9a-f]{64}$'"),
     "generator provenance field": (generator, "installerSha256 = $InstallerSha256"),
     "validator environment binding": (validator, "[string]$ExpectedInstallerSha256 = $env:BRICSCAD_V26_PINNED_MSI_SHA256"),
+    "validator expected syntax": (validator, "$ExpectedInstallerSha256 -cnotmatch '^[0-9A-Fa-f]{64}$'"),
+    "validator expected normalization": (validator, "$expectedInstallerSha256Canonical = $ExpectedInstallerSha256.ToLowerInvariant()"),
+    "validator unique property admission": (validator, "-PropertyName 'installerSha256') -ne 1"),
     "validator provenance field": (validator, "$installerSha256 = [string]$provenance.installerSha256"),
     "validator canonicality": (validator, "$installerSha256 -cnotmatch '^[0-9a-f]{64}$'"),
-    "validator exact digest equality": (validator, "[string]::Equals($installerSha256, $ExpectedInstallerSha256, [StringComparison]::Ordinal)"),
+    "validator exact digest equality": (validator, "[string]::Equals($installerSha256, $expectedInstallerSha256Canonical, [StringComparison]::Ordinal)"),
 }
 for label, (text, token) in mutations.items():
     if token not in text:
