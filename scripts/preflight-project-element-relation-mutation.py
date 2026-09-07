@@ -26,9 +26,16 @@ if not errors:
             errors.append("ProjectElement still exposes an unowned raw relation list: " + raw)
 
     for token in (
-        "ProjectElementRelationList",
-        "SourceHandles = new ProjectElementRelationList",
-        "DependsOn = new ProjectElementRelationList",
+        "private readonly ProjectElementRelationList _sourceHandles;",
+        "private readonly ProjectElementRelationList _dependsOn;",
+        "_sourceHandles = new ProjectElementRelationList(this);",
+        "_dependsOn = new ProjectElementRelationList(this);",
+        "SourceHandles = _sourceHandles;",
+        "DependsOn = _dependsOn;",
+        "ClearSourceHandlesPersistence",
+        "AddSourceHandlePersistenceValue",
+        "ClearDependenciesPersistence",
+        "AddDependencyPersistenceValue",
         "ElementDirtyFlags.Relations",
     ):
         if token not in element:
@@ -47,8 +54,23 @@ if not errors:
 
     if "target.SourceHandles.Clear();" in snapshot or "target.DependsOn.Clear();" in snapshot:
         errors.append("snapshot restore must use explicit persistence relation bypass instead of public mutation")
+    for token in (
+        "target.ClearSourceHandlesPersistence();",
+        "target.AddSourceHandlePersistenceValue(handle);",
+        "target.ClearDependenciesPersistence();",
+        "target.AddDependencyPersistenceValue(dependency);",
+    ):
+        if token not in snapshot:
+            errors.append("snapshot restore missing persistence relation token: " + token)
+
     if "element.SourceHandles.Add(handle.Value.Trim())" in store or "element.DependsOn.Add(dep.Value.Trim())" in store:
         errors.append("QSDB hydration must use explicit persistence relation bypass instead of public mutation")
+    for token in (
+        "element.AddSourceHandlePersistenceValue(handle.Value.Trim())",
+        "element.AddDependencyPersistenceValue(dep.Value.Trim())",
+    ):
+        if token not in store:
+            errors.append("QSDB hydration missing persistence relation token: " + token)
 
     for token in (
         "SourceHandleAddMarksRelationsDirty",
