@@ -109,6 +109,18 @@ jobs:
             -Configuration Release `
             -Platform x64
 
+      - name: Clear stale V26 runtime evidence
+        shell: powershell
+        run: |
+          $runtimeDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts\bricscad-v26-runtime'
+          if (Test-Path -LiteralPath $runtimeDir) {
+            $runtimeItem = Get-Item -LiteralPath $runtimeDir -Force
+            if (($runtimeItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              throw "Refusing to clear V26 runtime evidence through a reparse point: $runtimeDir"
+            }
+            Remove-Item -LiteralPath $runtimeDir -Recurse -Force
+          }
+
       - name: Licensed V26 NETLOAD runtime gate
         if: ${{ inputs.run_runtime }}
         shell: powershell
