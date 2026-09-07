@@ -574,6 +574,7 @@ jobs:
           $finalReleaseRelevantPaths = @(
             'src/',
             'tests/',
+            'samples/generated/',
             'scripts/',
             'external/QS3D-Platform',
             '.gitmodules',
