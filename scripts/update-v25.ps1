@@ -522,6 +522,11 @@ function Expand-VerifiedHeldArchive {
             }
 
             New-Item -ItemType Directory -Path $destinationFull -Force | Out-Null
+            $rootItem = Get-Item -LiteralPath $destinationFull -Force -ErrorAction Stop
+            if (($rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Package extraction root is a reparse point: $($rootItem.FullName)"
+            }
+
             foreach ($record in $records) {
                 if ($record.IsDirectory) {
                     [IO.Directory]::CreateDirectory([string]$record.Target) | Out-Null
@@ -531,10 +536,15 @@ function Expand-VerifiedHeldArchive {
                 $parent = [IO.Path]::GetDirectoryName([string]$record.Target)
                 [IO.Directory]::CreateDirectory($parent) | Out-Null
                 $cursor = Get-Item -LiteralPath $parent -Force -ErrorAction Stop
-                while ($null -ne $cursor -and $cursor.FullName.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+                while ($null -ne $cursor) {
+                    $cursorFull = [IO.Path]::GetFullPath([string]$cursor.FullName).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+                    $isRoot = [string]::Equals($cursorFull, $destinationFull, [StringComparison]::OrdinalIgnoreCase)
+                    if (-not $isRoot -and -not $cursorFull.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) { break }
                     if (($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-                        throw "Package extraction target traverses a reparse-point directory: $($cursor.FullName)"
+                        if ($isRoot) { throw "Package extraction root is a reparse point: $cursorFull" }
+                        throw "Package extraction target traverses a reparse-point directory: $cursorFull"
                     }
+                    if ($isRoot) { break }
                     $cursor = $cursor.Parent
                 }
 
