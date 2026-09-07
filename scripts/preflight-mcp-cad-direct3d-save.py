@@ -120,7 +120,7 @@ def main():
         "native current-document V25 event-owned save lifecycle")
     forbid(errors, native_save, (
         'Application.DocumentManager.ExecuteInCommandContextAsync(', 'TaskCompletionSource',
-        'document.Editor.Command("_.QSAVE")', 'Database.Save();', 'Database.SaveAs('),
+        'document.Editor.Command("_.QSAVE")', 'Database.Save();', 'Database.SaveAs(',
     ), "native current-document save regression")
     if not queue:
         errors.append("native QSAVE QueueInCadContext block is missing")
