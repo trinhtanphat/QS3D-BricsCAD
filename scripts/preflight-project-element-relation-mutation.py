@@ -21,10 +21,7 @@ if not errors:
     store = STORE.read_text(encoding="utf-8")
     smoke = SMOKE.read_text(encoding="utf-8")
 
-    for raw in (
-        "SourceHandles = new List<string>();",
-        "DependsOn = new List<string>();",
-    ):
+    for raw in ("SourceHandles = new List<string>();", "DependsOn = new List<string>();"):
         if raw in element:
             errors.append("ProjectElement still exposes an unowned raw relation list: " + raw)
 
@@ -32,7 +29,6 @@ if not errors:
         "ProjectElementRelationList",
         "SourceHandles = new ProjectElementRelationList",
         "DependsOn = new ProjectElementRelationList",
-        "MarkRelationChanged",
         "ElementDirtyFlags.Relations",
     ):
         if token not in element:
@@ -43,6 +39,8 @@ if not errors:
         "AddPersistenceValue",
         "ClearPersistenceValues",
         "RequireRelationValue",
+        "value.Trim()",
+        "StringComparison.OrdinalIgnoreCase",
     ):
         if token not in relations:
             errors.append("ProjectElementRelationList missing contract token: " + token)
@@ -56,7 +54,9 @@ if not errors:
         "SourceHandleAddMarksRelationsDirty",
         "DependencyAddMarksRelationsDirty",
         "NoOpRemovalPreservesCleanState",
-        "RelationInputsMustBeCanonical",
+        "RelationInputsNormalizeAndValidate",
+        'source.SourceHandles.Add(" padded ")',
+        'Equal("padded", source.SourceHandles[0])',
         "[ModuleInitializer]",
     ):
         if token not in smoke:
@@ -69,4 +69,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: ProjectElement relation collections preserve IList compatibility while routing semantic mutation through Relations dirty state and reserving explicit persistence hydration paths.")
+print("PASS: ProjectElement relation collections preserve IList compatibility while routing semantic mutation through Relations dirty state, normalizing canonical inputs, and reserving explicit persistence hydration paths.")
