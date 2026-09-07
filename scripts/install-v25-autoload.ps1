@@ -107,8 +107,29 @@ function Assert-PackageIntegrity {
     $packageRoot = $packageRootPath + [IO.Path]::DirectorySeparatorChar
     $manifestEntries = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $manifestHashes = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $manifestLines = [Collections.Generic.List[string]]::new()
+    $manifestStream = [IO.File]::Open($manifest, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try {
+            $manifestStream.Position = 0
+            $manifestSha256 = ([BitConverter]::ToString($sha.ComputeHash($manifestStream))).Replace('-', '').ToUpperInvariant()
+        }
+        finally { $sha.Dispose() }
+
+        $manifestStream.Position = 0
+        $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
+        $reader = [IO.StreamReader]::new($manifestStream, $strictUtf8, $true, 4096, $true)
+        try {
+            while (-not $reader.EndOfStream) { $manifestLines.Add($reader.ReadLine()) }
+        }
+        catch [Text.DecoderFallbackException] { throw 'SHA256SUMS.txt is not valid UTF-8/ASCII text.' }
+        finally { $reader.Dispose() }
+    }
+    finally { $manifestStream.Dispose() }
+
     $verified = 0
-    foreach ($line in Get-Content -LiteralPath $manifest) {
+    foreach ($line in $manifestLines) {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
         if ($line -notmatch '^([0-9A-Fa-f]{64})\s{2}(.+)$') { throw "Invalid SHA256SUMS entry: $line" }
         $expected = $Matches[1].ToUpperInvariant()
@@ -132,7 +153,7 @@ function Assert-PackageIntegrity {
         $verified++
     }
     if ($verified -eq 0) { throw 'SHA256SUMS.txt contains no payload entries.' }
-    $manifestHashes.Add('SHA256SUMS.txt', (Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash.ToUpperInvariant())
+    $manifestHashes.Add('SHA256SUMS.txt', $manifestSha256)
 
     $actualEntries = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($packageFile in Get-ChildItem -LiteralPath $Directory -File -Recurse) {
@@ -191,12 +212,22 @@ function Assert-StagedPayloadAdmission {
     if ($null -eq $AdmittedHashes -or $AdmittedHashes.Count -eq 0) { throw 'Staged payload admission requires a non-empty admitted hash snapshot.' }
 
     $stageRootPath = [IO.Path]::GetFullPath($Directory).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $stageRootItem = Get-Item -LiteralPath $stageRootPath -Force -ErrorAction Stop
+    if (-not $stageRootItem.PSIsContainer -or ($stageRootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Staged payload root must be an ordinary non-reparse directory: $stageRootPath"
+    }
+
     $stageRoot = $stageRootPath + [IO.Path]::DirectorySeparatorChar
     $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-    foreach ($stageFile in Get-ChildItem -LiteralPath $Directory -File -Recurse) {
+    $stageChildren = @(Get-ChildItem -LiteralPath $Directory -Force -ErrorAction Stop)
+    foreach ($stageFile in $stageChildren) {
+        if ($stageFile.PSIsContainer -or -not ($stageFile -is [IO.FileInfo]) -or ($stageFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Staged payload contains a directory, reparse point, or non-regular entry: $($stageFile.FullName)"
+        }
         $fullPath = [IO.Path]::GetFullPath($stageFile.FullName)
         if (-not $fullPath.StartsWith($stageRoot, [StringComparison]::OrdinalIgnoreCase)) { throw "Staged payload escaped stage root: $($stageFile.FullName)" }
         $relative = $fullPath.Substring($stageRoot.Length).Replace([IO.Path]::DirectorySeparatorChar, '/').Replace([IO.Path]::AltDirectorySeparatorChar, '/')
+        if ($relative.Contains('/')) { throw "Staged payload must contain top-level files only: $relative" }
         if (-not $seen.Add($relative)) { throw "Duplicate/case-colliding staged payload path: $relative" }
         if (-not $AdmittedHashes.ContainsKey($relative)) { throw "Staged payload was not part of source admission: $relative" }
         $path = [string]$stageFile.FullName
