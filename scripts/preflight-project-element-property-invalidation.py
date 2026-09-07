@@ -19,7 +19,7 @@ if not errors:
     smoke = SMOKE.read_text(encoding="utf-8")
 
     set_property = re.search(
-        r"public void SetProperty\(string name, string value\)(?P<body>.*?)\n        public void SetQuantity",
+        r"public void SetProperty\(string name, string value\)(?P<body>.*?)\n        internal void AddProperty",
         source,
         re.DOTALL,
     )
@@ -27,6 +27,20 @@ if not errors:
         errors.append("missing ProjectElement.SetProperty body")
     else:
         body = set_property.group("body")
+        if "MarkPropertyChanged(key);" not in body:
+            errors.append("SetProperty must route changed property values through MarkPropertyChanged(key)")
+        if "MarkDirty(flags)" in body or "MarkDirtyCore(" in body:
+            errors.append("SetProperty must delegate property-specific invalidation instead of applying dirty state directly")
+
+    mark_property_changed = re.search(
+        r"private void MarkPropertyChanged\(string key\)(?P<body>.*?)\n        private void MarkDirtyCore",
+        source,
+        re.DOTALL,
+    )
+    if not mark_property_changed:
+        errors.append("missing ProjectElement.MarkPropertyChanged body")
+    else:
+        body = mark_property_changed.group("body")
         for token in (
             "ElementGeometryPolicy.AffectsGeneratedGeometry(Category, key)",
             "ElementGeometryPolicy.AffectsGeneratedOutput(Category, key)",
@@ -35,9 +49,18 @@ if not errors:
             "MarkDirtyCore(flags, affectsGeneratedOutput)",
         ):
             if token not in body:
-                errors.append("SetProperty missing property-specific invalidation token: " + token)
+                errors.append("MarkPropertyChanged missing property-specific invalidation token: " + token)
         if "MarkDirty(flags)" in body:
-            errors.append("SetProperty must not route non-geometry property edits through broad MarkDirty(flags)")
+            errors.append("MarkPropertyChanged must not route non-geometry property edits through broad MarkDirty(flags)")
+
+    for method_name in ("AddProperty", "RemoveProperty"):
+        method = re.search(
+            rf"internal (?:void|bool) {method_name}\(.*?\)(?P<body>.*?)\n        (?:internal|public|private) ",
+            source,
+            re.DOTALL,
+        )
+        if not method or "MarkPropertyChanged(key);" not in method.group("body"):
+            errors.append(method_name + " must preserve the shared property-specific invalidation boundary")
 
     mark_dirty = re.search(
         r"public void MarkDirty\(ElementDirtyFlags flags\)(?P<body>.*?)\n        public void MarkClean",
@@ -106,4 +129,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: SetProperty only stales generated geometry for geometry-driving keys, while public MarkDirty(Properties/Relations/Geometry) retains broad compatibility and Core smoke coverage locks the behavior.")
+print("PASS: ProjectElement property mutations share MarkPropertyChanged for key-sensitive generated-output invalidation, while public MarkDirty(Properties/Relations/Geometry) retains broad compatibility and Core smoke coverage locks the behavior.")

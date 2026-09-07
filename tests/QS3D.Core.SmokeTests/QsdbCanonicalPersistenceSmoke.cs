@@ -46,7 +46,11 @@ namespace QS3D.Core.SmokeTests
 
             project = NewProject("property-key");
             var element = AddElement(project);
-            element.Properties[" WidthM "] = "1.2";
+            var propertiesField = typeof(ProjectElement).GetField("_properties", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Project element property backing dictionary field is unavailable.");
+            var propertyItems = propertiesField.GetValue(element) as IDictionary<string, string>
+                ?? throw new InvalidOperationException("Project element property backing dictionary is unavailable.");
+            propertyItems[" WidthM "] = "1.2";
             RejectSave(project, "Padded element property key was silently persisted/normalized.");
         }
 

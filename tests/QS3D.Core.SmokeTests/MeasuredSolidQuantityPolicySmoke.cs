@@ -64,7 +64,7 @@ namespace QS3D.Core.SmokeTests
         {
             var element = CreateMeasuredBeam();
             element.MarkClean(ElementDirtyFlags.All);
-            element.Properties.Remove(MeasuredSolidQuantityPolicy.VolumeProperty);
+            RemovePersistedProperty(element, MeasuredSolidQuantityPolicy.VolumeProperty);
 
             if (element.Dirty != ElementDirtyFlags.None)
                 throw new Exception("Measured solid cleanup regression precondition requires a clean element.");
@@ -239,6 +239,18 @@ namespace QS3D.Core.SmokeTests
             Near(12.5d, element.Quantities["GrossVolumeM3"]);
             Near(12.5d, element.Quantities["NetVolumeM3"]);
             return element;
+        }
+
+        private static void RemovePersistedProperty(ProjectElement element, string key)
+        {
+            var field = typeof(ProjectElement).GetField(
+                "_properties",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Measured solid cleanup fixture could not resolve the persisted ProjectElement backing map.");
+            var backing = field.GetValue(element) as System.Collections.Generic.IDictionary<string, string>
+                ?? throw new InvalidOperationException("Measured solid cleanup fixture resolved an unexpected ProjectElement backing-map type.");
+            if (!backing.Remove(key))
+                throw new InvalidOperationException("Measured solid cleanup fixture could not remove the persisted source property.");
         }
 
         private static void Missing(ProjectElement element, string key)
