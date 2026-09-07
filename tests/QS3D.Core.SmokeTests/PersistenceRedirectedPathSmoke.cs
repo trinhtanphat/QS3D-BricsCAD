@@ -188,8 +188,13 @@ namespace QS3D.Core.SmokeTests
 
         private static bool IsRedirectRefusal(Exception? exception)
         {
-            if (exception is InvalidDataException) return true;
-            return exception is InvalidOperationException && exception.InnerException is InvalidDataException;
+            if (exception == null) return false;
+            if (exception is IOException && string.Equals(
+                exception.GetType().FullName,
+                "QS3D.Core.Persistence.PersistencePathSafetyException",
+                StringComparison.Ordinal))
+                return true;
+            return exception is InvalidOperationException && IsRedirectRefusal(exception.InnerException);
         }
 
         private static void WithDirectory(Action<string> action)
