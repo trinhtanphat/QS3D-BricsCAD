@@ -15,6 +15,7 @@ on:
       - opened
       - synchronize
       - reopened
+      - ready_for_review
       - edited
     branches:
       - main
@@ -32,7 +33,7 @@ concurrency:
   # can block protected-branch required contexts even when the surviving run is GREEN.
   # Repository identity isolates forks with equal branch names; same-event superseded work still
   # cancels normally within its own class.
-  group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata' || github.event_name == 'pull_request' && 'pull_request' || github.event_name == 'push' && 'push' || 'dispatch' }}
+  group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata' || github.event_name == 'pull_request' && 'pull_request' || github.event_name == 'push' && 'push' || 'dispatch' }}-${{ github.run_attempt > 1 && github.run_id || 0 }}
   cancel-in-progress: true
 
 jobs:
