@@ -25,7 +25,7 @@ namespace QS3D.Core.Domain
                 if (string.Equals(_values[index], canonical, StringComparison.Ordinal)) return;
                 RequireUnique(canonical, index);
                 _values[index] = canonical;
-                _owner.MarkRelationChanged();
+                MarkRelationChanged();
             }
         }
 
@@ -37,14 +37,14 @@ namespace QS3D.Core.Domain
             var canonical = RequireRelationValue(item);
             RequireUnique(canonical, null);
             _values.Add(canonical);
-            _owner.MarkRelationChanged();
+            MarkRelationChanged();
         }
 
         public void Clear()
         {
             if (_values.Count == 0) return;
             _values.Clear();
-            _owner.MarkRelationChanged();
+            MarkRelationChanged();
         }
 
         public bool Contains(string item) => _values.Contains(item);
@@ -58,7 +58,7 @@ namespace QS3D.Core.Domain
             var canonical = RequireRelationValue(item);
             RequireUnique(canonical, null);
             _values.Insert(index, canonical);
-            _owner.MarkRelationChanged();
+            MarkRelationChanged();
         }
 
         public bool Remove(string item)
@@ -66,14 +66,14 @@ namespace QS3D.Core.Domain
             var index = _values.IndexOf(item);
             if (index < 0) return false;
             _values.RemoveAt(index);
-            _owner.MarkRelationChanged();
+            MarkRelationChanged();
             return true;
         }
 
         public void RemoveAt(int index)
         {
             _values.RemoveAt(index);
-            _owner.MarkRelationChanged();
+            MarkRelationChanged();
         }
 
         internal void AddPersistenceValue(string item)
@@ -106,6 +106,11 @@ namespace QS3D.Core.Domain
                 throw new ArgumentException("Relation value must be valid XML text.", nameof(value), ex);
             }
             return value;
+        }
+
+        private void MarkRelationChanged()
+        {
+            _owner.MarkDirty(ElementDirtyFlags.Relations);
         }
 
         private void RequireUnique(string value, int? replacingIndex)
