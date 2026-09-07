@@ -408,6 +408,59 @@ jobs:
             'X-GitHub-Api-Version' = '2022-11-28'
             'User-Agent' = 'QS3D-Cloud-Preview-Release'
           }
+
+          $preMutationMainResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers
+          $preMutationMain = ([string]$preMutationMainResponse.sha).Trim().ToLowerInvariant()
+          if ($preMutationMain -notmatch '^[0-9a-f]{40}$') {
+            throw "Protected main API returned an invalid pre-mutation SHA: $preMutationMain"
+          }
+          $preMutationMainRef = 'refs/remotes/origin/qs3d-release-pre-mutation-main'
+          & git fetch --no-tags --force origin "+refs/heads/main:$preMutationMainRef"
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not fetch protected main for pre-mutation release admission.'
+          }
+          $fetchedPreMutationMain = ([string](& git rev-parse --verify $preMutationMainRef)).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $fetchedPreMutationMain -notmatch '^[0-9a-f]{40}$') {
+            throw 'Could not resolve fetched protected-main SHA for pre-mutation release admission.'
+          }
+          if ($fetchedPreMutationMain -ne $preMutationMain) {
+            throw "Protected-main API/fetch identity mismatch before V25 release mutation. API=$preMutationMain fetched=$fetchedPreMutationMain"
+          }
+          & git merge-base --is-ancestor $env:SOURCE_SHA $preMutationMain
+          $preMutationAncestorStatus = $LASTEXITCODE
+          if ($preMutationAncestorStatus -ne 0) {
+            throw "Release SOURCE_SHA is no longer an ancestor of protected main before V25 release mutation: $env:SOURCE_SHA"
+          }
+          $preMutationReleaseRelevantPaths = @(
+            'src/',
+            'tests/',
+            'scripts/',
+            'external/QS3D-Platform',
+            '.gitmodules',
+            'Directory.Build.props',
+            'QS3D.sln',
+            'QS3D.V26.sln',
+            '.github/workflows/dispatch-v25-cloud-after-main-integration.yml',
+            '.github/workflows/release-v25-cloud.yml'
+          )
+          & git diff --quiet --no-ext-diff $env:SOURCE_SHA $preMutationMain -- $preMutationReleaseRelevantPaths
+          $preMutationReleaseDriftStatus = $LASTEXITCODE
+          if ($preMutationReleaseDriftStatus -eq 1) {
+            throw "Protected main contains release-relevant changes after SOURCE_SHA; refusing to create a stale V25 draft release. SOURCE_SHA=$env:SOURCE_SHA currentMain=$preMutationMain"
+          }
+          if ($preMutationReleaseDriftStatus -ne 0) {
+            throw "Could not classify SOURCE_SHA..preMutationMain release-relevant drift; refusing draft release mutation. git diff exit=$preMutationReleaseDriftStatus"
+          }
+          $preMutationPublishMainResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers
+          $preMutationPublishMain = ([string]$preMutationPublishMainResponse.sha).Trim().ToLowerInvariant()
+          if ($preMutationPublishMain -notmatch '^[0-9a-f]{40}$') {
+            throw "Protected main API returned an invalid pre-mutation confirmation SHA: $preMutationPublishMain"
+          }
+          if ($preMutationPublishMain -ne $preMutationMain) {
+            throw "Protected main changed after pre-mutation release-relevant drift classification; refusing draft release creation. classified=$preMutationMain current=$preMutationPublishMain"
+          }
+          Write-Host "V25 release SOURCE_SHA remains admitted against stable protected main before the first persistent release mutation: $preMutationMain"
+
           $body = @{
             tag_name = $env:RELEASE_TAG
             target_commitish = $env:RELEASE_COMMIT_SHA
@@ -547,6 +600,8 @@ jobs:
             '.gitmodules',
             'Directory.Build.props',
             'QS3D.sln',
+            'QS3D.V26.sln',
+            '.github/workflows/dispatch-v25-cloud-after-main-integration.yml',
             '.github/workflows/release-v25-cloud.yml'
           )
           & git diff --quiet --no-ext-diff $env:SOURCE_SHA $finalMain -- $finalReleaseRelevantPaths
