@@ -80,9 +80,8 @@ namespace QS3D.Core.Domain
 
         internal void AddPersistenceValue(string item)
         {
-            var canonical = RequireRelationValue(item);
-            RequireUnique(canonical, null);
-            _values.Add(canonical);
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            _values.Add(item);
         }
 
         internal void ClearPersistenceValues()
