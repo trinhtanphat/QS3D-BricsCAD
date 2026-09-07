@@ -489,7 +489,7 @@ function New-DeterministicPackageZip {
         $fullName = [IO.Path]::GetFullPath($file.FullName)
         if (-not $fullName.StartsWith($packagePrefix, [StringComparison]::OrdinalIgnoreCase)) { throw "Package file escaped staging root: $fullName" }
         $entryName = $fullName.Substring($packagePrefix.Length).Replace([IO.Path]::DirectorySeparatorChar, '/').Replace([IO.Path]::AltDirectorySeparatorChar, '/')
-        if ([string]::IsNullOrWhiteSpace($entryName) -or $entryName.StartsWith('/') -or $entryName.Contains('\\') -or $entryName.Contains(':')) { throw "Package entry name is not canonical: $entryName" }
+        if ([string]::IsNullOrWhiteSpace($entryName) -or $entryName.StartsWith('/') -or $entryName.Contains('\') -or $entryName.Contains(':')) { throw "Package entry name is not canonical: $entryName" }
         $segments = @($entryName.Split('/'))
         if (@($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) { throw "Package entry name is not canonical: $entryName" }
         if ($sourceByEntry.ContainsKey($entryName)) { throw "Duplicate deterministic package entry name: $entryName" }
@@ -698,7 +698,7 @@ $distFull = [IO.Path]::GetFullPath($dist).TrimEnd([IO.Path]::DirectorySeparatorC
 $manifestHashes = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)
 foreach ($file in Get-SafePackageFiles -PackageRoot $dist) {
     $relativePath = $file.FullName.Substring($distFull.Length + 1).Replace([IO.Path]::DirectorySeparatorChar, '/').Replace([IO.Path]::AltDirectorySeparatorChar, '/')
-    if ([string]::IsNullOrWhiteSpace($relativePath) -or [IO.Path]::IsPathRooted($relativePath) -or $relativePath.Contains(':') -or $relativePath.Contains('\\')) { throw "Unsafe package-relative path while hashing: $relativePath" }
+    if ([string]::IsNullOrWhiteSpace($relativePath) -or [IO.Path]::IsPathRooted($relativePath) -or $relativePath.Contains(':') -or $relativePath.Contains('\')) { throw "Unsafe package-relative path while hashing: $relativePath" }
     $segments = @($relativePath.Split('/'))
     if (@($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) { throw "Unsafe package-relative path while hashing: $relativePath" }
     if ($manifestHashes.ContainsKey($relativePath)) { throw "Duplicate V26 package manifest path: $relativePath" }
