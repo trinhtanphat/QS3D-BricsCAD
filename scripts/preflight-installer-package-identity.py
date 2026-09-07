@@ -97,29 +97,33 @@ def main() -> int:
         if actual is not expected:
             raise AssertionError(f"replacement policy model mismatch for {label}: expected {expected}, got {actual}")
 
-    integrity_call = installer.find("$commands = Assert-PackageIntegrity -Directory $package")
+    integrity_call = installer.find("$packageAdmission = Assert-PackageIntegrity -Directory $package")
+    commands_snapshot = installer.find("$commands = @($packageAdmission.Commands)")
     identity_call = installer.find("Assert-PackageIdentity -Directory $package")
     targets_call = installer.find("$targets = @(Get-RegistryTargets")
     stage_create = installer.find("New-Item -ItemType Directory -Path $stage")
+    staged_admission = installer.find("Assert-StagedPayloadAdmission -Directory $stage")
     replacement_guard = installer.find("Assert-ExistingInstallDirectorySafeToReplace -Directory $installFull")
     backup_assign = installer.find("$backup = $installFull + '.backup-'")
     backup_move = installer.find("Move-Item -LiteralPath $installFull -Destination $backup")
     registry_write = installer.find("New-Item -Path $target.AppKey -Force")
     positions = (
         integrity_call,
+        commands_snapshot,
         identity_call,
         targets_call,
         stage_create,
+        staged_admission,
         replacement_guard,
         backup_assign,
         backup_move,
         registry_write,
     )
     if min(positions) < 0 or not (
-        integrity_call < identity_call < targets_call < stage_create < replacement_guard < backup_assign < backup_move < registry_write
+        integrity_call < commands_snapshot < identity_call < targets_call < stage_create < staged_admission < replacement_guard < backup_assign < backup_move < registry_write
     ):
         raise AssertionError(
-            "hash/signature integrity -> source package identity -> target discovery/staging -> existing target identity -> backup move -> registry mutation ordering is required"
+            "hash/signature admission -> admitted commands -> source package identity -> target discovery/staging -> staged-byte admission -> existing target identity -> backup move -> registry mutation ordering is required"
         )
 
     # Preserve the existing install security/transaction contracts.
@@ -135,7 +139,7 @@ def main() -> int:
     require(installer, "throw $originalError", "original install failure propagation")
 
     print(
-        "PASS: V25 installer accepts SDK SemVer build metadata only when public product identity matches, rejects mixed managed-DLL revisions, and preserves hashed/signed transactional install safeguards."
+        "PASS: V25 installer accepts SDK SemVer build metadata only when public product identity matches, binds staged bytes to admitted package identity, rejects mixed managed-DLL revisions, and preserves hashed/signed transactional install safeguards."
     )
     return 0
 
