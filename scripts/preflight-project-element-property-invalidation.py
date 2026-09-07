@@ -27,6 +27,20 @@ if not errors:
         errors.append("missing ProjectElement.SetProperty body")
     else:
         body = set_property.group("body")
+        if "MarkPropertyChanged(key)" not in body:
+            errors.append("SetProperty must route property-specific invalidation through MarkPropertyChanged(key)")
+        if "MarkDirty(flags)" in body:
+            errors.append("SetProperty must not route non-geometry property edits through broad MarkDirty(flags)")
+
+    mark_property_changed = re.search(
+        r"private void MarkPropertyChanged\(string key\)(?P<body>.*?)\n        private void MarkDirtyCore",
+        source,
+        re.DOTALL,
+    )
+    if not mark_property_changed:
+        errors.append("missing ProjectElement.MarkPropertyChanged body")
+    else:
+        body = mark_property_changed.group("body")
         for token in (
             "ElementGeometryPolicy.AffectsGeneratedGeometry(Category, key)",
             "ElementGeometryPolicy.AffectsGeneratedOutput(Category, key)",
@@ -35,9 +49,7 @@ if not errors:
             "MarkDirtyCore(flags, affectsGeneratedOutput)",
         ):
             if token not in body:
-                errors.append("SetProperty missing property-specific invalidation token: " + token)
-        if "MarkDirty(flags)" in body:
-            errors.append("SetProperty must not route non-geometry property edits through broad MarkDirty(flags)")
+                errors.append("MarkPropertyChanged missing property-specific invalidation token: " + token)
 
     mark_dirty = re.search(
         r"public void MarkDirty\(ElementDirtyFlags flags\)(?P<body>.*?)\n        public void MarkClean",
@@ -106,4 +118,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: SetProperty only stales generated geometry for geometry-driving keys, while public MarkDirty(Properties/Relations/Geometry) retains broad compatibility and Core smoke coverage locks the behavior.")
+print("PASS: SetProperty delegates to MarkPropertyChanged for property-specific generated-output invalidation, while public MarkDirty(Properties/Relations/Geometry) retains broad compatibility and Core smoke coverage locks the behavior.")
