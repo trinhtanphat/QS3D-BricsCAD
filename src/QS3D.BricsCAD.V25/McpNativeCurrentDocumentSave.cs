@@ -11,8 +11,8 @@ namespace QS3D.BricsCAD.V25
     ///
     /// The active DWG is already owned/open by BricsCAD, so current-document save must not
     /// reopen or write that same path through Database.Save/SaveAs. Native QSAVE is queued in
-    /// application context, its terminal event is awaited outside that callback, and persistent
-    /// DBMOD content bits are then verified before success is reported.
+    /// application context, its terminal event is awaited outside that callback, handler cleanup
+    /// is proven, and persistent DBMOD content bits are then verified before success is reported.
     /// </summary>
     internal static class McpNativeCurrentDocumentSave
     {
@@ -39,6 +39,7 @@ namespace QS3D.BricsCAD.V25
             ensureRunning();
 
             var operation = new NativeSaveOperation(audit);
+            var detached = false;
             try
             {
                 McpDiagnosticHub.InvokeInCadContext(() =>
@@ -53,21 +54,31 @@ namespace QS3D.BricsCAD.V25
                         "Timed out waiting for native BricsCAD QSAVE to reach a terminal event; save completion is uncertain. "
                         + "Do not retry automatically. Inspect the drawing, DBMOD, audit state and filesystem before another save attempt.");
 
+                if (!operation.DetachBestEffort())
+                    throw new InvalidOperationException(
+                        "Native BricsCAD QSAVE reached a terminal event but terminal handler cleanup could not be proven; "
+                        + "save completion is uncertain. Do not retry automatically. Inspect the drawing, DBMOD and audit state before another save attempt.");
+                detached = true;
+
                 if (!string.IsNullOrEmpty(operation.TerminalError))
                     throw new InvalidOperationException(operation.TerminalError);
 
                 ensureRunning();
                 var dbmodAfterSave = WaitForCleanDbmod(operation, ensureRunning);
-                audit?.Invoke("native QSAVE completed; fileName=" + SafeLeaf(operation.FullPath)
-                    + "; dbmodAfterSave=" + dbmodAfterSave.ToString(CultureInfo.InvariantCulture));
+                try
+                {
+                    audit?.Invoke("native QSAVE completed; fileName=" + SafeLeaf(operation.FullPath)
+                        + "; dbmodAfterSave=" + dbmodAfterSave.ToString(CultureInfo.InvariantCulture));
+                }
+                catch { }
                 return new SaveResult(SafeLeaf(operation.FullPath), dbmodAfterSave);
             }
             finally
             {
-                // Always serialize cleanup through BricsCAD application context before disposing
-                // the wait handle. If a long-running QSAVE prevents that cleanup, intentionally
-                // leave the handle alive so a late terminal event can still signal it safely.
-                if (operation.DetachBestEffort()) operation.Done.Dispose();
+                if (!detached)
+                    detached = operation.DetachBestEffort();
+                if (detached)
+                    operation.Done.Dispose();
             }
         }
 
@@ -138,7 +149,9 @@ namespace QS3D.BricsCAD.V25
         {
             private readonly Action<string>? _audit;
             private int _terminalSet;
-            private bool _handlersAttached;
+            private bool _commandEndedAttached;
+            private bool _commandCancelledAttached;
+            private bool _commandFailedAttached;
 
             internal NativeSaveOperation(Action<string>? audit)
             {
@@ -187,54 +200,93 @@ namespace QS3D.BricsCAD.V25
                         "QSAVE",
                         () => document.SendStringToExecute("_.QSAVE\n", true, false, true),
                         _audit);
-                    _audit?.Invoke("native QSAVE queued; fileName=" + SafeLeaf(FullPath));
+                    try { _audit?.Invoke("native QSAVE queued; fileName=" + SafeLeaf(FullPath)); }
+                    catch { }
                 }
                 catch
                 {
-                    DetachInCadContext();
+                    if (!DetachInCadContext())
+                        throw new InvalidOperationException(
+                            "Native BricsCAD QSAVE queue failed and terminal handler rollback could not be proven. Do not retry automatically.");
                     throw;
                 }
             }
 
             internal bool DetachBestEffort()
             {
-                if (Document == null) return true;
+                if (Document == null)
+                    return !_commandEndedAttached && !_commandCancelledAttached && !_commandFailedAttached;
                 try
                 {
-                    // Even when the terminal handler already detached itself, this empty CAD
-                    // callback is a serialization barrier proving that handler has returned before
-                    // the worker thread disposes Done.
+                    var detached = false;
                     McpDiagnosticHub.InvokeInCadContext(() =>
                     {
-                        DetachInCadContext();
+                        detached = DetachInCadContext();
                         return string.Empty;
                     });
-                    return true;
+                    return detached;
                 }
                 catch
                 {
-                    // Coordinator-owned terminal handlers remain authoritative for writer safety.
-                    // Keep Done alive because a late helper terminal callback may still need it.
                     return false;
                 }
             }
 
             private void AttachHandlers(Document document)
             {
-                document.CommandEnded += OnCommandEnded;
-                document.CommandCancelled += OnCommandCancelled;
-                document.CommandFailed += OnCommandFailed;
-                _handlersAttached = true;
+                try
+                {
+                    document.CommandEnded += OnCommandEnded;
+                    _commandEndedAttached = true;
+                    document.CommandCancelled += OnCommandCancelled;
+                    _commandCancelledAttached = true;
+                    document.CommandFailed += OnCommandFailed;
+                    _commandFailedAttached = true;
+                }
+                catch
+                {
+                    if (!DetachInCadContext())
+                        throw new InvalidOperationException(
+                            "Native BricsCAD QSAVE terminal handler subscription failed and partial rollback could not be proven. Do not retry automatically.");
+                    throw;
+                }
             }
 
-            private void DetachInCadContext()
+            private bool DetachInCadContext()
             {
                 var document = Document;
-                if (document == null || !_handlersAttached) return;
-                _handlersAttached = false;
-                try { document.CommandEnded -= OnCommandEnded; } catch { }
-                try { document.CommandCancelled -= OnCommandCancelled; } catch { }
-                try { document.CommandFailed -= OnCommandFailed; } catch { }
+                if (document == null)
+                    return !_commandEndedAttached && !_commandCancelledAttached && !_commandFailedAttached;
+
+                if (_commandEndedAttached)
+                {
+                    try
+                    {
+                        document.CommandEnded -= OnCommandEnded;
+                        _commandEndedAttached = false;
+                    }
+                    catch { }
+                }
+                if (_commandCancelledAttached)
+                {
+                    try
+                    {
+                        document.CommandCancelled -= OnCommandCancelled;
+                        _commandCancelledAttached = false;
+                    }
+                    catch { }
+                }
+                if (_commandFailedAttached)
+                {
+                    try
+                    {
+                        document.CommandFailed -= OnCommandFailed;
+                        _commandFailedAttached = false;
+                    }
+                    catch { }
+                }
+
+                return !_commandEndedAttached && !_commandCancelledAttached && !_commandFailedAttached;
             }
 
             private void OnCommandEnded(object sender, CommandEventArgs e)
@@ -257,9 +309,18 @@ namespace QS3D.BricsCAD.V25
                 if (!Matches(sender, e)) return;
                 if (Interlocked.CompareExchange(ref _terminalSet, 1, 0) != 0) return;
                 TerminalError = error;
-                DetachInCadContext();
-                _audit?.Invoke("native QSAVE " + state);
-                Done.Set();
+                try
+                {
+                    var detached = DetachInCadContext();
+                    if (!detached && string.IsNullOrEmpty(TerminalError))
+                        TerminalError = "Native BricsCAD QSAVE reached a terminal event but handler detach could not be proven; save completion was not confirmed. Do not retry automatically.";
+                    try { _audit?.Invoke("native QSAVE " + state); }
+                    catch { }
+                }
+                finally
+                {
+                    Done.Set();
+                }
             }
 
             private bool Matches(object sender, CommandEventArgs e)
