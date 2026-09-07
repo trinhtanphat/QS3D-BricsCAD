@@ -29,7 +29,7 @@ for token in (
     require(text, token, "OpenAI supervisor warm-up")
 
 run = re.search(
-    r"private static void RunOneIteration\(string reason\)\s*\{(?P<body>.*?)\n        \}\n\n        private static bool TryStartProvider",
+    r"private static void RunOneIteration\(string reason\)\s*\{(?P<body>.*?)\n        \}\n\n        private static void PublishStartedProviderState",
     text,
     re.DOTALL,
 )
@@ -70,7 +70,7 @@ if not publish:
 else:
     body = publish.group("body")
     require(body, "var healthy = IsProviderHealthy(provider);", "start publication")
-    require(body, "healthy ?", "start publication")
+    require(body, "_health = healthy", "start publication")
     require(body, "McpTransportHealth.Starting", "start publication")
     require(body, "if (healthy)", "start publication")
     require(body, "_restartCount = 0;", "start publication")
