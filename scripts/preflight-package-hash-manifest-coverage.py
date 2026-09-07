@@ -116,22 +116,34 @@ if install_source:
             "installer must define complete manifest coverage before the install path invokes package integrity")
 
 updater_tokens = (
-    "$actualZipHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToUpperInvariant()",
-    "$actualZipHash -ne $expectedZipHash",
-    "Assert-SafeArchive -ZipPath $zipPath",
-    "Expand-Archive -LiteralPath $zipPath",
+    "function Expand-VerifiedHeldArchive",
+    "[IO.FileShare]::Read",
+    "ComputeHash($zipStream)",
+    "[IO.Compression.ZipArchive]::new($zipStream",
+    "$record.Entry.Open()",
+    "Expand-VerifiedHeldArchive -ZipPath $zipPath",
     "$installer = Join-Path $extractRoot 'install-v25-autoload.ps1'",
     "& $installer @arguments",
 )
 for token in updater_tokens:
     require(token in update_source, f"secure updater trust-chain guard missing token: {token}")
+require("Get-FileHash -LiteralPath $zipPath" not in update_source,
+        "secure updater must not reopen the admitted ZIP pathname for SHA-256")
+require("Expand-Archive -LiteralPath $zipPath" not in update_source,
+        "secure updater must not reopen the admitted ZIP pathname for extraction")
 
 if update_source:
-    hash_index = update_source.find("$actualZipHash -ne $expectedZipHash")
-    extract_index = update_source.find("Expand-Archive -LiteralPath $zipPath")
-    installer_index = update_source.find("& $installer @arguments")
-    require(hash_index >= 0 and extract_index >= 0 and installer_index >= 0 and hash_index < extract_index < installer_index,
-            "updater must verify the whole ZIP before extraction and delegate installation only afterwards")
+    held_function_index = update_source.find("function Expand-VerifiedHeldArchive")
+    held_hash_index = update_source.find("ComputeHash($zipStream)", held_function_index)
+    held_zip_index = update_source.find("[IO.Compression.ZipArchive]::new($zipStream", held_hash_index)
+    held_entry_index = update_source.find("$record.Entry.Open()", held_zip_index)
+    held_call_index = update_source.find("Expand-VerifiedHeldArchive -ZipPath $zipPath", held_entry_index)
+    installer_index = update_source.find("& $installer @arguments", held_call_index)
+    require(
+        min(held_function_index, held_hash_index, held_zip_index, held_entry_index, held_call_index, installer_index) >= 0
+        and held_function_index < held_hash_index < held_zip_index < held_entry_index < held_call_index < installer_index,
+        "updater must bind ZIP digest, ZipArchive admission and entry extraction to the held generation before delegating installation",
+    )
 
 # Deterministic regression probes: the guard must reject both traversal bypass and a
 # producer that silently drops the staging reparse rejection used by safe hashing.
