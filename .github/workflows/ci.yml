@@ -71,6 +71,9 @@ jobs:
         if: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' }}
         env:
           QS3D_EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          QS3D_EXPECTED_PR_NUMBER: ${{ github.event.pull_request.number }}
+          QS3D_EXPECTED_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          QS3D_EXPECTED_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/preflight-ci-edited-evidence.py --verify-runtime
       - name: CI trigger and publishing policy gate
