@@ -18,19 +18,23 @@ if source.is_file():
     ctor = text[ctor_start:resolve_start] if ctor_start >= 0 and resolve_start > ctor_start else ""
     required = (
         "var knownCount = TryGetKnownCount(mappings",
-        "foreach (var mapping in mappings)",
+        "using (var enumerator = mappings.GetEnumerator())",
+        "var hasNext = enumerator.MoveNext();",
+        'RevalidateKnownCount(mappings, knownCount, "MoveNext")',
+        "if (!hasNext)",
+        "index >= knownCount.Value",
+        "var mapping = enumerator.Current;",
+        'RevalidateKnownCount(mappings, knownCount, "Current")',
+        'RevalidateKnownCount(mappings, knownCount, "completed traversal")',
         "index != knownCount.Value",
-        "RevalidateKnownCountAfterTraversal(mappings, knownCount);",
         "items.Sort(CompareMappings);",
         "Mappings = new ReadOnlyCollection<MeasurementWorkItemMapping>",
     )
     positions = [ctor.find(token) for token in required]
     if not ctor or any(pos < 0 for pos in positions) or positions != sorted(positions):
-        errors.append("Mapping catalog must rebind known Count after exact traversal and before sort/publication.")
-    if "index >= knownCount.Value" not in ctor:
-        errors.append("Mapping catalog must retain fail-early known-Count overrun protection.")
+        errors.append("Mapping catalog must bind known Count across MoveNext/Current/completion before sort/publication.")
 
-    stable_start = text.find("private static void RevalidateKnownCountAfterTraversal(")
+    stable_start = text.find("private static void RevalidateKnownCount(")
     stable_end = text.find("private static int? TryGetKnownCount(", stable_start)
     stable = text[stable_start:stable_end] if stable_start >= 0 and stable_end > stable_start else ""
     for token in (
@@ -40,7 +44,7 @@ if source.is_file():
         "!reboundCount.HasValue || reboundCount.Value != admittedCount.Value",
     ):
         if token not in stable:
-            errors.append("Post-traversal mapping Count validator missing contract token: " + token)
+            errors.append("Mapping Count rebound validator missing contract token: " + token)
 
 if smoke.is_file():
     text = smoke.read_text(encoding="utf-8")
@@ -64,4 +68,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: mapping catalog rebinds deterministic Count evidence before publication.")
+print("PASS: mapping catalog binds deterministic Count evidence across traversal before publication.")
