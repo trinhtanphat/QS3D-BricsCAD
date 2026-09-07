@@ -27,13 +27,17 @@ permissions:
   issues: read
 
 concurrency:
-  # Push and PR code events for the same branch share a cancellation domain. Repository identity
-  # isolates forks with equal branch names, while metadata-only PR edits keep their own class.
-  group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata' || 'code' }}
+  # Keep push, PR code, and PR metadata validation in separate cancellation domains. GitHub
+  # materializes cancelled jobs as check-runs on the candidate SHA, so cross-event cancellation
+  # can block protected-branch required contexts even when the surviving run is GREEN.
+  # Repository identity isolates forks with equal branch names; same-event superseded work still
+  # cancels normally within its own class.
+  group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata' || github.event_name == 'pull_request' && 'pull_request' || github.event_name == 'push' && 'push' || 'dispatch' }}
   cancel-in-progress: true
 
 jobs:
   preflight:
+    name: ${{ github.event_name == 'push' && 'branch-preflight' || github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata-preflight' || github.event_name == 'pull_request' && 'preflight' || 'dispatch-preflight' }}
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request' }}
     runs-on: windows-latest
     timeout-minutes: 30
@@ -67,6 +71,9 @@ jobs:
         if: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' }}
         env:
           QS3D_EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          QS3D_EXPECTED_PR_NUMBER: ${{ github.event.pull_request.number }}
+          QS3D_EXPECTED_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          QS3D_EXPECTED_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/preflight-ci-edited-evidence.py --verify-runtime
       - name: CI trigger and publishing policy gate
@@ -169,6 +176,7 @@ jobs:
         run: echo "Independent source-validation safety gates completed."
 
   core:
+    name: ${{ github.event_name == 'push' && 'branch-core' || github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata-core' || github.event_name == 'pull_request' && 'core' || 'dispatch-core' }}
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request' }}
     needs: preflight
     runs-on: windows-latest
