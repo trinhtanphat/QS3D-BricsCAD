@@ -12,8 +12,8 @@ Runtime: `REMOTE_SAFE` deterministic managed Core/Domain/Persistence.
 
 - Preserve the public `IList<string>` API.
 - Effective semantic Add/Insert/index replacement/Remove/RemoveAt/Clear routes through the owning `ProjectElement` relation dirty boundary.
-- Removing a missing value, clearing an empty list, and assigning the identical value are no-ops.
-- Relation values are non-empty, already canonical/unpadded XML-safe text with no control characters.
+- Removing a missing value, clearing an empty list, and assigning the identical canonical value are no-ops.
+- Mutation inputs are trimmed before storage; stored relation values are non-empty canonical XML-safe text with no control characters.
 - Case-insensitive duplicates are rejected before mutation because QSDB persistence already rejects duplicate relation identities.
 - Persistence and snapshot hydration reconstruct the backing relation values through explicit internal bypass methods, then restore persisted Dirty/timestamp state; they do not impersonate user edits.
 - Relation ordering remains insertion/order preserving.
