@@ -15,6 +15,8 @@ def validate(text: str) -> None:
             "V25 package metadata must not depend on wall-clock UtcNow.")
     require("Compress-Archive" not in text,
             "V25 release ZIP must not use timestamp/order-sensitive Compress-Archive.")
+    require("Add-Type -AssemblyName System.IO.Compression" in text,
+            "Direct ZipArchive use must explicitly load System.IO.Compression on Windows PowerShell 5.1.")
     require("function Get-SourceGitTimestampUtc {" in text,
             "V25 packaging must derive one deterministic timestamp from the exact source commit.")
     require("git -C $root show -s --format=%cI $Commit" in text,
@@ -29,8 +31,12 @@ def validate(text: str) -> None:
             "ZIP entry names must be sorted with ordinal semantics, independent of host culture.")
     require(".Replace([IO.Path]::DirectorySeparatorChar, '/')" in text,
             "ZIP entry names must be normalized to forward slashes across Windows/Linux path semantics.")
-    require("[IO.Compression.CompressionLevel]::Optimal" in text,
-            "Deterministic ZIP writer must pin compression level explicitly.")
+    require("[IO.Compression.CompressionLevel]::NoCompression" in text,
+            "ZIP entries must use stored bytes to avoid runtime-specific deflate output drift.")
+    require("[Array]::Sort($commands, [StringComparer]::Ordinal)" in text,
+            "COMMANDS.txt ordering must be ordinal and culture-independent.")
+    require("[Array]::Sort($manifestEntryNames, [StringComparer]::Ordinal)" in text,
+            "SHA256SUMS.txt ordering must be ordinal and culture-independent.")
     require("New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc" in text,
             "Release packaging must route final ZIP creation through the deterministic writer.")
     require("generatedUtc = $sourceTimestampUtc.ToString('o')" in text,
@@ -41,12 +47,16 @@ text = PACKAGER.read_text(encoding="utf-8")
 validate(text)
 
 for marker in (
+    "Add-Type -AssemblyName System.IO.Compression",
     "function Get-SourceGitTimestampUtc {",
     "git -C $root show -s --format=%cI $Commit",
     "function New-DeterministicPackageZip {",
     "$entry.LastWriteTime = $SourceTimestamp",
     "[Array]::Sort($entryNames, [StringComparer]::Ordinal)",
     ".Replace([IO.Path]::DirectorySeparatorChar, '/')",
+    "[IO.Compression.CompressionLevel]::NoCompression",
+    "[Array]::Sort($commands, [StringComparer]::Ordinal)",
+    "[Array]::Sort($manifestEntryNames, [StringComparer]::Ordinal)",
     "New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc",
     "generatedUtc = $sourceTimestampUtc.ToString('o')",
 ):
