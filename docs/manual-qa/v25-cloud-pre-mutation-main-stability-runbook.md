@@ -6,7 +6,7 @@ Scope: REMOTE_SAFE source/workflow qualification for issue #5951. This runbook d
 
 Before the first persistent GitHub Release mutation (`POST /releases`), the V25 cloud workflow must bind the current protected `main` through both the authenticated GitHub API and an exact git fetch, prove that `SOURCE_SHA` is still its ancestor, classify `SOURCE_SHA..currentMain` only across the release-relevant path set, fail closed on both relevant drift and git-classification errors, then perform a second authenticated `main` read and require exact SHA stability. The existing final pre-publication fence remains required as defense in depth.
 
-Release-relevant paths are `src/`, `tests/`, `scripts/`, `external/QS3D-Platform`, `.gitmodules`, `Directory.Build.props`, `QS3D.sln`, and `.github/workflows/release-v25-cloud.yml`.
+Release-relevant paths are `src/`, `tests/`, `scripts/`, `external/QS3D-Platform`, `.gitmodules`, `Directory.Build.props`, `QS3D.sln`, `QS3D.V26.sln`, `.github/workflows/dispatch-v25-cloud-after-main-integration.yml`, and `.github/workflows/release-v25-cloud.yml`.
 
 ## Deterministic qualification
 
@@ -25,6 +25,6 @@ Adversarial source scenarios to preserve:
 
 ## Self-review checklist
 
-Confirm exact `SOURCE_SHA`/protected-main ancestry semantics, API/fetch identity equality, dedicated remote ref use, fail-closed `$LASTEXITCODE` handling, path quoting on Windows PowerShell, fence ordering before `POST /releases`, unchanged held-asset SHA-256/size verification, unchanged exact `RELEASE_COMMIT_SHA` and tag binding, unchanged final draft verification, and unchanged final protected-main publication fence.
+Confirm exact `SOURCE_SHA`/protected-main ancestry semantics, API/fetch identity equality, dedicated remote ref use, fail-closed `$LASTEXITCODE` handling, path quoting on Windows PowerShell, fence ordering before `POST /releases`, identical release-relevant path classification at pre-mutation and final publication admission, unchanged held-asset SHA-256/size verification, unchanged exact `RELEASE_COMMIT_SHA` and tag binding, unchanged final draft verification, and unchanged final protected-main publication fence.
 
 Do not weaken the classifier, convert failures to warnings, add `continue-on-error`, or claim a real release/runtime PASS from this source-only qualification.
