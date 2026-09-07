@@ -75,8 +75,12 @@ if not errors:
     for token in (
         "SourceHandleAddMarksRelationsDirty",
         "DependencyAddMarksRelationsDirty",
+        "EffectiveMutationSurfaceMarksRelationsDirty",
         "NoOpRemovalPreservesCleanState",
+        "NoOpMutationsPreserveCleanState",
+        "RejectedMutationsAreAtomic",
         "RelationInputsNormalizeAndValidate",
+        "Effective relation mutation must advance UpdatedUtc.",
         'source.SourceHandles.Add(" padded ")',
         'Equal("padded", source.SourceHandles[0])',
         "[ModuleInitializer]",
