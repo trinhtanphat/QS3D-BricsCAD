@@ -416,9 +416,11 @@ try {
         throw 'V25 package metadata target identity is invalid.'
     }
 
-    $metadataSource = ([string]$metadata.gitCommit).Trim()
-    if ($metadataSource -notmatch '^[0-9A-Fa-f]{40}$') {
-        throw "PACKAGE-METADATA gitCommit is missing or invalid: '$metadataSource'."
+    $metadataSource = [string]$metadata.gitCommit
+    if ([string]::IsNullOrWhiteSpace($metadataSource) -or
+        -not [string]::Equals($metadataSource, $metadataSource.Trim(), [StringComparison]::Ordinal) -or
+        $metadataSource -notmatch '^[0-9A-Fa-f]{40}$') {
+        throw "PACKAGE-METADATA gitCommit is missing, non-canonical, or invalid: '$metadataSource'."
     }
     if (-not [string]::Equals($metadataSource.ToLowerInvariant(), $expectedSource, [StringComparison]::Ordinal)) {
         throw "PACKAGE-METADATA gitCommit $metadataSource does not match expected source commit $ExpectedSourceCommit."

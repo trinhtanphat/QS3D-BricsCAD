@@ -125,8 +125,8 @@ if capture.exists():
 report = ROOT / "src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs"
 if report.exists():
     text = report.read_text(encoding="utf-8")
-    if "AutoRoomLifecycle.IsExcludedFromQuantity(project, element)" not in text:
-        errors.append("BQ must exclude stale auto rooms and room-linked dependents")
+    if "AutoRoomLifecycle.IsExcludedFromQuantity(project, source)" not in text or "if (elementSnapshot.ExcludedFromQuantity) continue;" not in text:
+        errors.append("BQ frozen generation must capture and consume stale auto-room/dependent quantity exclusion")
     for needle in ("QFirst(element, \"GrossConcreteM3\", \"GrossVolumeM3\")", "QFirstOrFallback", "QFirst(element, \"BottomAreaM2\", \"AreaM2\")"):
         if needle not in text: errors.append("BQ lazy quantity fallback guard missing: " + needle)
     if 'Q(element, "GrossConcreteM3", Q(' in text or 'Q(element, "NetConcreteM3", Q(' in text:
@@ -192,4 +192,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: auto-room input/identity, Room->finish resynchronization, stale/orphan quantity exclusion, lazy BQ fallbacks, rollback, shared current-project semantic locate and overflow-safe large-coordinate geometry guards are present.")
+print("PASS: auto-room input/identity, Room->finish resynchronization, frozen-generation stale/orphan quantity exclusion, lazy BQ fallbacks, rollback, shared current-project semantic locate and overflow-safe large-coordinate geometry guards are present.")

@@ -17,19 +17,29 @@ source = SOURCE.read_text(encoding="utf-8")
 smoke = SMOKE.read_text(encoding="utf-8")
 entry = ENTRY.read_text(encoding="utf-8")
 
+# Canonical ordering must be applied to the detached immutable generation snapshot.
+# Do not regress to ordering/traversing mutable project.Elements references directly.
 required_source = (
-    "var elementInstances = project.Elements.ToList();",
-    "var elements = elementInstances",
-    ".OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)",
-    ".ThenBy(x => x.Id, StringComparer.Ordinal)",
-    "EnsureProjectRevision(project, reportVersion, elementInstances, floorInstances, zoneInstances, familyInstances, drawingFingerprint);",
+    "var snapshot = ProjectQuantityGenerationSnapshot.Capture(project);",
+    "var elements = snapshot.Elements.OrderBy(x => x.Element.Id, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Element.Id, StringComparer.Ordinal).ToList();",
+    "foreach (var elementSnapshot in elements)",
+    "var element = elementSnapshot.Element;",
+    "EnsureProjectRevision(project, snapshot);",
 )
 for token in required_source:
     if token not in source:
-        fail("ProjectQuantityReportBuilder missing canonical traversal token: " + token)
+        fail("ProjectQuantityReportBuilder missing frozen canonical traversal token: " + token)
 
-if "var elements = project.Elements.ToList();" in source:
-    fail("ProjectQuantityReportBuilder still binds report traversal directly to persisted element insertion order")
+for forbidden in (
+    "var elementInstances = project.Elements.ToList();",
+    "var elements = project.Elements.ToList();",
+    "var elements = project.Elements.OrderBy(",
+):
+    if forbidden in source:
+        fail("ProjectQuantityReportBuilder canonical traversal must remain detached from mutable project element instances: " + forbidden)
+
+if source.count("EnsureProjectRevision(project, snapshot);") < 4:
+    fail("ProjectQuantityReportBuilder must revalidate the immutable generation during canonical traversal and before publication")
 
 required_smoke = (
     "ProjectQuantityReportBuilder.Group(forward)",
