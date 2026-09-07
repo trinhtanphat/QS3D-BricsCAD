@@ -243,7 +243,7 @@ try {
     if ([int]$provenance.schemaVersion -ne 1 -or [string]$provenance.product -ne 'QS3D' -or [string]$provenance.target -ne 'BricsCAD V25 x64' -or
         -not [string]::Equals([string]$provenance.releaseTag, $ExpectedReleaseTag, [StringComparison]::Ordinal) -or
         -not [string]::Equals([string]$provenance.productVersion, $expectedProductVersion, [StringComparison]::Ordinal) -or
-        -not [string]::Equals(([string]$provenance.sourceCommit).Trim(), $expectedSource, [StringComparison]::OrdinalIgnoreCase) -or
+        -not [string]::Equals(([string]$provenance.sourceCommit), $expectedSource, [StringComparison]::OrdinalIgnoreCase) -or
         -not [string]::Equals(([string]$provenance.signerThumbprint).Replace(' ', ''), $expectedSigner, [StringComparison]::OrdinalIgnoreCase) -or
         -not [string]::Equals([string]$provenance.packageFile, 'QS3D-BricsCAD-V25.zip', [StringComparison]::Ordinal) -or
         -not [string]::Equals([string]$provenance.packageSha256, $zipHash, [StringComparison]::OrdinalIgnoreCase) -or
@@ -254,8 +254,8 @@ try {
 
     $metadata = Read-ZipMetadataIdentity -ZipHeld $zipHeld
     if ([string]$metadata.product -ne 'QS3D' -or [string]$metadata.target -ne 'BricsCAD V25 x64' -or
-        -not [string]::Equals(([string]$metadata.productVersion).Trim(), $expectedProductVersion, [StringComparison]::Ordinal) -or
-        -not [string]::Equals(([string]$metadata.gitCommit).Trim(), $expectedSource, [StringComparison]::OrdinalIgnoreCase)) {
+        -not [string]::Equals(([string]$metadata.productVersion), $expectedProductVersion, [StringComparison]::Ordinal) -or
+        -not [string]::Equals(([string]$metadata.gitCommit), $expectedSource, [StringComparison]::OrdinalIgnoreCase)) {
         throw 'Downloaded V25 draft ZIP metadata does not exactly bind product, tag and source commit.'
     }
 
