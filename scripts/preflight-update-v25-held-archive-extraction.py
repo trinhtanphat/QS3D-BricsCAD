@@ -49,6 +49,27 @@ def validate(text: str) -> None:
         "Extraction must fail closed when the extraction root is a reparse point.",
     )
 
+    # RED-first ordering fence: no child directory creation is allowed before the
+    # existing parent/root chain has been reparse-validated.  In particular,
+    # directory records must not CreateDirectory(...)+continue without a check,
+    # and file parents must not be created before the validation walk.
+    directory_unsafe = "if ($record.IsDirectory) {\n                    [IO.Directory]::CreateDirectory([string]$record.Target) | Out-Null\n                    continue"
+    require(directory_unsafe not in block, "Directory entries must not mutate through an unvalidated reparse-capable parent chain.")
+    file_parent_unsafe = "$parent = [IO.Path]::GetDirectoryName([string]$record.Target)\n                [IO.Directory]::CreateDirectory($parent) | Out-Null\n                $cursor = Get-Item -LiteralPath $parent"
+    require(file_parent_unsafe not in block, "File parents must be reparse-validated before CreateDirectory mutation.")
+    require(
+        "Assert-ExistingExtractionPathChain" in block,
+        "Held extraction must use one explicit pre-mutation root-inclusive reparse-chain validator.",
+    )
+    require(
+        block.index("Assert-ExistingExtractionPathChain") < block.index("[IO.Directory]::CreateDirectory([string]$record.Target)"),
+        "Directory target mutation must occur only after the explicit path-chain validator.",
+    )
+    require(
+        block.index("Assert-ExistingExtractionPathChain") < block.index("[IO.Directory]::CreateDirectory($parent)"),
+        "File-parent mutation must occur only after the explicit path-chain validator.",
+    )
+
     call_marker = "Expand-VerifiedHeldArchive -ZipPath $zipPath"
     require(text.count(call_marker) == 1, "Updater must invoke held archive extraction exactly once for the downloaded ZIP.")
     call_start = text.index(call_marker)
@@ -76,12 +97,13 @@ for marker in (
     "$rootItem = Get-Item -LiteralPath $destinationFull -Force -ErrorAction Stop",
     "if (($rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)",
     "[string]::Equals($cursorFull, $destinationFull, [StringComparison]::OrdinalIgnoreCase)",
+    "Assert-ExistingExtractionPathChain",
 ):
     require(marker in text, f"Mutation probe could not find required marker: {marker}")
     mutated = text.replace(marker, "__QS3D_MUTATION_REMOVED__", 1)
     try:
         validate(mutated)
-    except SystemExit:
+    except (SystemExit, ValueError):
         pass
     else:
         raise SystemExit(f"Mutation probe unexpectedly passed after removing: {marker}")
