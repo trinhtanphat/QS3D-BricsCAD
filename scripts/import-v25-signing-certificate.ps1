@@ -165,8 +165,20 @@ try {
 }
 catch {
     $operationError = $_.Exception
+    $certificateCleanupError = $null
     if ($importedNewThumbprints.Count -gt 0) {
-        Remove-ImportedCertificates -Thumbprints $importedNewThumbprints
+        try {
+            Remove-ImportedCertificates -Thumbprints $importedNewThumbprints
+        }
+        catch {
+            $certificateCleanupError = $_.Exception
+        }
+    }
+    if ($null -ne $certificateCleanupError) {
+        $operationError = [AggregateException]::new(
+            'Signing operation failed and imported certificate cleanup also failed.',
+            [Exception[]]@($operationError, $certificateCleanupError))
+        throw $operationError
     }
     throw
 }
