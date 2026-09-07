@@ -439,6 +439,8 @@ jobs:
             '.gitmodules',
             'Directory.Build.props',
             'QS3D.sln',
+            'QS3D.V26.sln',
+            '.github/workflows/dispatch-v25-cloud-after-main-integration.yml',
             '.github/workflows/release-v25-cloud.yml'
           )
           & git diff --quiet --no-ext-diff $env:SOURCE_SHA $preMutationMain -- $preMutationReleaseRelevantPaths
@@ -598,6 +600,8 @@ jobs:
             '.gitmodules',
             'Directory.Build.props',
             'QS3D.sln',
+            'QS3D.V26.sln',
+            '.github/workflows/dispatch-v25-cloud-after-main-integration.yml',
             '.github/workflows/release-v25-cloud.yml'
           )
           & git diff --quiet --no-ext-diff $env:SOURCE_SHA $finalMain -- $finalReleaseRelevantPaths
