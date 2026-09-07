@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Xml;
 
 namespace QS3D.Core.Domain
@@ -92,20 +93,18 @@ namespace QS3D.Core.Domain
         {
             if (string.IsNullOrWhiteSpace(value))
                 throw new ArgumentException("Relation value is required.", nameof(value));
-            if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
-                throw new ArgumentException("Relation value must be canonical and unpadded.", nameof(value));
-            foreach (var ch in value)
-                if (char.IsControl(ch))
-                    throw new ArgumentException("Relation value cannot contain control characters.", nameof(value));
+            var canonical = value.Trim();
+            if (canonical.Any(char.IsControl))
+                throw new ArgumentException("Relation value cannot contain control characters.", nameof(value));
             try
             {
-                XmlConvert.VerifyXmlChars(value);
+                XmlConvert.VerifyXmlChars(canonical);
             }
             catch (XmlException ex)
             {
                 throw new ArgumentException("Relation value must be valid XML text.", nameof(value), ex);
             }
-            return value;
+            return canonical;
         }
 
         private void MarkRelationChanged()
