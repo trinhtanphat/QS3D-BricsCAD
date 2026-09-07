@@ -15,6 +15,7 @@ $sampleSource = Join-Path $root 'samples/generated'
 $generator = Join-Path $PSScriptRoot 'new-v26-script-from-v25.ps1'
 $script:MaxPackageTextBytes = 8MB
 $script:StrictUtf8 = [Text.UTF8Encoding]::new($false, $true)
+Add-Type -AssemblyName System.IO.Compression
 
 if (-not ('QS3D.V26.PackageNativeFileIdentity' -as [type])) {
     Add-Type -TypeDefinition @'
@@ -451,9 +452,90 @@ function Add-CommandMethodsFromSource {
         Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label 'V26 command source'
         $text = Read-HeldPackageText -Held $held -Label 'V26 command source'
         Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label 'V26 command source'
-        [regex]::Matches($text, '\[CommandMethod\("([^\"]+)"') | ForEach-Object { $script:commands += $_.Groups[1].Value.ToUpperInvariant() }
+        [regex]::Matches($text, '\[CommandMethod\("([^\"]+)"') | ForEach-Object { $null = $script:commandSet.Add($_.Groups[1].Value.ToUpperInvariant()) }
     }
     finally { $held.Stream.Dispose() }
+}
+
+function Get-SourceGitCommit {
+    $output = @(& git -C $root rev-parse --verify HEAD 2>&1)
+    if ($LASTEXITCODE -ne 0 -or $output.Count -ne 1) { throw "Could not resolve the exact source Git HEAD for V26 package provenance." }
+    $commit = ([string]$output[0]).Trim().ToLowerInvariant()
+    if ($commit -notmatch '^[0-9a-f]{40}$') { throw "Source Git HEAD is not one exact 40-hex commit: '$commit'." }
+    return $commit
+}
+
+function Get-SourceGitTimestampUtc {
+    param([string]$Commit)
+    $output = @(& git -C $root show -s --format=%cI $Commit 2>&1)
+    if ($LASTEXITCODE -ne 0 -or $output.Count -ne 1) { throw "Could not resolve one source Git timestamp for V26 package provenance." }
+    try {
+        $timestamp = [DateTimeOffset]::Parse(([string]$output[0]).Trim(), [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+    }
+    catch { throw "Source Git timestamp is invalid for V26 package provenance: $($_.Exception.Message)" }
+    $zipMin = [DateTimeOffset]::new(1980, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
+    $zipMax = [DateTimeOffset]::new(2107, 12, 31, 23, 59, 58, [TimeSpan]::Zero)
+    if ($timestamp -lt $zipMin -or $timestamp -gt $zipMax) { throw "Source Git timestamp is outside the ZIP timestamp range: $timestamp" }
+    return $timestamp
+}
+
+function New-DeterministicPackageZip {
+    param([string]$PackageRoot, [string]$DestinationPath, [DateTimeOffset]$SourceTimestamp)
+    $package = Assert-OrdinaryDirectory -Path $PackageRoot -Label 'package staging root'
+    $destination = Assert-SafeOutputFileTarget -Path $DestinationPath -RepositoryRoot $root -Label 'package ZIP'
+    $packagePrefix = $package.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    $sourceByEntry = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)
+    foreach ($file in Get-SafePackageFiles -PackageRoot $package) {
+        $fullName = [IO.Path]::GetFullPath($file.FullName)
+        if (-not $fullName.StartsWith($packagePrefix, [StringComparison]::OrdinalIgnoreCase)) { throw "Package file escaped staging root: $fullName" }
+        $entryName = $fullName.Substring($packagePrefix.Length).Replace([IO.Path]::DirectorySeparatorChar, '/').Replace([IO.Path]::AltDirectorySeparatorChar, '/')
+        if ([string]::IsNullOrWhiteSpace($entryName) -or $entryName.StartsWith('/') -or $entryName.Contains('\\') -or $entryName.Contains(':')) { throw "Package entry name is not canonical: $entryName" }
+        $segments = @($entryName.Split('/'))
+        if (@($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) { throw "Package entry name is not canonical: $entryName" }
+        if ($sourceByEntry.ContainsKey($entryName)) { throw "Duplicate deterministic package entry name: $entryName" }
+        $sourceByEntry.Add($entryName, $fullName)
+    }
+    $entryNames = [string[]]@($sourceByEntry.Keys)
+    [Array]::Sort($entryNames, [StringComparer]::Ordinal)
+    if ($entryNames.Length -eq 0) { throw 'No V26 package files were available for deterministic ZIP creation.' }
+
+    $temporary = Assert-SafeOutputFileTarget -Path ($destination + '.' + [Guid]::NewGuid().ToString('N') + '.tmp') -RepositoryRoot $root -Label 'temporary package ZIP'
+    $destinationStream = $null
+    try {
+        $destinationStream = [IO.File]::Open($temporary, [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+        $archive = [IO.Compression.ZipArchive]::new($destinationStream, [IO.Compression.ZipArchiveMode]::Create, $true)
+        try {
+            foreach ($entryName in $entryNames) {
+                $held = Open-HeldPackageInput -Path $sourceByEntry[$entryName] -RepositoryRoot $root -Label ("V26 package ZIP input $entryName")
+                try {
+                    Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label ("V26 package ZIP input $entryName")
+                    $entry = $archive.CreateEntry($entryName, [IO.Compression.CompressionLevel]::NoCompression)
+                    $entry.LastWriteTime = $SourceTimestamp
+                    $entryStream = $entry.Open()
+                    try {
+                        $held.Stream.Position = 0
+                        $held.Stream.CopyTo($entryStream)
+                    }
+                    finally { $entryStream.Dispose() }
+                    Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label ("V26 package ZIP input $entryName")
+                }
+                finally { $held.Stream.Dispose() }
+            }
+        }
+        finally { $archive.Dispose() }
+        $destinationStream.Flush($true)
+        $destinationStream.Dispose()
+        $destinationStream = $null
+
+        $temporary = Assert-SafeOutputFileTarget -Path $temporary -RepositoryRoot $root -Label 'temporary package ZIP'
+        if (Test-Path -LiteralPath $destination) { Remove-Item -LiteralPath $destination -Force }
+        $destination = Assert-SafeOutputFileTarget -Path $destination -RepositoryRoot $root -Label 'package ZIP'
+        [IO.File]::Move($temporary, $destination)
+    }
+    finally {
+        if ($null -ne $destinationStream) { $destinationStream.Dispose() }
+        if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
+    }
 }
 
 $root = Assert-OrdinaryDirectory -Path $root -Label 'repository root'
@@ -461,6 +543,8 @@ $pluginProject = Assert-SafeInputFile -Path (Join-Path $root 'src/QS3D.BricsCAD.
 $coreProject = Assert-SafeInputFile -Path (Join-Path $root 'src/QS3D.Core/QS3D.Core.csproj') -RepositoryRoot $root -Label 'Core project'
 $productVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $pluginProject) -Label 'QS3D V26 plugin product version'
 $coreProductVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $coreProject) -Label 'QS3D Core product version'
+$gitCommit = Get-SourceGitCommit
+$sourceTimestampUtc = Get-SourceGitTimestampUtc -Commit $gitCommit
 if (-not [string]::Equals($productVersion, $coreProductVersion, [StringComparison]::Ordinal)) { throw "QS3D V26 plugin/Core product versions differ: plugin=$productVersion core=$coreProductVersion" }
 if (-not [string]::IsNullOrEmpty($env:RELEASE_TAG)) {
     $expectedTag = 'v' + $productVersion
@@ -518,12 +602,13 @@ if (Test-Path -LiteralPath $sampleDwg) {
     Copy-HeldPackageInput -SourcePath $sampleDwg -DestinationPath (Join-Path $sampleDestination 'QS3D-Sample.dwg') -Label 'synthetic sample QS3D-Sample.dwg'
 }
 
-$commands = @()
+$script:commandSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 $v25Root = Assert-SafeInputDirectory -Path (Join-Path $root 'src/QS3D.BricsCAD.V25') -RepositoryRoot $root -Label 'V25 linked command source root'
 Get-SafeSourceFiles -SourceRoot $v25Root -RepositoryRoot $root -Extension '.cs' | Where-Object { $_.Name -ne 'PluginEntry.cs' -and -not $_.FullName.StartsWith((Join-Path $v25Root 'Updates') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Add-CommandMethodsFromSource -Path $_.FullName }
 foreach ($linkedUpdateSource in @('SemanticReleaseVersion.cs','UpdateBootstrapper.cs','UpdateCenterWindow.cs','UpdateCoordinator.cs','UpdatePreferences.cs','UpdateSettingsCommands.cs')) { Add-CommandMethodsFromSource -Path (Join-Path $v25Root ('Updates/' + $linkedUpdateSource)) }
 Get-SafeSourceFiles -SourceRoot (Join-Path $root 'src/QS3D.BricsCAD.V26') -RepositoryRoot $root -Extension '.cs' | ForEach-Object { Add-CommandMethodsFromSource -Path $_.FullName }
-$commands = @($commands | Sort-Object -Unique)
+$commands = [string[]]@($script:commandSet)
+[Array]::Sort($commands, [StringComparer]::Ordinal)
 if ($commands.Count -eq 0 -or -not ($commands -contains 'QS3D')) { throw 'No QS3D CommandMethod entries were discovered for V26.' }
 foreach ($requiredCommand in @('QS3DUPDATE','QSUPDATE','QS3DVER','QSVER')) { if (-not ($commands -contains $requiredCommand)) { throw "Required V26 command was not discovered from compiled source: $requiredCommand" } }
 $commands | Set-Content -LiteralPath (Join-Path $dist 'COMMANDS.txt') -Encoding ASCII
@@ -561,7 +646,8 @@ $metadata = [ordered]@{
     framework = 'net8.0-windows'
     productVersion = $productVersion
     version = $assemblyVersion.ToString()
-    generatedUtc = [DateTime]::UtcNow.ToString('o')
+    gitCommit = $gitCommit
+    generatedUtc = $sourceTimestampUtc.ToString('o')
     commandCount = $commands.Count
     defaultLoadMode = 'OnCommand'
     autoloadMethod = 'BricsCAD Registry DemandLoad'
@@ -609,26 +695,31 @@ Licensed V26 NETLOAD/DemandLoad, signing, clean-machine install/update/uninstall
 foreach ($name in $forbidden) { if (Get-SafePackageFiles -PackageRoot $dist | Where-Object { [string]::Equals($_.Name, $name, [StringComparison]::OrdinalIgnoreCase) }) { throw "Proprietary BricsCAD assembly must not be packaged: $name" } }
 
 $distFull = [IO.Path]::GetFullPath($dist).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
-$hashLines = Get-SafePackageFiles -PackageRoot $dist | ForEach-Object {
-    $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToUpperInvariant()
-    $relativePath = $_.FullName.Substring($distFull.Length + 1).Replace([IO.Path]::DirectorySeparatorChar, '/').Replace([IO.Path]::AltDirectorySeparatorChar, '/')
-    if ([string]::IsNullOrWhiteSpace($relativePath) -or [IO.Path]::IsPathRooted($relativePath) -or $relativePath.Contains(':') -or $relativePath.Contains('\')) { throw "Unsafe package-relative path while hashing: $relativePath" }
+$manifestHashes = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)
+foreach ($file in Get-SafePackageFiles -PackageRoot $dist) {
+    $relativePath = $file.FullName.Substring($distFull.Length + 1).Replace([IO.Path]::DirectorySeparatorChar, '/').Replace([IO.Path]::AltDirectorySeparatorChar, '/')
+    if ([string]::IsNullOrWhiteSpace($relativePath) -or [IO.Path]::IsPathRooted($relativePath) -or $relativePath.Contains(':') -or $relativePath.Contains('\\')) { throw "Unsafe package-relative path while hashing: $relativePath" }
     $segments = @($relativePath.Split('/'))
     if (@($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) { throw "Unsafe package-relative path while hashing: $relativePath" }
-    "$hash  $relativePath"
+    if ($manifestHashes.ContainsKey($relativePath)) { throw "Duplicate V26 package manifest path: $relativePath" }
+    $manifestHashes.Add($relativePath, (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToUpperInvariant())
 }
+$manifestEntryNames = [string[]]@($manifestHashes.Keys)
+[Array]::Sort($manifestEntryNames, [StringComparer]::Ordinal)
+$hashLines = @($manifestEntryNames | ForEach-Object { "$($manifestHashes[$_])  $_" })
 if (-not $hashLines) { throw 'No V26 package files were available for hashing.' }
 $hashLines | Set-Content -LiteralPath (Join-Path $dist 'SHA256SUMS.txt') -Encoding ASCII
 
 $zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
 $null = Get-SafePackageFiles -PackageRoot $dist
-Compress-Archive -Path (Join-Path $dist '*') -DestinationPath $zip -CompressionLevel Optimal
+New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc
 $zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'
 $zipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToUpperInvariant()
 Write-Host "V26 package ready: $zip"
 Write-Host "Product version: $productVersion"
 Write-Host "Assembly version: $($assemblyVersion.ToString())"
+Write-Host "Source commit: $gitCommit"
 Write-Host "Commands: $($commands.Count)"
 Write-Host "Plugin signature: $($signature.Status)"
 Write-Host "SHA256: $zipHash"
