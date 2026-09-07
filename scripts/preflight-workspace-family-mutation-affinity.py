@@ -48,48 +48,44 @@ def main() -> int:
     text = SOURCE.read_text(encoding="utf-8")
     add = method_body(text, "private void OnAddClick(object sender, RoutedEventArgs e)")
     delete = method_body(text, "private void OnDeleteClick(object sender, RoutedEventArgs e)")
-    validate = method_body(text, "private bool TryGetCurrentFamilyForWorkspaceMutation")
 
-    for required, message in [
-        ("ExistingProjectMutationContext.TryGet", "mutation affinity helper must resolve the current project from the active document without creating one"),
-        ("project.FindFamily(family.Id)", "mutation affinity helper must resolve Family identity in the current project generation"),
-        ("ReferenceEquals(ownedFamily, family)", "mutation affinity helper must require exact Family object identity, not stable Id alone"),
-    ]:
-        if required not in validate:
-            fail(message)
-
-    for forbidden, message in [
-        ("_viewModel.SetActiveFamily", "mutation affinity validation must not change active Family before transaction snapshot"),
-        ("ProjectFamilyActivationService.SetActive", "mutation affinity validation must not mutate ActiveFamily metadata before transaction snapshot"),
-        ("GetOrCreate", "mutation affinity validation must never create a project"),
-    ]:
-        if forbidden in validate:
-            fail(message)
-
-    if "TryGetCurrentFamilyForWorkspaceMutation(doc, selected" not in add:
-        fail("Duplicate path must validate selected Family against current document/project generation before mutation")
-    if "TryGetCurrentFamilyForWorkspaceMutation(doc, selected" not in delete:
-        fail("Delete path must validate selected Family against current document/project generation before mutation")
-
-    require_order(add, "TryGetCurrentFamilyForWorkspaceMutation(doc, selected", "ExecuteAtomic(project", "Duplicate path")
-    require_order(delete, "TryGetCurrentFamilyForWorkspaceMutation(doc, selected", "ProjectFamilyService.ReferenceCount(project", "Delete path")
-    require_order(delete, "TryGetCurrentFamilyForWorkspaceMutation(doc, selected", "ExecuteAtomic(project", "Delete path")
-
-    if "project.FindFamily(selected.Id)" in add:
-        fail("Duplicate path still rebinds stale selection by Id after validation; use exact validated selected Family")
-    if "project.FindFamily(selected.Id)" in delete:
-        fail("Delete path still rebinds stale selection by Id; exact identity validation must own generation affinity")
-
-    for block, context in ((add, "Duplicate path"), (delete, "Delete path")):
-        affinity = block.find("TryGetCurrentFamilyForWorkspaceMutation(doc, selected")
-        refresh = block.find("RefreshProject();", affinity if affinity >= 0 else 0)
-        if affinity < 0 or refresh < 0:
-            fail(context + " must reconcile Workspace when selected Family affinity is rejected")
-        elif "return;" not in block[affinity:refresh + len("RefreshProject();") + 32]:
-            fail(context + " stale-generation branch must return before mutation")
-
+    # Duplicate may create a project only when there is no selected Family. Once a
+    # Family is selected, the current document/project generation must own that
+    # exact object before any transaction starts.
     if "selected == null" not in add or "ProjectContextCoordinator.GetOrCreate(doc)" not in add:
-        fail("New-Family path must preserve existing no-selection project creation behavior")
+        fail("New-Family path must preserve no-selection project creation behavior")
+    if "ExistingProjectMutationContext.Require(doc, \"Nhân bản Family từ Workspace\")" not in add:
+        fail("Duplicate path must require an existing current-document project")
+    if "ReferenceEquals(basis, selected)" not in add:
+        fail("Duplicate path must require exact selected Family object identity in the current project generation")
+    if "ReferenceEquals(family, selected)" not in delete:
+        fail("Delete path must require exact selected Family object identity in the current project generation")
+
+    require_order(add, "ReferenceEquals(basis, selected)", "ExecuteAtomic(project", "Duplicate path")
+    require_order(delete, "ReferenceEquals(family, selected)", "ProjectFamilyService.ReferenceCount(project", "Delete path")
+    require_order(delete, "ReferenceEquals(family, selected)", "ExecuteAtomic(project", "Delete path")
+
+    # The affinity fence itself must be validation-only. Activating a stale Family
+    # before ExecuteAtomic would change metadata before the rollback snapshot.
+    for block, context in ((add, "Duplicate path"), (delete, "Delete path")):
+        fence_at = block.find("ReferenceEquals(")
+        atomic_at = block.find("ExecuteAtomic(project")
+        prefix = block[:atomic_at] if atomic_at >= 0 else block
+        if "_viewModel.SetActiveFamily" in prefix or "ProjectFamilyActivationService.SetActive" in prefix:
+            fail(context + " must not activate Family before the atomic rollback snapshot")
+        if fence_at < 0:
+            continue
+        if "RefreshProject();" not in block[fence_at:]:
+            fail(context + " stale-generation rejection must reconcile Workspace")
+        if "return;" not in block[fence_at:]:
+            fail(context + " stale-generation rejection must return before mutation")
+
+    # Stable Id lookup is allowed only to obtain the current project's candidate;
+    # null-only validation is not sufficient because a new generation may reuse Id.
+    if "selected != null && basis == null" in add:
+        fail("Duplicate path still accepts a different current-generation Family with the same stable Id")
+    if "project.FindFamily(selected.Id)\n                    ??" in delete:
+        fail("Delete path still accepts a different current-generation Family with the same stable Id")
 
     print("QS3D Workspace Family mutation affinity preflight")
     if errors:
@@ -97,7 +93,7 @@ def main() -> int:
             print("ERROR:", error)
         print("FAILED with %d error(s)." % len(errors))
         return 1
-    print("PASS: Workspace Family duplicate/delete reject stale project-generation selections before transactional mutation without pre-snapshot activation side effects.")
+    print("PASS: Workspace Family duplicate/delete validate exact project-generation identity before mutation without pre-snapshot activation side effects.")
     return 0
 
 
