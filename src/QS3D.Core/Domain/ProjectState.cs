@@ -424,6 +424,76 @@ namespace QS3D.Core.Domain
         }
     }
 
+    internal sealed class StructuralRevisionList<T> : IList<T> where T : class
+    {
+        private readonly List<T> _items = new List<T>();
+        private readonly Action _beforeMutation;
+
+        internal StructuralRevisionList(Action beforeMutation)
+        {
+            _beforeMutation = beforeMutation ?? throw new ArgumentNullException(nameof(beforeMutation));
+        }
+
+        public T this[int index]
+        {
+            get => _items[index];
+            set
+            {
+                if (value == null) throw new ArgumentNullException(nameof(value));
+                var previous = _items[index];
+                if (ReferenceEquals(previous, value)) return;
+                _beforeMutation();
+                _items[index] = value;
+            }
+        }
+
+        public int Count => _items.Count;
+        public bool IsReadOnly => false;
+
+        public void Add(T item)
+        {
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            _beforeMutation();
+            _items.Add(item);
+        }
+
+        public void Clear()
+        {
+            if (_items.Count == 0) return;
+            _beforeMutation();
+            _items.Clear();
+        }
+
+        public bool Contains(T item) => _items.Contains(item);
+        public void CopyTo(T[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
+        public IEnumerator<T> GetEnumerator() => _items.GetEnumerator();
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+        public int IndexOf(T item) => _items.IndexOf(item);
+
+        public void Insert(int index, T item)
+        {
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            if (index < 0 || index > _items.Count) throw new ArgumentOutOfRangeException(nameof(index));
+            _beforeMutation();
+            _items.Insert(index, item);
+        }
+
+        public bool Remove(T item)
+        {
+            var index = _items.IndexOf(item);
+            if (index < 0) return false;
+            RemoveAt(index);
+            return true;
+        }
+
+        public void RemoveAt(int index)
+        {
+            if (index < 0 || index >= _items.Count) throw new ArgumentOutOfRangeException(nameof(index));
+            _beforeMutation();
+            _items.RemoveAt(index);
+        }
+    }
+
     public sealed class ProjectState
     {
         public const int CurrentSchemaVersion = 4;
@@ -442,7 +512,7 @@ namespace QS3D.Core.Domain
             Zones = new CatalogOwnershipList<ZoneDefinition>(AttachZone, DetachZone, Touch);
             Floors = new CatalogOwnershipList<FloorDefinition>(AttachFloor, DetachFloor, Touch);
             Families = new CatalogOwnershipList<ProjectFamily>(AttachFamily, DetachFamily, Touch);
-            Elements = new List<ProjectElement>();
+            Elements = new StructuralRevisionList<ProjectElement>(Touch);
             QuantityRules = new List<QuantityRule>();
             Metadata = new ProjectMetadataDictionary();
             MeasurementWorkItemMappings = new ProjectMeasurementWorkItemMappingCollection(this, Metadata);
