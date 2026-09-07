@@ -240,10 +240,16 @@ try {
     $provenanceText = Read-HeldStrictUtf8 -Held $provenanceHeld -MaxBytes $MaxProvenanceBytes -Label 'downloaded V25 draft provenance'
     try { $provenance = $provenanceText | ConvertFrom-Json -ErrorAction Stop }
     catch { throw "Downloaded V25 draft provenance is invalid JSON: $($_.Exception.Message)" }
+
+    $provenanceSourceCommitRaw = [string]$provenance.sourceCommit
+    if (-not [string]::Equals($provenanceSourceCommitRaw, $provenanceSourceCommitRaw.Trim(), [StringComparison]::Ordinal)) {
+        throw 'Downloaded V25 draft provenance sourceCommit is non-canonical: leading or trailing whitespace is not allowed.'
+    }
+
     if ([int]$provenance.schemaVersion -ne 1 -or [string]$provenance.product -ne 'QS3D' -or [string]$provenance.target -ne 'BricsCAD V25 x64' -or
         -not [string]::Equals([string]$provenance.releaseTag, $ExpectedReleaseTag, [StringComparison]::Ordinal) -or
         -not [string]::Equals([string]$provenance.productVersion, $expectedProductVersion, [StringComparison]::Ordinal) -or
-        -not [string]::Equals(([string]$provenance.sourceCommit), $expectedSource, [StringComparison]::OrdinalIgnoreCase) -or
+        -not [string]::Equals(([string]$provenance.sourceCommit).Trim(), $expectedSource, [StringComparison]::OrdinalIgnoreCase) -or
         -not [string]::Equals(([string]$provenance.signerThumbprint).Replace(' ', ''), $expectedSigner, [StringComparison]::OrdinalIgnoreCase) -or
         -not [string]::Equals([string]$provenance.packageFile, 'QS3D-BricsCAD-V25.zip', [StringComparison]::Ordinal) -or
         -not [string]::Equals([string]$provenance.packageSha256, $zipHash, [StringComparison]::OrdinalIgnoreCase) -or
@@ -253,9 +259,16 @@ try {
     }
 
     $metadata = Read-ZipMetadataIdentity -ZipHeld $zipHeld
+    $metadataProductVersionRaw = [string]$metadata.productVersion
+    $metadataGitCommitRaw = [string]$metadata.gitCommit
+    if (-not [string]::Equals($metadataProductVersionRaw, $metadataProductVersionRaw.Trim(), [StringComparison]::Ordinal) -or
+        -not [string]::Equals($metadataGitCommitRaw, $metadataGitCommitRaw.Trim(), [StringComparison]::Ordinal)) {
+        throw 'Downloaded V25 draft ZIP metadata identity is non-canonical: leading or trailing whitespace is not allowed.'
+    }
+
     if ([string]$metadata.product -ne 'QS3D' -or [string]$metadata.target -ne 'BricsCAD V25 x64' -or
-        -not [string]::Equals(([string]$metadata.productVersion), $expectedProductVersion, [StringComparison]::Ordinal) -or
-        -not [string]::Equals(([string]$metadata.gitCommit), $expectedSource, [StringComparison]::OrdinalIgnoreCase)) {
+        -not [string]::Equals(([string]$metadata.productVersion).Trim(), $expectedProductVersion, [StringComparison]::Ordinal) -or
+        -not [string]::Equals(([string]$metadata.gitCommit).Trim(), $expectedSource, [StringComparison]::OrdinalIgnoreCase)) {
         throw 'Downloaded V25 draft ZIP metadata does not exactly bind product, tag and source commit.'
     }
 
