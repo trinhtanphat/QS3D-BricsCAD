@@ -229,7 +229,7 @@ namespace QS3D.Core.SmokeTests
             project.Families.Add(previous);
 
             var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall, previous.Id, string.Empty, string.Empty);
-            element.Properties[" ThicknessM "] = "0.2";
+            InjectLegacyElementProperty(element, " ThicknessM ", "0.2");
             element.Properties["InstanceOverride"] = "keep";
             element.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(element);
@@ -392,6 +392,15 @@ namespace QS3D.Core.SmokeTests
             Equal("MISSING", setup.Second.FamilyId, operation + " overwrote a dangling family reference instead of failing closed.");
             Equal("legacy", setup.Second.Properties["ThicknessM"], operation + " changed ambiguous properties on a dangling family reference.");
             if (setup.Project.UpdatedUtc != beforeUpdated) throw new Exception(operation + " touched project timestamp on a rejected dangling-family batch.");
+        }
+
+        private static void InjectLegacyElementProperty(ProjectElement element, string key, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_properties", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Family-assignment legacy fixture could not locate the element property backing dictionary.");
+            var inner = field.GetValue(element) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Family-assignment legacy fixture element property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
@@ -67,8 +68,8 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithElement(invalidFamilyElement), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithElement(invalidFloorElement), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithElement(invalidZoneElement), "REV-XML"));
-            Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.Properties["P-\u0001-1"] = "ok"), "REV-XML"));
-            Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.Properties["Note"] = "bad-\u0001-value"), "REV-XML"));
+            Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => SetRawProperty(x, "P-\u0001-1", "ok")), "REV-XML"));
+            Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => SetRawProperty(x, "Note", "bad-\u0001-value")), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.Quantities["Q-\u0001-1"] = 1d), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.SourceHandles.Add("H-\u0001-1")), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.DependsOn.Add("D-\u0001-1")), "REV-XML"));
@@ -108,6 +109,15 @@ namespace QS3D.Core.SmokeTests
                 ?? throw new Exception("ProjectElement relation field " + fieldName + " was not found.");
             Equal(typeof(string), field.FieldType);
             field.SetValue(element, value);
+        }
+
+        private static void SetRawProperty(ProjectElement element, string key, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_properties", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("ProjectElement property backing dictionary was not found.");
+            var backing = field.GetValue(element) as Dictionary<string, string>
+                ?? throw new Exception("ProjectElement property backing dictionary had an unexpected type.");
+            backing[key] = value;
         }
 
         private static void Throws<T>(Action action) where T : Exception
