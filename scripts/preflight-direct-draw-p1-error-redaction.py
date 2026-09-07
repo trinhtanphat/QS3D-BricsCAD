@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed when V25 Direct Draw authoring publishes raw exception details or lies after commit."""
+"""Fail closed when V25 Direct Draw authoring publishes raw exception details or stale-document UI state."""
 
 from pathlib import Path
 import re
@@ -54,9 +54,14 @@ def main() -> int:
         if "PaletteCoordinator.SetStatus(" in guard or "document.Editor.WriteMessage(" in guard:
             fail(f"{name} Guard performs presentation writes instead of delegating to the fail-safe reporter")
 
-        if "DirectDrawUiFailureReporter.ReportPostCommitWarning(document);" not in text:
+        finalize = body(text, "private static void FinalizeUi(")
+        if "DirectDrawUiFailureReporter.ReportPostCommitWarning(document);" not in finalize:
             fail(f"{name} FinalizeUi does not route presentation-only failure through the stable post-commit warning")
-        if re.search(r"catch\s*\(\s*Exception\s+\w+\s*\)\s*\{\s*DirectDrawUiFailureReporter\.ReportPostCommitWarning", text, re.S):
+        if "PaletteCoordinator.SetStatus(" in finalize:
+            fail(f"{name} FinalizeUi publishes process-wide success status without an exact-source-document fence")
+        if "DirectDrawUiFailureReporter.ReportPostCommitSuccess(document, status);" not in finalize:
+            fail(f"{name} FinalizeUi does not delegate normal success status to the source-document-fenced reporter")
+        if re.search(r"catch\s*\(\s*Exception\s+\w+\s*\)\s*\{\s*DirectDrawUiFailureReporter\.ReportPostCommitWarning", finalize, re.S):
             fail(f"{name} post-commit reporting unnecessarily captures an exception object")
 
     reporter = REPORTER.read_text(encoding="utf-8")
@@ -77,9 +82,14 @@ def main() -> int:
 
     operation_reporter = body(reporter, "internal static void ReportOperationFailure(Document document, string operation)")
     post_commit_reporter = body(reporter, "internal static void ReportPostCommitWarning(Document document)")
+    success_reporter = body(reporter, "internal static void ReportPostCommitSuccess(Document document, string message)")
     for block, context in ((operation_reporter, "operation failure"), (post_commit_reporter, "post-commit warning")):
         if "TryWriteEditor(document," not in block or "TrySetPaletteForCurrentDocument(document," not in block:
             fail(f"{context} does not isolate Editor and Palette publication through dedicated safe helpers")
+    if "TrySetPaletteForCurrentDocument(document, message);" not in success_reporter:
+        fail("post-commit success does not use exact-source-document-fenced Palette publication")
+    if "TryWriteEditor(document," in success_reporter:
+        fail("post-commit success helper must not duplicate the source Editor success message")
 
     palette_helper = body(reporter, "private static void TrySetPaletteForCurrentDocument(Document document, string message)")
     affinity = "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)"
@@ -106,7 +116,7 @@ def main() -> int:
         if forbidden in reporter:
             fail(f"shared presentation reporter must not own mutation/subscription/deferred work: found {forbidden!r}")
 
-    print("OK: Direct Draw authoring failures are redacted, fail-safe, source-document fenced, and post-commit truthful across P1/opening/window/slabOpen.")
+    print("OK: Direct Draw authoring UI reporting is redacted, fail-safe, source-document fenced for failure and success, and post-commit truthful across P1/opening/window/slabOpen.")
     return 0
 
 
