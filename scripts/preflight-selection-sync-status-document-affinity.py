@@ -4,7 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SELECTION = ROOT / "src/QS3D.BricsCAD.V25/SelectionSyncCoordinator.cs"
-PALETTE = ROOT / "src/QS3D.BricsCAD.V25/PaletteCoordinator.cs"
+PUBLISHER = ROOT / "src/QS3D.BricsCAD.V25/SelectionSyncStatusPublisher.cs"
 errors = []
 
 
@@ -15,39 +15,50 @@ def read(path):
     return path.read_text(encoding="utf-8")
 
 selection = read(SELECTION)
-palette = read(PALETTE)
+publisher = read(PUBLISHER)
 
-for needle in [
-    "PaletteCoordinator.SetStatusForDocument(document, \"Selection sync lỗi. Vui lòng thử lại.\")",
-]:
+required_selection = [
+    "SelectionSyncStatusPublisher.SetStatusForDocument(document, \"Selection sync lỗi. Vui lòng thử lại.\")",
+]
+for needle in required_selection:
     if needle not in selection:
-        errors.append("selection-sync catch must publish status through the exact source Document: " + needle)
+        errors.append("selection-sync catch must publish status through exact source Document: " + needle)
 
-for needle in [
+required_publisher = [
+    "internal static class SelectionSyncStatusPublisher",
     "public static void SetStatusForDocument(Document? sourceDocument, string status)",
     "ReferenceEquals(sourceDocument, Application.DocumentManager.MdiActiveDocument)",
-    "SetStatus(status);",
-]:
-    if needle not in palette:
-        errors.append("palette document-affinity status fence missing token: " + needle)
+    "PaletteCoordinator.SetStatus(status);",
+]
+for needle in required_publisher:
+    if needle not in publisher:
+        errors.append("status publication affinity fence missing token: " + needle)
 
 catch_start = selection.find("catch (Exception)")
 finally_start = selection.find("finally", catch_start if catch_start >= 0 else 0)
 catch_body = selection[catch_start:finally_start if finally_start >= 0 else len(selection)] if catch_start >= 0 else ""
 if catch_body and "PaletteCoordinator.SetStatus(" in catch_body:
-    errors.append("selection-sync exception path must not publish through the unbound process-wide SetStatus API")
+    errors.append("selection-sync exception path must not publish through unbound process-wide SetStatus")
 
-status_start = palette.find("public static void SetStatusForDocument")
-status_end = palette.find("public static void RefreshProject", status_start if status_start >= 0 else 0)
-status_body = palette[status_start:status_end if status_end >= 0 else len(palette)] if status_start >= 0 else ""
-if status_body:
-    guard = status_body.find("ReferenceEquals(sourceDocument, Application.DocumentManager.MdiActiveDocument)")
-    publish = status_body.find("SetStatus(status);")
-    if guard < 0 or publish < 0 or guard > publish:
-        errors.append("source-document identity must be checked before status publication")
-    for forbidden in ["GetOrCreate", "DocumentLock", "StartTransaction", "SetImpliedSelection", "SendStringToExecute"]:
-        if forbidden in status_body:
-            errors.append("status affinity fence must remain presentation-only: " + forbidden)
+method_start = publisher.find("public static void SetStatusForDocument")
+method_body = publisher[method_start:] if method_start >= 0 else ""
+if method_body:
+    null_guard = method_body.find("sourceDocument == null")
+    affinity_guard = method_body.find("ReferenceEquals(sourceDocument, Application.DocumentManager.MdiActiveDocument)")
+    publish = method_body.find("PaletteCoordinator.SetStatus(status);")
+    if null_guard < 0 or affinity_guard < 0 or publish < 0 or null_guard > publish or affinity_guard > publish:
+        errors.append("null/source-document identity guards must execute before status publication")
+    for forbidden in [
+        "ProjectContextCoordinator",
+        "GetOrCreate",
+        "DocumentLock",
+        "StartTransaction",
+        "SetImpliedSelection",
+        "SendStringToExecute",
+        "Dispatcher.BeginInvoke",
+    ]:
+        if forbidden in method_body:
+            errors.append("status affinity fence must remain synchronous presentation-only: " + forbidden)
 
 print("QS3D selection-sync status document-affinity preflight")
 if errors:
