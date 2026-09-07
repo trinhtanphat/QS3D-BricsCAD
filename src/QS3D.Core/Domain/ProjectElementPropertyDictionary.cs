@@ -57,5 +57,10 @@ namespace QS3D.Core.Domain
         {
             _values.Add(key, value);
         }
+
+        internal bool RemovePersistenceValue(string key)
+        {
+            return _values.Remove(key);
+        }
     }
 }
