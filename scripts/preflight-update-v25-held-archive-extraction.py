@@ -72,6 +72,7 @@ def validate(text: str) -> None:
     parent_validate = "Assert-ExistingExtractionPathChain -Path $parent -BoundaryRoot $destinationFull"
     create_new = "$output = [IO.File]::Open([string]$record.Target, [IO.FileMode]::CreateNew"
     require(parent_safe in block and parent_validate in block and create_new in block, "File extraction must safely prepare and validate its parent before CreateNew.")
+    require(block.count(parent_validate) >= 2, "File extraction must validate its parent after safe creation and again immediately before CreateNew.")
     parent_safe_i = block.index(parent_safe)
     create_new_i = block.index(create_new, parent_safe_i)
     require(parent_validate in block[parent_safe_i:create_new_i], "File parent must be reparse-validated after safe creation and before CreateNew.")
