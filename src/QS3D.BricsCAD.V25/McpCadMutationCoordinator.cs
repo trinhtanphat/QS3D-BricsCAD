@@ -475,8 +475,9 @@ namespace QS3D.BricsCAD.V25
         private static bool PendingMatchesLocked(object sender, CommandEventArgs e)
         {
             if (_pending == null || !ReferenceEquals(sender, _pending.Document)) return false;
-            var eventName = NormalizeCommand(e == null ? string.Empty : e.GlobalCommandName);
-            return eventName.Length != 0 && string.Equals(eventName, _pending.Command, StringComparison.OrdinalIgnoreCase);
+            var eventName = NormalizeLifecycleCommand(e == null ? string.Empty : e.GlobalCommandName);
+            var pendingName = NormalizeLifecycleCommand(_pending.Command);
+            return eventName.Length != 0 && string.Equals(eventName, pendingName, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void CleanupExpiredStateLocked(DateTime now)
@@ -553,6 +554,14 @@ namespace QS3D.BricsCAD.V25
             var index = 0;
             while (index < value.Length && (value[index] == '_' || value[index] == '.')) index++;
             return value.Substring(index).ToUpperInvariant();
+        }
+
+        private static string NormalizeLifecycleCommand(string command)
+        {
+            var value = NormalizeCommand(command);
+            var index = 0;
+            while (index < value.Length && value[index] == '-') index++;
+            return value.Substring(index);
         }
 
         private static void RejectUnsafeNativeCommand(string command)
