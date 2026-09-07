@@ -53,10 +53,9 @@ def main():
     boolean_block = method_block(direct, "private static string Boolean")
     direct_save_block = method_block(direct, "private static string Save()")
     direct_save_as_block = method_block(direct, "private static string SaveAs")
-    schedule_start = native_save.find("internal void ScheduleInCadContext()")
-    schedule_end = native_save.find("private Task ExecuteQsaveInCommandContext()", schedule_start)
-    schedule = native_save[schedule_start:schedule_end] if schedule_start >= 0 and schedule_end > schedule_start else ""
-    execute_qsave = method_block(native_save, "private Task ExecuteQsaveInCommandContext()")
+    queue_start = native_save.find("internal void QueueInCadContext()")
+    queue_end = native_save.find("internal bool DetachBestEffort()", queue_start)
+    queue = native_save[queue_start:queue_end] if queue_start >= 0 and queue_end > queue_start else ""
 
     require(errors, run_block, ('var command = NormalizeCadCommandToken(', 'var inputs = NormalizeCommandInputs('), "legacy generic command fallback")
     if 'SaveActiveDocument(' in run_block and 'McpCadDirectModelRuntime.CanHandleCadCommandSequence(args)' not in call_block:
@@ -73,32 +72,60 @@ def main():
     qsave_json = direct_qsave_block.replace("\\", "")
     require(errors, qsave_json, ('Save();', '"completed":true', '"saved":true', '"command":"QSAVE"'), "bounded QSAVE wrapper")
 
-    require(errors, extrude_block, ('OpenEntity(transaction, document.Database, handle, OpenMode.ForRead) as Curve', 'var profileClone = source.Clone() as Curve;', 'Region.CreateFromCurves(new DBObjectCollection { profileClone })', 'solid.Extrude(region, height, 0d);', 'region?.Dispose();', 'profileClone.Dispose();', 'kernelSource=transient-region'), "V25 transient-region direct curve extrusion")
-    forbid(errors, extrude_block, ('model.AppendEntity(profileClone);', 'solid.CreateExtrudedSolid(profileClone', 'solid.CreateExtrudedSolid(source,', 'kernelSource=database-resident-profile-clone', 'kernelSource=transient-curve-clone'), "direct extrusion live regression")
-    require(errors, boolean_block, ('var operandClone = operand.Clone() as Solid3d;', 'target.BooleanOperation(operation, operandClone);', 'if (!operand.IsErased) operand.Erase();', 'operandClone.Dispose();', 'kernelTarget=database-resident; kernelOperand=transient-clone'), "V25 direct boolean target/transient operand")
-    forbid(errors, boolean_block, ('model.AppendEntity(targetWorking);', 'model.AppendEntity(operandWorking);', 'targetWorking.BooleanOperation(operation, operandWorking);', 'target.HandOverTo(resultClone', 'kernelInputs=database-resident-working-clones'), "direct boolean live regression")
-    kernel_at = boolean_block.find('target.BooleanOperation(operation, operandClone);')
+    require(errors, extrude_block, (
+        'OpenEntity(transaction, document.Database, handle, OpenMode.ForRead) as Curve',
+        'Region.CreateFromCurves(new DBObjectCollection { source })',
+        'model.AppendEntity(region);',
+        'transaction.AddNewlyCreatedDBObject(region, true);',
+        'solid.Extrude(region, height, 0d);',
+        'if (!region.IsErased) region.Erase();',
+        'kernelSource=database-resident-region',
+    ), "V25 database-resident Region direct curve extrusion")
+    forbid(errors, extrude_block, (
+        'var profileClone = source.Clone() as Curve;',
+        'Region.CreateFromCurves(new DBObjectCollection { profileClone })',
+        'solid.CreateExtrudedSolid(profileClone',
+        'kernelSource=transient-region',
+        'kernelSource=database-resident-profile-clone',
+    ), "direct extrusion live regression")
+
+    require(errors, boolean_block, (
+        'target.BooleanOperation(operation, operand);',
+        'if (!operand.IsErased) operand.Erase();',
+        'kernelTarget=database-resident; kernelOperand=database-resident',
+    ), "V25 direct boolean resident target/resident operand")
+    forbid(errors, boolean_block, (
+        'var operandClone = operand.Clone() as Solid3d;',
+        'target.BooleanOperation(operation, operandClone);',
+        'model.AppendEntity(targetWorking);',
+        'model.AppendEntity(operandWorking);',
+        'target.HandOverTo(resultClone',
+        'kernelOperand=transient-clone',
+        'kernelInputs=database-resident-working-clones',
+    ), "direct boolean live regression")
+    kernel_at = boolean_block.find('target.BooleanOperation(operation, operand);')
     erase_at = boolean_block.find('if (!operand.IsErased) operand.Erase();')
     if kernel_at < 0 or erase_at < 0 or kernel_at > erase_at:
-        errors.append("direct boolean ordering must be target kernel success -> original tool erase")
+        errors.append("direct boolean ordering must be resident target/tool kernel success -> tool erase")
 
     require(errors, direct_save_block, ('McpNativeCurrentDocumentSave.SaveCurrentDocument(', 'dbmodAfterSave', 'route\\\":\\\"native-QSAVE-current-document'), "current-document save regression guard")
     forbid(errors, direct_save_block, ('document.Database.Save();', 'document.Database.SaveAs('), "current-document save")
     require(errors, native_save, (
-        'SaveCurrentDocument', 'Application.DocumentManager.ExecuteInCommandContextAsync(',
-        'var completionSource = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);',
-        'Completion = completionSource.Task;', 'completionSource.TrySetResult(null);', 'completionSource.TrySetException(ex);',
-        'EnsureCommandContextAutomationNotStopped();', 'document.Editor.Command("_.QSAVE");', 'Task.WaitAny(',
-        'WaitForCleanDbmod', 'DbmodPersistentContentMask = 1 | 4 | 32', 'Application.GetSystemVariable("DBMOD")',
+        'SaveCurrentDocument', 'ManualResetEventSlim', 'QueueNativeCommand(',
+        'document.SendStringToExecute("_.QSAVE\\n", true, false, true)',
+        'CommandEnded += OnCommandEnded', 'CommandCancelled += OnCommandCancelled', 'CommandFailed += OnCommandFailed',
+        'EnsureCommandContextAutomationNotStopped();', 'Done.Wait(', 'TerminalError', 'WaitForCleanDbmod',
+        'DbmodPersistentContentMask = 1 | 4 | 32', 'Application.GetSystemVariable("DBMOD")',
         '(dbmod & DbmodPersistentContentMask) == 0', 'Do not retry automatically'),
-        "native current-document V25 ExecutionResult-compatible save lifecycle")
-    forbid(errors, native_save, ('Completion = Application.DocumentManager.ExecuteInCommandContextAsync(', 'document.SendStringToExecute(', 'McpCadMutationCoordinator.QueueNativeCommand(', 'ManualResetEventSlim', 'CommandEnded +=', 'CommandCancelled +=', 'CommandFailed +=', 'Database.Save();', 'Database.SaveAs('), "native current-document save regression")
-    if "throw;" in schedule:
-        errors.append("native QSAVE scheduling callback must capture failures in Completion and return successfully to BricsCAD")
-    if '_ensureRunning();' in execute_qsave:
-        errors.append("native QSAVE command callback must not re-enter the transport mutation execution lease")
-    if native_save.count('document.Editor.Command("_.QSAVE");') != 1:
-        errors.append("native current-document save lifecycle must execute exactly one synchronous QSAVE command attempt")
+        "native current-document V25 event-owned save lifecycle")
+    forbid(errors, native_save, (
+        'Application.DocumentManager.ExecuteInCommandContextAsync(', 'TaskCompletionSource',
+        'document.Editor.Command("_.QSAVE")', 'Database.Save();', 'Database.SaveAs('),
+    ), "native current-document save regression")
+    if not queue:
+        errors.append("native QSAVE QueueInCadContext block is missing")
+    if native_save.count('document.SendStringToExecute("_.QSAVE\\n", true, false, true)') != 1:
+        errors.append("native current-document save lifecycle must queue exactly one QSAVE command attempt")
 
     require(errors, direct_save_as_block, ('EnsureWritableDirectory(directory);', 'McpDiagnosticHub.InvokeInCadContext(() =>', 'document.Database.SaveAs(fullPath, DwgVersion.Current);', 'McpNativeCurrentDocumentSave.SaveCurrentDocument(', 'route=Database.SaveAs+native-QSAVE', 'dbmodAfterSave', 'Path.GetFullPath(actual), fullPath'), "save-as publication plus native DBMOD settle guard")
     if 'WaitForSavedContentDbmod();' in direct_save_as_block:
@@ -111,7 +138,7 @@ def main():
         print("ERROR: MCP CAD direct 3D/save preflight failed:")
         for error in errors: print(" -", error)
         return 1
-    print("PASS: MCP direct 3D/save uses V25-safe kernel boundaries and an observed TCS completion signal compatible with BricsCAD ExecuteInCommandContextAsync ExecutionResult.")
+    print("PASS: MCP direct 3D/save uses database-resident V25 kernel inputs and event-owned native QSAVE terminal completion.")
     return 0
 
 

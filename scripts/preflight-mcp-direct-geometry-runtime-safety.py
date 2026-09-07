@@ -41,18 +41,19 @@ if not extrude_body:
     errors.append("unable to isolate Extrude implementation")
 else:
     for token in (
+        "Region.CreateFromCurves(new DBObjectCollection { source })",
+        "model.AppendEntity(region);",
+        "transaction.AddNewlyCreatedDBObject(region, true);",
+        "solid.Extrude(region, height, 0d);",
+        "if (!region.IsErased) region.Erase();",
+        "kernelSource=database-resident-region",
+    ):
+        require(extrude_body, token, "McpCadDirectModelRuntime.Extrude V25 database-resident-region topology")
+    for forbidden in (
         "var profileClone = source.Clone() as Curve;",
         "Region.CreateFromCurves(new DBObjectCollection { profileClone })",
-        "solid.Extrude(region, height, 0d);",
-        "region?.Dispose();",
-        "profileClone.Dispose();",
-        "kernelSource=transient-region",
-    ):
-        require(extrude_body, token, "McpCadDirectModelRuntime.Extrude V25 transient-region topology")
-    for forbidden in (
-        "model.AppendEntity(profileClone);",
         "solid.CreateExtrudedSolid(profileClone",
-        "solid.CreateExtrudedSolid(sourceClone",
+        "kernelSource=transient-region",
         "kernelSource=database-resident-profile-clone",
         "kernelSource=transient-curve-clone",
     ):
@@ -66,23 +67,24 @@ if not boolean_body:
     errors.append("unable to isolate Boolean implementation")
 else:
     for token in (
-        "var operandClone = operand.Clone() as Solid3d;",
-        "target.BooleanOperation(operation, operandClone);",
+        "target.BooleanOperation(operation, operand);",
         "if (!operand.IsErased) operand.Erase();",
-        "operandClone.Dispose();",
-        "kernelTarget=database-resident; kernelOperand=transient-clone",
+        "kernelTarget=database-resident; kernelOperand=database-resident",
     ):
-        require(boolean_body, token, "McpCadDirectModelRuntime.Boolean V25 target/transient-operand topology")
-    kernel_at = boolean_body.find("target.BooleanOperation(operation, operandClone);")
+        require(boolean_body, token, "McpCadDirectModelRuntime.Boolean V25 resident target/resident operand topology")
+    kernel_at = boolean_body.find("target.BooleanOperation(operation, operand);")
     erase_at = boolean_body.find("if (!operand.IsErased) operand.Erase();")
     if kernel_at < 0 or erase_at < 0 or kernel_at > erase_at:
-        errors.append("boolean ordering must be target kernel success -> tool erase")
+        errors.append("boolean ordering must be resident target/tool kernel success -> tool erase")
     for forbidden in (
+        "var operandClone = operand.Clone() as Solid3d;",
+        "target.BooleanOperation(operation, operandClone);",
         "model.AppendEntity(targetWorking);",
         "model.AppendEntity(operandWorking);",
         "targetWorking.BooleanOperation(operation, operandWorking);",
         "target.HandOverTo(resultClone",
         "targetClone.BooleanOperation(operation, operandClone);",
+        "kernelOperand=transient-clone",
         "kernelInputs=database-resident-working-clones",
     ):
         if forbidden in boolean_body:
@@ -102,4 +104,4 @@ if errors:
         print(" -", error)
     sys.exit(1)
 
-print("PASS: REGENALL/modal native dispatch is fail-closed, V25 direct kernels use transient Region/operand safety boundaries, and Solid3d extents stay bounded against eNullExtents.")
+print("PASS: REGENALL/modal native dispatch is fail-closed, V25 direct kernels use database-resident Region/operand boundaries, and Solid3d extents stay bounded against eNullExtents.")
