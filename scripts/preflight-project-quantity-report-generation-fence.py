@@ -3,6 +3,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 source = (root / "src/QS3D.Core/Reporting/ProjectQuantityReportBuilder.cs").read_text(encoding="utf-8")
 smoke = (root / "tests/QS3D.Core.SmokeTests/ProjectQuantityReportGenerationFenceSmoke.cs").read_text(encoding="utf-8")
+legacy_revision_smoke = (root / "tests/QS3D.Core.SmokeTests/QuantityReportProjectRevisionGuardSmoke.cs").read_text(encoding="utf-8")
 
 build_start = source.index("private static IReadOnlyList<QuantityReportRow> Build")
 snapshot_start = source.index("private sealed class ProjectQuantityGenerationSnapshot", build_start)
@@ -73,5 +74,27 @@ for token in [
 
 if "p.Families[0] = replacement" in smoke:
     raise SystemExit("Family replacement generation-fence smoke must bypass CatalogOwnershipList.Touch so ChangeVersion cannot satisfy the regression by itself.")
+
+for token in [
+    'GetNestedType(\n                "ProjectQuantityGenerationSnapshot",',
+    'GetMethod(\n                "Capture",',
+    'types: new[] { typeof(ProjectState), snapshot.GetType() }',
+    'method.Invoke(null, new[] { (object)project, snapshot })',
+    'StructuralReplacementWithoutTouchFailsClosed();',
+    'Equal(originalVersion, project.ChangeVersion);',
+]:
+    if token not in legacy_revision_smoke:
+        raise SystemExit("Legacy quantity revision smoke is not bound to the immutable generation snapshot contract: " + token)
+
+for forbidden in [
+    "snapshot.ChangeVersion,",
+    "snapshot.Elements,",
+    "snapshot.Floors,",
+    "snapshot.Zones,",
+    "snapshot.Families,",
+    "snapshot.DrawingFingerprint",
+]:
+    if forbidden in legacy_revision_smoke:
+        raise SystemExit("Legacy quantity revision smoke still invokes the superseded multi-argument revision guard: " + forbidden)
 
 print("Project Quantity semantic generation fence preflight passed.")
