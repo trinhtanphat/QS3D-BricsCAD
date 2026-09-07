@@ -518,13 +518,7 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnResetPropertyClick(object sender, RoutedEventArgs e) { if (sender is Button button && button.CommandParameter is PropertyRowViewModel row) row.ResetValue(); }
         private void OnFamilySelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (_loadingContext) return;
-            try
-            {
-                _viewModel.SetActiveFamily(FamilyList.SelectedItem as ProjectFamily);
-                _viewModel.ShowFamilyProperties();
-            }
-            catch (Exception) { ReportWorkspaceFailure("Đổi Family active"); }
+            OnFamilySelectionChangedWithAffinity();
         }
         private void OnFamilySearchChanged(object sender, TextChangedEventArgs e) => ApplyFamilyFilter();
 
