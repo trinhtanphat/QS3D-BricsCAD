@@ -317,6 +317,7 @@ else {
         $stagingAdmission = $null
         $publishedStream = $null
         $publishedAdmission = $null
+        $publishedByThisAttempt = $false
         try {
             Assert-NoExistingReparseComponent -Path $staging -Label 'MSI download staging path'
             Write-Host "Downloading BricsCAD V25 installer from $($candidate.Name) to isolated staging..."
@@ -336,6 +337,7 @@ else {
                 [IO.FileAccess]::Write,
                 [IO.FileShare]::None
             )
+            $publishedByThisAttempt = $true
             $stagingAdmission.Stream.Position = 0
             $stagingAdmission.Stream.CopyTo($publishedStream)
             $publishedStream.Flush($true)
@@ -354,7 +356,37 @@ else {
             break
         }
         catch {
-            Write-Warning "BricsCAD V25 installer source failed: $($candidate.Name) • $($_.Exception.Message)"
+            $sourceFailure = $_.Exception.Message
+
+            # A failed attempt may have already won CreateNew on the canonical
+            # pathname. Close our handles before cleanup, and only roll back a
+            # pathname that this exact attempt created. If cleanup cannot be
+            # proven complete, stop instead of poisoning every later fallback.
+            if ($null -ne $publishedAdmission) {
+                $publishedAdmission.Stream.Dispose()
+                $publishedAdmission = $null
+            }
+            if ($null -ne $publishedStream) {
+                $publishedStream.Dispose()
+                $publishedStream = $null
+            }
+            if ($publishedByThisAttempt) {
+                try {
+                    Assert-NoExistingReparseComponent -Path $msi -Label 'Failed owned canonical MSI publication'
+                    $failedPublication = Get-OrdinaryFileOrNull -Path $msi -Label 'Failed owned canonical MSI publication'
+                    if ($null -ne $failedPublication) {
+                        Remove-Item -LiteralPath $msi -Force
+                    }
+                    if (Test-Path -LiteralPath $msi) {
+                        throw 'Canonical MSI pathname still exists after owned failed-publication cleanup.'
+                    }
+                }
+                catch {
+                    throw "BricsCAD V25 installer source failed: $($candidate.Name) • $sourceFailure; owned canonical MSI cleanup failed: $($_.Exception.Message)"
+                }
+            }
+
+            Write-Warning "BricsCAD V25 installer source failed: $($candidate.Name) • $sourceFailure"
         }
         finally {
             if ($null -ne $publishedAdmission) { $publishedAdmission.Stream.Dispose() }
