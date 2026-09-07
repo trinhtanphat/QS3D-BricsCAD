@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using QS3D.Core.Cost;
 
 namespace QS3D.Core.Commercial
@@ -85,10 +84,11 @@ namespace QS3D.Core.Commercial
             for (var i = 0; i < _variations.Count; i++)
             {
                 var variation = _variations[i];
-                if (!_byId.TryAdd(variation.VariationId, variation))
+                if (_byId.ContainsKey(variation.VariationId))
                     throw new ArgumentException(
                         "Duplicate commercial variation id: " + variation.VariationId + ".",
                         nameof(variations));
+                _byId.Add(variation.VariationId, variation);
                 if (!string.Equals(variation.Currency, Currency, StringComparison.Ordinal))
                     throw new InvalidOperationException(
                         "Variation " + variation.VariationId + " uses currency " + variation.Currency +
