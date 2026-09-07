@@ -20,50 +20,38 @@ namespace QS3D.Core.SmokeTests
 
         private static void SourceHandleAddMarksRelationsDirty()
         {
-            AssertEffectiveMutation(element => element.SourceHandles.Add("AA11"));
+            AssertEffectiveMutation(null, element => element.SourceHandles.Add("AA11"));
         }
 
         private static void DependencyAddMarksRelationsDirty()
         {
-            AssertEffectiveMutation(element => element.DependsOn.Add("E2"));
+            AssertEffectiveMutation(null, element => element.DependsOn.Add("E2"));
         }
 
         private static void EffectiveMutationSurfaceMarksRelationsDirty()
         {
-            AssertEffectiveMutation(element =>
-            {
-                Seed(element.SourceHandles, "A");
-                element.MarkClean(ElementDirtyFlags.All);
-                element.SourceHandles.Insert(0, "B");
-            });
+            AssertEffectiveMutation(
+                element => Seed(element.SourceHandles, "A"),
+                element => element.SourceHandles.Insert(0, "B"));
 
-            AssertEffectiveMutation(element =>
-            {
-                Seed(element.SourceHandles, "A");
-                element.MarkClean(ElementDirtyFlags.All);
-                element.SourceHandles[0] = "B";
-            });
+            AssertEffectiveMutation(
+                element => Seed(element.SourceHandles, "A"),
+                element => element.SourceHandles[0] = "B");
 
-            AssertEffectiveMutation(element =>
-            {
-                Seed(element.SourceHandles, "A");
-                element.MarkClean(ElementDirtyFlags.All);
-                if (!element.SourceHandles.Remove(" A ")) throw new Exception("Canonicalized relation removal must succeed.");
-            });
+            AssertEffectiveMutation(
+                element => Seed(element.SourceHandles, "A"),
+                element =>
+                {
+                    if (!element.SourceHandles.Remove(" A ")) throw new Exception("Canonicalized relation removal must succeed.");
+                });
 
-            AssertEffectiveMutation(element =>
-            {
-                Seed(element.DependsOn, "A", "B");
-                element.MarkClean(ElementDirtyFlags.All);
-                element.DependsOn.RemoveAt(0);
-            });
+            AssertEffectiveMutation(
+                element => Seed(element.DependsOn, "A", "B"),
+                element => element.DependsOn.RemoveAt(0));
 
-            AssertEffectiveMutation(element =>
-            {
-                Seed(element.DependsOn, "A");
-                element.MarkClean(ElementDirtyFlags.All);
-                element.DependsOn.Clear();
-            });
+            AssertEffectiveMutation(
+                element => Seed(element.DependsOn, "A"),
+                element => element.DependsOn.Clear());
         }
 
         private static void NoOpRemovalPreservesCleanState()
@@ -131,9 +119,11 @@ namespace QS3D.Core.SmokeTests
             Equal(ElementDirtyFlags.None, dependency.Dirty);
         }
 
-        private static void AssertEffectiveMutation(Action<ProjectElement> mutation)
+        private static void AssertEffectiveMutation(Action<ProjectElement>? prepare, Action<ProjectElement> mutation)
         {
             var element = CleanElement();
+            prepare?.Invoke(element);
+            element.MarkClean(ElementDirtyFlags.All);
             var before = element.UpdatedUtc;
             WaitUntilClockCanAdvance(before);
             mutation(element);
