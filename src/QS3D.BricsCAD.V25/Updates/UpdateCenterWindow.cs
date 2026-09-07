@@ -30,6 +30,10 @@ namespace QS3D.BricsCAD.V25.Updates
         private static readonly Brush PickerHover = new SolidColorBrush(Color.FromRgb(39, 52, 72));
         private static readonly Brush PickerSelected = new SolidColorBrush(Color.FromRgb(45, 72, 119));
         private static readonly Brush PickerPopupBackground = new SolidColorBrush(Color.FromRgb(24, 30, 39));
+        private static readonly Brush PickerSearchBackground = new SolidColorBrush(Color.FromRgb(29, 37, 49));
+        private static readonly Brush PickerSearchForeground = TextPrimary;
+        private static readonly Brush PickerSearchPlaceholder = new SolidColorBrush(Color.FromRgb(184, 196, 216));
+        private static readonly Brush PickerSearchBorder = new SolidColorBrush(Color.FromRgb(85, 101, 128));
 
         private readonly TextBlock _title;
         private readonly TextBlock _status;
@@ -677,7 +681,6 @@ namespace QS3D.BricsCAD.V25.Updates
         {
             FilterReleaseChoices();
         }
-
         private void FilterReleaseChoices()
         {
             if (_releaseVersionPicker == null) return;
@@ -1015,9 +1018,9 @@ namespace QS3D.BricsCAD.V25.Updates
             searchBox.SetValue(FrameworkElement.HeightProperty, 36d);
             searchBox.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 0, 0, 7));
             searchBox.SetValue(Control.PaddingProperty, new Thickness(10, 0, 10, 0));
-            searchBox.SetValue(Control.BackgroundProperty, PanelBackground);
-            searchBox.SetValue(Control.ForegroundProperty, TextPrimary);
-            searchBox.SetValue(Control.BorderBrushProperty, BorderStroke);
+            searchBox.SetValue(Control.BackgroundProperty, PickerSearchBackground);
+            searchBox.SetValue(Control.ForegroundProperty, PickerSearchForeground);
+            searchBox.SetValue(Control.BorderBrushProperty, PickerSearchBorder);
             searchBox.SetValue(Control.BorderThicknessProperty, new Thickness(1));
             searchBox.SetValue(TextBox.CaretBrushProperty, AccentSoft);
             searchBox.SetValue(TextBox.SelectionBrushProperty, PickerSelected);
@@ -1057,8 +1060,8 @@ namespace QS3D.BricsCAD.V25.Updates
         private static ControlTemplate CreateReleaseSearchBoxTemplate()
         {
             var chrome = new FrameworkElementFactory(typeof(Border), "SearchChrome");
-            chrome.SetValue(Border.BackgroundProperty, PanelBackground);
-            chrome.SetValue(Border.BorderBrushProperty, BorderStroke);
+            chrome.SetValue(Border.BackgroundProperty, PickerSearchBackground);
+            chrome.SetValue(Border.BorderBrushProperty, PickerSearchBorder);
             chrome.SetValue(Border.BorderThicknessProperty, new Thickness(1));
             chrome.SetValue(Border.CornerRadiusProperty, new CornerRadius(5));
 
@@ -1066,11 +1069,12 @@ namespace QS3D.BricsCAD.V25.Updates
             var contentHost = new FrameworkElementFactory(typeof(ScrollViewer), "PART_ContentHost");
             contentHost.SetValue(FrameworkElement.MarginProperty, new Thickness(10, 0, 10, 0));
             contentHost.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            contentHost.SetValue(Control.BackgroundProperty, Brushes.Transparent);
             grid.AppendChild(contentHost);
 
             var placeholder = new FrameworkElementFactory(typeof(TextBlock), "SearchPlaceholder");
             placeholder.SetValue(TextBlock.TextProperty, "Tìm phiên bản…");
-            placeholder.SetValue(TextBlock.ForegroundProperty, TextMuted);
+            placeholder.SetValue(TextBlock.ForegroundProperty, PickerSearchPlaceholder);
             placeholder.SetValue(TextBlock.FontSizeProperty, 12d);
             placeholder.SetValue(FrameworkElement.MarginProperty, new Thickness(10, 0, 10, 0));
             placeholder.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
