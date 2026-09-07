@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Reporting;
@@ -46,32 +44,39 @@ namespace QS3D.Core.SmokeTests
             ThrowsInvalidOperation(() => InvokeGuard(project, snapshot), "Project changed while the quantity report was being built");
         }
 
-        private static SnapshotState Snapshot(ProjectState project) => new SnapshotState(
-            project.ChangeVersion,
-            project.Elements.ToList(),
-            project.Floors.ToList(),
-            project.Zones.ToList(),
-            project.Families.ToList(),
-            project.DrawingFingerprint);
+        private static object Snapshot(ProjectState project)
+        {
+            var snapshotType = typeof(ProjectQuantityReportBuilder).GetNestedType(
+                "ProjectQuantityGenerationSnapshot",
+                BindingFlags.NonPublic)
+                ?? throw new Exception("Expected ProjectQuantityReportBuilder.ProjectQuantityGenerationSnapshot.");
+            var capture = snapshotType.GetMethod(
+                "Capture",
+                BindingFlags.NonPublic | BindingFlags.Static)
+                ?? throw new Exception("Expected ProjectQuantityGenerationSnapshot.Capture.");
+            try
+            {
+                return capture.Invoke(null, new object[] { project })
+                    ?? throw new Exception("Project quantity generation snapshot capture returned null.");
+            }
+            catch (TargetInvocationException ex) when (ex.InnerException != null)
+            {
+                throw ex.InnerException;
+            }
+        }
 
-        private static void InvokeGuard(ProjectState project, SnapshotState snapshot)
+        private static void InvokeGuard(ProjectState project, object snapshot)
         {
             var method = typeof(ProjectQuantityReportBuilder).GetMethod(
                 "EnsureProjectRevision",
-                BindingFlags.NonPublic | BindingFlags.Static)
-                ?? throw new Exception("Expected ProjectQuantityReportBuilder.EnsureProjectRevision.");
+                BindingFlags.NonPublic | BindingFlags.Static,
+                binder: null,
+                types: new[] { typeof(ProjectState), snapshot.GetType() },
+                modifiers: null)
+                ?? throw new Exception("Expected ProjectQuantityReportBuilder.EnsureProjectRevision(ProjectState, ProjectQuantityGenerationSnapshot).");
             try
             {
-                method.Invoke(null, new object[]
-                {
-                    project,
-                    snapshot.ChangeVersion,
-                    snapshot.Elements,
-                    snapshot.Floors,
-                    snapshot.Zones,
-                    snapshot.Families,
-                    snapshot.DrawingFingerprint
-                });
+                method.Invoke(null, new[] { (object)project, snapshot });
             }
             catch (TargetInvocationException ex) when (ex.InnerException != null)
             {
@@ -114,32 +119,6 @@ namespace QS3D.Core.SmokeTests
         private static void Equal<T>(T expected, T actual)
         {
             if (!Equals(expected, actual)) throw new Exception("Expected " + expected + ", got " + actual + ".");
-        }
-
-        private sealed class SnapshotState
-        {
-            public SnapshotState(
-                long changeVersion,
-                IReadOnlyList<ProjectElement> elements,
-                IReadOnlyList<FloorDefinition> floors,
-                IReadOnlyList<ZoneDefinition> zones,
-                IReadOnlyList<ProjectFamily> families,
-                string drawingFingerprint)
-            {
-                ChangeVersion = changeVersion;
-                Elements = elements;
-                Floors = floors;
-                Zones = zones;
-                Families = families;
-                DrawingFingerprint = drawingFingerprint;
-            }
-
-            public long ChangeVersion { get; }
-            public IReadOnlyList<ProjectElement> Elements { get; }
-            public IReadOnlyList<FloorDefinition> Floors { get; }
-            public IReadOnlyList<ZoneDefinition> Zones { get; }
-            public IReadOnlyList<ProjectFamily> Families { get; }
-            public string DrawingFingerprint { get; }
         }
     }
 }
