@@ -59,4 +59,20 @@ for token in required_coordinator:
     if token not in COORDINATOR:
         raise SystemExit(f"#5969 hyphenated native-command lifecycle/barrier contract missing: {token}")
 
-print("PASS #5969 live V25 CAD kernel/save/status/native-barrier residual contracts")
+# BricsCAD can report CMDACTIVE=0 while its top-level application window is minimized.
+# Direct SetCurrentView calls are not admitted in that iconic state: the shared view-idle
+# gate must query the existing ActiveX application object without adding a BricscadApp
+# compile-time dependency, and both cad_view_set / extents paths inherit that shared gate.
+required_minimized_view_gate = (
+    "IsBricsCadWindowMinimized",
+    "Application.AcadApplication",
+    '"WindowState"',
+    "BindingFlags.GetProperty",
+    "== 2",
+    "BricsCAD view update is blocked while the application window is minimized.",
+)
+for token in required_minimized_view_gate:
+    if token not in STATUS:
+        raise SystemExit(f"#5969 minimized BricsCAD view-mutation gate missing: {token}")
+
+print("PASS #5969 live V25 CAD kernel/save/status/native-barrier/minimized-view residual contracts")
