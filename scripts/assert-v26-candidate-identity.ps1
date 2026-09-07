@@ -17,6 +17,7 @@ $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
 $maxTextBytes = 65536
 $maxAdmittedScriptBytes = 262144
 $effectivePackageTag = if ([string]::IsNullOrWhiteSpace($ExpectedPackageReleaseTag)) { $ExpectedReleaseTag } else { $ExpectedPackageReleaseTag }
+$requiredHostNames = @('bricscad.exe', 'BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')
 
 function Resolve-OrdinaryFile([string]$Path, [string]$Label) {
     $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
@@ -86,6 +87,16 @@ try {
     if (-not [string]::Equals([string]$provenance.sourceCommit, $ExpectedSourceCommit, [StringComparison]::OrdinalIgnoreCase)) { throw 'V26 candidate provenance source commit mismatch.' }
     if (-not [string]::Equals([string]$provenance.packageSha256, $zipHash, [StringComparison]::OrdinalIgnoreCase)) { throw 'V26 candidate provenance package digest mismatch.' }
 
+    $hostReferences = @($provenance.hostReferences)
+    if ($hostReferences.Count -ne $requiredHostNames.Count) { throw 'V26 candidate provenance must contain exactly four held host-reference identities.' }
+    foreach ($name in $requiredHostNames) {
+        $matches = @($hostReferences | Where-Object { [string]::Equals([string]$_.name, $name, [StringComparison]::Ordinal) })
+        if ($matches.Count -ne 1) { throw "V26 candidate provenance must contain exactly one $name host-reference identity." }
+        $host = $matches[0]
+        if ([string]$host.sha256 -cnotmatch '^[0-9a-f]{64}$') { throw "V26 candidate provenance host-reference SHA-256 is noncanonical for $name." }
+        if ([long]$host.length -le 0) { throw "V26 candidate provenance host-reference length must be positive for $name." }
+    }
+
     $archive = [IO.Compression.ZipArchive]::new($zipHeld.Stream, [IO.Compression.ZipArchiveMode]::Read, $true)
     try {
         $entries = @($archive.Entries | Where-Object { [string]::Equals([string]$_.FullName, 'PACKAGE-METADATA.json', [StringComparison]::Ordinal) })
@@ -119,7 +130,7 @@ try {
     }
 
     foreach ($item in $held) { Assert-Held -Held $item -Label 'V26 candidate identity input' }
-    $identity = [pscustomobject]@{ SourceCommit=$ExpectedSourceCommit.ToLowerInvariant(); ReleaseTag=$ExpectedReleaseTag; ProductVersion=[string]$metadata.productVersion; PackageSha256=$zipHash; Signed=($null -ne $updateHeld) }
+    $identity = [pscustomobject]@{ SourceCommit=$ExpectedSourceCommit.ToLowerInvariant(); ReleaseTag=$ExpectedReleaseTag; ProductVersion=[string]$metadata.productVersion; PackageSha256=$zipHash; Signed=($null -ne $updateHeld); HostReferences=$hostReferences }
     if ($null -ne $admittedScriptBlock) {
         & $admittedScriptBlock
         foreach ($item in $held) { Assert-Held -Held $item -Label 'V26 candidate identity input after publication' }
