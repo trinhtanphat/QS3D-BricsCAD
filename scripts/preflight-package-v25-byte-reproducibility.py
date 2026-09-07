@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGER = ROOT / "scripts" / "package-v25.ps1"
+NORMALIZED_ZIP_ENTRY = "$entryName = $fullName.Substring($packagePrefix.Length).Replace([IO.Path]::DirectorySeparatorChar, '/')"
 
 
 def require(condition: bool, message: str) -> None:
@@ -29,7 +30,7 @@ def validate(text: str) -> None:
             "Every ZIP entry must receive the source-bound deterministic timestamp.")
     require("[Array]::Sort($entryNames, [StringComparer]::Ordinal)" in text,
             "ZIP entry names must be sorted with ordinal semantics, independent of host culture.")
-    require(".Replace([IO.Path]::DirectorySeparatorChar, '/')" in text,
+    require(NORMALIZED_ZIP_ENTRY in text,
             "ZIP entry names must be normalized to forward slashes across Windows/Linux path semantics.")
     require("[IO.Compression.CompressionLevel]::NoCompression" in text,
             "ZIP entries must use stored bytes to avoid runtime-specific deflate output drift.")
@@ -53,7 +54,7 @@ for marker in (
     "function New-DeterministicPackageZip {",
     "$entry.LastWriteTime = $SourceTimestamp",
     "[Array]::Sort($entryNames, [StringComparer]::Ordinal)",
-    ".Replace([IO.Path]::DirectorySeparatorChar, '/')",
+    NORMALIZED_ZIP_ENTRY,
     "[IO.Compression.CompressionLevel]::NoCompression",
     "[Array]::Sort($commands, [StringComparer]::Ordinal)",
     "[Array]::Sort($manifestEntryNames, [StringComparer]::Ordinal)",
