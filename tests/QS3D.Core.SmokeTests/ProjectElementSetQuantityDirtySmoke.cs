@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
 
@@ -17,7 +19,7 @@ namespace QS3D.Core.SmokeTests
         private static void ChangedQuantityMarksOnlyQuantityDirty()
         {
             var element = NewCleanElement("quantity-dirty");
-            element.Properties["GeneratedSolidHandle"] = "AB12";
+            SeedPersistedProperty(element, "GeneratedSolidHandle", "AB12");
 
             element.SetQuantity(" AreaM2 ", 12.5d);
 
@@ -90,6 +92,17 @@ namespace QS3D.Core.SmokeTests
             var element = new ProjectElement(id, ElementCategory.Room, string.Empty, string.Empty, string.Empty);
             element.MarkClean(ElementDirtyFlags.All);
             return element;
+        }
+
+        private static void SeedPersistedProperty(ProjectElement element, string key, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_properties", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null)
+                throw new InvalidOperationException("Quantity dirty smoke fixture could not resolve the persisted ProjectElement backing map.");
+            var backing = field.GetValue(element) as Dictionary<string, string>;
+            if (backing == null)
+                throw new InvalidOperationException("Quantity dirty smoke fixture resolved an unexpected ProjectElement backing-map type.");
+            backing.Add(key, value);
         }
 
         private static void Require(bool value, string message)

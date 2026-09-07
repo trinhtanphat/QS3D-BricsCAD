@@ -24,7 +24,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = ProjectWithRule("LengthM");
             var element = new ProjectElement("E-PAD", ElementCategory.Beam, "", "", "");
-            element.Properties[" LengthM "] = "2.5";
+            InjectLegacyElementProperty(element, " LengthM ", "2.5");
             project.Elements.Add(element);
 
             ExpectInvalid(() => new QuantityRuleEngine().ApplyMatching(project, element));
@@ -72,6 +72,15 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("quantity-rule-key-smoke", "Quantity rule key smoke");
             project.QuantityRules.Add(new QuantityRule("RULE-1", ElementCategory.Beam, "Computed", expression, "1"));
             return project;
+        }
+
+        private static void InjectLegacyElementProperty(ProjectElement element, string key, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_properties", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Legacy Element fixture could not locate the property backing dictionary.");
+            var backing = field.GetValue(element) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Legacy Element fixture property backing dictionary had an unexpected type.");
+            backing[key] = value;
         }
 
         private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
