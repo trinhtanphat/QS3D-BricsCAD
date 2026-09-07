@@ -439,6 +439,90 @@ function Expand-VerifiedHeldArchive {
         throw 'Archive safety limits must all be positive.'
     }
 
+    function Assert-ExistingExtractionPathChain {
+        param(
+            [Parameter(Mandatory = $true)][string]$Path,
+            [Parameter(Mandatory = $true)][string]$BoundaryRoot,
+            [switch]$AllowOutsideBoundary
+        )
+
+        $pathFull = [IO.Path]::GetFullPath($Path).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+        $boundaryFull = [IO.Path]::GetFullPath($BoundaryRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+        $boundaryPrefix = $boundaryFull + [IO.Path]::DirectorySeparatorChar
+        if (-not $AllowOutsideBoundary -and
+            -not [string]::Equals($pathFull, $boundaryFull, [StringComparison]::OrdinalIgnoreCase) -and
+            -not $pathFull.StartsWith($boundaryPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Package extraction validation escaped the extraction root: $pathFull"
+        }
+
+        $probe = $pathFull
+        while (-not (Test-Path -LiteralPath $probe)) {
+            $parent = [IO.Path]::GetDirectoryName($probe)
+            if ([string]::IsNullOrWhiteSpace($parent) -or [string]::Equals($parent, $probe, [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Package extraction path has no existing ancestor: $pathFull"
+            }
+            $probe = [IO.Path]::GetFullPath($parent).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+        }
+
+        $cursor = Get-Item -LiteralPath $probe -Force -ErrorAction Stop
+        $reachedBoundary = $false
+        while ($null -ne $cursor) {
+            $cursorFull = [IO.Path]::GetFullPath([string]$cursor.FullName).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+            $isBoundary = [string]::Equals($cursorFull, $boundaryFull, [StringComparison]::OrdinalIgnoreCase)
+            if (-not $AllowOutsideBoundary -and -not $isBoundary -and -not $cursorFull.StartsWith($boundaryPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Package extraction validation escaped the extraction root: $cursorFull"
+            }
+            if (($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                if ($isBoundary) { throw "Package extraction root is a reparse point: $cursorFull" }
+                throw "Package extraction target traverses a reparse-point directory: $cursorFull"
+            }
+            if ($isBoundary) {
+                $reachedBoundary = $true
+                break
+            }
+            $cursor = $cursor.Parent
+        }
+        if (-not $AllowOutsideBoundary -and -not $reachedBoundary) {
+            throw "Package extraction path does not resolve through the extraction root: $pathFull"
+        }
+    }
+
+    function Ensure-SafeExtractionDirectory {
+        param(
+            [Parameter(Mandatory = $true)][string]$Path,
+            [Parameter(Mandatory = $true)][string]$BoundaryRoot
+        )
+
+        $boundaryFull = [IO.Path]::GetFullPath($BoundaryRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+        $boundaryPrefix = $boundaryFull + [IO.Path]::DirectorySeparatorChar
+        $pathFull = [IO.Path]::GetFullPath($Path).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+        if (-not [string]::Equals($pathFull, $boundaryFull, [StringComparison]::OrdinalIgnoreCase) -and
+            -not $pathFull.StartsWith($boundaryPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Package extraction directory escaped the extraction root: $pathFull"
+        }
+
+        Assert-ExistingExtractionPathChain -Path $boundaryFull -BoundaryRoot $boundaryFull
+        if ([string]::Equals($pathFull, $boundaryFull, [StringComparison]::OrdinalIgnoreCase)) { return }
+
+        $relative = $pathFull.Substring($boundaryPrefix.Length)
+        $current = $boundaryFull
+        foreach ($segment in $relative.Split([IO.Path]::DirectorySeparatorChar)) {
+            if ([string]::IsNullOrWhiteSpace($segment)) { throw "Package extraction directory has an empty path segment: $pathFull" }
+            Assert-ExistingExtractionPathChain -Path $current -BoundaryRoot $boundaryFull
+            $next = [IO.Path]::GetFullPath((Join-Path $current $segment))
+            if (Test-Path -LiteralPath $next) {
+                if (-not (Test-Path -LiteralPath $next -PathType Container)) {
+                    throw "Package extraction directory target already exists as a non-directory: $next"
+                }
+            }
+            else {
+                [IO.Directory]::CreateDirectory($next) | Out-Null
+            }
+            Assert-ExistingExtractionPathChain -Path $next -BoundaryRoot $boundaryFull
+            $current = $next
+        }
+    }
+
     $zipStream = [IO.File]::Open($ZipPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
     try {
         if ($zipStream.Length -le 0 -or $zipStream.Length -gt $MaxPackageBytes) {
@@ -521,37 +605,29 @@ function Expand-VerifiedHeldArchive {
                 }
             }
 
-            New-Item -ItemType Directory -Path $destinationFull -Force | Out-Null
+            Assert-ExistingExtractionPathChain -Path $destinationFull -BoundaryRoot $destinationFull -AllowOutsideBoundary
+            [IO.Directory]::CreateDirectory($destinationFull) | Out-Null
             $rootItem = Get-Item -LiteralPath $destinationFull -Force -ErrorAction Stop
             if (($rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
                 throw "Package extraction root is a reparse point: $($rootItem.FullName)"
             }
+            Assert-ExistingExtractionPathChain -Path $destinationFull -BoundaryRoot $destinationFull
 
             foreach ($record in $records) {
                 if ($record.IsDirectory) {
-                    [IO.Directory]::CreateDirectory([string]$record.Target) | Out-Null
+                    Ensure-SafeExtractionDirectory -Path ([string]$record.Target) -BoundaryRoot $destinationFull
                     continue
                 }
 
                 $parent = [IO.Path]::GetDirectoryName([string]$record.Target)
-                [IO.Directory]::CreateDirectory($parent) | Out-Null
-                $cursor = Get-Item -LiteralPath $parent -Force -ErrorAction Stop
-                while ($null -ne $cursor) {
-                    $cursorFull = [IO.Path]::GetFullPath([string]$cursor.FullName).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
-                    $isRoot = [string]::Equals($cursorFull, $destinationFull, [StringComparison]::OrdinalIgnoreCase)
-                    if (-not $isRoot -and -not $cursorFull.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) { break }
-                    if (($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-                        if ($isRoot) { throw "Package extraction root is a reparse point: $cursorFull" }
-                        throw "Package extraction target traverses a reparse-point directory: $cursorFull"
-                    }
-                    if ($isRoot) { break }
-                    $cursor = $cursor.Parent
-                }
+                Ensure-SafeExtractionDirectory -Path $parent -BoundaryRoot $destinationFull
+                Assert-ExistingExtractionPathChain -Path $parent -BoundaryRoot $destinationFull
 
                 $entryStream = $record.Entry.Open()
                 $output = $null
                 $completed = $false
                 try {
+                    Assert-ExistingExtractionPathChain -Path $parent -BoundaryRoot $destinationFull
                     $output = [IO.File]::Open([string]$record.Target, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
                     $buffer = New-Object byte[] 65536
                     [int64]$written = 0
