@@ -9,6 +9,7 @@ $forbidden = @('BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')
 $sampleSource = Join-Path $root 'samples/generated'
 $script:MaxPackageTextBytes = 8MB
 $script:StrictUtf8 = [Text.UTF8Encoding]::new($false, $true)
+Add-Type -AssemblyName System.IO.Compression
 
 function Get-CanonicalFullPath {
     param([string]$Path, [string]$Label)
@@ -316,7 +317,7 @@ function New-DeterministicPackageZip {
                 $held = Open-HeldPackageInput -Path $sourceByEntry[$entryName] -RepositoryRoot $root -Label ("package ZIP input $entryName")
                 try {
                     Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label ("package ZIP input $entryName")
-                    $entry = $archive.CreateEntry($entryName, [IO.Compression.CompressionLevel]::Optimal)
+                    $entry = $archive.CreateEntry($entryName, [IO.Compression.CompressionLevel]::NoCompression)
                     $entry.LastWriteTime = $SourceTimestamp
                     $entryStream = $entry.Open()
                     try {
@@ -388,12 +389,13 @@ if (Test-Path -LiteralPath $sampleDwg) {
     Copy-HeldPackageInput -SourcePath $sampleDwg -DestinationPath (Join-Path $sampleDestination 'QS3D-Sample.dwg') -Label 'synthetic sample QS3D-Sample.dwg'
 }
 
-$commands = @()
+$commandSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 Get-SafeSourceFiles -SourceRoot (Join-Path $root 'src/QS3D.BricsCAD.V25') -RepositoryRoot $root -Extension '.cs' | ForEach-Object {
     $text = Read-HeldSourceText -Path $_.FullName -Label 'V25 command source'
-    [regex]::Matches($text, '\[CommandMethod\("([^\"]+)"') | ForEach-Object { $commands += $_.Groups[1].Value.ToUpperInvariant() }
+    [regex]::Matches($text, '\[CommandMethod\("([^\"]+)"') | ForEach-Object { $null = $commandSet.Add($_.Groups[1].Value.ToUpperInvariant()) }
 }
-$commands = @($commands | Sort-Object -Unique)
+$commands = [string[]]@($commandSet)
+[Array]::Sort($commands, [StringComparer]::Ordinal)
 if ($commands.Count -eq 0 -or -not ($commands -contains 'QS3D')) { throw 'No QS3D CommandMethod entries were discovered.' }
 $commands | Set-Content -Path (Join-Path $dist 'COMMANDS.txt') -Encoding ASCII
 
@@ -473,11 +475,15 @@ $dist = Assert-SafeOutputDirectoryTarget -Path $dist -RepositoryRoot $root -Labe
 $distFull = [IO.Path]::GetFullPath($dist).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
 # Legacy manifest-coverage contract marker (non-executable); hashing below intentionally uses safe traversal:
 # Get-ChildItem $dist -Recurse -File | Sort-Object FullName | ForEach-Object
-$hashLines = Get-SafePackageFiles -PackageRoot $dist | ForEach-Object {
-    $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
-    $relativePath = $_.FullName.Substring($distFull.Length + 1).Replace([IO.Path]::DirectorySeparatorChar, '/')
-    "$hash  $relativePath"
+$manifestHashes = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)
+foreach ($file in Get-SafePackageFiles -PackageRoot $dist) {
+    $relativePath = $file.FullName.Substring($distFull.Length + 1).Replace([IO.Path]::DirectorySeparatorChar, '/')
+    if ($manifestHashes.ContainsKey($relativePath)) { throw "Duplicate package manifest path: $relativePath" }
+    $manifestHashes.Add($relativePath, (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash)
 }
+$manifestEntryNames = [string[]]@($manifestHashes.Keys)
+[Array]::Sort($manifestEntryNames, [StringComparer]::Ordinal)
+$hashLines = @($manifestEntryNames | ForEach-Object { "$($manifestHashes[$_])  $_" })
 if (-not $hashLines) { throw 'No package files were available for hashing.' }
 $hashLines | Set-Content -Path (Join-Path $dist 'SHA256SUMS.txt') -Encoding ASCII
 $zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'
