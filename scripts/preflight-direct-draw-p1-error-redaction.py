@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
-"""Fail closed when V25 Direct Draw P1 publishes raw exception details or lies after commit."""
+"""Fail closed when V25 Direct Draw authoring publishes raw exception details or lies after commit."""
 
 from pathlib import Path
 import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "src/QS3D.BricsCAD.V25/DirectDrawP1Commands.cs"
+SOURCES = (
+    ROOT / "src/QS3D.BricsCAD.V25/DirectDrawP1Commands.cs",
+    ROOT / "src/QS3D.BricsCAD.V25/DirectDrawOpeningCommands.cs",
+    ROOT / "src/QS3D.BricsCAD.V25/DirectDrawWindowCommands.cs",
+    ROOT / "src/QS3D.BricsCAD.V25/DirectDrawSlabOpeningCommands.cs",
+)
+REPORTER = ROOT / "src/QS3D.BricsCAD.V25/Services/DirectDrawUiFailureReporter.cs"
 
 
 def fail(message: str) -> None:
-    print(f"ERROR: Direct Draw P1 error-redaction preflight failed: {message}", file=sys.stderr)
+    print(f"ERROR: Direct Draw authoring error-redaction preflight failed: {message}", file=sys.stderr)
     raise SystemExit(1)
 
 
@@ -33,54 +39,74 @@ def body(text: str, signature: str) -> str:
     return ""
 
 
-def assert_before(text: str, first: str, second: str, context: str) -> None:
-    first_at = text.find(first)
-    second_at = text.find(second)
-    if first_at < 0 or second_at < 0 or first_at >= second_at:
-        fail(f"{context}: expected {first!r} before {second!r}")
-
-
 def main() -> int:
-    text = SOURCE.read_text(encoding="utf-8")
+    for source in SOURCES:
+        text = source.read_text(encoding="utf-8")
+        name = source.name
+        if ".Message" in text:
+            fail(f"{name} still references Exception.Message; command/modeless reporting must be redacted")
 
-    if ".Message" in text:
-        fail("DirectDrawP1Commands still references Exception.Message; command/modeless reporting must be redacted")
+        guard = body(text, "private static void Guard(Document document, string operation, Action action)")
+        if re.search(r"catch\s*\(\s*Exception\s+\w+\s*\)", guard):
+            fail(f"{name} Guard still captures an exception object for user-visible reporting")
+        if "DirectDrawUiFailureReporter.ReportOperationFailure(document, operation);" not in guard:
+            fail(f"{name} Guard does not delegate to the fail-safe stable operation failure reporter")
+        if "PaletteCoordinator.SetStatus(" in guard or "document.Editor.WriteMessage(" in guard:
+            fail(f"{name} Guard performs presentation writes instead of delegating to the fail-safe reporter")
 
-    guard = body(text, "private static void Guard(Document document, string operation, Action action)")
-    if re.search(r"catch\s*\(\s*Exception\s+\w+\s*\)", guard):
-        fail("Guard still captures an exception object for user-visible reporting")
-    if "ReportOperationFailure(document, operation);" not in guard:
-        fail("Guard does not delegate to the fail-safe stable operation failure reporter")
-    if "PaletteCoordinator.SetStatus(" in guard or "document.Editor.WriteMessage(" in guard:
-        fail("Guard performs unisolated presentation writes instead of delegating to the fail-safe reporter")
+        if "DirectDrawUiFailureReporter.ReportPostCommitWarning(document);" not in text:
+            fail(f"{name} FinalizeUi does not route presentation-only failure through the stable post-commit warning")
+        if re.search(r"catch\s*\(\s*Exception\s+\w+\s*\)\s*\{\s*DirectDrawUiFailureReporter\.ReportPostCommitWarning", text, re.S):
+            fail(f"{name} post-commit reporting unnecessarily captures an exception object")
 
-    reporter = body(text, "private static void ReportOperationFailure(Document document, string operation)")
-    for token in ("document.Editor.WriteMessage(", "PaletteCoordinator.SetStatus(", "không thể hoàn tất thao tác", "Vui lòng thử lại"):
+    reporter = REPORTER.read_text(encoding="utf-8")
+    if ".Message" in reporter:
+        fail("shared reporter must never inspect or publish Exception.Message")
+    for token in (
+        "không thể hoàn tất thao tác",
+        "Vui lòng thử lại",
+        "đã commit",
+        "đồng bộ giao diện chưa hoàn tất",
+        "refresh giao diện",
+        "document.Editor.WriteMessage(",
+        "PaletteCoordinator.SetStatus(",
+        "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)",
+    ):
         if token not in reporter:
-            fail(f"operation failure reporter missing {token!r}")
-    if reporter.count("try") < 2 or reporter.count("catch") < 2:
-        fail("operation failure reporter must exception-isolate Editor and Palette publication independently")
+            fail(f"shared reporter missing {token!r}")
 
-    finalize = body(text, "private static void FinalizeUi(Document document, ProjectElement element, ObjectId sourceId, string generatedHandle)")
-    if re.search(r"catch\s*\(\s*Exception\s+\w+\s*\)", finalize):
-        fail("FinalizeUi still captures an exception object after native commit")
-    if "ReportPostCommitUiWarning(document);" not in finalize:
-        fail("FinalizeUi does not route presentation-only failure through the stable post-commit warning")
+    operation_reporter = body(reporter, "internal static void ReportOperationFailure(Document document, string operation)")
+    post_commit_reporter = body(reporter, "internal static void ReportPostCommitWarning(Document document)")
+    for block, context in ((operation_reporter, "operation failure"), (post_commit_reporter, "post-commit warning")):
+        if "TryWriteEditor(document," not in block or "TrySetPaletteForCurrentDocument(document," not in block:
+            fail(f"{context} does not isolate Editor and Palette publication through dedicated safe helpers")
 
-    warning = body(text, "private static void ReportPostCommitUiWarning(Document document)")
-    for token in ("đã commit", "đồng bộ giao diện chưa hoàn tất", "refresh giao diện", "document.Editor.WriteMessage(", "PaletteCoordinator.SetStatus("):
-        if token not in warning:
-            fail(f"post-commit warning missing {token!r}")
-    if warning.count("try") < 2 or warning.count("catch") < 2:
-        fail("post-commit warning must exception-isolate Editor and Palette publication independently")
+    palette_helper = body(reporter, "private static void TrySetPaletteForCurrentDocument(Document document, string message)")
+    affinity = "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)"
+    status = "PaletteCoordinator.SetStatus(message)"
+    if affinity not in palette_helper or status not in palette_helper or palette_helper.find(affinity) >= palette_helper.find(status):
+        fail("process-wide Palette publication is not exact-source-document fenced before SetStatus")
+    if "try" not in palette_helper or "catch" not in palette_helper:
+        fail("Palette publication must be exception-isolated")
 
-    execute = body(text, "private static void Execute(")
-    assert_before(execute, "catch (Exception operationError)", "FinalizeUi(document, createdElement!, sourceId, generatedHandle);", "post-commit truth")
-    after_catch = execute[execute.find("FinalizeUi(document, createdElement!, sourceId, generatedHandle);"):]
-    if "throw" in after_catch:
-        fail("presentation-only finalization must not rethrow after committed authoring")
+    editor_helper = body(reporter, "private static void TryWriteEditor(Document document, string message)")
+    if "try" not in editor_helper or "catch" not in editor_helper:
+        fail("Editor publication must be exception-isolated")
 
-    print("OK: Direct Draw P1 failures are redacted, reporting is fail-safe, and post-commit UI failure preserves commit truth.")
+    for forbidden in (
+        "LockDocument(",
+        "StartTransaction(",
+        "StartOpenCloseTransaction(",
+        "SetImpliedSelection(",
+        "Dispatcher",
+        "SendStringToExecute(",
+        "ProjectContextCoordinator.GetOrCreate",
+        "+=",
+    ):
+        if forbidden in reporter:
+            fail(f"shared presentation reporter must not own mutation/subscription/deferred work: found {forbidden!r}")
+
+    print("OK: Direct Draw authoring failures are redacted, fail-safe, source-document fenced, and post-commit truthful across P1/opening/window/slabOpen.")
     return 0
 
 
