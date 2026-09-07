@@ -38,12 +38,22 @@ namespace QS3D.Core.Persistence
             var backupPath = fullPath + ".bak";
             if (!File.Exists(backupPath))
                 throw new FileNotFoundException("A validated QSDB backup is required for recovery-safe publication.", backupPath);
-            var validatedBackup = Load(backupPath);
-            if (!string.Equals(validatedBackup.ProjectId, project.ProjectId, StringComparison.Ordinal))
-                throw new InvalidDataException("Validated QSDB backup project identity does not match the project being published.");
-            SaveCore(project, fullPath, SaveMode.ReplacePrimaryOnly, MaxProjectFileBytes);
-            Load(fullPath);
-            Load(backupPath);
+
+            using (var backupFence = new FileStream(backupPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                PersistencePathSafety.RequireExclusiveOpenStillBound(backupFence, backupPath, "validated project backup");
+                var validatedBackup = Load(backupPath);
+                if (!string.Equals(validatedBackup.ProjectId, project.ProjectId, StringComparison.Ordinal))
+                    throw new InvalidDataException("Validated QSDB backup project identity does not match the project being published.");
+
+                SaveCore(project, fullPath, SaveMode.ReplacePrimaryOnly, MaxProjectFileBytes);
+                Load(fullPath);
+
+                PersistencePathSafety.RequireExclusiveOpenStillBound(backupFence, backupPath, "validated project backup");
+                var persistedBackup = Load(backupPath);
+                if (!string.Equals(persistedBackup.ProjectId, project.ProjectId, StringComparison.Ordinal))
+                    throw new InvalidDataException("Preserved QSDB backup project identity changed during recovery-safe publication.");
+            }
         }
 
         private void SaveCore(ProjectState project, string path, SaveMode mode, long maximumBytes)
@@ -311,7 +321,7 @@ namespace QS3D.Core.Persistence
 
             using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
-                PersistencePathSafety.RequireNonRedirected(fullPath, "project read");
+                PersistencePathSafety.RequireExclusiveOpenStillBound(stream, fullPath, "project read");
                 if (stream.Length > MaxProjectFileBytes)
                     throw new InvalidDataException("QSDB project exceeds the maximum supported file size of 64 MiB.");
 

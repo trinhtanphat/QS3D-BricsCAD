@@ -207,7 +207,9 @@ namespace QS3D.BricsCAD.V25
 
                 var background = CreatePermissionCheckBox(BackgroundControlCheckTag, BackgroundOnLabel, resumeButton);
                 background.IsChecked = true;
-                background.IsEnabled = false;
+                background.IsHitTestVisible = false;
+                background.Focusable = false;
+                background.IsTabStop = false;
                 controlPanel.Children.Add(background);
                 controlPanel.Children.Add(CreateSummaryText(BackgroundSummaryTag, resumeButton));
 
@@ -224,7 +226,9 @@ namespace QS3D.BricsCAD.V25
             if (backgroundCheck != null)
             {
                 backgroundCheck.IsChecked = true;
-                backgroundCheck.IsEnabled = false;
+                backgroundCheck.IsHitTestVisible = false;
+                backgroundCheck.Focusable = false;
+                backgroundCheck.IsTabStop = false;
                 backgroundCheck.Content = BackgroundOnLabel;
             }
 
@@ -264,7 +268,7 @@ namespace QS3D.BricsCAD.V25
                 VerticalContentAlignment = VerticalAlignment.Center,
                 FontSize = styleSource.FontSize,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = styleSource.Foreground,
+                Foreground = ResolveThemeForeground(styleSource),
                 IsThreeState = false
             };
         }
@@ -275,9 +279,36 @@ namespace QS3D.BricsCAD.V25
             {
                 Tag = tag,
                 TextWrapping = TextWrapping.Wrap,
-                Foreground = styleSource.Foreground,
+                Foreground = CreateSecondaryForeground(ResolveThemeForeground(styleSource)),
                 Margin = new Thickness(22, 0, 0, 8)
             };
+        }
+
+        private static Brush ResolveThemeForeground(Button styleSource)
+        {
+            try
+            {
+                var window = Window.GetWindow(styleSource);
+                if (window != null && window.Foreground != null) return window.Foreground;
+            }
+            catch { }
+
+            return styleSource.Foreground ?? SystemColors.ControlTextBrush;
+        }
+
+        private static Brush CreateSecondaryForeground(Brush primary)
+        {
+            try
+            {
+                var secondary = primary.Clone();
+                secondary.Opacity = 0.82;
+                if (secondary.CanFreeze) secondary.Freeze();
+                return secondary;
+            }
+            catch
+            {
+                return primary;
+            }
         }
 
         private static void ToggleDesktopForegroundAccess()

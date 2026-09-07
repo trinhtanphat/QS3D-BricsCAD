@@ -25,7 +25,7 @@ namespace QS3D.Core.SmokeTests
                 File.WriteAllText(target, "redirected-primary");
                 if (!TryCreateSymbolicLink(primary, target)) return;
 
-                ExpectInvalidData(
+                ExpectPathSafetyRefusal(
                     () => ProjectSidecarRevisionStamp.Capture(primary),
                     "redirected primary received revision authority");
             });
@@ -42,7 +42,7 @@ namespace QS3D.Core.SmokeTests
                 File.WriteAllText(backupTarget, "redirected-backup");
                 if (!TryCreateSymbolicLink(backup, backupTarget)) return;
 
-                ExpectInvalidData(
+                ExpectPathSafetyRefusal(
                     () => ProjectSidecarRevisionStamp.Capture(primary),
                     "redirected backup received revision authority");
             });
@@ -95,18 +95,26 @@ namespace QS3D.Core.SmokeTests
             catch (IOException) when (OperatingSystem.IsWindows()) { return false; }
         }
 
-        private static void ExpectInvalidData(Action action, string message)
+        private static void ExpectPathSafetyRefusal(Action action, string message)
         {
             try
             {
                 action();
             }
-            catch (InvalidDataException)
+            catch (Exception ex) when (IsPathSafetyRefusal(ex))
             {
                 return;
             }
 
             throw new InvalidOperationException("ProjectSidecarRevisionRedirectSmoke: " + message + ".");
+        }
+
+        private static bool IsPathSafetyRefusal(Exception exception)
+        {
+            return exception is IOException && string.Equals(
+                exception.GetType().FullName,
+                "QS3D.Core.Persistence.PersistencePathSafetyException",
+                StringComparison.Ordinal);
         }
 
         private static void WithDirectory(Action<string> action)

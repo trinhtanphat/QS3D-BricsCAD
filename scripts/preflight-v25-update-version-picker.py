@@ -17,7 +17,7 @@ def require(text: str, needle: str, source: str) -> None:
 
 def forbid(text: str, needle: str, source: str) -> None:
     if needle in text:
-        fail(f"{source} still contains stale/latest-only updater behavior: {needle}")
+        fail(f"{source} contains forbidden V25 updater UI/behavior: {needle}")
 
 
 def main() -> int:
@@ -31,8 +31,7 @@ def main() -> int:
     window = window_path.read_text(encoding="utf-8")
     receipt = receipt_path.read_text(encoding="utf-8")
 
-    # TDD RED: these tokens intentionally describe behavior production does not yet provide.
-    # UI must expose a searchable selector backed by the already-reviewed release history API.
+    # Searchable release selection stays pinned to the chosen release.
     for needle in (
         "Phiên bản cài đặt",
         "Tìm phiên bản",
@@ -47,6 +46,30 @@ def main() -> int:
         "Cài đặt lại ",
     ):
         require(window, needle, WINDOW_REL)
+
+    # The search field belongs inside the dropdown popup, not beside it. The picker and item
+    # containers must own their dark-theme templates so Windows' light default popup cannot
+    # produce white-on-white/low-contrast release rows.
+    for needle in (
+        "CreateReleasePickerTemplate()",
+        "CreateReleaseSearchBoxTemplate()",
+        "CreateReleaseChoiceItemStyle()",
+        "PART_Popup",
+        "PART_SearchBox",
+        "PopupAnimation.Fade",
+        "AttachReleaseSearchBox()",
+        "_releaseVersionPicker.DropDownOpened",
+        "new Trigger { Property = ComboBoxItem.IsSelectedProperty, Value = true }",
+        "new Trigger { Property = UIElement.IsMouseOverProperty, Value = true }",
+    ):
+        require(window, needle, WINDOW_REL)
+
+    for needle in (
+        "pickerPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220) });",
+        "Grid.SetColumn(_releaseSearchBox, 0);",
+        "pickerPanel.Children.Add(_releaseSearchBox);",
+    ):
+        forbid(window, needle, WINDOW_REL)
 
     # Clicking install must use the selected release object; it must not refresh latest and silently
     # switch targets after the user made a choice.
@@ -79,7 +102,7 @@ def main() -> int:
     ):
         require(receipt, needle, RECEIPT_REL)
 
-    print("PASS: V25 Update Center pins a searchable selected release and verifies the loaded version/path after restart.")
+    print("PASS: V25 Update Center keeps search inside a dark high-contrast release dropdown and pins the selected release through install/restart verification.")
     return 0
 
 

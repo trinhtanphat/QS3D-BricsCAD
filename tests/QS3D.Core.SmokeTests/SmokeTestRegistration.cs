@@ -20,6 +20,7 @@ namespace QS3D.Core.SmokeTests
             DoorOpeningFamilyCategorySmoke.Run();
             RoomFinishFamilyCategorySmoke.Run();
             CurtainWallScheduleFamilyCategorySmoke.Run();
+            CurtainWallScheduleReplacementGenerationFenceSmoke.Run();
             MeasurementTraceContractSmoke.Run();
             TakeoffMeasurementTraceSmoke.Run();
             RateBookSmoke.Run();
