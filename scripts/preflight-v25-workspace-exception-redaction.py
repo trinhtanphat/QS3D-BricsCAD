@@ -7,6 +7,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs"
+FAMILY_SELECTION_SOURCE = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.FamilySelectionAffinity.cs"
 
 
 def fail(message: str) -> None:
@@ -42,8 +43,9 @@ def assert_order(block: str, first: str, second: str, context: str) -> None:
 
 def main() -> int:
     text = SOURCE.read_text(encoding="utf-8")
+    family_selection_text = FAMILY_SELECTION_SOURCE.read_text(encoding="utf-8")
 
-    if ".Message" in text:
+    if ".Message" in text or ".Message" in family_selection_text:
         fail("WorkspacePanel still references Exception.Message; modeless status must use stable redacted diagnostics")
 
     helper = body(text, "private void ReportWorkspaceFailure(string operation)")
@@ -59,7 +61,6 @@ def main() -> int:
         "private void OnAddClick(object sender, RoutedEventArgs e)",
         "private void OnDeleteClick(object sender, RoutedEventArgs e)",
         "private void OnRefreshClick(object sender, RoutedEventArgs e)",
-        "private void OnFamilySelectionChanged(object sender, SelectionChangedEventArgs e)",
     )
     for signature in guarded_handlers:
         block = body(text, signature)
@@ -67,6 +68,18 @@ def main() -> int:
             fail(f"{signature} does not route failure through the redacted Workspace helper")
         if re.search(r"catch\s*\(\s*Exception\s+\w+\s*\)", block):
             fail(f"{signature} still captures an exception object for user-visible failure reporting")
+
+    family_handler = body(text, "private void OnFamilySelectionChanged(object sender, SelectionChangedEventArgs e)")
+    if "OnFamilySelectionChangedWithAffinity();" not in family_handler:
+        fail("Family selection handler must delegate to the affinity-safe instance helper")
+    if "ReportWorkspaceFailure(" in family_handler:
+        fail("Family selection handler must not duplicate the delegated helper's failure publication")
+
+    family_affinity = body(family_selection_text, "private void OnFamilySelectionChangedWithAffinity()")
+    if 'ReportWorkspaceFailure("Đổi Family active")' not in family_affinity:
+        fail("delegated Family selection helper does not route failure through the stable redacted Workspace helper")
+    if re.search(r"catch\s*\(\s*Exception\s+\w+\s*\)", family_affinity):
+        fail("delegated Family selection helper still captures an exception object for user-visible failure reporting")
 
     post_commit = body(text, "private void RefreshAfterCommit(Action refresh, string successMessage, string context)")
     if "ReportWorkspacePostCommitWarning(successMessage, context)" not in post_commit:
@@ -84,7 +97,7 @@ def main() -> int:
     if re.search(r"catch\s*\(\s*Exception\s+\w+\s*\)", send):
         fail("command dispatch still captures an exception object for user-visible reporting")
 
-    print("OK: V25 Workspace modeless failure reporting is stable, exception-redacted, and post-commit truthful.")
+    print("OK: V25 Workspace modeless failure reporting is stable, exception-redacted, delegation-safe, and post-commit truthful.")
     return 0
 
 
