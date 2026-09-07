@@ -142,8 +142,8 @@ namespace QS3D.Core.Domain
             project.Touch();
             foreach (var element in changed)
             {
-                element.Properties[BottomLevelIdKey] = floor.Id;
-                if (!element.Properties.ContainsKey(BottomLevelOffsetKey)) element.Properties[BottomLevelOffsetKey] = "0";
+                SetServiceOwnedProperty(element, BottomLevelIdKey, floor.Id);
+                if (!element.Properties.ContainsKey(BottomLevelOffsetKey)) SetServiceOwnedProperty(element, BottomLevelOffsetKey, "0");
                 MarkVerticalPlacementChanged(project, element);
             }
             return changed.Count;
@@ -184,8 +184,8 @@ namespace QS3D.Core.Domain
             project.Touch();
             foreach (var element in changed)
             {
-                element.Properties[TopLevelIdKey] = top.Id;
-                if (!element.Properties.ContainsKey(TopLevelOffsetKey)) element.Properties[TopLevelOffsetKey] = "0";
+                SetServiceOwnedProperty(element, TopLevelIdKey, top.Id);
+                if (!element.Properties.ContainsKey(TopLevelOffsetKey)) SetServiceOwnedProperty(element, TopLevelOffsetKey, "0");
                 MarkVerticalPlacementChanged(project, element);
             }
             return changed.Count;
@@ -206,10 +206,10 @@ namespace QS3D.Core.Domain
             project.Touch();
             foreach (var element in changed)
             {
-                element.Properties.Remove(BottomLevelIdKey);
-                element.Properties.Remove(BottomLevelOffsetKey);
-                element.Properties.Remove(TopLevelIdKey);
-                element.Properties.Remove(TopLevelOffsetKey);
+                RemoveServiceOwnedProperty(element, BottomLevelIdKey);
+                RemoveServiceOwnedProperty(element, BottomLevelOffsetKey);
+                RemoveServiceOwnedProperty(element, TopLevelIdKey);
+                RemoveServiceOwnedProperty(element, TopLevelOffsetKey);
                 MarkVerticalPlacementChanged(project, element);
             }
             return changed.Count;
@@ -418,6 +418,24 @@ namespace QS3D.Core.Domain
             var host = project.FindElement(hostId);
             if (host == null) return;
             host.MarkDirty(ElementDirtyFlags.Geometry | ElementDirtyFlags.Relations | ElementDirtyFlags.Quantity);
+        }
+
+        private static ProjectElementPropertyDictionary ServiceOwnedProperties(ProjectElement element)
+        {
+            return element.Properties as ProjectElementPropertyDictionary
+                ?? throw new InvalidOperationException("ProjectElement property facade is unavailable for Floor-owned level mutation.");
+        }
+
+        private static void SetServiceOwnedProperty(ProjectElement element, string key, string value)
+        {
+            var properties = ServiceOwnedProperties(element);
+            properties.RemovePersistenceValue(key);
+            properties.SetPersistenceValue(key, value);
+        }
+
+        private static bool RemoveServiceOwnedProperty(ProjectElement element, string key)
+        {
+            return ServiceOwnedProperties(element).RemovePersistenceValue(key);
         }
 
         private static double LevelOffset(ProjectElement element, string key)

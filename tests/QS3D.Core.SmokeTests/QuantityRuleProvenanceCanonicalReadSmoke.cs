@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Rules;
@@ -21,7 +23,7 @@ namespace QS3D.Core.SmokeTests
             var project = NewProject();
             var element = project.FindElement("B1")!;
             element.Quantities["Ghost"] = 7d;
-            element.Properties[" Rule:Ghost"] = "old@1";
+            InjectLegacyElementProperty(element, " Rule:Ghost", "old@1");
             var beforeUpdatedUtc = element.UpdatedUtc;
             var beforeDirty = element.Dirty;
 
@@ -53,7 +55,7 @@ namespace QS3D.Core.SmokeTests
             var project = NewProject();
             var element = project.FindElement("B1")!;
             element.Quantities["Keep"] = 3d;
-            element.Properties["Rule:   "] = "bad@1";
+            InjectLegacyElementProperty(element, "Rule:   ", "bad@1");
 
             Throws<InvalidOperationException>(() => new QuantityRuleEngine().ApplyMatching(project, element));
 
@@ -100,6 +102,15 @@ namespace QS3D.Core.SmokeTests
             element.Properties["LengthM"] = "2";
             project.Elements.Add(element);
             return project;
+        }
+
+        private static void InjectLegacyElementProperty(ProjectElement element, string key, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_properties", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Legacy Element fixture could not locate the property backing dictionary.");
+            var backing = field.GetValue(element) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Legacy Element fixture property backing dictionary had an unexpected type.");
+            backing[key] = value;
         }
 
         private static void Near(double expected, double actual)
