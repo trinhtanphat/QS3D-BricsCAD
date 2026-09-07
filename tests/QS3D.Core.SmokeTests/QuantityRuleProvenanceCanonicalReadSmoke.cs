@@ -41,7 +41,7 @@ namespace QS3D.Core.SmokeTests
             var project = NewProject();
             var element = project.FindElement("B1")!;
             element.Quantities["Ghost"] = 7d;
-            InjectLegacyElementProperty(element, "Rule: Ghost", "old@1");
+            element.Properties["Rule: Ghost"] = "old@1";
 
             Throws<InvalidOperationException>(() => new QuantityRuleEngine().ApplyMatching(project, element));
 
@@ -69,7 +69,7 @@ namespace QS3D.Core.SmokeTests
             var element = project.FindElement("B1")!;
             project.QuantityRules.Add(new QuantityRule("ghost", ElementCategory.Beam, "Ghost", "LengthM*2", "1"));
             element.Quantities["Ghost"] = 5d;
-            InjectLegacyElementProperty(element, "Rule: Ghost", "legacy@1");
+            element.Properties["Rule: Ghost"] = "legacy@1";
 
             Throws<InvalidOperationException>(() => new QuantityRuleEngine().ApplyMatching(project, element));
 
