@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Reflection;
 using Bricscad.ApplicationServices;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
@@ -489,19 +490,45 @@ namespace QS3D.BricsCAD.V25
             return value;
         }
 
+        private static bool IsBricsCadWindowMinimized()
+        {
+            try
+            {
+                var acadApplication = Application.AcadApplication;
+                if (acadApplication == null) return false;
+                var windowState = acadApplication.GetType().InvokeMember(
+                    "WindowState",
+                    BindingFlags.GetProperty | BindingFlags.Public | BindingFlags.Instance,
+                    null,
+                    acadApplication,
+                    null);
+                return Convert.ToInt32(windowState, CultureInfo.InvariantCulture) == 2;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private static void RequireViewMutationIdle()
         {
             var raw = Convert.ToString(Application.GetSystemVariable("CMDACTIVE"), CultureInfo.InvariantCulture) ?? string.Empty;
             int active;
-            if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out active) && active == 0) return;
-            var commandNames = SafeCommandNames(
-                Convert.ToString(Application.GetSystemVariable("CMDNAMES"), CultureInfo.InvariantCulture) ?? string.Empty);
-            var modal = (active & 8) != 0;
-            throw new InvalidOperationException(
-                modal
-                    ? "BricsCAD view update is blocked by modal/dialog state (CMDACTIVE bit 8). Dismiss the modal locally before retrying; MCP will not enter the view mutation while this state is active."
-                    : "BricsCAD view update is busy while another command is active. Wait for cad_wait_idle/CMDACTIVE=0 before retrying the view mutation."
-                + (commandNames.Length == 0 ? string.Empty : " Active command: " + commandNames + "."));
+            var parsed = int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out active);
+            if (!parsed || active != 0)
+            {
+                var commandNames = SafeCommandNames(
+                    Convert.ToString(Application.GetSystemVariable("CMDNAMES"), CultureInfo.InvariantCulture) ?? string.Empty);
+                var modal = (active & 8) != 0;
+                throw new InvalidOperationException(
+                    modal
+                        ? "BricsCAD view update is blocked by modal/dialog state (CMDACTIVE bit 8). Dismiss the modal locally before retrying; MCP will not enter the view mutation while this state is active."
+                        : "BricsCAD view update is busy while another command is active. Wait for cad_wait_idle/CMDACTIVE=0 before retrying the view mutation."
+                    + (commandNames.Length == 0 ? string.Empty : " Active command: " + commandNames + "."));
+            }
+            if (IsBricsCadWindowMinimized())
+                throw new InvalidOperationException(
+                    "BricsCAD view update is blocked while the application window is minimized.");
         }
 
         private static Document RequireDocument()
