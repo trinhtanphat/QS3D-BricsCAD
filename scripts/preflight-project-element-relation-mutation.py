@@ -76,6 +76,8 @@ if not errors:
         "SourceHandleAddMarksRelationsDirty",
         "DependencyAddMarksRelationsDirty",
         "EffectiveMutationSurfaceMarksRelationsDirty",
+        "RelationMutationInvalidatesGeneratedOutput",
+        "Effective relation mutation must invalidate generated solid output.",
         "NoOpRemovalPreservesCleanState",
         "NoOpMutationsPreserveCleanState",
         "RejectedMutationsAreAtomic",
