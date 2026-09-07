@@ -36,11 +36,13 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - name: Bind V26 host-reference state path
+      - name: Bind V26 qualification state paths
         shell: powershell
         run: |
           $statePath = Join-Path $env:RUNNER_TEMP "qs3d-v26-host-reference-state.json"
+          $manifestPath = Join-Path $env:GITHUB_WORKSPACE "artifacts\bricscad-v26-qualification-manifest.json"
           "V26_HOST_REFERENCE_STATE=$statePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "V26_QUALIFICATION_MANIFEST=$manifestPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Manual-only CI policy gate
         run: python scripts/preflight-ci-manual-only.py
@@ -54,9 +56,7 @@ jobs:
       - name: Validate V26 host references and runtime identity
         shell: powershell
         run: |
-          # Capture the exact ordinary/non-reparse V26 host-reference generations that later build/runtime steps are allowed to consume.
           & .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $env:BRICSCAD_V26_DIR -StatePath $env:V26_HOST_REFERENCE_STATE | Out-Null
-          # Keep the BRep reference explicit at the workflow boundary while the shared helper owns ordinary-file, reparse, host-major and stable-generation validation.
           $requiredBrep = Join-Path $env:BRICSCAD_V26_DIR 'TD_MgdBrep.dll'
           if (-not (Test-Path -LiteralPath $requiredBrep -PathType Leaf)) {
             throw "Required BricsCAD V26 host reference is missing: TD_MgdBrep.dll"
@@ -94,6 +94,27 @@ jobs:
             -Profile $env:BRICSCAD_V26_PROFILE `
             -ArtifactDir "$env:GITHUB_WORKSPACE\artifacts\bricscad-v26-runtime"
 
+      - name: Create and validate V26 qualification artifact provenance
+        shell: powershell
+        run: |
+          & .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $env:BRICSCAD_V26_DIR -VerifyStatePath $env:V26_HOST_REFERENCE_STATE | Out-Null
+          $plugin = (Resolve-Path "src\QS3D.BricsCAD.V26\bin\x64\Release\net8.0-windows\QS3D.BricsCAD.V26.dll").Path
+          $core = (Resolve-Path "src\QS3D.BricsCAD.V26\bin\x64\Release\net8.0-windows\QS3D.Core.dll").Path
+          $runtimeDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts\bricscad-v26-runtime'
+          New-Item -ItemType Directory -Path (Split-Path -Parent $env:V26_QUALIFICATION_MANIFEST) -Force | Out-Null
+          & .\scripts\new-v26-qualification-artifact-manifest.ps1 `
+            -SourceCommit '${{ github.sha }}' `
+            -PluginPath $plugin `
+            -CorePath $core `
+            -HostReferenceStatePath $env:V26_HOST_REFERENCE_STATE `
+            -RuntimeArtifactDir $runtimeDir `
+            -OutputPath $env:V26_QUALIFICATION_MANIFEST | Out-Null
+          & .\scripts\assert-v26-qualification-artifact-manifest.ps1 `
+            -ManifestPath $env:V26_QUALIFICATION_MANIFEST `
+            -PluginPath $plugin `
+            -CorePath $core `
+            -ExpectedSourceCommit '${{ github.sha }}'
+
       - name: Upload V26 qualification artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -102,4 +123,5 @@ jobs:
           path: |
             src/QS3D.BricsCAD.V26/bin/x64/Release/net8.0-windows/QS3D.BricsCAD.V26.dll
             src/QS3D.BricsCAD.V26/bin/x64/Release/net8.0-windows/QS3D.Core.dll
+            artifacts/bricscad-v26-qualification-manifest.json
             artifacts/bricscad-v26-runtime/
