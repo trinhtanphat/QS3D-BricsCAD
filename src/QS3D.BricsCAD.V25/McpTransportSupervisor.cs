@@ -44,6 +44,7 @@ namespace QS3D.BricsCAD.V25
         private const int RestartBackoffBaseSeconds = 5;
         private const int RestartBackoffMaxSeconds = 120;
         private const int CloudflarePublicProbeTimeoutMilliseconds = 4000;
+        private const int OpenAiUnreadyProbeThreshold = 3;
 
         private static readonly object Sync = new object();
         private static Timer? _timer;
@@ -54,6 +55,7 @@ namespace QS3D.BricsCAD.V25
         private static McpTransportHealth _health = McpTransportHealth.Stopped;
         private static int _restartCount;
         private static int _failoverCount;
+        private static int _openAiUnreadyProbeCount;
         private static DateTime _nextRetryUtc = DateTime.MinValue;
         private static string _failoverReason = string.Empty;
         private static int? _ownedPid;
@@ -111,6 +113,7 @@ namespace QS3D.BricsCAD.V25
                 _health = McpTransportHealth.Starting;
                 _restartCount = 0;
                 _failoverCount = 0;
+                _openAiUnreadyProbeCount = 0;
                 _nextRetryUtc = DateTime.MinValue;
                 _failoverReason = string.Empty;
                 EnsureTimerUnsafe();
@@ -136,6 +139,7 @@ namespace QS3D.BricsCAD.V25
                 _health = McpTransportHealth.Stopped;
                 _restartCount = 0;
                 _failoverCount = 0;
+                _openAiUnreadyProbeCount = 0;
                 _nextRetryUtc = DateTime.MinValue;
                 _failoverReason = string.Empty;
                 _ownedPid = null;
@@ -181,78 +185,146 @@ namespace QS3D.BricsCAD.V25
                 {
                     _health = McpTransportHealth.Ready;
                     _restartCount = 0;
+                    _openAiUnreadyProbeCount = 0;
                     _nextRetryUtc = DateTime.MinValue;
                 }
                 return;
             }
 
-            string error;
-            if (TryStartProvider(active, out error))
+            string error = string.Empty;
+            var countedUnreadyRestart = false;
+            var attempt = 0;
+
+            if (active == McpTransportProvider.OpenAiSecureTunnel && IsProviderRunning(active))
             {
                 lock (Sync)
                 {
-                    _health = _failoverCount > 0 ? McpTransportHealth.FailedOver : McpTransportHealth.Ready;
-                    _restartCount = 0;
-                    _nextRetryUtc = DateTime.MinValue;
-                }
-                return;
-            }
-
-            int attempt;
-            lock (Sync)
-            {
-                _restartCount = Math.Min(_restartCount + 1, 30);
-                attempt = _restartCount;
-                _health = McpTransportHealth.Degraded;
-            }
-
-            if (attempt >= MaxRestartAttempts)
-            {
-                McpTransportProvider fallback;
-                bool canFailover;
-                lock (Sync) canFailover = _failoverCount < MaxFailoverTransitions;
-                if (canFailover && TryGetFallbackProvider(active, out fallback))
-                {
-                    var failoverReason = active + " restart budget exhausted after " + attempt.ToString()
-                                         + " attempt(s) during " + reason
-                                         + (string.IsNullOrWhiteSpace(error) ? string.Empty : ": " + Limit(error, 240));
-                    StopProvider(active);
-                    lock (Sync)
+                    _openAiUnreadyProbeCount = Math.Min(_openAiUnreadyProbeCount + 1, OpenAiUnreadyProbeThreshold);
+                    if (_openAiUnreadyProbeCount < OpenAiUnreadyProbeThreshold)
                     {
-                        _failoverCount++;
-                        _activeProvider = fallback;
-                        _restartCount = 0;
-                        _nextRetryUtc = DateTime.MinValue;
-                        _failoverReason = failoverReason;
                         _health = McpTransportHealth.Starting;
-                    }
-
-                    string fallbackError;
-                    if (TryStartProvider(fallback, out fallbackError))
-                    {
-                        // Failover is sticky: keep persisted selected-provider identity aligned with
-                        // the route that is actually active, avoiding registration/public-URL drift.
-                        McpTransportCoordinator.SetSelectedProvider(fallback);
-                        lock (Sync) _health = McpTransportHealth.FailedOver;
                         return;
                     }
 
-                    lock (Sync)
-                    {
-                        _restartCount = 1;
-                        _health = McpTransportHealth.Degraded;
-                        _failoverReason = failoverReason + "; fallback start failed: " + Limit(fallbackError, 240);
-                        _nextRetryUtc = DateTime.UtcNow + ComputeRestartBackoff(_restartCount);
-                    }
-                    return;
+                    _openAiUnreadyProbeCount = 0;
+                    _restartCount = Math.Min(_restartCount + 1, 30);
+                    attempt = _restartCount;
+                    _health = McpTransportHealth.Degraded;
+                }
+
+                countedUnreadyRestart = true;
+                error = "OpenAI tunnel remained unready across " + OpenAiUnreadyProbeThreshold.ToString()
+                        + " supervisor probes.";
+                if (TryFailoverIfBudgetExhausted(active, attempt, reason, error)) return;
+
+                // The manager watchdog is intentionally suppressed while this supervisor owns the
+                // transport. Restart only after the bounded warm-up window, never on the first
+                // running-but-unready probe.
+                StopProvider(active);
+            }
+            else
+            {
+                lock (Sync) _openAiUnreadyProbeCount = 0;
+            }
+
+            if (TryStartProvider(active, out error))
+            {
+                PublishStartedProviderState(active, false);
+                return;
+            }
+
+            if (!countedUnreadyRestart)
+            {
+                lock (Sync)
+                {
+                    _restartCount = Math.Min(_restartCount + 1, 30);
+                    attempt = _restartCount;
+                    _health = McpTransportHealth.Degraded;
                 }
             }
+            else
+            {
+                lock (Sync)
+                {
+                    attempt = _restartCount;
+                    _health = McpTransportHealth.Degraded;
+                }
+            }
+
+            if (TryFailoverIfBudgetExhausted(active, attempt, reason, error)) return;
 
             lock (Sync)
             {
                 _nextRetryUtc = DateTime.UtcNow + ComputeRestartBackoff(attempt);
                 _health = McpTransportHealth.Backoff;
             }
+        }
+
+        private static void PublishStartedProviderState(McpTransportProvider provider, bool failedOver)
+        {
+            var healthy = IsProviderHealthy(provider);
+            lock (Sync)
+            {
+                _health = healthy
+                    ? (failedOver ? McpTransportHealth.FailedOver : McpTransportHealth.Ready)
+                    : McpTransportHealth.Starting;
+                if (healthy)
+                {
+                    _restartCount = 0;
+                    _openAiUnreadyProbeCount = 0;
+                }
+                else if (provider != McpTransportProvider.OpenAiSecureTunnel)
+                {
+                    _openAiUnreadyProbeCount = 0;
+                }
+                _nextRetryUtc = DateTime.MinValue;
+            }
+        }
+
+        private static bool TryFailoverIfBudgetExhausted(
+            McpTransportProvider active, int attempt, string reason, string error)
+        {
+            if (attempt < MaxRestartAttempts) return false;
+
+            McpTransportProvider fallback;
+            bool canFailover;
+            lock (Sync) canFailover = _failoverCount < MaxFailoverTransitions;
+            if (!canFailover || !TryGetFallbackProvider(active, out fallback)) return false;
+
+            var failoverReason = active + " restart budget exhausted after " + attempt.ToString()
+                                 + " attempt(s) during " + reason
+                                 + (string.IsNullOrWhiteSpace(error) ? string.Empty : ": " + Limit(error, 240));
+            StopProvider(active);
+            lock (Sync)
+            {
+                _failoverCount++;
+                _activeProvider = fallback;
+                _restartCount = 0;
+                _openAiUnreadyProbeCount = 0;
+                _nextRetryUtc = DateTime.MinValue;
+                _failoverReason = failoverReason;
+                _health = McpTransportHealth.Starting;
+            }
+
+            string fallbackError;
+            if (TryStartProvider(fallback, out fallbackError))
+            {
+                // Failover is sticky: keep persisted selected-provider identity aligned with the
+                // route that is actually active, avoiding registration/public-URL drift. A launched
+                // OpenAI fallback remains Starting until its own readiness proof succeeds.
+                McpTransportCoordinator.SetSelectedProvider(fallback);
+                PublishStartedProviderState(fallback, true);
+                return true;
+            }
+
+            lock (Sync)
+            {
+                _restartCount = 1;
+                _health = McpTransportHealth.Degraded;
+                _failoverReason = failoverReason + "; fallback start failed: " + Limit(fallbackError, 240);
+                _nextRetryUtc = DateTime.UtcNow + ComputeRestartBackoff(_restartCount);
+            }
+            return true;
         }
 
         private static bool TryStartProvider(McpTransportProvider provider, out string error)

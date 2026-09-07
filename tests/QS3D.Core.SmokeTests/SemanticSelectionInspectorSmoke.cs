@@ -178,7 +178,7 @@ namespace QS3D.Core.SmokeTests
         {
             var blankElementProject = BuildProject();
             var blankElement = blankElementProject.FindElement("B-001")!;
-            blankElement.Properties["   "] = "legacy";
+            InjectLegacyElementProperty(blankElement, "   ", "legacy");
             var blankElementVersion = blankElementProject.ChangeVersion;
             MustFail(
                 () => SemanticSelectionInspector.Inspect(blankElementProject, new[] { blankElement.Id }),
@@ -188,7 +188,7 @@ namespace QS3D.Core.SmokeTests
 
             var paddedElementProject = BuildProject();
             var paddedElement = paddedElementProject.FindElement("B-001")!;
-            paddedElement.Properties[" Mark "] = "legacy";
+            InjectLegacyElementProperty(paddedElement, " Mark ", "legacy");
             var paddedElementVersion = paddedElementProject.ChangeVersion;
             MustFail(
                 () => SemanticSelectionInspector.Inspect(paddedElementProject, new[] { paddedElement.Id }),
@@ -602,6 +602,17 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(first);
             project.Elements.Add(second);
             return project;
+        }
+
+        private static void InjectLegacyElementProperty(ProjectElement element, string key, string value)
+        {
+            var field = typeof(ProjectElement).GetField(
+                "_properties",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Legacy Element fixture could not locate the property backing dictionary.");
+            var backing = field.GetValue(element) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Legacy Element fixture property backing dictionary had an unexpected type.");
+            backing[key] = value;
         }
 
         private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)

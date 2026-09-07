@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 
@@ -22,7 +24,7 @@ namespace QS3D.Core.SmokeTests
             var setup = Create();
             setup.Previous.Properties["WidthM"] = "1.0";
             setup.Target.Properties["WidthM"] = "2.0";
-            setup.Element.Properties[" WidthM "] = "1.0";
+            SeedLegacyPersistedProperty(setup.Element, " WidthM ", "1.0");
             setup.Element.MarkClean(ElementDirtyFlags.All);
             var beforeVersion = setup.Project.ChangeVersion;
             var beforeProjectUpdatedUtc = setup.Project.UpdatedUtc;
@@ -47,7 +49,7 @@ namespace QS3D.Core.SmokeTests
         {
             var setup = Create();
             setup.Target.Properties["WidthM"] = "2.0";
-            setup.Element.Properties[string.Empty] = "legacy";
+            SeedLegacyPersistedProperty(setup.Element, string.Empty, "legacy");
             setup.Element.MarkClean(ElementDirtyFlags.All);
             var beforeVersion = setup.Project.ChangeVersion;
             var beforeFamilyId = setup.Element.FamilyId;
@@ -67,7 +69,7 @@ namespace QS3D.Core.SmokeTests
         {
             var setup = Create();
             setup.Element.FamilyId = setup.Target.Id;
-            setup.Element.Properties[" WidthM "] = "legacy";
+            SeedLegacyPersistedProperty(setup.Element, " WidthM ", "legacy");
             setup.Element.MarkClean(ElementDirtyFlags.All);
             var beforeVersion = setup.Project.ChangeVersion;
             var beforeProjectUpdatedUtc = setup.Project.UpdatedUtc;
@@ -125,6 +127,17 @@ namespace QS3D.Core.SmokeTests
             var element = new ProjectElement("E-WALL", ElementCategory.ArchitecturalWall, previous.Id, string.Empty, string.Empty);
             project.Elements.Add(element);
             return new Setup(project, previous, target, element);
+        }
+
+        private static void SeedLegacyPersistedProperty(ProjectElement element, string key, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_properties", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null)
+                throw new InvalidOperationException("Legacy family-assignment property-map smoke fixture could not resolve the persisted ProjectElement backing map.");
+            var backing = field.GetValue(element) as Dictionary<string, string>;
+            if (backing == null)
+                throw new InvalidOperationException("Legacy family-assignment property-map smoke fixture resolved an unexpected ProjectElement backing-map type.");
+            backing.Add(key, value);
         }
 
         private static void Throws<T>(Action action) where T : Exception

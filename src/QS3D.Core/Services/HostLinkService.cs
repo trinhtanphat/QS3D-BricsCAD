@@ -198,11 +198,13 @@ namespace QS3D.Core.Services
 
         private static bool ClearAutoHostMetadata(ProjectElement opening)
         {
+            var properties = opening.Properties as ProjectElementPropertyDictionary
+                ?? throw new InvalidOperationException("ProjectElement property facade is unavailable for Auto Host provenance repair.");
             var changed = false;
-            changed |= opening.Properties.Remove("AutoHostMatched");
-            changed |= opening.Properties.Remove("AutoHostGapM");
-            changed |= opening.Properties.Remove("AutoHostElevDeltaM");
-            changed |= opening.Properties.Remove("AutoHostCandidateCount");
+            changed |= properties.RemovePersistenceValue("AutoHostMatched");
+            changed |= properties.RemovePersistenceValue("AutoHostGapM");
+            changed |= properties.RemovePersistenceValue("AutoHostElevDeltaM");
+            changed |= properties.RemovePersistenceValue("AutoHostCandidateCount");
             return changed;
         }
 
