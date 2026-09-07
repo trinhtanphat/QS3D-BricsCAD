@@ -32,6 +32,15 @@ def validate(text: str) -> None:
     require("Expand-Archive" not in text, "Updater must not reopen the admitted ZIP via Expand-Archive.")
     require("Get-FileHash -LiteralPath $zipPath" not in text, "Updater must not hash the ZIP through a separate pathname reopen.")
 
+    require(
+        "[string]::Equals($cursorFull, $destinationFull, [StringComparison]::OrdinalIgnoreCase)" in block,
+        "Extraction parent reparse validation must include the extraction root itself.",
+    )
+    require(
+        "Package extraction root is a reparse point" in block,
+        "Extraction must fail closed when the extraction root is a reparse point.",
+    )
+
     call_marker = "Expand-VerifiedHeldArchive -ZipPath $zipPath"
     require(text.count(call_marker) == 1, "Updater must invoke held archive extraction exactly once for the downloaded ZIP.")
     call_start = text.index(call_marker)
@@ -49,13 +58,15 @@ def validate(text: str) -> None:
 text = UPDATER.read_text(encoding="utf-8")
 validate(text)
 
-# Mutation probes prove each essential held-generation primitive is independently required.
+# Mutation probes prove each essential held-generation/path-safety primitive is independently required.
 for marker in (
     "ComputeHash($zipStream)",
     "[IO.Compression.ZipArchive]::new($zipStream",
     "[IO.FileShare]::Read",
     "CreateNew",
     "$entry.Open()",
+    "[string]::Equals($cursorFull, $destinationFull, [StringComparison]::OrdinalIgnoreCase)",
+    "Package extraction root is a reparse point",
 ):
     require(marker in text, f"Mutation probe could not find required marker: {marker}")
     mutated = text.replace(marker, "__QS3D_MUTATION_REMOVED__", 1)
