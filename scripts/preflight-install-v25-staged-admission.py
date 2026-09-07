@@ -10,9 +10,20 @@ def require(condition: bool, message: str) -> None:
         raise SystemExit(message)
 
 
+def function_body(text: str, start_marker: str, next_marker: str) -> str:
+    start = text.find(start_marker)
+    end = text.find(next_marker, start + len(start_marker)) if start >= 0 else -1
+    require(start >= 0 and end > start, f"Could not isolate PowerShell function: {start_marker}")
+    return text[start:end]
+
+
 def validate(text: str) -> None:
-    require("function Assert-StagedPayloadAdmission {" in text,
-            "Installer must define staged-payload admission for the bytes that will be committed.")
+    staged = function_body(
+        text,
+        "function Assert-StagedPayloadAdmission {",
+        "function Convert-ToStrictSemVerIdentity {",
+    )
+
     require("Hashes = $manifestHashes" in text,
             "Package integrity admission must retain the already-validated manifest hash snapshot.")
     require("Commands = $commands" in text,
@@ -35,21 +46,21 @@ def validate(text: str) -> None:
     require(stage_call in text, "Installer must validate staged payload bytes before commit.")
     require("-AdmittedHashes $packageAdmission.Hashes" in text,
             "Staged admission must compare against the frozen manifest hashes from source admission.")
-    require("Assert-PackageIdentity -Directory $Directory" in text,
+    require("Assert-PackageIdentity -Directory $Directory" in staged,
             "Staged admission must re-bind package identity to staged DLL/metadata bytes.")
-    require("Get-FileHash -LiteralPath $path -Algorithm SHA256" in text,
+    require("Get-FileHash -LiteralPath $path -Algorithm SHA256" in staged,
             "Staged admission must hash staged payload bytes.")
-    require("Assert-AuthenticodeSigner -Path $path" in text,
+    require("Assert-AuthenticodeSigner -Path $path" in staged,
             "Staged executable payloads must have signer admission after staging.")
-    require("$stageRootItem = Get-Item -LiteralPath $stageRootPath -Force -ErrorAction Stop" in text,
+    require("$stageRootItem = Get-Item -LiteralPath $stageRootPath -Force -ErrorAction Stop" in staged,
             "Staged admission must inspect the exact stage root before trusting descendants.")
-    require("$stageRootItem.Attributes -band [IO.FileAttributes]::ReparsePoint" in text,
+    require("$stageRootItem.Attributes -band [IO.FileAttributes]::ReparsePoint" in staged,
             "Staged admission must reject a reparse-backed stage root.")
-    require("$stageChildren = @(Get-ChildItem -LiteralPath $Directory -Force -ErrorAction Stop)" in text,
+    require("$stageChildren = @(Get-ChildItem -LiteralPath $Directory -Force -ErrorAction Stop)" in staged,
             "Staged admission must enumerate every top-level stage entry, not silently skip directories.")
-    require("$stageFile.Attributes -band [IO.FileAttributes]::ReparsePoint" in text,
+    require("$stageFile.Attributes -band [IO.FileAttributes]::ReparsePoint" in staged,
             "Staged admission must reject reparse-backed staged entries.")
-    require("$relative.Contains('/')" in text,
+    require("$relative.Contains('/')" in staged,
             "Standalone installer staging must reject nested entries instead of silently admitting hidden subtrees.")
 
     copy_pos = text.find("Copy-Item -LiteralPath $source -Destination $destination -Force")
