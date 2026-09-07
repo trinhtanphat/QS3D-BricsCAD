@@ -36,7 +36,7 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - name: Bind V26 qualification state paths
+      - name: Bind V26 host-reference state path
         shell: powershell
         run: |
           $statePath = Join-Path $env:RUNNER_TEMP "qs3d-v26-host-reference-state.json"
