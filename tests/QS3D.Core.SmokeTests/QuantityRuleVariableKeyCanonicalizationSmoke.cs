@@ -25,7 +25,7 @@ namespace QS3D.Core.SmokeTests
             var element = new ProjectElement("B1", ElementCategory.Beam, family.Id, "floor", "zone");
             element.Properties["factor"] = "3";
             element.Properties["LengthM"] = "4";
-            element.Properties["\t"] = "222";
+            InjectLegacyElementProperty(element, "\t", "222");
             element.Quantities["LengthM"] = 5d;
             project.Elements.Add(element);
             project.QuantityRules.Add(new QuantityRule("beam-canonical-projected", ElementCategory.Beam, "ProjectedQuantity", "Factor*LengthM", "1"));
@@ -44,7 +44,7 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("canonical-collision", "Canonical rule collision");
             var element = new ProjectElement("B2", ElementCategory.Beam);
             element.Properties["Factor"] = "2";
-            element.Properties[" Factor "] = "3";
+            InjectLegacyElementProperty(element, " Factor ", "3");
             project.Elements.Add(element);
             project.QuantityRules.Add(new QuantityRule("beam-ambiguous", ElementCategory.Beam, "ProjectedQuantity", "Factor*2", "1"));
 
@@ -66,6 +66,15 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("Rejected normalized variable-key collision wrote provenance.");
             if (element.UpdatedUtc != beforeUpdatedUtc || element.Dirty != beforeDirty)
                 throw new InvalidOperationException("Rejected normalized variable-key collision changed element freshness state.");
+        }
+
+        private static void InjectLegacyElementProperty(ProjectElement element, string key, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_properties", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Legacy Element fixture could not locate the property backing dictionary.");
+            var backing = field.GetValue(element) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Legacy Element fixture property backing dictionary had an unexpected type.");
+            backing[key] = value;
         }
 
         private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
@@ -49,7 +51,7 @@ namespace QS3D.Core.SmokeTests
             };
             element.SourceHandles.Add("AB12");
             element.DependsOn.Add("E-BASE");
-            element.Properties["NullProperty"] = null!;
+            SeedLegacyPersistedProperty(element, "NullProperty", null);
             project.Elements.Add(element);
 
             project.AuditEvents.Add(new AuditEvent
@@ -89,6 +91,17 @@ namespace QS3D.Core.SmokeTests
             audit.Detail = "changed-detail";
             audit.Actor = "changed-actor";
             audit.CorrelationId = "changed-correlation";
+        }
+
+        private static void SeedLegacyPersistedProperty(ProjectElement element, string key, string? value)
+        {
+            var field = typeof(ProjectElement).GetField("_properties", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null)
+                throw new InvalidOperationException("Snapshot null-fidelity fixture could not resolve the persisted ProjectElement backing map.");
+            var backing = field.GetValue(element) as Dictionary<string, string>;
+            if (backing == null)
+                throw new InvalidOperationException("Snapshot null-fidelity fixture resolved an unexpected ProjectElement backing-map type.");
+            backing.Add(key, value!);
         }
 
         private static void AssertExpectedBacking(ProjectState project, string label)

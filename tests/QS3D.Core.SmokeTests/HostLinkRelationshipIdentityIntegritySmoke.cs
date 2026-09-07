@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
@@ -60,7 +62,7 @@ namespace QS3D.Core.SmokeTests
         private static void UnlinkRejectsMalformedPersistedHostIdBeforeMutation()
         {
             var state = CreateState();
-            state.Opening.Properties["HostWallId"] = "host-\uDC00-id";
+            SeedLegacyPersistedProperty(state.Opening, "HostWallId", "host-\uDC00-id");
             state.Opening.DependsOn.Add(state.Wall.Id);
 
             ThrowsInvalid(
@@ -98,6 +100,17 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(opening);
             project.Elements.Add(wall);
             return new State(project, opening, wall, new HostLinkService());
+        }
+
+        private static void SeedLegacyPersistedProperty(ProjectElement element, string key, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_properties", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null)
+                throw new InvalidOperationException("Legacy host-link identity smoke fixture could not resolve the persisted ProjectElement backing map.");
+            var backing = field.GetValue(element) as Dictionary<string, string>;
+            if (backing == null)
+                throw new InvalidOperationException("Legacy host-link identity smoke fixture resolved an unexpected ProjectElement backing-map type.");
+            backing.Add(key, value);
         }
 
         private static void ThrowsInvalid(Action action, string expectedMessage)

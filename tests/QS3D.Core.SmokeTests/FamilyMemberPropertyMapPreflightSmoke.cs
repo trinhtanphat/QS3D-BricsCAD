@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 
@@ -21,7 +23,7 @@ namespace QS3D.Core.SmokeTests
         {
             var setup = Create();
             setup.Family.Properties["WidthM"] = "1.0";
-            setup.Element.Properties[" WidthM "] = "1.0";
+            SeedLegacyPersistedProperty(setup.Element, " WidthM ", "1.0");
             setup.Element.MarkClean(ElementDirtyFlags.All);
             var beforeVersion = setup.Project.ChangeVersion;
             var beforeProjectUpdatedUtc = setup.Project.UpdatedUtc;
@@ -46,7 +48,7 @@ namespace QS3D.Core.SmokeTests
         {
             var setup = Create();
             setup.Family.Properties["WidthM"] = "1.0";
-            setup.Element.Properties[" WidthM "] = "1.0";
+            SeedLegacyPersistedProperty(setup.Element, " WidthM ", "1.0");
             setup.Element.MarkClean(ElementDirtyFlags.All);
             var beforeVersion = setup.Project.ChangeVersion;
             var beforeElementUpdatedUtc = setup.Element.UpdatedUtc;
@@ -69,7 +71,7 @@ namespace QS3D.Core.SmokeTests
         {
             var setup = Create();
             setup.Family.Properties["WidthM"] = "1.0";
-            setup.Element.Properties[string.Empty] = "legacy";
+            SeedLegacyPersistedProperty(setup.Element, string.Empty, "legacy");
             var beforeVersion = setup.Project.ChangeVersion;
 
             Throws<InvalidOperationException>(() =>
@@ -106,6 +108,17 @@ namespace QS3D.Core.SmokeTests
             var element = new ProjectElement("E-WALL", ElementCategory.ArchitecturalWall, family.Id, string.Empty, string.Empty);
             project.Elements.Add(element);
             return new Setup(project, family, element);
+        }
+
+        private static void SeedLegacyPersistedProperty(ProjectElement element, string key, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_properties", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null)
+                throw new InvalidOperationException("Legacy family-member property-map smoke fixture could not resolve the persisted ProjectElement backing map.");
+            var backing = field.GetValue(element) as Dictionary<string, string>;
+            if (backing == null)
+                throw new InvalidOperationException("Legacy family-member property-map smoke fixture resolved an unexpected ProjectElement backing-map type.");
+            backing.Add(key, value);
         }
 
         private static void Throws<T>(Action action) where T : Exception

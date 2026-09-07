@@ -69,7 +69,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("snapshot-invalid-element-property-" + label.Replace(" ", "-"), "Invalid element property fixture");
             var element = new ProjectElement("E1", ElementCategory.Room);
-            element.Properties[key] = value;
+            InjectLegacyElementProperty(element, key, value);
             element.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(element);
             var originalDirty = element.Dirty;
@@ -221,6 +221,17 @@ namespace QS3D.Core.SmokeTests
             Require(!ReferenceEquals(detached, project) && !ReferenceEquals(detachedElement, element), "CreateDetachedCopy aliased canonical state.");
             detachedElement.SetProperty("Name", "Detached"); detachedElement.SourceHandles.Add("DETACHED");
             Require(element.Properties["Name"] == "Canonical" && element.SourceHandles.Count == 0, "Detached mutation leaked into canonical element.");
+        }
+
+        private static void InjectLegacyElementProperty(ProjectElement element, string key, string value)
+        {
+            var field = typeof(ProjectElement).GetField(
+                "_properties",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Legacy Element fixture could not locate the property backing dictionary.");
+            var inner = field.GetValue(element) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Legacy Element fixture property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
