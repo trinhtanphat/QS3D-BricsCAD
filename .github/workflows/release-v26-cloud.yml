@@ -528,7 +528,7 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: QS3D-BricsCAD-V26-cloud-${{ needs.qualify.outputs.release_tag }}-${{ github.sha }}
-          path: .
+          path: dist
 
       - name: Verify and publish held V26 cloud candidate after job boundary
         shell: powershell
