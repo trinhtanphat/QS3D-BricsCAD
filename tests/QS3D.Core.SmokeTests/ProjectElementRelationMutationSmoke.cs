@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             SourceHandleAddMarksRelationsDirty();
             DependencyAddMarksRelationsDirty();
             EffectiveMutationSurfaceMarksRelationsDirty();
+            RelationMutationInvalidatesGeneratedOutput();
             NoOpRemovalPreservesCleanState();
             NoOpMutationsPreserveCleanState();
             RejectedMutationsAreAtomic();
@@ -52,6 +53,22 @@ namespace QS3D.Core.SmokeTests
             AssertEffectiveMutation(
                 element => Seed(element.DependsOn, "A"),
                 element => element.DependsOn.Clear());
+        }
+
+        private static void RelationMutationInvalidatesGeneratedOutput()
+        {
+            var element = new ProjectElement("E1", ElementCategory.Beam);
+            element.SetProperty("GeneratedSolidHandle", "AA11");
+            element.ClearGeneratedGeometryStale();
+            element.MarkClean(ElementDirtyFlags.All);
+            if (element.IsGeneratedSolidStale())
+                throw new Exception("Generated solid must be fresh before relation mutation regression.");
+
+            element.DependsOn.Add("E2");
+
+            if (!element.IsGeneratedSolidStale())
+                throw new Exception("Effective relation mutation must invalidate generated solid output.");
+            Has(element.Dirty, ElementDirtyFlags.Relations);
         }
 
         private static void NoOpRemovalPreservesCleanState()
