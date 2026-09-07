@@ -4,6 +4,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGER = ROOT / "scripts" / "package-v26.ps1"
 NORMALIZED_ZIP_ENTRY = "$entryName = $fullName.Substring($packagePrefix.Length).Replace([IO.Path]::DirectorySeparatorChar, '/').Replace([IO.Path]::AltDirectorySeparatorChar, '/')"
+ZIP_ENTRY_BACKSLASH_REJECTION = "$entryName.Contains('\\')"
+MANIFEST_BACKSLASH_REJECTION = "$relativePath.Contains('\\')"
 
 
 def require(condition: bool, message: str) -> None:
@@ -30,6 +32,10 @@ def validate(text: str) -> None:
             "V26 ZIP entry order must be ordinal and culture-independent.")
     require(NORMALIZED_ZIP_ENTRY in text,
             "V26 ZIP entry names must use canonical forward-slash separators.")
+    require(ZIP_ENTRY_BACKSLASH_REJECTION in text,
+            "V26 ZIP entry admission must reject literal backslashes after normalization.")
+    require(MANIFEST_BACKSLASH_REJECTION in text,
+            "V26 checksum-manifest path admission must reject literal backslashes.")
     require("[IO.Compression.CompressionLevel]::NoCompression" in text,
             "V26 ZIP entries must avoid runtime-specific deflate drift.")
     require("$entry.LastWriteTime = $SourceTimestamp" in text,
@@ -57,6 +63,8 @@ for marker in (
     "function New-DeterministicPackageZip {",
     "[Array]::Sort($entryNames, [StringComparer]::Ordinal)",
     NORMALIZED_ZIP_ENTRY,
+    ZIP_ENTRY_BACKSLASH_REJECTION,
+    MANIFEST_BACKSLASH_REJECTION,
     "[IO.Compression.CompressionLevel]::NoCompression",
     "$entry.LastWriteTime = $SourceTimestamp",
     "[Array]::Sort($commands, [StringComparer]::Ordinal)",
