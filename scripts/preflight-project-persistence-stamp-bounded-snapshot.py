@@ -36,7 +36,7 @@ for anchor in [
     "[ModuleInitializer]",
     "MaximumSnapshotCharacters",
     "RequireSnapshotCapacity",
-    "(long)budget + 1L",
+    "(long)budget - snapshot.Length + 1L",
     "InvalidOperationException",
     "64 Mi-character",
 ]:
