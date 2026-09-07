@@ -7,6 +7,7 @@ param(
     [Parameter(Mandatory = $true)][ValidatePattern('^[0-9A-Fa-f]{40}$')][string]$ExpectedSourceCommit,
     [Parameter(Mandatory = $true)][string]$ExpectedReleaseTag,
     [string]$ExpectedPackageReleaseTag,
+    [string]$ExpectedInstallerSha256 = $env:BRICSCAD_V26_PINNED_MSI_SHA256,
     [string]$AdmittedScript
 )
 
@@ -67,6 +68,10 @@ function Read-HeldText([pscustomobject]$Held, [string]$Label, [int64]$MaxBytes =
     catch [Text.DecoderFallbackException] { throw "$Label is not strict UTF-8." }
 }
 
+if ([string]::IsNullOrWhiteSpace($ExpectedInstallerSha256) -or $ExpectedInstallerSha256 -cnotmatch '^[0-9a-f]{64}$') {
+    throw 'Expected admitted V26 installer SHA-256 must be canonical lowercase 64-hex.'
+}
+
 $held = New-Object 'System.Collections.Generic.List[object]'
 try {
     $zipHeld = Open-Held -Path $PackageZip -Label 'V26 candidate ZIP'; $held.Add($zipHeld) | Out-Null
@@ -86,6 +91,9 @@ try {
     if (-not [string]::Equals([string]$provenance.releaseTag, $ExpectedReleaseTag, [StringComparison]::Ordinal)) { throw 'V26 candidate provenance release tag mismatch.' }
     if (-not [string]::Equals([string]$provenance.sourceCommit, $ExpectedSourceCommit, [StringComparison]::OrdinalIgnoreCase)) { throw 'V26 candidate provenance source commit mismatch.' }
     if (-not [string]::Equals([string]$provenance.packageSha256, $zipHash, [StringComparison]::OrdinalIgnoreCase)) { throw 'V26 candidate provenance package digest mismatch.' }
+    $installerSha256 = [string]$provenance.installerSha256
+    if ($installerSha256 -cnotmatch '^[0-9a-f]{64}$') { throw 'V26 candidate provenance installer SHA-256 is noncanonical.' }
+    if (-not [string]::Equals($installerSha256, $ExpectedInstallerSha256, [StringComparison]::Ordinal)) { throw 'V26 candidate provenance installer digest mismatch.' }
 
     $hostReferences = @($provenance.hostReferences)
     if ($hostReferences.Count -ne $requiredHostNames.Count) { throw 'V26 candidate provenance must contain exactly four held host-reference identities.' }
@@ -130,7 +138,7 @@ try {
     }
 
     foreach ($item in $held) { Assert-Held -Held $item -Label 'V26 candidate identity input' }
-    $identity = [pscustomobject]@{ SourceCommit=$ExpectedSourceCommit.ToLowerInvariant(); ReleaseTag=$ExpectedReleaseTag; ProductVersion=[string]$metadata.productVersion; PackageSha256=$zipHash; Signed=($null -ne $updateHeld); HostReferences=$hostReferences }
+    $identity = [pscustomobject]@{ SourceCommit=$ExpectedSourceCommit.ToLowerInvariant(); ReleaseTag=$ExpectedReleaseTag; ProductVersion=[string]$metadata.productVersion; PackageSha256=$zipHash; InstallerSha256=$installerSha256; Signed=($null -ne $updateHeld); HostReferences=$hostReferences }
     if ($null -ne $admittedScriptBlock) {
         & $admittedScriptBlock
         foreach ($item in $held) { Assert-Held -Held $item -Label 'V26 candidate identity input after publication' }
