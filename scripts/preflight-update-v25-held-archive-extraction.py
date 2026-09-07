@@ -33,6 +33,14 @@ def validate(text: str) -> None:
     require("Get-FileHash -LiteralPath $zipPath" not in text, "Updater must not hash the ZIP through a separate pathname reopen.")
 
     require(
+        "$rootItem = Get-Item -LiteralPath $destinationFull -Force -ErrorAction Stop" in block,
+        "Extraction must inspect the extraction root after creating/resolving it.",
+    )
+    require(
+        "if (($rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)" in block,
+        "Extraction must reject a reparse-backed extraction root.",
+    )
+    require(
         "[string]::Equals($cursorFull, $destinationFull, [StringComparison]::OrdinalIgnoreCase)" in block,
         "Extraction parent reparse validation must include the extraction root itself.",
     )
@@ -65,8 +73,9 @@ for marker in (
     "[IO.FileShare]::Read",
     "CreateNew",
     "$entry.Open()",
+    "$rootItem = Get-Item -LiteralPath $destinationFull -Force -ErrorAction Stop",
+    "if (($rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)",
     "[string]::Equals($cursorFull, $destinationFull, [StringComparison]::OrdinalIgnoreCase)",
-    "Package extraction root is a reparse point",
 ):
     require(marker in text, f"Mutation probe could not find required marker: {marker}")
     mutated = text.replace(marker, "__QS3D_MUTATION_REMOVED__", 1)
