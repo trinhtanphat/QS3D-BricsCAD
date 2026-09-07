@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGER = ROOT / "scripts" / "package-v26.ps1"
+NORMALIZED_ZIP_ENTRY = "$entryName = $fullName.Substring($packagePrefix.Length).Replace([IO.Path]::DirectorySeparatorChar, '/').Replace([IO.Path]::AltDirectorySeparatorChar, '/')"
 
 
 def require(condition: bool, message: str) -> None:
@@ -27,6 +28,8 @@ def validate(text: str) -> None:
             "V26 packaging must use a deterministic ZIP writer.")
     require("[Array]::Sort($entryNames, [StringComparer]::Ordinal)" in text,
             "V26 ZIP entry order must be ordinal and culture-independent.")
+    require(NORMALIZED_ZIP_ENTRY in text,
+            "V26 ZIP entry names must use canonical forward-slash separators.")
     require("[IO.Compression.CompressionLevel]::NoCompression" in text,
             "V26 ZIP entries must avoid runtime-specific deflate drift.")
     require("$entry.LastWriteTime = $SourceTimestamp" in text,
@@ -53,6 +56,7 @@ for marker in (
     "git -C $root show -s --format=%cI $Commit",
     "function New-DeterministicPackageZip {",
     "[Array]::Sort($entryNames, [StringComparer]::Ordinal)",
+    NORMALIZED_ZIP_ENTRY,
     "[IO.Compression.CompressionLevel]::NoCompression",
     "$entry.LastWriteTime = $SourceTimestamp",
     "[Array]::Sort($commands, [StringComparer]::Ordinal)",
