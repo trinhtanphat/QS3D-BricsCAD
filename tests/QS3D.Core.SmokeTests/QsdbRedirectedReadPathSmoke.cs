@@ -130,14 +130,20 @@ namespace QS3D.Core.SmokeTests
             {
                 action();
             }
-            catch (InvalidDataException ex) when (
-                ex.Message.IndexOf("redirected", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                ex.Message.IndexOf("reparse-point", StringComparison.OrdinalIgnoreCase) >= 0)
+            catch (Exception ex) when (IsRedirectRefusal(ex))
             {
                 return;
             }
 
             throw new InvalidOperationException("QsdbRedirectedReadPathSmoke: " + message + ".");
+        }
+
+        private static bool IsRedirectRefusal(Exception exception)
+        {
+            return exception is IOException && string.Equals(
+                exception.GetType().FullName,
+                "QS3D.Core.Persistence.PersistencePathSafetyException",
+                StringComparison.Ordinal);
         }
 
         private static void WithDirectory(Action<string> action)

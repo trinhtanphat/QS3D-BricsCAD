@@ -7,6 +7,14 @@ using Microsoft.Win32.SafeHandles;
 
 namespace QS3D.Core.Persistence
 {
+    internal sealed class PersistencePathSafetyException : IOException
+    {
+        public PersistencePathSafetyException(string message)
+            : base(message)
+        {
+        }
+    }
+
     /// <summary>
     /// Fail-closed path checks shared by persistence write primitives.
     /// Persistence authority is expressed by the canonical path, so an existing
@@ -33,7 +41,7 @@ namespace QS3D.Core.Persistence
             var canonical = Path.GetFullPath(fullPath);
             var root = Path.GetPathRoot(canonical);
             if (string.IsNullOrWhiteSpace(root))
-                throw new InvalidDataException("QS3D could not resolve the persistence path root.");
+                throw new PersistencePathSafetyException("QS3D could not resolve the persistence path root.");
 
             var separators = Path.AltDirectorySeparatorChar == Path.DirectorySeparatorChar
                 ? new[] { Path.DirectorySeparatorChar }
@@ -63,7 +71,7 @@ namespace QS3D.Core.Persistence
                 }
 
                 if ((attributes & FileAttributes.ReparsePoint) != 0)
-                    throw new InvalidDataException("QS3D refused a redirected or reparse-point " + role + " path.");
+                    throw new PersistencePathSafetyException("QS3D refused a redirected or reparse-point " + role + " path.");
             }
         }
 
@@ -116,7 +124,7 @@ namespace QS3D.Core.Persistence
                 if (!GetFileInformationByHandle(pathHandle, out pathInformation))
                     throw CreateIdentityIOException(role + " pathname generation");
                 if ((((FileAttributes)pathInformation.FileAttributes) & FileAttributes.ReparsePoint) != 0)
-                    throw new InvalidDataException("QS3D refused a redirected or reparse-point " + role + " pathname generation.");
+                    throw new PersistencePathSafetyException("QS3D refused a redirected or reparse-point " + role + " pathname generation.");
 
                 RequireCanonicalFinalPath(canonical, pathHandle, role + " pathname generation");
 
