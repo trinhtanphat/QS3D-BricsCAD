@@ -3,34 +3,42 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.DocumentAffinity.cs"
+AFFINITY_SOURCE = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.DocumentAffinity.cs"
+WORKSPACE_SOURCE = ROOT / "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs"
+PALETTE_SOURCE = ROOT / "src/QS3D.BricsCAD.V25/PaletteCoordinator.cs"
+SELECTION_SOURCE = ROOT / "src/QS3D.BricsCAD.V25/SelectionSyncCoordinator.cs"
 errors = []
 
-if not SOURCE.is_file():
-    errors.append("missing Workspace affinity source: " + str(SOURCE.relative_to(ROOT)))
-    text = ""
-else:
-    text = SOURCE.read_text(encoding="utf-8")
 
-required = [
-    "public partial class WorkspacePanel",
+def read_source(path):
+    if not path.is_file():
+        errors.append("missing source: " + str(path.relative_to(ROOT)))
+        return ""
+    return path.read_text(encoding="utf-8")
+
+
+affinity = read_source(AFFINITY_SOURCE)
+workspace = read_source(WORKSPACE_SOURCE)
+palette = read_source(PALETTE_SOURCE)
+selection = read_source(SELECTION_SOURCE)
+
+# Preserve the merged #5945 lifecycle contract: modeless presentation is invalidated
+# synchronously at native document activation/destruction and subscriptions are symmetric.
+for needle in [
     "private static readonly bool DocumentAffinityRegistrationReady",
     "private bool _workspaceDocumentAffinityAttached;",
-    "FrameworkElement.LoadedEvent",
-    "FrameworkElement.UnloadedEvent",
     "Application.DocumentManager.DocumentActivated += OnWorkspaceDocumentActivated;",
     "Application.DocumentManager.DocumentActivated -= OnWorkspaceDocumentActivated;",
     "Application.DocumentManager.DocumentToBeDestroyed += OnWorkspaceDocumentToBeDestroyed;",
     "Application.DocumentManager.DocumentToBeDestroyed -= OnWorkspaceDocumentToBeDestroyed;",
     "private void InvalidateWorkspaceDocumentState",
     "ClearProject(",
-]
-for needle in required:
-    if needle not in text:
-        errors.append("Workspace affinity source missing token: " + needle)
+]:
+    if needle not in affinity:
+        errors.append("Workspace lifecycle affinity contract missing token: " + needle)
 
-if "Dispatcher.BeginInvoke" in text or ".BeginInvoke(" in text:
-    errors.append("Workspace document invalidation must be synchronous; Dispatcher queuing re-opens the activation-to-idle stale-state window")
+if "Dispatcher.BeginInvoke" in affinity or ".BeginInvoke(" in affinity:
+    errors.append("Workspace document invalidation must stay synchronous")
 
 for forbidden in [
     "CadHandleService.",
@@ -40,60 +48,84 @@ for forbidden in [
     "ProjectContextCoordinator.GetOrCreate",
     "DocumentLock",
 ]:
-    if forbidden in text:
-        errors.append("Workspace affinity invalidation must remain presentation-only: " + forbidden)
+    if forbidden in affinity:
+        errors.append("Workspace lifecycle invalidation must remain presentation-only: " + forbidden)
 
+# #6037 payload contract: the exact source Document must be carried from the selection
+# authority through PaletteCoordinator into Workspace inspection state. A consumer must
+# never infer ownership from whichever MDI document happens to be active later.
+selection_required = [
+    "PaletteCoordinator.SetInspection(document, snapshots);",
+]
+for needle in selection_required:
+    if needle not in selection:
+        errors.append("Selection producer must publish exact source Document with snapshots: " + needle)
 
-def method_body(signature, next_signature):
-    start = text.find(signature)
-    if start < 0:
-        errors.append("missing method: " + signature)
-        return ""
-    end = text.find(next_signature, start + len(signature))
-    return text[start:end if end >= 0 else len(text)]
+palette_required = [
+    "public static void SetInspection(Document sourceDocument, IReadOnlyList<EntitySnapshot> snapshots)",
+    "ReferenceEquals(sourceDocument, Application.DocumentManager.MdiActiveDocument)",
+    "ProjectContextCoordinator.TryGetReadOnly(sourceDocument, out var currentProject)",
+    "_workspacePanel?.SetInspectionReadOnly(sourceDocument, snapshots, project);",
+]
+for needle in palette_required:
+    if needle not in palette:
+        errors.append("Palette inspection handoff missing exact-document token: " + needle)
 
-loaded = method_body("private static void OnWorkspaceAffinityLoaded", "private static void OnWorkspaceAffinityUnloaded")
-if loaded:
-    if "AttachWorkspaceDocumentAffinity" not in loaded:
-        errors.append("Workspace Loaded must attach document affinity")
-    if "InvalidateWorkspaceDocumentState" not in loaded:
-        errors.append("Workspace Loaded must invalidate state that may have gone stale while detached")
-    if "RefreshProject" not in loaded:
-        errors.append("Workspace Loaded must rehydrate active project after stale-state invalidation")
+if "var document = Application.DocumentManager.MdiActiveDocument;" in palette:
+    set_start = palette.find("public static void SetInspection(")
+    status_start = palette.find("public static void SetStatus", set_start)
+    set_body = palette[set_start:status_start if status_start >= 0 else len(palette)] if set_start >= 0 else ""
+    if "var document = Application.DocumentManager.MdiActiveDocument;" in set_body:
+        errors.append("Palette SetInspection must not infer the payload owner from current MDI state")
 
-attach = method_body("private void AttachWorkspaceDocumentAffinity", "private void DetachWorkspaceDocumentAffinity")
-if attach:
-    if "if (_workspaceDocumentAffinityAttached) return;" not in attach:
-        errors.append("Workspace affinity attach must be idempotent")
-    if "_workspaceDocumentAffinityAttached = true;" not in attach:
-        errors.append("Workspace affinity attach must publish attached state only after both native hooks succeed")
+workspace_required = [
+    "private Document? _inspectionSourceDocument;",
+    "public void SetInspectionReadOnly(Document sourceDocument, IReadOnlyList<EntitySnapshot> snapshots, ProjectState? project)",
+    "_inspectionSourceDocument = sourceDocument;",
+    "_inspectionSourceDocument = null;",
+    "var sourceDocument = _inspectionSourceDocument;",
+    "var activeDocument = Application.DocumentManager.MdiActiveDocument;",
+    "!ReferenceEquals(sourceDocument, activeDocument)",
+]
+for needle in workspace_required:
+    if needle not in workspace:
+        errors.append("Workspace inspection payload affinity missing token: " + needle)
 
-detach = method_body("private void DetachWorkspaceDocumentAffinity", "private void OnWorkspaceDocumentActivated")
-if detach:
-    if "if (!_workspaceDocumentAffinityAttached) return;" not in detach:
-        errors.append("Workspace affinity detach must be idempotent")
-    if "_workspaceDocumentAffinityAttached = false;" not in detach:
-        errors.append("Workspace affinity detach must clear attached state")
+sync_start = workspace.find("private void SyncFamilyFromSelection")
+sync_end = workspace.find("private ", sync_start + len("private void SyncFamilyFromSelection")) if sync_start >= 0 else -1
+sync_body = workspace[sync_start:sync_end if sync_end >= 0 else len(workspace)] if sync_start >= 0 else ""
+if not sync_body:
+    errors.append("missing SyncFamilyFromSelection")
+else:
+    identity = sync_body.find("!ReferenceEquals(sourceDocument, activeDocument)")
+    database = sync_body.find(".Database")
+    transaction = sync_body.find("StartTransaction")
+    handle_lookup = sync_body.find("GetObjectId")
+    if identity < 0:
+        errors.append("SyncFamilyFromSelection must fail closed on source/active Document mismatch")
+    for name, index in [("Database", database), ("StartTransaction", transaction), ("GetObjectId", handle_lookup)]:
+        if index >= 0 and identity >= 0 and index < identity:
+            errors.append("SyncFamilyFromSelection touches %s before exact document-affinity fence" % name)
+    if "var document = Application.DocumentManager.MdiActiveDocument;" in sync_body:
+        errors.append("SyncFamilyFromSelection must not treat current MDI document as the inspection source")
 
-activated = method_body("private void OnWorkspaceDocumentActivated", "private void OnWorkspaceDocumentToBeDestroyed")
-if activated and "InvalidateWorkspaceDocumentState" not in activated:
-    errors.append("DocumentActivated must synchronously invalidate stale Workspace state")
+# Clearing/invalidation must release the native Document reference so a detached modeless
+# panel cannot retain or resurrect stale payload ownership.
+clear_start = workspace.find("public void ClearInspection")
+clear_end = workspace.find("public ", clear_start + len("public void ClearInspection")) if clear_start >= 0 else -1
+clear_body = workspace[clear_start:clear_end if clear_end >= 0 else len(workspace)] if clear_start >= 0 else ""
+if clear_body and "_inspectionSourceDocument = null;" not in clear_body:
+    errors.append("ClearInspection must release inspection source Document identity")
 
-destroyed = method_body("private void OnWorkspaceDocumentToBeDestroyed", "private void InvalidateWorkspaceDocumentState")
-if destroyed:
-    if "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, e.Document)" not in destroyed:
-        errors.append("destroy handling must only invalidate when the active/owner document is going away")
-    if "InvalidateWorkspaceDocumentState" not in destroyed:
-        errors.append("DocumentToBeDestroyed must invalidate active Workspace state")
+# This fix must not add process-wide/native event subscriptions to the payload path.
+for text, label in [(workspace, "Workspace"), (palette, "PaletteCoordinator"), (selection, "SelectionSyncCoordinator")]:
+    if "EventManager.RegisterClassHandler" in text:
+        errors.append(label + " inspection payload path must not add process-wide WPF class handlers")
 
-invalidate = method_body("private void InvalidateWorkspaceDocumentState", "}")
-if invalidate and "ClearProject(" not in invalidate:
-    errors.append("Workspace invalidation must clear inspection/family/project presentation before deferred reconcile")
-
-print("QS3D Workspace document-affinity preflight")
+print("QS3D Workspace inspection document-affinity preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: Workspace synchronously invalidates document-bound presentation on activation/destruction, safely covers unload/reload gaps, and leaves CAD/project mutation to active-document reconciliation.")
+print("PASS: Workspace preserves #5945 lifecycle invalidation and binds every inspection payload to the exact source Document before project/database/handle consumption.")
