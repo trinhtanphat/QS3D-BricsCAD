@@ -27,6 +27,7 @@ namespace QS3D.Core.SmokeTests
             UnsafeMalformedAndUnsupportedPackagesFailClosed();
             MalformedLeafStructureFailsClosed();
             NonCanonicalXmlNodeFormsFailClosed();
+            DtdBearingEntriesFailClosedBeforeSemanticUse();
         }
 
         private static void PackageIsByteDeterministicAndSchemaShaped()
@@ -276,6 +277,32 @@ namespace QS3D.Core.SmokeTests
                 [TopicA + "/markup.bcf"] = MinimalMarkup("Document comment")
             });
             ThrowsInvalidData(() => BcfZipPackage.Read(documentComment), "BCF XML documents must reject non-root comments and processing content.");
+        }
+
+        private static void DtdBearingEntriesFailClosedBeforeSemanticUse()
+        {
+            var versionDtd = BuildRawPackage(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["bcf.version"] = "<!DOCTYPE Version [<!ENTITY v '3.0'>]><Version VersionId=\"&v;\" />",
+                [TopicA + "/markup.bcf"] = MinimalMarkup("DTD version")
+            });
+            ThrowsInvalidData(() => BcfZipPackage.Read(versionDtd), "BCF version XML with an inline DTD/entity must fail closed.");
+
+            var markupDtd = BuildRawPackage(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["bcf.version"] = "<Version VersionId=\"3.0\" />",
+                [TopicA + "/markup.bcf"] = "<!DOCTYPE Markup [<!ENTITY title 'Expanded title'>]><Markup><Topic Guid=\"" + TopicA + "\" TopicType=\"Coordination\" TopicStatus=\"Open\"><Title>&title;</Title><CreationDate>2026-08-14T09:00:00Z</CreationDate><CreationAuthor>qa@qs3d</CreationAuthor></Topic></Markup>"
+            });
+            ThrowsInvalidData(() => BcfZipPackage.Read(markupDtd), "BCF markup XML with an inline DTD/entity must fail closed.");
+
+            var viewpointMarkup = "<Markup><Topic Guid=\"" + TopicA + "\" TopicType=\"Coordination\" TopicStatus=\"Open\"><Title>DTD viewpoint</Title><CreationDate>2026-08-14T09:00:00Z</CreationDate><CreationAuthor>qa@qs3d</CreationAuthor><Viewpoints><ViewPoint Guid=\"" + Viewpoint + "\"><Viewpoint>" + Viewpoint + ".bcfv</Viewpoint></ViewPoint></Viewpoints></Topic></Markup>";
+            var viewpointDtd = BuildRawPackage(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["bcf.version"] = "<Version VersionId=\"3.0\" />",
+                [TopicA + "/markup.bcf"] = viewpointMarkup,
+                [TopicA + "/" + Viewpoint + ".bcfv"] = "<!DOCTYPE VisualizationInfo [<!ENTITY one '1'>]><VisualizationInfo Guid=\"" + Viewpoint + "\"><Components><Selection /></Components><OrthogonalCamera><CameraViewPoint><X>0</X><Y>0</Y><Z>0</Z></CameraViewPoint><CameraDirection><X>0</X><Y>0</Y><Z>-1</Z></CameraDirection><CameraUpVector><X>0</X><Y>&one;</Y><Z>0</Z></CameraUpVector><ViewToWorldScale>1</ViewToWorldScale><AspectRatio>1</AspectRatio></OrthogonalCamera></VisualizationInfo>"
+            });
+            ThrowsInvalidData(() => BcfZipPackage.Read(viewpointDtd), "BCF viewpoint XML with an inline DTD/entity must fail closed.");
         }
 
         private static BcfIssueExchange BuildFixture()
