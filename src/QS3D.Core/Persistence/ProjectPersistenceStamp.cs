@@ -11,6 +11,7 @@ namespace QS3D.Core.Persistence
     {
         private const int MaximumTopLevelSnapshotEntries = QsdbProjectStructuralCardinality.MaxTopLevelEntries;
         private const int MaximumNestedSnapshotEntries = QsdbProjectStructuralCardinality.MaxNestedEntries;
+        private const int MaximumSnapshotCharacters = 64 * 1024 * 1024;
         private const string RecoveredFromBackupKey = "QS3D.RecoveredFromBackup";
         private const string ProjectBrowserWorkspaceStateKey = "QS3D.ProjectBrowser.WorkspaceState";
         private readonly ProjectState _project;
@@ -386,17 +387,23 @@ namespace QS3D.Core.Persistence
 
         private static void AppendSequenceCount(StringBuilder snapshot, int value)
         {
-            snapshot.Append('C').Append(value.ToString(CultureInfo.InvariantCulture)).Append(';');
+            var encoded = "C" + value.ToString(CultureInfo.InvariantCulture) + ";";
+            RequireSnapshotCapacity(snapshot, encoded.Length);
+            snapshot.Append(encoded);
         }
 
         private static void AppendInt32(StringBuilder snapshot, int value)
         {
-            snapshot.Append('I').Append(value.ToString(CultureInfo.InvariantCulture)).Append(';');
+            var encoded = "I" + value.ToString(CultureInfo.InvariantCulture) + ";";
+            RequireSnapshotCapacity(snapshot, encoded.Length);
+            snapshot.Append(encoded);
         }
 
         private static void AppendDouble(StringBuilder snapshot, double value)
         {
-            snapshot.Append('D').Append(value.ToString("R", CultureInfo.InvariantCulture)).Append(';');
+            var encoded = "D" + value.ToString("R", CultureInfo.InvariantCulture) + ";";
+            RequireSnapshotCapacity(snapshot, encoded.Length);
+            snapshot.Append(encoded);
         }
 
         private static void AppendDateTime(StringBuilder snapshot, DateTime? value)
@@ -410,14 +417,27 @@ namespace QS3D.Core.Persistence
         {
             if (value == null)
             {
-                snapshot.Append("S-1:");
+                const string encodedNull = "S-1:";
+                RequireSnapshotCapacity(snapshot, encodedNull.Length);
+                snapshot.Append(encodedNull);
                 return;
             }
 
-            snapshot.Append('S')
-                .Append(value.Length.ToString(CultureInfo.InvariantCulture))
-                .Append(':')
-                .Append(value);
+            var prefix = "S" + value.Length.ToString(CultureInfo.InvariantCulture) + ":";
+            RequireSnapshotCapacity(snapshot, (long)prefix.Length + value.Length);
+            snapshot.Append(prefix).Append(value);
+        }
+
+        private static void RequireSnapshotCapacity(StringBuilder snapshot, long additionalCharacters)
+        {
+            if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            if (additionalCharacters < 0L)
+                throw new ArgumentOutOfRangeException(nameof(additionalCharacters));
+            if (additionalCharacters > MaximumSnapshotCharacters - (long)snapshot.Length)
+            {
+                throw new InvalidOperationException(
+                    "Persistence stamp semantic snapshot exceeds the supported 64 Mi-character materialization budget.");
+            }
         }
 
         private static bool TracksSemanticDirtyState(string key)
