@@ -164,7 +164,7 @@ checks = {
     ],
     "src/QS3D.BricsCAD.V25/UI/WorkspacePanel.xaml.cs": [
         "QS3DGLASSWALL", "QS3DWALLPIER", "QS3DFINISH", "QS3DWALLJUNCTIONS", "CommandFor", "QS3DFOCUS", "QS3DISOLATE", "QS3DUNISOLATE", "SelectInspection",
-        "SemanticReferenceHandles.MatchesSelection", "SetSelectedElement(element)", "ShowFamilyProperties", "OnResetPropertyClick"
+        "SemanticReferenceHandles.MatchesSelection", "SetSelectedElement(element)", "OnFamilySelectionChangedWithAffinity", "OnResetPropertyClick"
     ],
     "src/QS3D.BricsCAD.V25/UI/ViewModels/PropertyRowViewModel.cs": [
         "BooleanEditor", "ChoiceEditor", "BooleanValue", "Choices", "IsEditable", "CanReset", "ResetValue", "Action? Reset"

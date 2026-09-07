@@ -326,8 +326,12 @@ namespace QS3D.BricsCAD.V25.UI
                     ? ProjectContextCoordinator.GetOrCreate(doc)
                     : ExistingProjectMutationContext.Require(doc, "Nhân bản Family từ Workspace");
                 var basis = selected == null ? null : project.FindFamily(selected.Id);
-                if (selected != null && basis == null)
-                    throw new InvalidOperationException("Family đang chọn không còn tồn tại trong project hiện tại. Hãy Refresh Workspace.");
+                if (selected != null && (basis == null || !ReferenceEquals(basis, selected)))
+                {
+                    RefreshProject();
+                    SetStatus("Nhân bản Family đã hủy vì selection thuộc project/generation cũ. Hãy chọn lại Family trong Workspace hiện tại.");
+                    return;
+                }
 
                 var category = basis?.Category ?? _categoryFilter ?? ElementCategory.Room;
                 var baseName = basis?.Name ?? category.ToString();
@@ -372,8 +376,13 @@ namespace QS3D.BricsCAD.V25.UI
                 if (doc == null) throw new InvalidOperationException("Không có bản vẽ BricsCAD đang active.");
                 if (!(FamilyList.SelectedItem is ProjectFamily selected)) return;
                 var project = ExistingProjectMutationContext.Require(doc, "Xóa Family từ Workspace");
-                var family = project.FindFamily(selected.Id)
-                    ?? throw new InvalidOperationException("Family đang chọn không còn tồn tại trong project hiện tại. Hãy Refresh Workspace.");
+                var family = project.FindFamily(selected.Id);
+                if (family == null || !ReferenceEquals(family, selected))
+                {
+                    RefreshProject();
+                    SetStatus("Xóa Family đã hủy vì selection thuộc project/generation cũ. Hãy chọn lại Family trong Workspace hiện tại.");
+                    return;
+                }
                 var used = ProjectFamilyService.ReferenceCount(project, family.Id);
                 if (used > 0)
                 {
@@ -518,13 +527,7 @@ namespace QS3D.BricsCAD.V25.UI
         private void OnResetPropertyClick(object sender, RoutedEventArgs e) { if (sender is Button button && button.CommandParameter is PropertyRowViewModel row) row.ResetValue(); }
         private void OnFamilySelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (_loadingContext) return;
-            try
-            {
-                _viewModel.SetActiveFamily(FamilyList.SelectedItem as ProjectFamily);
-                _viewModel.ShowFamilyProperties();
-            }
-            catch (Exception) { ReportWorkspaceFailure("Đổi Family active"); }
+            OnFamilySelectionChangedWithAffinity();
         }
         private void OnFamilySearchChanged(object sender, TextChangedEventArgs e) => ApplyFamilyFilter();
 

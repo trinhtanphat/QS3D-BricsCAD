@@ -64,7 +64,7 @@ namespace QS3D.Core.Mapping
             {
                 if (element.Quantities.Count == 0)
                 {
-                    findings.Add(new MeasurementWorkItemCoverageFinding(
+                    AddFinding(findings, new MeasurementWorkItemCoverageFinding(
                         element.Id,
                         element.Category,
                         null,
@@ -83,7 +83,7 @@ namespace QS3D.Core.Mapping
                     if (!resolution.IsMapped)
                         issues.Add(MeasurementWorkItemCoverageIssue.UnmappedWorkItem);
 
-                    findings.Add(new MeasurementWorkItemCoverageFinding(
+                    AddFinding(findings, new MeasurementWorkItemCoverageFinding(
                         element.Id,
                         element.Category,
                         quantity.Key,
@@ -96,11 +96,23 @@ namespace QS3D.Core.Mapping
             return new ReadOnlyCollection<MeasurementWorkItemCoverageFinding>(findings.ToArray());
         }
 
+        private static void AddFinding(
+            List<MeasurementWorkItemCoverageFinding> findings,
+            MeasurementWorkItemCoverageFinding finding)
+        {
+            if (findings.Count >= MeasurementWorkItemCoverageReport.MaximumFindingCount)
+                throw CreateFindingCountException();
+            findings.Add(finding);
+        }
+
         private static List<ElementCoverageSnapshot> SnapshotElements(ProjectState project)
         {
+            if (project.Elements.Count > MeasurementWorkItemCoverageReport.MaximumFindingCount)
+                throw CreateFindingCountException();
+
             var source = project.Elements.ToArray();
             var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var result = new List<ElementCoverageSnapshot>(source.Length);
+            var admittedFindingCount = 0;
 
             for (var index = 0; index < source.Length; index++)
             {
@@ -113,9 +125,20 @@ namespace QS3D.Core.Mapping
                 if (!Enum.IsDefined(typeof(ElementCategory), element.Category))
                     throw new InvalidOperationException("Quantity coverage cannot inspect element " + id + " with an undefined category.");
 
+                var quantityCount = element.Quantities.Count;
+                var findingContribution = quantityCount == 0 ? 1 : quantityCount;
+                if (findingContribution > MeasurementWorkItemCoverageReport.MaximumFindingCount - admittedFindingCount)
+                    throw CreateFindingCountException();
+                admittedFindingCount += findingContribution;
+            }
+
+            var result = new List<ElementCoverageSnapshot>(source.Length);
+            for (var index = 0; index < source.Length; index++)
+            {
+                var element = source[index];
                 var quantities = SnapshotQuantities(element);
                 result.Add(new ElementCoverageSnapshot(
-                    id,
+                    element.Id,
                     element.Category,
                     (element.Dirty & ElementDirtyFlags.Quantity) != 0,
                     quantities));
@@ -142,6 +165,11 @@ namespace QS3D.Core.Mapping
             quantities.Sort(CompareQuantities);
             return new ReadOnlyCollection<QuantityCoverageSnapshot>(quantities.ToArray());
         }
+
+        private static InvalidOperationException CreateFindingCountException() =>
+            new InvalidOperationException(
+                "Measurement/work-item coverage exceeds the maximum supported finding count of " +
+                MeasurementWorkItemCoverageReport.MaximumFindingCount + ".");
 
         private static string RequireCanonicalIdentity(string value, string label)
         {

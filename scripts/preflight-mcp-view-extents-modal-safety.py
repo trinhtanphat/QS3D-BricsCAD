@@ -54,18 +54,26 @@ else:
             errors.append("view runtime must not force refresh/regen: " + forbidden)
 
     # View mutations must fail closed if command/modal state is already active before touching view state,
-    # and explicitly distinguish CMDACTIVE bit 8 so callers do not treat an undismissable dialog as ESC-cancellable command work.
+    # explicitly distinguish CMDACTIVE bit 8, and reject the top-level minimized/iconic application state.
     idle_start = text.find("private static void RequireViewMutationIdle(")
     idle_end = text.find("private static ", idle_start + 1) if idle_start >= 0 else -1
     idle = text[idle_start:idle_end] if idle_start >= 0 and idle_end > idle_start else ""
     for token in (
         'Application.GetSystemVariable("CMDACTIVE")',
-        "active == 0",
         "(active & 8) != 0",
         "modal/dialog state (CMDACTIVE bit 8)",
+        "IsBricsCadWindowMinimized()",
+        "application window is minimized",
     ):
         if token not in idle:
-            errors.append("RequireViewMutationIdle missing modal/command gate token: " + token)
+            errors.append("RequireViewMutationIdle missing modal/command/minimized gate token: " + token)
+
+    # Accept either the original direct idle branch or the newer fail-closed parse form. The latter
+    # deliberately rejects an unreadable CMDACTIVE value instead of treating it as idle.
+    direct_idle = "active == 0" in idle
+    fail_closed_idle = "var parsed = int.TryParse(" in idle and "if (!parsed || active != 0)" in idle
+    if not (direct_idle or fail_closed_idle):
+        errors.append("RequireViewMutationIdle must admit only a proven CMDACTIVE=0 state")
 
 if errors:
     print("ERROR: MCP view extents/modal safety preflight failed")
@@ -73,4 +81,4 @@ if errors:
         print(" -", error)
     sys.exit(1)
 
-print("PASS: cad_view_fit_entities skips only live entities with unusable extents, reports skipped handles/counts, fails only when no usable extents remain, and view mutations preserve fail-closed CMDACTIVE/modal-bit/no-forced-REGEN safety.")
+print("PASS: cad_view_fit_entities skips only live entities with unusable extents, reports skipped handles/counts, fails only when no usable extents remain, and view mutations preserve fail-closed CMDACTIVE/modal-bit/minimized/no-forced-REGEN safety.")
