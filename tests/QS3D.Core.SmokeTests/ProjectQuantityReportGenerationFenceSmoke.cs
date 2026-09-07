@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
@@ -86,7 +87,15 @@ namespace QS3D.Core.SmokeTests
                 var source = p.Families[0];
                 var replacement = new ProjectFamily(source.Id, source.Name, source.Category);
                 foreach (var property in source.Properties) replacement.Properties.Add(property.Key, property.Value);
-                p.Families[0] = replacement;
+
+                // CatalogOwnershipList intentionally calls ProjectState.Touch() through its public setter.
+                // This regression must model the historical in-place/replacement bypass where ChangeVersion
+                // cannot help, so inject the value-equivalent replacement into the private backing list only.
+                var itemsField = p.Families.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?? throw new MissingFieldException(p.Families.GetType().FullName, "_items");
+                var items = itemsField.GetValue(p.Families) as IList<ProjectFamily>
+                    ?? throw new InvalidOperationException("Project family catalog backing list is unavailable for generation-fence regression injection.");
+                items[0] = replacement;
             });
             ExpectGenerationDrift(project, "equivalent family instance replacement");
             if (project.ChangeVersion != version) throw new InvalidOperationException("Equivalent family replacement unexpectedly changed ProjectState.ChangeVersion; regression no longer exercises the instance-identity bypass.");
