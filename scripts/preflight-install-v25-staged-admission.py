@@ -17,6 +17,21 @@ def function_body(text: str, start_marker: str, next_marker: str) -> str:
     return text[start:end]
 
 
+def mutate_scoped(text: str, marker: str, start_marker: str | None = None, next_marker: str | None = None) -> str:
+    if start_marker is None:
+        require(marker in text, f"Mutation probe could not find required marker: {marker}")
+        return text.replace(marker, "__QS3D_MUTATION_REMOVED__", 1)
+
+    require(next_marker is not None, "Scoped mutation requires a terminating function marker.")
+    start = text.find(start_marker)
+    end = text.find(next_marker, start + len(start_marker)) if start >= 0 else -1
+    require(start >= 0 and end > start, f"Mutation probe could not isolate PowerShell function: {start_marker}")
+    scoped = text[start:end]
+    require(marker in scoped, f"Mutation probe could not find scoped marker: {marker}")
+    mutated_scoped = scoped.replace(marker, "__QS3D_MUTATION_REMOVED__", 1)
+    return text[:start] + mutated_scoped + text[end:]
+
+
 def validate(text: str) -> None:
     staged = function_body(
         text,
@@ -75,22 +90,29 @@ def validate(text: str) -> None:
 text = INSTALLER.read_text(encoding="utf-8")
 validate(text)
 
-for marker in (
-    "Hashes = $manifestHashes",
-    "$packageAdmission = Assert-PackageIntegrity -Directory $package",
-    "$commands = @($packageAdmission.Commands)",
-    "$manifestStream = [IO.File]::Open($manifest, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)",
-    "$manifestHashes.Add('SHA256SUMS.txt', $manifestSha256)",
-    "Assert-StagedPayloadAdmission -Directory $stage",
-    "-AdmittedHashes $packageAdmission.Hashes",
-    "Assert-PackageIdentity -Directory $Directory",
-    "$stageRootItem = Get-Item -LiteralPath $stageRootPath -Force -ErrorAction Stop",
-    "$stageRootItem.Attributes -band [IO.FileAttributes]::ReparsePoint",
-    "$stageChildren = @(Get-ChildItem -LiteralPath $Directory -Force -ErrorAction Stop)",
-    "$stageFile.Attributes -band [IO.FileAttributes]::ReparsePoint",
+STAGED_START = "function Assert-StagedPayloadAdmission {"
+STAGED_END = "function Convert-ToStrictSemVerIdentity {"
+
+for marker, scope in (
+    ("Hashes = $manifestHashes", None),
+    ("$packageAdmission = Assert-PackageIntegrity -Directory $package", None),
+    ("$commands = @($packageAdmission.Commands)", None),
+    ("$manifestStream = [IO.File]::Open($manifest, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)", None),
+    ("$manifestHashes.Add('SHA256SUMS.txt', $manifestSha256)", None),
+    ("Assert-StagedPayloadAdmission -Directory $stage", None),
+    ("-AdmittedHashes $packageAdmission.Hashes", None),
+    ("Assert-PackageIdentity -Directory $Directory", "staged"),
+    ("Get-FileHash -LiteralPath $path -Algorithm SHA256", "staged"),
+    ("Assert-AuthenticodeSigner -Path $path", "staged"),
+    ("$stageRootItem = Get-Item -LiteralPath $stageRootPath -Force -ErrorAction Stop", "staged"),
+    ("$stageRootItem.Attributes -band [IO.FileAttributes]::ReparsePoint", "staged"),
+    ("$stageChildren = @(Get-ChildItem -LiteralPath $Directory -Force -ErrorAction Stop)", "staged"),
+    ("$stageFile.Attributes -band [IO.FileAttributes]::ReparsePoint", "staged"),
 ):
-    require(marker in text, f"Mutation probe could not find required marker: {marker}")
-    mutated = text.replace(marker, "__QS3D_MUTATION_REMOVED__", 1)
+    if scope == "staged":
+        mutated = mutate_scoped(text, marker, STAGED_START, STAGED_END)
+    else:
+        mutated = mutate_scoped(text, marker)
     try:
         validate(mutated)
     except SystemExit:
