@@ -129,8 +129,6 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnBrowserDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
-            // The inspection list can still contain the old document while modeless Workspace is
-            // being rebound. Do not let that stale snapshot acquire the new document identity.
             _browserInspectionProjectId = string.Empty;
             _browserInspectionDrawingFingerprint = string.Empty;
             QueueBrowserRefresh(true);
@@ -360,9 +358,9 @@ namespace QS3D.BricsCAD.V25.UI
                 _browserElementOffset = 0;
                 RefreshProjectBrowser(true);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                SetBrowserStatus("Reset Project Browser bị từ chối: " + ex.Message);
+                ReportProjectBrowserFailure("Reset Project Browser");
             }
         }
 
@@ -410,9 +408,9 @@ namespace QS3D.BricsCAD.V25.UI
                 _browserElementOffset = 0;
                 RefreshProjectBrowser(false);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                SetBrowserStatus("Project Browser view bị từ chối: " + ex.Message);
+                ReportProjectBrowserFailure("Project Browser view");
             }
         }
 
@@ -447,9 +445,9 @@ namespace QS3D.BricsCAD.V25.UI
                 RequireBrowserVersionInvariant(project, version);
                 RenderProjectBrowser(project, plan);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                ClearProjectBrowser("Project Browser fail-closed: " + ex.Message);
+                ReportProjectBrowserFailure("Refresh Project Browser", true);
             }
         }
 
@@ -514,7 +512,7 @@ namespace QS3D.BricsCAD.V25.UI
                 try { RenderProjectBrowserElements(project, plan.Query.Root); }
                 finally { _browserUpdating = false; }
             }
-            catch (Exception ex) { SetBrowserStatus("Project Browser node bị từ chối: " + ex.Message); }
+            catch (Exception) { ReportProjectBrowserFailure("Project Browser node"); }
         }
 
         private void OnBrowserNodeDoubleClick(object sender, MouseButtonEventArgs e)
@@ -529,7 +527,7 @@ namespace QS3D.BricsCAD.V25.UI
                 _browserNodeOffset = 0;
                 RefreshProjectBrowser(false);
             }
-            catch (Exception ex) { SetBrowserStatus("Project Browser expand/collapse bị từ chối: " + ex.Message); }
+            catch (Exception) { ReportProjectBrowserFailure("Project Browser expand/collapse"); }
         }
 
         private void OnBrowserElementDoubleClick(object sender, MouseButtonEventArgs e) => SelectBrowserCad(true);
@@ -556,7 +554,7 @@ namespace QS3D.BricsCAD.V25.UI
                 if (ids.Count == 0) throw new InvalidOperationException("Project Browser chưa có semantic element để chọn CAD.");
                 ResolveAndSelectBrowserCad(document, project, ids, zoom);
             }
-            catch (Exception ex) { SetBrowserStatus("Browser → CAD bị từ chối: " + ex.Message); }
+            catch (Exception) { ReportProjectBrowserFailure("Browser → CAD"); }
         }
 
         private void ResolveAndSelectBrowserCad(Document document, ProjectState project, IReadOnlyList<string> elementIds, bool zoom)
@@ -598,21 +596,23 @@ namespace QS3D.BricsCAD.V25.UI
                 throw new InvalidOperationException("Project changed before Browser → CAD selection commit; PICKFIRST was not changed.");
 
             document.Editor.SetImpliedSelection(objectIds.ToArray());
+            var presentationStatePersisted = true;
             try
             {
                 PersistBrowserState(document, project, state);
                 _browserState = state;
             }
-            catch (Exception persistenceError)
+            catch (Exception)
             {
-                SetBrowserStatus("Đã chọn CAD nhưng không lưu được browser presentation state: " + persistenceError.Message);
+                presentationStatePersisted = false;
+                ReportProjectBrowserPostSelectionWarning();
             }
             if (zoom)
             {
                 if (ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)) Send("QS3DZOOMSELECTED");
                 else SetBrowserStatus("CAD selection đã commit trên DWG nguồn; active DWG đổi trước Zoom nên Zoom bị bỏ qua.");
             }
-            QueueBrowserRefresh(false);
+            if (presentationStatePersisted) QueueBrowserRefresh(false);
         }
 
         private void SyncProjectBrowserFromCad()
@@ -654,7 +654,7 @@ namespace QS3D.BricsCAD.V25.UI
                 if (!string.IsNullOrWhiteSpace(selectionError))
                     SetBrowserStatus(selectionError + " Project Browser selection đã clear fail-closed.");
             }
-            catch (Exception ex) { SetBrowserStatus("CAD → Browser bị từ chối: " + ex.Message); }
+            catch (Exception) { ReportProjectBrowserFailure("CAD → Browser"); }
         }
 
         private void OnBrowserPreviousNodesClick(object sender, RoutedEventArgs e)
@@ -747,6 +747,18 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (project.ChangeVersion != expectedVersion)
                 throw new InvalidOperationException("Project Browser presentation-only operation changed semantic ChangeVersion unexpectedly.");
+        }
+
+        private void ReportProjectBrowserFailure(string operation, bool clearBrowser = false)
+        {
+            var message = operation + " bị từ chối. Chi tiết nội bộ đã được ẩn. Refresh Project Browser.";
+            if (clearBrowser) ClearProjectBrowser(message);
+            else SetBrowserStatus(message);
+        }
+
+        private void ReportProjectBrowserPostSelectionWarning()
+        {
+            SetBrowserStatus("CAD selection đã commit, nhưng browser presentation state không lưu được. Refresh Project Browser.");
         }
 
         private void ClearProjectBrowser(string status)
