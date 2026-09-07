@@ -31,9 +31,10 @@ concurrency:
   # Keep push, PR code, and PR metadata validation in separate cancellation domains. GitHub
   # materializes cancelled jobs as check-runs on the candidate SHA, so cross-event cancellation
   # can block protected-branch required contexts even when the surviving run is GREEN.
-  # Repository identity isolates forks with equal branch names; same-event superseded work still
-  # cancels normally within its own class.
-  group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata' || github.event_name == 'pull_request' && 'pull_request' || github.event_name == 'push' && 'push' || 'dispatch' }}-${{ github.run_attempt > 1 && github.run_id || 0 }}
+  # Repository identity isolates forks with equal branch names; PR number isolates distinct
+  # candidates that reuse one head branch against different allowed bases. Same-event superseded
+  # work still cancels normally within its own candidate class.
+  group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ github.event.pull_request.number || 0 }}-${{ github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata' || github.event_name == 'pull_request' && 'pull_request' || github.event_name == 'push' && 'push' || 'dispatch' }}-${{ github.run_attempt > 1 && github.run_id || 0 }}
   cancel-in-progress: true
 
 jobs:
