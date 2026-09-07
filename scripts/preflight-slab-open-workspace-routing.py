@@ -83,23 +83,48 @@ def main():
 
     if 'Send("QS3DDRAWSLABOPEN")' in quick or 'Send("QS3DDRAWSLABOPENADV")' in quick:
         return fail("workspace must retain active-family dispatch freshness instead of bypassing QS3DDRAWACTIVE")
-    if "_viewModel.SetActiveFamily(family);" not in quick:
-        return fail("quick draw must canonically activate the resolved exact family before dispatch")
 
     ensure = quick.find("EnsureSlabOpeningWorkspaceRoute();")
     menu = quick.find("var menu = FamilyList.ContextMenu;")
     if ensure < 0 or menu < 0 or ensure > menu:
         return fail("slabOpen workspace route must be installed before context-menu early returns")
 
-    resolve = quick.find("var family = ResolveWorkspaceDrawFamily();")
-    activate = quick.find("_viewModel.SetActiveFamily(family);", resolve)
-    dispatch = quick.find('var command = advanced ? "QS3DDRAWACTIVEADV" : "QS3DDRAWACTIVE";', resolve)
-    if resolve < 0 or activate < 0 or dispatch < 0 or not (resolve < activate < dispatch):
-        return fail("quick draw must resolve exact slabOpen, activate it, then dispatch")
+    draw_start = quick.find("private void ExecuteWorkspaceDraw(bool advanced)")
+    draw_end = quick.find("private void ExecuteWorkspaceRepeatedDraw()", draw_start)
+    if draw_start < 0 or draw_end < 0:
+        return fail("quick draw implementation could not be isolated")
+    draw = quick[draw_start:draw_end]
+
+    resolve = draw.find("var family = ResolveWorkspaceDrawFamily();")
+    dispatch = draw.find('var command = advanced ? "QS3DDRAWACTIVEADV" : "QS3DDRAWACTIVE";', resolve)
+    direct_activate = draw.find("_viewModel.SetActiveFamily(family);", resolve)
+    guarded_activate = draw.find("TryActivateFamilyForCommand(family", resolve)
+
+    if direct_activate >= 0:
+        activate = direct_activate
+    elif guarded_activate >= 0:
+        helper_start = quick.find("private bool TryActivateFamilyForCommand")
+        helper = quick[helper_start:] if helper_start >= 0 else ""
+        for token in (
+            "ExistingProjectMutationContext.TryGet",
+            "project.FindFamily(family.Id)",
+            "ReferenceEquals(ownedFamily, family)",
+            "_viewModel.SetActiveFamily(family);",
+            "ProjectFamilyActivationService.GetActive(project)",
+            "ReferenceEquals(activeFamily, ownedFamily)",
+        ):
+            if token not in helper:
+                return fail("guarded quick draw activation helper missing slabOpen freshness token: " + token)
+        activate = guarded_activate
+    else:
+        return fail("quick draw must canonically activate the resolved exact family before dispatch")
+
+    if resolve < 0 or dispatch < 0 or not (resolve < activate < dispatch):
+        return fail("quick draw must resolve exact slabOpen, prove activation, then dispatch")
 
     print(
         "PASS: V25 Sàn > Lỗ Mở Sàn uniquely resolves/provisions exact slabOpen, rejects ambiguous "
-        "exact-family candidates, activates before QS3DDRAWACTIVE dispatch, blocks generic basic draw "
+        "exact-family candidates, proves activation before QS3DDRAWACTIVE dispatch, blocks generic basic draw "
         "fallback, and preserves the dedicated negative-Z/BoolSubtract command boundary. "
         "NATIVE_RUNTIME=LOCAL_ONLY"
     )
