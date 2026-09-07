@@ -77,7 +77,9 @@ namespace QS3D.Core.SmokeTests
             True(stamp.RequiresSave(project), "Direct persisted element mutation bypassed dirty detection.");
             element.Properties["LengthM"] = "5";
             Equal(expectedVersion, project.ChangeVersion, "Restoring a direct element property unexpectedly changed the project revision.");
-            False(stamp.RequiresSave(project), "Restoring the persisted element property left a false-positive dirty state.");
+            True(stamp.RequiresSave(project), "Restoring a semantic element property must remain pending until its persisted dirty/timestamp state is saved.");
+            stamp.MarkSaved(project);
+            False(stamp.RequiresSave(project), "MarkSaved did not accept the restored semantic element property baseline.");
 
             element.SourceHandles.Add("CD34");
             Equal(expectedVersion, project.ChangeVersion, "Direct element handle mutation unexpectedly changed the project revision.");

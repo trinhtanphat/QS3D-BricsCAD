@@ -29,7 +29,7 @@ namespace QS3D.Core.SmokeTests
         private static void PaddedElementNumericKeyFailsClosed()
         {
             var project = CreateProject(out _, out var element);
-            element.Properties[" Width "] = "2.5";
+            InjectLegacyElementProperty(element, " Width ", "2.5");
 
             ThrowsNonCanonical(() => new QuantityRuleEngine().ApplyMatching(project, element), "element padded numeric key");
         }
@@ -56,6 +56,15 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(element);
             project.QuantityRules.Add(new QuantityRule("rule-1", ElementCategory.Room, "Result", "Width", "1"));
             return project;
+        }
+
+        private static void InjectLegacyElementProperty(ProjectElement element, string key, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_properties", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Legacy Element fixture could not locate the property backing dictionary.");
+            var inner = field.GetValue(element) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Legacy Element fixture property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)

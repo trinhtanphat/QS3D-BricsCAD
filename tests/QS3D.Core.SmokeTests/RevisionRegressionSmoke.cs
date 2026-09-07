@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Revisions;
@@ -109,7 +110,7 @@ namespace QS3D.Core.SmokeTests
         {
             var propertyProject = NewProject();
             var propertyElement = new ProjectElement("E-PROP", ElementCategory.Beam, string.Empty, "f", "z");
-            propertyElement.Properties[" Mark "] = "B1";
+            InjectLegacyElementProperty(propertyElement, " Mark ", "B1");
             propertyProject.Elements.Add(propertyElement);
             Throws<InvalidOperationException>(() => new RevisionService().Capture(propertyProject, "padded-property-key"));
 
@@ -330,6 +331,15 @@ namespace QS3D.Core.SmokeTests
             project.ActiveZoneId = "z";
             project.ActiveFloorId = "f";
             return project;
+        }
+
+        private static void InjectLegacyElementProperty(ProjectElement element, string key, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_properties", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Legacy Element fixture could not locate the property backing dictionary.");
+            var backing = field.GetValue(element) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Legacy Element fixture property backing dictionary had an unexpected type.");
+            backing[key] = value;
         }
 
         private static void SetRawElementId(ProjectElement element, string value)
