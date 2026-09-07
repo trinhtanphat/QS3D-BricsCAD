@@ -32,8 +32,12 @@ def validate(text: str) -> None:
         "dist root binding": "$distRoot = Assert-SafeOutputDirectoryTarget -Path $distRoot",
         "staging binding": "$dist = Assert-SafeOutputDirectoryTarget -Path $dist",
         "zip binding": "$zip = Assert-SafeOutputFileTarget -Path $zip",
-        "safe hash walk": "$hashLines = Get-SafePackageFiles -PackageRoot $dist",
-        "pre-compress safe walk": "$null = Get-SafePackageFiles -PackageRoot $dist",
+        "safe manifest walk": "foreach ($file in Get-SafePackageFiles -PackageRoot $dist)",
+        "manifest path map": "$manifestHashes = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)",
+        "ordinal manifest ordering": "[Array]::Sort($manifestEntryNames, [StringComparer]::Ordinal)",
+        "pre-archive safe walk": "$null = Get-SafePackageFiles -PackageRoot $dist",
+        "deterministic zip builder": "function New-DeterministicPackageZip",
+        "deterministic zip invocation": "New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc",
         "V26 zip": "QS3D-BricsCAD-V26.zip",
         "hash manifest": "SHA256SUMS.txt",
     }
@@ -61,12 +65,13 @@ def validate(text: str) -> None:
     before(
         text,
         "$null = Get-SafePackageFiles -PackageRoot $dist",
-        "Compress-Archive -Path (Join-Path $dist '*') -DestinationPath $zip -CompressionLevel Optimal",
-        "safe recursive package walk before compression",
+        "New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc",
+        "safe recursive package walk before deterministic archive",
     )
 
     forbidden = (
         "$hashLines = Get-ChildItem -LiteralPath $dist -Recurse -File",
+        "foreach ($file in Get-ChildItem -LiteralPath $dist -Recurse -File)",
         "Remove-Item -LiteralPath $dist -Recurse -Force -ErrorAction SilentlyContinue",
         "Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue",
     )
@@ -92,8 +97,9 @@ def main() -> None:
     probes = (
         ("[IO.FileAttributes]::ReparsePoint", "[IO.FileAttributes]::Hidden", "reparse contract"),
         ("function Get-SafePackageFiles", "function Get-UnsafePackageFiles", "safe walker"),
-        ("$hashLines = Get-SafePackageFiles -PackageRoot $dist", "$hashLines = Get-ChildItem -LiteralPath $dist -Recurse -File", "safe hash enumeration"),
-        ("$null = Get-SafePackageFiles -PackageRoot $dist", "$null = @()", "pre-compress traversal"),
+        ("foreach ($file in Get-SafePackageFiles -PackageRoot $dist)", "foreach ($file in Get-ChildItem -LiteralPath $dist -Recurse -File)", "safe manifest enumeration"),
+        ("$null = Get-SafePackageFiles -PackageRoot $dist", "$null = @()", "pre-archive traversal"),
+        ("New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc", "Compress-Archive -Path (Join-Path $dist '*') -DestinationPath $zip -CompressionLevel Optimal", "deterministic archive path"),
         ("$root = Assert-OrdinaryDirectory -Path $root -Label 'repository root'", "$root = [IO.Path]::GetFullPath($root)", "repository root trust"),
     )
     for token, replacement, label in probes:
