@@ -368,10 +368,9 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.SetStatus(status);
                 document.Editor.WriteMessage("\nQS3D " + status);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                try { document.Editor.WriteMessage("\nQS3D " + status + " UI sync warning: " + ex.Message); }
-                catch { }
+                DirectDrawUiFailureReporter.ReportPostCommitWarning(document);
             }
         }
 
@@ -384,10 +383,9 @@ namespace QS3D.BricsCAD.V25
         private static void Guard(Document document, string operation, Action action)
         {
             try { action(); }
-            catch (Exception ex)
+            catch (Exception)
             {
-                try { document.Editor.WriteMessage("\n" + operation + " lỗi: " + ex.Message); } catch { }
-                try { PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message); } catch { }
+                DirectDrawUiFailureReporter.ReportOperationFailure(document, operation);
             }
         }
     }
