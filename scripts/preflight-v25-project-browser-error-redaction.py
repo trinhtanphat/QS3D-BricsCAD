@@ -53,6 +53,7 @@ def main() -> int:
         ("private void OnBrowserNodeSelectionChanged(object sender, SelectionChangedEventArgs e)", 'ReportProjectBrowserFailure("Project Browser node")'),
         ("private void OnBrowserNodeDoubleClick(object sender, MouseButtonEventArgs e)", 'ReportProjectBrowserFailure("Project Browser expand/collapse")'),
         ("private void SelectBrowserCad(bool zoom)", 'ReportProjectBrowserFailure("Browser → CAD")'),
+        ("private void SyncProjectBrowserFromCad()", 'ReportProjectBrowserFailure("CAD → Browser")'),
     )
     for signature, expected in guarded:
         block = body(text, signature)
