@@ -43,7 +43,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = NewProject(out var previous, out var target, out var element);
             InjectLegacyFamilyProperty(previous, " OldDefault ", "legacy");
-            element.Properties[" OldDefault "] = "legacy";
+            InjectLegacyElementProperty(element, " OldDefault ", "legacy");
             var beforeVersion = project.ChangeVersion;
             var beforeUpdatedUtc = project.UpdatedUtc;
             var beforeElementUpdatedUtc = element.UpdatedUtc;
@@ -138,6 +138,15 @@ namespace QS3D.Core.SmokeTests
             var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
                 ?? throw new Exception("Legacy Family fixture property backing dictionary had an unexpected type.");
             inner[key] = value;
+        }
+
+        private static void InjectLegacyElementProperty(ProjectElement element, string key, string value)
+        {
+            var backingField = typeof(ProjectElement).GetField("_properties", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("Legacy element fixture could not locate the persisted ProjectElement property backing dictionary.");
+            var backing = backingField.GetValue(element) as Dictionary<string, string>
+                ?? throw new Exception("Legacy element fixture property backing dictionary had an unexpected type.");
+            backing[key] = value;
         }
 
         private static void Equal(string expected, string actual, string message)
