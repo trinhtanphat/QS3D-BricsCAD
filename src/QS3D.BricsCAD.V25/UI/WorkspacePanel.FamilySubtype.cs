@@ -43,6 +43,8 @@ namespace QS3D.BricsCAD.V25.UI
         private bool _familySubtypeInteractionsAttached;
         private bool _applyingFamilySubtypeFilter;
         private bool _familyHighlightRefreshPending;
+        private long _familyHighlightAttachmentGeneration;
+        private DispatcherOperation? _familyHighlightRefreshOperation;
         private string _familySubtypeFilter = string.Empty;
 
         private void AttachFamilySubtypeInteractions()
@@ -54,6 +56,8 @@ namespace QS3D.BricsCAD.V25.UI
             FamilyList.SelectionChanged += OnFamilySubtypeFamilySelectionChanged;
             FamilyList.ItemContainerGenerator.StatusChanged += OnFamilyContainerGeneratorStatusChanged;
             FloorCombo.SelectionChanged += OnRoomFloorContextChanged;
+            Loaded += OnFamilySubtypeWorkspaceLoaded;
+            Unloaded += OnFamilySubtypeWorkspaceUnloaded;
             RewireFamilyAddActions();
             RefreshSelectedFamilyHighlight();
         }
@@ -189,9 +193,9 @@ namespace QS3D.BricsCAD.V25.UI
                         : "Đã tạo Family tham số “" + created.Name + "”.",
                     launchSolid3D ? "Workspace Family Solid3D" : "Workspace Family parameter");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                SetStatus((launchSolid3D ? "Tạo Family Solid3D lỗi: " : "Tạo Family tham số lỗi: ") + ex.Message);
+                ReportWorkspaceFailure(launchSolid3D ? "Tạo Family Solid3D" : "Tạo Family tham số");
             }
         }
 
@@ -505,13 +509,36 @@ namespace QS3D.BricsCAD.V25.UI
             return separator == '-' || separator == '_' || char.IsWhiteSpace(separator);
         }
 
+        private void OnFamilySubtypeWorkspaceLoaded(object sender, RoutedEventArgs e)
+        {
+            _familyHighlightAttachmentGeneration++;
+            CancelFamilyHighlightRefresh();
+            RefreshSelectedFamilyHighlight();
+        }
+
+        private void OnFamilySubtypeWorkspaceUnloaded(object sender, RoutedEventArgs e)
+        {
+            _familyHighlightAttachmentGeneration++;
+            CancelFamilyHighlightRefresh();
+        }
+
+        private void CancelFamilyHighlightRefresh()
+        {
+            _familyHighlightRefreshOperation?.Abort();
+            _familyHighlightRefreshOperation = null;
+            _familyHighlightRefreshPending = false;
+        }
+
         private void RefreshSelectedFamilyHighlight()
         {
             if (_familyHighlightRefreshPending) return;
             _familyHighlightRefreshPending = true;
-            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+            var attachmentGeneration = _familyHighlightAttachmentGeneration;
+            _familyHighlightRefreshOperation = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
             {
+                _familyHighlightRefreshOperation = null;
                 _familyHighlightRefreshPending = false;
+                if (!IsLoaded || attachmentGeneration != _familyHighlightAttachmentGeneration) return;
                 RevealSelectedFamilyAndRefreshHighlight();
             }));
         }
