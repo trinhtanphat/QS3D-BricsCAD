@@ -25,35 +25,35 @@ namespace QS3D.Core.SmokeTests
         {
             var error = Capture<InvalidOperationException>(() =>
                 new MeasurementWorkItemMappingCatalog(new GenericDriftCollection(1, 2)));
-            Equal("Measurement/work-item mapping source known Count changed during traversal.", error.Message);
+            Equal("Measurement/work-item mapping source known Count changed during MoveNext from 1 to 2.", error.Message);
         }
 
         private static void ReadOnlyCountDriftRejects()
         {
             var error = Capture<InvalidOperationException>(() =>
                 new MeasurementWorkItemMappingCatalog(new ReadOnlyDriftCollection(1, 2)));
-            Equal("Measurement/work-item mapping source known Count changed during traversal.", error.Message);
+            Equal("Measurement/work-item mapping source known Count changed during MoveNext from 1 to 2.", error.Message);
         }
 
         private static void NonGenericCountDriftRejects()
         {
             var error = Capture<InvalidOperationException>(() =>
                 new MeasurementWorkItemMappingCatalog(new NonGenericDriftCollection(1, 2)));
-            Equal("Measurement/work-item mapping source known Count changed during traversal.", error.Message);
+            Equal("Measurement/work-item mapping source known Count changed during MoveNext from 1 to 2.", error.Message);
         }
 
         private static void NegativePostTraversalCountRejects()
         {
             var error = Capture<InvalidOperationException>(() =>
                 new MeasurementWorkItemMappingCatalog(new GenericDriftCollection(1, -1)));
-            Equal("Measurement/work-item mapping source exposes an invalid negative known Count value after traversal.", error.Message);
+            Equal("Measurement/work-item mapping source exposes an invalid negative known Count value during MoveNext.", error.Message);
         }
 
         private static void ConflictingPostTraversalCountsReject()
         {
             var error = Capture<InvalidOperationException>(() =>
                 new MeasurementWorkItemMappingCatalog(new ConflictingAfterTraversalCollection()));
-            Equal("Measurement/work-item mapping source exposes conflicting known Count values after traversal.", error.Message);
+            Equal("Measurement/work-item mapping source exposes conflicting known Count values during MoveNext.", error.Message);
         }
 
         private static void StableCountedSourceSucceeds()
