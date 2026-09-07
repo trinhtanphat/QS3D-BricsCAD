@@ -25,8 +25,10 @@ def validate(text: str) -> None:
             "Deterministic ZIP writer must create entries through ZipArchive.")
     require("$entry.LastWriteTime = $SourceTimestamp" in text,
             "Every ZIP entry must receive the source-bound deterministic timestamp.")
-    require("Get-SafePackageFiles -PackageRoot $PackageRoot | Sort-Object FullName" in text,
-            "ZIP entries must be emitted in canonical full-path order.")
+    require("[Array]::Sort($entryNames, [StringComparer]::Ordinal)" in text,
+            "ZIP entry names must be sorted with ordinal semantics, independent of host culture.")
+    require(".Replace([IO.Path]::DirectorySeparatorChar, '/')" in text,
+            "ZIP entry names must be normalized to forward slashes across Windows/Linux path semantics.")
     require("[IO.Compression.CompressionLevel]::Optimal" in text,
             "Deterministic ZIP writer must pin compression level explicitly.")
     require("New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc" in text,
@@ -43,7 +45,8 @@ for marker in (
     "git -C $root show -s --format=%cI $Commit",
     "function New-DeterministicPackageZip {",
     "$entry.LastWriteTime = $SourceTimestamp",
-    "Get-SafePackageFiles -PackageRoot $PackageRoot | Sort-Object FullName",
+    "[Array]::Sort($entryNames, [StringComparer]::Ordinal)",
+    ".Replace([IO.Path]::DirectorySeparatorChar, '/')",
     "New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc",
     "generatedUtc = $sourceTimestampUtc.ToString('o')",
 ):
