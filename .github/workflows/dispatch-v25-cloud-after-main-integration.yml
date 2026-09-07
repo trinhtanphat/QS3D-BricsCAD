@@ -19,6 +19,7 @@ on:
       - "src/**"
       - "tests/**"
       - "scripts/**"
+      - "samples/generated/**"
       - "external/QS3D-Platform"
       - ".gitmodules"
       - "Directory.Build.props"
@@ -76,6 +77,7 @@ jobs:
             'src/'
             'tests/'
             'scripts/'
+            'samples/generated/'
             'external/QS3D-Platform'
             '.gitmodules'
             'Directory.Build.props'
