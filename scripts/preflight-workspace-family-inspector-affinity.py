@@ -28,31 +28,26 @@ def method_body(text, signature, next_signature=None):
 
 affinity = read(AFFINITY)
 panel = read(PANEL)
-class_handler = method_body(affinity, "private static void OnFamilyListSelectionChangedClass", "private static WorkspacePanel? FindOwningWorkspacePanel")
 selection = method_body(affinity, "private void OnFamilySelectionChangedWithAffinity")
 legacy = method_body(panel, "private void OnFamilySelectionChanged", "private void OnFamilySearchChanged")
 
-for required, message in [
-    ("EventManager.RegisterClassHandler(", "Workspace must register a class-level SelectionChanged fence"),
-    ("typeof(ListBox)", "class handler must be registered on ListBox so it runs before the source ListBox instance/XAML handler"),
-    ("Selector.SelectionChangedEvent", "class handler must target Selector.SelectionChangedEvent"),
-    ("FindOwningWorkspacePanel(familyList)", "global ListBox class handler must resolve and restrict itself to an owning WorkspacePanel"),
+for forbidden, message in [
+    ("EventManager.RegisterClassHandler", "Family inspector fence must remain instance-scoped"),
+    ("OnFamilyListSelectionChangedClass", "obsolete ListBox class callback must be removed"),
+    ("FindOwningWorkspacePanel", "obsolete visual-tree owner lookup must be removed"),
 ]:
-    if required not in affinity:
+    if forbidden in affinity:
         errors.append(message)
 
-if "sender is ListBox familyList" not in class_handler:
-    errors.append("class handler must require a ListBox routed-event source")
-if "string.Equals(familyList.Name, \"FamilyList\", StringComparison.Ordinal)" not in class_handler:
-    errors.append("global ListBox class handler must reject unrelated ListBox controls by name")
-if "ReferenceEquals(familyList, panel.FamilyList)" not in class_handler:
-    errors.append("class handler must prove the source is the exact FamilyList owned by the resolved WorkspacePanel")
-if "e.Handled = true;" not in class_handler:
-    errors.append("FamilyList event must be marked handled before its stale instance/XAML handler can run")
-if "panel.OnFamilySelectionChangedWithAffinity();" not in class_handler:
-    errors.append("class handler must delegate to the affinity-safe Family selection path")
+if "OnFamilySelectionChangedWithAffinity();" not in legacy:
+    errors.append("FamilyList XAML handler must delegate directly to the affinity-safe path")
+if "_viewModel.SetActiveFamily(" in legacy:
+    errors.append("FamilyList XAML handler must not call void SetActiveFamily directly")
+if "_viewModel.ShowFamilyProperties();" in legacy:
+    errors.append("FamilyList XAML handler must not render properties outside the affinity fence")
 
 for required, message in [
+    ("if (_loadingContext) return;", "affinity-safe handler must preserve reconciliation reentrancy suppression"),
     ("var selectedFamily = FamilyList.SelectedItem as ProjectFamily;", "affinity-safe handler must capture selected Family explicitly"),
     ("TryActivateFamilyForWorkspaceAction(selectedFamily", "selected Family must pass the canonical document/project/generation activation fence"),
     ("RefreshProject();", "rejected stale Family selection must reconcile Workspace from the current document/project"),
@@ -77,10 +72,10 @@ else:
     if "ShowFamilyProperties" in between:
         errors.append("rejected stale Family path must not repopulate old property rows")
 
-# The old XAML handler remains as compatibility fallback. This assertion intentionally
-# fails if that shape changes so the source-level class-handler pre-emption is reviewed.
-if "_viewModel.SetActiveFamily(FamilyList.SelectedItem as ProjectFamily);" not in legacy:
-    errors.append("legacy Family selection handler shape changed; reassess whether class-level pre-emption is still required")
+null_check = selection.find("if (selectedFamily == null)")
+first_refresh = selection.find("RefreshProject();", null_check if null_check >= 0 else 0)
+if null_check < 0 or first_refresh < 0:
+    errors.append("cleared Family selection must reconcile Workspace instead of retaining stale state")
 
 print("QS3D Workspace Family inspector affinity preflight")
 if errors:
@@ -88,4 +83,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: source ListBox class handler pre-empts the legacy FamilyList handler; stale project-generation Families are rejected and reconciled before property rows render.")
+print("PASS: FamilyList selection delegates through the current-document/project Family affinity fence and stale selections reconcile before property rows render.")
