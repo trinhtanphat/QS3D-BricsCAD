@@ -92,39 +92,53 @@ namespace QS3D.Core.Mapping
             _byCategory = new Dictionary<ElementCategory, Dictionary<string, MeasurementWorkItemMapping>>();
 
             var index = 0;
-            foreach (var mapping in mappings)
+            using (var enumerator = mappings.GetEnumerator())
             {
-                if (knownCount.HasValue && index >= knownCount.Value)
-                    throw new InvalidOperationException(
-                        "Measurement/work-item mapping source known Count does not match completed traversal cardinality.");
-                if (index == MaximumEntries)
-                    throw new InvalidOperationException("Measurement/work-item mapping catalog supports at most " + MaximumEntries + " entries.");
-                if (mapping == null)
-                    throw new ArgumentException("Measurement/work-item mapping collection contains a null entry at index " + index + ".", nameof(mappings));
-                if (!mappingIds.Add(mapping.MappingId))
-                    throw new ArgumentException("Duplicate measurement/work-item mapping id: " + mapping.MappingId + ".", nameof(mappings));
+                if (enumerator == null)
+                    throw new ArgumentException("Measurement/work-item mapping source returned a null enumerator.", nameof(mappings));
 
-                if (!_byCategory.TryGetValue(mapping.Category, out var byMeasurementItem))
+                while (true)
                 {
-                    byMeasurementItem = new Dictionary<string, MeasurementWorkItemMapping>(StringComparer.OrdinalIgnoreCase);
-                    _byCategory.Add(mapping.Category, byMeasurementItem);
+                    var hasNext = enumerator.MoveNext();
+                    RevalidateKnownCount(mappings, knownCount, "MoveNext");
+                    if (!hasNext)
+                        break;
+
+                    if (knownCount.HasValue && index >= knownCount.Value)
+                        throw new InvalidOperationException(
+                            "Measurement/work-item mapping source known Count does not match completed traversal cardinality.");
+                    if (index == MaximumEntries)
+                        throw new InvalidOperationException("Measurement/work-item mapping catalog supports at most " + MaximumEntries + " entries.");
+
+                    var mapping = enumerator.Current;
+                    RevalidateKnownCount(mappings, knownCount, "Current");
+                    if (mapping == null)
+                        throw new ArgumentException("Measurement/work-item mapping collection contains a null entry at index " + index + ".", nameof(mappings));
+                    if (!mappingIds.Add(mapping.MappingId))
+                        throw new ArgumentException("Duplicate measurement/work-item mapping id: " + mapping.MappingId + ".", nameof(mappings));
+
+                    if (!_byCategory.TryGetValue(mapping.Category, out var byMeasurementItem))
+                    {
+                        byMeasurementItem = new Dictionary<string, MeasurementWorkItemMapping>(StringComparer.OrdinalIgnoreCase);
+                        _byCategory.Add(mapping.Category, byMeasurementItem);
+                    }
+
+                    if (byMeasurementItem.ContainsKey(mapping.MeasurementItemId))
+                        throw new ArgumentException(
+                            "Ambiguous measurement/work-item mapping target: " + mapping.Category + "/" + mapping.MeasurementItemId + ".",
+                            nameof(mappings));
+
+                    byMeasurementItem.Add(mapping.MeasurementItemId, mapping);
+                    items.Add(mapping);
+                    index++;
                 }
-
-                if (byMeasurementItem.ContainsKey(mapping.MeasurementItemId))
-                    throw new ArgumentException(
-                        "Ambiguous measurement/work-item mapping target: " + mapping.Category + "/" + mapping.MeasurementItemId + ".",
-                        nameof(mappings));
-
-                byMeasurementItem.Add(mapping.MeasurementItemId, mapping);
-                items.Add(mapping);
-                index++;
             }
 
+            RevalidateKnownCount(mappings, knownCount, "completed traversal");
             if (knownCount.HasValue && index != knownCount.Value)
                 throw new InvalidOperationException(
                     "Measurement/work-item mapping source known Count does not match completed traversal cardinality.");
 
-            RevalidateKnownCountAfterTraversal(mappings, knownCount);
             items.Sort(CompareMappings);
             Mappings = new ReadOnlyCollection<MeasurementWorkItemMapping>(items.ToArray());
         }
@@ -143,9 +157,10 @@ namespace QS3D.Core.Mapping
             return MeasurementWorkItemMappingResolution.Unmapped(canonicalCategory, canonicalMeasurementItemId);
         }
 
-        private static void RevalidateKnownCountAfterTraversal(
+        private static void RevalidateKnownCount(
             IEnumerable<MeasurementWorkItemMapping> mappings,
-            int? admittedCount)
+            int? admittedCount,
+            string boundary)
         {
             if (!admittedCount.HasValue)
                 return;
@@ -153,13 +168,14 @@ namespace QS3D.Core.Mapping
             var reboundCount = TryGetKnownCount(mappings, out var conflictingKnownCounts, out var negativeKnownCount);
             if (negativeKnownCount)
                 throw new InvalidOperationException(
-                    "Measurement/work-item mapping source exposes an invalid negative known Count value after traversal.");
+                    "Measurement/work-item mapping source exposes an invalid negative known Count value during " + boundary + ".");
             if (conflictingKnownCounts)
                 throw new InvalidOperationException(
-                    "Measurement/work-item mapping source exposes conflicting known Count values after traversal.");
+                    "Measurement/work-item mapping source exposes conflicting known Count values during " + boundary + ".");
             if (!reboundCount.HasValue || reboundCount.Value != admittedCount.Value)
                 throw new InvalidOperationException(
-                    "Measurement/work-item mapping source known Count changed during traversal.");
+                    "Measurement/work-item mapping source known Count changed during " + boundary + " from " + admittedCount.Value + " to " +
+                    (reboundCount.HasValue ? reboundCount.Value.ToString() : "unknown") + ".");
         }
 
         private static int? TryGetKnownCount(
