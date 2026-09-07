@@ -21,9 +21,10 @@ def main() -> int:
     else:
         publish = source[publish_step:]
 
+    final_main_api_token = "$finalMainResponse = Invoke-RestMethod -Method Get -Uri \"https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main\""
     required = (
         "$finalMain =",
-        "repos/$env:GITHUB_REPOSITORY/commits/main",
+        final_main_api_token,
         "$finalMainRef = 'refs/remotes/origin/qs3d-release-final-main'",
         "+refs/heads/main:$finalMainRef",
         "$fetchedFinalMain =",
@@ -55,7 +56,7 @@ def main() -> int:
             failures.append(f"final V25 publication still contains superseded final-source policy token: {token}")
 
     final_asset_identity = publish.find("$assetIdentityDrift = @(")
-    final_api = publish.find("repos/$env:GITHUB_REPOSITORY/commits/main")
+    final_api = publish.find(final_main_api_token)
     final_fetch = publish.find("& git fetch --no-tags --force origin \"+refs/heads/main:$finalMainRef\"")
     fetched_identity = publish.find("$fetchedFinalMain =")
     api_fetch_equality = publish.find("$fetchedFinalMain -ne $finalMain")
