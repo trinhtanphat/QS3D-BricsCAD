@@ -64,6 +64,23 @@ def main() -> int:
     ):
         require(window, needle, WINDOW_REL)
 
+    # The unfocused search field must own an explicit, readable dark state rather than inheriting
+    # platform TextBox chrome. Keep keyboard-focus behavior separate so its existing accent state
+    # remains unchanged.
+    for needle in (
+        "PickerSearchBackground",
+        "PickerSearchForeground",
+        "PickerSearchPlaceholder",
+        "PickerSearchBorder",
+        "searchBox.SetValue(Control.BackgroundProperty, PickerSearchBackground);",
+        "searchBox.SetValue(Control.ForegroundProperty, PickerSearchForeground);",
+        "chrome.SetValue(Border.BackgroundProperty, PickerSearchBackground);",
+        "chrome.SetValue(Border.BorderBrushProperty, PickerSearchBorder);",
+        "placeholder.SetValue(TextBlock.ForegroundProperty, PickerSearchPlaceholder);",
+        "focusTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, AccentSoft, \"SearchChrome\"));",
+    ):
+        require(window, needle, WINDOW_REL)
+
     for needle in (
         "pickerPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220) });",
         "Grid.SetColumn(_releaseSearchBox, 0);",
@@ -102,7 +119,7 @@ def main() -> int:
     ):
         require(receipt, needle, RECEIPT_REL)
 
-    print("PASS: V25 Update Center keeps search inside a dark high-contrast release dropdown and pins the selected release through install/restart verification.")
+    print("PASS: V25 Update Center keeps search inside a dark high-contrast release dropdown, preserves explicit unfocused search contrast, and pins the selected release through install/restart verification.")
     return 0
 
 
