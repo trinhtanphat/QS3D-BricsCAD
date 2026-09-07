@@ -43,12 +43,30 @@ def active_literal_entries(block: str) -> list[str]:
     return entries
 
 
-def validate(text: str, gitmodules_bytes: bytes, expected_digest: str) -> list[str]:
-    errors: list[str] = []
+def final_classifier_bounds(text: str) -> tuple[int, int]:
     start = text.find("$finalReleaseRelevantPaths = @(")
     if start < 0:
-        return ["V26 publisher missing final release-relevant protected-main path classifier"]
+        return -1, -1
     end = text.find("\n  )", start)
+    return start, end
+
+
+def mutate_final_classifier(text: str, old: str, new: str) -> str:
+    start, end = final_classifier_bounds(text)
+    if start < 0 or end < 0:
+        return text
+    block = text[start:end]
+    mutated = block.replace(old, new, 1)
+    if mutated == block:
+        return text
+    return text[:start] + mutated + text[end:]
+
+
+def validate(text: str, gitmodules_bytes: bytes, expected_digest: str) -> list[str]:
+    errors: list[str] = []
+    start, end = final_classifier_bounds(text)
+    if start < 0:
+        return ["V26 publisher missing final release-relevant protected-main path classifier"]
     if end < 0:
         return ["V26 publisher final release-relevant path classifier is not bounded"]
     block = text[start:end]
@@ -84,19 +102,19 @@ mutated_gitmodules = gitmodules + b"# mutation: changed submodule acquisition me
 if not validate(publisher, mutated_gitmodules, EXPECTED_GITMODULES_SHA256):
     raise SystemExit("V26 .gitmodules binding mutation probe did not fail closed")
 
-mutated_publisher = publisher.replace("    'scripts/',\n", "", 1)
+mutated_publisher = mutate_final_classifier(publisher, "    'scripts/',\n", "")
 if mutated_publisher == publisher:
     raise SystemExit("V26 scripts/ classifier mutation probe could not mutate publisher fixture")
 if not validate(mutated_publisher, gitmodules, EXPECTED_GITMODULES_SHA256):
     raise SystemExit("V26 release-relevant scripts/ classifier mutation probe did not fail closed")
 
-commented_publisher = publisher.replace("    'scripts/',\n", "    # 'scripts/',\n", 1)
+commented_publisher = mutate_final_classifier(publisher, "    'scripts/',\n", "    # 'scripts/',\n")
 if commented_publisher == publisher:
     raise SystemExit("V26 commented scripts/ classifier mutation probe could not mutate publisher fixture")
 if not validate(commented_publisher, gitmodules, EXPECTED_GITMODULES_SHA256):
     raise SystemExit("V26 commented scripts/ classifier mutation probe did not fail closed")
 
-duplicated_publisher = publisher.replace("    'scripts/',\n", "    'scripts/',\n    'scripts/',\n", 1)
+duplicated_publisher = mutate_final_classifier(publisher, "    'scripts/',\n", "    'scripts/',\n    'scripts/',\n")
 if duplicated_publisher == publisher:
     raise SystemExit("V26 duplicate scripts/ classifier mutation probe could not mutate publisher fixture")
 if not validate(duplicated_publisher, gitmodules, EXPECTED_GITMODULES_SHA256):

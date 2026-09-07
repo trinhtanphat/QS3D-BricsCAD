@@ -56,8 +56,16 @@ if COMMANDS.is_file():
 
 if REPORT.is_file():
     text = REPORT.read_text(encoding="utf-8")
-    for token in ('RoomFinishIdentityService.ValidateProject(project)','AutoRoomLifecycle.IsExcludedFromQuantity(project, element)','QuantityReportMath.Add','SourceHandleResolver.Resolve'):
-        if token not in text: errors.append("ProjectQuantityReportBuilder.cs lost authoritative BQ token: " + token)
+    for token in (
+        'RoomFinishIdentityService.ValidateProject(project)',
+        'ProjectQuantityGenerationSnapshot.Capture(project)',
+        'AutoRoomLifecycle.IsExcludedFromQuantity(project, source)',
+        'if (elementSnapshot.ExcludedFromQuantity) continue;',
+        'SourceHandleResolver.Resolve(project, new[] { source.Id })',
+        'AddHandles(row.SourceHandles, elementSnapshot.ResolvedSourceHandles)',
+        'CompensatedValue',
+    ):
+        if token not in text: errors.append("ProjectQuantityReportBuilder.cs lost authoritative/frozen BQ token: " + token)
 
 if ROW.is_file():
     text = ROW.read_text(encoding="utf-8")
@@ -92,4 +100,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: BQ native Table preserves authoritative quantity/lifecycle semantics and redacts raw command/post-commit UI exception detail.")
+print("PASS: BQ native Table preserves authoritative frozen-generation quantity/lifecycle semantics and redacts raw command/post-commit UI exception detail.")
