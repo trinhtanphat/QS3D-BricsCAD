@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 
@@ -10,22 +11,59 @@ namespace QS3D.Core.SmokeTests
         {
             SourceHandleAddMarksRelationsDirty();
             DependencyAddMarksRelationsDirty();
+            EffectiveMutationSurfaceMarksRelationsDirty();
             NoOpRemovalPreservesCleanState();
+            NoOpMutationsPreserveCleanState();
+            RejectedMutationsAreAtomic();
             RelationInputsNormalizeAndValidate();
         }
 
         private static void SourceHandleAddMarksRelationsDirty()
         {
-            var element = CleanElement();
-            element.SourceHandles.Add("AA11");
-            Has(element.Dirty, ElementDirtyFlags.Relations);
+            AssertEffectiveMutation(element => element.SourceHandles.Add("AA11"));
         }
 
         private static void DependencyAddMarksRelationsDirty()
         {
-            var element = CleanElement();
-            element.DependsOn.Add("E2");
-            Has(element.Dirty, ElementDirtyFlags.Relations);
+            AssertEffectiveMutation(element => element.DependsOn.Add("E2"));
+        }
+
+        private static void EffectiveMutationSurfaceMarksRelationsDirty()
+        {
+            AssertEffectiveMutation(element =>
+            {
+                Seed(element.SourceHandles, "A");
+                element.MarkClean(ElementDirtyFlags.All);
+                element.SourceHandles.Insert(0, "B");
+            });
+
+            AssertEffectiveMutation(element =>
+            {
+                Seed(element.SourceHandles, "A");
+                element.MarkClean(ElementDirtyFlags.All);
+                element.SourceHandles[0] = "B";
+            });
+
+            AssertEffectiveMutation(element =>
+            {
+                Seed(element.SourceHandles, "A");
+                element.MarkClean(ElementDirtyFlags.All);
+                if (!element.SourceHandles.Remove(" A ")) throw new Exception("Canonicalized relation removal must succeed.");
+            });
+
+            AssertEffectiveMutation(element =>
+            {
+                Seed(element.DependsOn, "A", "B");
+                element.MarkClean(ElementDirtyFlags.All);
+                element.DependsOn.RemoveAt(0);
+            });
+
+            AssertEffectiveMutation(element =>
+            {
+                Seed(element.DependsOn, "A");
+                element.MarkClean(ElementDirtyFlags.All);
+                element.DependsOn.Clear();
+            });
         }
 
         private static void NoOpRemovalPreservesCleanState()
@@ -36,6 +74,48 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Removing a missing source handle must return false.");
             Equal(ElementDirtyFlags.None, element.Dirty);
             Equal(before, element.UpdatedUtc);
+        }
+
+        private static void NoOpMutationsPreserveCleanState()
+        {
+            var empty = CleanElement();
+            var emptyBefore = empty.UpdatedUtc;
+            empty.DependsOn.Clear();
+            Equal(ElementDirtyFlags.None, empty.Dirty);
+            Equal(emptyBefore, empty.UpdatedUtc);
+
+            var identical = CleanElement();
+            Seed(identical.SourceHandles, "AA11");
+            identical.MarkClean(ElementDirtyFlags.All);
+            var identicalBefore = identical.UpdatedUtc;
+            identical.SourceHandles[0] = "AA11";
+            Equal(ElementDirtyFlags.None, identical.Dirty);
+            Equal(identicalBefore, identical.UpdatedUtc);
+        }
+
+        private static void RejectedMutationsAreAtomic()
+        {
+            var duplicate = CleanElement();
+            Seed(duplicate.SourceHandles, "AA11", "BB22");
+            duplicate.MarkClean(ElementDirtyFlags.All);
+            var before = duplicate.UpdatedUtc;
+            Throws<ArgumentException>(() => duplicate.SourceHandles.Add("aa11"));
+            Equal(2, duplicate.SourceHandles.Count);
+            Equal("AA11", duplicate.SourceHandles[0]);
+            Equal("BB22", duplicate.SourceHandles[1]);
+            Equal(ElementDirtyFlags.None, duplicate.Dirty);
+            Equal(before, duplicate.UpdatedUtc);
+
+            Throws<ArgumentException>(() => duplicate.SourceHandles[1] = " aa11 ");
+            Equal("AA11", duplicate.SourceHandles[0]);
+            Equal("BB22", duplicate.SourceHandles[1]);
+            Equal(ElementDirtyFlags.None, duplicate.Dirty);
+            Equal(before, duplicate.UpdatedUtc);
+
+            Throws<ArgumentException>(() => duplicate.DependsOn.Remove("bad\nrelation"));
+            Equal(0, duplicate.DependsOn.Count);
+            Equal(ElementDirtyFlags.None, duplicate.Dirty);
+            Equal(before, duplicate.UpdatedUtc);
         }
 
         private static void RelationInputsNormalizeAndValidate()
@@ -49,6 +129,32 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentException>(() => dependency.DependsOn.Add("bad\nrelation"));
             Equal(0, dependency.DependsOn.Count);
             Equal(ElementDirtyFlags.None, dependency.Dirty);
+        }
+
+        private static void AssertEffectiveMutation(Action<ProjectElement> mutation)
+        {
+            var element = CleanElement();
+            var before = element.UpdatedUtc;
+            WaitUntilClockCanAdvance(before);
+            mutation(element);
+            Has(element.Dirty, ElementDirtyFlags.Relations);
+            if (element.UpdatedUtc <= before)
+                throw new Exception("Effective relation mutation must advance UpdatedUtc.");
+        }
+
+        private static void Seed(IList<string> values, params string[] items)
+        {
+            foreach (var item in items) values.Add(item);
+        }
+
+        private static void WaitUntilClockCanAdvance(DateTime before)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(2);
+            while (DateTime.UtcNow <= before)
+            {
+                if (DateTime.UtcNow >= deadline)
+                    throw new Exception("UTC clock did not advance while preparing relation mutation regression.");
+            }
         }
 
         private static ProjectElement CleanElement()
@@ -66,7 +172,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void Equal<T>(T expected, T actual)
         {
-            if (!Equals(expected, actual))
+            if (!EqualityComparer<T>.Default.Equals(expected, actual))
                 throw new Exception("Expected " + expected + ", got " + actual + ".");
         }
 
