@@ -18,7 +18,8 @@ if SOURCE.is_file():
         'return RequireXmlText(normalized, nameof(value), "Element relation id");',
         'return RequireXmlText(rawValue.Trim(), nameof(value), "Element drawing fingerprint");',
         'return RequireXmlText(normalized, nameof(id), "Element id");',
-        'key = RequireXmlText(key, nameof(name), "Property name");',
+        'var key = RequirePropertyName(name);',
+        'return RequireXmlText(name.Trim(), nameof(name), "Property name");',
         'key = RequireXmlText(key, nameof(name), "Quantity name");',
     )
     for token in required:
@@ -54,4 +55,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: ProjectElement Id/relation/fingerprint text is XML-preflighted before acceptance while existing key guards and mutation semantics remain covered.")
+print("PASS: ProjectElement Id/relation/fingerprint/property-name text is XML-preflighted before acceptance while existing key guards and mutation semantics remain covered.")
