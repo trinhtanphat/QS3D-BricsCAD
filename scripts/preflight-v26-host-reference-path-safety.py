@@ -127,6 +127,17 @@ def remove_last(text: str, token: str) -> str:
     return left + right if separator else text
 
 
+def remove_between(text: str, token: str, after: str, before: str) -> str:
+    left = text.find(after)
+    right = text.find(before, left + len(after)) if left >= 0 else -1
+    if left < 0 or right < 0:
+        return text
+    position = text.find(token, left + len(after), right)
+    if position < 0:
+        return text
+    return text[:position] + text[position + len(token):]
+
+
 def main() -> None:
     helper = HELPER.read_text(encoding="utf-8")
     build = BUILD_WORKFLOW.read_text(encoding="utf-8")
@@ -145,7 +156,11 @@ def main() -> None:
     expect_rejected(validate_helper, helper.replace(CURRENT_VERIFY_HASH_TOKEN, "$currentHash = [string]$Expected.Sha256", 1), "removed current-generation verification hash")
     expect_rejected(lambda text: validate_workflow(text, "manual V26 build workflow", 1), build.replace(HELD_BUILD_CALL, "& .\\scripts\\missing-held-build.ps1", 1), "removed build-workflow held-reference boundary")
     expect_rejected(lambda text: validate_workflow(text, "manual V26 release workflow", 2), release.replace(HELD_BUILD_CALL, "& .\\scripts\\missing-held-build.ps1", 1), "removed release-workflow held-reference boundary")
-    expect_rejected(lambda text: validate_workflow(text, "manual V26 build workflow", 1), remove_last(build, STATE_VERIFY_TOKEN), "removed build-workflow runtime revalidation")
+    expect_rejected(
+        lambda text: validate_workflow(text, "manual V26 build workflow", 1),
+        remove_between(build, STATE_VERIFY_TOKEN, HELD_BUILD_CALL, "test-bricscad-v26-runtime.ps1"),
+        "removed build-workflow runtime revalidation",
+    )
     expect_rejected(lambda text: validate_workflow(text, "manual V26 release workflow", 2), remove_last(release, STATE_VERIFY_TOKEN), "removed release-workflow signed-runtime revalidation")
 
     print("PASS V26 host reference path/generation-safety contract")
