@@ -312,7 +312,7 @@ function Assert-OfficialGitHubPackageSnapshot {
         throw 'Official QS3D package URI contains invalid escaping.'
     }
     if (-not [string]::Equals($tag, [string]$Snapshot.Tag, [StringComparison]::Ordinal)) {
-        throw "Official QS3D package release tag '$tag' does not match scheduled release tag '$($Snapshot.Tag)."
+        throw "Official QS3D package release tag '$tag' does not match scheduled release tag '$($Snapshot.Tag)'."
     }
     if (-not [string]::Equals($asset, 'QS3D-BricsCAD-V25.zip', [StringComparison]::Ordinal)) {
         throw "Official QS3D package asset must be QS3D-BricsCAD-V25.zip, got '$asset'."
