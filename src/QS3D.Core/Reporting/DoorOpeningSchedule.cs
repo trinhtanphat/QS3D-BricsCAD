@@ -126,6 +126,7 @@ namespace QS3D.Core.Reporting
                 project.ChangeVersion,
                 project.ProjectId,
                 project.DrawingFingerprint,
+                project.Elements.ToList().AsReadOnly(),
                 project.Elements.Select(DoorOpeningElementSnapshot.Capture).ToList().AsReadOnly(),
                 project.Floors.Select(x => new DoorOpeningFloorSnapshot(x.Id, x.Name)).ToList().AsReadOnly(),
                 project.Families.Select(DoorOpeningFamilySnapshot.Capture).ToList().AsReadOnly());
@@ -136,10 +137,19 @@ namespace QS3D.Core.Reporting
             if (project.ChangeVersion != snapshot.Version ||
                 !string.Equals(project.ProjectId, snapshot.ProjectId, StringComparison.Ordinal) ||
                 !string.Equals(project.DrawingFingerprint, snapshot.DrawingFingerprint, StringComparison.Ordinal) ||
+                !SameElementInstances(project.Elements, snapshot.SourceElements) ||
                 !SameElements(project.Elements, snapshot.Elements) ||
                 !SameFloors(project.Floors, snapshot.Floors) ||
                 !SameFamilies(project.Families, snapshot.Families))
                 throw new InvalidOperationException("Project changed while the door/opening schedule was being built; recompute the schedule against the current project state.");
+        }
+
+        private static bool SameElementInstances(IList<ProjectElement> current, IReadOnlyList<ProjectElement> sourceElements)
+        {
+            if (current.Count != sourceElements.Count) return false;
+            for (var index = 0; index < current.Count; index++)
+                if (!ReferenceEquals(current[index], sourceElements[index])) return false;
+            return true;
         }
 
         private static bool SameElements(IList<ProjectElement> current, IReadOnlyList<DoorOpeningElementSnapshot> snapshot)
@@ -299,11 +309,12 @@ namespace QS3D.Core.Reporting
 
         private sealed class DoorOpeningScheduleSnapshot
         {
-            internal DoorOpeningScheduleSnapshot(long version, string projectId, string drawingFingerprint, IReadOnlyList<DoorOpeningElementSnapshot> elements, IReadOnlyList<DoorOpeningFloorSnapshot> floors, IReadOnlyList<DoorOpeningFamilySnapshot> families)
-            { Version = version; ProjectId = projectId; DrawingFingerprint = drawingFingerprint; Elements = elements; Floors = floors; Families = families; }
+            internal DoorOpeningScheduleSnapshot(long version, string projectId, string drawingFingerprint, IReadOnlyList<ProjectElement> sourceElements, IReadOnlyList<DoorOpeningElementSnapshot> elements, IReadOnlyList<DoorOpeningFloorSnapshot> floors, IReadOnlyList<DoorOpeningFamilySnapshot> families)
+            { Version = version; ProjectId = projectId; DrawingFingerprint = drawingFingerprint; SourceElements = sourceElements; Elements = elements; Floors = floors; Families = families; }
             internal long Version { get; }
             internal string ProjectId { get; }
             internal string DrawingFingerprint { get; }
+            internal IReadOnlyList<ProjectElement> SourceElements { get; }
             internal IReadOnlyList<DoorOpeningElementSnapshot> Elements { get; }
             internal IReadOnlyList<DoorOpeningFloorSnapshot> Floors { get; }
             internal IReadOnlyList<DoorOpeningFamilySnapshot> Families { get; }
