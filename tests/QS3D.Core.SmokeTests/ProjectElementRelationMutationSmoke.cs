@@ -11,7 +11,7 @@ namespace QS3D.Core.SmokeTests
             SourceHandleAddMarksRelationsDirty();
             DependencyAddMarksRelationsDirty();
             NoOpRemovalPreservesCleanState();
-            RelationInputsMustBeCanonical();
+            RelationInputsNormalizeAndValidate();
         }
 
         private static void SourceHandleAddMarksRelationsDirty()
@@ -38,12 +38,12 @@ namespace QS3D.Core.SmokeTests
             Equal(before, element.UpdatedUtc);
         }
 
-        private static void RelationInputsMustBeCanonical()
+        private static void RelationInputsNormalizeAndValidate()
         {
             var source = CleanElement();
-            Throws<ArgumentException>(() => source.SourceHandles.Add(" padded "));
-            Equal(0, source.SourceHandles.Count);
-            Equal(ElementDirtyFlags.None, source.Dirty);
+            source.SourceHandles.Add(" padded ");
+            Equal("padded", source.SourceHandles[0]);
+            Has(source.Dirty, ElementDirtyFlags.Relations);
 
             var dependency = CleanElement();
             Throws<ArgumentException>(() => dependency.DependsOn.Add("bad\nrelation"));
