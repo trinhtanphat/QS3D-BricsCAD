@@ -56,9 +56,9 @@ update_source = read(UPDATE)
 package_active = executable_lines(package_source)
 
 # Both package construction and signed-package finalization must traverse the payload
-# fail-closed: reparse/non-regular entries are rejected before hashing. This preserves
-# complete manifest coverage without reopening the staging tree through an unchecked
-# recursive pathname enumeration.
+# fail-closed: reparse/non-regular entries are rejected before hashing. The deterministic
+# producer may materialize hashes through an ordinal dictionary rather than a pipeline,
+# but it must still enumerate only through Get-SafePackageFiles.
 package_traversal_tokens = (
     "function Get-SafePackageFiles",
     "Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop",
@@ -66,7 +66,12 @@ package_traversal_tokens = (
     "Package staging contains a reparse-backed entry",
     "$files.Add($item)",
     "return @($files | Sort-Object FullName)",
-    "$hashLines = Get-SafePackageFiles -PackageRoot $dist | ForEach-Object",
+    "foreach ($file in Get-SafePackageFiles -PackageRoot $dist)",
+    "$manifestHashes = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)",
+    "$manifestHashes.Add($relativePath, (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash)",
+    "$manifestEntryNames = [string[]]@($manifestHashes.Keys)",
+    "[Array]::Sort($manifestEntryNames, [StringComparer]::Ordinal)",
+    "$hashLines = @($manifestEntryNames | ForEach-Object",
     "SHA256SUMS.txt",
     "Get-FileHash",
     "-Algorithm SHA256",
@@ -133,21 +138,24 @@ if update_source:
     require(hash_index >= 0 and extract_index >= 0 and installer_index >= 0 and hash_index < extract_index < installer_index,
             "updater must verify the whole ZIP before extraction and delegate installation only afterwards")
 
-# Deterministic regression probes: the guard must reject both traversal bypass and a
-# producer that silently drops the staging reparse rejection used by safe hashing.
+# Deterministic regression probes: reject traversal bypass and removal of the staging
+# reparse rejection while accepting the ordinal dictionary-based manifest producer.
 def producer_safe(source):
     active = executable_lines(source)
     return (
         "function Get-SafePackageFiles" in source
-        and "$hashLines = Get-SafePackageFiles -PackageRoot $dist | ForEach-Object" in source
+        and "foreach ($file in Get-SafePackageFiles -PackageRoot $dist)" in source
+        and "$manifestHashes = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)" in source
+        and "[Array]::Sort($manifestEntryNames, [StringComparer]::Ordinal)" in source
         and "Package staging contains a reparse-backed entry" in source
         and "Get-ChildItem $dist -Recurse -File" not in active
+        and "Get-ChildItem -LiteralPath $dist -Recurse -File" not in active
     )
 
 require(producer_safe(package_source), "package producer safe-traversal model baseline must pass")
 require(not producer_safe(package_source.replace(
-    "$hashLines = Get-SafePackageFiles -PackageRoot $dist | ForEach-Object",
-    "$hashLines = Get-ChildItem $dist -Recurse -File | Sort-Object FullName | ForEach-Object",
+    "foreach ($file in Get-SafePackageFiles -PackageRoot $dist)",
+    "foreach ($file in Get-ChildItem -LiteralPath $dist -Recurse -File)",
     1,
 )), "package producer safe-traversal model must reject recursive pathname enumeration")
 require(not producer_safe(package_source.replace(
