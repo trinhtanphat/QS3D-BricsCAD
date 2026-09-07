@@ -48,7 +48,7 @@ for token in (
     "negativeKnownCount",
     "conflictingKnownCounts",
     "reboundCount.Value != admittedCount.Value",
-    '" known Count changed during " + boundary',
+    '"Measurement/work-item mapping source known Count changed during " + boundary',
 ):
     if token not in helper:
         fail(f"mapping catalog Count rebound helper must retain: {token}")
