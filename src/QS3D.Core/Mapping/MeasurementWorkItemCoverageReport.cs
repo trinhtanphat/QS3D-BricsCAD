@@ -75,16 +75,29 @@ namespace QS3D.Core.Mapping
 
             var rows = new List<MeasurementWorkItemCoverageReportRow>();
             var index = 0;
-            foreach (var finding in findings)
+            using (var enumerator = findings.GetEnumerator())
             {
-                if (index >= MaximumFindingCount)
-                    throw CreateFindingCountException();
-                if (finding == null)
-                    throw new ArgumentException("Coverage report input contains a null finding at index " + index + ".", nameof(findings));
-                rows.Add(new MeasurementWorkItemCoverageReportRow(finding));
-                index++;
+                if (enumerator == null)
+                    throw new ArgumentException("Coverage report input returned a null enumerator.", nameof(findings));
+
+                while (true)
+                {
+                    var hasNext = enumerator.MoveNext();
+                    RevalidateKnownCount(findings, knownCount, "MoveNext");
+                    if (!hasNext) break;
+                    if (index >= MaximumFindingCount)
+                        throw CreateFindingCountException();
+
+                    var finding = enumerator.Current;
+                    RevalidateKnownCount(findings, knownCount, "Current");
+                    if (finding == null)
+                        throw new ArgumentException("Coverage report input contains a null finding at index " + index + ".", nameof(findings));
+                    rows.Add(new MeasurementWorkItemCoverageReportRow(finding));
+                    index++;
+                }
             }
 
+            RevalidateKnownCount(findings, knownCount, "completed traversal");
             if (knownCount.HasValue && index != knownCount.Value)
                 throw new ArgumentException(
                     "Coverage report input traversal count does not match its validated known count.",
@@ -126,6 +139,22 @@ namespace QS3D.Core.Mapping
                 missingQuantityCount,
                 staleQuantityCount,
                 unmappedWorkItemCount);
+        }
+
+        private static void RevalidateKnownCount(
+            IEnumerable<MeasurementWorkItemCoverageFinding> findings,
+            int? admittedCount,
+            string boundary)
+        {
+            if (!admittedCount.HasValue)
+                return;
+
+            var reboundCount = ValidateKnownCount(findings);
+            if (!reboundCount.HasValue || reboundCount.Value != admittedCount.Value)
+                throw new ArgumentException(
+                    "Coverage report input known Count changed during " + boundary + " from " + admittedCount.Value + " to " +
+                    (reboundCount.HasValue ? reboundCount.Value.ToString() : "unknown") + ".",
+                    nameof(findings));
         }
 
         private static int? ValidateKnownCount(IEnumerable<MeasurementWorkItemCoverageFinding> findings)
