@@ -64,7 +64,8 @@ namespace QS3D.Core.Domain
 
         public bool Remove(string item)
         {
-            var index = _values.IndexOf(item);
+            var canonical = RequireRelationValue(item);
+            var index = _values.IndexOf(canonical);
             if (index < 0) return false;
             _values.RemoveAt(index);
             MarkRelationChanged();
