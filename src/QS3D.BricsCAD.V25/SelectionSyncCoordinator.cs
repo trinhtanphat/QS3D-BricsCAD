@@ -77,7 +77,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception)
             {
-                PaletteCoordinator.SetStatus("Selection sync lỗi. Vui lòng thử lại.");
+                SelectionSyncStatusPublisher.SetStatusForDocument(document, "Selection sync lỗi. Vui lòng thử lại.");
             }
             finally { Refreshing.Remove(document); }
         }
