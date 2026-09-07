@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 
@@ -16,7 +18,7 @@ namespace QS3D.Core.SmokeTests
         private static void PreservesDistinctPairsAcrossNewlineCollision()
         {
             var element = new ProjectElement("E1", ElementCategory.Room, string.Empty, string.Empty, string.Empty);
-            element.Properties["GeneratedX\nGeneratedYHandle"] = "A";
+            InjectLegacyElementProperty(element, "GeneratedX\nGeneratedYHandle", "A");
             element.Properties["GeneratedYHandle"] = "A\nGeneratedX";
 
             var pairs = GeneratedHandleOwnershipPolicy.EnumerateLogicalOwnerHandles(element).ToList();
@@ -35,6 +37,15 @@ namespace QS3D.Core.SmokeTests
             Equal(1, pairs.Count, "Host-solid aliases no longer deduplicate as one logical owner pair.");
             True(string.Equals("H1", pairs[0].Key, StringComparison.OrdinalIgnoreCase), "Logical owner handle changed unexpectedly.");
             Equal("GeneratedSolidHandle", pairs[0].Value, "Logical host alias did not canonicalize to GeneratedSolidHandle.");
+        }
+
+        private static void InjectLegacyElementProperty(ProjectElement element, string key, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_properties", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Legacy generated-handle fixture could not locate the property backing dictionary.");
+            var inner = field.GetValue(element) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Legacy generated-handle fixture property backing dictionary had an unexpected type.");
+            inner[key] = value;
         }
 
         private static void True(bool condition, string message)
