@@ -276,12 +276,72 @@ function Get-SourceGitCommit {
     return $commit
 }
 
+function Get-SourceGitTimestampUtc {
+    param([string]$Commit)
+    $output = @(& git -C $root show -s --format=%cI $Commit 2>&1)
+    if ($LASTEXITCODE -ne 0 -or $output.Count -ne 1) { throw "Could not resolve one source Git timestamp for package provenance." }
+    try {
+        $timestamp = [DateTimeOffset]::Parse(([string]$output[0]).Trim(), [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+    }
+    catch { throw "Source Git timestamp is invalid for package provenance: $($_.Exception.Message)" }
+    $zipMin = [DateTimeOffset]::new(1980, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
+    $zipMax = [DateTimeOffset]::new(2107, 12, 31, 23, 59, 58, [TimeSpan]::Zero)
+    if ($timestamp -lt $zipMin -or $timestamp -gt $zipMax) { throw "Source Git timestamp is outside the ZIP timestamp range: $timestamp" }
+    return $timestamp
+}
+
+function New-DeterministicPackageZip {
+    param([string]$PackageRoot, [string]$DestinationPath, [DateTimeOffset]$SourceTimestamp)
+    $package = Assert-OrdinaryDirectory -Path $PackageRoot -Label 'package staging root'
+    $destination = Assert-SafeOutputFileTarget -Path $DestinationPath -RepositoryRoot $root -Label 'package ZIP'
+    $packagePrefix = $package.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    $sourceByEntry = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)
+    foreach ($file in Get-SafePackageFiles -PackageRoot $package) {
+        $fullName = [IO.Path]::GetFullPath($file.FullName)
+        if (-not $fullName.StartsWith($packagePrefix, [StringComparison]::OrdinalIgnoreCase)) { throw "Package file escaped staging root: $fullName" }
+        $entryName = $fullName.Substring($packagePrefix.Length).Replace([IO.Path]::DirectorySeparatorChar, '/')
+        if ([string]::IsNullOrWhiteSpace($entryName) -or $entryName.StartsWith('/') -or $entryName.Contains('\\')) { throw "Package entry name is not canonical: $entryName" }
+        if ($sourceByEntry.ContainsKey($entryName)) { throw "Duplicate deterministic package entry name: $entryName" }
+        $sourceByEntry.Add($entryName, $fullName)
+    }
+    $entryNames = [string[]]@($sourceByEntry.Keys)
+    [Array]::Sort($entryNames, [StringComparer]::Ordinal)
+    if ($entryNames.Length -eq 0) { throw 'No package files were available for deterministic ZIP creation.' }
+
+    $destinationStream = [IO.File]::Open($destination, [IO.FileMode]::Create, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+    try {
+        $archive = [IO.Compression.ZipArchive]::new($destinationStream, [IO.Compression.ZipArchiveMode]::Create, $true)
+        try {
+            foreach ($entryName in $entryNames) {
+                $held = Open-HeldPackageInput -Path $sourceByEntry[$entryName] -RepositoryRoot $root -Label ("package ZIP input $entryName")
+                try {
+                    Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label ("package ZIP input $entryName")
+                    $entry = $archive.CreateEntry($entryName, [IO.Compression.CompressionLevel]::Optimal)
+                    $entry.LastWriteTime = $SourceTimestamp
+                    $entryStream = $entry.Open()
+                    try {
+                        $held.Stream.Position = 0
+                        $held.Stream.CopyTo($entryStream)
+                    }
+                    finally { $entryStream.Dispose() }
+                    Assert-HeldPathBinding -Held $held -RepositoryRoot $root -Label ("package ZIP input $entryName")
+                }
+                finally { $held.Stream.Dispose() }
+            }
+        }
+        finally { $archive.Dispose() }
+        $destinationStream.Flush($true)
+    }
+    finally { $destinationStream.Dispose() }
+}
+
 $root = Assert-OrdinaryDirectory -Path $root -Label 'repository root'
 $pluginProject = Assert-SafeInputFile -Path (Join-Path $root 'src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj') -RepositoryRoot $root -Label 'V25 plugin project'
 $coreProject = Assert-SafeInputFile -Path (Join-Path $root 'src/QS3D.Core/QS3D.Core.csproj') -RepositoryRoot $root -Label 'Core project'
 $productVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $pluginProject) -Label 'QS3D plugin product version'
 $coreProductVersion = Convert-ToStrictSemVerText -Value (Read-ProjectProductVersion -ProjectPath $coreProject) -Label 'QS3D Core product version'
 $gitCommit = Get-SourceGitCommit
+$sourceTimestampUtc = Get-SourceGitTimestampUtc -Commit $gitCommit
 if (-not [string]::Equals($productVersion, $coreProductVersion, [StringComparison]::Ordinal)) { throw "QS3D plugin/Core product versions differ: plugin=$productVersion core=$coreProductVersion" }
 if (-not [string]::IsNullOrWhiteSpace($env:RELEASE_TAG)) {
     $expectedTag = 'v' + $productVersion
@@ -347,7 +407,7 @@ $metadata = [ordered]@{
     productVersion = $productVersion
     version = $assemblyVersion.ToString()
     gitCommit = $gitCommit
-    generatedUtc = [DateTime]::UtcNow.ToString('o')
+    generatedUtc = $sourceTimestampUtc.ToString('o')
     commandCount = $commands.Count
     defaultLoadMode = 'OnCommand'
     autoloadMethod = 'BricsCAD Registry DemandLoad'
@@ -424,7 +484,7 @@ $zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'pack
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
 $dist = Assert-SafeOutputDirectoryTarget -Path $dist -RepositoryRoot $root -Label 'package staging directory'
 $zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'
-Compress-Archive -Path (Join-Path $dist '*') -DestinationPath $zip -CompressionLevel Optimal
+New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc
 $zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'
 $zipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
 Write-Host "Package ready: $zip"
