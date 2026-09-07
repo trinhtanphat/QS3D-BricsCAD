@@ -10,11 +10,14 @@ On PR #6011, current-head pull-request run `34090086154` for `94faa366a56e5b0138
 
 This is not push/PR cross-event collision: the same-head push run stayed in its distinct `push` concurrency class.
 
+GitHub concurrency also replaces an existing pending run when a newer run enters the same group, independently of `cancel-in-progress`. Therefore conditional cancellation alone is insufficient: historical reruns must use a run-specific concurrency suffix so they cannot replace either running or pending live exact-head validation.
+
 ## Required invariant
 
-- Preserve the existing repository + head branch + event-class group identity.
-- First-attempt branch/PR events may cancel superseded work in the same class.
-- A manual rerun (`github.run_attempt > 1`) must not preempt already-running current-head validation merely because the historical run shares the branch/class key.
+- Preserve repository + head branch + event-class identity for ordinary first-attempt validation.
+- First-attempt branch/PR events may cancel genuinely superseded live work in the same class.
+- A manual rerun (`github.run_attempt > 1`) receives a `github.run_id`-specific suffix and must not share the live suffix used by current attempt-1 validation.
+- Historical reruns must not cancel a running current head or replace a pending current head.
 - Preserve canonical protected PR job names `preflight` / `core`, push names `branch-preflight` / `branch-core`, and edited metadata isolation.
 - Do not reuse stale GREEN or weaken exact-head, reservation, source, smoke, or build gates.
 
@@ -24,4 +27,5 @@ This is not push/PR cross-event collision: the same-head push run stayed in its 
 2. `python scripts/preflight-all.py`
 3. Fresh exact-head Shared CI on the carrier branch.
 4. Confirm ordinary first-attempt push/PR validation still executes normally.
-5. Before merge, refresh protected main, require zero unresolved review threads and fresh exact-head required CI GREEN; merge only with expected-head SHA binding.
+5. Hosted probe: while a newer exact-head PR-code run is active, rerun a historical carrier run whose workflow already contains this fix. Verify the stale attempt uses an isolated concurrency group and does not cancel/replace the current-head run.
+6. Before merge, refresh protected main, require zero unresolved review threads and fresh exact-head required CI GREEN; merge only with expected-head SHA binding.
