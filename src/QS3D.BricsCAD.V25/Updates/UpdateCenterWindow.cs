@@ -5,6 +5,8 @@ using System.Linq;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Media;
 using BricscadApplication = Bricscad.ApplicationServices.Application;
@@ -25,6 +27,12 @@ namespace QS3D.BricsCAD.V25.Updates
         private static readonly Brush CardBackground = new SolidColorBrush(Color.FromRgb(31, 38, 49));
         private static readonly Brush PanelBackground = new SolidColorBrush(Color.FromRgb(19, 24, 32));
         private static readonly Brush BorderStroke = new SolidColorBrush(Color.FromRgb(54, 65, 82));
+        private static readonly Brush PickerInputBackground = new SolidColorBrush(Color.FromRgb(31, 38, 49));
+        private static readonly Brush PickerInputBorder = new SolidColorBrush(Color.FromRgb(96, 118, 149));
+        private static readonly Brush PickerInputPlaceholder = new SolidColorBrush(Color.FromRgb(178, 189, 207));
+        private static readonly Brush PickerHover = new SolidColorBrush(Color.FromRgb(39, 52, 72));
+        private static readonly Brush PickerSelected = new SolidColorBrush(Color.FromRgb(45, 72, 119));
+        private static readonly Brush PickerPopupBackground = new SolidColorBrush(Color.FromRgb(24, 30, 39));
 
         private readonly TextBlock _title;
         private readonly TextBlock _status;
@@ -32,7 +40,7 @@ namespace QS3D.BricsCAD.V25.Updates
         private readonly TextBlock _runtimeIdentity;
         private readonly TextBlock _detail;
         private readonly TextBox _notes;
-        private readonly TextBox _releaseSearchBox;
+        private TextBox? _releaseSearchBox;
         private readonly ComboBox _releaseVersionPicker;
         private readonly Grid _progressHeader;
         private readonly ProgressBar _progressBar;
@@ -112,8 +120,6 @@ namespace QS3D.BricsCAD.V25.Updates
             var pickerPanel = new Grid { Margin = new Thickness(0, 0, 0, 15) };
             pickerPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             pickerPanel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            pickerPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220) });
-            pickerPanel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
             var pickerLabel = new TextBlock
             {
@@ -124,41 +130,42 @@ namespace QS3D.BricsCAD.V25.Updates
                 Margin = new Thickness(2, 0, 0, 7)
             };
             Grid.SetRow(pickerLabel, 0);
-            Grid.SetColumnSpan(pickerLabel, 2);
             pickerPanel.Children.Add(pickerLabel);
-
-            _releaseSearchBox = new TextBox
-            {
-                Height = 36,
-                Margin = new Thickness(0, 0, 10, 0),
-                Padding = new Thickness(10, 6, 10, 6),
-                Background = PanelBackground,
-                Foreground = TextPrimary,
-                BorderBrush = BorderStroke,
-                BorderThickness = new Thickness(1),
-                CaretBrush = AccentSoft,
-                ToolTip = "Tìm phiên bản…"
-            };
-            _releaseSearchBox.TextChanged += (_, __) => FilterReleaseChoices();
-            Grid.SetRow(_releaseSearchBox, 1);
-            Grid.SetColumn(_releaseSearchBox, 0);
-            pickerPanel.Children.Add(_releaseSearchBox);
 
             _releaseVersionPicker = new ComboBox
             {
-                Height = 36,
-                Background = PanelBackground,
+                Height = 38,
+                Background = PickerInputBackground,
                 Foreground = TextPrimary,
-                BorderBrush = BorderStroke,
+                BorderBrush = PickerInputBorder,
                 BorderThickness = new Thickness(1),
-                Padding = new Thickness(8, 4, 8, 4),
+                Padding = new Thickness(11, 0, 42, 0),
                 IsTextSearchEnabled = false,
-                MaxDropDownHeight = 300,
+                MaxDropDownHeight = 320,
+                FocusVisualStyle = null,
+                Template = CreateReleasePickerTemplate(),
+                ItemContainerStyle = CreateReleaseChoiceItemStyle(),
                 ToolTip = "Chọn release QS3D cần cài đặt"
             };
             _releaseVersionPicker.SelectionChanged += (_, __) => OnReleaseSelectionChanged();
+            _releaseVersionPicker.DropDownOpened += (_, __) =>
+            {
+                AttachReleaseSearchBox();
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    AttachReleaseSearchBox();
+                    if (_releaseSearchBox == null) return;
+                    _releaseSearchBox.IsEnabled = _releaseVersionPicker.IsEnabled && !_loadingReleaseChoices;
+                    _releaseSearchBox.Focus();
+                    _releaseSearchBox.SelectAll();
+                }));
+            };
+            _releaseVersionPicker.DropDownClosed += (_, __) =>
+            {
+                if (_releaseSearchBox == null || _releaseSearchBox.Text.Length == 0) return;
+                _releaseSearchBox.Clear();
+            };
             Grid.SetRow(_releaseVersionPicker, 1);
-            Grid.SetColumn(_releaseVersionPicker, 1);
             pickerPanel.Children.Add(_releaseVersionPicker);
             Grid.SetRow(pickerPanel, 3);
             root.Children.Add(pickerPanel);
@@ -410,7 +417,8 @@ namespace QS3D.BricsCAD.V25.Updates
             _updateButton.IsEnabled = !previewDownloading && !previewScheduled && (result.CanAutoInstall || hasPreviewDownload || hasManualRelease);
             _releaseButton.IsEnabled = !previewDownloading && targetRelease?.PageUri != null;
             _updateOnCloseCheckBox.IsEnabled = !previewDownloading && !previewScheduled && result.State != UpdateState.Scheduled;
-            _releaseSearchBox.IsEnabled = !previewDownloading && !previewScheduled && !_loadingReleaseChoices;
+            if (_releaseSearchBox != null)
+                _releaseSearchBox.IsEnabled = !previewDownloading && !previewScheduled && !_loadingReleaseChoices;
             _releaseVersionPicker.IsEnabled = !previewDownloading && !previewScheduled && !_loadingReleaseChoices;
 
             if (previewDownloading)
@@ -612,7 +620,8 @@ namespace QS3D.BricsCAD.V25.Updates
         {
             if (_loadingReleaseChoices) return;
             _loadingReleaseChoices = true;
-            _releaseSearchBox.IsEnabled = false;
+            if (_releaseSearchBox != null)
+                _releaseSearchBox.IsEnabled = false;
             _releaseVersionPicker.IsEnabled = false;
             try
             {
@@ -642,15 +651,40 @@ namespace QS3D.BricsCAD.V25.Updates
             finally
             {
                 _loadingReleaseChoices = false;
-                _releaseSearchBox.IsEnabled = true;
+                if (_releaseSearchBox != null)
+                    _releaseSearchBox.IsEnabled = true;
                 _releaseVersionPicker.IsEnabled = true;
             }
         }
 
+        private void AttachReleaseSearchBox()
+        {
+            _releaseVersionPicker.ApplyTemplate();
+            var template = _releaseVersionPicker.Template;
+            if (template == null) return;
+
+            var searchBox = template.FindName("PART_SearchBox", _releaseVersionPicker) as TextBox;
+            if (ReferenceEquals(_releaseSearchBox, searchBox)) return;
+
+            if (_releaseSearchBox != null)
+                _releaseSearchBox.TextChanged -= OnReleaseSearchTextChanged;
+
+            _releaseSearchBox = searchBox;
+            if (_releaseSearchBox == null) return;
+
+            _releaseSearchBox.TextChanged += OnReleaseSearchTextChanged;
+            _releaseSearchBox.IsEnabled = _releaseVersionPicker.IsEnabled && !_loadingReleaseChoices;
+        }
+
+        private void OnReleaseSearchTextChanged(object sender, TextChangedEventArgs e)
+        {
+            FilterReleaseChoices();
+        }
+
         private void FilterReleaseChoices()
         {
-            if (_releaseVersionPicker == null || _releaseSearchBox == null) return;
-            var query = (_releaseSearchBox.Text ?? string.Empty).Trim();
+            if (_releaseVersionPicker == null) return;
+            var query = (_releaseSearchBox?.Text ?? string.Empty).Trim();
             var selectedTag = _selectedRelease?.Tag;
             var latestTag = _publishedReleases.Count == 0 ? null : _publishedReleases[0].Tag;
 
@@ -896,6 +930,216 @@ namespace QS3D.BricsCAD.V25.Updates
                 FocusVisualStyle = null,
                 Template = CreateButtonTemplate(primary, normal)
             };
+        }
+
+        private static ControlTemplate CreateReleasePickerTemplate()
+        {
+            var root = new FrameworkElementFactory(typeof(Grid), "PickerRoot");
+
+            var chrome = new FrameworkElementFactory(typeof(Border), "PickerChrome");
+            chrome.SetValue(Border.BackgroundProperty, PickerInputBackground);
+            chrome.SetValue(Border.BorderBrushProperty, PickerInputBorder);
+            chrome.SetValue(Border.BorderThicknessProperty, new Thickness(1));
+            chrome.SetValue(Border.CornerRadiusProperty, new CornerRadius(6));
+            chrome.SetValue(UIElement.SnapsToDevicePixelsProperty, true);
+            root.AppendChild(chrome);
+
+            var selection = new FrameworkElementFactory(typeof(ContentPresenter), "SelectionPresenter");
+            selection.SetValue(FrameworkElement.MarginProperty, new Thickness(12, 0, 42, 0));
+            selection.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            selection.SetValue(ContentPresenter.RecognizesAccessKeyProperty, true);
+            selection.SetValue(UIElement.IsHitTestVisibleProperty, false);
+            selection.SetValue(TextElement.ForegroundProperty, TextPrimary);
+            selection.SetBinding(ContentPresenter.ContentProperty, new Binding("SelectionBoxItem")
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent)
+            });
+            selection.SetBinding(ContentPresenter.ContentTemplateProperty, new Binding("SelectionBoxItemTemplate")
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent)
+            });
+            root.AppendChild(selection);
+
+            var arrow = new FrameworkElementFactory(typeof(TextBlock), "PickerArrow");
+            arrow.SetValue(TextBlock.TextProperty, "▾");
+            arrow.SetValue(TextBlock.ForegroundProperty, AccentSoft);
+            arrow.SetValue(TextBlock.FontSizeProperty, 14d);
+            arrow.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Right);
+            arrow.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            arrow.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 0, 13, 1));
+            arrow.SetValue(UIElement.IsHitTestVisibleProperty, false);
+            root.AppendChild(arrow);
+
+            var toggleChrome = new FrameworkElementFactory(typeof(Border));
+            toggleChrome.SetValue(Border.BackgroundProperty, Brushes.Transparent);
+            var toggleTemplate = new ControlTemplate(typeof(ToggleButton)) { VisualTree = toggleChrome };
+            var toggle = new FrameworkElementFactory(typeof(ToggleButton), "PickerToggle");
+            toggle.SetValue(Control.TemplateProperty, toggleTemplate);
+            toggle.SetValue(Control.FocusVisualStyleProperty, null);
+            toggle.SetValue(UIElement.FocusableProperty, false);
+            toggle.SetBinding(ToggleButton.IsCheckedProperty, new Binding("IsDropDownOpen")
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent),
+                Mode = BindingMode.TwoWay
+            });
+            root.AppendChild(toggle);
+
+            var popup = new FrameworkElementFactory(typeof(Popup), "PART_Popup");
+            popup.SetValue(Popup.AllowsTransparencyProperty, true);
+            popup.SetValue(Popup.StaysOpenProperty, false);
+            popup.SetValue(Popup.PlacementProperty, PlacementMode.Bottom);
+            popup.SetValue(Popup.PopupAnimationProperty, PopupAnimation.Fade);
+            popup.SetBinding(Popup.IsOpenProperty, new Binding("IsDropDownOpen")
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent),
+                Mode = BindingMode.TwoWay
+            });
+            popup.SetBinding(Popup.PlacementTargetProperty, new Binding
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent)
+            });
+            popup.SetBinding(FrameworkElement.WidthProperty, new Binding("ActualWidth")
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent)
+            });
+
+            var popupChrome = new FrameworkElementFactory(typeof(Border), "PopupChrome");
+            popupChrome.SetValue(Border.BackgroundProperty, PickerPopupBackground);
+            popupChrome.SetValue(Border.BorderBrushProperty, BorderStroke);
+            popupChrome.SetValue(Border.BorderThicknessProperty, new Thickness(1));
+            popupChrome.SetValue(Border.CornerRadiusProperty, new CornerRadius(7));
+            popupChrome.SetValue(Border.PaddingProperty, new Thickness(7));
+            popupChrome.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 4, 0, 0));
+
+            var popupStack = new FrameworkElementFactory(typeof(StackPanel));
+            popupStack.SetValue(StackPanel.OrientationProperty, Orientation.Vertical);
+
+            var searchBox = new FrameworkElementFactory(typeof(TextBox), "PART_SearchBox");
+            searchBox.SetValue(FrameworkElement.HeightProperty, 36d);
+            searchBox.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 0, 0, 7));
+            searchBox.SetValue(Control.PaddingProperty, new Thickness(10, 0, 10, 0));
+            searchBox.SetValue(Control.BackgroundProperty, PickerInputBackground);
+            searchBox.SetValue(Control.ForegroundProperty, TextPrimary);
+            searchBox.SetValue(Control.BorderBrushProperty, PickerInputBorder);
+            searchBox.SetValue(Control.BorderThicknessProperty, new Thickness(1));
+            searchBox.SetValue(TextBox.CaretBrushProperty, AccentSoft);
+            searchBox.SetValue(TextBox.SelectionBrushProperty, PickerSelected);
+            searchBox.SetValue(Control.FontSizeProperty, 12d);
+            searchBox.SetValue(Control.ToolTipProperty, "Tìm phiên bản…");
+            searchBox.SetValue(Control.TemplateProperty, CreateReleaseSearchBoxTemplate());
+            popupStack.AppendChild(searchBox);
+
+            var scroller = new FrameworkElementFactory(typeof(ScrollViewer), "ReleaseScroller");
+            scroller.SetValue(FrameworkElement.MaxHeightProperty, 255d);
+            scroller.SetValue(ScrollViewer.CanContentScrollProperty, true);
+            scroller.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty, ScrollBarVisibility.Auto);
+            scroller.SetValue(ScrollViewer.HorizontalScrollBarVisibilityProperty, ScrollBarVisibility.Disabled);
+            scroller.SetValue(Control.BackgroundProperty, PickerPopupBackground);
+            var itemsPresenter = new FrameworkElementFactory(typeof(ItemsPresenter));
+            scroller.AppendChild(itemsPresenter);
+            popupStack.AppendChild(scroller);
+
+            popupChrome.AppendChild(popupStack);
+            popup.AppendChild(popupChrome);
+            root.AppendChild(popup);
+
+            var template = new ControlTemplate(typeof(ComboBox)) { VisualTree = root };
+            var focusTrigger = new Trigger { Property = UIElement.IsKeyboardFocusWithinProperty, Value = true };
+            focusTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, AccentSoft, "PickerChrome"));
+            template.Triggers.Add(focusTrigger);
+            var openTrigger = new Trigger { Property = ComboBox.IsDropDownOpenProperty, Value = true };
+            openTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, AccentSoft, "PickerChrome"));
+            openTrigger.Setters.Add(new Setter(TextBlock.ForegroundProperty, TextPrimary, "PickerArrow"));
+            template.Triggers.Add(openTrigger);
+            var disabledTrigger = new Trigger { Property = UIElement.IsEnabledProperty, Value = false };
+            disabledTrigger.Setters.Add(new Setter(UIElement.OpacityProperty, 0.48, "PickerRoot"));
+            template.Triggers.Add(disabledTrigger);
+            return template;
+        }
+
+        private static ControlTemplate CreateReleaseSearchBoxTemplate()
+        {
+            var chrome = new FrameworkElementFactory(typeof(Border), "SearchChrome");
+            chrome.SetValue(Border.BackgroundProperty, PickerInputBackground);
+            chrome.SetValue(Border.BorderBrushProperty, PickerInputBorder);
+            chrome.SetValue(Border.BorderThicknessProperty, new Thickness(1));
+            chrome.SetValue(Border.CornerRadiusProperty, new CornerRadius(5));
+
+            var grid = new FrameworkElementFactory(typeof(Grid));
+            var contentHost = new FrameworkElementFactory(typeof(ScrollViewer), "PART_ContentHost");
+            contentHost.SetValue(FrameworkElement.MarginProperty, new Thickness(10, 0, 10, 0));
+            contentHost.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            grid.AppendChild(contentHost);
+
+            var placeholder = new FrameworkElementFactory(typeof(TextBlock), "SearchPlaceholder");
+            placeholder.SetValue(TextBlock.TextProperty, "Tìm phiên bản…");
+            placeholder.SetValue(TextBlock.ForegroundProperty, PickerInputPlaceholder);
+            placeholder.SetValue(TextBlock.FontSizeProperty, 12d);
+            placeholder.SetValue(FrameworkElement.MarginProperty, new Thickness(10, 0, 10, 0));
+            placeholder.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            placeholder.SetValue(UIElement.IsHitTestVisibleProperty, false);
+            placeholder.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
+            grid.AppendChild(placeholder);
+            chrome.AppendChild(grid);
+
+            var template = new ControlTemplate(typeof(TextBox)) { VisualTree = chrome };
+            var emptyTrigger = new Trigger { Property = TextBox.TextProperty, Value = string.Empty };
+            emptyTrigger.Setters.Add(new Setter(UIElement.VisibilityProperty, Visibility.Visible, "SearchPlaceholder"));
+            template.Triggers.Add(emptyTrigger);
+            var focusTrigger = new Trigger { Property = UIElement.IsKeyboardFocusedProperty, Value = true };
+            focusTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, AccentSoft, "SearchChrome"));
+            template.Triggers.Add(focusTrigger);
+            var disabledTrigger = new Trigger { Property = UIElement.IsEnabledProperty, Value = false };
+            disabledTrigger.Setters.Add(new Setter(UIElement.OpacityProperty, 0.5, "SearchChrome"));
+            template.Triggers.Add(disabledTrigger);
+            return template;
+        }
+
+        private static Style CreateReleaseChoiceItemStyle()
+        {
+            var style = new Style(typeof(ComboBoxItem));
+            style.Setters.Add(new Setter(Control.ForegroundProperty, TextPrimary));
+            style.Setters.Add(new Setter(Control.BackgroundProperty, PanelBackground));
+            style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(11, 9, 11, 9)));
+            style.Setters.Add(new Setter(Control.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
+            style.Setters.Add(new Setter(Control.FocusVisualStyleProperty, null));
+
+            var chrome = new FrameworkElementFactory(typeof(Border), "ItemChrome");
+            chrome.SetValue(Border.BackgroundProperty, PanelBackground);
+            chrome.SetValue(Border.CornerRadiusProperty, new CornerRadius(5));
+            chrome.SetBinding(Border.PaddingProperty, new Binding("Padding")
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent)
+            });
+
+            var content = new FrameworkElementFactory(typeof(ContentPresenter));
+            content.SetValue(ContentPresenter.RecognizesAccessKeyProperty, true);
+            content.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            content.SetBinding(ContentPresenter.ContentProperty, new Binding("Content")
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent)
+            });
+            content.SetBinding(TextElement.ForegroundProperty, new Binding("Foreground")
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent)
+            });
+            chrome.AppendChild(content);
+
+            var template = new ControlTemplate(typeof(ComboBoxItem)) { VisualTree = chrome };
+            var selectedTrigger = new Trigger { Property = ComboBoxItem.IsSelectedProperty, Value = true };
+            selectedTrigger.Setters.Add(new Setter(Border.BackgroundProperty, PickerSelected, "ItemChrome"));
+            selectedTrigger.Setters.Add(new Setter(Control.ForegroundProperty, TextPrimary));
+            template.Triggers.Add(selectedTrigger);
+            var hoverTrigger = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
+            hoverTrigger.Setters.Add(new Setter(Border.BackgroundProperty, PickerHover, "ItemChrome"));
+            hoverTrigger.Setters.Add(new Setter(Control.ForegroundProperty, TextPrimary));
+            template.Triggers.Add(hoverTrigger);
+            var disabledTrigger = new Trigger { Property = UIElement.IsEnabledProperty, Value = false };
+            disabledTrigger.Setters.Add(new Setter(UIElement.OpacityProperty, 0.45, "ItemChrome"));
+            template.Triggers.Add(disabledTrigger);
+
+            style.Setters.Add(new Setter(Control.TemplateProperty, template));
+            return style;
         }
 
         private static ControlTemplate CreateCheckBoxTemplate()
