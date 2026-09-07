@@ -64,10 +64,14 @@ for token in [
     'field.SetValue(p.Families[0], "Wall Type Drifted")',
     'SourceHandles.Add("BEEF")',
     "p.Elements[0] = replacement",
-    "p.Families[0] = replacement",
+    'GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)',
+    "items[0] = replacement",
     "Project changed while the quantity report was being built",
 ]:
     if token not in smoke:
         raise SystemExit("Missing deterministic Project Quantity generation-fence smoke contract: " + token)
+
+if "p.Families[0] = replacement" in smoke:
+    raise SystemExit("Family replacement generation-fence smoke must bypass CatalogOwnershipList.Touch so ChangeVersion cannot satisfy the regression by itself.")
 
 print("Project Quantity semantic generation fence preflight passed.")
