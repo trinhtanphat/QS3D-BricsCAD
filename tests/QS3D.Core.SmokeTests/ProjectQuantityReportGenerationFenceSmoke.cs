@@ -106,10 +106,10 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("P-QTY-GEN", "Project quantity generation fence") { DrawingFingerprint = "FP-QTY-GEN" };
             project.Floors.Add(new FloorDefinition("F1", "Level 1", 0d));
             project.Zones.Add(new ZoneDefinition("Z1", "Zone 1"));
-            var family = new ProjectFamily("WF1", "Wall Type A", ElementCategory.Wall);
+            var family = new ProjectFamily("WF1", "Wall Type A", ElementCategory.ArchitecturalWall);
             family.Properties["Material"] = "Concrete";
             project.Families.Add(family);
-            var element = new ProjectElement("W1", ElementCategory.Wall, "WF1", "F1", "Z1");
+            var element = new ProjectElement("W1", ElementCategory.ArchitecturalWall, "WF1", "F1", "Z1");
             element.Quantities["GrossConcreteM3"] = 2d;
             element.Quantities["NetConcreteM3"] = 2d;
             element.SourceHandles.Add("ABCD");
