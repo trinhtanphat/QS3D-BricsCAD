@@ -28,7 +28,7 @@ def validate(text: str) -> None:
     require("$zipStream.Position = 0" in block, "Held ZIP stream must be rewound between digest and ZIP consumption.")
     require("HashSet[string]" in block and "OrdinalIgnoreCase" in block, "Extraction must reject case-insensitive duplicate destinations.")
     require("CreateNew" in block, "Held extraction must not overwrite an already-created destination leaf.")
-    require("$entry.Open()" in block, "Held extraction must stream entry bytes from the admitted ZipArchive.")
+    require("$record.Entry.Open()" in block, "Held extraction must stream entry bytes from the already-admitted archive record.")
     require("Expand-Archive" not in text, "Updater must not reopen the admitted ZIP via Expand-Archive.")
     require("Get-FileHash -LiteralPath $zipPath" not in text, "Updater must not hash the ZIP through a separate pathname reopen.")
 
@@ -72,7 +72,7 @@ for marker in (
     "[IO.Compression.ZipArchive]::new($zipStream",
     "[IO.FileShare]::Read",
     "CreateNew",
-    "$entry.Open()",
+    "$record.Entry.Open()",
     "$rootItem = Get-Item -LiteralPath $destinationFull -Force -ErrorAction Stop",
     "if (($rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)",
     "[string]::Equals($cursorFull, $destinationFull, [StringComparison]::OrdinalIgnoreCase)",
