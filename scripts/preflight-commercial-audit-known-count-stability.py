@@ -48,18 +48,37 @@ require_order(append, (
     "var record = enumerator.Current;",
 ), "Commercial audit batch traversal")
 
-snapshot_start = require(source, "internal static IReadOnlyList<T> Snapshot<T>(IEnumerable<T> source, string paramName, int maximum)", "CommercialGuard.Snapshot")
-snapshot_end = require(source[snapshot_start:], "internal static void RequireCanProcessNext", "CommercialGuard.Snapshot end") + snapshot_start
-snapshot = source[snapshot_start:snapshot_end]
+wrapper_start = require(source, "internal static IReadOnlyList<T> Snapshot<T>(IEnumerable<T> source, string paramName, int maximum)", "CommercialGuard.Snapshot")
+helper_start = require(source[wrapper_start:], "private static IReadOnlyList<T> SnapshotWithAdmittedCount<T>(", "CommercialGuard.SnapshotWithAdmittedCount") + wrapper_start
+wrapper = source[wrapper_start:helper_start]
+require_order(wrapper, (
+    "var admittedCount = SnapshotKnownCount(source, paramName, maximum);",
+    "return SnapshotWithAdmittedCount(source, paramName, maximum, admittedCount);",
+), "Commercial snapshot admission")
+
+helper_end = require(source[helper_start:], "internal static IReadOnlyList<T> SnapshotStableGeneration<T>(", "CommercialGuard.SnapshotWithAdmittedCount end") + helper_start
+snapshot = source[helper_start:helper_end]
 require_order(snapshot, (
+    "RequireStableSnapshotKnownCount(source, admittedCount, paramName, maximum);",
     "using (var enumerator = source.GetEnumerator())",
     "while (true)",
-    "RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum);",
+    "RequireStableSnapshotKnownCountDuringTraversal(source, admittedCount, paramName, maximum);",
     "if (!enumerator.MoveNext())",
-    "RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum);",
-    "RequireCanProcessNext(knownCount, result.Count, paramName);",
+    "RequireStableSnapshotKnownCountDuringTraversal(source, admittedCount, paramName, maximum);",
+    "RequireCanProcessNext(admittedCount, result.Count, paramName);",
     "var item = enumerator.Current;",
 ), "Commercial snapshot traversal")
+
+stable_start = helper_end
+stable_end = require(source[stable_start:], "internal static void RequireCanProcessNext", "SnapshotStableGeneration end") + stable_start
+stable = source[stable_start:stable_end]
+require_order(stable, (
+    "var admittedCount = SnapshotKnownCount(source, paramName, maximum);",
+    "var snapshot = SnapshotWithAdmittedCount(source, paramName, maximum, admittedCount);",
+    "RequireStableSnapshotKnownCount(source, admittedCount, paramName, maximum);",
+), "Commercial stable-generation admission")
+if "var snapshot = Snapshot(source, paramName, maximum);" in stable:
+    fail("SnapshotStableGeneration must not perform a nested Count admission through Snapshot")
 
 for phrase in (
     "before every MoveNext",
@@ -71,4 +90,4 @@ for phrase in (
 ):
     require(runbook, phrase, "runbook contract")
 
-print("PASS: commercial audit traversal-wide known-Count stability guard")
+print("PASS: commercial audit traversal-wide known-Count stability guard with single-admission snapshot binding")
