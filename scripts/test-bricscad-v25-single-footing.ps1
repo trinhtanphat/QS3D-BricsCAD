@@ -223,7 +223,7 @@ function Read-Phase([string]$Phase) {
         if ($keys -notcontains $key) { throw 'Native marker lacks a required field.' }
     }
     if ($keys.Count -ne 7) { throw 'Native marker contains an unapproved field.' }
-    if ($marker.schema -cne 'QS3D_LOCAL022_NATIVE_V1' -or $marker.run_id -cne $runId -or $marker.phase -cne $Phase) {
+    if ($marker.schema -cne 'QS3D_LOCAL022_NATIVE_V2' -or $marker.run_id -cne $runId -or $marker.phase -cne $Phase) {
         throw 'Native marker identity mismatch.'
     }
     if ($marker.stage -cnotmatch '^[a-z0-9_]{1,80}$' -or $marker.error_code -cnotmatch '^[A-Z0-9_]{1,80}$') {
@@ -235,13 +235,13 @@ function Read-Phase([string]$Phase) {
     $checks = @($marker.checks.PSObject.Properties)
     $requiredByPhase = @{
         run = @('active_disposable_drawing', 'host_major_25', 'product_location_exact', 'mcp_mutation_boundary_paused', 'meter_units',
-            'box_placement', 'tapered_repeated_placement', 'solid_mass_volume_extents',
+            'box_placement', 'tapered_repeated_placement', 'solid_mass_volume_extents', 'native_rectangular_sections',
             'generated_ownership', 'family_regeneration', 'former_generated_handle_erased',
             'generic_foundation_rejected_before_mutation', 'exact_native_semantic_cardinality')
         saved = @('active_disposable_drawing', 'mcp_mutation_boundary_paused', 'sidecar_exists_after_qs3dsave',
-            'native_database_still_open', 'saved_semantic_native_state', 'saved_exact_cardinality')
+            'native_database_still_open', 'saved_semantic_native_state', 'saved_native_rectangular_sections', 'saved_exact_cardinality')
         reopen = @('active_disposable_drawing', 'mcp_mutation_boundary_paused', 'cold_project_bind', 'reopened_semantic_identity',
-            'reopened_generated_solids_live', 'reopened_dimensions_volume_extents', 'reopened_exact_cardinality')
+            'reopened_generated_solids_live', 'reopened_dimensions_volume_extents', 'reopened_native_rectangular_sections', 'reopened_exact_cardinality')
     }
     $required = @($requiredByPhase[$Phase] | Sort-Object)
     $actual = @($checks.Name | Sort-Object)

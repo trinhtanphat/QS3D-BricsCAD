@@ -25,7 +25,7 @@ namespace QS3D.LocalQualification.V26
     /// </summary>
     public sealed partial class Local022NativeFootingProbeCommands
     {
-        private const string Schema = "QS3D_LOCAL022_V26_NATIVE_V1";
+        private const string Schema = "QS3D_LOCAL022_V26_NATIVE_V2";
         private const string RunIdVariable = "QS3D_LOCAL022_V26_RUN_ID";
         private const string RootVariable = "QS3D_LOCAL022_V26_ROOT";
         private const string DrawingVariable = "QS3D_LOCAL022_V26_DRAWING";
@@ -65,14 +65,14 @@ namespace QS3D.LocalQualification.V26
             ProjectFamilyActivationService.SetActive(project, family.Id);
             Place(context.Document, new Point3d(10d, 10d, 0d));
             var boxElement = RequireSingleFootingElement(project, family.Id, null);
-            VerifySolid(context.Document, boxElement, box, new Point3d(10d, 10d, 0d), "box");
+            VerifySolid(context.Document, boxElement, box, new Point3d(10d, 10d, 0d), "box", verifySections: true);
 
             var tapered = new SingleFootingDimensions(3d, 2d, 1d, 1d, 1d, 1d);
             ApplyFamily(family, tapered);
             ProjectFamilyActivationService.SetActive(project, family.Id);
             Place(context.Document, new Point3d(20d, 10d, 0d));
             var taperedElement = RequireSingleFootingElement(project, family.Id, boxElement.Id);
-            VerifySolid(context.Document, taperedElement, tapered, new Point3d(20d, 10d, 0d), "tapered");
+            VerifySolid(context.Document, taperedElement, tapered, new Point3d(20d, 10d, 0d), "tapered", verifySections: true);
 
             var previousBox = OwnedHandle(boxElement);
             var previousTapered = OwnedHandle(taperedElement);
@@ -88,8 +88,8 @@ namespace QS3D.LocalQualification.V26
             if (string.Equals(OwnedHandle(boxElement), previousBox, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(OwnedHandle(taperedElement), previousTapered, StringComparison.OrdinalIgnoreCase))
                 throw new ProbeException("generated_handle_not_replaced");
-            VerifySolid(context.Document, boxElement, edited, new Point3d(10d, 10d, 0d), "edited_box");
-            VerifySolid(context.Document, taperedElement, edited, new Point3d(20d, 10d, 0d), "edited_tapered");
+            VerifySolid(context.Document, boxElement, edited, new Point3d(10d, 10d, 0d), "edited_box", verifySections: true);
+            VerifySolid(context.Document, taperedElement, edited, new Point3d(20d, 10d, 0d), "edited_tapered", verifySections: true);
 
             RequireTotalDeltas(context.Document, project, semanticBaseline, familyBaseline, nativeBaseline);
             WriteContinuity(context, project, semanticBaseline, familyBaseline, nativeBaseline);
@@ -104,6 +104,7 @@ namespace QS3D.LocalQualification.V26
                 "box_placement", true,
                 "tapered_repeated_placement", true,
                 "solid_mass_volume_extents", true,
+                "native_rectangular_sections", true,
                 "generated_ownership", true,
                 "family_regeneration", true,
                 "former_generated_handle_erased", true,
@@ -133,6 +134,7 @@ namespace QS3D.LocalQualification.V26
                 "sidecar_exists_after_qs3dsave", true,
                 "native_database_still_open", true,
                 "saved_semantic_native_state", true,
+                "saved_native_rectangular_sections", true,
                 "saved_exact_cardinality", true);
         }
 
@@ -153,6 +155,7 @@ namespace QS3D.LocalQualification.V26
                 "reopened_semantic_identity", true,
                 "reopened_generated_solids_live", true,
                 "reopened_dimensions_volume_extents", true,
+                "reopened_native_rectangular_sections", true,
                 "reopened_exact_cardinality", true);
         }
 
@@ -456,12 +459,12 @@ namespace QS3D.LocalQualification.V26
                 var matches = remainingCenters.Where(point => SamePoint(point, center)).ToList();
                 if (matches.Count != 1) throw new ProbeException(stage + "_center_identity");
                 remainingCenters.Remove(matches[0]);
-                VerifySolid(document, element, dimensions, center, stage);
+                VerifySolid(document, element, dimensions, center, stage, verifySections: true);
             }
             if (remainingCenters.Count != 0) throw new ProbeException(stage + "_center_cardinality");
         }
 
-        private static void VerifySolid(Document document, ProjectElement element, SingleFootingDimensions dimensions, Point3d center, string stage)
+        private static void VerifySolid(Document document, ProjectElement element, SingleFootingDimensions dimensions, Point3d center, string stage, bool verifySections = false)
         {
             VerifyFootprint(document, element, dimensions, center, stage);
             var handle = OwnedHandle(element);
@@ -478,6 +481,15 @@ namespace QS3D.LocalQualification.V26
                     !Near(extents.MinPoint.Y, center.Y - dimensions.W1M / 2d) || !Near(extents.MaxPoint.Y, center.Y + dimensions.W1M / 2d) ||
                     !Near(extents.MinPoint.Z, center.Z) || !Near(extents.MaxPoint.Z, center.Z + dimensions.TotalHeightM))
                     throw new ProbeException(stage + "_solid_extents");
+                if (verifySections)
+                {
+                    try
+                    {
+                        QS3D.LocalQualification.SectionVerifier.Verify(solid, dimensions.L1M, dimensions.W1M,
+                            dimensions.L2M, dimensions.W2M, dimensions.H1M, dimensions.H2M, center);
+                    }
+                    catch (InvalidOperationException error) { throw new ProbeException(stage + "_" + error.Message); }
+                }
                 transaction.Commit();
             }
             if (!element.Properties.TryGetValue("GeneratedSolidMode", out var mode) || !string.Equals(mode, "SingleFootingLoft", StringComparison.Ordinal)) throw new ProbeException(stage + "_ownership_mode");

@@ -2,6 +2,16 @@
 
 ## Verdict
 
+Native section successor (2026-09-08): native marker V2 now requires actual
+horizontal region intersections at three interior heights per lower/upper stage,
+with independent area/perimeter/bounds and four-edge rectangular-boundary checks.
+It covers initial placement, regeneration, save and cold reopen without changing
+physical-UI assertions. V1 native51/52 remain their original bounded PASS, not
+section evidence. Host-free adapter/validator tests and both SDK builds pass;
+fresh V25-first/V26 V2 licensed evidence is pending. This is finite sampled-section
+coverage, not complete BREP topology. Procedure and limits:
+`tests/QS3D.LocalQualification.V25/NATIVE-SECTIONS.md`.
+
 Latest V26 UI allocation53 (2026-09-08) is **`FAIL_OR_NO_RESULT /
 UI_TIMEOUT_SELECTTREE`**, zero acceptance requests/ACKs and zero verified phases.
 Exact pushed harness `9b9820b9f33694a8afd3f384be25f7bdb5e8aac7`, unchanged frozen

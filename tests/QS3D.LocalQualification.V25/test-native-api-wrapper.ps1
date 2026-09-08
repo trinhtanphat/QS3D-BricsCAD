@@ -221,7 +221,7 @@ function Test-ActualPhases([string]$Mutation) {
         $phase=[IO.Path]::GetFileNameWithoutExtension($LiteralPath).Substring(6)
         $checks=[ordered]@{}
         foreach($key in $requiredByPhase[$phase]) { $checks[$key]=$true }
-        $marker=[ordered]@{schema='QS3D_LOCAL022_NATIVE_V1';run_id=('a'*32);phase=$phase;status='PASS';stage=$phase;error_code='NONE';checks=$checks}
+        $marker=[ordered]@{schema='QS3D_LOCAL022_NATIVE_V2';run_id=('a'*32);phase=$phase;status='PASS';stage=$phase;error_code='NONE';checks=$checks}
         if($phase -ceq 'run') {
             switch($Mutation) {
                 'missing' { throw 'test_missing_marker' }
@@ -229,6 +229,8 @@ function Test-ActualPhases([string]$Mutation) {
                 'string' { $checks.generic_foundation_rejected_before_mutation='true' }
                 'coverage' { $checks.Remove('generic_foundation_rejected_before_mutation') }
                 'runid' { $marker.run_id=('b'*32) }
+                'v1' { $marker.schema='QS3D_LOCAL022_NATIVE_V1' }
+                'section' { $checks.Remove('native_rectangular_sections') }
                 'failed' { $marker.status='FAIL' }
             }
         }
@@ -237,7 +239,7 @@ function Test-ActualPhases([string]$Mutation) {
     Assert-Local022NativeV25Phases $runnerPath 'C:\host-free-receipts\native-v25' ('a'*32)
 }
 Test-ActualPhases ''
-foreach($mutation in @('missing','false','string','coverage','runid','failed')) {
+foreach($mutation in @('missing','false','string','coverage','runid','failed','v1','section')) {
     $rejected=$false
     try { Test-ActualPhases $mutation } catch { $rejected=$true }
     if(-not $rejected) { throw "FAIL: native phase validator accepted $mutation" }
