@@ -30,6 +30,8 @@ namespace QS3D.Core.SmokeTests
                 WallFormworkContactSmoke.Run();
                 CommercialSubtractionPrecisionSmoke.Run();
                 CommercialQsSettlementSmoke.Run();
+                TenderProcurementWorkflowSmoke.Run();
+                CommercialCostControlSmoke.Run();
                 BeamCoreFormworkRegeneratorSmoke.Run();
                 ProjectQuantityCanonicalTraversalSmoke.Run();
 

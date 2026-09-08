@@ -26,6 +26,13 @@ def assert_source_contract() -> None:
         raise AssertionError("PACKAGE-METADATA.json must not use unbounded Get-Content -Raw")
     if "if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }" in source:
         raise AssertionError("existing published ZIP must not be deleted before staged ZIP verification")
+    for forbidden in (
+        "[IO.File]::Replace($tempZip, $zip, $zipBackup, $true)",
+        "[IO.File]::Move($tempZip, $zip)",
+        "$installedZipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToUpperInvariant()",
+    ):
+        if forbidden in source:
+            raise AssertionError("verified staged ZIP must not be published/rebound by pathname: " + forbidden)
 
     max_bytes = require(source, "$MaxMetadataBytes = 1MB")
     bounded_read = require(source, "function Read-BoundedUtf8Text")
@@ -65,9 +72,25 @@ def assert_source_contract() -> None:
     enumerate_package = require(source, "Get-SafePackageFiles -PackageRoot $package")
     compress = require(source, "Compress-Archive -Path (Join-Path $package '*') -DestinationPath $tempZip")
     verify_zip = require(source, "Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package")
-    publish_existing_zip = require(source, "[IO.File]::Replace($tempZip, $zip, $zipBackup, $true)")
-    publish_new_zip = require(source, "[IO.File]::Move($tempZip, $zip)")
+    manifest_digest = require(source, "$stagedZipHash = Assert-ZipManifestIntegrity -ZipPath $tempZip")
+    held_open = require(
+        source,
+        "$heldZip = Open-HeldVerifiedZipGeneration -Path $tempZip -ExpectedSha256 $stagedZipHash",
+    )
+    require(source, "function Assert-HeldVerifiedZipStable")
+    require(source, "function Publish-HeldVerifiedZipGeneration")
+    require(source, "[QS3DV25HeldZipPublication]::SetFileInformationByHandleFileRenameInfo(")
+    held_publish = require(
+        source,
+        "Publish-HeldVerifiedZipGeneration -HeldZip $heldZip -TargetPath $zip -ReplaceIfExists $zipExistedBeforePublish",
+    )
+    installed_hash = require(source, "$installedZipHash = [string]$heldZip.Sha256")
+    identity_compare = require(
+        source,
+        "[string]::Equals($installedZipHash, $stagedZipHash, [StringComparison]::Ordinal)",
+    )
     committed = require(source, "$transactionCommitted = $true")
+    held_dispose = require(source, "$heldZip.Stream.Dispose()")
 
     if not (
         metadata_stage
@@ -83,20 +106,30 @@ def assert_source_contract() -> None:
         < manifest_stage
         < compress
         < verify_zip
-        < publish_existing_zip
+        < manifest_digest
+        < held_open
+        < held_publish
+        < installed_hash
+        < identity_compare
         < committed
+        < held_dispose
     ):
-        raise AssertionError("finalizer must stage/verify all package state before commit")
+        raise AssertionError(
+            "finalizer must stage, verify, admit, hold and publish one ZIP generation before transaction commit"
+        )
     if enumerate_package > compress:
         raise AssertionError("package enumeration must precede archive creation")
-    if not (verify_zip < publish_new_zip < committed):
-        raise AssertionError("new ZIP publication must happen only after staged ZIP verification")
 
     rollback_manifest = require(source, "restore original manifest")
     rollback_metadata = require(source, "restore original metadata")
     rollback_failure = require(source, "Rollback also failed")
     if not (committed < rollback_manifest < rollback_metadata < rollback_failure):
         raise AssertionError("failed finalization must restore package metadata/manifest and fail closed")
+
+    rollback_marker = require(source, "$originalError = $_")
+    zip_remove = source.find("Remove-Item -LiteralPath $zip -Force")
+    if zip_remove >= 0 and not rollback_marker < zip_remove:
+        raise AssertionError("PackageZip may be deleted only during rollback")
 
 
 def assert_failure_atomic_reference_model() -> None:
@@ -186,7 +219,10 @@ def main() -> int:
     assert_source_contract()
     assert_failure_atomic_reference_model()
     assert_success_path_reference_model()
-    print("PASS: V25 signed-package finalization is bounded, failure-atomic, and success-path package-stable")
+    print(
+        "PASS: V25 signed-package finalization is bounded, failure-atomic, "
+        "held-generation bound, and success-path package-stable"
+    )
     return 0
 
 

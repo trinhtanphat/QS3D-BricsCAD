@@ -38,7 +38,7 @@ def replace_in_publish_window(workflow: str, old: str, new: str) -> str:
 
 def validate(validator: str, workflow: str) -> list[str]:
     errors: list[str] = []
-    for token in (
+    validator_tokens = (
         "[IO.FileShare]::Read",
         "[IO.FileAttributes]::ReparsePoint",
         "$MaxMetadataBytes = 65536",
@@ -51,13 +51,20 @@ def validate(validator: str, workflow: str) -> list[str]:
         "$zipHash = (Get-HeldSha256 -Held $zipHeld)",
         "$updateHash = (Get-HeldSha256 -Held $updateHeld)",
         "Read-ZipMetadataIdentity -ZipHeld $zipHeld",
+        "$provenanceSourceCommitRaw = [string]$provenance.sourceCommit",
+        "[string]::Equals($provenanceSourceCommitRaw, $provenanceSourceCommitRaw.Trim(), [StringComparison]::Ordinal)",
+        "$metadataProductVersionRaw = [string]$metadata.productVersion",
+        "$metadataGitCommitRaw = [string]$metadata.gitCommit",
+        "[string]::Equals($metadataProductVersionRaw, $metadataProductVersionRaw.Trim(), [StringComparison]::Ordinal)",
+        "[string]::Equals($metadataGitCommitRaw, $metadataGitCommitRaw.Trim(), [StringComparison]::Ordinal)",
         "([string]$metadata.gitCommit).Trim()",
         "[string]$provenance.packageSha256",
         "[string]$provenance.updateManifestSha256",
         "[string]$provenance.sourceCommit",
         "[string]$provenance.releaseTag",
         "[string]$provenance.signerThumbprint",
-    ):
+    )
+    for token in validator_tokens:
         if token not in validator:
             errors.append(f"downloaded V25 draft validator missing token: {token}")
     if "Get-Content -LiteralPath" in validator:
@@ -109,10 +116,15 @@ mutations = {
     "workflow held package loses checksum binding": (VALIDATOR, replace_in_publish_window(WORKFLOW, HELD_SOURCE_TOKENS[4], "if ($remoteZipHash -eq '')")),
     "workflow omits exact source": (VALIDATOR, replace_in_publish_window(WORKFLOW, "-ExpectedSourceCommit $env:GITHUB_SHA", "-ExpectedSourceCommit $env:RELEASE_TAG")),
     "workflow omits exact tag": (VALIDATOR, replace_in_publish_window(WORKFLOW, "-ExpectedReleaseTag $env:RELEASE_TAG", "-ExpectedReleaseTag $env:GITHUB_SHA")),
-    "validator loses provenance source": (VALIDATOR.replace("[string]$provenance.sourceCommit", "[string]$ExpectedSourceCommit", 1), WORKFLOW),
+    "validator loses raw provenance source": (VALIDATOR.replace("$provenanceSourceCommitRaw = [string]$provenance.sourceCommit", "$provenanceSourceCommitRaw = [string]$ExpectedSourceCommit", 1), WORKFLOW),
+    "validator loses provenance canonicality": (VALIDATOR.replace("[string]::Equals($provenanceSourceCommitRaw, $provenanceSourceCommitRaw.Trim(), [StringComparison]::Ordinal)", "$true", 1), WORKFLOW),
+    "validator loses raw metadata productVersion": (VALIDATOR.replace("$metadataProductVersionRaw = [string]$metadata.productVersion", "$metadataProductVersionRaw = $expectedProductVersion", 1), WORKFLOW),
+    "validator loses raw metadata gitCommit": (VALIDATOR.replace("$metadataGitCommitRaw = [string]$metadata.gitCommit", "$metadataGitCommitRaw = $expectedSource", 1), WORKFLOW),
+    "validator loses metadata product canonicality": (VALIDATOR.replace("[string]::Equals($metadataProductVersionRaw, $metadataProductVersionRaw.Trim(), [StringComparison]::Ordinal)", "$true", 1), WORKFLOW),
+    "validator loses metadata source canonicality": (VALIDATOR.replace("[string]::Equals($metadataGitCommitRaw, $metadataGitCommitRaw.Trim(), [StringComparison]::Ordinal)", "$true", 1), WORKFLOW),
     "validator loses package digest": (VALIDATOR.replace("[string]$provenance.packageSha256", "[string]$zipHash", 1), WORKFLOW),
     "validator loses update digest": (VALIDATOR.replace("[string]$provenance.updateManifestSha256", "[string]$updateHash", 1), WORKFLOW),
-    "validator loses ZIP metadata source": (VALIDATOR.replace("([string]$metadata.gitCommit).Trim()", "([string]$ExpectedSourceCommit).Trim()", 1), WORKFLOW),
+    "validator loses ZIP metadata source comparison": (VALIDATOR.replace("([string]$metadata.gitCommit).Trim()", "([string]$ExpectedSourceCommit).Trim()", 1), WORKFLOW),
 }
 for label, (validator, workflow) in mutations.items():
     if not validate(validator, workflow):

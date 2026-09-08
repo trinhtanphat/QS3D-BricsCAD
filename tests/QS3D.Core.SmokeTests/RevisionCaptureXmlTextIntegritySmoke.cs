@@ -71,8 +71,8 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => SetRawProperty(x, "P-\u0001-1", "ok")), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => SetRawProperty(x, "Note", "bad-\u0001-value")), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.Quantities["Q-\u0001-1"] = 1d), "REV-XML"));
-            Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.SourceHandles.Add("H-\u0001-1")), "REV-XML"));
-            Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.DependsOn.Add("D-\u0001-1")), "REV-XML"));
+            Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => AddRawRelationValue(x.SourceHandles, "H-\u0001-1")), "REV-XML"));
+            Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => AddRawRelationValue(x.DependsOn, "D-\u0001-1")), "REV-XML"));
         }
 
         private static void ValidUnicodeIsPreservedExactly()
@@ -109,6 +109,15 @@ namespace QS3D.Core.SmokeTests
                 ?? throw new Exception("ProjectElement relation field " + fieldName + " was not found.");
             Equal(typeof(string), field.FieldType);
             field.SetValue(element, value);
+        }
+
+        private static void AddRawRelationValue(IList<string> relation, string value)
+        {
+            var valuesField = relation.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("ProjectElement relation-list backing field was not found.");
+            var values = valuesField.GetValue(relation) as List<string>
+                ?? throw new Exception("ProjectElement relation-list backing collection had an unexpected type.");
+            values.Add(value);
         }
 
         private static void SetRawProperty(ProjectElement element, string key, string value)

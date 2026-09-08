@@ -138,6 +138,8 @@ namespace QS3D.Core.Mapping
             if (knownCount.HasValue && index != knownCount.Value)
                 throw new InvalidOperationException(
                     "Measurement/work-item mapping source known Count does not match completed traversal cardinality.");
+            if (knownCount.HasValue)
+                RequireStableMappingGeneration(mappings, knownCount.Value, items);
 
             items.Sort(CompareMappings);
             Mappings = new ReadOnlyCollection<MeasurementWorkItemMapping>(items.ToArray());
@@ -176,6 +178,86 @@ namespace QS3D.Core.Mapping
                 throw new InvalidOperationException(
                     "Measurement/work-item mapping source known Count changed during " + boundary + " from " + admittedCount.Value + " to " +
                     (reboundCount.HasValue ? reboundCount.Value.ToString() : "unknown") + ".");
+        }
+
+        private static void RequireStableMappingGeneration(
+            IEnumerable<MeasurementWorkItemMapping> mappings,
+            int admittedCount,
+            IReadOnlyList<MeasurementWorkItemMapping> admittedMappings)
+        {
+            // Count was rebound immediately before this generation check. This pass
+            // verifies content only so the primary traversal keeps its exact Count-probe
+            // and one-pass contracts while still rejecting same-count generation drift.
+            if (mappings is ICollection<MeasurementWorkItemMapping> collection)
+            {
+                var copied = new MeasurementWorkItemMapping[admittedCount];
+                try
+                {
+                    collection.CopyTo(copied, 0);
+                }
+                catch (NotSupportedException)
+                {
+                    RequireStableMappingGenerationByReplay(mappings, admittedMappings);
+                    return;
+                }
+
+                if (copied.Length != admittedMappings.Count)
+                    ThrowMappingContentChanged();
+
+                for (var i = 0; i < copied.Length; i++)
+                {
+                    var mapping = copied[i];
+                    if (mapping == null || !SameMappingState(admittedMappings[i], mapping))
+                        ThrowMappingContentChanged();
+                }
+                return;
+            }
+
+            RequireStableMappingGenerationByReplay(mappings, admittedMappings);
+        }
+
+        private static void RequireStableMappingGenerationByReplay(
+            IEnumerable<MeasurementWorkItemMapping> mappings,
+            IReadOnlyList<MeasurementWorkItemMapping> admittedMappings)
+        {
+            var index = 0;
+            using (var enumerator = mappings.GetEnumerator())
+            {
+                if (enumerator == null)
+                    throw new InvalidOperationException("Measurement/work-item mapping source content changed during traversal.");
+
+                while (true)
+                {
+                    if (!enumerator.MoveNext())
+                        break;
+                    if (index >= admittedMappings.Count)
+                        ThrowMappingContentChanged();
+
+                    var mapping = enumerator.Current;
+                    if (mapping == null || !SameMappingState(admittedMappings[index], mapping))
+                        ThrowMappingContentChanged();
+                    index++;
+                }
+            }
+
+            if (index != admittedMappings.Count)
+                ThrowMappingContentChanged();
+        }
+
+        private static bool SameMappingState(
+            MeasurementWorkItemMapping left,
+            MeasurementWorkItemMapping right)
+        {
+            return string.Equals(left.MappingId, right.MappingId, StringComparison.Ordinal) &&
+                   left.Category == right.Category &&
+                   string.Equals(left.MeasurementItemId, right.MeasurementItemId, StringComparison.Ordinal) &&
+                   string.Equals(left.ClassificationId, right.ClassificationId, StringComparison.Ordinal) &&
+                   string.Equals(left.WorkItemId, right.WorkItemId, StringComparison.Ordinal);
+        }
+
+        private static void ThrowMappingContentChanged()
+        {
+            throw new InvalidOperationException("Measurement/work-item mapping source content changed during traversal.");
         }
 
         private static int? TryGetKnownCount(

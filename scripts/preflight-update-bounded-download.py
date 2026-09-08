@@ -56,19 +56,20 @@ def main() -> int:
     manifest_parse = updater.find("$manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json")
     snapshot_package = updater.find("Assert-OfficialGitHubPackageSnapshot -PackageAddress $packageAddress")
     package = updater.find(package_call)
-    package_hash = updater.find("Get-FileHash -LiteralPath $zipPath -Algorithm SHA256")
-    archive = updater.find("Assert-SafeArchive -ZipPath $zipPath")
+    held_archive = updater.find("Expand-VerifiedHeldArchive -ZipPath $zipPath")
     signed_root = updater.find("Assert-PackageRoot -Directory $extractRoot -ExpectedSigner $expectedSigner")
     installer = updater.find("& $installer @arguments")
     release = updater.rfind("Exit-Qs3dUpdateMutex -Mutex $updateMutex")
-    positions = (helper, mutex, manifest, manifest_parse, snapshot_package, package, package_hash, archive, signed_root, installer, release)
+    positions = (helper, mutex, manifest, manifest_parse, snapshot_package, package, held_archive, signed_root, installer, release)
     if min(positions) < 0 or not (
-        helper < mutex < manifest < manifest_parse < snapshot_package < package < package_hash < archive < signed_root < installer < release
+        helper < mutex < manifest < manifest_parse < snapshot_package < package < held_archive < signed_root < installer < release
     ):
         raise AssertionError(
-            "bounded transfer ordering must preserve mutex -> manifest -> release snapshot -> package -> hash/archive/signer -> installer"
+            "bounded transfer ordering must preserve mutex -> manifest -> release snapshot -> package -> held archive -> signer -> installer"
         )
 
+    reject(updater, "Get-FileHash -LiteralPath $zipPath", "pathname ZIP hash reopen after bounded package download")
+    reject(updater, "Expand-Archive -LiteralPath $zipPath", "pathname ZIP extraction reopen after bounded package download")
     require(updater, "Update manifest must be between 1 byte and 64 KiB.", "post-download manifest defense in depth")
     require(updater, "Downloaded package size", "post-download package defense in depth")
     require(updater, "Downloaded package SHA-256 does not match the update manifest.", "package hash binding")
@@ -79,7 +80,7 @@ def main() -> int:
 
     print(
         "PASS: final updater manifest/package transfers are HTTPS, timeout/redirect/stream bounded, clean partial files on failure, "
-        "and retain release-snapshot/hash/archive/signer/install ordering."
+        "and retain release-snapshot/held-archive/signer/install ordering."
     )
     return 0
 

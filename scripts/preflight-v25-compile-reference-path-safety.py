@@ -5,6 +5,9 @@ from pathlib import Path, PureWindowsPath
 
 SCRIPT = Path(__file__).resolve().with_name("acquire-v25-compile-references.ps1")
 STAGING_OPEN = "$stagingAdmission = Open-PinnedMsiReadLock -Path $staging -ExpectedSha256 $expected"
+OWNED_OPEN = "$publishedStream = Open-OwnedMsiPublication -Path $msi"
+DELETE_ARM = "Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $true"
+DELETE_CLEAR = "Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $false"
 DESTINATION_READMIT = "$publishedAdmission = Open-PinnedMsiReadLock -Path $msi -ExpectedSha256 $expected"
 
 
@@ -63,9 +66,16 @@ def main() -> int:
         "New-Item -ItemType Directory -Path $extract | Out-Null",
         "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging",
         STAGING_OPEN,
-        "[IO.FileMode]::CreateNew",
+        "CreateFileW",
+        "public const uint DELETE = 0x00010000;",
+        "public const uint CREATE_NEW = 1;",
+        OWNED_OPEN,
+        DELETE_ARM,
         "$stagingAdmission.Stream.CopyTo($publishedStream)",
         "$publishedStream.Flush($true)",
+        "$publishedStream.Position = 0",
+        "$publishedHashBytes = $publishedSha.ComputeHash($publishedStream)",
+        DELETE_CLEAR,
         DESTINATION_READMIT,
         "Canonical MSI destination appeared before held-generation publication; refusing destructive replacement.",
         "$msiState = Open-PinnedMsiReadLock -Path $msi",
@@ -83,6 +93,7 @@ def main() -> int:
         ("[IO.File]::Move($staging, $msi)", "canonical publication must not re-resolve the staging pathname"),
         ("Remove-Item -LiteralPath $msi -Force", "canonical publication must not destructively remove an unbound destination"),
         ("[IO.FileMode]::OpenOrCreate", "canonical publication must be fresh-only"),
+        ("[IO.FileOptions]::DeleteOnClose", "canonical publication delete disposition must remain explicitly cancelable"),
     ):
         require(forbidden not in source, label)
 
@@ -100,15 +111,20 @@ def main() -> int:
 
     download_index = source.index("Invoke-WebRequest -Uri $candidate.Url -OutFile $staging")
     staged_index = source.index(STAGING_OPEN, download_index)
-    fresh_publish_index = source.index("[IO.FileMode]::CreateNew", staged_index)
-    copy_index = source.index("$stagingAdmission.Stream.CopyTo($publishedStream)", fresh_publish_index)
+    owned_index = source.index(OWNED_OPEN, staged_index)
+    arm_index = source.index(DELETE_ARM, owned_index)
+    copy_index = source.index("$stagingAdmission.Stream.CopyTo($publishedStream)", arm_index)
     flush_index = source.index("$publishedStream.Flush($true)", copy_index)
-    published_index = source.index(DESTINATION_READMIT, flush_index)
+    rewind_index = source.index("$publishedStream.Position = 0", flush_index)
+    hash_index = source.index("$publishedHashBytes = $publishedSha.ComputeHash($publishedStream)", rewind_index)
+    clear_index = source.index(DELETE_CLEAR, hash_index)
+    published_index = source.index(DESTINATION_READMIT, clear_index)
     final_lock_index = source.index("$msiState = Open-PinnedMsiReadLock -Path $msi", published_index)
     signature_index = source.index("Get-AuthenticodeSignature -FilePath $msiState.Path", final_lock_index)
     require(
-        download_index < staged_index < fresh_publish_index < copy_index < flush_index < published_index < final_lock_index < signature_index,
-        "V25 acquisition must stage -> held-admit -> fresh-copy -> durable-flush -> canonical re-admit -> final lock -> Authenticode",
+        download_index < staged_index < owned_index < arm_index < copy_index < flush_index
+        < rewind_index < hash_index < clear_index < published_index < final_lock_index < signature_index,
+        "V25 acquisition must stage -> held-admit -> fresh handle-owned publish -> explicit delete arm -> durable copy -> same-handle verify -> explicit commit -> canonical re-admit -> final lock -> Authenticode",
     )
     staging_dispose_index = source.find("$stagingAdmission.Stream.Dispose()", staged_index)
     require(staging_dispose_index < 0 or staging_dispose_index > published_index,
@@ -142,8 +158,8 @@ def main() -> int:
     print(" - pre-existing or raced ExtractDir generations fail closed; recursive pathname cleanup is forbidden")
     print(" - normal shared-CI disjoint paths and safe cache-child extraction remain accepted")
     print(" - filesystem-root, MSI-containing and cache-containing extraction layouts fail closed")
-    print(" - remote bytes stay held while copied into a fresh-only canonical destination and durably flushed")
-    print(" - canonical bytes are re-admitted before the staging generation is released")
+    print(" - remote bytes stay held while copied into a fresh handle-owned canonical destination with explicit cancelable deletion")
+    print(" - canonical bytes are rehashed through the creator handle and explicitly committed before re-admission")
     print(" - final Authenticode consumption remains bound to the held MSI state")
     print(" - version and bounded extraction semantics remain source-guarded")
     return 0
