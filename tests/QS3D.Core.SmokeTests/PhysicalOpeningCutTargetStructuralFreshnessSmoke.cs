@@ -31,7 +31,7 @@ namespace QS3D.Core.SmokeTests
             }
 
             ThrowsStructuralFreshness(() => PhysicalOpeningCutTargetStateCodec.Resolve(project, host, Targets()));
-            Equal(beforeVersion, project.ChangeVersion, "direct opening replacement must leave ChangeVersion unchanged");
+            Equal(beforeVersion + 1L, project.ChangeVersion, "direct opening replacement must advance ChangeVersion");
             if (ReferenceEquals(project.Elements[index], opening))
                 throw new InvalidOperationException("PhysicalOpeningCutTargetStructuralFreshnessSmoke replacement fixture did not change opening ownership.");
         }
@@ -73,7 +73,7 @@ namespace QS3D.Core.SmokeTests
             }
             catch (InvalidOperationException ex)
             {
-                if (ex.Message.IndexOf("element structure changed", StringComparison.Ordinal) >= 0) return;
+                if (ex.Message.IndexOf("Project changed while physical opening target ids were being enumerated", StringComparison.Ordinal) >= 0) return;
                 throw new InvalidOperationException("Unexpected physical opening structural-freshness error.", ex);
             }
 
