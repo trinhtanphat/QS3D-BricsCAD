@@ -6,19 +6,24 @@ SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "BeamRebarCommands.cs"
 text = SOURCE.read_text(encoding="utf-8")
 
 finalize_start = text.find("private static void FinalizeUi(Document document, string message)")
-report_start = text.find("private static void Report(Document document, string message)", finalize_start)
+helper_start = text.find("private static bool IsActiveDocument(Document document)", finalize_start)
+refresh_start = text.find("private static void TryRefreshProject(Document document)", helper_start)
+status_start = text.find("private static void TrySetPaletteStatus(Document document, string message)", refresh_start)
+report_start = text.find("private static void Report(Document document, string message)", status_start)
 write_start = text.find("private static void TryWriteMessage", report_start)
-if min(finalize_start, report_start, write_start) < 0:
-    print("ERROR: cannot locate Beam Rebar UI publication methods")
+if min(finalize_start, helper_start, refresh_start, status_start, report_start, write_start) < 0:
+    print("ERROR: cannot locate Beam Rebar UI publication/affinity methods")
+    sys.exit(1)
+if not (finalize_start < helper_start < refresh_start < status_start < report_start < write_start):
+    print("ERROR: Beam Rebar UI publication/affinity helper ordering is unexpected")
     sys.exit(1)
 
-finalize = text[finalize_start:report_start]
+finalize = text[finalize_start:helper_start]
+active_helper = text[helper_start:refresh_start]
+refresh = text[refresh_start:status_start]
+status = text[status_start:report_start]
 report = text[report_start:write_start]
-helper_start = text.find("private static bool IsActiveDocument(Document document)")
-if helper_start < 0:
-    print("ERROR: missing exact source-document active-MDI affinity helper")
-    sys.exit(1)
-helper = text[helper_start:]
+helper = text[helper_start:report_start]
 
 required_helper = [
     "private static bool IsActiveDocument(Document document)",
@@ -48,11 +53,10 @@ for body_name, body in [("FinalizeUi", finalize), ("Report", report)]:
             print(f"ERROR: {body_name} bypasses source-document affinity via {forbidden}")
             sys.exit(1)
 
-refresh_start = helper.find("private static void TryRefreshProject(Document document)")
-status_start = helper.find("private static void TrySetPaletteStatus(Document document, string message)")
-write_helper = helper.find("private static void TryWriteMessage", status_start)
-refresh = helper[refresh_start:status_start] if refresh_start >= 0 and status_start >= 0 else ""
-status = helper[status_start:write_helper] if status_start >= 0 and write_helper >= 0 else helper[status_start:]
+if "ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)" not in active_helper:
+    print("ERROR: IsActiveDocument must use exact source-document/active-MDI identity")
+    sys.exit(1)
+
 for label, body, native_call in [
     ("TryRefreshProject", refresh, "PaletteCoordinator.RefreshProject();"),
     ("TrySetPaletteStatus", status, "PaletteCoordinator.SetStatus(message);")
