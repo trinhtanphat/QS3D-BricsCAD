@@ -26,14 +26,17 @@ helper = text[active_start:report_start]
 
 required = [
     (active, "ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)"),
+    (active, "catch"),
+    (active, "return false;"),
     (status, "IsActiveDocument(document)"),
     (status, "PaletteCoordinator.SetStatus(message);"),
+    (status, "catch"),
     (report, "TrySetPaletteStatus(document, message);"),
     (report, "document.Editor.WriteMessage"),
 ]
 for body, needle in required:
     if needle not in body:
-        print("ERROR: Basic Drawing Workspace status must remain bound to the exact source active document; missing", needle)
+        print("ERROR: Basic Drawing Workspace status must remain fail-closed and bound to the exact source active document; missing", needle)
         sys.exit(1)
 
 if "PaletteCoordinator.SetStatus(message);" in report:
@@ -63,4 +66,4 @@ if "Report(document, status + \" \" + UiSyncWarning);" not in finalize or "Repor
     print("ERROR: Basic Drawing post-commit reporting contract changed unexpectedly")
     sys.exit(1)
 
-print("PASS: Basic Drawing Workspace status is fenced to the exact source active document")
+print("PASS: Basic Drawing Workspace status is fenced to the exact source active document and presenter failures are contained")
