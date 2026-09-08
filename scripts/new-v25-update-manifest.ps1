@@ -312,8 +312,9 @@ $outputParentPath = Split-Path -Parent $outputFull
 if ([string]::IsNullOrWhiteSpace($outputParentPath)) { throw 'OutputPath must have a parent directory.' }
 $outputParent = Resolve-OrdinaryNonReparseDirectory -Path $outputParentPath -Label 'Update manifest output parent'
 $hadExistingOutput = $false
+$existingOutputState = $null
 if (Test-Path -LiteralPath $outputFull) {
-    Resolve-OrdinaryNonReparseFile -Path $outputFull -Label 'Existing update manifest' | Out-Null
+    $existingOutputState = Get-StableFileState -Path $outputFull -Label 'Existing update manifest'
     $hadExistingOutput = $true
 }
 
@@ -382,6 +383,7 @@ if ($PSCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')) {
     $backupPath = Join-Path $outputParent.FullName (([IO.Path]::GetFileName($outputFull)) + ".bak-$nonce")
     if (Test-Path -LiteralPath $stagePath) { throw "Refusing to reuse update-manifest staging path: $stagePath" }
     if (Test-Path -LiteralPath $backupPath) { throw "Refusing to reuse update-manifest backup path: $backupPath" }
+    $preserveBackup = $false
     try {
         [IO.File]::WriteAllText($stagePath, $manifestJson + [Environment]::NewLine, $utf8NoBom)
         $stage = Resolve-OrdinaryNonReparseFile -Path $stagePath -Label 'Update manifest staging file'
@@ -391,14 +393,41 @@ if ($PSCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')) {
         $publishedText = Read-BoundedStrictUtf8File -File $published -Label 'Published update manifest'
         $null = $publishedText | ConvertFrom-Json -ErrorAction Stop
     }
+    catch {
+        $publishFailure = $_
+        try {
+            if ($hadExistingOutput) {
+                $backup = Resolve-OrdinaryNonReparseFile -Path $backupPath -Label 'Update manifest rollback backup'
+                if (Test-Path -LiteralPath $outputFull) {
+                    $null = Resolve-OrdinaryNonReparseFile -Path $outputFull -Label 'Failed published update manifest'
+                    [IO.File]::Replace($backup.FullName, $outputFull, $null, $true)
+                }
+                else {
+                    [IO.File]::Move($backup.FullName, $outputFull)
+                }
+                $null = Assert-StableFileState -Expected $existingOutputState -Label 'Restored update manifest'
+            }
+            elseif (Test-Path -LiteralPath $outputFull) {
+                $failedOutput = Resolve-OrdinaryNonReparseFile -Path $outputFull -Label 'Failed published update manifest'
+                [IO.File]::Delete($failedOutput.FullName)
+                if (Test-Path -LiteralPath $outputFull) { throw 'Failed published update manifest remained after rollback cleanup.' }
+            }
+        }
+        catch {
+            $preserveBackup = $hadExistingOutput -and (Test-Path -LiteralPath $backupPath)
+            $backupHint = if ($preserveBackup) { " Backup retained at $backupPath." } else { '' }
+            throw "Update manifest publication failed and rollback could not restore the prior generation: $($_.Exception.Message).$backupHint"
+        }
+        throw $publishFailure
+    }
     finally {
         if (Test-Path -LiteralPath $stagePath) {
             $stage = Resolve-OrdinaryNonReparseFile -Path $stagePath -Label 'Update manifest staging cleanup'
-            Remove-Item -LiteralPath $stage.FullName -Force
+            [IO.File]::Delete($stage.FullName)
         }
-        if (Test-Path -LiteralPath $backupPath) {
+        if (-not $preserveBackup -and (Test-Path -LiteralPath $backupPath)) {
             $backup = Resolve-OrdinaryNonReparseFile -Path $backupPath -Label 'Update manifest backup cleanup'
-            Remove-Item -LiteralPath $backup.FullName -Force
+            [IO.File]::Delete($backup.FullName)
         }
     }
 }
