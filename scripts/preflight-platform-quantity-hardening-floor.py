@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import re
 import subprocess
 import sys
 
@@ -40,31 +39,54 @@ def pinned_sha() -> str:
     return fields[2]
 
 
+def require_known_count_shape(label: str, source: str) -> None:
+    if not source:
+        return
+    marker = "private static List<T> MaterializeCaptured<T>"
+    start = source.find(marker)
+    if start < 0:
+        errors.append(f"{label} lacks dedicated captured-count materialization")
+        return
+
+    body = source[start:]
+    tokens = (
+        "if (!advertisedCount.HasValue)",
+        "foreach (var item in source)",
+        "for (var index = 0; index < advertisedCount.Value; index++)",
+        "if (!enumerator.MoveNext())",
+        "result.Add(enumerator.Current);",
+        "if (enumerator.MoveNext())",
+    )
+    positions = []
+    for token in tokens:
+        position = body.find(token)
+        if position < 0:
+            errors.append(f"{label} captured-count materializer is missing {token!r}")
+            return
+        positions.append(position)
+
+    # Unknown-count input may remain a bounded foreach. The known-count branch
+    # must instead consume exactly N MoveNext+Current pairs and then make only
+    # one surplus MoveNext probe, with no surplus Current read.
+    if positions != sorted(positions):
+        errors.append(f"{label} captured-count traversal order does not preserve the no-overread contract")
+
+
 sha = pinned_sha()
 schedule = read(SCHEDULE)
 boq = read(BOQ)
 schedule_smoke = read(SCHEDULE_SMOKE)
 boq_smoke = read(BOQ_SMOKE)
 
-# The protected pin must carry the actual hostile-count regressions, not merely
-# a version string or a parent-repository expected literal.
+# Require executable hostile-enumerator regressions in the pinned tree rather
+# than trusting a parent-repository version literal.
 if schedule_smoke and "CurrentReadCount" not in schedule_smoke:
     errors.append("schedule no-overread smoke does not observe Current reads")
 if boq_smoke and "CurrentReadCount" not in boq_smoke:
     errors.append("BOQ no-overread smoke does not observe Current reads")
 
-# Known-count materialization must bound successful MoveNext() before Current.
-# This deliberately rejects the older captured-Count + foreach implementation
-# that can read one surplus Current before reporting cardinality drift.
-for label, source in (("schedule", schedule), ("BOQ", boq)):
-    if not source:
-        continue
-    if "advertisedCount" not in source and "knownCount" not in source:
-        errors.append(f"{label} materializer no longer exposes an auditable known-count admission path")
-    if "MoveNext()" not in source:
-        errors.append(f"{label} known-count materializer lacks explicit MoveNext traversal")
-    if re.search(r"foreach\s*\(\s*var\s+item\s+in\s+source\s*\)", source):
-        errors.append(f"{label} materializer still uses captured-Count + foreach traversal")
+require_known_count_shape("schedule", schedule)
+require_known_count_shape("BOQ", boq)
 
 if errors:
     print("ERROR: pinned QS3D-Platform is below the Quantity/BOQ hostile-count hardening floor")
