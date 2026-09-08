@@ -2,13 +2,45 @@
 
 ## Verdict
 
+Latest licensed section pair (2026-09-08): **V25 allocation54 and V26 allocation55
+are `LOCAL_PASS_BOUNDED`, all three V2 native phases** on exact pushed harness
+`8a0650fcb9416497410c7ce4c1572dce72f6bf7d` and unchanged frozen product source
+`87aff7fec452f9a8dd9f641ef84d143edc73514d`. Both are explicit non-interactive
+`NATIVE_V1 / WALL_CLOCK_V1` runs in fresh disposable `Default` clones.
+
+- V25.2.10: RunId `dc72e1fc540e48f5af1d54e21e5b568c`,
+  `2026-09-08T05:15:43.9188592Z`–`2026-09-08T05:16:37.1379336Z`;
+  probe SHA-256 `6e20d760efa71b7cbaa70ebf70714c20627261e999f8b8e3221fd592c00402db`;
+  ZIP SHA-256 `6da38fcb3bc5fdb1989e9397fad45da712bf4af6b7690298a2fe83657bcb10ac`.
+- V26.2.07: RunId `35424516bc7045c58ca6e631ee449081`,
+  `2026-09-08T05:17:21.5120887Z`–`2026-09-08T05:18:07.0999233Z`;
+  probe SHA-256 `bdc4afb419756d0bfba42a66c5a78d789eb943b92b73b3893c37685352810abf`;
+  ZIP SHA-256 `59498948341f36d408f8bf838e177170c19d99ffc64acaa2070b0524e6b99a81`.
+
+Each host passed run14/14, saved7/7, cold8/8 with exact matching RunIds and strict
+Boolean assertions. Actual native section area/perimeter/WCS bounds and four
+unique straight rectangle edges passed at25/50/75% of each applicable stage,
+before/after Family regeneration and after production save/native QSAVE/fresh
+process reopen. Existing volume/extents/ownership/cardinality/generic Foundation
+refusal checks remain intact. These samples extend geometric evidence; they do
+not prove complete BREP topology, every possible height or physical UI behavior.
+
+Both runners exited0. Private fixtures were removed; exact original profile
+inventory/current pointer restored, nonce removed, protected state unchanged,
+zero residual hosts. Original autostart byte1/hash and timestamp
+`2026-09-07T02:55:30.6894998Z` were restored. No mouse/key/capture, MCP request or
+installed-package change occurred during either native allocation. Candidate kind
+remains unsigned `LOCAL_PR_CANDIDATE`, not published-source qualification. V26 UI53
+below remains failed; Quantity/Unicode/DPI/private-DWG/full topology and applicable
+release evidence remain open. No aggregate #5718/#4034/#72 or MCP PASS.
+
 Native section successor (2026-09-08): native marker V2 now requires actual
 horizontal region intersections at three interior heights per lower/upper stage,
 with independent area/perimeter/bounds and four-edge rectangular-boundary checks.
 It covers initial placement, regeneration, save and cold reopen without changing
 physical-UI assertions. V1 native51/52 remain their original bounded PASS, not
 section evidence. Host-free adapter/validator tests and both SDK builds pass;
-fresh V25-first/V26 V2 licensed evidence is pending. This is finite sampled-section
+fresh V25-first/V26 V2 licensed evidence is recorded in54/55 above. This is finite sampled-section
 coverage, not complete BREP topology. Procedure and limits:
 `tests/QS3D.LocalQualification.V25/NATIVE-SECTIONS.md`.
 
