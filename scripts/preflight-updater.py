@@ -71,7 +71,7 @@ for token in (
     "function Compare-StrictSemVer",
     "schemaVersion -ne 2",
     "Refusing product-version downgrade",
-    "Assert-SafeArchive",
+    "function Expand-VerifiedHeldArchive",
     "Assert-PackageRoot",
     "Assert-AuthenticodeSigner",
     "Read-SignedPluginVersion",
@@ -201,18 +201,21 @@ for label, text in (("updater", updater), ("installer", installer), ("uninstalle
 installed_state = updater.find("$installedVersion = Read-InstalledVersion -Directory $InstallDirectory")
 product_state = updater.find("$installedProductVersion = Read-InstalledProductVersion -Directory $InstallDirectory")
 should_process = updater.find("$PSCmdlet.ShouldProcess($InstallDirectory")
-archive_check = updater.find("Assert-SafeArchive -ZipPath $zipPath")
-extraction = updater.find("Expand-Archive -LiteralPath $zipPath")
+held_archive_call = updater.find("Expand-VerifiedHeldArchive -ZipPath $zipPath")
 package_check = updater.find("Assert-PackageRoot -Directory $extractRoot")
 signed_version = updater.find("$signedPluginVersion = Read-SignedPluginVersion")
 metadata_check = updater.find("$packageVersion -ne $signedPluginVersion")
 installer_execute = updater.find("& $installer @arguments")
 if min(installed_state, product_state, should_process) < 0 or not (installed_state < product_state < should_process):
     errors.append("updater must reconcile installed assembly/product identities before mutation approval")
-if min(archive_check, extraction) < 0 or archive_check > extraction:
-    errors.append("updater must validate archive paths/expanded limits before Expand-Archive")
-if min(package_check, signed_version, metadata_check, installer_execute) < 0 or not (package_check < signed_version < metadata_check < installer_execute):
-    errors.append("updater must verify signatures, signed plugin identity and metadata binding before installer execution")
+if held_archive_call < 0:
+    errors.append("updater must consume the admitted held ZIP generation through Expand-VerifiedHeldArchive")
+if "Expand-Archive -LiteralPath $zipPath" in updater or "Get-FileHash -LiteralPath $zipPath" in updater:
+    errors.append("updater must not reopen the downloaded ZIP pathname after held-generation admission")
+if min(held_archive_call, package_check, signed_version, metadata_check, installer_execute) < 0 or not (
+    held_archive_call < package_check < signed_version < metadata_check < installer_execute
+):
+    errors.append("updater must consume the held archive generation before package/signature/metadata verification and installer execution")
 
 manifest_package_guard = manifest.find("$package = Resolve-OrdinaryNonReparseDirectory -Path $PackageDirectory")
 manifest_zip_guard = manifest.find("$zip = Resolve-OrdinaryNonReparseFile -Path $PackageZip")
