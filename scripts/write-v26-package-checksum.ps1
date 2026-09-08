@@ -152,12 +152,12 @@ public static class Qs3dChecksumGenerationNative
         return information;
     }
 
-    private static SafeFileHandle OpenCore(string path, uint access, uint disposition)
+    private static SafeFileHandle OpenCore(string path, uint access, uint disposition, uint shareMode)
     {
         var handle = CreateFileW(
             path,
             access,
-            FileShareRead | FileShareWrite | FileShareDelete,
+            shareMode,
             IntPtr.Zero,
             disposition,
             FileAttributeNormal | FileFlagOpenReparsePoint,
@@ -180,9 +180,19 @@ public static class Qs3dChecksumGenerationNative
         }
     }
 
+    private static SafeFileHandle OpenCore(string path, uint access, uint disposition)
+    {
+        return OpenCore(path, access, disposition, FileShareRead | FileShareWrite | FileShareDelete);
+    }
+
     public static SafeFileHandle OpenOwnedChecksumGeneration(string path)
     {
         return OpenCore(path, GenericRead | DeleteAccess | FileReadAttributes, OpenExisting);
+    }
+
+    public static SafeFileHandle OpenPinnedChecksumGeneration(string path)
+    {
+        return OpenCore(path, GenericRead | FileReadAttributes, OpenExisting, FileShareRead | FileShareWrite);
     }
 
     public static SafeFileHandle CreateOwnedChecksumGeneration(string path, byte[] bytes)
@@ -236,6 +246,20 @@ function Open-OwnedChecksumGeneration {
     param([Parameter(Mandatory = $true)][string]$Path,[Parameter(Mandatory = $true)][string]$Label)
     $item = Resolve-OrdinaryNonReparseFile -Path $Path -Label $Label
     $handle = [Qs3dChecksumGenerationNative]::OpenOwnedChecksumGeneration($item.FullName)
+    try {
+        $identity = [Qs3dChecksumGenerationNative]::GetOwnedChecksumGenerationIdentity($handle)
+        return [pscustomobject]@{ Handle = $handle; Identity = $identity; Path = $item.FullName; Label = $Label }
+    }
+    catch {
+        $handle.Dispose()
+        throw
+    }
+}
+
+function Open-PinnedChecksumGeneration {
+    param([Parameter(Mandatory = $true)][string]$Path,[Parameter(Mandatory = $true)][string]$Label)
+    $item = Resolve-OrdinaryNonReparseFile -Path $Path -Label $Label
+    $handle = [Qs3dChecksumGenerationNative]::OpenPinnedChecksumGeneration($item.FullName)
     try {
         $identity = [Qs3dChecksumGenerationNative]::GetOwnedChecksumGenerationIdentity($handle)
         return [pscustomobject]@{ Handle = $handle; Identity = $identity; Path = $item.FullName; Label = $Label }
@@ -369,18 +393,18 @@ try {
     }
 
     $publishedItem = Resolve-OrdinaryNonReparseFile -Path $outputFullPath -Label 'Published V26 checksum'
-    $publishedGeneration = Open-OwnedChecksumGeneration -Path $outputFullPath -Label 'Published V26 checksum generation proof'
+    $publishedGeneration = Open-PinnedChecksumGeneration -Path $outputFullPath -Label 'Published V26 checksum generation proof'
     try {
         if (-not [string]::Equals($publishedGeneration.Identity, $tempGeneration.Identity, [StringComparison]::Ordinal)) {
             throw 'Published V26 checksum pathname no longer names the generation created by this publication attempt.'
         }
+        $publishedText = [IO.File]::ReadAllText($publishedItem.FullName, [Text.Encoding]::ASCII).TrimEnd("`r", "`n")
+        if (-not [string]::Equals($publishedText, $record, [StringComparison]::Ordinal)) { throw 'Published V26 checksum bytes do not match the computed canonical record.' }
+        $publicationCommitted = $true
     }
     finally {
         Close-OwnedChecksumGeneration -Generation $publishedGeneration
     }
-    $publishedText = [IO.File]::ReadAllText($publishedItem.FullName, [Text.Encoding]::ASCII).TrimEnd("`r", "`n")
-    if (-not [string]::Equals($publishedText, $record, [StringComparison]::Ordinal)) { throw 'Published V26 checksum bytes do not match the computed canonical record.' }
-    $publicationCommitted = $true
 }
 catch {
     $publicationFailure = $_
