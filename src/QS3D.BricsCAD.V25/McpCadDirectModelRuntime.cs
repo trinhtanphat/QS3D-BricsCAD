@@ -53,12 +53,14 @@ namespace QS3D.BricsCAD.V25
         internal static bool IsTool(string? tool)
         {
             return Tools.Contains(tool ?? string.Empty)
+                   || McpQs3dDomainRuntime.IsTool(tool)
                    || McpCadLayerStateRuntime.IsTool(tool)
                    || McpCadViewStatusRuntime.IsTool(tool);
         }
 
         internal static bool RequiresMutation(string? tool)
         {
+            if (McpQs3dDomainRuntime.IsTool(tool)) return McpQs3dDomainRuntime.RequiresMutation(tool);
             if (McpCadLayerStateRuntime.IsTool(tool)) return McpCadLayerStateRuntime.RequiresMutation(tool);
             if (McpCadViewStatusRuntime.IsTool(tool)) return McpCadViewStatusRuntime.RequiresMutation(tool);
             return Tools.Contains(tool ?? string.Empty);
@@ -78,6 +80,16 @@ namespace QS3D.BricsCAD.V25
 
         internal static IEnumerable<string> ToolDescriptors()
         {
+            yield return Descriptor(
+                "qs3d_project_bind",
+                "Bind the active rooted DWG to an existing persisted QS3D sidecar, or explicitly create and persist one only when createIfMissing=true.",
+                "\"createIfMissing\":{\"type\":\"boolean\"}," + ConfirmProperty(),
+                "\"confirmMutation\"");
+            yield return Descriptor(
+                "qs3d_project_reload",
+                "Reload the active DWG's persisted QS3D sidecar with drawing-fingerprint and backing-store freshness validation.",
+                ConfirmProperty(),
+                "\"confirmMutation\"");
             yield return Descriptor(
                 "cad_create_box",
                 "Create a native Solid3d box centered at x,y,z using direct BricsCAD database APIs.",
@@ -109,6 +121,16 @@ namespace QS3D.BricsCAD.V25
         {
             if (!IsTool(tool)) throw new InvalidOperationException("Unknown direct MCP CAD model tool: " + tool);
             var body = string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments;
+            if (McpQs3dDomainRuntime.IsTool(tool))
+            {
+                var mutation = McpQs3dDomainRuntime.RequiresMutation(tool);
+                if (mutation)
+                {
+                    RequireConfirmedMutation(body, tool);
+                    EnsureAutomationRunning();
+                }
+                return McpQs3dDomainRuntime.Call(tool, body);
+            }
             if (McpCadLayerStateRuntime.IsTool(tool))
             {
                 var mutation = McpCadLayerStateRuntime.RequiresMutation(tool);
