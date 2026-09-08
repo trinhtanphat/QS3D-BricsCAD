@@ -20,6 +20,7 @@ Add-Type -AssemblyName System.IO.Compression
 if (-not ('QS3D.V26.PackageNativeFileIdentity' -as [type])) {
     Add-Type -TypeDefinition @'
 using System;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
@@ -40,16 +41,96 @@ namespace QS3D.V26
         public uint nFileIndexLow;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct FILE_DISPOSITION_INFO
+    {
+        public byte DeleteFile;
+    }
+
     public static class PackageNativeFileIdentity
     {
+        private const uint GENERIC_READ = 0x80000000;
+        private const uint GENERIC_WRITE = 0x40000000;
+        private const uint DELETE = 0x00010000;
+        private const uint CREATE_NEW = 1;
+        private const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
+        private const int FileDispositionInfo = 4;
+
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool GetFileInformationByHandle(
             SafeFileHandle hFile,
             out BY_HANDLE_FILE_INFORMATION fileInformation);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern SafeFileHandle CreateFileW(
+            string lpFileName,
+            uint dwDesiredAccess,
+            uint dwShareMode,
+            IntPtr lpSecurityAttributes,
+            uint dwCreationDisposition,
+            uint dwFlagsAndAttributes,
+            IntPtr hTemplateFile);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetFileInformationByHandle(
+            SafeFileHandle hFile,
+            int fileInformationClass,
+            ref FILE_DISPOSITION_INFO fileInformation,
+            uint bufferSize);
+
+        public static SafeFileHandle CreateOwnedPackageOutput(string path)
+        {
+            SafeFileHandle handle = CreateFileW(
+                path,
+                GENERIC_READ | GENERIC_WRITE | DELETE,
+                0,
+                IntPtr.Zero,
+                CREATE_NEW,
+                FILE_ATTRIBUTE_NORMAL,
+                IntPtr.Zero);
+            if (handle == null || handle.IsInvalid)
+            {
+                int errorCode = Marshal.GetLastWin32Error();
+                if (handle != null) handle.Dispose();
+                throw new Win32Exception(errorCode, "Could not create the V26 package output as one fresh exclusive generation.");
+            }
+            return handle;
+        }
+
+        public static void SetDeleteDisposition(SafeFileHandle handle, bool delete)
+        {
+            if (handle == null || handle.IsInvalid || handle.IsClosed)
+                throw new ArgumentException("A live package output handle is required.", "handle");
+            FILE_DISPOSITION_INFO info = new FILE_DISPOSITION_INFO { DeleteFile = delete ? (byte)1 : (byte)0 };
+            if (!SetFileInformationByHandle(handle, FileDispositionInfo, ref info, (uint)Marshal.SizeOf(typeof(FILE_DISPOSITION_INFO))))
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not update exact-generation V26 package rollback disposition.");
+        }
     }
 }
 '@
+}
+
+function Open-OwnedPackageOutput {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    if (-not [Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([Runtime.InteropServices.OSPlatform]::Windows)) {
+        throw 'V26 exact-generation package output requires Windows.'
+    }
+    $handle = [QS3D.V26.PackageNativeFileIdentity]::CreateOwnedPackageOutput($Path)
+    try { return [IO.FileStream]::new($handle, [IO.FileAccess]::ReadWrite) }
+    catch {
+        $handle.Dispose()
+        throw
+    }
+}
+
+function Set-PackageOutputDeleteDisposition {
+    param(
+        [Parameter(Mandatory = $true)][IO.FileStream]$Stream,
+        [Parameter(Mandatory = $true)][bool]$Delete
+    )
+    [QS3D.V26.PackageNativeFileIdentity]::SetDeleteDisposition($Stream.SafeFileHandle, $Delete)
 }
 
 function Get-CanonicalFullPath {
@@ -483,6 +564,7 @@ function New-DeterministicPackageZip {
     param([string]$PackageRoot, [string]$DestinationPath, [DateTimeOffset]$SourceTimestamp)
     $package = Assert-OrdinaryDirectory -Path $PackageRoot -Label 'package staging root'
     $destination = Assert-SafeOutputFileTarget -Path $DestinationPath -RepositoryRoot $root -Label 'package ZIP'
+    if (Test-Path -LiteralPath $destination) { throw 'V26 package ZIP destination already exists; refusing destructive pathname replacement.' }
     $packagePrefix = $package.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
     $sourceByEntry = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)
     foreach ($file in Get-SafePackageFiles -PackageRoot $package) {
@@ -499,10 +581,12 @@ function New-DeterministicPackageZip {
     [Array]::Sort($entryNames, [StringComparer]::Ordinal)
     if ($entryNames.Length -eq 0) { throw 'No V26 package files were available for deterministic ZIP creation.' }
 
-    $temporary = Assert-SafeOutputFileTarget -Path ($destination + '.' + [Guid]::NewGuid().ToString('N') + '.tmp') -RepositoryRoot $root -Label 'temporary package ZIP'
     $destinationStream = $null
+    $deleteArmed = $false
     try {
-        $destinationStream = [IO.File]::Open($temporary, [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+        $destinationStream = Open-OwnedPackageOutput -Path $destination
+        Set-PackageOutputDeleteDisposition -Stream $destinationStream -Delete $true
+        $deleteArmed = $true
         $archive = [IO.Compression.ZipArchive]::new($destinationStream, [IO.Compression.ZipArchiveMode]::Create, $true)
         try {
             foreach ($entryName in $entryNames) {
@@ -524,17 +608,14 @@ function New-DeterministicPackageZip {
         }
         finally { $archive.Dispose() }
         $destinationStream.Flush($true)
-        $destinationStream.Dispose()
-        $destinationStream = $null
-
-        $temporary = Assert-SafeOutputFileTarget -Path $temporary -RepositoryRoot $root -Label 'temporary package ZIP'
-        if (Test-Path -LiteralPath $destination) { Remove-Item -LiteralPath $destination -Force }
-        $destination = Assert-SafeOutputFileTarget -Path $destination -RepositoryRoot $root -Label 'package ZIP'
-        [IO.File]::Move($temporary, $destination)
+        Set-PackageOutputDeleteDisposition -Stream $destinationStream -Delete $false
+        $deleteArmed = $false
     }
     finally {
-        if ($null -ne $destinationStream) { $destinationStream.Dispose() }
-        if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
+        if ($null -ne $destinationStream) {
+            try { $destinationStream.Dispose() }
+            finally { $destinationStream = $null }
+        }
     }
 }
 
@@ -711,7 +792,7 @@ if (-not $hashLines) { throw 'No V26 package files were available for hashing.' 
 $hashLines | Set-Content -LiteralPath (Join-Path $dist 'SHA256SUMS.txt') -Encoding ASCII
 
 $zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'
-if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
+if (Test-Path -LiteralPath $zip) { throw 'V26 package ZIP destination already exists; refusing destructive pathname replacement.' }
 $null = Get-SafePackageFiles -PackageRoot $dist
 New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc
 $zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'
