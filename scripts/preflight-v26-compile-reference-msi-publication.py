@@ -20,6 +20,8 @@ def validate(text: str) -> list[str]:
         "function Publish-AdmittedV26Installer",
         "rejected cached V26 MSI is left untouched because safe replacement requires a fresh canonical destination",
         "$Destination,\n            [IO.FileMode]::CreateNew",
+        "$publishedByThisAttempt = $false",
+        "$publishedByThisAttempt = $true",
         "$Candidate.Stream.Position = 0",
         "$Candidate.Stream.CopyTo($destinationStream)",
         "$destinationStream.Flush($true)",
@@ -27,7 +29,14 @@ def validate(text: str) -> list[str]:
         "published V26 MSI digest does not match admitted staged generation",
         "published V26 MSI product identity does not match admitted staged generation",
         "published V26 MSI signer does not match admitted staged generation",
-        "V26 MSI publication failed after canonical destination creation; leaving the destination untouched for fail-closed re-admission",
+        "if ($publishedByThisAttempt)",
+        "Assert-NoExistingReparseComponent -Path $Destination -Label 'Failed owned V26 canonical MSI publication'",
+        "$failedPublication = Get-OrdinaryFileOrNull -Path $Destination -Label 'Failed owned V26 canonical MSI publication'",
+        "[IO.File]::Delete($Destination)",
+        "V26 canonical MSI pathname still exists after owned failed-publication cleanup.",
+        "owned canonical MSI cleanup failed",
+        "Assert-NoExistingReparseComponent -Path $msi -Label 'V26 MSI canonical path after source failure'",
+        "left the canonical V26 MSI destination non-fresh",
         "$admission = Publish-AdmittedV26Installer -Candidate $candidateAdmission -Destination $msi",
     )
     for token in required:
@@ -40,14 +49,20 @@ def validate(text: str) -> list[str]:
         "Remove-Item -LiteralPath $cached.FullName -Force",
         "Remove-Item -LiteralPath $ordinary.FullName -Force",
         "[IO.File]::Move($staging, $msi)",
+        "V26 MSI publication failed after canonical destination creation; leaving the destination untouched for fail-closed re-admission",
     )
     for token in forbidden:
         if token in text:
-            errors.append(f"V26 MSI publication retains unbound/destructive pathname token: {token}")
+            errors.append(f"V26 MSI publication retains unbound/destructive/stale failure token: {token}")
 
+    before(text, "$publishedByThisAttempt = $false", "$Destination,\n            [IO.FileMode]::CreateNew", "ownership flag initialized before destination creation", errors)
+    before(text, "$Destination,\n            [IO.FileMode]::CreateNew", "$publishedByThisAttempt = $true", "ownership claimed only after CreateNew succeeds", errors)
     before(text, "$Candidate.Stream.Position = 0", "$Candidate.Stream.CopyTo($destinationStream)", "rewind held admitted stream before publication copy", errors)
     before(text, "$Candidate.Stream.CopyTo($destinationStream)", "$destinationStream.Flush($true)", "held byte copy before durable flush", errors)
     before(text, "$destinationStream.Flush($true)", "Get-SingleV26InstallerAdmission -Path $Destination -Expected $Candidate.Sha256", "durable publication before destination re-admission", errors)
+    before(text, "if ($publishedByThisAttempt)", "[IO.File]::Delete($Destination)", "delete only inside attempt-owned cleanup", errors)
+    before(text, "[IO.File]::Delete($Destination)", "V26 canonical MSI pathname still exists after owned failed-publication cleanup.", "owned deletion before absence verification", errors)
+    before(text, "Assert-NoExistingReparseComponent -Path $msi -Label 'V26 MSI canonical path after source failure'", "left the canonical V26 MSI destination non-fresh", "outer fallback checks canonical freshness before warning/continue", errors)
     return errors
 
 
@@ -64,13 +79,16 @@ def main() -> int:
         "post-publication admission": text.replace("Get-SingleV26InstallerAdmission -Path $Destination -Expected $Candidate.Sha256", "$null", 1),
         "digest parity": text.replace("published V26 MSI digest does not match admitted staged generation", "digest ignored", 1),
         "rejected-cache fail closed": text.replace("rejected cached V26 MSI is left untouched because safe replacement requires a fresh canonical destination", "cached MSI removed", 1),
-        "failed-publication fail closed": text.replace("V26 MSI publication failed after canonical destination creation; leaving the destination untouched for fail-closed re-admission", "failed destination removed", 1),
+        "attempt ownership": text.replace("$publishedByThisAttempt = $true", "$publishedByThisAttempt = $false", 1),
+        "owned failed-publication cleanup": text.replace("[IO.File]::Delete($Destination)", "$null = $failedPublication", 1),
+        "owned cleanup verification": text.replace("V26 canonical MSI pathname still exists after owned failed-publication cleanup.", "owned cleanup unchecked", 1),
+        "outer non-fresh fail closed": text.replace("left the canonical V26 MSI destination non-fresh", "fallback continued with ambiguous canonical path", 1),
     }
     for label, mutated in probes.items():
         if not validate(mutated):
             raise SystemExit(f"mutation probe was not rejected: {label}")
 
-    print("PASS V26 compile-reference MSI held-byte publication")
+    print("PASS V26 compile-reference MSI held-byte publication with attempt-owned failed-publication rollback")
     return 0
 
 
