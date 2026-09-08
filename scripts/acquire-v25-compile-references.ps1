@@ -35,6 +35,21 @@ public static class QS3DV25NativeFileDisposition
     }
 
     public const int FileDispositionInfo = 4;
+    public const uint GENERIC_READ = 0x80000000;
+    public const uint GENERIC_WRITE = 0x40000000;
+    public const uint DELETE = 0x00010000;
+    public const uint CREATE_NEW = 1;
+    public const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern SafeFileHandle CreateFileW(
+        string lpFileName,
+        uint dwDesiredAccess,
+        uint dwShareMode,
+        IntPtr lpSecurityAttributes,
+        uint dwCreationDisposition,
+        uint dwFlagsAndAttributes,
+        IntPtr hTemplateFile);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -45,6 +60,35 @@ public static class QS3DV25NativeFileDisposition
         uint dwBufferSize);
 }
 "@
+}
+
+function Open-OwnedMsiPublication {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $desiredAccess = [QS3DV25NativeFileDisposition]::GENERIC_READ -bor
+        [QS3DV25NativeFileDisposition]::GENERIC_WRITE -bor
+        [QS3DV25NativeFileDisposition]::DELETE
+    $handle = [QS3DV25NativeFileDisposition]::CreateFileW(
+        $Path,
+        [uint32]$desiredAccess,
+        0,
+        [IntPtr]::Zero,
+        [QS3DV25NativeFileDisposition]::CREATE_NEW,
+        [QS3DV25NativeFileDisposition]::FILE_ATTRIBUTE_NORMAL,
+        [IntPtr]::Zero)
+    if ($null -eq $handle -or $handle.IsInvalid) {
+        $errorCode = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        if ($null -ne $handle) { $handle.Dispose() }
+        throw "Failed to create fresh owned canonical MSI. Win32Error=$errorCode"
+    }
+
+    try {
+        return [IO.FileStream]::new($handle, [IO.FileAccess]::ReadWrite, 1048576, $false)
+    }
+    catch {
+        $handle.Dispose()
+        throw
+    }
 }
 
 function Set-OwnedMsiDeleteDisposition {
@@ -379,17 +423,13 @@ else {
                 throw 'Canonical MSI destination appeared before held-generation publication; refusing destructive replacement.'
             }
 
-            # Keep the just-created canonical generation handle-owned and armed
-            # for deletion until its bytes are verified through this exact handle.
-            $publishedStream = [IO.FileStream]::new(
-                $msi,
-                [IO.FileMode]::CreateNew,
-                [IO.FileAccess]::ReadWrite,
-                [IO.FileShare]::None,
-                1048576,
-                [IO.FileOptions]::DeleteOnClose
-            )
+            # Create a fresh canonical generation with DELETE access but without
+            # FILE_FLAG_DELETE_ON_CLOSE. The delete disposition is explicitly
+            # armed below so it can also be explicitly cancelled at commit.
+            $publishedStream = Open-OwnedMsiPublication -Path $msi
             $publishedByThisAttempt = $true
+            Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $true
+
             $stagingAdmission.Stream.Position = 0
             $stagingAdmission.Stream.CopyTo($publishedStream)
             $publishedStream.Flush($true)
@@ -406,9 +446,11 @@ else {
             if (-not [string]::Equals($publishedHash, [string]$stagingAdmission.Sha256, [StringComparison]::Ordinal)) {
                 throw 'Canonical MSI SHA256 does not match the held staging generation after publication.'
             }
+            if (-not [string]::Equals($publishedHash, $expected, [StringComparison]::Ordinal)) {
+                throw 'Canonical MSI SHA256 no longer matches the pinned expected installer identity before commit.'
+            }
 
-            # Commit only this exact handle-owned generation. Until this call
-            # succeeds, closing the creator handle deletes the owned generation.
+            # Commit only this exact explicitly-armed handle-owned generation.
             Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $false
             $publishedByThisAttempt = $false
             $publishedStream.Dispose()
@@ -432,7 +474,7 @@ else {
                 $publishedStream = $null
             }
             if ($publishedByThisAttempt -and (Test-Path -LiteralPath $msi)) {
-                throw "BricsCAD V25 installer source failed: $($candidate.Name) • $sourceFailure; exact handle-owned cleanup completed but canonical MSI pathname is occupied, so replacement identity is uncertain and fallback is refused."
+                throw "BricsCAD V25 installer source failed: $($candidate.Name) • $sourceFailure; exact handle-owned cleanup could not prove canonical pathname removal, so replacement identity is uncertain and fallback is refused."
             }
 
             Write-Warning "BricsCAD V25 installer source failed: $($candidate.Name) • $sourceFailure"
