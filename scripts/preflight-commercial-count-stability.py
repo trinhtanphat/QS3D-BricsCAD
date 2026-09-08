@@ -53,29 +53,56 @@ if source.is_file():
     if "foreach (var record in records)" in append:
         errors.append("CommercialAuditLog.AppendBatch must not use foreach for caller-controlled counted traversal.")
 
-    snapshot_start = text.find("internal static IReadOnlyList<T> Snapshot<T>(")
-    snapshot_end = text.find("internal static void RequireCanProcessNext", snapshot_start)
+    wrapper_start = text.find("internal static IReadOnlyList<T> Snapshot<T>(IEnumerable<T> source, string paramName, int maximum)")
+    helper_start = text.find("private static IReadOnlyList<T> SnapshotWithAdmittedCount<T>(", wrapper_start)
+    wrapper = text[wrapper_start:helper_start] if wrapper_start >= 0 and helper_start > wrapper_start else ""
+    wrapper_required = (
+        "var admittedCount = SnapshotKnownCount(source, paramName, maximum);",
+        "return SnapshotWithAdmittedCount(source, paramName, maximum, admittedCount);",
+    )
+    wrapper_positions = ordered_positions(wrapper, wrapper_required)
+    if not wrapper or len(wrapper_positions) != len(wrapper_required) or any(pos < 0 for pos in wrapper_positions):
+        errors.append("CommercialGuard.Snapshot must admit Count once and delegate traversal to SnapshotWithAdmittedCount.")
+
+    snapshot_start = helper_start
+    snapshot_end = text.find("internal static IReadOnlyList<T> SnapshotStableGeneration<T>(", snapshot_start)
     snapshot = text[snapshot_start:snapshot_end] if snapshot_start >= 0 and snapshot_end > snapshot_start else ""
     snapshot_required = (
-        "var knownCount = SnapshotKnownCount(source, paramName, maximum);",
+        "RequireStableSnapshotKnownCount(source, admittedCount, paramName, maximum);",
         "using (var enumerator = source.GetEnumerator())",
         "while (true)",
-        "RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum);",
+        "RequireStableSnapshotKnownCountDuringTraversal(source, admittedCount, paramName, maximum);",
         "if (!enumerator.MoveNext())",
-        "RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum);",
-        "RequireCanProcessNext(knownCount, result.Count",
+        "RequireStableSnapshotKnownCountDuringTraversal(source, admittedCount, paramName, maximum);",
+        "RequireCanProcessNext(admittedCount, result.Count",
         "var item = enumerator.Current;",
-        "RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum);",
+        "RequireStableSnapshotKnownCountDuringTraversal(source, admittedCount, paramName, maximum);",
         "if (item == null)",
-        "result.Count != knownCount.Value",
-        "RequireStableSnapshotKnownCount(source, knownCount, paramName, maximum);",
+        "result.Count != admittedCount.Value",
+        "RequireStableSnapshotKnownCount(source, admittedCount, paramName, maximum);",
         "return new ReadOnlyCollection<T>(result.ToArray());",
     )
     snapshot_positions = ordered_positions(snapshot, snapshot_required)
     if not snapshot or len(snapshot_positions) != len(snapshot_required) or any(pos < 0 for pos in snapshot_positions):
-        errors.append("CommercialGuard.Snapshot must rebind Count before/after MoveNext and immediately after Current before item acceptance/immutable return.")
+        errors.append("CommercialGuard.SnapshotWithAdmittedCount must bind traversal to the original admitted Count before/after MoveNext and after Current.")
     if "foreach (var item in source)" in snapshot:
-        errors.append("CommercialGuard.Snapshot must not use foreach for caller-controlled counted traversal.")
+        errors.append("CommercialGuard.SnapshotWithAdmittedCount must not use foreach for caller-controlled counted traversal.")
+
+    stable_generation_start = text.find("internal static IReadOnlyList<T> SnapshotStableGeneration<T>(")
+    stable_generation_end = text.find("internal static void RequireCanProcessNext", stable_generation_start)
+    stable_generation = text[stable_generation_start:stable_generation_end] if stable_generation_start >= 0 and stable_generation_end > stable_generation_start else ""
+    stable_generation_required = (
+        "var admittedCount = SnapshotKnownCount(source, paramName, maximum);",
+        "var snapshot = SnapshotWithAdmittedCount(source, paramName, maximum, admittedCount);",
+        "RequireStableSnapshotKnownCount(source, admittedCount, paramName, maximum);",
+        "RequireStableSnapshotGeneration(source, admittedCount, snapshot, semanticEquals, paramName, maximum);",
+        "return snapshot;",
+    )
+    stable_generation_positions = ordered_positions(stable_generation, stable_generation_required)
+    if not stable_generation or len(stable_generation_positions) != len(stable_generation_required) or any(pos < 0 for pos in stable_generation_positions):
+        errors.append("CommercialGuard.SnapshotStableGeneration must reuse the single admitted Count through materialization and semantic replay.")
+    if "var snapshot = Snapshot(source, paramName, maximum);" in stable_generation:
+        errors.append("CommercialGuard.SnapshotStableGeneration must not re-admit Count through the public Snapshot wrapper.")
 
     stable_start = text.find("private static void RequireStableSnapshotKnownCount<T>(")
     stable_end = text.find("private static int? SnapshotKnownCount<T>", stable_start)
@@ -143,4 +170,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Commercial audit and snapshot materializers rebind Count before/after MoveNext and after Current before semantic acceptance/publication.")
+print("PASS: Commercial audit and snapshot materializers bind traversal to one admitted Count and revalidate it before semantic acceptance/publication.")

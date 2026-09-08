@@ -8,11 +8,13 @@ snapshot_legacy_smoke = (ROOT / "tests/QS3D.Core.SmokeTests/CommercialGuardSnaps
 
 required_source = [
     "CommercialGuard.RequireCanProcessNext(knownCount, snapshot.Count, \"Commercial audit batch source\")",
-    "RequireCanProcessNext(knownCount, result.Count, paramName)",
+    "private static IReadOnlyList<T> SnapshotWithAdmittedCount<T>(",
+    "RequireCanProcessNext(admittedCount, result.Count, paramName)",
     "internal static void RequireCanProcessNext(int? knownCount, int observedCount, string label)",
     "observedCount >= knownCount.Value",
     "known Count was exceeded during traversal",
     "known Count does not match completed traversal cardinality",
+    "var snapshot = SnapshotWithAdmittedCount(source, paramName, maximum, admittedCount);",
 ]
 
 required_smoke = [
@@ -47,11 +49,18 @@ if missing:
 # Ordering is the contract: Count overrun must be checked before null/semantic work.
 audit_guard = source.index("CommercialGuard.RequireCanProcessNext(knownCount, snapshot.Count")
 audit_null = source.index("Commercial audit batch contains a null record")
-revision_guard = source.index("RequireCanProcessNext(knownCount, result.Count, paramName)")
-revision_null = source.index("contains a null item")
+helper_start = source.index("private static IReadOnlyList<T> SnapshotWithAdmittedCount<T>(")
+revision_guard = source.index("RequireCanProcessNext(admittedCount, result.Count, paramName)", helper_start)
+revision_null = source.index("contains a null item", revision_guard)
 if not audit_guard < audit_null:
     raise SystemExit("Commercial audit known-Count overrun guard must precede record semantic validation.")
 if not revision_guard < revision_null:
     raise SystemExit("Commercial snapshot known-Count overrun guard must precede item semantic validation.")
 
-print("PASS commercial known-Count overrun ordering")
+stable_start = source.index("internal static IReadOnlyList<T> SnapshotStableGeneration<T>(")
+stable_end = source.index("internal static void RequireCanProcessNext", stable_start)
+stable = source[stable_start:stable_end]
+if "var snapshot = Snapshot(source, paramName, maximum);" in stable:
+    raise SystemExit("Commercial stable-generation snapshot must not re-admit Count before bounded traversal.")
+
+print("PASS commercial known-Count overrun ordering with single admitted-count materialization")
