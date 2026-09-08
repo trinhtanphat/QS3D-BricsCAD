@@ -20,14 +20,15 @@ if SOURCE.is_file():
         'return RequireXmlText(rawValue.Trim(), nameof(value), "Element drawing fingerprint");',
         'return RequireXmlText(normalized, nameof(id), "Element id");',
         'return RequireXmlText(name.Trim(), nameof(name), "Property name");',
-        'key = RequireXmlText(key, nameof(name), "Quantity name");',
+        'return RequireXmlText(name.Trim(), nameof(name), "Quantity name");',
+        'var key = RequireQuantityName(name);',
     )
     for token in required:
         if token not in text:
             errors.append("ProjectElement lost XML persistability contract: " + token)
 
     property_name_guard = re.search(
-        r"private static string RequirePropertyName\(string name\)(?P<body>.*?)\n        private static string NormalizeOptionalRelationId",
+        r"private static string RequirePropertyName\(string name\)(?P<body>.*?)\n        private static string RequireQuantityName",
         text,
         re.DOTALL,
     )
@@ -43,6 +44,23 @@ if SOURCE.is_file():
             if token not in body:
                 errors.append("RequirePropertyName lost property-name validation contract: " + token)
 
+    quantity_name_guard = re.search(
+        r"private static string RequireQuantityName\(string name\)(?P<body>.*?)\n        private static double RequireQuantityValue",
+        text,
+        re.DOTALL,
+    )
+    if not quantity_name_guard:
+        errors.append("missing ProjectElement.RequireQuantityName body")
+    else:
+        body = quantity_name_guard.group("body")
+        for token in (
+            'if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Quantity name is required.", nameof(name));',
+            'if (name.Any(char.IsControl)) throw new ArgumentException("Quantity name cannot contain control characters.", nameof(name));',
+            'return RequireXmlText(name.Trim(), nameof(name), "Quantity name");',
+        ):
+            if token not in body:
+                errors.append("RequireQuantityName lost quantity-name validation contract: " + token)
+
     for method_name in ("SetProperty", "AddProperty", "RemoveProperty"):
         method = re.search(
             rf"(?:public|internal) (?:void|bool) {method_name}\(.*?\)(?P<body>.*?)\n        (?:public|internal|private) ",
@@ -51,6 +69,15 @@ if SOURCE.is_file():
         )
         if not method or "var key = RequirePropertyName(name);" not in method.group("body"):
             errors.append(method_name + " must validate property names through RequirePropertyName before mutation")
+
+    for method_name in ("SetQuantity", "AddQuantity", "RemoveQuantity"):
+        method = re.search(
+            rf"(?:public|internal) (?:void|bool) {method_name}\(.*?\)(?P<body>.*?)\n        (?:public|internal|private) ",
+            text,
+            re.DOTALL,
+        )
+        if not method or "var key = RequireQuantityName(name);" not in method.group("body"):
+            errors.append(method_name + " must validate quantity names through RequireQuantityName before mutation")
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
@@ -81,4 +108,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: ProjectElement Id/relation/fingerprint text remains XML-preflighted and every semantic property mutation validates names through the shared XML-safe RequirePropertyName boundary.")
+print("PASS: ProjectElement Id/relation/fingerprint text remains XML-preflighted and semantic property/quantity mutations validate names through shared XML-safe boundaries.")
