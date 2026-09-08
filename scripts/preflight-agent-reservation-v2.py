@@ -51,13 +51,13 @@ def peer() -> dict:
 def assert_git_tree_identity(gate):
     calls = []
 
-    def run_git(args):
+    def run_git_exact(args):
         calls.append(args)
         if args[:2] == ["ls-tree", "-z"]:
             return f"100755 blob {BLOB_SHA}\t{STALE_PATH}\x00"
         raise AssertionError(args)
 
-    gate._run_git = run_git
+    gate._run_git_exact = run_git_exact
     identity = gate.git_path_identity(CURRENT_MAIN_SHA, STALE_PATH)
     assert identity == ("100755", "blob", BLOB_SHA), identity
     assert calls == [[
@@ -80,6 +80,9 @@ def run_case(gate, path_is_effective: bool):
         return CURRENT_MAIN_SHA
 
     gate._run_git = run_git
+    gate.ensure_peer_commit = lambda peer_sha: (
+        None if peer_sha == PEER_HEAD_SHA else (_ for _ in ()).throw(AssertionError(peer_sha))
+    )
     observed = []
 
     def path_changed(api_url, repository, current_main_sha, peer_head_sha, path, token):
