@@ -130,6 +130,7 @@ def windows_disposition_probe() -> None:
     with tempfile.TemporaryDirectory(prefix="qs3d-v25-disposition-") as directory:
         commit_path = str(Path(directory) / "commit.tmp")
         rollback_path = str(Path(directory) / "rollback.tmp")
+        probe_path = Path(directory) / "disposition-probe.ps1"
         script = r'''
 param([string]$CommitPath, [string]$RollbackPath)
 $ErrorActionPreference = 'Stop'
@@ -178,8 +179,20 @@ $r.Dispose()
 if (Test-Path -LiteralPath $RollbackPath) { throw 'armed disposition did not remove failed generation on close' }
 Remove-Item -LiteralPath $CommitPath -Force
 '''
+        probe_path.write_text(script, encoding="utf-8")
         completed = subprocess.run(
-            ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script, commit_path, rollback_path],
+            [
+                "powershell.exe",
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-File",
+                str(probe_path),
+                "-CommitPath",
+                commit_path,
+                "-RollbackPath",
+                rollback_path,
+            ],
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
