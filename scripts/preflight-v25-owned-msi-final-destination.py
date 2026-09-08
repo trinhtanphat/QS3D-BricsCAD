@@ -12,6 +12,8 @@ MAX_SOURCE_BYTES = 256 * 1024
 DECL = "public static extern uint GetFinalPathNameByHandleW("
 HELPER = "function Get-OwnedMsiFinalPath {"
 HANDLE_CALL = "[QS3DV25NativeFileDisposition]::GetFinalPathNameByHandleW("
+NORMALIZE_UNC = "\\\\?\\UNC\\"
+NORMALIZE_DOS = "\\\\?\\"
 PROOF_ASSIGN = "$publishedFinalPath = Get-OwnedMsiFinalPath -Stream $publishedStream"
 EXPECTED_ASSIGN = "$expectedPublishedPath = Get-CanonicalAbsolutePath -Path $msi"
 COMPARE = "Test-CanonicalPathEqual -Left $publishedFinalPath -Right $expectedPublishedPath"
@@ -50,8 +52,8 @@ def validate(source: str) -> list[str]:
         (HELPER, "owned-handle final-path helper is missing"),
         (HANDLE_CALL, "owned-handle GetFinalPathNameByHandleW call is missing"),
         ("$Stream.SafeFileHandle", "final-path query must use the owned publication stream handle"),
-        ("\\\\?\\UNC\\", "extended UNC final-path normalization is missing"),
-        ("\\\\?\\", "extended DOS final-path normalization is missing"),
+        (NORMALIZE_UNC, "extended UNC final-path normalization is missing"),
+        (NORMALIZE_DOS, "extended DOS final-path normalization is missing"),
         (PROOF_ASSIGN, "creator-handle final path is not captured"),
         (EXPECTED_ASSIGN, "expected canonical publication path is not captured"),
         (COMPARE, "creator-handle final path is not compared with the canonical MSI path"),
@@ -103,6 +105,8 @@ def main() -> int:
         (DECL, "native final-path declaration"),
         (HELPER, "final-path helper"),
         (HANDLE_CALL, "native final-path invocation"),
+        (NORMALIZE_UNC, "extended UNC final-path normalization"),
+        (NORMALIZE_DOS, "extended DOS final-path normalization"),
         (PROOF_ASSIGN, "creator-handle final-path capture"),
         (EXPECTED_ASSIGN, "expected canonical-path capture"),
         (COMPARE, "final-path comparison"),
