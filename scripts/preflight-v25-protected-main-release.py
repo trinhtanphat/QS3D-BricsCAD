@@ -136,11 +136,17 @@ def main() -> int:
             "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging",
             "$stagingAdmission = Open-PinnedMsiReadLock -Path $staging -ExpectedSha256 $expected",
             "[IO.FileMode]::CreateNew",
+            "[IO.FileOptions]::DeleteOnClose",
             "$stagingAdmission.Stream.CopyTo($publishedStream)",
             "$publishedStream.Flush($true)",
+            "$publishedStream.Position = 0",
+            "$publishedHashBytes = $publishedSha.ComputeHash($publishedStream)",
+            "[string]::Equals($publishedHash, [string]$stagingAdmission.Sha256",
+            "Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $false",
+            "$publishedByThisAttempt = $false",
+            "$publishedStream.Dispose()",
             "$publishedAdmission = Open-PinnedMsiReadLock -Path $msi -ExpectedSha256 $expected",
-            "Assert-PinnedMsiStable -State $publishedAdmission -Label 'immediately after held-generation publication'",
-            "[string]$publishedAdmission.Sha256, [string]$stagingAdmission.Sha256",
+            "Assert-PinnedMsiStable -State $publishedAdmission -Label 'immediately after held-generation publication commit'",
             "Get-AuthenticodeSignature -FilePath $msiState.Path",
             "WindowsInstaller.Installer",
             "ProductVersion",
@@ -160,8 +166,8 @@ def main() -> int:
         failures.append("V25 managed-reference acquisition must not download remote bytes directly to the canonical cache pathname")
     if "[IO.File]::Move($staging, $msi)" in acquire:
         failures.append("V25 managed-reference acquisition must publish from the held staging stream, not pathname File.Move")
-    if "Remove-Item -LiteralPath $msi -Force" in acquire:
-        failures.append("V25 managed-reference acquisition must refuse an appeared canonical destination instead of destructively replacing it")
+    if "Remove-Item -LiteralPath $msi -Force" in acquire or "[IO.File]::Delete($msi)" in acquire:
+        failures.append("V25 managed-reference acquisition must clean failed owned publication by creator-handle semantics, never by canonical pathname deletion")
 
     if failures:
         print("V25 protected-main release/compile preflight FAILED")
@@ -172,7 +178,7 @@ def main() -> int:
     print("PASS: V25 preview release and pre-merge compile contracts are protected-main safe.")
     print(" - manual preview identity may already be synchronized or is derived only in the bounded V25/V26/Core workspace; protected main is never mutated")
     print(" - source HEAD/provenance remains an exact protected-main commit and release drift uses Git pathspec semantics")
-    print(" - canonical core check compiles V25 through locked, held-verified reference generations with fresh-only held-stream MSI publication")
+    print(" - canonical core check compiles V25 through held reference generations whose fresh publication stays delete-on-close until same-handle verification commits it")
     return 0
 
 
