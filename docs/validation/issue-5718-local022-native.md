@@ -26,10 +26,13 @@ b816 candidate. Actual SDK builds: V25 23.57s, V26 18.49s, zero warnings/errors.
   wrapper test failed on the old pins before the pin update. Strict76/3 oracle,
   native phase coverage, physical gestures and full cleanup requirements are
   unchanged. Source/build evidence is not licensed PASS.
-- Allocation65 below remains consumed and the native launcher interruption
-  remains unresolved. No new CAD allocation is started merely by preparing
-  these packages. A fresh, uninterrupted V25 BQ result and full cleanup are
-  required before V26; no replay, synthetic ACK or inferred PASS.
+- Allocation65 below remains consumed and its closure cause is unknown.
+  Its terminal receipt proves full cleanup, independently checked with zero
+  CAD processes. A controlled first attempt on the newly merged e768 candidate
+  may use a fresh allocation after the usual exclusive-host/protected-state/
+  exact-hash admission checks. This does not claim65's cause was identified or
+  fixed. No startup input or replay is permitted; a fresh, uninterrupted V25
+  BQ result and full cleanup are required before V26.
 - Package preparation check: V25 archive integrity passed; both new probe SDK
   builds and the complete host-free runner suite passed. The extra production
   V26 release-identity verifier failed with `managed assembly identity mismatch`.
