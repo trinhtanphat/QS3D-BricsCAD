@@ -82,7 +82,16 @@ namespace QS3D.Core.Export
             if (string.IsNullOrWhiteSpace(payload)) throw new InvalidDataException("BCF payload is empty.");
             try
             {
-                var document = XDocument.Parse(payload, LoadOptions.None);
+                var settings = new XmlReaderSettings
+                {
+                    DtdProcessing = DtdProcessing.Prohibit,
+                    XmlResolver = null,
+                    MaxCharactersInDocument = MaxSemanticXmlCharacters,
+                    CloseInput = false
+                };
+                using var textReader = new StringReader(payload);
+                using var reader = XmlReader.Create(textReader, settings);
+                var document = XDocument.Load(reader, LoadOptions.None);
                 EnsureDocumentContent(document);
                 var root = document.Root;
                 if (root == null || root.Name.NamespaceName.Length != 0 || !string.Equals(root.Name.LocalName, "BcfIssueExchange", StringComparison.Ordinal))
