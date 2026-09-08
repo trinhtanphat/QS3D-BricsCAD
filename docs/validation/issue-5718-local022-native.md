@@ -2,6 +2,27 @@
 
 ## Verdict
 
+Latest attempt (2026-09-08): V25 `quantity-v25-65` is **FAIL_OR_NO_RESULT**,
+not a BQ verdict. RunId `de6f8cb516864697a3e0d16c25cb998d`, exact pushed
+harness `28df62564ff7277dad6daf2065829b683b3809ae`, product source
+`b816113ea6196ec4ce2dadc763f948f817b334a2`, BricsCAD25.2.10, ran
+`2026-09-08T14:48:51.8449838Z`–`2026-09-08T14:56:59.9751950Z`.
+The owned native launcher exited0 without a phase marker or exact child;
+native/quantity phases verified0. Last module inspection before exit had not
+observed QS3D or the probe. Whether the launcher was closed externally is not
+established; no crash, licensing diagnosis or product regression is inferred.
+Supported Computer Use returned a launcher window but no usable CAD workspace;
+no test gesture or command was sent. Exact V25 package hash is listed below;
+allocation probe SHA256 is
+`6903a3b88a2c178e3072bd08d1a98127ffaab079d9bcdfcbf106f3c4321fded3`.
+Full private/protected/profile cleanup and original autostart restoration passed,
+with before/after profile inventory
+`285c6889f88f326f165c9b539d83ed47555c03f8343d2826c7c6638a3462cf0c`
+and independently verified zero BricsCAD processes. Only disposable private
+allocation files were removed. This allocation is consumed: do not replay it or
+admit V26 from it. BQ recalculate/detail/Locate/cold remain untested on this new
+source, and the strict76/3 oracle remains unchanged. MCP remains paused.
+
 New local candidate admitted for the next reporting allocation: pushed product
 source `b816113ea6196ec4ce2dadc763f948f817b334a2` (#6145 / PR#6169), containing
 the protected #6168 / PR#6171 fix merged on main at
