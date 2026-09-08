@@ -216,6 +216,7 @@ namespace QS3D.Core.SmokeTests
                 advanceRecovery: 2m,
                 otherDeductions: 1m);
 
+            Equal(first.CertificateId, second.PreviousCertificateId);
             Equal(first.CumulativeNetCertified, second.PreviousNetCertified);
             Equal(first.RetainedBalanceAfterCertificate, second.PreviousRetentionHeld);
             Equal(70m, second.VariationCertifiedToDate["VO-01"]);
@@ -237,7 +238,7 @@ namespace QS3D.Core.SmokeTests
                 nextProgress,
                 register,
                 new[] { new VariationCertificationLine("VO-01", 40m, 0m) },
-                retentionRelease: 25m));
+                retentionRelease: 35m));
 
             Throws<InvalidOperationException>(() => service.CreateNext(
                 "IPC-OVER",
