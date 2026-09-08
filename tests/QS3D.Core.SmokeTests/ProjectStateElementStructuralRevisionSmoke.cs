@@ -130,7 +130,7 @@ namespace QS3D.Core.SmokeTests
 
         private static ProjectState Project() => new ProjectState("element-structural-revision", "Element structural revision");
 
-        private static ProjectElement Element(string id) => new ProjectElement(id, ElementCategory.Wall);
+        private static ProjectElement Element(string id) => new ProjectElement(id, ElementCategory.Beam);
 
         private static void SetChangeVersion(ProjectState project, long value)
         {
