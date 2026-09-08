@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
@@ -134,7 +136,7 @@ namespace QS3D.Core.SmokeTests
             var project = NewRelationProject(label);
             var element = project.Elements[0];
             var values = sourceHandle ? element.SourceHandles : element.DependsOn;
-            values.Add(value);
+            AddPersistedRelation(element, sourceHandle, value);
             var originalDirty = element.Dirty;
             var originalUpdatedUtc = element.UpdatedUtc;
             var originalChangeVersion = project.ChangeVersion;
@@ -152,10 +154,10 @@ namespace QS3D.Core.SmokeTests
         {
             var project = NewRelationProject("repairable-duplicates");
             var element = project.Elements[0];
-            element.SourceHandles.Add("A1");
-            element.SourceHandles.Add("a1");
-            element.DependsOn.Add("HOST");
-            element.DependsOn.Add("host");
+            AddPersistedRelation(element, true, "A1");
+            AddPersistedRelation(element, true, "a1");
+            AddPersistedRelation(element, false, "HOST");
+            AddPersistedRelation(element, false, "host");
 
             var detached = ProjectStateSnapshot.CreateDetachedCopy(project);
             var copy = detached.FindElement("E1") ?? throw new Exception("Detached snapshot lost the repairable duplicate fixture element.");
@@ -244,6 +246,16 @@ namespace QS3D.Core.SmokeTests
             element.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(element);
             return project;
+        }
+
+        private static void AddPersistedRelation(ProjectElement element, bool sourceHandle, string value)
+        {
+            var relation = sourceHandle ? element.SourceHandles : element.DependsOn;
+            var valuesField = relation.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed malformed persisted snapshot relation.");
+            var values = valuesField.GetValue(relation) as List<string>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement relation backing collection.");
+            values.Add(value);
         }
 
         private static void ExpectInvalidOperation(Action action, string message)

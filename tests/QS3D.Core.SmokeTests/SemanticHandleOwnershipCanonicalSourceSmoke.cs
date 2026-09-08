@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
@@ -33,7 +35,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void PaddedStoredHandleFailsClosedInBothPaths()
         {
-            var project = NewProject(" AB12 ");
+            var project = NewPersistedProject(" AB12 ");
             var beforeVersion = project.ChangeVersion;
 
             Throws<InvalidOperationException>(() => SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, "AB12"));
@@ -43,7 +45,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void BlankStoredHandleFailsClosedInBothPaths()
         {
-            var project = NewProject("   ");
+            var project = NewPersistedProject("   ");
             var beforeVersion = project.ChangeVersion;
 
             Throws<InvalidOperationException>(() => SemanticHandleOwnershipResolver.ResolveUniqueSourceOwner(project, "OTHER"));
@@ -58,6 +60,24 @@ namespace QS3D.Core.SmokeTests
             element.SourceHandles.Add(storedHandle);
             project.Elements.Add(element);
             return project;
+        }
+
+        private static ProjectState NewPersistedProject(string storedHandle)
+        {
+            var project = new ProjectState("P-SOURCE-HANDLE", "Source handle ownership");
+            var element = new ProjectElement("E-1", ElementCategory.Beam);
+            SeedPersistedSourceHandle(element, storedHandle);
+            project.Elements.Add(element);
+            return project;
+        }
+
+        private static void SeedPersistedSourceHandle(ProjectElement element, string value)
+        {
+            var valuesField = element.SourceHandles.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed malformed persisted SourceHandles state.");
+            var values = valuesField.GetValue(element.SourceHandles) as List<string>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement.SourceHandles backing collection.");
+            values.Add(value);
         }
 
         private static void Equal<T>(T expected, T actual)
