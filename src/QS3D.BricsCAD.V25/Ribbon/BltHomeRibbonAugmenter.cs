@@ -3,6 +3,7 @@ using System.Collections;
 using System.Linq;
 using System.Reflection;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace QS3D.BricsCAD.V25.Ribbon
 {
@@ -24,18 +25,25 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
         private sealed class HomeButtonSpec
         {
-            public HomeButtonSpec(string id, string text, Action action, RibbonIconKind icon)
+            public HomeButtonSpec(
+                string id,
+                string text,
+                Action action,
+                RibbonIconKind icon,
+                Func<int, ImageSource>? iconFactory = null)
             {
                 Id = id;
                 Text = text;
                 Action = action ?? throw new ArgumentNullException(nameof(action));
                 Icon = icon;
+                IconFactory = iconFactory;
             }
 
             public string Id { get; }
             public string Text { get; }
             public Action Action { get; }
             public RibbonIconKind Icon { get; }
+            public Func<int, ImageSource>? IconFactory { get; }
         }
 
         public static bool TryInitialize()
@@ -61,8 +69,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
                 RemoveOwnedPanel(panels, UpdatePanelSourceId);
                 RemoveOwnedPanel(panels, ConfigPanelSourceId);
 
-                // Keep KHỞI ĐẦU faithful to the owner reference: only Dự án + Cấu hình.
-                // Update functionality remains available through its dedicated Update Center surfaces.
+                // Keep KHỞI ĐẦU focused on Dự án + Cấu hình while exposing the two
+                // frequently used system surfaces directly in Cấu hình.
                 AddPanel(
                     panels,
                     FilePanelSourceId,
@@ -76,7 +84,18 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     ConfigPanelSourceId,
                     "Cấu hình",
                     new HomeButtonSpec("QS3D_HOME_SETTINGS", "Cài đặt", () => new ProjectToolsCommands().ShowProjectTools(), RibbonIconKind.Settings),
-                    new HomeButtonSpec("QS3D_HOME_SYSTEM_OBJECTS", "Đối tượng\nhệ thống", () => new FamilyManagerCommands().ShowFamilyManager(), RibbonIconKind.Model3d));
+                    new HomeButtonSpec("QS3D_HOME_SYSTEM_OBJECTS", "Đối tượng\nhệ thống", () => new FamilyManagerCommands().ShowFamilyManager(), RibbonIconKind.Model3d),
+                    new HomeButtonSpec(
+                        "QS3D_HOME_LANGUAGE",
+                        "Ngôn ngữ",
+                        () => new QS3D.BricsCAD.V25.UiLanguageCommands().ShowLanguageSettings(),
+                        RibbonIconKind.Settings,
+                        LanguageRibbonIconFactory.Create),
+                    new HomeButtonSpec(
+                        "QS3D_HOME_UPDATE",
+                        "Cập nhật",
+                        () => new QS3D.BricsCAD.V25.Updates.UpdateCommands().ShowUpdateCenter(),
+                        RibbonIconKind.Update));
 
                 _initialized = true;
                 return true;
@@ -120,12 +139,16 @@ namespace QS3D.BricsCAD.V25.Ribbon
 
             // Brand rendering remains available only for explicit product-identity specs.
             // Functional actions such as System Objects must select a semantic icon instead.
-            var smallImage = spec.Icon == RibbonIconKind.Qs3dLogo
-                ? Qs3dBrandIconFactory.Create(16)
-                : RibbonIconFactory.Create(spec.Icon, 16);
-            var largeImage = spec.Icon == RibbonIconKind.Qs3dLogo
-                ? Qs3dBrandIconFactory.Create(32)
-                : RibbonIconFactory.Create(spec.Icon, 32);
+            var smallImage = spec.IconFactory != null
+                ? spec.IconFactory(16)
+                : spec.Icon == RibbonIconKind.Qs3dLogo
+                    ? Qs3dBrandIconFactory.Create(16)
+                    : RibbonIconFactory.Create(spec.Icon, 16);
+            var largeImage = spec.IconFactory != null
+                ? spec.IconFactory(32)
+                : spec.Icon == RibbonIconKind.Qs3dLogo
+                    ? Qs3dBrandIconFactory.Create(32)
+                    : RibbonIconFactory.Create(spec.Icon, 32);
             SetProperty(button, "Image", smallImage);
             SetProperty(button, "LargeImage", largeImage);
             return button;
