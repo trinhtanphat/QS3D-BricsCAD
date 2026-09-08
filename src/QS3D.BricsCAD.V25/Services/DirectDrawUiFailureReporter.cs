@@ -34,6 +34,13 @@ namespace QS3D.BricsCAD.V25.Services
             TrySetPaletteForCurrentDocument(document, message);
         }
 
+        internal static void ReportMessage(Document document, string message)
+        {
+            if (document == null) return;
+            TryWriteEditor(document, message);
+            TrySetPaletteForCurrentDocument(document, message);
+        }
+
         private static void TryWriteEditor(Document document, string message)
         {
             try { document.Editor.WriteMessage("\nQS3D " + message); }

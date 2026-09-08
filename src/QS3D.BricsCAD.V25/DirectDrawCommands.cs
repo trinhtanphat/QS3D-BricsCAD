@@ -45,8 +45,6 @@ namespace QS3D.BricsCAD.V25
     {
         private const double PlanarityToleranceM = 0.005d;
         private const double UcsAxisTolerance = 1e-9d;
-        private const string OperationFailureSuffix = " lỗi: không thể hoàn tất thao tác. Vui lòng thử lại.";
-        private const string PostCommitUiWarning = "Direct Draw đã commit nhưng đồng bộ giao diện chưa hoàn tất. Hãy refresh giao diện.";
 
         [CommandMethod("QS3DDRAWWALL", CommandFlags.Modal)]
         public void DrawWall()
@@ -787,19 +785,18 @@ namespace QS3D.BricsCAD.V25
             var status = "Direct Draw " + element.Category + ": 1 semantic • " + solids + " solid • regenerate " + regenerated + ".";
             try
             {
+                EnsureActive(document, "Direct Draw post-commit UI refresh");
                 PaletteCoordinator.RefreshProject();
                 var generatedHandle = element.Properties.TryGetValue("GeneratedSolidHandle", out var generated) ? generated : string.Empty;
                 if (!string.IsNullOrWhiteSpace(generatedHandle)) CadHandleService.Select(document, new[] { generatedHandle });
                 else if (!sourceId.IsNull && sourceId.IsValid) document.Editor.SetImpliedSelection(new[] { sourceId });
                 document.Editor.Regen();
-                PaletteCoordinator.SetStatus(status);
+                DirectDrawUiFailureReporter.ReportPostCommitSuccess(document, status);
                 document.Editor.WriteMessage("\nQS3D " + status);
             }
             catch (Exception)
             {
-                try { document.Editor.WriteMessage("\nQS3D " + PostCommitUiWarning); }
-                catch { }
-                TrySetPaletteStatus(PostCommitUiWarning);
+                DirectDrawUiFailureReporter.ReportPostCommitWarning(document);
             }
         }
 
@@ -816,16 +813,8 @@ namespace QS3D.BricsCAD.V25
             try { action(); }
             catch (Exception)
             {
-                try { document.Editor.WriteMessage("\n" + operation + OperationFailureSuffix); }
-                catch { }
-                TrySetPaletteStatus(operation + OperationFailureSuffix);
+                DirectDrawUiFailureReporter.ReportOperationFailure(document, operation);
             }
-        }
-
-        private static void TrySetPaletteStatus(string status)
-        {
-            try { PaletteCoordinator.SetStatus(status); }
-            catch { }
         }
     }
 }
