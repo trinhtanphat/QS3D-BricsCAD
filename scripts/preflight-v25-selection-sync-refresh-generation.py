@@ -11,11 +11,12 @@ refresh_start = text.find("public static void Refresh(Document? document)", deta
 stop_start = text.find("public static void Stop()", refresh_start)
 rollback_start = text.find("private static void RollbackAttachment(Document document, bool subscribed, object attachmentToken, EventHandler attachmentHandler)", stop_start)
 release_start = text.find("private static void ReleaseRefresh(Document document, object attachmentToken)", rollback_start)
-handler_start = text.find("private static void OnImpliedSelectionChanged", release_start)
-if min(attach_start, detach_start, refresh_start, stop_start, rollback_start, release_start, handler_start) < 0:
+handler_start = text.find("private static void OnImpliedSelectionChanged(Document document, object attachmentToken)", release_start)
+schedule_start = text.find("private static void ScheduleRefresh(Document document)", handler_start)
+if min(attach_start, detach_start, refresh_start, stop_start, rollback_start, release_start, handler_start, schedule_start) < 0:
     print("ERROR: cannot locate SelectionSync generation-ownership methods")
     sys.exit(1)
-if not (attach_start < detach_start < refresh_start < stop_start < rollback_start < release_start < handler_start):
+if not (attach_start < detach_start < refresh_start < stop_start < rollback_start < release_start < handler_start < schedule_start):
     print("ERROR: SelectionSync generation-ownership method ordering is unexpected")
     sys.exit(1)
 
@@ -24,6 +25,7 @@ detach = text[detach_start:refresh_start]
 refresh = text[refresh_start:stop_start]
 rollback = text[rollback_start:release_start]
 release = text[release_start:handler_start]
+handler = text[handler_start:schedule_start]
 
 required = [
     "private static readonly Dictionary<Document, object> Refreshing",
@@ -31,7 +33,7 @@ required = [
     "Refreshing[document] = attachmentToken;",
     "ReleaseRefresh(document, attachmentToken);",
     "var attachmentToken = new object();",
-    "EventHandler attachmentHandler = (sender, args) => OnImpliedSelectionChanged(sender, args);",
+    "EventHandler attachmentHandler = (_, __) => OnImpliedSelectionChanged(document, attachmentToken);",
     "AttachmentTokens[document] = attachmentToken;",
     "AttachmentHandlers[document] = attachmentHandler;",
     "RollbackAttachment(document, subscribed, attachmentToken, attachmentHandler);",
@@ -42,7 +44,7 @@ for needle in required:
         sys.exit(1)
 
 claim_token = attach.find("var attachmentToken = new object();")
-claim_handler = attach.find("EventHandler attachmentHandler = (sender, args) => OnImpliedSelectionChanged(sender, args);")
+claim_handler = attach.find("EventHandler attachmentHandler = (_, __) => OnImpliedSelectionChanged(document, attachmentToken);")
 claim_attached = attach.find("Attached.Add(document)")
 publish_token = attach.find("AttachmentTokens[document] = attachmentToken;")
 publish_handler = attach.find("AttachmentHandlers[document] = attachmentHandler;")
@@ -61,6 +63,15 @@ for needle in [
 ]:
     if needle not in detach:
         print("ERROR: Detach must remove only the exact current attachment handler; missing", needle)
+        sys.exit(1)
+
+for needle in [
+    "IsCurrentAttachment(document, attachmentToken)",
+    "ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)",
+    "ScheduleRefresh(document);",
+]:
+    if needle not in handler:
+        print("ERROR: stale SelectionSync callbacks must fail closed on exact attachment generation/active document; missing", needle)
         sys.exit(1)
 
 if "finally { Refreshing.Remove(document); }" in refresh:
@@ -106,4 +117,4 @@ for label, body in [("RollbackAttachment", rollback), ("ReleaseRefresh", release
             print(f"ERROR: {label} must remain synchronous bookkeeping only; found {forbidden}")
             sys.exit(1)
 
-print("PASS: SelectionSync token, subscription handler, rollback, and refresh cleanup are exact-generation fenced")
+print("PASS: SelectionSync token, handler, callback, rollback, and refresh cleanup are exact-generation fenced")
