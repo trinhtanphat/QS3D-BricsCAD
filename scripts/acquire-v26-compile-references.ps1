@@ -225,6 +225,7 @@ function Publish-AdmittedV26Installer {
 
     $destinationStream = $null
     $published = $null
+    $publishedByThisAttempt = $false
     try {
         $destinationStream = [IO.File]::Open(
             $Destination,
@@ -232,6 +233,7 @@ function Publish-AdmittedV26Installer {
             [IO.FileAccess]::Write,
             [IO.FileShare]::None
         )
+        $publishedByThisAttempt = $true
         $Candidate.Stream.Position = 0
         $Candidate.Stream.CopyTo($destinationStream)
         $destinationStream.Flush($true)
@@ -253,6 +255,7 @@ function Publish-AdmittedV26Installer {
         return $published
     }
     catch {
+        $publicationFailure = $_.Exception.Message
         if ($null -ne $published) {
             $published.Stream.Dispose()
             $published = $null
@@ -261,7 +264,21 @@ function Publish-AdmittedV26Installer {
             $destinationStream.Dispose()
             $destinationStream = $null
         }
-        Write-Warning 'V26 MSI publication failed after canonical destination creation; leaving the destination untouched for fail-closed re-admission.'
+        if ($publishedByThisAttempt) {
+            try {
+                Assert-NoExistingReparseComponent -Path $Destination -Label 'Failed owned V26 canonical MSI publication'
+                $failedPublication = Get-OrdinaryFileOrNull -Path $Destination -Label 'Failed owned V26 canonical MSI publication'
+                if ($null -ne $failedPublication) {
+                    [IO.File]::Delete($Destination)
+                }
+                if (Test-Path -LiteralPath $Destination) {
+                    throw 'V26 canonical MSI pathname still exists after owned failed-publication cleanup.'
+                }
+            }
+            catch {
+                throw "V26 MSI publication failed: $publicationFailure; owned canonical MSI cleanup failed: $($_.Exception.Message)"
+            }
+        }
         throw
     }
 }
@@ -356,7 +373,12 @@ if ($null -eq $admission) {
             }
         }
         catch {
-            Write-Warning "BricsCAD V26 installer source $($candidate.Name) failed admission: $($_.Exception.Message)"
+            $sourceFailure = $_.Exception.Message
+            Assert-NoExistingReparseComponent -Path $msi -Label 'V26 MSI canonical path after source failure'
+            if (Test-Path -LiteralPath $msi) {
+                throw "BricsCAD V26 installer source $($candidate.Name) failed and left the canonical V26 MSI destination non-fresh: $sourceFailure"
+            }
+            Write-Warning "BricsCAD V26 installer source $($candidate.Name) failed admission: $sourceFailure"
         }
         finally {
             Remove-Item -LiteralPath $staging -Force -ErrorAction SilentlyContinue
