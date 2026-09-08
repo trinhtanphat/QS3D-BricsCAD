@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Focused regression for Reservation-v2 peer path collision against current protected main."""
+"""Focused regression for Reservation-v2 peer collision against exact current-base tree state."""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ PEER_HEAD = "agent/gpt56sol-20260908-c05-v25-final-publish-main-stability/issue-
 STALE_PATH = "scripts/publish-v26-release.ps1"
 CURRENT_MAIN_SHA = "a" * 40
 PEER_HEAD_SHA = "b" * 40
-BLOB_SHA = "c" * 40
 
 
 def load_target():
@@ -48,50 +47,54 @@ def peer(repo: str = REPOSITORY) -> dict:
     }
 
 
-def assert_git_tree_identity(gate):
+def assert_exact_peer_delta(gate):
     calls = []
+    weird = "scripts/name with trailing space "
 
     def run_git_exact(args):
         calls.append(args)
-        if args[:2] == ["ls-tree", "-z"]:
-            return f"100755 blob {BLOB_SHA}\t{STALE_PATH}\x00"
-        raise AssertionError(args)
+        return f"{STALE_PATH}\x00{weird}\x00"
 
     gate._run_git_exact = run_git_exact
-    identity = gate.git_path_identity(CURRENT_MAIN_SHA, STALE_PATH)
-    assert identity == ("100755", "blob", BLOB_SHA), identity
+    paths = gate.effective_changed_paths(CURRENT_MAIN_SHA, PEER_HEAD_SHA)
+    assert paths == [STALE_PATH, weird], paths
     assert calls == [[
-        "ls-tree",
+        "diff",
+        "--name-only",
         "-z",
+        "--no-renames",
+        "--diff-filter=ACDMRTUXB",
         CURRENT_MAIN_SHA,
+        PEER_HEAD_SHA,
         "--",
-        f":(literal){STALE_PATH}",
     ]], calls
 
 
-def assert_mode_only_change(gate):
-    original = gate.git_path_identity
-    gate.git_path_identity = lambda sha, _path: (
-        ("100644", "blob", BLOB_SHA) if sha == CURRENT_MAIN_SHA else ("100755", "blob", BLOB_SHA)
-    )
-    try:
-        assert gate.path_changed_between_commits(
-            "https://api.github.test",
-            REPOSITORY,
-            CURRENT_MAIN_SHA,
-            PEER_HEAD_SHA,
-            STALE_PATH,
-            "token",
-        )
-    finally:
-        gate.git_path_identity = original
+def assert_current_delta_is_nul_safe_and_includes_deletes(gate):
+    calls = []
+    deleted = "scripts/deleted file.ps1"
+
+    def run_git_exact(args):
+        calls.append(args)
+        return deleted + "\x00"
+
+    gate._run_git_exact = run_git_exact
+    paths = gate.current_changed_paths("main")
+    assert paths == [deleted], paths
+    assert calls == [[
+        "diff",
+        "--name-only",
+        "-z",
+        "--no-renames",
+        "--diff-filter=ACDMRTUXB",
+        "origin/main...HEAD",
+        "--",
+    ]], calls
 
 
-def run_case(gate, path_is_effective: bool):
+def run_case(gate, peer_paths: list[str]):
     current = issue(6100, "2026-09-08T01:21:37Z")
     older = issue(6095, "2026-09-07T23:44:40Z")
-
-    gate.fetch_pr_files = lambda *_args, **_kwargs: [STALE_PATH]
 
     def run_git(args):
         assert args == ["rev-parse", "origin/main^{commit}"], args
@@ -103,11 +106,11 @@ def run_case(gate, path_is_effective: bool):
     )
     observed = []
 
-    def path_changed(api_url, repository, current_main_sha, peer_head_sha, path, token):
-        observed.append((current_main_sha, peer_head_sha, path))
-        return path_is_effective
+    def effective(base_sha, peer_sha):
+        observed.append((base_sha, peer_sha))
+        return peer_paths
 
-    gate.path_changed_between_commits = path_changed
+    gate.effective_changed_paths = effective
     conflicts = gate.canonical_open_pr_path_conflicts(
         current,
         CURRENT_HEAD,
@@ -119,7 +122,7 @@ def run_case(gate, path_is_effective: bool):
         "token",
         6101,
     )
-    assert observed == [(CURRENT_MAIN_SHA, PEER_HEAD_SHA, STALE_PATH)], observed
+    assert observed == [(CURRENT_MAIN_SHA, PEER_HEAD_SHA)], observed
     return conflicts
 
 
@@ -147,20 +150,17 @@ def assert_foreign_peer_fails_closed(gate):
 
 def main() -> int:
     gate = load_target()
-    assert_git_tree_identity(gate)
-    assert_mode_only_change(gate)
+    assert_exact_peer_delta(gate)
+    assert_current_delta_is_nul_safe_and_includes_deletes(gate)
 
-    stale_conflicts = run_case(gate, path_is_effective=False)
-    assert stale_conflicts == [], (
-        "peer PR-file ancestry noise must not collide when the peer head has the same "
-        "path identity as the workflow's protected-main base snapshot"
-    )
+    stale_conflicts = run_case(gate, [])
+    assert stale_conflicts == [], "peer ancestry noise absent from exact current-base tree delta must not collide"
 
-    real_conflicts = run_case(gate, path_is_effective=True)
+    real_conflicts = run_case(gate, [STALE_PATH])
     assert real_conflicts == [(6096, PEER_HEAD, [STALE_PATH])], real_conflicts
     assert_foreign_peer_fails_closed(gate)
 
-    print("PASS: Reservation-v2 peer path collision uses effective base-snapshot Git tree identity")
+    print("PASS: Reservation-v2 peer collision uses exact NUL-safe current-base tree delta")
     return 0
 
 
