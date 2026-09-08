@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             PropertyCapacityMatchesPersistenceBoundary();
+            PairRemovalUsesCanonicalIdentityAndLifecycle();
         }
 
         private static void PropertyCapacityMatchesPersistenceBoundary()
@@ -70,6 +71,31 @@ namespace QS3D.Core.SmokeTests
             Equal("replacement", element.Properties["P-REPLACEMENT"]);
         }
 
+        private static void PairRemovalUsesCanonicalIdentityAndLifecycle()
+        {
+            var element = new ProjectElement("E-PAIR-REMOVE", ElementCategory.Beam);
+            element.SetProperty("WidthM", "0.4");
+            element.MarkClean(ElementDirtyFlags.All);
+            var before = element.UpdatedUtc;
+            var properties = (ICollection<KeyValuePair<string, string>>)element.Properties;
+
+            if (!properties.Remove(new KeyValuePair<string, string>(" widthm ", "0.4")))
+                throw new Exception("Property pair removal must canonicalize semantic key identity before matching.");
+            Equal(0, element.Properties.Count);
+            Has(element.Dirty, ElementDirtyFlags.Properties | ElementDirtyFlags.Quantity | ElementDirtyFlags.Geometry);
+            Changed(before, element.UpdatedUtc, "Effective property pair removal must advance persistence lifecycle.");
+
+            element.SetProperty("WidthM", "0.4");
+            element.MarkClean(ElementDirtyFlags.All);
+            before = element.UpdatedUtc;
+            if (properties.Remove(new KeyValuePair<string, string>(" widthm ", "0.5")))
+                throw new Exception("Property pair removal with a mismatched value must report false.");
+            Equal(1, element.Properties.Count);
+            Equal("0.4", element.Properties["WidthM"]);
+            Equal(ElementDirtyFlags.None, element.Dirty);
+            Equal(before, element.UpdatedUtc);
+        }
+
         private static void SeedPersistedProperties(ProjectElement element, int count)
         {
             var propertiesField = typeof(ProjectElement).GetField("_properties", BindingFlags.Instance | BindingFlags.NonPublic)
@@ -88,6 +114,11 @@ namespace QS3D.Core.SmokeTests
         {
             if ((actual & expected) != expected)
                 throw new Exception("Expected dirty flags " + actual + " to contain " + expected + ".");
+        }
+
+        private static void Changed(DateTime before, DateTime after, string message)
+        {
+            if (after == before) throw new Exception(message);
         }
 
         private static void Equal<T>(T expected, T actual)
