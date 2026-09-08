@@ -2,6 +2,29 @@
 
 ## Verdict
 
+Runner checkpoint (2026-09-08): the wrapper now has an explicit `-NativeApi`
+route for the unchanged native run/save/cold tests on frozen source87aff.
+V26 admission requires same-source/package V25 native evidence, explicit mode,
+all three actual strict phase validators and complete cleanup; UI defaults and
+physical acceptance remain unchanged. The full focused runner suite and both
+explicit frozen-product/host-SDK probe builds passed (zero build warnings/errors).
+No new licensed PASS is inferred from that verification. Reusable allocation-bound
+private diagnostic sources and their guard/compile tests are now included;
+their live native capture/reader functions are not yet qualified. A reproduced
+CIM/native creation-time precision mismatch was corrected with a microsecond-exact
+handle guard; a negative test first rejected unrestricted dump-DLL lookup, then
+passed with System32-only resolution. Raw dumps and proprietary DLLs remain ignored.
+
+Latest V26 allocation50 is **`FAIL_OR_NO_RESULT / UI_TIMEOUT_EDITH2`**. It ran on exact pushed harness `fc7a571978499c4e956a3c102d6892ab23dc63a3`, unchanged frozen product `87aff7fec452f9a8dd9f641ef84d143edc73514d`, V26.2.07, and `OBSERVED_CLICK_V2 / PAUSE_FOR_OPERATOR_V1` with a disposable `Default` clone. RunId `d32ec95c722a4e09acc1b91271e0aed1`; interval `2026-09-06T15:50:20.9876766Z`–`2026-09-06T16:26:50.5640563Z`; probe SHA-256 `ee52a6203b3625a9b2b4e54be676dbe6a736d208ce61531a98ae75a73fca401d`; V26 ZIP SHA-256 `59498948341f36d408f8bf838e177170c19d99ffc64acaa2070b0524e6b99a81`. All17 published actions were physically performed, refreshed and ACKed: tree selection, Add/Cancel, six fields/OK, two centres, Enter and Family-scope selection. Native `VPOINT 1,-1,1` was prepared before centre-target capture. The independent first/second point events at16:14:04Z/16:14:47Z matched their frozen targets; both solids were visibly created. These partial observations are not a complete UI phase PASS.
+
+At16:16:36Z the controller reached EditH2, but no request18 was published: the H2 editor remained outside its hit-testable viewport. Supported screenshots showed largely initial/static QS3D contents despite responsive native CAD and updated WPF layout in the trace. Physical property scrolling and splitter resizing changed the recorded layout; the screenshots did not show corresponding property contents. Restore/maximize, a fresh Computer Use connection and minimize/restore did not recover a usable property view; the last observation showed blank QS3D panes while the native viewport still displayed both solids. No blind property click, direct WPF mutation, replay or invented ACK was used. The unchanged preparation deadline emitted `FAIL / ui_edith2 / UI_TIMEOUT_EDITH2` at `2026-09-06T16:26:36Z`. This establishes the failed observable UI route, not whether its root cause is product rendering, host integration or capture. Read-only wait-chain sampling of eight owned threads reported no cycle in that sample; it is not a global deadlock verdict. No memory dump was collected for50.
+
+Allocation50 verified zero complete phases, aggregate false, private drawing cleanup, exact original profile inventory/current pointer, nonce removal and unchanged protected state. The wrapper restored OpenAI autostart byte1/hash and its allocation baseline timestamp `2026-09-06T15:11:20.1855105Z`; Cloudflare stayed paused and no MCP request was issued. Resumption at `2026-09-07T00:31Z` found the host and wrapper absent with these terminal receipts, so no restart/replay occurred. Consumed50 is not a new V26 PASS. Raw action/trace receipts remain ignored; only this sanitized account is published.
+
+Exact fc7a push run34043506785 and PR run34043544626 passed preflight/core. Their tested head is fc7a, not the later main-sync/documentation head. Main `845916f4963a25d3c5fd2d86f03f9906c217205c` was subsequently merged into this same carrier; it does not relabel the frozen product or runtime evidence. V26 presentation diagnosis and all remaining acceptance below stay open.
+
+The following V25 success and V26 allocation49 account remain unchanged historical evidence.
+
 Latest verified runtime (2026-09-06): **V25 allocation48 is `LOCAL_PASS_BOUNDED`** on pushed harness `92ac8299da3f52c05da7fa3a7ebe32f5f58cfe4e` and unchanged local product `87aff7fec452f9a8dd9f641ef84d143edc73514d`. RunId `be7c11f360144056a4dab352c325a26d`, V25.2.10, `2026-09-06T10:52:13.8700257Z`–`2026-09-06T11:43:50.7703136Z`, probe SHA-256 `92efc826560c2e75555cea211bf0b0e43643c28c1a504c777809b85e9c2ee2b7`. All 21 physical actions/ACKs completed; UI19/19, save8/8 and fresh-process reopen9/9 passed. The runner exited0 and verified complete private/profile/protected-state cleanup and original autostart byte/timestamp restoration. It used `OBSERVED_CLICK_V2 / PAUSE_FOR_OPERATOR_V1` and a disposable clone of `Default`.
 
 Allocation48 additionally exercises the corrected ray/plane mapper in a real oblique view: native `VPOINT 1,-1,1` was entered before the first centre request/target capture, and all three frozen pre-click targets matched independent `Editor.PromptedForPoint` results. Window/tree/property preparation used observed physical inputs. An unexpected restore after the first target was frozen was corrected back to the same maximized geometry before clicking; no target was remapped or accepted from generated geometry. Earlier native view/menu preparation was not an acceptance action. The operator kernel was reset after the final verified Escape/ACK and no UI query was made during cold startup. This successful cold run does not establish the cause or a general fix for the historical V26 UIAutomationCore stall.

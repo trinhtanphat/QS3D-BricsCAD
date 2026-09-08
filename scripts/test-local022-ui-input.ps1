@@ -260,4 +260,6 @@ Write-Output 'PASS: actual V26 startup hides only native Tips/Properties before 
 & (Join-Path $PSScriptRoot '..\tests\QS3D.LocalQualification.V25\test-ui-operator-pause.ps1')
 & (Join-Path $PSScriptRoot '..\tests\QS3D.LocalQualification.V25\test-ui-operator-runner.ps1')
 & (Join-Path $PSScriptRoot '..\tests\QS3D.LocalQualification.V25\test-ui-source-profile.ps1')
+& (Join-Path $PSScriptRoot '..\tests\QS3D.LocalQualification.V25\test-native-api-wrapper.ps1')
+& (Join-Path $PSScriptRoot '..\tests\QS3D.LocalQualification.V25\diagnostics\test-diagnostic-guards.ps1')
 & (Join-Path $PSScriptRoot '..\tests\QS3D.LocalQualification.V25\test-ui-view-projection.ps1')

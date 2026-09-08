@@ -105,3 +105,18 @@ receipt I/O and negative/replay contracts. Observed-mode cleanup never sends a
 PowerShell close-window message; the runner can terminate only its owned test
 process if normal scoped probe shutdown does not complete.
 Reference: [Bricsys PromptedForPoint](https://developer.bricsys.com/bricscad/help/en_US/CurVer/DevRef/source/html/56081019-d553-bb3d-55f1-afa769b9fee3.htm).
+
+## Separate native API qualification
+
+The wrapper's opt-in `-NativeApi` runs the existing non-interactive native
+`run`/`saved`/`reopen` phases on the same frozen source and package. It cannot be
+combined with an explicit `-UiDriver` or `-PauseForOperator`. Omission leaves the
+UI route unchanged. Both modes still require a clean exact pushed harness,
+exclusive test host, disposable DWG/nonce profile, temporary autostart consent
+and verified cleanup; neither attaches to an already open BricsCAD process.
+
+V26 native mode requires a cleaned V25 **native** result from that same source
+and V25 package, explicit mode fields and all three original strict phase
+validators (including generic Foundation refusal). A UI receipt or older source
+cannot substitute for it. Native API evidence does not cover physical input,
+visible Workspace rendering or any other missing UI/DPI/private-DWG cell.
