@@ -13,6 +13,7 @@ SOURCES = (
     ROOT / "src/QS3D.BricsCAD.V25/DirectDrawSlabOpeningCommands.cs",
 )
 REPORTER = ROOT / "src/QS3D.BricsCAD.V25/Services/DirectDrawUiFailureReporter.cs"
+RAW_MESSAGE_MEMBER = re.compile(r"\.\s*Message\b")
 
 
 def fail(message: str) -> None:
@@ -43,7 +44,7 @@ def main() -> int:
     for source in SOURCES:
         text = source.read_text(encoding="utf-8")
         name = source.name
-        if ".Message" in text:
+        if RAW_MESSAGE_MEMBER.search(text):
             fail(f"{name} still references Exception.Message; command/modeless reporting must be redacted")
 
         guard = body(text, "private static void Guard(Document document, string operation, Action action)")
@@ -65,7 +66,7 @@ def main() -> int:
             fail(f"{name} post-commit reporting unnecessarily captures an exception object")
 
     reporter = REPORTER.read_text(encoding="utf-8")
-    if ".Message" in reporter:
+    if RAW_MESSAGE_MEMBER.search(reporter):
         fail("shared reporter must never inspect or publish Exception.Message")
     for token in (
         "không thể hoàn tất thao tác",
