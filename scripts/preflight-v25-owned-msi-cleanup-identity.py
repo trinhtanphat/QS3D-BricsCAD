@@ -3,7 +3,10 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+import subprocess
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / "scripts" / "acquire-v25-compile-references.ps1"
@@ -101,6 +104,74 @@ def validate(source: str) -> list[str]:
     return failures
 
 
+def windows_disposition_probe() -> None:
+    if os.name != "nt":
+        return
+
+    with tempfile.TemporaryDirectory(prefix="qs3d-v25-disposition-") as directory:
+        commit_path = str(Path(directory) / "commit.tmp")
+        rollback_path = str(Path(directory) / "rollback.tmp")
+        script = r'''
+param([string]$CommitPath, [string]$RollbackPath)
+$ErrorActionPreference = 'Stop'
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+public static class Qs3dDispositionProbe {
+  [StructLayout(LayoutKind.Sequential)] public struct FILE_DISPOSITION_INFO { [MarshalAs(UnmanagedType.Bool)] public bool DeleteFile; }
+  public const int FileDispositionInfo = 4;
+  public const uint GENERIC_READ = 0x80000000;
+  public const uint GENERIC_WRITE = 0x40000000;
+  public const uint DELETE = 0x00010000;
+  public const uint CREATE_NEW = 1;
+  public const uint FILE_ATTRIBUTE_NORMAL = 0x80;
+  [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+  public static extern SafeFileHandle CreateFileW(string p, uint a, uint s, IntPtr sa, uint c, uint f, IntPtr t);
+  [DllImport("kernel32.dll", SetLastError=true)] [return: MarshalAs(UnmanagedType.Bool)]
+  public static extern bool SetFileInformationByHandle(SafeFileHandle h, int i, ref FILE_DISPOSITION_INFO d, uint z);
+}
+"@
+function Open-Probe([string]$Path) {
+  $access = [Qs3dDispositionProbe]::GENERIC_READ -bor [Qs3dDispositionProbe]::GENERIC_WRITE -bor [Qs3dDispositionProbe]::DELETE
+  $h = [Qs3dDispositionProbe]::CreateFileW($Path,[uint32]$access,0,[IntPtr]::Zero,[Qs3dDispositionProbe]::CREATE_NEW,[Qs3dDispositionProbe]::FILE_ATTRIBUTE_NORMAL,[IntPtr]::Zero)
+  if ($h.IsInvalid) { throw "CreateFileW failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())" }
+  return [IO.FileStream]::new($h,[IO.FileAccess]::ReadWrite,4096,$false)
+}
+function Set-Probe([IO.FileStream]$Stream,[bool]$Delete) {
+  $d = New-Object 'Qs3dDispositionProbe+FILE_DISPOSITION_INFO'; $d.DeleteFile=$Delete
+  $z=[Runtime.InteropServices.Marshal]::SizeOf($d)
+  if (-not [Qs3dDispositionProbe]::SetFileInformationByHandle($Stream.SafeFileHandle,[Qs3dDispositionProbe]::FileDispositionInfo,[ref]$d,[uint32]$z)) {
+    throw "SetFileInformationByHandle failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
+  }
+}
+$c=Open-Probe $CommitPath
+Set-Probe $c $true
+$c.WriteByte(0x51); $c.Flush($true)
+Set-Probe $c $false
+$c.Dispose()
+if (-not (Test-Path -LiteralPath $CommitPath -PathType Leaf)) { throw 'explicit disposition clear did not preserve committed file' }
+$r=Open-Probe $RollbackPath
+Set-Probe $r $true
+$r.WriteByte(0x52); $r.Flush($true)
+$r.Dispose()
+if (Test-Path -LiteralPath $RollbackPath) { throw 'armed disposition did not remove failed generation on close' }
+Remove-Item -LiteralPath $CommitPath -Force
+'''
+        completed = subprocess.run(
+            ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script, commit_path, rollback_path],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=60,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise SystemExit(
+                "Windows explicit-disposition runtime probe failed:\n" + completed.stdout.strip()
+            )
+
+
 def main() -> int:
     source = TARGET.read_text(encoding="utf-8")
     failures = validate(source)
@@ -144,6 +215,7 @@ def main() -> int:
             print(f"FAIL: guard mutation escaped detection: {label}")
             return 1
 
+    windows_disposition_probe()
     print("PASS: V25 canonical MSI publication uses an explicitly armed, cancelable same-handle delete disposition")
     return 0
 
