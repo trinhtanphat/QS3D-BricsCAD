@@ -112,17 +112,21 @@ The coordinator validates the exact combined tree and does not silently drop par
 
 The combined candidate must satisfy the applicable protected checks/freshness before authorized merge.
 
-## Hybrid native auto-merge coordinator
+## Automatic PR ready/auto-merge arming
 
-`.github/workflows/hybrid-pr-coordinator.yml` is the single owner-approved queue coordinator. It may arm **GitHub native auto-merge** for an eligible open, non-draft, same-repository PR targeting `main`, unless the PR carries `no-automerge`.
+`.github/workflows/auto-merge-main-prs.yml` is the single owner-approved PR metadata automation for pull requests targeting `main`.
 
-The coordinator does not perform the final merge itself. GitHub protected-main rules remain authoritative: the current candidate still needs fresh successful `preflight` and `core`, strict freshness, mergeability and every other effective repository rule before GitHub can merge it.
+It automatically marks a draft PR Ready for review and idempotently arms GitHub native auto-merge. Repository-wide native auto-merge arming is explicitly enabled for PRs targeting `main`; branch protection and required checks remain authoritative.
 
-After a landing on `main`, the same workflow may refresh remaining eligible same-repository PR branches through GitHub's `update-branch` operation using the current PR head SHA as an optimistic lock. Forks, drafts, conflicts and `no-automerge` PRs are skipped. Force-push, reset, direct writes to `main`, direct PR merge endpoints and `gh pr merge` remain forbidden.
+The workflow does not perform the final merge. GitHub protected-main rules still require the current candidate to satisfy fresh successful `preflight` and `core`, strict freshness, mergeability and every other effective repository rule before GitHub may merge it.
 
-The refresh path uses `QS3D_AUTOMERGE_TOKEN`, a repository-scoped fine-grained credential, so accepted branch updates emit normal PR synchronization/CI events. Missing credentials fail closed; the workflow must not silently fall back to mutating branches with `GITHUB_TOKEN`.
+The workflow uses `pull_request_target` only for trusted base-repository metadata operations. It must never checkout or execute PR head code, inspect or execute the PR head SHA/ref, write repository contents, dispatch releases, call a direct pull-request merge endpoint, use `--admin`, or bypass protected-main rules.
 
-This is a narrow coordinator authorization, not permission for ordinary agents or arbitrary workflows to bulk merge unrelated PRs. Repository-wide blind auto-merge remains intentionally disabled.
+The automation uses the repository `GITHUB_TOKEN` with only `contents: read` and `pull-requests: write`. It may call `gh pr ready` and `gh pr merge --auto --merge` solely to update PR readiness and arm native auto-merge. The `--auto` operation is queue arming, not a direct merge authorization.
+
+The retired `.github/workflows/hybrid-pr-coordinator.yml` must remain absent. Automatic branch refresh/update-branch behavior is not part of this workflow and is not authorized by this policy.
+
+This is a narrow repository-owner authorization for metadata automation, not permission for ordinary agents or arbitrary workflows to directly merge unrelated PRs. Repository-wide blind direct merge remains disabled.
 
 ## Exact-main automatic V25 cloud CI
 
@@ -136,7 +140,7 @@ Automatic validation authorization does not imply release authorization.
 
 ## Manual workflows
 
-Workflows other than shared `ci.yml`, the approved hybrid PR coordinator and the approved main dispatcher remain owner-controlled manual lanes unless a current canonical policy explicitly says otherwise.
+Workflows other than shared `ci.yml`, the approved `auto-merge-main-prs.yml` PR metadata automation and the approved main dispatcher remain owner-controlled manual lanes unless a current canonical policy explicitly says otherwise.
 
 Release workflows retain their own confirmation/protection boundaries.
 
@@ -146,11 +150,11 @@ A normal `continue all`, `fix bug`, source change, docs change or CI remediation
 
 GitHub Dependabot may create dependency-update PRs directly from committed Dependabot configuration.
 
-This generated-PR boundary does **not** authorize Dependabot to merge, write `main`, enable autonomous protected-main merge, bypass checks or publish releases.
+Dependabot itself does **not** receive merge authority, write `main`, bypass checks or publish releases. A Dependabot PR targeting `main` is subject to the same repository-owned Ready/auto-merge arming workflow as any other PR, and protected-main checks remain authoritative.
 
 Dependabot PRs still require the protected current-candidate checks applicable to `main`.
 
-Repository-wide blind auto-merge remains intentionally disabled.
+Repository-wide blind direct merge remains disabled; repository-wide native auto-merge arming is explicitly enabled only through the owner-approved metadata workflow.
 
 ## LOCAL_ONLY evidence
 
@@ -176,7 +180,8 @@ In particular:
 - automatic branch pushes must remain available for exact-head evidence;
 - PR path filters must not suppress required protected contexts;
 - shared validation must remain non-publishing/read-only;
-- `.github/workflows/hybrid-pr-coordinator.yml` is the only workflow authorized to arm native PR auto-merge and refresh eligible PR branches;
+- `.github/workflows/auto-merge-main-prs.yml` is the only workflow authorized to mark main-targeting PRs Ready and arm GitHub native auto-merge;
+- the retired `.github/workflows/hybrid-pr-coordinator.yml` must remain absent;
 - the approved main dispatcher must remain narrow;
 - release workflows must retain their explicit safety/confirmation requirements.
 
