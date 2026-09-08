@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Revisions;
@@ -37,7 +39,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = CreateProject("revision-dependency-blank");
             var element = project.FindElement("E1") ?? throw new Exception("Fixture element missing.");
-            element.DependsOn.Add("   ");
+            SeedPersistedDependency(element, "   ");
             Throws<InvalidOperationException>(() => new RevisionService().Capture(project, "R1"));
         }
 
@@ -45,7 +47,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = CreateProject("revision-dependency-padded");
             var element = project.FindElement("E1") ?? throw new Exception("Fixture element missing.");
-            element.DependsOn.Add(" A ");
+            SeedPersistedDependency(element, " A ");
             Throws<InvalidOperationException>(() => new RevisionService().Capture(project, "R1"));
         }
 
@@ -54,8 +56,17 @@ namespace QS3D.Core.SmokeTests
             var project = CreateProject("revision-dependency-duplicate");
             var element = project.FindElement("E1") ?? throw new Exception("Fixture element missing.");
             element.DependsOn.Add("A");
-            element.DependsOn.Add("a");
+            SeedPersistedDependency(element, "a");
             Throws<InvalidOperationException>(() => new RevisionService().Capture(project, "R1"));
+        }
+
+        private static void SeedPersistedDependency(ProjectElement element, string value)
+        {
+            var valuesField = element.DependsOn.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed malformed persisted DependsOn state.");
+            var values = valuesField.GetValue(element.DependsOn) as List<string>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement.DependsOn backing collection.");
+            values.Add(value);
         }
 
         private static ProjectState CreateProject(string id)

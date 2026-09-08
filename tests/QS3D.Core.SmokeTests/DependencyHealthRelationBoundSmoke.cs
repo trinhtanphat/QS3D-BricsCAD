@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 
@@ -20,7 +22,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = ProjectWithSourceAndTarget(out var source);
             for (var index = 0; index <= MaxRelations; index++)
-                source.DependsOn.Add("TARGET");
+                AddPersistedDependency(source, "TARGET");
 
             try
             {
@@ -46,7 +48,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = ProjectWithSourceAndTarget(out var source);
             for (var index = 0; index < MaxRelations; index++)
-                source.DependsOn.Add("TARGET");
+                AddPersistedDependency(source, "TARGET");
 
             var issues = new DependencyHealthService().Inspect(project);
             var duplicateIssues = issues
@@ -61,13 +63,13 @@ namespace QS3D.Core.SmokeTests
         private static void PreservesExistingDependencyDiagnostics()
         {
             var project = ProjectWithSourceAndTarget(out var source);
-            source.DependsOn.Add("TARGET");
-            source.DependsOn.Add("TARGET");
-            source.DependsOn.Add(string.Empty);
-            source.DependsOn.Add(" MISSING ");
-            source.DependsOn.Add("MISSING");
-            source.DependsOn.Add("SOURCE");
-            source.DependsOn.Add("BAD\u0001TOKEN");
+            AddPersistedDependency(source, "TARGET");
+            AddPersistedDependency(source, "TARGET");
+            AddPersistedDependency(source, string.Empty);
+            AddPersistedDependency(source, " MISSING ");
+            AddPersistedDependency(source, "MISSING");
+            AddPersistedDependency(source, "SOURCE");
+            AddPersistedDependency(source, "BAD\u0001TOKEN");
 
             var issues = new DependencyHealthService().Inspect(project);
             RequireCode(issues, "DEPENDENCY_TARGET_DUPLICATE");
@@ -97,7 +99,16 @@ namespace QS3D.Core.SmokeTests
                 string.Empty);
         }
 
-        private static void RequireCode(System.Collections.Generic.IEnumerable<ModelHealthIssue> issues, string code)
+        private static void AddPersistedDependency(ProjectElement element, string dependency)
+        {
+            var valuesField = element.DependsOn.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed persisted dependency relation-bound state.");
+            var values = valuesField.GetValue(element.DependsOn) as List<string>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement.DependsOn backing collection.");
+            values.Add(dependency);
+        }
+
+        private static void RequireCode(IEnumerable<ModelHealthIssue> issues, string code)
         {
             if (!issues.Any(x => string.Equals(x.Code, code, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("Dependency health regression lost expected diagnostic: " + code + ".");

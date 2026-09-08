@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
@@ -35,7 +37,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void CaseInsensitiveDuplicateDependencyFailsReadOnly()
         {
-            var project = BuildProject("B", "b");
+            var project = BuildPersistedProject("B", "b");
             var beforeVersion = project.ChangeVersion;
 
             Throws<InvalidOperationException>(() => SourceHandleResolver.Resolve(project, new[] { "A" }));
@@ -47,7 +49,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void AssertMalformedFails(string dependency)
         {
-            var project = BuildProject(dependency);
+            var project = BuildPersistedProject(dependency);
             var beforeVersion = project.ChangeVersion;
 
             Throws<InvalidOperationException>(() => SourceHandleResolver.Resolve(project, new[] { "A" }));
@@ -59,10 +61,27 @@ namespace QS3D.Core.SmokeTests
 
         private static ProjectState BuildProject(params string[] dependencies)
         {
-            var project = new ProjectState("locate-dependency-canonical", "Locate Dependency Canonical");
-            var a = new ProjectElement("A", ElementCategory.Room);
-            a.SourceHandles.Add("HA");
+            var project = NewProject(out var a);
             foreach (var dependency in dependencies) a.DependsOn.Add(dependency);
+            return project;
+        }
+
+        private static ProjectState BuildPersistedProject(params string[] dependencies)
+        {
+            var project = NewProject(out var a);
+            var valuesField = a.DependsOn.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed malformed persisted dependency state.");
+            var values = valuesField.GetValue(a.DependsOn) as List<string>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement.DependsOn backing collection.");
+            foreach (var dependency in dependencies) values.Add(dependency);
+            return project;
+        }
+
+        private static ProjectState NewProject(out ProjectElement a)
+        {
+            var project = new ProjectState("locate-dependency-canonical", "Locate Dependency Canonical");
+            a = new ProjectElement("A", ElementCategory.Room);
+            a.SourceHandles.Add("HA");
             var b = new ProjectElement("B", ElementCategory.Room);
             b.SourceHandles.Add("HB");
             project.Elements.Add(a);

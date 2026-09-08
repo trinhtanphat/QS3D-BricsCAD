@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
 
@@ -123,7 +125,7 @@ namespace QS3D.Core.SmokeTests
             Equal(room.Id, finish.DependsOn[finish.DependsOn.Count - 1]);
 
             finish.Properties["DoorWidthM"] = "0.9";
-            finish.DependsOn.Insert(0, room.Id.ToLowerInvariant());
+            InsertPersistedDependency(finish, 0, room.Id.ToLowerInvariant());
             var beforeRepairVersion = project.ChangeVersion;
             RoomFinishSynchronizationService.Synchronize(project, room, finish);
 
@@ -212,6 +214,15 @@ namespace QS3D.Core.SmokeTests
 
         private static ProjectElement Finish(string id, ElementCategory category, string floorId, string zoneId) =>
             new ProjectElement(id, category, string.Empty, floorId, zoneId);
+
+        private static void InsertPersistedDependency(ProjectElement element, int index, string dependency)
+        {
+            var valuesField = element.DependsOn.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed malformed persisted room-finish dependency state.");
+            var values = valuesField.GetValue(element.DependsOn) as List<string>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement.DependsOn backing collection.");
+            values.Insert(index, dependency);
+        }
 
         private static void Equal(string expected, string actual)
         {

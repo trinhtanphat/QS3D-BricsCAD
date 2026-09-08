@@ -86,7 +86,10 @@ namespace QS3D.Core.SmokeTests
             True(stamp.RequiresSave(project), "Direct persisted element handle mutation bypassed dirty detection.");
             element.SourceHandles.Remove("CD34");
             Equal(expectedVersion, project.ChangeVersion, "Restoring direct element handles unexpectedly changed the project revision.");
-            False(stamp.RequiresSave(project), "Restoring the persisted element handles left a false-positive dirty state.");
+            True(stamp.RequiresSave(project), "Effective source-handle mutations must remain pending until saved even when the handle sequence is restored.");
+            stamp.MarkSaved(project);
+            False(stamp.RequiresSave(project), "MarkSaved did not accept the restored source-handle sequence and its current persistence timestamp.");
+            savedUpdatedUtc = project.UpdatedUtc;
 
             project.Zones.Add(new ZoneDefinition("zone-1", "Zone 1"));
             expectedVersion = checked(expectedVersion + 1L);
