@@ -56,7 +56,7 @@ def main():
         "Restart-BricsCAD",
         "Start-Process -FilePath $env:QS3D_PREVIEW_BRICSCAD",
         "function Assert-Unblocked([string]$Path, [string]$Label)",
-        'Get-Item -LiteralPath $Path -Stream "Zone.Identifier" -ErrorAction SilentlyContinue',
+        'Get-Item -LiteralPath $Path -Stream ""Zone.Identifier"" -ErrorAction SilentlyContinue',
         "Unblock-File -LiteralPath $destination -ErrorAction Stop",
         "Assert-Unblocked $destination ('installed payload ' + $entry.RelativePath)",
     ):
