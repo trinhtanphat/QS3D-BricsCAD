@@ -447,7 +447,6 @@ catch {
         if ($publicationSafetyKnownInvalid) { throw "V26 release is published, but post-PATCH protected-main safety was already observed invalid; refusing acknowledgement recovery. Manual release review is required." }
         Assert-ProtectedMainStableForPublisherMutation -Phase 'publish-acknowledgement-reconciliation'
         $publicationSafetyInvalidated = $false
-        if ($publicationSafetyInvalidated) { throw "V26 release publication safety remains unproven after acknowledgement reconciliation; refusing success. Manual release review is required." }
         Assert-PublishedReleaseMatchesVerifiedTransaction `
           -ReleaseSnapshot $reconciledRelease `
           -ReleaseUri $releaseUri `
