@@ -4,6 +4,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "scripts" / "package-v26.ps1"
+ZIP_BINDING = "$zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'"
+ZIP_EXISTS_REFUSAL = "if (Test-Path -LiteralPath $zip) { throw 'V26 package ZIP destination already exists; refusing destructive pathname replacement.' }"
 
 
 def require(text: str, token: str, label: str) -> None:
@@ -31,7 +33,8 @@ def validate(text: str) -> None:
         "package non-regular refusal": "Package staging contains a non-regular filesystem entry",
         "dist root binding": "$distRoot = Assert-SafeOutputDirectoryTarget -Path $distRoot",
         "staging binding": "$dist = Assert-SafeOutputDirectoryTarget -Path $dist",
-        "zip binding": "$zip = Assert-SafeOutputFileTarget -Path $zip",
+        "zip binding": ZIP_BINDING,
+        "zip existing-generation refusal": ZIP_EXISTS_REFUSAL,
         "safe manifest walk": "foreach ($file in Get-SafePackageFiles -PackageRoot $dist)",
         "manifest path map": "$manifestHashes = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)",
         "ordinal manifest ordering": "[Array]::Sort($manifestEntryNames, [StringComparer]::Ordinal)",
@@ -58,9 +61,15 @@ def validate(text: str) -> None:
     )
     before(
         text,
-        "$zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'",
-        "if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }",
-        "zip trust before removal",
+        ZIP_BINDING,
+        ZIP_EXISTS_REFUSAL,
+        "zip trust before existing-generation refusal",
+    )
+    before(
+        text,
+        ZIP_EXISTS_REFUSAL,
+        "New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc",
+        "existing ZIP refusal before deterministic archive",
     )
     before(
         text,
@@ -73,7 +82,8 @@ def validate(text: str) -> None:
         "$hashLines = Get-ChildItem -LiteralPath $dist -Recurse -File",
         "foreach ($file in Get-ChildItem -LiteralPath $dist -Recurse -File)",
         "Remove-Item -LiteralPath $dist -Recurse -Force -ErrorAction SilentlyContinue",
-        "Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue",
+        "Remove-Item -LiteralPath $zip -Force",
+        "[IO.File]::Move($temporary, $destination)",
     )
     for token in forbidden:
         if token in text:
@@ -83,7 +93,7 @@ def validate(text: str) -> None:
 def mutation_probe(source: str, token: str, replacement: str, label: str) -> None:
     if token not in source:
         raise SystemExit(f"mutation setup missing {label}")
-    mutated = source.replace(token, replacement)
+    mutated = source.replace(token, replacement, 1)
     try:
         validate(mutated)
     except SystemExit:
@@ -101,6 +111,7 @@ def main() -> None:
         ("$null = Get-SafePackageFiles -PackageRoot $dist", "$null = @()", "pre-archive traversal"),
         ("New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc", "Compress-Archive -Path (Join-Path $dist '*') -DestinationPath $zip -CompressionLevel Optimal", "deterministic archive path"),
         ("$root = Assert-OrdinaryDirectory -Path $root -Label 'repository root'", "$root = [IO.Path]::GetFullPath($root)", "repository root trust"),
+        (ZIP_EXISTS_REFUSAL, "if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }", "existing ZIP destructive replacement refusal"),
     )
     for token, replacement, label in probes:
         mutation_probe(source, token, replacement, label)
