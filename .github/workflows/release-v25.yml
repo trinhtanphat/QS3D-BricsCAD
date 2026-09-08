@@ -430,6 +430,24 @@ jobs:
             if (-not [string]::Equals($exact[0], $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) { throw "V25 release tag $env:RELEASE_TAG targets $($exact[0]) instead of qualified workflow SHA $env:GITHUB_SHA. Release remains a draft." }
           }
 
+          function Assert-V25ProtectedMainStillAdmitted {
+            param(
+              [Parameter(Mandatory = $true)][string]$ExpectedMain,
+              [Parameter(Mandatory = $true)][string]$Phase
+            )
+            if ($ExpectedMain -notmatch '^[0-9a-f]{40}$') {
+              throw "Expected protected-main identity is invalid during ${Phase}: $ExpectedMain"
+            }
+            $currentMainResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers
+            $currentMain = ([string]$currentMainResponse.sha).Trim().ToLowerInvariant()
+            if ($currentMain -notmatch '^[0-9a-f]{40}$') {
+              throw "Protected main API returned an invalid V25 post-publication SHA during ${Phase}: $currentMain"
+            }
+            if ($currentMain -ne $ExpectedMain) {
+              throw "Protected main changed after final V25 publication admission during ${Phase}. Expected=$ExpectedMain Current=$currentMain"
+            }
+          }
+
           function Resolve-AmbiguousDraftCreate {
             param(
               [Parameter(Mandatory = $true)][string]$TransactionMarker,
@@ -510,6 +528,8 @@ jobs:
           $verifiedAssetIds = @{}
           $localAssets = @{}
           $publishPatchAttempted = $false
+          $publicationSafetyInvalidated = $false
+          $publicationSafetyKnownInvalid = $false
           try {
             $tagRefUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/git/refs"
             $existingTag = Get-ExactReusableReleaseTag
@@ -718,7 +738,17 @@ jobs:
             }
 
             $publishPatchAttempted = $true
+            $publicationSafetyInvalidated = $true
             $published = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body (@{ draft = $false } | ConvertTo-Json)
+            try {
+              Assert-V25ProtectedMainStillAdmitted -ExpectedMain $finalMain -Phase 'post-release-publish'
+          $publicationSafetyInvalidated = $false
+            }
+            catch {
+              $publicationSafetyInvalidated = $true
+              $publicationSafetyKnownInvalid = $true
+              throw "V25 release publication completed, but protected-main safety revalidation failed after publish PATCH: $($_.Exception.Message)"
+            }
             Assert-PublishedReleaseMatchesVerifiedTransaction `
               -ReleaseSnapshot $published `
               -ReleaseUri $releaseUri `
@@ -739,6 +769,9 @@ jobs:
                 $reconciledRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
                 if ($reconciledRelease.draft -eq $false) {
                   if (-not $publishPatchAttempted) { throw 'V25 release became published before this workflow attempted the final publish PATCH.' }
+                  if ($publicationSafetyKnownInvalid) { throw 'V25 release is published, but post-PATCH protected-main safety was already observed invalid; refusing acknowledgement recovery. Manual release review is required.' }
+                  Assert-V25ProtectedMainStillAdmitted -ExpectedMain $finalMain -Phase 'publish-acknowledgement-reconciliation'
+              $publicationSafetyInvalidated = $false
                   Assert-PublishedReleaseMatchesVerifiedTransaction `
                     -ReleaseSnapshot $reconciledRelease `
                     -ReleaseUri $releaseUri `
