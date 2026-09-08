@@ -2,6 +2,59 @@
 
 ## Verdict
 
+Latest reporting result (2026-09-08): **`FAIL_OR_NO_RESULT /
+QUANTITY_GROSS_VOLUME`**, V25 allocation64. The real production `QS3DBQ`
+window's visible DataGrid contained one grouped row, count 2, gross/net **16 m³**.
+The independent analytic/native fixture requires **76/3 = 25.3333333333333 m³**
+(38/3 per regenerated footing). This is a reproduced product reporting defect,
+not missing UI input, a CI failure or a reason to weaken the quantity oracle.
+
+- Allocation `quantity-v25-64`, RunId `2dfbe5c93d524ffcb158c09e2576a889`,
+  exact pushed harness `6db117b4b082487c2923a95667d7d4259e376596`,
+  unchanged frozen source `87aff7fec452f9a8dd9f641ef84d143edc73514d`,
+  BricsCAD25.2.10; `2026-09-08T10:53:37.3233213Z`–
+  `2026-09-08T10:54:23.0001410Z` (approximately46 seconds).
+- Package SHA256 `6da38fcb3bc5fdb1989e9397fad45da712bf4af6b7690298a2fe83657bcb10ac`;
+  probe SHA256 `3d76e0e688868741f3673840512e24842f87eea93d9797d9783dd78e43ab8afa`.
+- Native fixture preparation run15/15 and save8/8 passed, including exact
+  regenerated dimensions4/2/2/1/1/1 metres, native topology/sections/ownership.
+  At `10:54:14.0069203Z` the separate in-process observer read actual BQ
+  `_rows` and DataGrid identity/cardinality, recorded gross/net16, then failed
+  `quantity_open / QUANTITY_GROSS_VOLUME`. No substitute report was constructed.
+  This is actual bound WPF data evidence, **not a screenshot or physical gesture
+  PASS**: no external input/capture was used and recalculate/detail/Locate/cold
+  BQ were not reached. Quantity markers verified0; no V26 reporting run admitted.
+- Root-cause evidence in unchanged frozen/current reporting path: ordinary
+  Foundation capture initializes box4 and tapered-prism12 quantity dictionaries;
+  native creation/Family regeneration update correct dimension/volume properties
+  but mark semantic state clean without refreshing those quantities. BQ's
+  detached dirty-only regeneration skips them and reports stale dictionaries.
+  A source fix must synchronize creation/edit/Core regeneration, not adjust BQ
+  expectations to16 or32. Production corrections use a separate safe carrier;
+  this issue continues to own the strict local runner and exact evidence.
+- Full private/profile/protected-state cleanup succeeded. Profile inventory
+  before/after `285c6889f88f326f165c9b539d83ed47555c03f8343d2826c7c6638a3462cf0c`;
+  original OpenAI autostart hash/timestamp restored exactly, Cloudflare unchanged,
+  independent zero-BricsCAD check. Only disposable allocation files removed;
+  sanitized markers remain local. No installed-product/private-DWG/MCP mutation.
+
+Preceding consumed allocation63 (`quantity-v25-63`, RunId
+`5f0e42e839bd4451a5a2420aa10e17a7`, harness
+`d31ae8fd7ab8c9a7d655d63cd5f7d982bfa55697`) ran
+`2026-09-08T10:50:59.6258176Z`–`2026-09-08T10:51:41.6403749Z` and remains
+`FAIL_OR_NO_RESULT / quantity_bind / UNEXPECTED_IOEXCEPTION` with native
+run/save only, zero quantity phases and full cleanup/restoration. Exact private
+stack/HRESULT80070020 identified test-only `HashFile` opening a CAD-held DWG with
+incompatible sharing. Commit6db fixes read-only hashing with FileShare.ReadWrite;
+the actual method passes a regression using an independently held write handle.
+Allocation64 is a fresh identity after that runner fix, not a replay of63.
+
+The separate QuantityUi runner, strict oracle/markers/predecessor/status tests
+and both V25/V26 SDK builds pass locally; these do not qualify reporting runtime.
+Existing accepted physical/native cells below retain their original scope.
+MCP stays paused; Quantity/Unicode/DPI/private-DWG and applicable published-source
+acceptance remain incomplete. PR5738 remains the canonical draft local carrier.
+
 Latest physical UI result (2026-09-08): V26 allocation62 is
 **`LOCAL_PASS_BOUNDED`**, with all three phases verified: UI19/19,
 saved8/8 and fresh-process reopen9/9. This closes the bounded V26 physical
