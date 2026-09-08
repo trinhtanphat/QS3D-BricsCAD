@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 
@@ -9,10 +10,38 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
+            SemanticAdmissionMatchesPersistedCardinality();
             DirectAddUsesSemanticLifecycle();
             DirectMutationUsesSemanticValidation();
             RemoveAndClearUseSemanticLifecycle();
             NoOpMutationsStayStable();
+        }
+
+        private static void SemanticAdmissionMatchesPersistedCardinality()
+        {
+            var element = new ProjectElement("E-QTY-CAP", ElementCategory.Beam);
+            for (var i = 0; i < 10000; i++)
+                element.Quantities.Add("Q" + i.ToString("D5", CultureInfo.InvariantCulture), i);
+
+            element.MarkClean(ElementDirtyFlags.All);
+            var beforeOverflow = element.UpdatedUtc;
+            Throws<InvalidOperationException>(() => element.Quantities.Add("Q10000", 1d));
+            Equal(10000, element.Quantities.Count);
+            Equal(ElementDirtyFlags.None, element.Dirty);
+            Equal(beforeOverflow, element.UpdatedUtc);
+
+            element.Quantities["Q00000"] = 42d;
+            Equal(42d, element.Quantities["Q00000"]);
+            Has(element.Dirty, ElementDirtyFlags.Quantity);
+
+            element.MarkClean(ElementDirtyFlags.All);
+            if (!element.Quantities.Remove("Q00001"))
+                throw new Exception("Expected an existing quantity to be removable at capacity.");
+            element.MarkClean(ElementDirtyFlags.All);
+            element.Quantities.Add("Q10000", 1d);
+            Equal(10000, element.Quantities.Count);
+            Equal(1d, element.Quantities["Q10000"]);
+            Has(element.Dirty, ElementDirtyFlags.Quantity);
         }
 
         private static void DirectAddUsesSemanticLifecycle()
