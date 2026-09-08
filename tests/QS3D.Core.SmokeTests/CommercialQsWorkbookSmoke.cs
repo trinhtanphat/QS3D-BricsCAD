@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -13,6 +14,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             ExportIsByteStableAndCarriesAllCommercialSections();
+            OversizedWorksheetFailsWithoutPublishingDestination();
             SnapshotRejectsStaleTenderEvaluationRevision();
         }
 
@@ -125,6 +127,60 @@ namespace QS3D.Core.SmokeTests
                     Contains(tenderXml, ">2</t>", "Tender worksheet must project the Core commercial rank for BID-B.");
                     Contains(tenderXml, ">FAIL</t>", "Tender worksheet must project mandatory compliance outcome for BID-B.");
                 }
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); } catch { }
+            }
+        }
+
+        private static void OversizedWorksheetFailsWithoutPublishingDestination()
+        {
+            var sharedLargeDescription = new string('X', 32767);
+            var variations = new List<CommercialVariation>(1100);
+            for (var i = 0; i < 1100; i++)
+            {
+                var id = "VO-BULK-" + i.ToString("D4", System.Globalization.CultureInfo.InvariantCulture);
+                variations.Add(new CommercialVariation(
+                    id,
+                    sharedLargeDescription,
+                    "VND",
+                    0m,
+                    0m,
+                    CommercialVariationStatus.Approved,
+                    Revision("variation", id, "R1")));
+            }
+
+            var snapshot = new CommercialQsWorkbookSnapshot(
+                new CommercialVariationRegister("VND", variations),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-commercial-workbook-bound-smoke-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var destination = Path.Combine(root, "existing.xlsx");
+                var sentinel = new byte[] { 0x51, 0x53, 0x33, 0x44 };
+                File.WriteAllBytes(destination, sentinel);
+
+                var rejected = false;
+                try
+                {
+                    CommercialQsWorkbook.Export(destination, snapshot);
+                }
+                catch (InvalidDataException)
+                {
+                    rejected = true;
+                }
+
+                Require(rejected, "Commercial workbook must reject XML entry output that exceeds its bounded writer contract.");
+                Require(File.ReadAllBytes(destination).SequenceEqual(sentinel), "Rejected oversized workbook export must not replace the existing destination.");
+                Require(Directory.GetFiles(root).Length == 1, "Rejected oversized workbook export must clean its owned temporary package.");
             }
             finally
             {

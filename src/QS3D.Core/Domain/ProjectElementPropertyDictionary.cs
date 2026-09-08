@@ -61,9 +61,14 @@ namespace QS3D.Core.Domain
 
         public bool Remove(KeyValuePair<string, string> item)
         {
-            var collection = (ICollection<KeyValuePair<string, string>>)_values;
-            if (!collection.Contains(item)) return false;
-            return _owner.RemoveProperty(item.Key);
+            var canonical = ValidateMutationKey(item.Key);
+            if (!_values.TryGetValue(canonical, out var existing) ||
+                !string.Equals(existing, item.Value, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return _owner.RemoveProperty(canonical);
         }
 
         public bool TryGetValue(string key, out string value) => _values.TryGetValue(key, out value!);
@@ -80,6 +85,22 @@ namespace QS3D.Core.Domain
 
         private static string ValidateMutationInput(string key, string value)
         {
+            var canonical = ValidateMutationKey(key);
+
+            try
+            {
+                XmlConvert.VerifyXmlChars(value ?? string.Empty);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException("Property value contains characters that are invalid in XML.", nameof(value), ex);
+            }
+
+            return canonical;
+        }
+
+        private static string ValidateMutationKey(string key)
+        {
             if (string.IsNullOrWhiteSpace(key))
                 throw new ArgumentException("Property name is required.", "name");
             if (key.Any(char.IsControl))
@@ -93,15 +114,6 @@ namespace QS3D.Core.Domain
             catch (XmlException ex)
             {
                 throw new ArgumentException("Property name contains characters that are invalid in XML.", "name", ex);
-            }
-
-            try
-            {
-                XmlConvert.VerifyXmlChars(value ?? string.Empty);
-            }
-            catch (XmlException ex)
-            {
-                throw new ArgumentException("Property value contains characters that are invalid in XML.", nameof(value), ex);
             }
 
             return canonical;

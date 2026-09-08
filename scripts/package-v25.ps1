@@ -124,7 +124,7 @@ function Read-HeldPackageText {
     param([pscustomobject]$Held, [string]$Label)
     if ($Held.Stream.Length -gt $script:MaxPackageTextBytes) { throw "$Label exceeds the $($script:MaxPackageTextBytes)-byte package text limit." }
     $Held.Stream.Position = 0
-    $reader = [IO.StreamReader]::new($Held.Stream, $script:StrictUtf8, $true, 4096, $true)
+    $reader = [IO.StreamReader]::new($Held.Stream, $script:StrictUtf8, $false, 4096, $true)
     try { return $reader.ReadToEnd() }
     catch [Text.DecoderFallbackException] { throw "$Label is not strict UTF-8." }
     finally {

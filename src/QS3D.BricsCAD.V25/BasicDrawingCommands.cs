@@ -350,10 +350,29 @@ namespace QS3D.BricsCAD.V25
             Report(document, status);
         }
 
+        private static bool IsActiveDocument(Document document)
+        {
+            try
+            {
+                return ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void TrySetPaletteStatus(Document document, string message)
+        {
+            if (!IsActiveDocument(document)) return;
+            try { PaletteCoordinator.SetStatus(message); }
+            catch { }
+        }
+
         private static void Report(Document document, string message)
         {
             try { document.Editor.WriteMessage("\nQS3D: " + message); } catch { }
-            try { PaletteCoordinator.SetStatus(message); } catch { }
+            TrySetPaletteStatus(document, message);
         }
 
         private enum BasicPrimitiveKind

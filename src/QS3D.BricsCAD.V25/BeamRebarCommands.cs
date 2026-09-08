@@ -88,9 +88,9 @@ namespace QS3D.BricsCAD.V25
         {
             try
             {
-                PaletteCoordinator.RefreshProject();
+                TryRefreshProject(document);
                 document.Editor.Regen();
-                PaletteCoordinator.SetStatus(message);
+                TrySetPaletteStatus(document, message);
                 document.Editor.WriteMessage("\nQS3D " + message);
             }
             catch (Exception)
@@ -99,9 +99,33 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        private static bool IsActiveDocument(Document document)
+        {
+            try
+            {
+                return ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void TryRefreshProject(Document document)
+        {
+            if (!IsActiveDocument(document)) return;
+            PaletteCoordinator.RefreshProject();
+        }
+
+        private static void TrySetPaletteStatus(Document document, string message)
+        {
+            if (!IsActiveDocument(document)) return;
+            PaletteCoordinator.SetStatus(message);
+        }
+
         private static void Report(Document document, string message)
         {
-            try { PaletteCoordinator.SetStatus(message); }
+            try { TrySetPaletteStatus(document, message); }
             catch { }
             TryWriteMessage(document, "\nQS3D " + message);
         }

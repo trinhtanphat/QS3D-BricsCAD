@@ -23,6 +23,7 @@ if (-not ('QS3DV25NativeFileDisposition' -as [type])) {
     Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 using Microsoft.Win32.SafeHandles;
 
 public static class QS3DV25NativeFileDisposition
@@ -57,6 +58,13 @@ public static class QS3DV25NativeFileDisposition
         int FileInformationClass,
         ref FILE_DISPOSITION_INFO lpFileInformation,
         uint dwBufferSize);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern uint GetFinalPathNameByHandleW(
+        SafeFileHandle hFile,
+        StringBuilder lpszFilePath,
+        uint cchFilePath,
+        uint dwFlags);
 }
 "@
 }
@@ -108,6 +116,44 @@ function Set-OwnedMsiDeleteDisposition {
         $errorCode = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
         throw "Failed to update owned MSI delete disposition. Win32Error=$errorCode"
     }
+}
+
+function Get-OwnedMsiFinalPath {
+    param([Parameter(Mandatory = $true)][IO.FileStream]$Stream)
+
+    [uint32]$capacity = 512
+    while ($true) {
+        $builder = [Text.StringBuilder]::new([int]$capacity)
+        $written = [QS3DV25NativeFileDisposition]::GetFinalPathNameByHandleW(
+            $Stream.SafeFileHandle,
+            $builder,
+            $capacity,
+            0)
+        if ($written -eq 0) {
+            $errorCode = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+            throw "Failed to resolve owned MSI creator handle final path. Win32Error=$errorCode"
+        }
+        if ($written -lt $capacity) {
+            $resolved = $builder.ToString()
+            break
+        }
+        if ($written -gt 32767) {
+            throw "Owned MSI creator handle final path exceeds the supported Windows path length: $written"
+        }
+        $capacity = [uint32]($written + 1)
+    }
+
+    if ($resolved.StartsWith('\\?\UNC\', [StringComparison]::OrdinalIgnoreCase)) {
+        $resolved = '\\' + $resolved.Substring(8)
+    }
+    elseif ($resolved.StartsWith('\\?\', [StringComparison]::OrdinalIgnoreCase)) {
+        $resolved = $resolved.Substring(4)
+    }
+    else {
+        throw "Owned MSI creator handle returned an unsupported final-path namespace: $resolved"
+    }
+
+    return Get-CanonicalAbsolutePath -Path $resolved
 }
 
 function Get-CanonicalAbsolutePath {
@@ -199,8 +245,6 @@ function Open-PinnedMsiReadLock {
     $stream = $null
     $sha = $null
     try {
-        # FileShare.Read deliberately denies write/delete/replace while trust
-        # metadata and msiexec consume the admitted generation by path.
         $stream = [IO.File]::Open(
             $canonicalBefore,
             [IO.FileMode]::Open,
@@ -332,9 +376,6 @@ function Stop-OwnedProcessTree {
         [ValidateRange(1, 60000)][int]$CleanupTimeoutMs = 10000
     )
 
-    # Always attempt PID-scoped tree cleanup after the extraction timeout. The
-    # root may race to exit between WaitForExit(false) and this helper; treating
-    # that race as a clean return would make surviving descendants unverifiable.
     $taskkill = $null
     try {
         $taskkill = Start-Process -FilePath 'taskkill.exe' -ArgumentList @('/PID', [string]$Process.Id, '/T', '/F') -PassThru -NoNewWindow
@@ -372,17 +413,10 @@ if (Test-CanonicalPathWithin -Candidate $cacheDir -Parent $extract) {
     throw 'ExtractDir must not equal or contain the MSI cache directory because extraction output must remain disjoint from the cache.'
 }
 
-# Existing filesystem aliases must be rejected before cache mutation or fresh
-# extraction-root creation. This keeps lexical overlap checks from being
-# bypassed by a junction/symlink that redirects an apparently safe path elsewhere.
 Assert-NoExistingReparseComponent -Path $cacheDir -Label 'MSI cache directory'
 Assert-NoExistingReparseComponent -Path $msi -Label 'MsiPath'
 Assert-NoExistingReparseComponent -Path $extract -Label 'ExtractDir'
 
-# The extraction root is single-use. Never recursively delete or reuse a path
-# admitted by an earlier sample: if it exists now, fail closed; if another
-# actor races creation after this check, non-Force New-Item fails rather than
-# following/reusing that new generation.
 New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
 if (Test-Path -LiteralPath $extract) {
     throw "ExtractDir unexpectedly already exists; refusing pathname reuse: $extract"
@@ -415,19 +449,20 @@ else {
             Invoke-WebRequest -Uri $candidate.Url -OutFile $staging -MaximumRedirection 10 -TimeoutSec 1200 -UseBasicParsing
             $stagingAdmission = Open-PinnedMsiReadLock -Path $staging -ExpectedSha256 $expected
 
-            # Publication is fresh-only. A canonical cache entry that appeared
-            # after the initial cache admission is not ours to delete or replace.
             Assert-NoExistingReparseComponent -Path $msi -Label 'MsiPath before held-generation publication'
             if (Test-Path -LiteralPath $msi) {
                 throw 'Canonical MSI destination appeared before held-generation publication; refusing destructive replacement.'
             }
 
-            # Create a fresh canonical generation with DELETE access but without
-            # FILE_FLAG_DELETE_ON_CLOSE. The delete disposition is explicitly
-            # armed below so it can also be explicitly cancelled at commit.
             $publishedStream = Open-OwnedMsiPublication -Path $msi
             $publishedByThisAttempt = $true
             Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $true
+
+            $expectedPublishedPath = Get-CanonicalAbsolutePath -Path $msi
+            $publishedFinalPath = Get-OwnedMsiFinalPath -Stream $publishedStream
+            if (-not (Test-CanonicalPathEqual -Left $publishedFinalPath -Right $expectedPublishedPath)) {
+                throw "Owned canonical MSI creator handle resolved to an unexpected final destination: expected=$expectedPublishedPath actual=$publishedFinalPath"
+            }
 
             $stagingAdmission.Stream.Position = 0
             $stagingAdmission.Stream.CopyTo($publishedStream)
@@ -449,7 +484,11 @@ else {
                 throw 'Canonical MSI SHA256 no longer matches the pinned expected installer identity before commit.'
             }
 
-            # Commit only this exact explicitly-armed handle-owned generation.
+            $publishedFinalPathBeforeCommit = Get-OwnedMsiFinalPath -Stream $publishedStream
+            if (-not (Test-CanonicalPathEqual -Left $publishedFinalPathBeforeCommit -Right $expectedPublishedPath)) {
+                throw "Owned canonical MSI creator handle final destination changed before publication commit: expected=$expectedPublishedPath actual=$publishedFinalPathBeforeCommit"
+            }
+
             Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $false
             $publishedByThisAttempt = $false
             $publishedStream.Dispose()

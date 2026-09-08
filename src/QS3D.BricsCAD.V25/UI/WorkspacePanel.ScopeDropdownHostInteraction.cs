@@ -1,42 +1,29 @@
 using System;
-using System.Collections.ObjectModel;
-using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using System.Windows.Threading;
-using QS3D.BricsCAD.V25.UI.ViewModels;
+using System.Windows.Media;
+using QS3D.BricsCAD.V25.Services;
+using BricscadApplication = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.UI
 {
     /// <summary>
-    /// BricsCAD PaletteSet interaction fallback for the two Workspace scope ComboBoxes.
-    ///
-    /// The shared premium ComboBox template owns its dark chrome and uses a transparent
-    /// template toggle. Some PaletteSet host/input paths can consume the mouse press before
-    /// that template toggle changes IsDropDownOpen. Keep the normal ComboBox semantics, but
-    /// explicitly open these two non-editable scope selectors on their first preview press.
-    /// Item clicks are left untouched because the fallback only runs while the popup is closed.
-    ///
-    /// This partial also owns the presentation-only empty state for Zone/Floor. Project data
-    /// remains unchanged: the Vietnamese sentinel strings live only in the Workspace view-model
-    /// collections while those collections have no real entries, and are removed automatically
-    /// as soon as project data is rebuilt.
+    /// Keeps the two Workspace scope selectors readable and truthful inside the BricsCAD
+    /// PaletteSet host. Placeholder text is rendered as UI chrome only; the bound Zone/Floor
+    /// catalogs remain real project data and are never padded with display-only rows.
     /// </summary>
     public partial class WorkspacePanel
     {
-        private const string EmptyZoneOption = "Không có Zone";
-        private const string EmptyFloorOption = "Không có Tầng";
-
         private static readonly bool WorkspaceScopeDropdownHostInteractionRegistered =
             RegisterWorkspaceScopeDropdownHostInteraction();
 
         private bool _workspaceScopeDropdownHostInteractionWired;
-        private bool _workspaceScopeEmptyStateWired;
-        private bool _workspaceScopeEmptyStateRefreshQueued;
-        private bool _workspaceZoneEmptyStateInjected;
-        private bool _workspaceFloorEmptyStateInjected;
-        private WorkspaceViewModel? _workspaceScopeEmptyStateViewModel;
+        private TextBlock? _zoneEmptyPlaceholder;
+        private TextBlock? _zoneUnselectedPlaceholder;
+        private TextBlock? _floorEmptyPlaceholder;
+        private TextBlock? _floorUnselectedPlaceholder;
 
         private static bool RegisterWorkspaceScopeDropdownHostInteraction()
         {
@@ -54,7 +41,6 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
 
             panel.WireWorkspaceScopeDropdownHostInteraction();
-            panel.WireWorkspaceScopeEmptyState();
         }
 
         private void WireWorkspaceScopeDropdownHostInteraction()
@@ -65,160 +51,153 @@ namespace QS3D.BricsCAD.V25.UI
             _workspaceScopeDropdownHostInteractionWired = true;
             WireWorkspaceScopeCombo(ZoneCombo);
             WireWorkspaceScopeCombo(FloorCombo);
+
+            WrapWorkspaceScopeCombo(
+                ZoneCombo,
+                "Không có Zone",
+                "Chưa chọn Zone",
+                out _zoneEmptyPlaceholder,
+                out _zoneUnselectedPlaceholder);
+            WrapWorkspaceScopeCombo(
+                FloorCombo,
+                "Không có Tầng",
+                "Chưa chọn Tầng",
+                out _floorEmptyPlaceholder,
+                out _floorUnselectedPlaceholder);
+
+            ZoneCombo.SelectionChanged += OnWorkspaceZoneSelectionChanged;
+            FloorCombo.SelectionChanged += OnWorkspaceFloorSelectionChanged;
+            ZoneCombo.ItemContainerGenerator.ItemsChanged += OnWorkspaceScopeItemsChanged;
+            FloorCombo.ItemContainerGenerator.ItemsChanged += OnWorkspaceScopeItemsChanged;
+
+            NormalizeWorkspaceProgrammaticScopeSelection(ZoneCombo, isZone: true);
+            NormalizeWorkspaceProgrammaticScopeSelection(FloorCombo, isZone: false);
+            UpdateWorkspaceScopePlaceholders();
         }
 
-        private void WireWorkspaceScopeEmptyState()
+        private void OnWorkspaceZoneSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (!_workspaceScopeEmptyStateWired)
-            {
-                _workspaceScopeEmptyStateWired = true;
-                DataContextChanged += OnWorkspaceScopeEmptyStateDataContextChanged;
-                ZoneCombo.SelectionChanged += OnWorkspaceScopeZoneSelectionChanged;
-            }
-
-            AttachWorkspaceScopeEmptyStateViewModel(DataContext as WorkspaceViewModel);
-            QueueWorkspaceScopeEmptyStateRefresh();
+            NormalizeWorkspaceProgrammaticScopeSelection(ZoneCombo, isZone: true);
+            UpdateWorkspaceScopePlaceholders();
         }
 
-        private void OnWorkspaceScopeEmptyStateDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+        private void OnWorkspaceFloorSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            AttachWorkspaceScopeEmptyStateViewModel(e.NewValue as WorkspaceViewModel);
-            QueueWorkspaceScopeEmptyStateRefresh();
+            NormalizeWorkspaceProgrammaticScopeSelection(FloorCombo, isZone: false);
+            UpdateWorkspaceScopePlaceholders();
         }
 
-        private void OnWorkspaceScopeZoneSelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void OnWorkspaceScopeItemsChanged(object sender, ItemsChangedEventArgs e)
         {
-            // Zone changes can coincide with a project/scope rebuild. Re-normalize both selectors
-            // after binding/selection settles so Floor never remains as a meaningless blank row.
-            QueueWorkspaceScopeEmptyStateRefresh();
+            UpdateWorkspaceScopePlaceholders();
         }
 
-        private void AttachWorkspaceScopeEmptyStateViewModel(WorkspaceViewModel? viewModel)
+        private void NormalizeWorkspaceProgrammaticScopeSelection(ComboBox combo, bool isZone)
         {
-            if (ReferenceEquals(_workspaceScopeEmptyStateViewModel, viewModel))
+            // RefreshProject/ClearProject own selection synchronization while this flag is set.
+            // Correct only those programmatic transitions; a user's real click must continue to
+            // flow to OnZoneChanged/OnFloorChanged and become the active project scope.
+            if (!_loadingContext)
                 return;
 
-            if (_workspaceScopeEmptyStateViewModel != null)
-            {
-                _workspaceScopeEmptyStateViewModel.Zones.CollectionChanged -= OnWorkspaceScopeCollectionChanged;
-                _workspaceScopeEmptyStateViewModel.Floors.CollectionChanged -= OnWorkspaceScopeCollectionChanged;
-            }
-
-            _workspaceScopeEmptyStateViewModel = viewModel;
-            _workspaceZoneEmptyStateInjected = false;
-            _workspaceFloorEmptyStateInjected = false;
-
-            if (_workspaceScopeEmptyStateViewModel != null)
-            {
-                _workspaceScopeEmptyStateViewModel.Zones.CollectionChanged += OnWorkspaceScopeCollectionChanged;
-                _workspaceScopeEmptyStateViewModel.Floors.CollectionChanged += OnWorkspaceScopeCollectionChanged;
-            }
+            var expectedIndex = ResolveWorkspaceActiveScopeIndex(combo, isZone);
+            if (combo.SelectedIndex != expectedIndex)
+                combo.SelectedIndex = expectedIndex;
         }
 
-        private void OnWorkspaceScopeCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+        private int ResolveWorkspaceActiveScopeIndex(ComboBox combo, bool isZone)
         {
-            // ObservableCollection.Clear() reports Reset. Forget our presentation sentinel at
-            // that boundary so a real project item with the same text can never be mistaken for
-            // an injected empty-state row during the subsequent rebuild.
-            if (e.Action == NotifyCollectionChangedAction.Reset)
-            {
-                if (_workspaceScopeEmptyStateViewModel != null && ReferenceEquals(sender, _workspaceScopeEmptyStateViewModel.Zones))
-                    _workspaceZoneEmptyStateInjected = false;
-                if (_workspaceScopeEmptyStateViewModel != null && ReferenceEquals(sender, _workspaceScopeEmptyStateViewModel.Floors))
-                    _workspaceFloorEmptyStateInjected = false;
-            }
+            if (!combo.HasItems)
+                return -1;
 
-            QueueWorkspaceScopeEmptyStateRefresh();
-        }
+            var doc = BricscadApplication.DocumentManager.MdiActiveDocument;
+            if (doc == null || !ProjectContextCoordinator.TryGetReadOnly(doc, out var project))
+                return -1;
 
-        private void QueueWorkspaceScopeEmptyStateRefresh()
-        {
-            if (_workspaceScopeEmptyStateRefreshQueued)
-                return;
-
-            _workspaceScopeEmptyStateRefreshQueued = true;
-            Dispatcher.BeginInvoke(
-                DispatcherPriority.DataBind,
-                new Action(ApplyWorkspaceScopeEmptyState));
-        }
-
-        private void ApplyWorkspaceScopeEmptyState()
-        {
-            _workspaceScopeEmptyStateRefreshQueued = false;
-            var viewModel = DataContext as WorkspaceViewModel;
-            if (viewModel == null)
-                return;
-
-            if (!ReferenceEquals(_workspaceScopeEmptyStateViewModel, viewModel))
-                AttachWorkspaceScopeEmptyStateViewModel(viewModel);
-
-            // Suppress the normal mutation handlers while the presentation sentinel and selected
-            // index are synchronized. Empty-state display must never attempt a project mutation or
-            // overwrite the more useful no-project/status message from ClearProject().
-            var wasLoadingContext = _loadingContext;
-            _loadingContext = true;
             try
             {
-                NormalizeWorkspaceScopeCollection(
-                    viewModel.Zones,
-                    EmptyZoneOption,
-                    ref _workspaceZoneEmptyStateInjected);
-                NormalizeWorkspaceScopeCollection(
-                    viewModel.Floors,
-                    EmptyFloorOption,
-                    ref _workspaceFloorEmptyStateInjected);
+                if (isZone)
+                {
+                    if (string.IsNullOrWhiteSpace(project.ActiveZoneId))
+                        return -1;
+                    var zone = project.FindZone(project.ActiveZoneId);
+                    return zone == null ? -1 : _viewModel.Zones.IndexOf(zone.Name);
+                }
 
-                EnsureWorkspaceScopeSelection(ZoneCombo, viewModel.ActiveZoneIndex());
-                EnsureWorkspaceScopeSelection(FloorCombo, viewModel.ActiveFloorIndex());
+                if (string.IsNullOrWhiteSpace(project.ActiveFloorId))
+                    return -1;
+                var floor = project.FindFloor(project.ActiveFloorId);
+                return floor == null ? -1 : _viewModel.Floors.IndexOf(floor.Name);
             }
-            finally
+            catch (InvalidOperationException)
             {
-                _loadingContext = wasLoadingContext;
+                return -1;
             }
         }
 
-        private static void NormalizeWorkspaceScopeCollection(
-            ObservableCollection<string> items,
-            string emptyLabel,
-            ref bool injected)
+        private void WrapWorkspaceScopeCombo(
+            ComboBox combo,
+            string emptyText,
+            string unselectedText,
+            out TextBlock emptyPlaceholder,
+            out TextBlock unselectedPlaceholder)
         {
-            if (items.Count == 0)
-            {
-                items.Add(emptyLabel);
-                injected = true;
-                return;
-            }
+            emptyPlaceholder = CreateWorkspaceScopePlaceholder(emptyText);
+            unselectedPlaceholder = CreateWorkspaceScopePlaceholder(unselectedText);
 
-            if (!injected)
+            if (!(combo.Parent is Panel parent))
                 return;
 
-            var injectedIndex = items.IndexOf(emptyLabel);
-            if (injectedIndex < 0)
-            {
-                injected = false;
+            var index = parent.Children.IndexOf(combo);
+            if (index < 0)
                 return;
-            }
 
-            if (items.Count > 1)
-            {
-                items.RemoveAt(injectedIndex);
-                injected = false;
-            }
+            parent.Children.RemoveAt(index);
+            var host = new Grid();
+            host.Children.Add(combo);
+            host.Children.Add(emptyPlaceholder);
+            host.Children.Add(unselectedPlaceholder);
+            parent.Children.Insert(index, host);
         }
 
-        private static void EnsureWorkspaceScopeSelection(ComboBox combo, int preferredIndex)
+        private TextBlock CreateWorkspaceScopePlaceholder(string text)
         {
-            if (combo.Items.Count == 0)
+            return new TextBlock
             {
-                combo.SelectedIndex = -1;
-                return;
-            }
+                Text = text,
+                Foreground = TryFindResource("SubtleTextBrush") as Brush ?? Brushes.Gray,
+                Margin = new Thickness(8, 0, 28, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                IsHitTestVisible = false,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                Visibility = Visibility.Collapsed
+            };
+        }
 
-            var index = preferredIndex >= 0 && preferredIndex < combo.Items.Count
-                ? preferredIndex
-                : 0;
-            if (combo.SelectedIndex != index)
-                combo.SelectedIndex = index;
+        private void UpdateWorkspaceScopePlaceholders()
+        {
+            UpdateWorkspaceScopePlaceholder(
+                ZoneCombo,
+                _zoneEmptyPlaceholder,
+                _zoneUnselectedPlaceholder);
+            UpdateWorkspaceScopePlaceholder(
+                FloorCombo,
+                _floorEmptyPlaceholder,
+                _floorUnselectedPlaceholder);
+        }
+
+        private static void UpdateWorkspaceScopePlaceholder(
+            ComboBox combo,
+            TextBlock? emptyPlaceholder,
+            TextBlock? unselectedPlaceholder)
+        {
+            var hasItems = combo.HasItems;
+            if (emptyPlaceholder != null)
+                emptyPlaceholder.Visibility = hasItems ? Visibility.Collapsed : Visibility.Visible;
+            if (unselectedPlaceholder != null)
+                unselectedPlaceholder.Visibility = hasItems && combo.SelectedIndex < 0
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
         }
 
         private static void WireWorkspaceScopeCombo(ComboBox combo)

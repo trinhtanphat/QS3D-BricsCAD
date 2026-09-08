@@ -60,7 +60,6 @@ def main() -> int:
         "ExtractDir must not equal or contain MsiPath",
         "ExtractDir must not equal or contain the MSI cache directory",
         "Assert-NoExistingReparseComponent -Path $extract -Label 'ExtractDir'",
-        "The extraction root is single-use.",
         "if (Test-Path -LiteralPath $extract)",
         "ExtractDir unexpectedly already exists; refusing pathname reuse",
         "New-Item -ItemType Directory -Path $extract | Out-Null",
