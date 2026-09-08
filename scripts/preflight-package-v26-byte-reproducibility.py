@@ -7,7 +7,9 @@ NORMALIZED_ZIP_ENTRY = "$entryName = $fullName.Substring($packagePrefix.Length).
 ZIP_ENTRY_BACKSLASH_REJECTION = "$entryName.Contains('\\')"
 MANIFEST_BACKSLASH_REJECTION = "$relativePath.Contains('\\')"
 OWNED_CREATE = "$destinationStream = Open-OwnedPackageOutput -Path $destination"
-NATIVE_CREATE = "CreateFileW("
+NATIVE_CREATE_DECL = "private static extern SafeFileHandle CreateFileW("
+NATIVE_CREATE_CALL = "SafeFileHandle handle = CreateFileW("
+SET_DISPOSITION_CALL = "if (!SetFileInformationByHandle(handle, FileDispositionInfo, ref info,"
 DELETE_ACCESS = "GENERIC_READ | GENERIC_WRITE | DELETE"
 ARM_DELETE = "Set-PackageOutputDeleteDisposition -Stream $destinationStream -Delete $true"
 ZIP_CREATE = "$archive = [IO.Compression.ZipArchive]::new($destinationStream, [IO.Compression.ZipArchiveMode]::Create, $true)"
@@ -65,10 +67,12 @@ def validate(text: str) -> None:
             "V26 deterministic ZIP publication must expose an owned output opener.")
     require("function Set-PackageOutputDeleteDisposition {" in text,
             "V26 deterministic ZIP publication must expose handle-bound rollback/commit disposition.")
-    require("FILE_DISPOSITION_INFO" in text and "SetFileInformationByHandle" in text,
-            "V26 deterministic ZIP publication must use native handle disposition for exact-generation rollback.")
-    require(NATIVE_CREATE in text and "CREATE_NEW" in text,
+    require("FILE_DISPOSITION_INFO" in text,
+            "V26 deterministic ZIP publication must define native exact-generation disposition state.")
+    require(NATIVE_CREATE_DECL in text and NATIVE_CREATE_CALL in text and "CREATE_NEW" in text,
             "V26 deterministic ZIP publication must create the final generation through native fresh-only CreateFileW.")
+    require(SET_DISPOSITION_CALL in text,
+            "V26 deterministic ZIP publication must apply native FileDispositionInfo to the owned handle.")
     require(DELETE_ACCESS in text,
             "V26 deterministic ZIP output handle must request DELETE together with read/write access before FileDispositionInfo rollback is armed.")
     require(OWNED_CREATE in text,
@@ -116,8 +120,9 @@ for marker in (
     "New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc",
     "function Open-OwnedPackageOutput {",
     "function Set-PackageOutputDeleteDisposition {",
-    "SetFileInformationByHandle",
-    NATIVE_CREATE,
+    NATIVE_CREATE_DECL,
+    NATIVE_CREATE_CALL,
+    SET_DISPOSITION_CALL,
     DELETE_ACCESS,
     OWNED_CREATE,
     ARM_DELETE,
