@@ -31,7 +31,7 @@ Use a stable account/session identity and a globally distinguishable repository-
 
 ## Ownership-Key
 
-`Ownership-Key` describes the semantic authority being changed, not merely the Issue number or worker name.
+`Ownership-Key` describes the semantic authority being changed, not merely an Issue number or worker name.
 
 When multiple open v2 Issues claim the same semantic Ownership-Key, first visible valid ownership wins until released/reassigned/superseded.
 
@@ -45,7 +45,9 @@ Use the narrowest truthful claim. If required scope expands, update the same Iss
 
 The current machine gate may fail closed when actual changed files fall outside the declared paths or overlap an earlier active reservation/PR.
 
-For overlap with an earlier open same-repository agent/integration PR, `pulls/{N}/files` is only a candidate-path index. A candidate path is treated as an effective peer mutation only when its exact object identity at that peer head differs from the workflow's protected-`main` base snapshot. This prevents stale PR ancestry from reserving a path that has already converged to current main, while preserving collisions for additions, deletions, type changes, and differing blobs. Missing or invalid peer/base identities and GitHub API failures remain fail-closed.
+For overlap with an earlier open same-repository agent/integration PR, the gate does not treat that PR's historical `pulls/{N}/files` view as authoritative. It fetches the exact peer head commit from the open-PR snapshot and computes a NUL-delimited, no-rename Git tree delta from the workflow's protected-`main` base snapshot to that exact peer SHA. Only paths still different in that exact current-base tree delta can collide. This removes stale-ancestry false positives while preserving additions, deletions, renames, file-mode/type changes and content changes. Missing/invalid peer SHAs, foreign locked peers, fetch failures and malformed/incomplete path output remain fail-closed.
+
+Current-carrier changed paths use the same NUL-delimited/no-rename discipline and include deletions, so unusual whitespace in repository paths and delete/rename mutations cannot silently escape Expected-Paths containment.
 
 ## One active carrier
 
