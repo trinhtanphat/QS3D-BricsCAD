@@ -106,10 +106,29 @@ def _same_opened_file(before, opened):
     opened_ino = getattr(opened, "st_ino", 0)
     if before_dev and before_ino and opened_dev and opened_ino:
         return (before_dev, before_ino) == (opened_dev, opened_ino)
+
+    before_size = getattr(before, "st_size", None)
+    opened_size = getattr(opened, "st_size", None)
+    before_mtime_ns = getattr(before, "st_mtime_ns", None)
+    opened_mtime_ns = getattr(opened, "st_mtime_ns", None)
+    before_ctime_ns = getattr(before, "st_ctime_ns", None)
+    opened_ctime_ns = getattr(opened, "st_ctime_ns", None)
+    if any(
+        value is None
+        for value in (
+            before_size,
+            opened_size,
+            before_mtime_ns,
+            opened_mtime_ns,
+            before_ctime_ns,
+            opened_ctime_ns,
+        )
+    ):
+        return False
     return (
-        before.st_size == opened.st_size
-        and getattr(before, "st_mtime_ns", None) == getattr(opened, "st_mtime_ns", None)
-        and getattr(before, "st_ctime_ns", None) == getattr(opened, "st_ctime_ns", None)
+        before_size == opened_size
+        and before_mtime_ns == opened_mtime_ns
+        and before_ctime_ns == opened_ctime_ns
     )
 
 

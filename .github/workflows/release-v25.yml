@@ -145,8 +145,16 @@ jobs:
             if (-not (Test-Path (Join-Path $env:BRICSCAD_V25_DIR $name))) { throw "Required BricsCAD V25 runtime file is missing: $name" }
           }
 
-      - name: Build BricsCAD V25 plugin
-        run: dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release -p:Platform=x64
+      - name: Build BricsCAD V25 plugin against locked reference snapshot
+        shell: powershell
+        run: |
+          $snapshot = Join-Path $env:RUNNER_TEMP ('qs3d-v25-commercial-compile-references-' + [Guid]::NewGuid().ToString('N'))
+          & .\scripts\build-v25-with-stable-references.ps1 `
+            -BricsCadDir $env:BRICSCAD_V25_DIR `
+            -ProjectPath 'src\QS3D.BricsCAD.V25\QS3D.BricsCAD.V25.csproj' `
+            -SnapshotDir $snapshot `
+            -Configuration Release `
+            -Platform x64
 
       - name: Build V25 release package
         shell: powershell

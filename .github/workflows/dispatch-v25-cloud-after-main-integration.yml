@@ -19,6 +19,7 @@ on:
       - "src/**"
       - "tests/**"
       - "scripts/**"
+      - "samples/generated/**"
       - "external/QS3D-Platform"
       - ".gitmodules"
       - "Directory.Build.props"
@@ -76,6 +77,7 @@ jobs:
             'src/'
             'tests/'
             'scripts/'
+            'samples/generated/'
             'external/QS3D-Platform'
             '.gitmodules'
             'Directory.Build.props'
@@ -146,6 +148,17 @@ jobs:
           series_prefix="v0.1.0-preview."
           published_preview_tag=""
           published_preview_ordinal=0
+          set +e
+          published_release_rows="$(
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq '.[] | [.tag_name, (.draft | tostring), (.published_at // "")] | @tsv'
+          )"
+          published_release_query_status=$?
+          set -e
+          if (( published_release_query_status != 0 )); then
+            echo "Could not enumerate published V25 preview releases; gh api exit ${published_release_query_status}." >&2
+            exit "${published_release_query_status}"
+          fi
           while IFS=$'\t' read -r release_tag release_draft release_published_at; do
             [[ -n "${release_tag}" ]] || continue
             if [[ "${release_draft}" != "false" || -z "${release_published_at}" ]]; then
@@ -168,10 +181,7 @@ jobs:
               published_preview_ordinal=${ordinal}
               published_preview_tag="${release_tag}"
             fi
-          done < <(
-            gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-              --jq '.[] | [.tag_name, (.draft | tostring), (.published_at // "")] | @tsv'
-          )
+          done <<< "${published_release_rows}"
           echo "Published V25 preview baseline: ${published_preview_tag:-'(none)'}"
 
           gate_args=(

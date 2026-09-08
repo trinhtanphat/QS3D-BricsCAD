@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 
@@ -71,7 +72,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = ProjectWithBeam("bom-property-key", "beam-property-key");
             var element = project.Elements[0];
-            element.Properties[" MaterialName "] = "C30";
+            InjectLegacyElementProperty(element, " MaterialName ", "C30");
 
             var issues = BomReleaseGuardService.Inspect(project);
             Has(issues, "BOM_PROPERTY_KEY_INVALID");
@@ -113,7 +114,7 @@ namespace QS3D.Core.SmokeTests
             {
                 var propertyProject = ProjectWithBeam("bom-bad-property", "beam-bad-property");
                 var propertyElement = propertyProject.Elements[0];
-                propertyElement.Properties[invalidKey] = "value";
+                InjectLegacyElementProperty(propertyElement, invalidKey, "value");
                 var propertyIssues = BomReleaseGuardService.Inspect(propertyProject);
                 Equal(1, Count(propertyIssues, "BOM_PROPERTY_KEY_INVALID"));
                 AssertKeyNotReflected(propertyIssues, invalidKey);
@@ -179,6 +180,15 @@ namespace QS3D.Core.SmokeTests
             element.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(element);
             return project;
+        }
+
+        private static void InjectLegacyElementProperty(ProjectElement element, string key, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_properties", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Legacy BOM fixture could not locate the element property backing dictionary.");
+            var backing = field.GetValue(element) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Legacy BOM fixture property backing dictionary had an unexpected type.");
+            backing[key] = value;
         }
 
         private static void AssertKeyNotReflected(IReadOnlyList<ModelHealthIssue> issues, string invalidKey)

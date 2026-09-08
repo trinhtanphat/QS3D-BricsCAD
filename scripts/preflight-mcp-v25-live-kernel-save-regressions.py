@@ -30,28 +30,54 @@ def main():
     errors = []
     extrude = block(direct, "private static string Extrude(", "private static string Boolean(")
     boolean = block(direct, "private static string Boolean(", "private static string Save()")
-    execute_qsave = block(save, "private Task ExecuteQsaveInCommandContext()", "internal void EnsureSameActiveDocumentAndPath()")
-    schedule = block(save, "internal void ScheduleInCadContext()", "private Task ExecuteQsaveInCommandContext()")
+    queue = block(save, "internal void QueueInCadContext()", "internal bool DetachBestEffort()")
 
-    require(errors, extrude, ("Region.CreateFromCurves(new DBObjectCollection { profileClone })", "solid.Extrude(region, height, 0d);", "kernelSource=transient-region"), "V25 Circle extrusion fallback")
-    forbid(errors, extrude, ("solid.CreateExtrudedSolid(profileClone", "model.AppendEntity(profileClone)", "kernelSource=database-resident-profile-clone"), "V25 Circle extrusion fallback")
-    require(errors, boolean, ("var operandClone = operand.Clone() as Solid3d;", "target.BooleanOperation(operation, operandClone);", "if (!operand.IsErased) operand.Erase();", "kernelTarget=database-resident; kernelOperand=transient-clone"), "V25 boolean fallback")
-    forbid(errors, boolean, ("model.AppendEntity(targetWorking)", "model.AppendEntity(operandWorking)", "target.HandOverTo(resultClone", "kernelInputs=database-resident-working-clones"), "V25 boolean fallback")
+    require(errors, extrude, (
+        "Region.CreateFromCurves(new DBObjectCollection { source })",
+        "model.AppendEntity(region);",
+        "transaction.AddNewlyCreatedDBObject(region, true);",
+        "solid.Extrude(region, height, 0d);",
+        "if (!region.IsErased) region.Erase();",
+        "kernelSource=database-resident-region",
+    ), "V25 closed-polyline extrusion fallback")
+    forbid(errors, extrude, (
+        "var profileClone = source.Clone() as Curve;",
+        "Region.CreateFromCurves(new DBObjectCollection { profileClone })",
+        "solid.CreateExtrudedSolid(profileClone", "kernelSource=transient-region",
+        "kernelSource=database-resident-profile-clone",
+    ), "V25 closed-polyline extrusion fallback")
 
-    require(errors, schedule, (
-        "var completionSource = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);",
-        "Completion = completionSource.Task;", "Application.DocumentManager.ExecuteInCommandContextAsync(",
-        "completionSource.TrySetResult(null);", "completionSource.TrySetException(ex);",
-    ), "V25 ExecutionResult QSAVE completion signal")
-    forbid(errors, schedule, ("Completion = Application.DocumentManager.ExecuteInCommandContextAsync(", "throw;"), "V25 ExecutionResult QSAVE completion signal")
-    require(errors, execute_qsave, ("EnsureCommandContextAutomationNotStopped();", "document.Editor.Command(\"_.QSAVE\");"), "QSAVE command-context stop boundary")
-    forbid(errors, execute_qsave, ("_ensureRunning();",), "QSAVE command-context mutation lease")
+    require(errors, boolean, (
+        "target.BooleanOperation(operation, operand);",
+        "if (!operand.IsErased) operand.Erase();",
+        "kernelTarget=database-resident; kernelOperand=database-resident",
+    ), "V25 boolean fallback")
+    forbid(errors, boolean, (
+        "var operandClone = operand.Clone() as Solid3d;", "target.BooleanOperation(operation, operandClone);",
+        "model.AppendEntity(targetWorking)", "model.AppendEntity(operandWorking)",
+        "target.HandOverTo(resultClone", "kernelOperand=transient-clone",
+        "kernelInputs=database-resident-working-clones",
+    ), "V25 boolean fallback")
+
+    require(errors, queue, (
+        "McpCadMutationCoordinator.QueueNativeCommand(",
+        "document.SendStringToExecute(\"_.QSAVE\\n\", true, false, true)",
+        "AttachHandlers(document);",
+    ), "V25 event-owned QSAVE queue")
+    require(errors, save, (
+        "ManualResetEventSlim", "CommandEnded += OnCommandEnded", "CommandCancelled += OnCommandCancelled",
+        "CommandFailed += OnCommandFailed", "Done.Wait(", "TerminalError", "EnsureCommandContextAutomationNotStopped();",
+    ), "QSAVE event terminal ownership")
+    forbid(errors, save, (
+        "Application.DocumentManager.ExecuteInCommandContextAsync(", "TaskCompletionSource",
+        "document.Editor.Command(\"_.QSAVE\")",
+    ), "QSAVE command-context regression")
 
     if errors:
         print("ERROR: live V25 MCP kernel/save regression preflight failed closed:")
         for error in errors: print(" -", error)
         return 1
-    print("PASS: live V25 Circle extrusion avoids CreateExtrudedSolid, booleans avoid DB-resident working-clone handover, and QSAVE captures callback completion without rethrow or mutation-lease escape.")
+    print("PASS: live V25 closed-polyline extrusion and booleans use database-resident inputs, and QSAVE owns terminal completion through native command events.")
     return 0
 
 

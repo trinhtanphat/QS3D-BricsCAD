@@ -12,10 +12,16 @@ def require(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
+def exact_hex40(value: str) -> bool:
+    return len(value) == 40 and all(ch in "0123456789abcdefABCDEF" for ch in value)
+
+
 def provenance_valid(*, dirty_before: bool, dirty_after: bool, head_before: str, head_after: str, metadata_commit: str) -> bool:
     if dirty_before or dirty_after:
         return False
-    if not head_before or len(head_before) != 40 or head_before.lower() != head_after.lower():
+    if not exact_hex40(head_before) or not exact_hex40(head_after) or head_before.lower() != head_after.lower():
+        return False
+    if not exact_hex40(metadata_commit):
         return False
     return metadata_commit.lower() == head_before.lower()
 
@@ -59,11 +65,15 @@ def main() -> int:
         "Read-HeldStrictUtf8Metadata",
         "Assert-HeldMetadataBinding -Held $held",
         "ExpectedSourceCommit -notmatch '^[0-9A-Fa-f]{40}$'",
-        "([string]$metadata.gitCommit).Trim()",
+        "$metadataSource = [string]$metadata.gitCommit",
+        "-not [string]::Equals($metadataSource, $metadataSource.Trim(), [StringComparison]::Ordinal)",
+        "$metadataSource -notmatch '^[0-9A-Fa-f]{40}$'",
+        "$metadataSource.ToLowerInvariant(), $expectedSource, [StringComparison]::Ordinal",
         "does not match expected source commit",
     )
     for token in required_validator_tokens:
         require(token in validator, "held package identity validator missing token: " + token)
+    require("([string]$metadata.gitCommit).Trim()" not in validator, "metadata source identity must not be normalized before canonical admission")
     require("[IO.FileShare]::ReadWrite" not in validator, "metadata admission must not share write access")
 
     before_status = wrapper.find("Assert-CleanRepository -Phase 'before package creation'")
@@ -90,6 +100,9 @@ def main() -> int:
         (False, True, clean, clean, clean, False, "dirty after packaging"),
         (False, False, clean, "b" * 40, clean, False, "HEAD changed during packaging"),
         (False, False, clean, clean, "b" * 40, False, "metadata commit mismatch"),
+        (False, False, clean, clean, f" {clean}", False, "metadata commit has leading whitespace"),
+        (False, False, clean, clean, f"{clean} ", False, "metadata commit has trailing whitespace"),
+        (False, False, clean, clean, "g" * 40, False, "metadata commit is not hexadecimal"),
     )
     for dirty_before, dirty_after, head_before, head_after, metadata_commit, expected, label in cases:
         actual = provenance_valid(

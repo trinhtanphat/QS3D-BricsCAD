@@ -29,6 +29,7 @@ namespace QS3D.Core.SmokeTests
                 MeasurementTraceKnownCountStabilitySmoke.Run();
                 WallFormworkContactSmoke.Run();
                 CommercialSubtractionPrecisionSmoke.Run();
+                CommercialQsSettlementSmoke.Run();
                 BeamCoreFormworkRegeneratorSmoke.Run();
                 ProjectQuantityCanonicalTraversalSmoke.Run();
 

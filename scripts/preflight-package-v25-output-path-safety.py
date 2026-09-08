@@ -19,6 +19,7 @@ required_tokens = (
     "function Assert-SafeOutputDirectoryTarget",
     "function Assert-SafeOutputFileTarget",
     "function Get-SafePackageFiles",
+    "function New-DeterministicPackageZip",
     "[IO.FileAttributes]::ReparsePoint",
     "must stay below the repository root",
     "must not be a filesystem root",
@@ -26,9 +27,9 @@ required_tokens = (
     "$distRoot = Assert-SafeOutputDirectoryTarget -Path $distRoot -RepositoryRoot $root -Label 'package dist root' -MayBeMissing",
     "$dist = Assert-SafeOutputDirectoryTarget -Path $dist -RepositoryRoot $root -Label 'package staging directory' -MayBeMissing",
     "$zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'",
-    "Get-SafePackageFiles -PackageRoot $dist",
-    "Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256",
-    "Compress-Archive -Path (Join-Path $dist '*') -DestinationPath $zip -CompressionLevel Optimal",
+    "foreach ($file in Get-SafePackageFiles -PackageRoot $dist)",
+    "Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256",
+    "New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc",
 )
 for token in required_tokens:
     if token not in source:
@@ -44,6 +45,7 @@ for forbidden in (
     "Remove-Item $dist -Recurse -Force -ErrorAction SilentlyContinue",
     "Remove-Item $zip -Force -ErrorAction SilentlyContinue",
     "Get-ChildItem $dist -Recurse -File",
+    "Get-ChildItem -LiteralPath $dist -Recurse -File",
 ):
     if forbidden in active_source:
         errors.append(f"package-v25 must not use legacy unchecked destructive/traversal form: {forbidden}")
@@ -55,11 +57,11 @@ revalidate_dist = source.find("$dist = Assert-SafeOutputDirectoryTarget -Path $d
 if min(validate_dist, remove_dist, create_dist, revalidate_dist) < 0 or not (validate_dist < remove_dist < create_dist < revalidate_dist):
     errors.append("package staging must be validated before recursive removal and revalidated after recreation")
 
-validate_zip = source.rfind("$zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'", 0, source.find("Remove-Item -LiteralPath $zip -Force") + 1)
 remove_zip = source.find("Remove-Item -LiteralPath $zip -Force")
-archive = source.find("Compress-Archive -Path (Join-Path $dist '*') -DestinationPath $zip -CompressionLevel Optimal")
+validate_zip = source.rfind("$zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'", 0, remove_zip + 1)
+archive = source.find("New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc", remove_zip + 1)
 if min(validate_zip, remove_zip, archive) < 0 or not (validate_zip < remove_zip < archive):
-    errors.append("package ZIP must be validated immediately before destructive replacement/archive")
+    errors.append("package ZIP must be validated immediately before destructive replacement/deterministic archive")
 
 if source.count("Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'") < 4:
     errors.append("package ZIP identity must be revalidated across creation/replacement checkpoints")
@@ -89,4 +91,4 @@ if errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("PASS: package-v25 validates repository-owned dist/staging/ZIP identities before destructive mutation, rejects reparse/non-regular surfaces, and hashes via safe traversal.")
+print("PASS: package-v25 validates repository-owned dist/staging/ZIP identities before destructive mutation, rejects reparse/non-regular surfaces, hashes via safe traversal, and creates the deterministic archive only after revalidation.")

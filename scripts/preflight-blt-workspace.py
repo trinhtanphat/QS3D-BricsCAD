@@ -49,7 +49,7 @@ checks = {
         "OnUnisolateClick", "Snap xem", "Snap áp", "Auto Host",
     ],
     "workspace_code": [
-        "SemanticReferenceHandles.MatchesSelection", "SetSelectedElement(element)", "ShowFamilyProperties",
+        "SemanticReferenceHandles.MatchesSelection", "SetSelectedElement(element)", "OnFamilySelectionChangedWithAffinity",
         "QS3DWALLJUNCTIONS", "QS3DWALLSNAPPREVIEW", "QS3DWALLSNAPAPPLY", "QS3DAUTOLINKHOSTS",
         "QS3DFOCUS", "QS3DISOLATE", "QS3DUNISOLATE", "OnResetPropertyClick",
     ],

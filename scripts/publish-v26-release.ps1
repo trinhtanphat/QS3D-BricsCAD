@@ -29,6 +29,65 @@ function Test-GitHubNotFound {
   catch { return $false }
 }
 
+function Assert-ProtectedMainStableForPublisherMutation {
+  param([Parameter(Mandatory = $true)][string]$Phase)
+
+  $publisherMainResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers
+  $publisherMain = [string]$publisherMainResponse.sha
+  if ($publisherMain -notmatch '^[0-9a-f]{40}$') {
+    throw "Protected main API returned an invalid V26 publisher-admission SHA before ${Phase}: $publisherMain"
+  }
+
+  $publisherMainRef = 'refs/remotes/origin/qs3d-v26-publisher-admitted-main'
+  & git fetch --no-tags --force origin "+refs/heads/main:$publisherMainRef"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Could not fetch protected main for V26 publisher admission before $Phase."
+  }
+  $fetchedPublisherMain = ([string](& git rev-parse --verify $publisherMainRef)).Trim().ToLowerInvariant()
+  if ($LASTEXITCODE -ne 0 -or $fetchedPublisherMain -notmatch '^[0-9a-f]{40}$') {
+    throw "Could not resolve fetched protected-main SHA for V26 publisher admission before $Phase."
+  }
+  if (-not [string]::Equals($fetchedPublisherMain, $publisherMain, [StringComparison]::Ordinal)) {
+    throw "Protected-main API/fetch identity mismatch during V26 publisher admission before $Phase. API=$publisherMain fetched=$fetchedPublisherMain"
+  }
+
+  & git merge-base --is-ancestor $env:GITHUB_SHA $publisherMain
+  if ($LASTEXITCODE -ne 0) {
+    throw "V26 release workflow SHA is no longer an ancestor of protected main before ${Phase}: $env:GITHUB_SHA"
+  }
+
+  $publisherReleaseRelevantPaths = @(
+    '.github/workflows/',
+    'scripts/',
+    'tests/',
+    'src/QS3D.BricsCAD.V25/',
+    'src/QS3D.BricsCAD.V26/',
+    'src/QS3D.Core/',
+    'samples/generated/',
+    'Directory.Build.props',
+    'Directory.Build.targets',
+    'VERSION',
+    'installer/',
+    'external/'
+  )
+  & git diff --quiet --no-ext-diff "$env:GITHUB_SHA..$publisherMain" -- @publisherReleaseRelevantPaths
+  if ($LASTEXITCODE -eq 1) {
+    throw "newer release-relevant protected main supersedes this V26 publisher transaction before $Phase"
+  }
+  if ($LASTEXITCODE -ne 0) {
+    throw "Could not classify protected-main V26 publisher drift before $Phase. git diff exit=$LASTEXITCODE"
+  }
+
+  $confirmedPublisherMainResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers
+  $confirmedPublisherMain = [string]$confirmedPublisherMainResponse.sha
+  if ($confirmedPublisherMain -notmatch '^[0-9a-f]{40}$') {
+    throw "Protected main confirmation returned an invalid V26 publisher-admission SHA before ${Phase}: $confirmedPublisherMain"
+  }
+  if (-not [string]::Equals($confirmedPublisherMain, $publisherMain, [StringComparison]::Ordinal)) {
+    throw "Protected main moved during V26 publisher admission before $Phase. Before=$publisherMain after=$confirmedPublisherMain"
+  }
+}
+
 function Get-ExactReusableReleaseTag {
   $escapedTag = [Uri]::EscapeDataString($env:RELEASE_TAG)
   $uri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/git/ref/tags/$escapedTag"
@@ -165,6 +224,7 @@ $expectedAssets = @()
 $admittedAssets = @{}
 $verifiedAssetIds = @{}
 $publishPatchAttempted = $false
+$publicationSafetyInvalidated = $false
 
 try {
   $tagRefUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/git/refs"
@@ -175,6 +235,7 @@ try {
   }
   else {
     $tagCreateRequest = @{ ref = $tagRef; sha = $env:GITHUB_SHA } | ConvertTo-Json
+    Assert-ProtectedMainStableForPublisherMutation -Phase 'release-tag-create'
     try {
       $createdTag = Invoke-RestMethod -Method Post -Uri $tagRefUri -Headers $headers -ContentType 'application/json' -Body $tagCreateRequest
       if ($null -eq $createdTag -or -not [string]::Equals([string]$createdTag.ref, $tagRef, [StringComparison]::Ordinal)) { throw "V26 release tag creation returned a mismatched ref; refusing transaction ownership." }
@@ -193,6 +254,7 @@ try {
   }
   Assert-RemoteReleaseTagTargetsWorkflowSha
 
+  Assert-ProtectedMainStableForPublisherMutation -Phase 'draft-release-create'
   try {
     $release = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases" -Headers $headers -ContentType 'application/json' -Body $request
   }
@@ -227,6 +289,7 @@ try {
   $expectedUploadUrl = "https://uploads.github.com/repos/$env:GITHUB_REPOSITORY/releases/$releaseId/assets{?name,label}"
   if (-not [string]::Equals([string]$release.upload_url, $expectedUploadUrl, [StringComparison]::Ordinal)) { throw "V26 draft upload endpoint does not belong to the admitted repository/release identity." }
   $uploadBase = $expectedUploadUrl -replace '\{\?name,label\}$', ''
+  Assert-ProtectedMainStableForPublisherMutation -Phase 'held-asset-upload'
   foreach ($assetPath in $releaseAssets) {
     $name = [IO.Path]::GetFileName($assetPath)
     if ($name -match 'V25') { throw "V25 release asset leaked into V26 publication: $name" }
@@ -308,6 +371,7 @@ try {
   $finalReleaseRelevantPaths = @(
     '.github/workflows/',
     'scripts/',
+    'tests/',
     'src/QS3D.BricsCAD.V25/',
     'src/QS3D.BricsCAD.V26/',
     'src/QS3D.Core/',
@@ -348,6 +412,13 @@ try {
     body = $expectedPublishedBody
   } | ConvertTo-Json
   $published = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body $publishRequest
+  try {
+    Assert-ProtectedMainStableForPublisherMutation -Phase 'post-release-publish'
+  }
+  catch {
+    $publicationSafetyInvalidated = $true
+    throw "V26 release publication completed, but protected-main safety revalidation failed after publish PATCH: $($_.Exception.Message)"
+  }
   Assert-PublishedReleaseMatchesVerifiedTransaction `
     -ReleaseSnapshot $published `
     -ReleaseUri $releaseUri `
@@ -368,6 +439,7 @@ catch {
       $reconciledRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
       if ($reconciledRelease.draft -eq $false) {
         if (-not $publishPatchAttempted) { throw "V26 release became published before this workflow attempted the final publish PATCH." }
+        if ($publicationSafetyInvalidated) { throw "V26 release is published, but post-PATCH protected-main safety was invalidated; refusing ambiguous acknowledgement success. Manual release review is required." }
         Assert-PublishedReleaseMatchesVerifiedTransaction `
           -ReleaseSnapshot $reconciledRelease `
           -ReleaseUri $releaseUri `
@@ -385,7 +457,7 @@ catch {
     }
     catch {
       $reconciliationError = $_
-      throw "V26 publication acknowledgement reconciliation failed. Original publication error: $($publicationError.Exception.Message) Reconciliation error: $($reconciliationError.Exception.Message) Manual cleanup is required before retry."
+      throw "V26 publication acknowledgement reconciliation failed. Original publication error: $($publicationError.Exception.Message) Reconciliation error: $($_.Exception.Message) Manual cleanup is required before retry."
     }
   }
 

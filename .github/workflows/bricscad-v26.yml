@@ -40,7 +40,9 @@ jobs:
         shell: powershell
         run: |
           $statePath = Join-Path $env:RUNNER_TEMP "qs3d-v26-host-reference-state.json"
+          $manifestPath = Join-Path $env:GITHUB_WORKSPACE "artifacts\bricscad-v26-qualification-manifest.json"
           "V26_HOST_REFERENCE_STATE=$statePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "V26_QUALIFICATION_MANIFEST=$manifestPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Manual-only CI policy gate
         run: python scripts/preflight-ci-manual-only.py
@@ -61,9 +63,34 @@ jobs:
           if (-not (Test-Path -LiteralPath $requiredBrep -PathType Leaf)) {
             throw "Required BricsCAD V26 host reference is missing: TD_MgdBrep.dll"
           }
-          $desktopRuntimes = @(dotnet --list-runtimes | Where-Object { $_ -match '^Microsoft\.WindowsDesktop\.App 8\.' })
-          if ($desktopRuntimes.Count -eq 0) {
-            throw ".NET 8 Windows Desktop Runtime/SDK is required for the BricsCAD V26 managed host."
+
+          # BricsCAD loads the machine-installed x64 desktop runtime. actions/setup-dotnet can place
+          # an SDK/runtime on PATH and DOTNET_ROOT that is suitable for builds but cannot satisfy
+          # the native host. Fail here against the same Program Files contract as the runtime gate.
+          $programFiles = [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFiles)
+          if ([string]::IsNullOrWhiteSpace($programFiles)) {
+            throw "BricsCAD V26 requires a system-installed x64 .NET 8 Windows Desktop Runtime."
+          }
+          $installedRoot = Join-Path $programFiles 'dotnet'
+          $coreRoot = Join-Path $installedRoot 'shared\Microsoft.NETCore.App'
+          $desktopRoot = Join-Path $installedRoot 'shared\Microsoft.WindowsDesktop.App'
+          $installedCore8 = @()
+          $installedDesktop8 = @()
+          if (Test-Path -LiteralPath $coreRoot -PathType Container) {
+            $installedCore8 = @(Get-ChildItem -LiteralPath $coreRoot -Directory -ErrorAction Stop | Where-Object {
+              $_.Name -match '^8\.' -and (Test-Path -LiteralPath (Join-Path $_.FullName 'coreclr.dll') -PathType Leaf)
+            })
+          }
+          if (Test-Path -LiteralPath $desktopRoot -PathType Container) {
+            $installedDesktop8 = @(Get-ChildItem -LiteralPath $desktopRoot -Directory -ErrorAction Stop | Where-Object {
+              $_.Name -match '^8\.' -and
+              (Test-Path -LiteralPath (Join-Path $_.FullName 'WindowsBase.dll') -PathType Leaf) -and
+              (Test-Path -LiteralPath (Join-Path $_.FullName 'System.Windows.Forms.dll') -PathType Leaf)
+            })
+          }
+          $matchingSystemRuntime = @($installedCore8 | Where-Object { $installedDesktop8.Name -contains $_.Name })
+          if ($matchingSystemRuntime.Count -eq 0) {
+            throw "BricsCAD V26 requires a matching system-installed x64 .NET 8 Core + Windows Desktop Runtime under '$installedRoot'; an Actions-managed DOTNET_ROOT alone is insufficient."
           }
 
       - name: Build Core Release
@@ -82,6 +109,18 @@ jobs:
             -Configuration Release `
             -Platform x64
 
+      - name: Clear stale V26 runtime evidence
+        shell: powershell
+        run: |
+          $runtimeDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts\bricscad-v26-runtime'
+          if (Test-Path -LiteralPath $runtimeDir) {
+            $runtimeItem = Get-Item -LiteralPath $runtimeDir -Force
+            if (($runtimeItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              throw "Refusing to clear V26 runtime evidence through a reparse point: $runtimeDir"
+            }
+            Remove-Item -LiteralPath $runtimeDir -Recurse -Force
+          }
+
       - name: Licensed V26 NETLOAD runtime gate
         if: ${{ inputs.run_runtime }}
         shell: powershell
@@ -94,6 +133,27 @@ jobs:
             -Profile $env:BRICSCAD_V26_PROFILE `
             -ArtifactDir "$env:GITHUB_WORKSPACE\artifacts\bricscad-v26-runtime"
 
+      - name: Create and validate V26 qualification artifact provenance
+        shell: powershell
+        run: |
+          & .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $env:BRICSCAD_V26_DIR -VerifyStatePath $env:V26_HOST_REFERENCE_STATE | Out-Null
+          $plugin = (Resolve-Path "src\QS3D.BricsCAD.V26\bin\x64\Release\net8.0-windows\QS3D.BricsCAD.V26.dll").Path
+          $core = (Resolve-Path "src\QS3D.BricsCAD.V26\bin\x64\Release\net8.0-windows\QS3D.Core.dll").Path
+          $runtimeDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts\bricscad-v26-runtime'
+          New-Item -ItemType Directory -Path (Split-Path -Parent $env:V26_QUALIFICATION_MANIFEST) -Force | Out-Null
+          & .\scripts\new-v26-qualification-artifact-manifest.ps1 `
+            -SourceCommit '${{ github.sha }}' `
+            -PluginPath $plugin `
+            -CorePath $core `
+            -HostReferenceStatePath $env:V26_HOST_REFERENCE_STATE `
+            -RuntimeArtifactDir $runtimeDir `
+            -OutputPath $env:V26_QUALIFICATION_MANIFEST | Out-Null
+          & .\scripts\assert-v26-qualification-artifact-manifest.ps1 `
+            -ManifestPath $env:V26_QUALIFICATION_MANIFEST `
+            -PluginPath $plugin `
+            -CorePath $core `
+            -ExpectedSourceCommit '${{ github.sha }}'
+
       - name: Upload V26 qualification artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -102,4 +162,5 @@ jobs:
           path: |
             src/QS3D.BricsCAD.V26/bin/x64/Release/net8.0-windows/QS3D.BricsCAD.V26.dll
             src/QS3D.BricsCAD.V26/bin/x64/Release/net8.0-windows/QS3D.Core.dll
+            artifacts/bricscad-v26-qualification-manifest.json
             artifacts/bricscad-v26-runtime/
