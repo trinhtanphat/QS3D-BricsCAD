@@ -483,6 +483,8 @@ Valid statuses: `OPEN`, `IN_PROGRESS`, `PASS`, `BLOCKED`.
 
 ## LOCAL-022 — Móng đơn placement/edit/save-reopen on V25/V26
 
+- Reporting runner checkpoint (2026-09-08): source-safe harness `95c4e26f5798be8d52512864a6df8ea582f04dfb` adds separate `-NativeApi -QuantityUi` on unchanged frozen product `87aff7fec452f9a8dd9f641ef84d143edc73514d`. Both SDK builds and focused host-free suite passed. Execute fresh V25 then V26 allocations only after this exact harness ancestry is pushed/clean; actual launch head is frozen in `allocation.json`. Follow `tests/QS3D.LocalQualification.V25/QUANTITY-UI.md`: real BQ summary/recalculate/detail/summary/Locate/close and fresh-process BQ, analytic total 76/3 m³, exact semantic/source identity and nonmutation. Requires the existing isolated profiles/packages/autostart pause; no installed-product or customer-DWG changes. Wrong quantities fail immediately, never become an adjusted oracle. Licensed reporting verdict is still PENDING; accepted authoring/native cells are not replayed as reporting proof. MCP stays paused.
+
 - Priority: P0
 - Status: IN_PROGRESS
 - Area: issue `#4034`; BricsCAD V25/V26 Móng đơn Add/placement/edit/regenerate/save-reopen
