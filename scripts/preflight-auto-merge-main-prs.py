@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed if repository-wide main PR auto-ready/auto-merge policy regresses."""
+"""Fail closed if repository-wide Ready PR auto-update/auto-merge policy regresses."""
 
 from pathlib import Path
 
@@ -38,30 +38,45 @@ supply_chain = ACTIONS_SUPPLY_CHAIN_GUARD.read_text(encoding="utf-8")
 ci_policy = CI_POLICY_DOC.read_text(encoding="utf-8")
 
 for token in (
+    "name: Auto-update and auto-merge ready main PRs",
     "pull_request_target:",
+    "push:",
+    "- main",
     "opened",
     "reopened",
     "synchronize",
     "ready_for_review",
     "converted_to_draft",
-    "contents: read",
+    "contents: write",
     "pull-requests: write",
+    "github.event_name == 'pull_request_target'",
     "github.event.pull_request.base.ref == 'main'",
+    "github.event_name == 'push'",
+    "github.ref == 'refs/heads/main'",
     "GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}",
     "gh pr view",
-    "isDraft",
-    "autoMergeRequest",
-    "gh pr ready",
+    "state,isDraft,isCrossRepository,mergeStateStatus,headRefOid,autoMergeRequest,baseRefName",
+    "is_draft",
+    "is_cross_repository",
+    "merge_state",
+    "head_oid",
+    "BEHIND",
+    'gh api --method PUT "repos/$GH_REPO/pulls/$pr_number/update-branch"',
+    'expected_head_sha="$head_oid"',
+    "gh pr list",
+    "--base main",
+    "--state open",
+    "--limit 1000",
     "gh pr merge --auto --merge",
 ):
     require(text, token)
 
 for token in (
+    "gh pr ready",
     "actions/checkout",
     "--admin",
     "github.event.pull_request.head.sha",
     "github.event.pull_request.head.ref",
-    "contents: write",
     "actions: write",
     "issues: write",
     "packages: write",
@@ -74,9 +89,14 @@ for token in (
 
 for token in (
     'AUTO_MERGE_WORKFLOW = "auto-merge-main-prs.yml"',
-    'expected = {"pull_request_target"}',
-    'github.event.pull_request.base.ref == \'main\'',
+    'expected = {"pull_request_target", "push"}',
+    "github.event_name == 'pull_request_target'",
+    "github.event.pull_request.base.ref == 'main'",
+    "github.event_name == 'push'",
+    "github.ref == 'refs/heads/main'",
+    '"contents: write"',
     '"gh pr merge --auto --merge"',
+    '"gh pr ready"',
     '"actions/checkout"',
     '"--admin"',
 ):
@@ -85,7 +105,12 @@ for token in (
 for token in (
     'AUTO_MERGE_WORKFLOW = "auto-merge-main-prs.yml"',
     "workflow.name != AUTO_MERGE_WORKFLOW",
+    "Auto-update and auto-merge ready main PRs",
+    "contents: write",
+    "update-branch",
+    "expected_head_sha",
     '"gh pr merge --auto --merge"',
+    '"gh pr ready"',
     '"--admin"',
     "retired Hybrid PR Coordinator workflow must remain removed",
 ):
@@ -100,8 +125,12 @@ for token in (
     require(supply_chain, token, "Actions supply-chain guard")
 
 for token in (
-    "## Automatic PR ready/auto-merge arming",
+    "## Automatic Ready PR refresh/auto-merge arming",
     ".github/workflows/auto-merge-main-prs.yml",
+    "Draft is a manual hold",
+    "update-branch",
+    "expected_head_sha",
+    "contents: write",
     "does not perform the final merge",
     "Repository-wide native auto-merge arming is explicitly enabled",
     "branch protection and required checks remain authoritative",
@@ -109,9 +138,12 @@ for token in (
     require(ci_policy, token, "CI policy document")
 
 for token in (
+    "automatically marks a draft PR Ready for review",
+    "gh pr ready",
+    "Automatic branch refresh/update-branch behavior is not part of this workflow",
     "Repository-wide blind auto-merge remains intentionally disabled",
     ".github/workflows/hybrid-pr-coordinator.yml` is the single owner-approved queue coordinator",
 ):
     forbid(ci_policy, token, "CI policy document")
 
-print("PASS auto-merge main PR policy source guard")
+print("PASS auto-update/auto-merge ready main PR policy source guard")
