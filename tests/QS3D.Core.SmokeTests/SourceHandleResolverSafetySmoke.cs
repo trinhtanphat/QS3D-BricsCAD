@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
@@ -77,7 +78,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("source-handle-blank", "Source Handle Blank");
             var element = NewElement("E");
-            element.SourceHandles.Add(" ");
+            SeedPersistedSourceHandle(element, " ");
             project.Elements.Add(element);
 
             AssertInvalidDirectSourceHandleFailsClosed(project, element.Id, "empty SourceHandles entry at index 0");
@@ -87,7 +88,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("source-handle-noncanonical", "Source Handle Noncanonical");
             var element = NewElement("E");
-            element.SourceHandles.Add(" ABCD");
+            SeedPersistedSourceHandle(element, " ABCD");
             project.Elements.Add(element);
 
             AssertInvalidDirectSourceHandleFailsClosed(project, element.Id, "non-canonical SourceHandles entry at index 0");
@@ -114,7 +115,7 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("source-handle-duplicate", "Source Handle Duplicate");
             var element = NewElement("E");
             element.SourceHandles.Add("ABCD");
-            element.SourceHandles.Add("ABCD");
+            SeedPersistedSourceHandle(element, "ABCD");
             project.Elements.Add(element);
 
             AssertDuplicateSourceHandlesFailClosed(project, element.Id);
@@ -125,7 +126,7 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("source-handle-case-alias", "Source Handle Case Alias");
             var element = NewElement("E");
             element.SourceHandles.Add("ABCD");
-            element.SourceHandles.Add("abcd");
+            SeedPersistedSourceHandle(element, "abcd");
             project.Elements.Add(element);
 
             AssertDuplicateSourceHandlesFailClosed(project, element.Id);
@@ -277,6 +278,15 @@ namespace QS3D.Core.SmokeTests
                 if (handles.Count != expected.Length || expected.Any(x => !handles.Contains(x, StringComparer.OrdinalIgnoreCase)))
                     throw new Exception("Canonical generated-owner locate fallback did not resolve slot " + pair.Key + ".");
             }
+        }
+
+        private static void SeedPersistedSourceHandle(ProjectElement element, string value)
+        {
+            var valuesField = element.SourceHandles.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed malformed persisted SourceHandles state.");
+            var values = valuesField.GetValue(element.SourceHandles) as List<string>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement.SourceHandles backing collection.");
+            values.Add(value);
         }
 
         private static ProjectElement NewElement(string id) =>
