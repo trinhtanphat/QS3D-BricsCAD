@@ -696,8 +696,12 @@ namespace QS3D.Core.Persistence
             foreach (var dependency in source.DependsOn) target.DependsOn.Add(dependency);
 
             RequireCanonicalElementProperties(source);
-            target.Properties.Clear();
-            foreach (var property in source.Properties) target.Properties[property.Key] = property.Value;
+            var targetProperties = target.Properties as ProjectElementPropertyDictionary
+                ?? throw new InvalidOperationException("Project snapshot target does not expose the canonical ProjectElement property store.");
+            foreach (var key in new List<string>(targetProperties.Keys))
+                targetProperties.RemovePersistenceValue(key);
+            foreach (var property in source.Properties)
+                targetProperties.SetPersistenceValue(property.Key, property.Value);
 
             target.Quantities.Clear();
             foreach (var quantity in source.Quantities) target.SetQuantity(quantity.Key, quantity.Value);

@@ -18,7 +18,7 @@ namespace QS3D.Core.SmokeTests
 
             var element = new ProjectElement("B1", ElementCategory.Beam, family.Id, "floor", "zone");
             element.Properties["LengthM"] = "3";
-            element.Properties["\t"] = "456";
+            InjectLegacyElementProperty(element, "\t", "456");
             project.Elements.Add(element);
             project.QuantityRules.Add(new QuantityRule("beam-projected", ElementCategory.Beam, "ProjectedQuantity", "LengthM*Factor", "1"));
 
@@ -29,6 +29,15 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("Valid numeric variables were not projected correctly.");
             if (!element.Properties.TryGetValue("Rule:ProjectedQuantity", out var provenance) || provenance != "beam-projected@1")
                 throw new InvalidOperationException("Quantity rule provenance was not recorded.");
+        }
+
+        private static void InjectLegacyElementProperty(ProjectElement element, string key, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_properties", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Legacy Element fixture could not locate the property backing dictionary.");
+            var backing = field.GetValue(element) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Legacy Element fixture property backing dictionary had an unexpected type.");
+            backing[key] = value;
         }
 
         private static void InjectLegacyFamilyProperty(ProjectFamily family, string key, string value)
