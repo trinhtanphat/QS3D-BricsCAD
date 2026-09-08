@@ -6,6 +6,11 @@ PACKAGER = ROOT / "scripts" / "package-v26.ps1"
 NORMALIZED_ZIP_ENTRY = "$entryName = $fullName.Substring($packagePrefix.Length).Replace([IO.Path]::DirectorySeparatorChar, '/').Replace([IO.Path]::AltDirectorySeparatorChar, '/')"
 ZIP_ENTRY_BACKSLASH_REJECTION = "$entryName.Contains('\\')"
 MANIFEST_BACKSLASH_REJECTION = "$relativePath.Contains('\\')"
+OWNED_CREATE = "$destinationStream = [IO.File]::Open($destination, [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)"
+ARM_DELETE = "Set-PackageOutputDeleteDisposition -Stream $destinationStream -Delete $true"
+ZIP_CREATE = "$archive = [IO.Compression.ZipArchive]::new($destinationStream, [IO.Compression.ZipArchiveMode]::Create, $true)"
+DURABLE_FLUSH = "$destinationStream.Flush($true)"
+COMMIT_DELETE = "Set-PackageOutputDeleteDisposition -Stream $destinationStream -Delete $false"
 
 
 def require(condition: bool, message: str) -> None:
@@ -51,6 +56,36 @@ def validate(text: str) -> None:
     require("New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc" in text,
             "V26 final ZIP creation must route through the deterministic writer.")
 
+    # Candidate-caused publication safety: the deterministic writer must create
+    # the final pathname itself as one exact owned generation. A closed temp
+    # pathname followed by pathname Move/Delete reintroduces a substitution
+    # window and makes the bytes hashed after publication unverifiable.
+    require("function Set-PackageOutputDeleteDisposition {" in text,
+            "V26 deterministic ZIP publication must expose handle-bound rollback/commit disposition.")
+    require("FILE_DISPOSITION_INFO" in text and "SetFileInformationByHandle" in text,
+            "V26 deterministic ZIP publication must use native handle disposition for exact-generation rollback.")
+    require(OWNED_CREATE in text,
+            "V26 deterministic ZIP must create the final destination fresh-only through the owned output handle.")
+    require(ARM_DELETE in text,
+            "V26 deterministic ZIP must arm exact-generation deletion before archive bytes are written.")
+    require(ZIP_CREATE in text,
+            "V26 deterministic ZIP must write through the owned final-destination stream.")
+    require(DURABLE_FLUSH in text,
+            "V26 deterministic ZIP must durably flush the owned final generation before commit.")
+    require(COMMIT_DELETE in text,
+            "V26 deterministic ZIP must clear deletion only after successful durable construction.")
+    require("$temporary =" not in text and "[IO.File]::Move($temporary, $destination)" not in text,
+            "V26 deterministic ZIP must not publish by closing/reopening a temporary pathname generation.")
+
+    create_pos = text.find(OWNED_CREATE)
+    arm_pos = text.find(ARM_DELETE, create_pos + 1)
+    zip_pos = text.find(ZIP_CREATE, arm_pos + 1)
+    flush_pos = text.find(DURABLE_FLUSH, zip_pos + 1)
+    commit_pos = text.find(COMMIT_DELETE, flush_pos + 1)
+    require(min(create_pos, arm_pos, zip_pos, flush_pos, commit_pos) >= 0 and
+            create_pos < arm_pos < zip_pos < flush_pos < commit_pos,
+            "V26 exact output generation must be delete-armed before ZIP writes and committed only after durable flush.")
+
 
 text = PACKAGER.read_text(encoding="utf-8")
 validate(text)
@@ -72,6 +107,13 @@ for marker in (
     "gitCommit = $gitCommit",
     "generatedUtc = $sourceTimestampUtc.ToString('o')",
     "New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc",
+    "function Set-PackageOutputDeleteDisposition {",
+    "SetFileInformationByHandle",
+    OWNED_CREATE,
+    ARM_DELETE,
+    ZIP_CREATE,
+    DURABLE_FLUSH,
+    COMMIT_DELETE,
 ):
     require(marker in text, f"Mutation probe could not find required marker: {marker}")
     mutated = text.replace(marker, "__QS3D_MUTATION_REMOVED__", 1)
