@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 
@@ -172,8 +173,8 @@ namespace QS3D.Core.SmokeTests
         private static void RelationCapacityMatchesPersistenceBoundary()
         {
             var element = CleanElement();
-            for (var index = 0; index < MaximumRelationEntries; index++)
-                element.DependsOn.Add("E" + index.ToString("D5"));
+            SeedPersistedRelations(element.DependsOn, MaximumRelationEntries - 1);
+            element.DependsOn.Add("E09999");
 
             Equal(MaximumRelationEntries, element.DependsOn.Count);
             element.MarkClean(ElementDirtyFlags.All);
@@ -194,6 +195,16 @@ namespace QS3D.Core.SmokeTests
             element.DependsOn.Insert(0, "E-REPLACEMENT");
             Equal(MaximumRelationEntries, element.DependsOn.Count);
             Equal("E-REPLACEMENT", element.DependsOn[0]);
+        }
+
+        private static void SeedPersistedRelations(IList<string> relation, int count)
+        {
+            var valuesField = relation.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed canonical persisted relation-bound fixture.");
+            var values = valuesField.GetValue(relation) as List<string>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement relation backing collection.");
+            for (var index = 0; index < count; index++)
+                values.Add("E" + index.ToString("D5"));
         }
 
         private static void AssertEffectiveMutation(Action<ProjectElement>? prepare, Action<ProjectElement> mutation)
