@@ -2,8 +2,8 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+PRESENTATION = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.ScopePresentation.cs"
 XAML = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.xaml"
-BROWSER = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "WorkspacePanel.ProjectBrowser.cs"
 VIEW_MODEL = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "ViewModels" / "WorkspaceViewModel.cs"
 
 
@@ -17,55 +17,52 @@ def require(text: str, marker: str, scope: str) -> None:
         fail(scope + " is missing required marker: " + marker)
 
 
-def require_order(text: str, markers: tuple[str, ...], scope: str) -> None:
-    cursor = -1
-    for marker in markers:
-        position = text.find(marker, cursor + 1)
-        if position < 0:
-            fail(scope + " is missing ordered marker: " + marker)
-        if position <= cursor:
-            fail(scope + " has invalid marker order around: " + marker)
-        cursor = position
-
-
 def main() -> None:
-    for path in (XAML, BROWSER, VIEW_MODEL):
+    for path in (PRESENTATION, XAML, VIEW_MODEL):
         if not path.is_file():
             fail("missing source file " + str(path.relative_to(ROOT)))
 
+    presentation = PRESENTATION.read_text(encoding="utf-8")
     xaml = XAML.read_text(encoding="utf-8")
-    browser = BROWSER.read_text(encoding="utf-8")
     view_model = VIEW_MODEL.read_text(encoding="utf-8")
 
-    # The runtime-created Project Browser tabs must opt into host-independent dark chrome.
-    require(xaml, 'x:Key="WorkspaceBrowserTabItem"', "Workspace-local tab style")
+    # Runtime-created TabItems must not inherit host/system light chrome.
     for marker in (
-        'TargetType="{x:Type TabItem}"',
-        'Foreground" Value="{StaticResource TextBrush}"',
-        'Background" Value="{StaticResource Bg2Brush}"',
-        'BorderBrush" Value="{StaticResource BorderStrongBrush}"',
-        '<ControlTemplate TargetType="{x:Type TabItem}">',
-        '<Trigger Property="IsSelected" Value="True">',
-        '<Trigger Property="IsMouseOver" Value="True">',
+        "ApplyWorkspaceBrowserTabStyle",
+        "new Style(typeof(TabItem))",
+        "new ControlTemplate(typeof(TabItem))",
+        "new FrameworkElementFactory(typeof(Border))",
+        'TryFindResource("TextBrush")',
+        'TryFindResource("Bg2Brush")',
+        'TryFindResource("Bg1Brush")',
+        'TryFindResource("BgHoverBrush")',
+        'TryFindResource("BorderStrongBrush")',
+        'TryFindResource("AccentBrush")',
+        "TabItem.IsSelectedProperty",
+        "UIElement.IsMouseOverProperty",
+        "item.Style = style",
     ):
-        require(xaml, marker, "Workspace-local tab style")
+        require(presentation, marker, "host-independent Project Browser tab chrome")
 
-    require_order(
-        browser,
-        (
-            "var tabs = new TabControl",
-            'ItemContainerStyle = TryFindResource("WorkspaceBrowserTabItem") as Style,',
-            'new TabItem { Header = "Mô hình", Content = ModelTree }',
-            'new TabItem { Header = "Project Browser", Content = CreateProjectBrowserSurface() }',
-        ),
-        "Project Browser tab-style binding",
-    )
+    # Empty scope copy is presentation-only and follows actual collection changes.
+    for marker in (
+        "INotifyCollectionChanged",
+        "CollectionChanged += OnWorkspaceScopeCollectionChanged",
+        "CollectionChanged -= OnWorkspaceScopeCollectionChanged",
+        'ApplyWorkspaceScopeComboState(ZoneCombo, "Không có Zone")',
+        'ApplyWorkspaceScopeComboState(FloorCombo, "Không có Tầng")',
+        "combo.Items.Count == 0",
+        "combo.IsEditable = true",
+        "combo.IsReadOnly = true",
+        "combo.Text = emptyText",
+        "combo.IsHitTestVisible = false",
+        "combo.IsEditable = false",
+        "combo.IsReadOnly = false",
+        "combo.IsHitTestVisible = true",
+    ):
+        require(presentation, marker, "Zone/Floor empty-state presentation")
 
-    # Empty scope collections must remain real empty collections while the UI communicates no-data.
-    for collection, text in (("Zones", "Không có Zone"), ("Floors", "Không có Tầng")):
-        require(xaml, f'Binding="{{Binding {collection}.Count}}" Value="0"', f"{collection} empty-state trigger")
-        require(xaml, f'Text="{text}"', f"{collection} empty-state copy")
-
+    # Keep the authoritative XAML bindings and mutation handlers untouched.
     for marker in (
         'x:Name="ZoneCombo" ItemsSource="{Binding Zones}"',
         'x:Name="FloorCombo" ItemsSource="{Binding Floors}"',
