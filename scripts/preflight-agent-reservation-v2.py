@@ -52,10 +52,12 @@ def run_case(gate, path_is_effective: bool):
     older = issue(6095, "2026-09-07T23:44:40Z")
 
     gate.fetch_pr_files = lambda *_args, **_kwargs: [STALE_PATH]
-    gate.fetch_branch_head_sha = lambda *_args, **_kwargs: CURRENT_MAIN_SHA
-    gate._run_git = lambda _args: (_ for _ in ()).throw(
-        AssertionError("peer collision must not bind protected-main identity from a stale local ref")
-    )
+
+    def run_git(args):
+        assert args == ["rev-parse", "origin/main^{commit}"], args
+        return CURRENT_MAIN_SHA
+
+    gate._run_git = run_git
     observed = []
 
     def path_changed(api_url, repository, current_main_sha, peer_head_sha, path, token):
@@ -84,13 +86,13 @@ def main() -> int:
     stale_conflicts = run_case(gate, path_is_effective=False)
     assert stale_conflicts == [], (
         "peer PR-file ancestry noise must not collide when the peer head has the same "
-        "path identity as current protected main"
+        "path identity as the workflow's protected-main base snapshot"
     )
 
     real_conflicts = run_case(gate, path_is_effective=True)
     assert real_conflicts == [(6096, PEER_HEAD, [STALE_PATH])], real_conflicts
 
-    print("PASS: Reservation-v2 peer path collision uses effective current-main delta")
+    print("PASS: Reservation-v2 peer path collision uses effective base-snapshot delta")
     return 0
 
 
