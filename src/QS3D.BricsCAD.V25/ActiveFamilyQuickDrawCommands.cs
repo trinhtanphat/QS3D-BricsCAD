@@ -256,7 +256,12 @@ namespace QS3D.BricsCAD.V25
         private static void Report(Document document, string message)
         {
             try { document.Editor.WriteMessage("\n" + message); } catch { }
-            try { PaletteCoordinator.SetStatus(message); } catch { }
+            try
+            {
+                if (ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))
+                    PaletteCoordinator.SetStatus(message);
+            }
+            catch { }
         }
     }
 }
