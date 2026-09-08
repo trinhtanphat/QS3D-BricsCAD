@@ -20,7 +20,7 @@ namespace QS3D.BricsCAD.V25
         {
             if (document == null || Attached.Contains(document)) return;
             var attachmentToken = new object();
-            EventHandler attachmentHandler = (sender, args) => OnImpliedSelectionChanged(sender, args);
+            EventHandler attachmentHandler = (_, __) => OnImpliedSelectionChanged(document, attachmentToken);
             var subscribed = false;
             try
             {
@@ -29,8 +29,8 @@ namespace QS3D.BricsCAD.V25
                 AttachmentHandlers[document] = attachmentHandler;
 
                 // Publish exact generation ownership before entering the native subscription boundary.
-                // The generation-specific delegate lets stale outer work unsubscribe only its own
-                // handler if the host pumps detach/reattach callbacks while += is in progress.
+                // The generation-specific delegate captures document + token so stale callbacks cannot
+                // act for a later attachment that happens to reuse the same native Document wrapper.
                 subscribed = true;
                 document.ImpliedSelectionChanged += attachmentHandler;
                 if (!IsCurrentAttachment(document, attachmentToken))
@@ -149,11 +149,9 @@ namespace QS3D.BricsCAD.V25
             Refreshing.Remove(document);
         }
 
-        private static void OnImpliedSelectionChanged(object sender, EventArgs e)
+        private static void OnImpliedSelectionChanged(Document document, object attachmentToken)
         {
-            var document = sender as Document ?? Application.DocumentManager.MdiActiveDocument;
-            if (document == null ||
-                !Attached.Contains(document) ||
+            if (!IsCurrentAttachment(document, attachmentToken) ||
                 !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;
             ScheduleRefresh(document);
         }
