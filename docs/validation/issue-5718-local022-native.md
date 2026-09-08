@@ -2,6 +2,45 @@
 
 ## Verdict
 
+Post-merge continuation (2026-09-08): #6189 owns the remaining standalone BQ
+qualification work after the released #5718/#5738 harness carrier. PR5738
+merged as `19a62fa66c05034397039bc32944aeeaee6b6f09`; production quantity
+fix #6145/#6169 merged as `e768d19f967e010d0343f446b98b561dce7c24bb`.
+Their exact candidate trees matched the fetched merges, with protected
+preflight/core SUCCESS (harness PR34243315638 on e217bf2c0; source
+PR34244632340 on e31cba167). Both task reservations are released. Parent
+#4034/#72 and aggregate LOCAL-022 acceptance remain **IN_PROGRESS**.
+
+The next matched local package pair is built from exact merged source
+`e768d19f967e010d0343f446b98b561dce7c24bb`, not from the older unmerged
+b816 candidate. Actual SDK builds: V25 23.57s, V26 18.49s, zero warnings/errors.
+
+- V25 ZIP SHA256 `15b86bcdacdd614fb785143f49e4d51e90bc380c2b216c583acebcc35abccdaa`.
+- V26 ZIP SHA256 `30a0a6a99875468ac5063f2397903cc913089f84410bf9d57bc3901ab2d04c1b`.
+- Both version `0.1.0-preview.10307`, unsigned, 564 commands, locally generated
+  without installed-product changes. `LOCAL_PR_CANDIDATE` remains the existing
+  non-published schema category even though this source is now merged; the
+  local provenance releaseTag is only a version label, not a publication claim.
+- Wrapper/native predecessor checks pin this exact pair; new negative cases
+  reject the old b816 receipt/allocation/archive as V26 admission. The actual
+  wrapper test failed on the old pins before the pin update. Strict76/3 oracle,
+  native phase coverage, physical gestures and full cleanup requirements are
+  unchanged. Source/build evidence is not licensed PASS.
+- Allocation65 below remains consumed and the native launcher interruption
+  remains unresolved. No new CAD allocation is started merely by preparing
+  these packages. A fresh, uninterrupted V25 BQ result and full cleanup are
+  required before V26; no replay, synthetic ACK or inferred PASS.
+- Package preparation check: V25 archive integrity passed; both new probe SDK
+  builds and the complete host-free runner suite passed. The extra production
+  V26 release-identity verifier failed with `managed assembly identity mismatch`.
+  Direct inspection found both managed versions and metadata equal0.1.0.0;
+  dot-sourcing the actual verifier confirmed its `Get-HeldAssemblyVersion`
+  returns an Object[] containing `System.Threading.Tasks.VoidTaskResult` and
+  `System.Version`, because its CopyToAsync await result is unsuppressed.
+  This is an observed verifier failure, not successful package admission or a
+  DLL version mismatch. Its separate source fix must preserve held-byte/hash/
+  timeout checks; this harness does not alter or bypass that verifier.
+
 Latest attempt (2026-09-08): V25 `quantity-v25-65` is **FAIL_OR_NO_RESULT**,
 not a BQ verdict. RunId `de6f8cb516864697a3e0d16c25cb998d`, exact pushed
 harness `28df62564ff7277dad6daf2065829b683b3809ae`, product source
