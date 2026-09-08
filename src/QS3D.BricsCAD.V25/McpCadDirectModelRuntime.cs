@@ -21,6 +21,7 @@ namespace QS3D.BricsCAD.V25
     internal static class McpCadDirectModelRuntime
     {
         private const int DbmodPersistentContentMask = 1 | 4 | 32;
+        private const double GeometryTolerance = 1e-9;
 
         private static readonly HashSet<string> Tools = new HashSet<string>(StringComparer.Ordinal)
         {
@@ -84,12 +85,12 @@ namespace QS3D.BricsCAD.V25
                 "\"x\",\"y\",\"z\",\"length\",\"width\",\"height\",\"confirmMutation\"");
             yield return Descriptor(
                 "cad_extrude",
-                "Extrude one closed planar curve vertically into a native Solid3d without prompt scripting.",
+                "Extrude one validated closed planar non-zero-area curve vertically into a native Solid3d without prompt scripting; source geometry is preserved on failure.",
                 "\"handle\":{\"type\":\"string\",\"maxLength\":32},\"height\":{\"type\":\"number\"}" + LayerAndConfirm(),
                 "\"handle\",\"height\",\"confirmMutation\"");
-            yield return BooleanDescriptor("cad_boolean_union", "Union target Solid3d with tool Solid3d; the tool solid is consumed after success.");
-            yield return BooleanDescriptor("cad_boolean_subtract", "Subtract tool Solid3d from target Solid3d; the tool solid is consumed after success.");
-            yield return BooleanDescriptor("cad_boolean_intersect", "Intersect target Solid3d with tool Solid3d; the tool solid is consumed after success.");
+            yield return BooleanDescriptor("cad_boolean_union", "Union two validated Solid3d entities through detached kernel clones; the tool solid is consumed only after kernel success.");
+            yield return BooleanDescriptor("cad_boolean_subtract", "Subtract tool Solid3d from target through detached kernel clones; disjoint inputs are a deterministic no-op and sources are preserved on failure.");
+            yield return BooleanDescriptor("cad_boolean_intersect", "Intersect two Solid3d entities through detached kernel clones; disjoint inputs are a deterministic no-op and sources are preserved on failure.");
             yield return Descriptor(
                 "cad_save",
                 "Synchronously save the active rooted DWG and report success after persistent DBMOD content is clean; window/view bits may remain.",
@@ -249,7 +250,8 @@ namespace QS3D.BricsCAD.V25
         {
             var handle = Handle(body, "handle");
             var height = NumberRequired(body, "height");
-            if (Math.Abs(height) <= 1e-12) throw new InvalidOperationException("height must be non-zero.");
+            if (Math.Abs(height) <= GeometryTolerance)
+                throw new InvalidOperationException("cad_extrude validation failed: height must be non-zero.");
             var requestedLayer = LayerOptional(body);
             var document = RequireDocument();
             EnsureAutomationRunning();
@@ -257,33 +259,69 @@ namespace QS3D.BricsCAD.V25
             using (var transaction = document.Database.TransactionManager.StartTransaction())
             {
                 var source = OpenEntity(transaction, document.Database, handle, OpenMode.ForRead) as Curve;
-                if (source == null) throw new InvalidOperationException("cad_extrude requires a curve entity handle.");
+                if (source == null)
+                    throw new InvalidOperationException("cad_extrude validation failed: handle must identify a live Curve entity in the active drawing.");
+                if (!source.Closed)
+                    throw new InvalidOperationException("cad_extrude validation failed: source curve is open; close the profile before extrusion.");
+                if (!source.IsPlanar)
+                    throw new InvalidOperationException("cad_extrude validation failed: source curve is not planar.");
+                double sourceArea;
+                try { sourceArea = Math.Abs(source.Area); }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException("cad_extrude validation failed: source curve area could not be evaluated.", ex);
+                }
+                if (double.IsNaN(sourceArea) || double.IsInfinity(sourceArea) || sourceArea <= GeometryTolerance)
+                    throw new InvalidOperationException("cad_extrude validation failed: source curve has zero or non-finite enclosed area.");
+
+                Curve? profileClone = null;
                 Region? region = null;
-                var regionAppended = false;
                 var solid = new Solid3d();
                 try
                 {
-                    var regions = Region.CreateFromCurves(new DBObjectCollection { source });
+                    profileClone = source.Clone() as Curve;
+                    if (profileClone == null)
+                        throw new InvalidOperationException("cad_extrude validation failed: source curve could not be cloned safely.");
+
+                    DBObjectCollection regions;
+                    try
+                    {
+                        regions = Region.CreateFromCurves(new DBObjectCollection { profileClone });
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException(
+                            "cad_extrude validation failed: source curve is self-intersecting or cannot form exactly one closed planar region.", ex);
+                    }
                     if (regions == null || regions.Count != 1 || !(regions[0] is Region generatedRegion))
                     {
                         if (regions != null)
                             foreach (DBObject item in regions) item.Dispose();
-                        throw new InvalidOperationException("Source curve must form exactly one closed planar region for cad_extrude.");
+                        throw new InvalidOperationException(
+                            "cad_extrude validation failed: source curve must form exactly one non-self-intersecting closed planar region.");
                     }
                     region = generatedRegion;
-                    var model = ModelSpace(transaction, document.Database, OpenMode.ForWrite);
-                    model.AppendEntity(region);
-                    regionAppended = true;
-                    transaction.AddNewlyCreatedDBObject(region, true);
                     solid.SetDatabaseDefaults(document.Database);
-                    solid.Extrude(region, height, 0d);
+                    try
+                    {
+                        using (var options = new SweepOptions())
+                            solid.CreateExtrudedSolid(region, new Vector3d(0d, 0d, height), options);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException(
+                            "cad_extrude native solid creation failed after validation; source curve was preserved.", ex);
+                    }
+
+                    EnsureSameActiveDocument(document, "cad_extrude");
+                    EnsureAutomationRunning();
                     ApplyLayer(transaction, document.Database, solid, string.IsNullOrWhiteSpace(requestedLayer) ? source.Layer : requestedLayer);
+                    var model = ModelSpace(transaction, document.Database, OpenMode.ForWrite);
                     var id = model.AppendEntity(solid);
                     transaction.AddNewlyCreatedDBObject(solid, true);
-                    if (!region.IsErased) region.Erase();
                     transaction.Commit();
                     var resultHandle = id.Handle.ToString();
-                    RecordMutation(document, "cad-extrude", "handle=" + resultHandle + "; sourceHandle=" + handle + "; kernelSource=database-resident-region");
+                    RecordMutation(document, "cad-extrude", "handle=" + resultHandle + "; sourceHandle=" + handle + "; kernelSource=transient-region");
                     return "{\"created\":true,\"handle\":\"" + Escape(resultHandle) + "\",\"type\":\"Solid3d\",\"sourceHandle\":\"" + Escape(handle) + "\"}";
                 }
                 catch
@@ -293,7 +331,8 @@ namespace QS3D.BricsCAD.V25
                 }
                 finally
                 {
-                    if (!regionAppended) region?.Dispose();
+                    region?.Dispose();
+                    profileClone?.Dispose();
                 }
             }
         }
@@ -309,16 +348,64 @@ namespace QS3D.BricsCAD.V25
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartTransaction())
             {
-                var target = OpenEntity(transaction, document.Database, targetHandle, OpenMode.ForWrite) as Solid3d;
-                var operand = OpenEntity(transaction, document.Database, toolHandle, OpenMode.ForWrite) as Solid3d;
+                var target = OpenEntity(transaction, document.Database, targetHandle, OpenMode.ForRead) as Solid3d;
+                var operand = OpenEntity(transaction, document.Database, toolHandle, OpenMode.ForRead) as Solid3d;
                 if (target == null || operand == null)
-                    throw new InvalidOperationException("Boolean operations require two live Solid3d entity handles.");
-                EnsureAutomationRunning();
-                target.BooleanOperation(operation, operand);
-                if (!operand.IsErased) operand.Erase();
-                transaction.Commit();
-                RecordMutation(document, "cad-boolean", "targetHandle=" + targetHandle + "; consumedHandle=" + toolHandle + "; operation=" + operationName + "; kernelTarget=database-resident; kernelOperand=database-resident");
-                return "{\"updated\":true,\"resultHandle\":\"" + Escape(targetHandle) + "\",\"consumedHandle\":\"" + Escape(toolHandle) + "\",\"operation\":\"" + operationName + "\"}";
+                    throw new InvalidOperationException("cad_boolean_" + operationName + " requires two live Solid3d entity handles in the active drawing.");
+
+                Extents3d targetExtents;
+                Extents3d operandExtents;
+                try
+                {
+                    targetExtents = target.GeometricExtents;
+                    operandExtents = operand.GeometricExtents;
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException("cad_boolean_" + operationName + " could not validate solid extents; no entities were changed.", ex);
+                }
+                if (operation != BooleanOperationType.BoolUnite && !ExtentsOverlap(targetExtents, operandExtents))
+                {
+                    return "{\"updated\":false,\"consumed\":false,\"operation\":\"" + Escape(operationName)
+                           + "\",\"reason\":\"no-intersection\",\"targetHandle\":\"" + Escape(targetHandle)
+                           + "\",\"toolHandle\":\"" + Escape(toolHandle) + "\"}";
+                }
+
+                Solid3d? targetWorking = null;
+                Solid3d? operandWorking = null;
+                try
+                {
+                    targetWorking = target.Clone() as Solid3d;
+                    operandWorking = operand.Clone() as Solid3d;
+                    if (targetWorking == null || operandWorking == null)
+                        throw new InvalidOperationException("cad_boolean_" + operationName + " could not clone the validated Solid3d operands.");
+                    try
+                    {
+                        targetWorking.BooleanOperation(operation, operandWorking);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException(
+                            "cad_boolean_" + operationName + " native solid kernel failed after validation; sources were preserved.", ex);
+                    }
+
+                    EnsureSameActiveDocument(document, "cad_boolean_" + operationName);
+                    EnsureAutomationRunning();
+                    target.UpgradeOpen();
+                    operand.UpgradeOpen();
+                    target.CopyFrom(targetWorking);
+                    if (!operand.IsErased) operand.Erase();
+                    transaction.Commit();
+                    RecordMutation(document, "cad-boolean", "targetHandle=" + targetHandle + "; consumedHandle=" + toolHandle
+                        + "; operation=" + operationName + "; kernelInputs=detached-clones");
+                    return "{\"updated\":true,\"resultHandle\":\"" + Escape(targetHandle) + "\",\"consumedHandle\":\""
+                           + Escape(toolHandle) + "\",\"operation\":\"" + Escape(operationName) + "\"}";
+                }
+                finally
+                {
+                    targetWorking?.Dispose();
+                    operandWorking?.Dispose();
+                }
             }
         }
 
@@ -569,7 +656,6 @@ namespace QS3D.BricsCAD.V25
                 if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out dbmod))
                 {
                     lastDbmod = dbmod;
-                    // BricsCAD tracks window/view state separately; window/view DBMOD bits may remain after save.
                     if ((dbmod & DbmodPersistentContentMask) == 0)
                         return dbmod;
                 }
@@ -592,6 +678,23 @@ namespace QS3D.BricsCAD.V25
             if (McpCadAgentRuntime.AutomationStopped)
                 throw new InvalidOperationException("Automation is emergency-stopped. Resume the MCP CAD agent before mutating the drawing.");
             McpCadAgentRuntime.EnsureCurrentMutationRunning();
+        }
+
+        private static void EnsureSameActiveDocument(Document document, string operation)
+        {
+            if (document == null || !ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                throw new InvalidOperationException(operation + " stopped because the active BricsCAD document changed before commit; no mutation was committed.");
+        }
+
+        private static bool ExtentsOverlap(Extents3d left, Extents3d right)
+        {
+            var a0 = left.MinPoint;
+            var a1 = left.MaxPoint;
+            var b0 = right.MinPoint;
+            var b1 = right.MaxPoint;
+            return a0.X <= b1.X + GeometryTolerance && a1.X + GeometryTolerance >= b0.X
+                && a0.Y <= b1.Y + GeometryTolerance && a1.Y + GeometryTolerance >= b0.Y
+                && a0.Z <= b1.Z + GeometryTolerance && a1.Z + GeometryTolerance >= b0.Z;
         }
 
         private static void RecordMutation(Document document, string eventName, string detail)
@@ -624,10 +727,12 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("Invalid entity handle.");
             ObjectId id;
             try { id = database.GetObjectId(false, new Handle(value), 0); }
-            catch (Exception ex) { throw new InvalidOperationException("Entity handle was not found.", ex); }
-            if (id.IsNull) throw new InvalidOperationException("Entity handle was not found.");
+            catch (Exception ex) { throw new InvalidOperationException("Entity handle was not found in the active drawing.", ex); }
+            if (id.IsNull) throw new InvalidOperationException("Entity handle was not found in the active drawing.");
             var entity = transaction.GetObject(id, mode, false) as Entity;
-            if (entity == null || entity.IsErased) throw new InvalidOperationException("Object handle is not a live entity.");
+            if (entity == null || entity.IsErased) throw new InvalidOperationException("Object handle is not a live entity in the active drawing.");
+            if (entity.Database == null || !ReferenceEquals(entity.Database, database))
+                throw new InvalidOperationException("Object handle belongs to a different drawing database; no mutation was applied.");
             return entity;
         }
 
