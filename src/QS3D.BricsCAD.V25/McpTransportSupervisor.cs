@@ -456,7 +456,9 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
+#pragma warning disable SYSLIB0014
                 var request = (HttpWebRequest)WebRequest.Create("https://" + hostname + "/mcp");
+#pragma warning restore SYSLIB0014
                 request.Method = "GET";
                 request.AllowAutoRedirect = false;
                 request.Timeout = CloudflarePublicProbeTimeoutMilliseconds;
