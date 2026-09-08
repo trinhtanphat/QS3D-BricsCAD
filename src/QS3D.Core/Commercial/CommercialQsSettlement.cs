@@ -328,8 +328,9 @@ namespace QS3D.Core.Commercial
                 foreach (var pair in previousVariationCertifiedToDate)
                 {
                     var variationId = CommercialGuard.RequireToken(pair.Key, nameof(previousVariationCertifiedToDate));
-                    if (!certifiedToDate.TryAdd(variationId, pair.Value))
+                    if (certifiedToDate.ContainsKey(variationId))
                         throw new InvalidOperationException("Previous IPC variation certification history contains duplicate variation ids.");
+                    certifiedToDate.Add(variationId, pair.Value);
                 }
             }
 
