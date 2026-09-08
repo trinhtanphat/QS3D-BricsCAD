@@ -86,7 +86,7 @@ def main() -> int:
         if "Stop-Process" in text or "taskkill" in text or ".Kill(" in text:
             raise AssertionError(f"{label} must never force-terminate BricsCAD/processes")
     require(update, "function Invoke-BoundedHttpsDownload", "secure updater bounded transfer helper")
-    require(update, "Assert-SafeArchive", "secure updater archive gate")
+    require(update, "Expand-VerifiedHeldArchive -ZipPath $zipPath", "secure updater held archive gate")
     require(update, "ExpectedSignerThumbprint = $expectedSigner", "secure updater signed installer handoff")
     require(update, "Installed QS3D productVersion changed during update preparation", "secure updater stale-state recheck")
     require(install, "Duplicate SHA256SUMS payload entry", "installer complete hash-manifest integrity")
