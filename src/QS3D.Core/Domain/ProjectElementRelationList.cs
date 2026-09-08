@@ -23,7 +23,7 @@ namespace QS3D.Core.Domain
             set
             {
                 var canonical = RequireRelationValue(value);
-                if (string.Equals(_values[index], canonical, StringComparison.Ordinal)) return;
+                if (string.Equals(_values[index], canonical, StringComparison.OrdinalIgnoreCase)) return;
                 RequireUnique(canonical, index);
                 _values[index] = canonical;
                 MarkRelationChanged();
