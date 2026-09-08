@@ -58,7 +58,8 @@ def validate(text: str) -> None:
             "The staged manifest must be bound to the exact held manifest generation.")
 
     stage_call = "Assert-StagedPayloadAdmission -Directory $stage"
-    require(stage_call in text, "Installer must validate staged payload bytes before commit.")
+    require(text.count(stage_call) >= 2,
+            "Installer must validate staged payload bytes after copying and revalidate the same contract immediately before commit.")
     require("-AdmittedHashes $packageAdmission.Hashes" in text,
             "Staged admission must compare against the frozen manifest hashes from source admission.")
     require("Assert-PackageIdentity -Directory $Directory" in staged,
@@ -79,12 +80,18 @@ def validate(text: str) -> None:
             "Standalone installer staging must reject nested entries instead of silently admitting hidden subtrees.")
 
     copy_pos = text.find("Copy-Item -LiteralPath $source -Destination $destination -Force")
-    stage_pos = text.find(stage_call)
+    first_stage_pos = text.find(stage_call)
+    backup_pos = text.find("Move-Item -LiteralPath $installFull -Destination $backup")
+    final_stage_pos = text.rfind(stage_call)
     commit_pos = text.find("Move-Item -LiteralPath $stage -Destination $installFull")
-    require(copy_pos >= 0 and stage_pos > copy_pos,
-            "Staged admission must occur after source bytes have been copied into the stage.")
-    require(commit_pos > stage_pos,
-            "Staged admission must occur before the stage is committed into InstallDirectory.")
+    require(copy_pos >= 0 and first_stage_pos > copy_pos,
+            "Initial staged admission must occur after source bytes have been copied into the stage.")
+    require(backup_pos > first_stage_pos,
+            "Existing-install validation/backup must occur after the initial staged admission.")
+    require(final_stage_pos > backup_pos,
+            "Final staged admission must revalidate the stage after any existing-install backup window.")
+    require(commit_pos > final_stage_pos,
+            "Final staged admission must occur immediately before the stage is committed into InstallDirectory.")
 
 
 text = INSTALLER.read_text(encoding="utf-8")
