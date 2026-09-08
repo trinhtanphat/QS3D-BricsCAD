@@ -224,6 +224,8 @@ namespace QS3D.LocalQualification.V25
             private readonly TimeSpan _stageTimeout;
             private readonly bool _pauseForOperator;
             private DateTime? _operatorPauseStartedUtc;
+            private UiRenderDiagnostics? _renderDiagnostics;
+            private DateTime _nextRenderTraceUtc;
 
             public UiController(Context context)
             {
@@ -249,6 +251,11 @@ namespace QS3D.LocalQualification.V25
             {
                 _context.Document.Editor.PromptedForPoint += OnPromptedForPoint;
                 _pickObserverAttached = true;
+                if (_observedClickDriver)
+                {
+                    try { _renderDiagnostics = new UiRenderDiagnostics(_timer.Dispatcher); }
+                    catch { } // Diagnostic availability never changes acceptance.
+                }
                 _timer.Start();
             }
 
@@ -260,6 +267,7 @@ namespace QS3D.LocalQualification.V25
                     // Even an operator-paused run must retain the exact active drawing
                     // and paused MCP boundary. An ACK only resumes product assertions.
                     RequireUiContextStable(_context);
+                    TraceRenderProgress();
                     if (AwaitObservedOperator(DateTime.UtcNow)) return;
                     if (DateTime.UtcNow > _deadlineUtc)
                         throw new ProbeException("ui_timeout_" + _stage.ToString());
@@ -733,6 +741,7 @@ namespace QS3D.LocalQualification.V25
                     _uiController = null;
                 }
                 _timer.Stop();
+                StopRenderDiagnostics();
                 DetachPickObserver();
                 _context.Document.SendStringToExecute("QS3DSAVE QSAVE QL22UISAVED ", true, false, false);
             }
@@ -805,6 +814,28 @@ namespace QS3D.LocalQualification.V25
             private void UiTrace(string value)
             {
                 File.AppendAllText(RequireUiChildPath(_context, "ui-trace.private.txt"), DateTime.UtcNow.ToString("O") + " " + value + "\n");
+            }
+
+            private void TraceRenderProgress()
+            {
+                if (!_observedClickDriver || DateTime.UtcNow < _nextRenderTraceUtc) return;
+                _nextRenderTraceUtc = DateTime.UtcNow.AddSeconds(10);
+                try
+                {
+                    int? commandActive = null;
+                    try { commandActive = Convert.ToInt32(Application.GetSystemVariable("CMDACTIVE"), CultureInfo.InvariantCulture); }
+                    catch { }
+                    UiTrace("render_progress stage=" + _stage + " " +
+                        (_renderDiagnostics?.Snapshot(commandActive, _workspace?.Dispatcher) ?? "diagnostic_only=true unavailable=true"));
+                }
+                catch { } // No I/O/query failure may create or suppress a product verdict.
+            }
+
+            private void StopRenderDiagnostics()
+            {
+                try { _renderDiagnostics?.Dispose(); }
+                catch { }
+                _renderDiagnostics = null;
             }
 
             private void TracePropertyLayout(TextBox editor)
@@ -886,6 +917,7 @@ namespace QS3D.LocalQualification.V25
             private void Fail(System.Exception error)
             {
                 _timer.Stop();
+                StopRenderDiagnostics();
                 try { DetachPickObserver(); } catch { }
                 try
                 {

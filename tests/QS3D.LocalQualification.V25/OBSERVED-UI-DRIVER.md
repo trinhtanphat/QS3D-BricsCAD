@@ -99,6 +99,18 @@ same driver and wait policy. Neither mode retries or relabels failed evidence.
 
 The new protocol and Editor-event ordering must be qualified in licensed hosts.
 Host-free tests/builds alone do not establish that runtime observation order.
+Observed UI allocations also emit passive `render_progress` diagnostics at most
+once per ten seconds through the existing controller timer, including while
+waiting for an operator ACK. Raw `CMDACTIVE`, controller/Workspace dispatcher
+identity and Render-priority posted/completed/aborted notification totals help
+separate host command activity from WPF queue progress. Hooks are detached on
+controller completion/failure. No render operation, forced layout, timer, input,
+render-mode change or acceptance check is added; unavailable diagnostics cannot
+change a product verdict. Notification totals are not matched queue lengths
+(priorities may change) and completed operations do not prove displayed pixels.
+Compare them with actual layout changes and supported screenshots before drawing
+a rendering diagnosis. This instrumentation needs licensed observation; it does
+not reopen accepted V25/native cells or relabel consumed V26 failures.
 `scripts/test-local022-ui-input.ps1` includes actual C# serializer-to-JavaScript
 consumer interoperability for all 21 stage/action/value combinations, plus the
 receipt I/O and negative/replay contracts. Observed-mode cleanup never sends a

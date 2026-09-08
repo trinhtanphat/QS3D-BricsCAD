@@ -2,6 +2,21 @@
 
 ## Verdict
 
+Presentation diagnostic successor (2026-09-08): the observed UI runner now
+records passive Render-priority hook totals, raw CMDACTIVE and controller/Workspace
+dispatcher identity at most once per ten seconds. It adds no queue operations,
+forced layout, graphics setting, physical input or acceptance check. Completion
+and failure detach the observer; query/log failures remain diagnostic-only.
+Host-free event/integration tests and the full runner suite pass; both frozen
+product/SDK probe builds report zero warnings/errors. This is new diagnostic
+instrumentation, not a UI fix or PASS. The next fresh V26 allocation pins its
+exact pushed harness while retaining accepted V25 UI48 and native51/52.
+
+Exact documentation head `72d9a3a05846206bcd28671e68e644e8af51cf64` passed
+PR34187600716 preflight101938985471/core101939570240 and push34187597498
+branch-preflight101938975411/branch-core101939629868. Those checks do not
+qualify the later diagnostic head or complete licensed acceptance.
+
 Latest licensed native API pair (2026-09-08): **V25 allocation51 and V26
 allocation52 are `LOCAL_PASS_BOUNDED`, three phases each**, on exact pushed
 harness `764c7252312dd41cc0deddc0add3808c8637a8d9` and unchanged frozen source

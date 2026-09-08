@@ -23,6 +23,7 @@ public sealed class $name {
     private object _context = new object();
     private bool ack, invalidAck, invalidContext;
     private int ticks, contextChecks;
+    private void TraceRenderProgress() { if (contextChecks == 0 || invalidContext) throw new Exception("diagnostic before stable context"); }
     private string? failure;
     private void RequireUiContextStable(object context) { contextChecks++; if (invalidContext) throw new ProbeException("ui_document_changed"); }
     private bool HasExactUiAck(object context, int sequence) { if (invalidAck) throw new ProbeException("ui_ack_identity_mismatch"); return ack; }
