@@ -58,7 +58,10 @@ checks = {
         "FamilyInheritanceAndCurtainComponents", "InstanceOverrideUsesCatalogUnit", "RejectsInvalidQuantities",
         "PrimaryQuantitiesIgnoreInvalidFallbacks", "InvalidUsedFallbackIsRejected", "RoomFinishQuantityPriorityMatchesFinishSchedule",
         "RoomFinishScheduleBuilder.Build(project)", "BottomAreaM2", "TopAreaM2", "SkirtingLengthM", "NetFinishAreaM2",
-        "VolumeM3\"] = -99d", "SideAreaM2\"] = double.NaN", "14.4d", "33d", "22d",
+        'SetPersistedQuantityFixture(wall, "VolumeM3", -99d);',
+        'SetPersistedQuantityFixture(wall, "SideAreaM2", double.NaN);',
+        'GetField("_quantityValues", BindingFlags.Instance | BindingFlags.NonPublic)',
+        "14.4d", "33d", "22d",
     ],
     required[7]: ["MaterialUsageScheduleSmoke.Run();"],
     required[8]: [
@@ -127,4 +130,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: material usage keeps lazy validation, checked aggregation, HT_Phòng quantity-priority parity, catalog units/provenance, detached read-only freshness, PrimaryQuantity snapshot stability, and atomic XLSX through bound UI/command entry points.")
+print("PASS: material usage keeps lazy validation, checked aggregation, HT_Phòng quantity-priority parity, catalog units/provenance, detached read-only freshness, persisted-corrupt fallback fixtures below the semantic quantity facade, PrimaryQuantity snapshot stability, and atomic XLSX through bound UI/command entry points.")
