@@ -15,13 +15,17 @@ REQUIRED = (
     "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging",
     "$stagingAdmission = Open-PinnedMsiReadLock -Path $staging -ExpectedSha256 $expected",
     "Assert-NoExistingReparseComponent -Path $msi -Label 'MsiPath before held-generation publication'",
-    "[IO.FileMode]::CreateNew",
-    "[IO.FileOptions]::DeleteOnClose",
+    "CreateFileW",
+    "public const uint DELETE = 0x00010000;",
+    "public const uint CREATE_NEW = 1;",
+    "$publishedStream = Open-OwnedMsiPublication -Path $msi",
+    "Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $true",
     "$stagingAdmission.Stream.CopyTo($publishedStream)",
     "$publishedStream.Flush($true)",
     "$publishedStream.Position = 0",
     "$publishedHashBytes = $publishedSha.ComputeHash($publishedStream)",
     "[string]::Equals($publishedHash, [string]$stagingAdmission.Sha256",
+    "[string]::Equals($publishedHash, $expected",
     "Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $false",
     "$publishedByThisAttempt = $false",
     "$publishedStream.Dispose()",
@@ -47,6 +51,7 @@ FORBIDDEN = (
     "[IO.File]::Move($staging, $msi)",
     "Remove-Item -LiteralPath $msi -Force",
     "[IO.File]::Delete($msi)",
+    "[IO.FileOptions]::DeleteOnClose",
     "Get-ChildItem -LiteralPath $extract -Recurse -File -Filter 'BrxMgd.dll'",
 )
 
@@ -62,25 +67,26 @@ def validate(text: str) -> list[str]:
 
     download = text.find("Invoke-WebRequest -Uri $candidate.Url -OutFile $staging")
     staged_admission = text.find("$stagingAdmission = Open-PinnedMsiReadLock -Path $staging -ExpectedSha256 $expected")
-    fresh_publish = text.find("[IO.FileMode]::CreateNew", staged_admission)
-    delete_on_close = text.find("[IO.FileOptions]::DeleteOnClose", fresh_publish)
-    copy_from_held = text.find("$stagingAdmission.Stream.CopyTo($publishedStream)", delete_on_close)
+    owned_open = text.find("$publishedStream = Open-OwnedMsiPublication -Path $msi", staged_admission)
+    arm = text.find("Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $true", owned_open)
+    copy_from_held = text.find("$stagingAdmission.Stream.CopyTo($publishedStream)", arm)
     durable_flush = text.find("$publishedStream.Flush($true)", copy_from_held)
     rewind = text.find("$publishedStream.Position = 0", durable_flush)
     same_handle_hash = text.find("$publishedHashBytes = $publishedSha.ComputeHash($publishedStream)", rewind)
     digest_match = text.find("[string]::Equals($publishedHash, [string]$stagingAdmission.Sha256", same_handle_hash)
-    commit = text.find("Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $false", digest_match)
+    expected_match = text.find("[string]::Equals($publishedHash, $expected", digest_match)
+    commit = text.find("Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $false", expected_match)
     ownership_clear = text.find("$publishedByThisAttempt = $false", commit)
     creator_dispose = text.find("$publishedStream.Dispose()", ownership_clear)
     published_admission = text.find("$publishedAdmission = Open-PinnedMsiReadLock -Path $msi -ExpectedSha256 $expected", creator_dispose)
     staged_dispose = text.find("$stagingAdmission.Stream.Dispose()", published_admission)
     if not (
-        0 <= download < staged_admission < fresh_publish < delete_on_close < copy_from_held < durable_flush
-        < rewind < same_handle_hash < digest_match < commit < ownership_clear < creator_dispose
-        < published_admission < staged_dispose
+        0 <= download < staged_admission < owned_open < arm < copy_from_held < durable_flush
+        < rewind < same_handle_hash < digest_match < expected_match < commit < ownership_clear
+        < creator_dispose < published_admission < staged_dispose
     ):
         failures.append(
-            "remote MSI must stay held through delete-on-close publication, same-handle digest verification, explicit handle commit, and canonical re-admission"
+            "remote MSI must stay held through explicit cancelable disposition arm, same-handle digest verification, explicit commit, and canonical re-admission"
         )
 
     lock = text.find("$msiState = Open-PinnedMsiReadLock")
@@ -102,13 +108,17 @@ def main() -> int:
         "$sha.ComputeHash($stream)",
         "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging",
         "$stagingAdmission = Open-PinnedMsiReadLock -Path $staging -ExpectedSha256 $expected",
-        "[IO.FileMode]::CreateNew",
-        "[IO.FileOptions]::DeleteOnClose",
+        "CreateFileW",
+        "public const uint DELETE = 0x00010000;",
+        "public const uint CREATE_NEW = 1;",
+        "$publishedStream = Open-OwnedMsiPublication -Path $msi",
+        "Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $true",
         "$stagingAdmission.Stream.CopyTo($publishedStream)",
         "$publishedStream.Flush($true)",
         "$publishedStream.Position = 0",
         "$publishedHashBytes = $publishedSha.ComputeHash($publishedStream)",
         "[string]::Equals($publishedHash, [string]$stagingAdmission.Sha256",
+        "[string]::Equals($publishedHash, $expected",
         "Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $false",
         "$publishedByThisAttempt = $false\n            $publishedStream.Dispose()",
         "$publishedAdmission = Open-PinnedMsiReadLock -Path $msi -ExpectedSha256 $expected",
@@ -123,21 +133,11 @@ def main() -> int:
         if not validate(mutated):
             failures.append(f"guard mutation escaped detection: {token}")
 
-    direct_download = text.replace(
-        "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging",
-        "Invoke-WebRequest -Uri $candidate.Url -OutFile $msi",
-        1,
-    )
-    if not validate(direct_download):
-        failures.append("guard mutation escaped direct-to-canonical MSI download")
-
-    pathname_publish = text.replace(
-        "$stagingAdmission.Stream.CopyTo($publishedStream)",
-        "[IO.File]::Move($staging, $msi)",
-        1,
-    )
-    if not validate(pathname_publish):
-        failures.append("guard mutation escaped pathname File.Move publication")
+    for unsafe in ("[IO.FileOptions]::DeleteOnClose", "[IO.File]::Move($staging, $msi)"):
+        insertion = text.find("$stagingAdmission.Stream.CopyTo($publishedStream)")
+        mutated = text[:insertion] + unsafe + "\n" + text[insertion:]
+        if not validate(mutated):
+            failures.append(f"guard mutation escaped unsafe publication primitive: {unsafe}")
 
     pathname_hash = text.replace(
         "$state = Open-PinnedMsiReadLock -Path $Path -ExpectedSha256 $expected",
@@ -155,7 +155,7 @@ def main() -> int:
 
     print("PASS: V25 compile-reference MSI admission and trust stay generation-bound.")
     print(" - cache and staged downloads are hashed through held read generations")
-    print(" - canonical publication stays delete-on-close and handle-owned until same-handle digest verification commits it")
+    print(" - canonical publication uses an explicitly armed cancelable same-handle delete disposition")
     print(" - Authenticode, MSI metadata, and msiexec stay inside the final generation lock")
     print(" - extracted-tree discovery rejects reparse-backed traversal")
     return 0
