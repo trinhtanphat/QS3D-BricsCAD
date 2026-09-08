@@ -586,22 +586,33 @@ def ensure_peer_commit(peer_head_sha: str) -> None:
         raise RuntimeError(f"fetched peer commit identity drifted: expected {peer_sha}, got {resolved or '<missing>'}")
 
 
-def effective_changed_paths(base_sha: str, peer_head_sha: str) -> list[str]:
-    base = str(base_sha or "").strip().lower()
-    peer = str(peer_head_sha or "").strip().lower()
-    if not re.fullmatch(r"[0-9a-f]{40}", base) or not re.fullmatch(r"[0-9a-f]{40}", peer):
-        raise RuntimeError("effective peer delta requires exact 40-hex base and peer commit SHAs")
+def _exact_diff_paths(left: str, right: str, source: str) -> list[str]:
     raw = _run_git_exact([
         "diff",
         "--name-only",
         "-z",
         "--no-renames",
         "--diff-filter=ACDMRTUXB",
-        base,
-        peer,
+        left,
+        right,
         "--",
     ])
-    return parse_nul_paths(raw, "effective peer tree delta")
+    return parse_nul_paths(raw, source)
+
+
+def effective_changed_paths(base_sha: str, peer_head_sha: str) -> list[str]:
+    base = str(base_sha or "").strip().lower()
+    peer = str(peer_head_sha or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", base) or not re.fullmatch(r"[0-9a-f]{40}", peer):
+        raise RuntimeError("effective peer delta requires exact 40-hex base and peer commit SHAs")
+    merge_base = _run_git(["merge-base", base, peer]).strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", merge_base):
+        raise RuntimeError("effective peer delta could not resolve an exact merge-base commit")
+    introduced = set(_exact_diff_paths(merge_base, peer, "peer-introduced delta"))
+    if not introduced:
+        return []
+    still_different = set(_exact_diff_paths(base, peer, "current-base peer tree delta"))
+    return sorted(introduced.intersection(still_different))
 
 
 def current_changed_paths(base_ref: str) -> list[str]:
