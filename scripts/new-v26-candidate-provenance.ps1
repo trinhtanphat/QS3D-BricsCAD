@@ -54,6 +54,7 @@ function Read-StrictUtf8Json([string]$Path, [string]$Label) {
     if ($item.Length -gt $maxMetadataBytes) { throw "$Label exceeds the $maxMetadataBytes-byte safety limit." }
     $stream = [IO.File]::Open($item.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
     try {
+        if ($stream.Length -gt $maxMetadataBytes) { throw "$Label exceeds the $maxMetadataBytes-byte safety limit." }
         $bytes = [byte[]]::new([int]$stream.Length)
         $offset = 0
         while ($offset -lt $bytes.Length) {
