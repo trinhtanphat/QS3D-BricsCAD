@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
 
@@ -24,8 +26,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = Project(out var wallA, out _, out var opening);
             opening.Properties["HostWallId"] = " wall-a ";
-            opening.DependsOn.Add(" WALL-A ");
-            opening.DependsOn.Add("wall-a");
+            SeedPersistedDependencies(opening, " WALL-A ", "wall-a");
             var version = project.ChangeVersion;
             var audits = project.AuditEvents.Count;
 
@@ -45,8 +46,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = Project(out var wallA, out var wallB, out var opening);
             opening.Properties["HostWallId"] = " wall-a ";
-            opening.DependsOn.Add(" WALL-A ");
-            opening.DependsOn.Add("wall-a");
+            SeedPersistedDependencies(opening, " WALL-A ", "wall-a");
             var version = project.ChangeVersion;
             var audits = project.AuditEvents.Count;
 
@@ -67,8 +67,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = Project(out var wallA, out _, out var opening);
             opening.Properties["HostWallId"] = " wall-a ";
-            opening.DependsOn.Add(" WALL-A ");
-            opening.DependsOn.Add("wall-a");
+            SeedPersistedDependencies(opening, " WALL-A ", "wall-a");
             var version = project.ChangeVersion;
             var audits = project.AuditEvents.Count;
 
@@ -223,6 +222,17 @@ namespace QS3D.Core.SmokeTests
             opening.DependsOn.Add("WALL-A");
             project.Elements.Add(opening);
             return project;
+        }
+
+        private static void SeedPersistedDependencies(ProjectElement element, params string[] valuesToSeed)
+        {
+            var valuesField = element.DependsOn.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement dependency backing list field is unavailable.");
+            var values = valuesField.GetValue(element.DependsOn) as List<string>
+                ?? throw new InvalidOperationException("ProjectElement dependency backing list is unavailable.");
+
+            foreach (var value in valuesToSeed)
+                values.Add(value);
         }
 
         private static void Equal<T>(T expected, T actual)
