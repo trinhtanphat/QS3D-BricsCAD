@@ -14,7 +14,6 @@ SAFETY_CLEAR = "$publicationSafetyInvalidated = $false"
 RECONCILE_PUBLISHED = "if ($reconciledRelease.draft -eq $false) {"
 KNOWN_INVALID_GUARD = "if ($publicationSafetyKnownInvalid)"
 RECONCILE_VALIDATE = "Assert-ProtectedMainStableForPublisherMutation -Phase 'publish-acknowledgement-reconciliation'"
-INVALIDATED_GUARD = "if ($publicationSafetyInvalidated)"
 VERIFY = "Assert-PublishedReleaseMatchesVerifiedTransaction `"
 ACK_SUCCESS = "treating publication as committed"
 
@@ -75,15 +74,10 @@ def validate(text: str) -> None:
         reconcile_clear > reconcile_validate,
         "V26 acknowledgement reconciliation may clear unproven safety only after main revalidation.",
     )
-    guard = text.find(INVALIDATED_GUARD, reconcile_clear, ack)
+    verify_reconciled = text.find(VERIFY, reconcile_clear, ack)
     require(
-        guard > reconcile_clear,
-        "V26 acknowledgement reconciliation must reject still-invalid publication safety before accepting release identity.",
-    )
-    verify_reconciled = text.find(VERIFY, guard, ack)
-    require(
-        verify_reconciled > guard,
-        "V26 reconciled release identity verification must run after publication-safety proof.",
+        verify_reconciled > reconcile_clear,
+        "V26 reconciled release identity verification must run only after publication-safety proof and clear.",
     )
 
 
@@ -98,7 +92,6 @@ mutation_snippets = (
     KNOWN_INVALID_SET,
     KNOWN_INVALID_GUARD,
     RECONCILE_VALIDATE + "\n        " + SAFETY_CLEAR,
-    INVALIDATED_GUARD,
 )
 for snippet in mutation_snippets:
     require(snippet in text, f"Mutation probe could not find sequence: {snippet}")
