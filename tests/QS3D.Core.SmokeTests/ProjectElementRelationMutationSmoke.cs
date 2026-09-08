@@ -7,6 +7,8 @@ namespace QS3D.Core.SmokeTests
 {
     internal static class ProjectElementRelationMutationSmoke
     {
+        private const int MaximumRelationEntries = 10000;
+
         internal static void Run()
         {
             SourceHandleAddMarksRelationsDirty();
@@ -18,6 +20,7 @@ namespace QS3D.Core.SmokeTests
             NoOpMutationsPreserveCleanState();
             RejectedMutationsAreAtomic();
             RelationInputsNormalizeAndValidate();
+            RelationCapacityMatchesPersistenceBoundary();
         }
 
         private static void SourceHandleAddMarksRelationsDirty()
@@ -164,6 +167,33 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentException>(() => dependency.DependsOn.Add("bad\nrelation"));
             Equal(0, dependency.DependsOn.Count);
             Equal(ElementDirtyFlags.None, dependency.Dirty);
+        }
+
+        private static void RelationCapacityMatchesPersistenceBoundary()
+        {
+            var element = CleanElement();
+            for (var index = 0; index < MaximumRelationEntries; index++)
+                element.DependsOn.Add("E" + index.ToString("D5"));
+
+            Equal(MaximumRelationEntries, element.DependsOn.Count);
+            element.MarkClean(ElementDirtyFlags.All);
+            var before = element.UpdatedUtc;
+
+            Throws<ArgumentException>(() => element.DependsOn.Add("e00000"));
+            Equal(MaximumRelationEntries, element.DependsOn.Count);
+            Equal(ElementDirtyFlags.None, element.Dirty);
+            Equal(before, element.UpdatedUtc);
+
+            Throws<InvalidOperationException>(() => element.DependsOn.Add("E-OVERFLOW"));
+            Equal(MaximumRelationEntries, element.DependsOn.Count);
+            Equal(ElementDirtyFlags.None, element.Dirty);
+            Equal(before, element.UpdatedUtc);
+
+            element.DependsOn.RemoveAt(0);
+            Equal(MaximumRelationEntries - 1, element.DependsOn.Count);
+            element.DependsOn.Insert(0, "E-REPLACEMENT");
+            Equal(MaximumRelationEntries, element.DependsOn.Count);
+            Equal("E-REPLACEMENT", element.DependsOn[0]);
         }
 
         private static void AssertEffectiveMutation(Action<ProjectElement>? prepare, Action<ProjectElement> mutation)
