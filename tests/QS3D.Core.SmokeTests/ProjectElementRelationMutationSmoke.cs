@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             SourceHandleAddMarksRelationsDirty();
             DependencyAddMarksRelationsDirty();
             EffectiveMutationSurfaceMarksRelationsDirty();
+            RelationIdentityLookupAndRemovalUseCanonicalCaseInsensitiveIdentity();
             RelationMutationInvalidatesGeneratedOutput();
             NoOpRemovalPreservesCleanState();
             NoOpMutationsPreserveCleanState();
@@ -53,6 +54,26 @@ namespace QS3D.Core.SmokeTests
             AssertEffectiveMutation(
                 element => Seed(element.DependsOn, "A"),
                 element => element.DependsOn.Clear());
+        }
+
+        private static void RelationIdentityLookupAndRemovalUseCanonicalCaseInsensitiveIdentity()
+        {
+            var element = CleanElement();
+            element.SourceHandles.Add("AA11");
+            element.MarkClean(ElementDirtyFlags.All);
+            var before = element.UpdatedUtc;
+
+            if (!element.SourceHandles.Contains(" aa11 "))
+                throw new Exception("Relation lookup must use canonical case-insensitive identity.");
+            Equal(0, element.SourceHandles.IndexOf(" aa11 "));
+
+            WaitUntilClockCanAdvance(before);
+            if (!element.SourceHandles.Remove(" aa11 "))
+                throw new Exception("Relation removal must use canonical case-insensitive identity.");
+            Equal(0, element.SourceHandles.Count);
+            Has(element.Dirty, ElementDirtyFlags.Relations);
+            if (element.UpdatedUtc <= before)
+                throw new Exception("Case-insensitive relation removal must advance UpdatedUtc.");
         }
 
         private static void RelationMutationInvalidatesGeneratedOutput()
