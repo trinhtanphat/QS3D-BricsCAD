@@ -58,8 +58,8 @@ namespace QS3D.BricsCAD.V25.Updates
         private bool _changingUpdateOnClose;
         private bool _syncingReleasePicker;
         private bool _loadingReleaseChoices;
-        private string? _postRestartDiagnostic;
 #if !BRICSCAD_V26
+        private string? _postRestartDiagnostic;
         private bool _previewDownloading;
         private bool _previewScheduled;
         private string? _previewScheduledDetail;
@@ -334,7 +334,9 @@ namespace QS3D.BricsCAD.V25.Updates
             {
                 UpdateCoordinator.Instance.StateChanged += OnStateChanged;
                 _coordinatorAttached = true;
+#if !BRICSCAD_V26
                 TryApplyPostRestartReceipt();
+#endif
                 Apply(UpdateCoordinator.Instance.LastResult);
                 _ = LoadPublishedReleasesAsync();
             }
@@ -421,12 +423,14 @@ namespace QS3D.BricsCAD.V25.Updates
                 _status.Foreground = result.State == UpdateState.Error ? Warning : TextPrimary;
             }
 
+#if !BRICSCAD_V26
             if (!string.IsNullOrWhiteSpace(_postRestartDiagnostic) && !previewDownloading && !previewScheduled)
             {
                 _status.Text = "Phát hiện phiên bản QS3D đang load không khớp";
                 _status.Foreground = Warning;
                 _detail.Text = _postRestartDiagnostic;
             }
+#endif
 
             _refreshButton.IsEnabled = !previewDownloading && !previewScheduled && !checking && result.State != UpdateState.Scheduled;
             _updateButton.IsEnabled = !previewDownloading && !previewScheduled && (result.CanAutoInstall || hasPreviewDownload || hasManualRelease);
@@ -768,11 +772,23 @@ namespace QS3D.BricsCAD.V25.Updates
         {
             var current = _result?.CurrentVersion?.Original ?? string.Empty;
             return string.Equals(
-                PreviewInstallReceipt.NormalizeVersion(current),
-                PreviewInstallReceipt.NormalizeVersion(release.Tag),
+                NormalizeReleaseVersion(current),
+                NormalizeReleaseVersion(release.Tag),
                 StringComparison.OrdinalIgnoreCase);
         }
 
+        // Shared display comparison must not depend on V25-only receipt persistence.
+        private static string NormalizeReleaseVersion(string? value)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            if (normalized.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+                normalized = normalized.Substring(1);
+            var buildMetadata = normalized.IndexOf('+');
+            if (buildMetadata >= 0) normalized = normalized.Substring(0, buildMetadata);
+            return normalized.Trim();
+        }
+
+#if !BRICSCAD_V26
         private void TryApplyPostRestartReceipt()
         {
             if (!PreviewInstallReceipt.TryRead(out var receipt, out var readError))
@@ -800,6 +816,7 @@ namespace QS3D.BricsCAD.V25.Updates
 
             _postRestartDiagnostic = PreviewInstallReceipt.DescribeMismatch(receipt, actualVersion, actualPath);
         }
+#endif
 
 #if !BRICSCAD_V26
         private void ApplyDownloadProgress(UpdateDownloadProgress progress)
