@@ -184,85 +184,98 @@ namespace QS3D.Core.SmokeTests
 
         private static void NonCanonicalHandleAndDependencyFailBeforePersistence()
         {
-            RejectSemanticRelationThenPersistedCorruption(
+            VerifySemanticBoundaryThenPersistedCorruption(
                 NewProject("handle-key"),
                 true,
                 " 1A ",
                 false,
-                "Padded source handle was silently accepted by the domain boundary.",
                 "Padded source handle was silently persisted/normalized.");
 
-            RejectSemanticRelationThenPersistedCorruption(
+            VerifySemanticBoundaryThenPersistedCorruption(
                 NewProject("dependency-key"),
                 false,
                 " E2 ",
                 false,
-                "Padded dependency id was silently accepted by the domain boundary.",
                 "Padded dependency id was silently persisted/normalized.");
 
-            RejectSemanticRelationThenPersistedCorruption(
+            VerifySemanticBoundaryThenPersistedCorruption(
                 NewProject("blank-handle"),
                 true,
                 "   ",
                 false,
-                "Blank source handle was silently accepted by the domain boundary.",
                 "Blank source handle was silently dropped during persistence.");
 
-            RejectSemanticRelationThenPersistedCorruption(
+            VerifySemanticBoundaryThenPersistedCorruption(
                 NewProject("duplicate-handle-exact"),
                 true,
                 "1A",
                 true,
-                "Exact duplicate source handle was silently accepted by the domain boundary.",
                 "Exact duplicate source handles were persisted even though the QSDB reader rejects them.");
 
-            RejectSemanticRelationThenPersistedCorruption(
+            VerifySemanticBoundaryThenPersistedCorruption(
                 NewProject("duplicate-handle-case"),
                 true,
                 "1a",
                 true,
-                "Case-only duplicate source handle was silently accepted by the domain boundary.",
                 "Case-only duplicate source handles were persisted even though source identity is case-insensitive.");
 
-            RejectSemanticRelationThenPersistedCorruption(
+            VerifySemanticBoundaryThenPersistedCorruption(
                 NewProject("duplicate-dependency-exact"),
                 false,
                 "E2",
                 true,
-                "Exact duplicate dependency id was silently accepted by the domain boundary.",
                 "Exact duplicate dependency ids were persisted even though the QSDB reader rejects them.");
 
-            RejectSemanticRelationThenPersistedCorruption(
+            VerifySemanticBoundaryThenPersistedCorruption(
                 NewProject("duplicate-dependency-case"),
                 false,
                 "e2",
                 true,
-                "Case-only duplicate dependency id was silently accepted by the domain boundary.",
                 "Case-only duplicate dependency ids were persisted even though dependency identity is case-insensitive.");
         }
 
-        private static void RejectSemanticRelationThenPersistedCorruption(
+        private static void VerifySemanticBoundaryThenPersistedCorruption(
             ProjectState project,
             bool sourceHandle,
             string value,
             bool duplicate,
-            string domainMessage,
             string persistenceMessage)
         {
             var element = AddElement(project);
             var relation = sourceHandle ? element.SourceHandles : element.DependsOn;
             var canonical = value.Trim();
-            if (duplicate)
-                relation.Add(sourceHandle && string.Equals(value, "1a", StringComparison.Ordinal) ? "1A" :
-                    !sourceHandle && string.Equals(value, "e2", StringComparison.Ordinal) ? "E2" : canonical);
 
-            var countBeforeRejectedMutation = relation.Count;
-            var rejectedAtDomainBoundary = false;
-            try { relation.Add(value); }
-            catch (ArgumentException) { rejectedAtDomainBoundary = true; }
-            if (!rejectedAtDomainBoundary) throw new Exception(domainMessage);
-            if (relation.Count != countBeforeRejectedMutation)
-                throw new Exception("Rejected relation mutation changed the public collection.");
+            if (duplicate)
+            {
+                var existing = sourceHandle && string.Equals(value, "1a", StringComparison.Ordinal) ? "1A" :
+                    !sourceHandle && string.Equals(value, "e2", StringComparison.Ordinal) ? "E2" : canonical;
+                relation.Add(existing);
+                var countBeforeRejectedMutation = relation.Count;
+                var rejectedAtDomainBoundary = false;
+                try { relation.Add(value); }
+                catch (ArgumentException) { rejectedAtDomainBoundary = true; }
+                if (!rejectedAtDomainBoundary)
+                    throw new Exception("Duplicate relation identity was accepted by the semantic domain boundary.");
+                if (relation.Count != countBeforeRejectedMutation)
+                    throw new Exception("Rejected duplicate relation mutation changed the public collection.");
+            }
+            else if (canonical.Length == 0)
+            {
+                var rejectedAtDomainBoundary = false;
+                try { relation.Add(value); }
+                catch (ArgumentException) { rejectedAtDomainBoundary = true; }
+                if (!rejectedAtDomainBoundary)
+                    throw new Exception("Blank relation identity was accepted by the semantic domain boundary.");
+                if (relation.Count != 0)
+                    throw new Exception("Rejected blank relation mutation changed the public collection.");
+            }
+            else
+            {
+                relation.Add(value);
+                if (relation.Count != 1 || !string.Equals(relation[0], canonical, StringComparison.Ordinal))
+                    throw new Exception("Padded semantic relation input was not canonicalized deterministically.");
+                relation.Clear();
+            }
 
             AddPersistedRelation(element, sourceHandle, value);
             RejectSave(project, persistenceMessage);
