@@ -1,4 +1,5 @@
 using System;
+using QS3D.Core.Commercial;
 using QS3D.Core.Cost;
 using QS3D.Core.Measurement;
 using QS3D.Core.Progress;
@@ -14,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             ProgressSnapshotIsDeterministic();
             ProgressDeltaExplainsChanges();
             ClaimSnapshotFreezesExistingEvaluation();
+            InterimPaymentCertificateSeriesFailsClosedOnPriorStateDrift();
             DuplicateProgressIdentityFailsClosed();
             InvalidClaimPeriodFailsClosed();
         }
@@ -164,6 +166,86 @@ namespace QS3D.Core.SmokeTests
                 "claim-snapshot-1");
             Equal("claim-snapshot-1", successor.SupersedesSnapshotId);
             Equal("claim-snapshot-1", claim.SnapshotId);
+        }
+
+        private static void InterimPaymentCertificateSeriesFailsClosedOnPriorStateDrift()
+        {
+            var progressService = new ProgressClaimService();
+            var progress = progressService.Evaluate(
+                new[] { new ProgressContractItem("BASE", "m3", 100m, 10m) },
+                new[] { new ProgressClaimLine("BASE", 0m, 20m) },
+                retentionPercent: 10m);
+            var nextProgress = progressService.Evaluate(
+                new[] { new ProgressContractItem("BASE", "m3", 100m, 10m) },
+                new[] { new ProgressClaimLine("BASE", 20m, 10m) },
+                retentionPercent: 10m);
+
+            var register = new CommercialVariationRegister("VND", new[]
+            {
+                new CommercialVariation(
+                    "VO-01",
+                    "Approved additional scope",
+                    "VND",
+                    100m,
+                    100m,
+                    CommercialVariationStatus.Approved,
+                    new CommercialRevisionRef("variation", "VO-01", "R1"))
+            });
+
+            var service = new InterimPaymentCertificateService();
+            var first = service.Create(
+                "IPC-001",
+                "VND",
+                progress,
+                register,
+                new[] { new VariationCertificationLine("VO-01", 0m, 40m) },
+                variationRetentionThisPeriod: 4m);
+
+            Equal(40m, first.VariationCertifiedToDate["VO-01"]);
+            Equal(24m, first.RetainedBalanceAfterCertificate);
+
+            var second = service.CreateNext(
+                "IPC-002",
+                "VND",
+                first,
+                nextProgress,
+                register,
+                new[] { new VariationCertificationLine("VO-01", 40m, 30m) },
+                variationRetentionThisPeriod: 3m,
+                retentionRelease: 5m,
+                advanceRecovery: 2m,
+                otherDeductions: 1m);
+
+            Equal(first.CumulativeNetCertified, second.PreviousNetCertified);
+            Equal(first.RetainedBalanceAfterCertificate, second.PreviousRetentionHeld);
+            Equal(70m, second.VariationCertifiedToDate["VO-01"]);
+            Equal(32m, second.RetainedBalanceAfterCertificate);
+            Equal(first.CumulativeNetCertified + second.NetCertifiedThisPeriod, second.CumulativeNetCertified);
+
+            Throws<InvalidOperationException>(() => service.CreateNext(
+                "IPC-DRIFT",
+                "VND",
+                first,
+                nextProgress,
+                register,
+                new[] { new VariationCertificationLine("VO-01", 0m, 30m) }));
+
+            Throws<InvalidOperationException>(() => service.CreateNext(
+                "IPC-RELEASE",
+                "VND",
+                first,
+                nextProgress,
+                register,
+                new[] { new VariationCertificationLine("VO-01", 40m, 0m) },
+                retentionRelease: 25m));
+
+            Throws<InvalidOperationException>(() => service.CreateNext(
+                "IPC-OVER",
+                "VND",
+                first,
+                nextProgress,
+                register,
+                new[] { new VariationCertificationLine("VO-01", 40m, 61m) }));
         }
 
         private static void DuplicateProgressIdentityFailsClosed()
