@@ -93,7 +93,6 @@ def main() -> int:
         "_selectedRelease",
         "Mới nhất",
         "Đang dùng",
-        "Cài đặt lại ",
     ):
         require(window, needle, WINDOW_REL)
 
@@ -111,6 +110,7 @@ def main() -> int:
         "_releaseVersionPicker.DropDownOpened",
         "new Trigger { Property = ComboBoxItem.IsSelectedProperty, Value = true }",
         "new Trigger { Property = UIElement.IsMouseOverProperty, Value = true }",
+        "content.SetBinding(TextElement.ForegroundProperty, new Binding(\"Foreground\")",
     ):
         require(window, needle, WINDOW_REL)
 
@@ -121,13 +121,14 @@ def main() -> int:
     ):
         forbid(window, needle, WINDOW_REL)
 
-    # The closed picker and the embedded search field must remain legible before focus. Their
-    # custom templates bypass WPF's outer Background/BorderBrush values, so pin the actual chrome
-    # to explicit high-contrast tokens while keeping AccentSoft as the focused border.
+    # The closed picker, popup choices and embedded search field must remain legible before focus.
+    # Pin every visible state to explicit dark-theme tokens and keep WCAG-level text contrast.
     for needle in (
         "PickerInputBackground",
         "PickerInputBorder",
         "PickerInputPlaceholder",
+        "PickerHover",
+        "PickerSelected",
         "searchBox.SetValue(Control.BackgroundProperty, PickerInputBackground);",
         "searchBox.SetValue(Control.ForegroundProperty, TextPrimary);",
         "searchBox.SetValue(Control.BorderBrushProperty, PickerInputBorder);",
@@ -141,6 +142,31 @@ def main() -> int:
     require_contrast(window, "TextPrimary", "PickerInputBackground", 4.5)
     require_contrast(window, "PickerInputPlaceholder", "PickerInputBackground", 4.5)
     require_contrast(window, "PickerInputBorder", "PickerInputBackground", 3.0)
+    require_contrast(window, "TextPrimary", "PanelBackground", 4.5)
+    require_contrast(window, "TextPrimary", "PickerHover", 4.5)
+    require_contrast(window, "TextPrimary", "PickerSelected", 4.5)
+
+    # The editable search caret and the placeholder must share the same vertical alignment contract.
+    # This prevents the caret from riding above the Vietnamese placeholder baseline in the custom WPF template.
+    for needle in (
+        "searchBox.SetValue(Control.VerticalContentAlignmentProperty, VerticalAlignment.Center);",
+        "contentHost.SetBinding(FrameworkElement.VerticalAlignmentProperty, new Binding(\"VerticalContentAlignment\")",
+        "placeholder.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);",
+    ):
+        require(window, needle, WINDOW_REL)
+
+    # The currently installed release is not a reinstall CTA. If current == latest, surface an
+    # explicit success state with an icon; selecting a different release must restore install action.
+    for needle in (
+        "✓ Phiên bản hiện tại đang là mới nhất",
+        "var currentIsLatest = result.Release != null && IsCurrentRelease(result.Release);",
+        "var targetIsCurrent = targetRelease != null && IsCurrentRelease(targetRelease);",
+        "_updateButton.Visibility = targetIsCurrent",
+        "if (selectedRelease != null && IsCurrentRelease(selectedRelease)) return;",
+        "PreviewInstallButtonText + \" \" + targetRelease.Tag",
+    ):
+        require(window, needle, WINDOW_REL)
+    forbid(window, "Cài đặt lại ", WINDOW_REL)
 
     # Clicking install must use the selected release object; it must not refresh latest and silently
     # switch targets after the user made a choice.
@@ -173,7 +199,7 @@ def main() -> int:
     ):
         require(receipt, needle, RECEIPT_REL)
 
-    print("PASS: V25 Update Center keeps search inside a dark high-contrast release dropdown, preserves unfocused contrast, and pins the selected release through install/restart verification.")
+    print("PASS: V25 Update Center keeps the version picker/search fully high-contrast, vertically aligns the search caret, hides current-release reinstall actions, surfaces a current-latest success state, and pins a different selected release through install/restart verification.")
     return 0
 
 

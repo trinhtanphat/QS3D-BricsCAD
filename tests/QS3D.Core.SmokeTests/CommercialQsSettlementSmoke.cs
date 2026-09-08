@@ -12,6 +12,8 @@ namespace QS3D.Core.SmokeTests
             VariationRegisterRejectsDuplicateAndMixedCurrency();
             IpcReusesProgressClaimAndBoundsVariationCertification();
             FinalAccountReconcilesContractAndRetention();
+            CommercialQsWorkbookSmoke.Run();
+            CommercialWorkflowAuditSmoke.Run();
         }
 
         private static void VariationRegisterCountsApprovedChangesOnly()

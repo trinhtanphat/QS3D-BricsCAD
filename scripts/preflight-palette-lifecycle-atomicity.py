@@ -4,7 +4,7 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "PaletteCoordinator.cs"
+SOURCE = ROOT / "src/QS3D.BricsCAD.V25/PaletteCoordinator.cs"
 errors = []
 
 
@@ -76,10 +76,7 @@ else:
 
     for field in ("_workspace", "_properties", "_right", "_quantityInsight"):
         if f"{field} = new PaletteSet(" in ensure:
-            errors.append(
-                "native PaletteSet must not be field-published through an object initializer before configuration rollback is armed: "
-                + field
-            )
+            errors.append("native PaletteSet must not be field-published through an object initializer before configuration rollback is armed: " + field)
 
     create = method_block(text, "private static PaletteSet CreatePaletteSet(")
     required_create = (
@@ -116,9 +113,7 @@ else:
         rollback = create.find("try { palette.Dispose(); }")
         rethrow = create.rfind("throw;")
         if not (0 <= constructor < first_config < add_visual < publish_return < rollback < rethrow):
-            errors.append(
-                "CreatePaletteSet must own the exact native instance locally through configuration/AddVisual, return only after success, and dispose it before rethrow on failure."
-            )
+            errors.append("CreatePaletteSet must own the exact native instance locally through configuration/AddVisual, return only after success, and dispose it before rethrow on failure.")
 
     dispose = method_block(text, "private static void DisposeCore(bool persistLayout)")
     required_dispose = (
@@ -142,22 +137,11 @@ else:
         cursor = pos + len(token)
 
     dispose_palette = method_block(text, "private static void DisposePalette(ref PaletteSet? palette)")
-    for token in (
-        "var current = palette;",
-        "palette = null;",
-        "if (current == null) return;",
-        "try { current.Dispose(); }",
-        "catch",
-    ):
+    for token in ("var current = palette;", "palette = null;", "if (current == null) return;", "try { current.Dispose(); }", "catch"):
         if token not in dispose_palette:
             errors.append("published palette teardown must remain isolated through DisposePalette: " + token)
 
-    for forbidden in (
-        "_workspace.Dispose();",
-        "_properties.Dispose();",
-        "_right.Dispose();",
-        "_quantityInsight.Dispose();",
-    ):
+    for forbidden in ("_workspace.Dispose();", "_properties.Dispose();", "_right.Dispose();", "_quantityInsight.Dispose();"):
         if forbidden in text:
             errors.append("palette teardown must remain isolated through DisposePalette: " + forbidden)
 
@@ -172,14 +156,18 @@ else:
         "_workspacePanel?.SetDedicatedPropertiesPaletteActive(propertiesVisible);",
         "SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);",
         "private static void SetVisibility(bool workspace, bool properties, bool right, bool quantityInsight)",
-        "if (_workspace != null) _workspace.Visible = workspace;",
-        "if (_properties != null) _properties.Visible = properties;",
-        "if (_right != null) _right.Visible = right;",
-        "if (_quantityInsight != null) _quantityInsight.Visible = quantityInsight;",
+        'SetPaletteVisibility(workspacePalette, _workspace, workspace, "Workspace");',
+        'SetPaletteVisibility(propertiesPalette, _properties, properties, "Properties");',
+        'SetPaletteVisibility(rightPalette, _right, right, "Right");',
+        'SetPaletteVisibility(quantityPalette, _quantityInsight, quantityInsight, "QuantityInsight");',
+        "TryRestorePaletteVisibility(quantityPalette, _quantityInsight, quantityWasVisible);",
+        "TryRestorePaletteVisibility(rightPalette, _right, rightWasVisible);",
+        "TryRestorePaletteVisibility(propertiesPalette, _properties, propertiesWereVisible);",
+        "TryRestorePaletteVisibility(workspacePalette, _workspace, workspaceWasVisible);",
         "UserUiLayoutStore.Update(layout =>",
     ):
         if token not in text:
-            errors.append("palette lifecycle lost centralized layout/visibility behavior: " + token)
+            errors.append("palette lifecycle lost centralized atomic layout/visibility behavior: " + token)
 
 print("QS3D palette lifecycle atomicity preflight")
 if errors:
@@ -188,4 +176,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: four native palettes remain locally owned and rollback-disposable through configuration/AddVisual, publish only after success, and retain sibling teardown/layout/visibility contracts.")
+print("PASS: four native palettes remain locally owned and rollback-disposable through configuration/AddVisual, publish only after success, and retain sibling teardown/layout plus transactional visibility contracts.")

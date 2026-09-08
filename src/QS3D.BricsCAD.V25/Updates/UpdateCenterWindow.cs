@@ -58,8 +58,8 @@ namespace QS3D.BricsCAD.V25.Updates
         private bool _changingUpdateOnClose;
         private bool _syncingReleasePicker;
         private bool _loadingReleaseChoices;
-        private string? _postRestartDiagnostic;
 #if !BRICSCAD_V26
+        private string? _postRestartDiagnostic;
         private bool _previewDownloading;
         private bool _previewScheduled;
         private string? _previewScheduledDetail;
@@ -256,7 +256,6 @@ namespace QS3D.BricsCAD.V25.Updates
             _updateOnCloseCheckBox.Checked += (_, __) => PersistUpdateOnClose(true);
             _updateOnCloseCheckBox.Unchecked += (_, __) => PersistUpdateOnClose(false);
             stateStack.Children.Add(_updateOnCloseCheckBox);
-
             _updateOnCloseHelp = new TextBlock
             {
                 Foreground = TextMuted,
@@ -335,7 +334,9 @@ namespace QS3D.BricsCAD.V25.Updates
             {
                 UpdateCoordinator.Instance.StateChanged += OnStateChanged;
                 _coordinatorAttached = true;
+#if !BRICSCAD_V26
                 TryApplyPostRestartReceipt();
+#endif
                 Apply(UpdateCoordinator.Instance.LastResult);
                 _ = LoadPublishedReleasesAsync();
             }
@@ -357,6 +358,8 @@ namespace QS3D.BricsCAD.V25.Updates
             var currentDisplay = ToDisplayVersion(currentOriginal);
             var latest = result.Release?.Tag ?? "—";
             var targetRelease = _selectedRelease ?? result.Release;
+            var currentIsLatest = result.Release != null && IsCurrentRelease(result.Release);
+            var targetIsCurrent = targetRelease != null && IsCurrentRelease(targetRelease);
             var assembly = Assembly.GetExecutingAssembly();
             var loadedPath = string.IsNullOrWhiteSpace(assembly.Location) ? "<unknown>" : assembly.Location;
             var buildIdentity = GetBuildIdentity(currentOriginal);
@@ -389,8 +392,22 @@ namespace QS3D.BricsCAD.V25.Updates
             _detail.Text = result.Detail;
             HideProgress();
 
+            if (currentIsLatest && !previewDownloading && !previewScheduled && !checking && result.State != UpdateState.Scheduled)
+            {
+                _status.Text = "✓ Phiên bản hiện tại đang là mới nhất";
+                _status.Foreground = Success;
+                _detail.Text = targetIsCurrent
+                    ? "Bạn đang dùng release mới nhất. Không cần cài đặt lại phiên bản đang chạy."
+                    : "Bạn đang dùng release mới nhất. Release khác đang được chọn trong danh sách và chỉ được cài khi bạn chủ động xác nhận.";
+            }
+            else if (targetIsCurrent && !previewDownloading && !previewScheduled && !checking && result.State != UpdateState.Scheduled)
+            {
+                _status.Text = "✓ Phiên bản này đang được sử dụng";
+                _status.Foreground = Success;
+                _detail.Text = "Không cần cài đặt lại release đang chạy. Hãy chọn một release khác nếu bạn muốn chuyển phiên bản.";
+            }
 #if !BRICSCAD_V26
-            if (hasPreviewDownload && !previewDownloading && !previewScheduled)
+            else if (hasPreviewDownload && !previewDownloading && !previewScheduled)
             {
                 _status.Text = "Gói preview + SHA-256 đã sẵn sàng";
                 _status.Foreground = Success;
@@ -400,21 +417,26 @@ namespace QS3D.BricsCAD.V25.Updates
                 if (targetRelease != null)
                     _detail.Text += " Mục tiêu đã ghim: " + targetRelease.Tag + ".";
             }
-            else
 #endif
+            else
             {
                 _status.Foreground = result.State == UpdateState.Error ? Warning : TextPrimary;
             }
 
+#if !BRICSCAD_V26
             if (!string.IsNullOrWhiteSpace(_postRestartDiagnostic) && !previewDownloading && !previewScheduled)
             {
                 _status.Text = "Phát hiện phiên bản QS3D đang load không khớp";
                 _status.Foreground = Warning;
                 _detail.Text = _postRestartDiagnostic;
             }
+#endif
 
             _refreshButton.IsEnabled = !previewDownloading && !previewScheduled && !checking && result.State != UpdateState.Scheduled;
             _updateButton.IsEnabled = !previewDownloading && !previewScheduled && (result.CanAutoInstall || hasPreviewDownload || hasManualRelease);
+            _updateButton.Visibility = targetIsCurrent && !previewDownloading && !previewScheduled && result.State != UpdateState.Scheduled
+                ? Visibility.Collapsed
+                : Visibility.Visible;
             _releaseButton.IsEnabled = !previewDownloading && targetRelease?.PageUri != null;
             _updateOnCloseCheckBox.IsEnabled = !previewDownloading && !previewScheduled && result.State != UpdateState.Scheduled;
             if (_releaseSearchBox != null)
@@ -448,9 +470,7 @@ namespace QS3D.BricsCAD.V25.Updates
             }
             else if (hasPreviewDownload && targetRelease != null)
             {
-                _updateButton.Content = IsCurrentRelease(targetRelease)
-                    ? "Cài đặt lại " + targetRelease.Tag
-                    : PreviewInstallButtonText + " " + targetRelease.Tag;
+                _updateButton.Content = PreviewInstallButtonText + " " + targetRelease.Tag;
                 _updateButton.ToolTip = IsUpdateOnCloseEnabled()
                     ? "Tải và xác minh đúng release đã chọn; chỉ cài sau khi bạn tự đóng BricsCAD. BricsCAD sẽ tự mở lại."
                     : "Tải đúng release đã chọn, xác minh SHA-256, stage an toàn, đóng BricsCAD, cài rồi tự mở lại.";
@@ -480,6 +500,7 @@ namespace QS3D.BricsCAD.V25.Updates
             if (_previewScheduled) return;
 #endif
             var selectedRelease = _selectedRelease ?? _result?.Release;
+            if (selectedRelease != null && IsCurrentRelease(selectedRelease)) return;
             if (_selectedRelease != null && selectedRelease != null)
             {
 #if !BRICSCAD_V26
@@ -751,11 +772,23 @@ namespace QS3D.BricsCAD.V25.Updates
         {
             var current = _result?.CurrentVersion?.Original ?? string.Empty;
             return string.Equals(
-                PreviewInstallReceipt.NormalizeVersion(current),
-                PreviewInstallReceipt.NormalizeVersion(release.Tag),
+                NormalizeReleaseVersion(current),
+                NormalizeReleaseVersion(release.Tag),
                 StringComparison.OrdinalIgnoreCase);
         }
 
+        // Shared display comparison must not depend on V25-only receipt persistence.
+        private static string NormalizeReleaseVersion(string? value)
+        {
+            var normalized = (value ?? string.Empty).Trim();
+            if (normalized.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+                normalized = normalized.Substring(1);
+            var buildMetadata = normalized.IndexOf('+');
+            if (buildMetadata >= 0) normalized = normalized.Substring(0, buildMetadata);
+            return normalized.Trim();
+        }
+
+#if !BRICSCAD_V26
         private void TryApplyPostRestartReceipt()
         {
             if (!PreviewInstallReceipt.TryRead(out var receipt, out var readError))
@@ -783,6 +816,7 @@ namespace QS3D.BricsCAD.V25.Updates
 
             _postRestartDiagnostic = PreviewInstallReceipt.DescribeMismatch(receipt, actualVersion, actualPath);
         }
+#endif
 
 #if !BRICSCAD_V26
         private void ApplyDownloadProgress(UpdateDownloadProgress progress)
@@ -1005,7 +1039,7 @@ namespace QS3D.BricsCAD.V25.Updates
 
             var popupChrome = new FrameworkElementFactory(typeof(Border), "PopupChrome");
             popupChrome.SetValue(Border.BackgroundProperty, PickerPopupBackground);
-            popupChrome.SetValue(Border.BorderBrushProperty, BorderStroke);
+            popupChrome.SetValue(Border.BorderBrushProperty, PickerInputBorder);
             popupChrome.SetValue(Border.BorderThicknessProperty, new Thickness(1));
             popupChrome.SetValue(Border.CornerRadiusProperty, new CornerRadius(7));
             popupChrome.SetValue(Border.PaddingProperty, new Thickness(7));
@@ -1022,6 +1056,7 @@ namespace QS3D.BricsCAD.V25.Updates
             searchBox.SetValue(Control.ForegroundProperty, TextPrimary);
             searchBox.SetValue(Control.BorderBrushProperty, PickerInputBorder);
             searchBox.SetValue(Control.BorderThicknessProperty, new Thickness(1));
+            searchBox.SetValue(Control.VerticalContentAlignmentProperty, VerticalAlignment.Center);
             searchBox.SetValue(TextBox.CaretBrushProperty, AccentSoft);
             searchBox.SetValue(TextBox.SelectionBrushProperty, PickerSelected);
             searchBox.SetValue(Control.FontSizeProperty, 12d);
@@ -1068,7 +1103,10 @@ namespace QS3D.BricsCAD.V25.Updates
             var grid = new FrameworkElementFactory(typeof(Grid));
             var contentHost = new FrameworkElementFactory(typeof(ScrollViewer), "PART_ContentHost");
             contentHost.SetValue(FrameworkElement.MarginProperty, new Thickness(10, 0, 10, 0));
-            contentHost.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            contentHost.SetBinding(FrameworkElement.VerticalAlignmentProperty, new Binding("VerticalContentAlignment")
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent)
+            });
             grid.AppendChild(contentHost);
 
             var placeholder = new FrameworkElementFactory(typeof(TextBlock), "SearchPlaceholder");
