@@ -10,6 +10,8 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / "scripts" / "acquire-v25-compile-references.ps1"
+NATIVE_CREATE_DECL = "public static extern SafeFileHandle CreateFileW("
+NATIVE_CREATE_CALL = "$handle = [QS3DV25NativeFileDisposition]::CreateFileW("
 
 
 def validate(source: str) -> list[str]:
@@ -37,7 +39,8 @@ def validate(source: str) -> list[str]:
     desired_delete = "[QS3DV25NativeFileDisposition]::DELETE"
 
     required_tokens = (
-        ("CreateFileW", "native creator handle with DELETE access is missing"),
+        (NATIVE_CREATE_DECL, "native CreateFileW declaration is missing"),
+        (NATIVE_CREATE_CALL, "owned native CreateFileW call site is missing"),
         (delete_access, "native DELETE access constant is missing"),
         (desired_delete, "creator handle does not request DELETE access"),
         ("public const uint CREATE_NEW = 1;", "fresh-only CREATE_NEW constant is missing"),
@@ -53,6 +56,12 @@ def validate(source: str) -> list[str]:
     for token, message in required_tokens:
         if token not in source:
             failures.append(message)
+
+    native_decl = source.find(NATIVE_CREATE_DECL)
+    helper = source.find("function Open-OwnedMsiPublication")
+    native_call = source.find(NATIVE_CREATE_CALL, helper if helper >= 0 else 0)
+    if not (0 <= native_decl < helper < native_call):
+        failures.append("native CreateFileW declaration must back the exact owned-publication helper call")
 
     if create_time_delete in source:
         failures.append(
@@ -181,7 +190,8 @@ def main() -> int:
         return 1
 
     mutation_tokens = (
-        ("CreateFileW", "native creator"),
+        (NATIVE_CREATE_DECL, "native creator declaration"),
+        (NATIVE_CREATE_CALL, "native creator call site"),
         ("public const uint DELETE = 0x00010000;", "DELETE access constant"),
         ("[QS3DV25NativeFileDisposition]::DELETE", "DELETE access use"),
         ("public const uint CREATE_NEW = 1;", "fresh-only constant"),
