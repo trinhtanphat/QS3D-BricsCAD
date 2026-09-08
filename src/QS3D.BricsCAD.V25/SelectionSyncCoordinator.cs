@@ -39,7 +39,7 @@ namespace QS3D.BricsCAD.V25
                     catch { }
                     return;
                 }
-                Refresh(document);
+                Refresh(document, attachmentToken);
             }
             catch
             {
@@ -75,11 +75,10 @@ namespace QS3D.BricsCAD.V25
             foreach (var document in Attached.Where(x => string.Equals(x.Name, fileName, StringComparison.OrdinalIgnoreCase)).ToArray()) Detach(document);
         }
 
-        public static void Refresh(Document? document)
+        public static void Refresh(Document? document, object attachmentToken)
         {
             if (document == null ||
-                !Attached.Contains(document) ||
-                !AttachmentTokens.TryGetValue(document, out var attachmentToken) ||
+                !IsCurrentAttachment(document, attachmentToken) ||
                 !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;
             if (!PaletteCoordinator.IsWorkspaceVisible) return;
             RemovePending(document);
@@ -153,12 +152,12 @@ namespace QS3D.BricsCAD.V25
         {
             if (!IsCurrentAttachment(document, attachmentToken) ||
                 !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;
-            ScheduleRefresh(document);
+            ScheduleRefresh(document, attachmentToken);
         }
 
-        private static void ScheduleRefresh(Document document)
+        private static void ScheduleRefresh(Document document, object attachmentToken)
         {
-            if (!Attached.Contains(document))
+            if (!IsCurrentAttachment(document, attachmentToken))
             {
                 RemovePending(document);
                 return;
@@ -182,8 +181,8 @@ namespace QS3D.BricsCAD.V25
                         return;
                     }
                     Pending.Remove(document);
-                    if (!Attached.Contains(document)) return;
-                    Refresh(document);
+                    if (!IsCurrentAttachment(document, attachmentToken)) return;
+                    Refresh(document, attachmentToken);
                 };
                 Pending[document] = timer;
             }
