@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
 
@@ -164,8 +166,8 @@ namespace QS3D.Core.SmokeTests
             {
                 var target = TargetProject();
                 var dependent = new ProjectElement("TGT-E2", ElementCategory.Beam, "TGT-FAM", "TGT-FLOOR", "TGT-ZONE");
-                dependent.DependsOn.Add("TGT-E1");
-                dependent.DependsOn.Add(duplicate);
+                AddPersistedDependency(dependent, "TGT-E1");
+                AddPersistedDependency(dependent, duplicate);
                 target.Elements.Add(dependent);
                 var elements = target.Elements.Count;
                 var audits = target.AuditEvents.Count;
@@ -296,6 +298,15 @@ namespace QS3D.Core.SmokeTests
             beam.Quantities["LengthM"] = 5.5d;
             project.Elements.Add(beam);
             return project;
+        }
+
+        private static void AddPersistedDependency(ProjectElement element, string value)
+        {
+            var valuesField = element.DependsOn.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed malformed persisted importer dependencies.");
+            var values = valuesField.GetValue(element.DependsOn) as List<string>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement dependency backing collection.");
+            values.Add(value);
         }
 
         private static void Near(double expected, double actual)

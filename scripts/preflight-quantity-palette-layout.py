@@ -71,7 +71,8 @@ if COORDINATOR.is_file():
         "var quantityVisible = IsQuantityInsightVisible;",
         "SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);",
         "private static void SetVisibility(bool workspace, bool properties, bool right, bool quantityInsight)",
-        "if (_quantityInsight != null) _quantityInsight.Visible = quantityInsight;",
+        'SetPaletteVisibility(quantityPalette, _quantityInsight, quantityInsight, "QuantityInsight");',
+        "TryRestorePaletteVisibility(quantityPalette, _quantityInsight, quantityWasVisible);",
     )
     for needle in required:
         if needle not in text:
@@ -98,4 +99,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Quantity Insight has independent per-user dimensions, native configuration is applied under pre-publication rollback ownership, and four-palette visibility restore plus finite positive persisted-size filtering remain outside QSDB state.")
+print("PASS: Quantity Insight has independent per-user dimensions, native configuration is applied under pre-publication rollback ownership, and four-palette transactional visibility restore plus finite positive persisted-size filtering remain outside QSDB state.")

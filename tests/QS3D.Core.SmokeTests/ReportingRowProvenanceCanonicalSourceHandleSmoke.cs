@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Reporting;
@@ -20,7 +22,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void PaddedStoredHandleFailsClosed()
         {
-            var project = ProjectWithDoor("D1", " AB ");
+            var project = ProjectWithPersistedDoor("D1", " AB ");
             Throws(
                 () => DoorOpeningScheduleBuilder.Build(project),
                 "Report provenance contains a non-canonical stored SourceHandles entry at index 0. Repair source ownership before reporting.");
@@ -28,7 +30,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void BlankStoredHandleFailsClosed()
         {
-            var project = ProjectWithDoor("D1", "   ");
+            var project = ProjectWithPersistedDoor("D1", "   ");
             Throws(
                 () => DoorOpeningScheduleBuilder.Build(project),
                 "Report provenance contains an empty stored SourceHandles entry at index 0. Repair source ownership before reporting.");
@@ -64,11 +66,33 @@ namespace QS3D.Core.SmokeTests
             return project;
         }
 
+        private static ProjectState ProjectWithPersistedDoor(string id, string sourceHandle)
+        {
+            var project = new ProjectState("REPORT-PROV", "Reporting provenance canonicality");
+            var element = new ProjectElement(id, ElementCategory.Door, string.Empty, string.Empty, string.Empty);
+            AddPersistedSourceHandle(element, sourceHandle);
+            project.Elements.Add(element);
+            return project;
+        }
+
         private static void AddDoor(ProjectState project, string id, string sourceHandle)
         {
             var element = new ProjectElement(id, ElementCategory.Door, string.Empty, string.Empty, string.Empty);
             element.SourceHandles.Add(sourceHandle);
             project.Elements.Add(element);
+        }
+
+        private static void AddPersistedSourceHandle(ProjectElement element, string sourceHandle)
+        {
+            var relationField = typeof(ProjectElement).GetField("_sourceHandles", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement persisted source-handle backing relation field is unavailable.");
+            var relation = relationField.GetValue(element)
+                ?? throw new InvalidOperationException("ProjectElement persisted source-handle backing relation is unavailable.");
+            var valuesField = relation.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement persisted source-handle backing values field is unavailable.");
+            var values = valuesField.GetValue(relation) as List<string>
+                ?? throw new InvalidOperationException("ProjectElement persisted source-handle backing values are unavailable.");
+            values.Add(sourceHandle);
         }
 
         private static void Throws(Action action, string expectedMessage)
