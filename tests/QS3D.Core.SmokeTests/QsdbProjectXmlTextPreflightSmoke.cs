@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
         {
             InvalidMetadataValueFailsAtPublicMutationBoundary();
             InvalidRelationTextFailsBeforeFilesystemMutation();
+            PersistedPaddedRelationsFailLoadInsteadOfBeingLaundered();
             LoneSurrogateFailsBeforeFilesystemMutation();
             SupplementaryUnicodeRoundTrips();
         }
@@ -43,6 +44,33 @@ namespace QS3D.Core.SmokeTests
             AddPersistedDependency(element, "DEP-\u0001");
             project.Elements.Add(element);
             AssertPreflightFailure(project, "invalid-relation-control");
+        }
+
+        private static void PersistedPaddedRelationsFailLoadInsteadOfBeingLaundered()
+        {
+            var root = TempRoot("padded-relations-load");
+            var path = Path.Combine(root, "project.qsdb");
+            var project = Project("P-QSDB-PADDED-RELATIONS");
+            var element = new ProjectElement("E-QSDB-PADDED-RELATIONS", ElementCategory.Beam, string.Empty, string.Empty, string.Empty);
+            element.SourceHandles.Add("HANDLE-1");
+            element.DependsOn.Add("DEP-1");
+            project.Elements.Add(element);
+
+            try
+            {
+                var store = new QsdbProjectStore();
+                store.SaveNew(project, path);
+                var xml = File.ReadAllText(path);
+                xml = xml.Replace("<h>HANDLE-1</h>", "<h> HANDLE-1 </h>")
+                         .Replace("<d>DEP-1</d>", "<d> DEP-1 </d>");
+                File.WriteAllText(path, xml);
+
+                Throws<InvalidDataException>(() => store.Load(path));
+            }
+            finally
+            {
+                DeleteTree(root);
+            }
         }
 
         private static void LoneSurrogateFailsBeforeFilesystemMutation()
