@@ -96,6 +96,7 @@ namespace QS3D.BricsCAD.V25
 
         public static void SaveCurrentProject()
         {
+            var nativeDrawingCommitted = false;
             try
             {
                 var document = RequireActiveDocument();
@@ -103,6 +104,7 @@ namespace QS3D.BricsCAD.V25
 
                 var stopwatch = Stopwatch.StartNew();
                 InvokeAcadDocumentMethod(document, "Save");
+                nativeDrawingCommitted = true;
                 var path = ProjectContextCoordinator.Save(document);
                 stopwatch.Stop();
 
@@ -113,12 +115,19 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
+                if (nativeDrawingCommitted)
+                {
+                    ShowPostNativeCommitFailure("Save");
+                    return;
+                }
+
                 ShowError("Lưu dự án", ex);
             }
         }
 
         public static void SaveCurrentProjectAs()
         {
+            var nativeDrawingCommitted = false;
             try
             {
                 var document = RequireActiveDocument();
@@ -148,6 +157,7 @@ namespace QS3D.BricsCAD.V25
 
                 var stopwatch = Stopwatch.StartNew();
                 InvokeAcadDocumentMethod(document, "SaveAs", targetDrawingPath, Type.Missing, Type.Missing);
+                nativeDrawingCommitted = true;
                 if (!SamePath(document.Name, targetDrawingPath))
                     throw new InvalidOperationException("BricsCAD đã thực hiện Save As nhưng bản vẽ hiện hành không chuyển sang đường dẫn đích.");
 
@@ -167,6 +177,12 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
+                if (nativeDrawingCommitted)
+                {
+                    ShowPostNativeCommitFailure("SaveAs");
+                    return;
+                }
+
                 ShowError("Lưu thành", ex);
             }
         }
@@ -404,6 +420,27 @@ namespace QS3D.BricsCAD.V25
             catch
             {
                 return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        private static void ShowPostNativeCommitFailure(string operation)
+        {
+            var message = string.Equals(operation, "SaveAs", StringComparison.Ordinal)
+                ? "Save As của bản vẽ BricsCAD đã hoàn tất, nhưng QS3D chưa hoàn tất lưu sidecar project. DWG đã được lưu; hãy xử lý project và thử lưu lại."
+                : "Bản vẽ BricsCAD đã được lưu, nhưng QS3D chưa hoàn tất lưu sidecar project. DWG đã được lưu; hãy xử lý project và thử lưu lại.";
+
+            try
+            {
+                System.Windows.MessageBox.Show(
+                    message,
+                    "QS3D — Lưu project chưa hoàn tất",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+            catch
+            {
+                // Native DWG commit is already irreversible. Warning presentation is
+                // best-effort only and must never turn a partial success into failure.
             }
         }
 
