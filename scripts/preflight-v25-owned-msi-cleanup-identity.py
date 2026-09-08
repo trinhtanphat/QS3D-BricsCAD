@@ -25,32 +25,52 @@ def main() -> int:
     require(end > start, "could not isolate failed owned-publication cleanup window")
     window = source[start:end]
 
-    capture = "$publishedFileIdentity = Get-FileIdentityFromStream -Stream $publishedStream"
-    verification = "Assert-PathMatchesFileIdentity -Path $msi -ExpectedIdentity $publishedFileIdentity"
-    deletion = "[IO.File]::Delete($msi)"
+    # A pathname identity check followed by File.Delete(path) is still racy: a
+    # replacement can occur between the check and deletion. Cleanup must keep a
+    # handle for the exact generation created by this attempt and request
+    # deletion through that handle while ownership is still proven.
+    cleanup_handle_state = "$publishedCleanupHandle = $null"
+    capture = "$publishedCleanupHandle = Open-OwnedCanonicalMsiCleanupHandle -Path $msi"
+    deletion = "Remove-OwnedCanonicalMsiByHandle -Handle $publishedCleanupHandle"
+    pathname_delete = "[IO.File]::Delete($msi)"
 
-    require(capture in window, "owned canonical MSI file identity is not captured before handle disposal")
-    require(verification in window, "canonical MSI pathname is not rebound to the captured owned identity before deletion")
-    require(deletion in window, "owned failed-publication cleanup no longer performs an explicit deletion")
+    for token, message in (
+        ("SetFileInformationByHandle", "native handle-bound deletion primitive is missing"),
+        ("FileDispositionInfo", "file-disposition delete class is missing"),
+        (cleanup_handle_state, "owned cleanup-handle state is missing"),
+        (capture, "owned canonical MSI cleanup handle is not captured for the created generation"),
+        (deletion, "failed owned-publication cleanup is not performed through the captured handle"),
+    ):
+        require(token in source, message)
+
+    require(capture in window, "cleanup handle is not acquired in the owned publication window")
+    require(deletion in window, "handle-bound deletion is not executed in failed owned-publication cleanup")
+    require(pathname_delete not in window, "failed owned-publication cleanup must not reopen/delete the canonical pathname")
 
     capture_pos = window.index(capture)
-    verify_pos = window.index(verification)
     delete_pos = window.index(deletion)
-    dispose_pos = window.find("$publishedStream.Dispose()")
+    dispose_token = "$publishedCleanupHandle.Dispose()"
+    dispose_pos = window.find(dispose_token, capture_pos)
+    require(dispose_pos >= 0, "owned cleanup handle disposal is missing")
+    require(capture_pos < delete_pos < dispose_pos, "owned generation must be deleted before its cleanup handle is released")
 
-    require(dispose_pos >= 0, "published stream disposal is missing from cleanup")
-    require(capture_pos < dispose_pos, "owned identity must be captured while the exclusive publication handle is still open")
-    require(dispose_pos < verify_pos < delete_pos, "pathname identity must be revalidated after handle close and immediately before delete")
+    # The canonical publication write handle must not be mistaken for proof of
+    # later cleanup ownership: the dedicated cleanup handle is acquired while
+    # the created generation is still protected and remains live through delete.
+    publish_dispose = window.find("$publishedStream.Dispose()")
+    require(publish_dispose >= 0, "published stream disposal is missing")
+    require(capture_pos < publish_dispose, "cleanup ownership handle must be captured before the publication handle is released")
 
-    # Mutation locks: weakening either side of the identity handoff must fail this guard.
+    # Mutation locks: removing either ownership capture or handle-bound delete
+    # must make the focused contract unsatisfied.
     for token, label in (
-        (capture, "identity capture"),
-        (verification, "identity revalidation"),
+        (capture, "cleanup handle capture"),
+        (deletion, "handle-bound deletion"),
     ):
         mutated = window.replace(token, "", 1)
         require(token not in mutated, f"{label} mutation probe did not remove the protected invariant")
 
-    print("PASS: V25 failed-publication cleanup is bound to the exact owned MSI file identity")
+    print("PASS: V25 failed-publication cleanup deletes only the exact owned MSI generation through a live handle")
     return 0
 
 
