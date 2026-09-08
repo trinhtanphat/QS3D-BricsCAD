@@ -14,9 +14,13 @@ def require(text: str, token: str, label: str) -> None:
 
 
 def before(text: str, left: str, right: str, label: str) -> None:
-    require(text, left, label + " left")
-    require(text, right, label + " right")
-    if text.index(left) >= text.index(right):
+    left_index = text.find(left)
+    if left_index < 0:
+        raise SystemExit(f"V26 package filesystem safety missing {label} left: {left}")
+    right_index = text.find(right, left_index + len(left))
+    if right_index < 0:
+        raise SystemExit(f"V26 package filesystem safety missing {label} right after left: {right}")
+    if left_index >= right_index:
         raise SystemExit(f"V26 package filesystem safety ordering failed: {label}")
 
 
