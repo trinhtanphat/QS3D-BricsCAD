@@ -13,13 +13,6 @@ BOQ_SMOKE = PLATFORM / "tests" / "QS3D.Platform.SmokeTests" / "BoqKnownCountNoOv
 errors = []
 
 
-def read(path: Path) -> str:
-    if not path.is_file():
-        errors.append(f"missing required pinned Platform hardening file: {path.relative_to(ROOT)}")
-        return ""
-    return path.read_text(encoding="utf-8")
-
-
 def pinned_sha() -> str:
     result = subprocess.run(
         ["git", "ls-tree", "HEAD", "external/QS3D-Platform"],
@@ -37,6 +30,49 @@ def pinned_sha() -> str:
         errors.append("external/QS3D-Platform is not a gitlink in HEAD")
         return ""
     return fields[2]
+
+
+def ensure_pinned_platform_checkout(sha: str) -> None:
+    if not sha:
+        return
+    required = (SCHEDULE, BOQ, SCHEDULE_SMOKE, BOQ_SMOKE)
+    if all(path.is_file() for path in required):
+        return
+
+    # Shared CI intentionally performs a non-recursive checkout. This guard needs
+    # the exact gitlink tree it is validating, so initialize only this pinned
+    # submodule path. Git verifies the resulting submodule HEAD against the
+    # superproject gitlink; any fetch/checkout mismatch fails closed here.
+    result = subprocess.run(
+        ["git", "submodule", "update", "--init", "--depth", "1", "--", "external/QS3D-Platform"],
+        cwd=ROOT,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        errors.append("cannot initialize pinned QS3D-Platform gitlink for hardening validation: " + result.stderr.strip())
+        return
+
+    head = subprocess.run(
+        ["git", "-C", str(PLATFORM), "rev-parse", "HEAD"],
+        cwd=ROOT,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    actual = head.stdout.strip().lower() if head.returncode == 0 else ""
+    if actual != sha.lower():
+        errors.append(f"initialized QS3D-Platform HEAD does not match superproject gitlink: expected {sha}, got {actual or '<unresolved>'}")
+
+
+def read(path: Path) -> str:
+    if not path.is_file():
+        errors.append(f"missing required pinned Platform hardening file: {path.relative_to(ROOT)}")
+        return ""
+    return path.read_text(encoding="utf-8")
 
 
 def require_known_count_shape(label: str, source: str) -> None:
@@ -73,6 +109,7 @@ def require_known_count_shape(label: str, source: str) -> None:
 
 
 sha = pinned_sha()
+ensure_pinned_platform_checkout(sha)
 schedule = read(SCHEDULE)
 boq = read(BOQ)
 schedule_smoke = read(SCHEDULE_SMOKE)
