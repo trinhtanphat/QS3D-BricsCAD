@@ -13,8 +13,12 @@ DECL = "public static extern uint GetFinalPathNameByHandleW("
 HELPER = "function Get-HeldFinalPath {"
 HANDLE_CALL = "[QS3DV26HeldFileIdentity]::GetFinalPathNameByHandleW("
 HANDLE_INVOCATION = "$length = [QS3DV26HeldFileIdentity]::GetFinalPathNameByHandleW($Stream.SafeFileHandle, $builder, [uint32]$builder.Capacity, 0)"
+LIVE_HANDLE = "if ($Stream.SafeFileHandle.IsInvalid -or $Stream.SafeFileHandle.IsClosed) {"
+BOUNDED_LOOP = "while ($capacity -le 32768) {"
+ZERO_FAILURE = "if ($length -eq 0) {"
 UNC_BRANCH = "if ($resolved.StartsWith('\\\\?\\UNC\\', [StringComparison]::OrdinalIgnoreCase)) {"
 DOS_BRANCH = "elseif ($resolved.StartsWith('\\\\?\\', [StringComparison]::OrdinalIgnoreCase)) {"
+NORMALIZED_RETURN = "return [IO.Path]::GetFullPath($resolved)"
 CANONICAL = "[IO.Path]::GetFullPath($item.FullName)"
 OPEN = "$stream = [IO.File]::Open($canonicalPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)"
 PROOF = "$openedFinalPath = Get-HeldFinalPath -Stream $stream"
@@ -49,8 +53,12 @@ def validate(source: str) -> list[str]:
         (HELPER, "held-handle final-path helper is missing"),
         (HANDLE_CALL, "held-handle final-path invocation is missing"),
         (HANDLE_INVOCATION, "final-path query is not bound to the exact held stream SafeFileHandle"),
+        (LIVE_HANDLE, "held-handle validity check is missing"),
+        (BOUNDED_LOOP, "final-path buffer growth is not safety bounded"),
+        (ZERO_FAILURE, "GetFinalPathNameByHandleW zero/error result does not fail closed"),
         (UNC_BRANCH, "extended UNC final-path normalization is missing"),
         (DOS_BRANCH, "extended DOS final-path normalization is missing"),
+        (NORMALIZED_RETURN, "resolved final path is not normalized before comparison"),
         (CANONICAL, "canonical admitted pathname capture is missing"),
         (OPEN, "held read open is not bound to the captured canonical pathname"),
         (PROOF, "opened handle final-path proof is missing"),
@@ -63,15 +71,18 @@ def validate(source: str) -> list[str]:
             failures.append(message)
 
     helper_pos = source.find(HELPER)
-    call_pos = source.find(HANDLE_INVOCATION, helper_pos if helper_pos >= 0 else 0)
+    live_pos = source.find(LIVE_HANDLE, helper_pos if helper_pos >= 0 else 0)
+    call_pos = source.find(HANDLE_INVOCATION, live_pos if live_pos >= 0 else 0)
+    zero_pos = source.find(ZERO_FAILURE, call_pos if call_pos >= 0 else 0)
+    normalize_pos = source.find(NORMALIZED_RETURN, zero_pos if zero_pos >= 0 else 0)
     open_pos = source.find(OPEN)
     proof_pos = source.find(PROOF, open_pos + len(OPEN) if open_pos >= 0 else 0)
     compare_pos = source.find(COMPARE, proof_pos + len(PROOF) if proof_pos >= 0 else 0)
     mismatch_pos = source.find(MISMATCH, compare_pos if compare_pos >= 0 else 0)
     return_pos = source.find(RETURN, mismatch_pos if mismatch_pos >= 0 else 0)
-    if min(helper_pos, call_pos, open_pos, proof_pos, compare_pos, mismatch_pos, return_pos) < 0:
+    if min(helper_pos, live_pos, call_pos, zero_pos, normalize_pos, open_pos, proof_pos, compare_pos, mismatch_pos, return_pos) < 0:
         failures.append("held-handle final-path proof sequence is incomplete")
-    elif not (helper_pos < call_pos < open_pos < proof_pos < compare_pos < mismatch_pos < return_pos):
+    elif not (helper_pos < live_pos < call_pos < zero_pos < normalize_pos < open_pos < proof_pos < compare_pos < mismatch_pos < return_pos):
         failures.append("opened handle final-path identity must be proven fail-closed after open and before held state is returned")
 
     if "Resolve-OrdinaryFile -Path $Path -Label $Label" not in source:
@@ -92,9 +103,13 @@ def main() -> int:
     mutations = (
         (DECL, "native final-path declaration"),
         (HELPER, "held final-path helper"),
+        (LIVE_HANDLE, "held-handle validity check"),
+        (BOUNDED_LOOP, "bounded final-path buffer growth"),
         (HANDLE_INVOCATION, "native final-path invocation on exact held SafeFileHandle"),
+        (ZERO_FAILURE, "Win32 zero/error fail-closed branch"),
         (UNC_BRANCH, "extended UNC normalization"),
         (DOS_BRANCH, "extended DOS normalization"),
+        (NORMALIZED_RETURN, "normalized final-path return"),
         (CANONICAL, "canonical admitted path capture"),
         (PROOF, "opened-handle final-path proof"),
         (COMPARE, "opened/admitted path comparison"),
