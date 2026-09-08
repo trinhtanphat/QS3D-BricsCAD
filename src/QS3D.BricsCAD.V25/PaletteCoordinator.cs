@@ -444,6 +444,15 @@ namespace QS3D.BricsCAD.V25
                 SetPaletteVisibility(propertiesPalette, _properties, properties, "Properties");
                 SetPaletteVisibility(rightPalette, _right, right, "Right");
                 SetPaletteVisibility(quantityPalette, _quantityInsight, quantityInsight, "QuantityInsight");
+
+                // Native PaletteSet.Visible setters can re-enter host UI code. Revalidate all captured
+                // ownership after the last setter so a replacement published during any setter cannot
+                // make a stale transition look successful. The catch below restores every still-current
+                // captured instance and preserves the stale-ownership failure as the transition outcome.
+                EnsurePaletteOwnership(workspacePalette, _workspace, "Workspace");
+                EnsurePaletteOwnership(propertiesPalette, _properties, "Properties");
+                EnsurePaletteOwnership(rightPalette, _right, "Right");
+                EnsurePaletteOwnership(quantityPalette, _quantityInsight, "QuantityInsight");
             }
             catch
             {
@@ -461,6 +470,13 @@ namespace QS3D.BricsCAD.V25
             if (!ReferenceEquals(expected, current))
                 throw new InvalidOperationException("Palette ownership changed during " + operation + " visibility transition.");
             expected.Visible = visible;
+        }
+
+        private static void EnsurePaletteOwnership(PaletteSet? expected, PaletteSet? current, string operation)
+        {
+            if (expected == null) return;
+            if (!ReferenceEquals(expected, current))
+                throw new InvalidOperationException("Palette ownership changed during " + operation + " visibility transition.");
         }
 
         private static void TryRestorePaletteVisibility(PaletteSet? expected, PaletteSet? current, bool? priorVisibility)
