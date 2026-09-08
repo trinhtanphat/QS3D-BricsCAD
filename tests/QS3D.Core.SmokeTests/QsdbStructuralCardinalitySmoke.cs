@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Xml.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
@@ -64,8 +66,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("save-cardinality-smoke", "Save cardinality smoke");
             var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
-            for (var index = 0; index <= MaxNestedEntries; index++)
-                element.SourceHandles.Add("H" + index);
+            SeedPersistedSourceHandles(element, MaxNestedEntries + 1);
             project.Elements.Add(element);
 
             var beforeSchema = project.SchemaVersion;
@@ -97,6 +98,17 @@ namespace QS3D.Core.SmokeTests
                 Delete(path + ".bak");
                 Delete(path + ".tmp");
             }
+        }
+
+        private static void SeedPersistedSourceHandles(ProjectElement element, int count)
+        {
+            var valuesField = element.SourceHandles.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement source-handle backing list field is unavailable.");
+            var values = valuesField.GetValue(element.SourceHandles) as List<string>
+                ?? throw new InvalidOperationException("ProjectElement source-handle backing list is unavailable.");
+
+            for (var index = 0; index < count; index++)
+                values.Add("H" + index);
         }
 
         private static XElement NewElement(int handleCount)

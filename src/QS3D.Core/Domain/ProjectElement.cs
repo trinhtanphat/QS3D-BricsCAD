@@ -56,6 +56,8 @@ namespace QS3D.Core.Domain
         private const string GeneratedCurtainPanelBuildCompleteValue = "Complete";
 
         private readonly Dictionary<string, string> _properties;
+        private readonly ProjectElementRelationList _sourceHandles;
+        private readonly ProjectElementRelationList _dependsOn;
         private ElementCategory _category;
         private string _familyId = string.Empty;
         private string _floorId = string.Empty;
@@ -74,8 +76,10 @@ namespace QS3D.Core.Domain
             _familyId = NormalizeOptionalRelationId(familyId);
             _floorId = NormalizeOptionalRelationId(floorId);
             _zoneId = NormalizeOptionalRelationId(zoneId);
-            SourceHandles = new List<string>();
-            DependsOn = new List<string>();
+            _sourceHandles = new ProjectElementRelationList(this);
+            _dependsOn = new ProjectElementRelationList(this);
+            SourceHandles = _sourceHandles;
+            DependsOn = _dependsOn;
             _properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             Properties = new ProjectElementPropertyDictionary(this, _properties);
             Quantities = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
@@ -165,6 +169,11 @@ namespace QS3D.Core.Domain
             _properties.Clear();
             MarkDirtyCore(flags, false);
         }
+
+        internal void ClearSourceHandlesPersistence() => _sourceHandles.ClearPersistenceValues();
+        internal void AddSourceHandlePersistenceValue(string value) => _sourceHandles.AddPersistenceValue(value);
+        internal void ClearDependenciesPersistence() => _dependsOn.ClearPersistenceValues();
+        internal void AddDependencyPersistenceValue(string value) => _dependsOn.AddPersistenceValue(value);
 
         public void SetQuantity(string name, double value)
         {
