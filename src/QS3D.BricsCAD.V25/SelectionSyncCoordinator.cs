@@ -11,7 +11,7 @@ namespace QS3D.BricsCAD.V25
     {
         private static readonly HashSet<Document> Attached = new HashSet<Document>();
         private static readonly Dictionary<Document, object> AttachmentTokens = new Dictionary<Document, object>();
-        private static readonly HashSet<Document> Refreshing = new HashSet<Document>();
+        private static readonly Dictionary<Document, object> Refreshing = new Dictionary<Document, object>();
         private static readonly Dictionary<Document, DispatcherTimer> Pending = new Dictionary<Document, DispatcherTimer>();
         private static readonly TimeSpan RefreshDelay = TimeSpan.FromMilliseconds(80d);
 
@@ -71,7 +71,8 @@ namespace QS3D.BricsCAD.V25
                 !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;
             if (!PaletteCoordinator.IsWorkspaceVisible) return;
             RemovePending(document);
-            if (!Refreshing.Add(document)) return;
+            if (Refreshing.ContainsKey(document)) return;
+            Refreshing[document] = attachmentToken;
             try
             {
                 // Palette creation and native selection capture may pump modeless/document callbacks.
@@ -90,7 +91,7 @@ namespace QS3D.BricsCAD.V25
                     SelectionSyncStatusPublisher.SetStatusForDocument(document, "Selection sync lỗi. Vui lòng thử lại.");
                 }
             }
-            finally { Refreshing.Remove(document); }
+            finally { ReleaseRefresh(document, attachmentToken); }
         }
 
         public static void Stop()
@@ -100,6 +101,13 @@ namespace QS3D.BricsCAD.V25
             Pending.Clear();
             Refreshing.Clear();
             AttachmentTokens.Clear();
+        }
+
+        private static void ReleaseRefresh(Document document, object attachmentToken)
+        {
+            if (!Refreshing.TryGetValue(document, out var currentToken) ||
+                !ReferenceEquals(currentToken, attachmentToken)) return;
+            Refreshing.Remove(document);
         }
 
         private static void OnImpliedSelectionChanged(object sender, EventArgs e)
