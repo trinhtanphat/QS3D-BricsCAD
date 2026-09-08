@@ -85,7 +85,12 @@ namespace QS3D.Core.Export
         private const string TenderSheetName = "TENDER";
         private const string CvrSheetName = "CVR";
         private static readonly DateTimeOffset FixedZipTimestamp = new DateTimeOffset(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private const int MaxCellCharacters = 32767;
+        private const int MaxWorksheetRows = 10002;
+        private const long MaxEntryBytes = 32L * 1024L * 1024L;
+        private const long MaxTotalUncompressedBytes = 64L * 1024L * 1024L;
+        private const long MaxArchiveBytes = 64L * 1024L * 1024L;
 
         public static void Export(string path, CommercialQsWorkbookSnapshot snapshot)
         {
@@ -98,30 +103,51 @@ namespace QS3D.Core.Export
             var tempPath = AtomicFileCommit.CreateTempPath(fullPath);
             try
             {
+                long totalUncompressedBytes = 0L;
                 using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
-                using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, false, Encoding.UTF8))
+                using (var boundedStream = new BoundedArchiveWriteStream(stream, MaxArchiveBytes))
+                using (var archive = new ZipArchive(boundedStream, ZipArchiveMode.Create, true, Encoding.UTF8))
                 {
-                    WriteEntry(archive, "[Content_Types].xml", ContentTypesXml);
-                    WriteEntry(archive, "_rels/.rels", RootRelationshipsXml);
-                    WriteEntry(archive, "xl/workbook.xml", WorkbookXml);
-                    WriteEntry(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml);
-                    WriteEntry(archive, "xl/worksheets/sheet1.xml", BuildSheet(new[] { "KEY", "VALUE" }, MetaRows(snapshot)));
-                    WriteEntry(archive, "xl/worksheets/sheet2.xml", BuildSheet(
+                    WriteEntry(archive, "[Content_Types].xml", ContentTypesXml, ref totalUncompressedBytes);
+                    WriteEntry(archive, "_rels/.rels", RootRelationshipsXml, ref totalUncompressedBytes);
+                    WriteEntry(archive, "xl/workbook.xml", WorkbookXml, ref totalUncompressedBytes);
+                    WriteEntry(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml, ref totalUncompressedBytes);
+                    WriteSheetEntry(archive, "xl/worksheets/sheet1.xml", new[] { "KEY", "VALUE" }, MetaRows(snapshot), ref totalUncompressedBytes);
+                    WriteSheetEntry(
+                        archive,
+                        "xl/worksheets/sheet2.xml",
                         new[] { "VARIATION_ID", "DESCRIPTION", "STATUS", "PROPOSED", "APPROVED", "CURRENCY", "REVISION" },
-                        VariationRows(snapshot.Variations)));
-                    WriteEntry(archive, "xl/worksheets/sheet3.xml", BuildSheet(
+                        VariationRows(snapshot.Variations),
+                        ref totalUncompressedBytes);
+                    WriteSheetEntry(
+                        archive,
+                        "xl/worksheets/sheet3.xml",
                         new[] { "CERTIFICATE_ID", "GROSS_THIS_PERIOD", "RETENTION_THIS_PERIOD", "NET_THIS_PERIOD", "CUMULATIVE_NET", "CURRENCY" },
-                        IpcRows(snapshot.Ipc)));
-                    WriteEntry(archive, "xl/worksheets/sheet4.xml", BuildSheet(
+                        IpcRows(snapshot.Ipc),
+                        ref totalUncompressedBytes);
+                    WriteSheetEntry(
+                        archive,
+                        "xl/worksheets/sheet4.xml",
                         new[] { "FINAL_ACCOUNT_ID", "FINAL_CONTRACT_VALUE", "AMOUNT_DUE", "RECOVERY_DUE", "UNRELEASED_RETENTION", "CURRENCY" },
-                        FinalAccountRows(snapshot.FinalAccount)));
-                    WriteEntry(archive, "xl/worksheets/sheet5.xml", BuildSheet(
+                        FinalAccountRows(snapshot.FinalAccount),
+                        ref totalUncompressedBytes);
+                    WriteSheetEntry(
+                        archive,
+                        "xl/worksheets/sheet5.xml",
                         new[] { "RECORD", "PACKAGE_ID", "DESCRIPTION", "STATUS", "PACKAGE_REVISION", "RECOMMENDED_BID", "AWARD_ID", "AWARDED_BID", "BIDDER", "EVALUATED_TOTAL", "CURRENCY", "AWARD_REVISION", "BID_ID", "COMMERCIAL_RANK", "MANDATORY_COMPLIANCE" },
-                        TenderRows(snapshot)));
-                    WriteEntry(archive, "xl/worksheets/sheet6.xml", BuildSheet(
+                        TenderRows(snapshot),
+                        ref totalUncompressedBytes);
+                    WriteSheetEntry(
+                        archive,
+                        "xl/worksheets/sheet6.xml",
                         new[] { "PERIOD_ID", "STATUS", "REVISION", "REVISED_BUDGET", "COST_TO_DATE", "COMMITTED_EXPOSURE", "FORECAST_TO_COMPLETE", "FORECAST_FINAL_COST", "FORECAST_VARIANCE", "EARNED_VALUE", "CVR_MARGIN", "CURRENCY" },
-                        CvrRows(snapshot.Cvr)));
+                        CvrRows(snapshot.Cvr),
+                        ref totalUncompressedBytes);
                 }
+
+                var archiveLength = new FileInfo(tempPath).Length;
+                if (archiveLength <= 0L || archiveLength > MaxArchiveBytes)
+                    throw new InvalidDataException("Commercial workbook archive exceeds the bounded output contract.");
 
                 XlsxPackageValidator.Validate(
                     tempPath,
@@ -311,29 +337,57 @@ namespace QS3D.Core.Export
             return rows;
         }
 
-        private static string BuildSheet(IReadOnlyList<string> headers, IReadOnlyList<IReadOnlyList<string>> rows)
+        private static void WriteSheetEntry(
+            ZipArchive archive,
+            string name,
+            IReadOnlyList<string> headers,
+            IReadOnlyList<IReadOnlyList<string>> rows,
+            ref long totalUncompressedBytes)
         {
-            var builder = new StringBuilder();
-            builder.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
-            builder.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>");
-            AppendRow(builder, 1, headers);
-            for (var i = 0; i < rows.Count; i++) AppendRow(builder, i + 2, rows[i]);
-            builder.Append("</sheetData></worksheet>");
-            return builder.ToString();
+            if (rows.Count > MaxWorksheetRows)
+                throw new InvalidDataException("Commercial workbook worksheet exceeds the bounded row contract: " + name + ".");
+
+            using (var buffer = new MemoryStream())
+            {
+                using (var boundedEntry = new BoundedEntryWriteStream(buffer, MaxEntryBytes))
+                using (var writer = new StreamWriter(boundedEntry, StrictUtf8, 4096, true))
+                    WriteSheet(writer, headers, rows);
+
+                ReserveUncompressed(buffer.Length, ref totalUncompressedBytes, name);
+                buffer.Position = 0L;
+                var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
+                entry.LastWriteTime = FixedZipTimestamp;
+                using (var target = entry.Open())
+                    buffer.CopyTo(target);
+            }
         }
 
-        private static void AppendRow(StringBuilder builder, int rowNumber, IReadOnlyList<string> values)
+        private static void WriteSheet(TextWriter writer, IReadOnlyList<string> headers, IReadOnlyList<IReadOnlyList<string>> rows)
         {
-            builder.Append("<row r=\"").Append(rowNumber.ToString(CultureInfo.InvariantCulture)).Append("\">");
+            writer.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+            writer.Write("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>");
+            AppendRow(writer, 1, headers);
+            for (var i = 0; i < rows.Count; i++) AppendRow(writer, i + 2, rows[i]);
+            writer.Write("</sheetData></worksheet>");
+        }
+
+        private static void AppendRow(TextWriter writer, int rowNumber, IReadOnlyList<string> values)
+        {
+            writer.Write("<row r=\"");
+            writer.Write(rowNumber.ToString(CultureInfo.InvariantCulture));
+            writer.Write("\">");
             for (var i = 0; i < values.Count; i++)
             {
                 var value = values[i] ?? string.Empty;
-                if (value.Length > MaxCellCharacters) throw new InvalidDataException("Commercial workbook cell exceeds the Excel text limit.");
-                builder.Append("<c r=\"").Append(CellReference(i, rowNumber)).Append("\" t=\"inlineStr\"><is><t xml:space=\"preserve\">")
-                    .Append(SecurityElement.Escape(value) ?? string.Empty)
-                    .Append("</t></is></c>");
+                if (value.Length > MaxCellCharacters)
+                    throw new InvalidDataException("Commercial workbook cell exceeds the Excel text limit.");
+                writer.Write("<c r=\"");
+                writer.Write(CellReference(i, rowNumber));
+                writer.Write("\" t=\"inlineStr\"><is><t xml:space=\"preserve\">");
+                writer.Write(SecurityElement.Escape(value) ?? string.Empty);
+                writer.Write("</t></is></c>");
             }
-            builder.Append("</row>");
+            writer.Write("</row>");
         }
 
         private static string CellReference(int column, int row)
@@ -349,12 +403,24 @@ namespace QS3D.Core.Export
             return name + row.ToString(CultureInfo.InvariantCulture);
         }
 
-        private static void WriteEntry(ZipArchive archive, string name, string content)
+        private static void WriteEntry(ZipArchive archive, string name, string content, ref long totalUncompressedBytes)
         {
+            var bytes = StrictUtf8.GetBytes(content);
+            ReserveUncompressed(bytes.LongLength, ref totalUncompressedBytes, name);
             var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
             entry.LastWriteTime = FixedZipTimestamp;
-            using (var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false)))
-                writer.Write(content);
+            using (var target = entry.Open())
+                target.Write(bytes, 0, bytes.Length);
+        }
+
+        private static void ReserveUncompressed(long entryBytes, ref long totalUncompressedBytes, string name)
+        {
+            if (entryBytes < 0L || entryBytes > MaxEntryBytes)
+                throw new InvalidDataException("Commercial workbook XML entry exceeds the bounded size: " + name + ".");
+            var projectedTotal = checked(totalUncompressedBytes + entryBytes);
+            if (projectedTotal > MaxTotalUncompressedBytes)
+                throw new InvalidDataException("Commercial workbook total uncompressed XML exceeds the bounded output contract.");
+            totalUncompressedBytes = projectedTotal;
         }
 
         private static string Invariant(decimal value) => value.ToString(CultureInfo.InvariantCulture);
@@ -363,5 +429,124 @@ namespace QS3D.Core.Export
         private const string ContentTypesXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/sheet2.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/sheet3.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/sheet4.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/sheet5.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/sheet6.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/></Types>";
         private const string WorkbookXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"META\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"VARIATIONS\" sheetId=\"2\" r:id=\"rId2\"/><sheet name=\"IPC\" sheetId=\"3\" r:id=\"rId3\"/><sheet name=\"FINAL_ACCOUNT\" sheetId=\"4\" r:id=\"rId4\"/><sheet name=\"TENDER\" sheetId=\"5\" r:id=\"rId5\"/><sheet name=\"CVR\" sheetId=\"6\" r:id=\"rId6\"/></sheets></workbook>";
         private const string WorkbookRelationshipsXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet2.xml\"/><Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet3.xml\"/><Relationship Id=\"rId4\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet4.xml\"/><Relationship Id=\"rId5\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet5.xml\"/><Relationship Id=\"rId6\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet6.xml\"/></Relationships>";
+
+        private sealed class BoundedEntryWriteStream : Stream
+        {
+            private readonly Stream _inner;
+            private readonly long _maxLength;
+
+            internal BoundedEntryWriteStream(Stream inner, long maxLength)
+            {
+                _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+                if (maxLength < 0L) throw new ArgumentOutOfRangeException(nameof(maxLength));
+                _maxLength = maxLength;
+            }
+
+            public override bool CanRead => false;
+            public override bool CanSeek => false;
+            public override bool CanWrite => true;
+            public override long Length => _inner.Length;
+            public override long Position
+            {
+                get => _inner.Position;
+                set => throw new NotSupportedException();
+            }
+
+            public override void Flush() => _inner.Flush();
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                var projectedLength = checked(_inner.Position + count);
+                if (projectedLength > _maxLength) throw EntrySizeExceeded();
+                _inner.Write(buffer, offset, count);
+            }
+
+            public override void WriteByte(byte value)
+            {
+                var projectedLength = checked(_inner.Position + 1L);
+                if (projectedLength > _maxLength) throw EntrySizeExceeded();
+                _inner.WriteByte(value);
+            }
+
+            private static InvalidDataException EntrySizeExceeded()
+                => new InvalidDataException("Commercial workbook XML entry exceeds the bounded output contract.");
+        }
+
+        private sealed class BoundedArchiveWriteStream : Stream
+        {
+            private readonly Stream _inner;
+            private readonly long _maxLength;
+
+            internal BoundedArchiveWriteStream(Stream inner, long maxLength)
+            {
+                _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+                if (maxLength < 0L) throw new ArgumentOutOfRangeException(nameof(maxLength));
+                _maxLength = maxLength;
+            }
+
+            public override bool CanRead => _inner.CanRead;
+            public override bool CanSeek => _inner.CanSeek;
+            public override bool CanWrite => _inner.CanWrite;
+            public override long Length => _inner.Length;
+            public override long Position
+            {
+                get => _inner.Position;
+                set
+                {
+                    if (value < 0L || value > _maxLength) throw ArchiveSizeExceeded();
+                    _inner.Position = value;
+                }
+            }
+
+            public override void Flush() => _inner.Flush();
+            public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+
+            public override long Seek(long offset, SeekOrigin origin)
+            {
+                long target;
+                switch (origin)
+                {
+                    case SeekOrigin.Begin:
+                        target = offset;
+                        break;
+                    case SeekOrigin.Current:
+                        target = checked(_inner.Position + offset);
+                        break;
+                    case SeekOrigin.End:
+                        target = checked(_inner.Length + offset);
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(origin));
+                }
+                if (target < 0L || target > _maxLength) throw ArchiveSizeExceeded();
+                return _inner.Seek(offset, origin);
+            }
+
+            public override void SetLength(long value)
+            {
+                if (value < 0L || value > _maxLength) throw ArchiveSizeExceeded();
+                _inner.SetLength(value);
+            }
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                var projectedLength = Math.Max(_inner.Length, checked(_inner.Position + count));
+                if (projectedLength > _maxLength) throw ArchiveSizeExceeded();
+                _inner.Write(buffer, offset, count);
+            }
+
+            public override void WriteByte(byte value)
+            {
+                var projectedLength = Math.Max(_inner.Length, checked(_inner.Position + 1L));
+                if (projectedLength > _maxLength) throw ArchiveSizeExceeded();
+                _inner.WriteByte(value);
+            }
+
+            private static InvalidDataException ArchiveSizeExceeded()
+                => new InvalidDataException("Commercial workbook archive exceeds the bounded output contract.");
+        }
     }
 }
