@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Bricscad.ApplicationServices;
@@ -8,9 +9,65 @@ namespace QS3D.BricsCAD.V25.UI
 {
     public partial class DomainHubWindow : Window
     {
+        private bool _commercialQsCardInstalled;
+
         public DomainHubWindow()
         {
             InitializeComponent();
+            Loaded += (_, __) => InstallCommercialQsCard();
+        }
+
+        private void InstallCommercialQsCard()
+        {
+            if (_commercialQsCardInstalled) return;
+
+            var root = Content as Grid;
+            var scroll = root?.Children
+                .OfType<ScrollViewer>()
+                .FirstOrDefault(x => Grid.GetRow(x) == 1);
+            var cardsGrid = scroll?.Content as Grid;
+            var rightColumn = cardsGrid?.Children
+                .OfType<StackPanel>()
+                .FirstOrDefault(x => Grid.GetColumn(x) == 2);
+            if (rightColumn == null) return;
+
+            var card = new Border
+            {
+                Style = TryFindResource("HubSectionCard") as Style
+            };
+            var content = new StackPanel();
+            card.Child = content;
+
+            content.Children.Add(new TextBlock
+            {
+                Text = "COMMERCIAL QS",
+                Style = TryFindResource("PanelTitle") as Style
+            });
+            content.Children.Add(new TextBlock
+            {
+                Text = "Variation • IPC • Final Account — dữ liệu lưu trong QS3D project.",
+                Style = TryFindResource("Caption") as Style,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 6)
+            });
+            content.Children.Add(HubCommandButton("Variation Register", "QS3D_VARIATIONS", true));
+            content.Children.Add(HubCommandButton("Interim Payment Certificate (IPC)", "QS3D_IPC", true));
+            content.Children.Add(HubCommandButton("Final Account", "QS3D_FINAL_ACCOUNT", true));
+
+            rightColumn.Children.Insert(0, card);
+            _commercialQsCardInstalled = true;
+        }
+
+        private Button HubCommandButton(string content, string command, bool accent)
+        {
+            var button = new Button
+            {
+                Content = content,
+                Tag = command,
+                Style = TryFindResource(accent ? "HubAccentButton" : "HubCommandButton") as Style
+            };
+            button.Click += OnCommandClick;
+            return button;
         }
 
         private void OnCommandClick(object sender, RoutedEventArgs e)
