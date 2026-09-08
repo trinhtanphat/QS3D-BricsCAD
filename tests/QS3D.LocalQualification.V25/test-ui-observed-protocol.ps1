@@ -108,7 +108,7 @@ $fieldSource
 if ($LASTEXITCODE -ne 0) { throw 'FAIL: actual C# producer / JS consumer protocol interoperability.' }
 foreach ($major in @(25,26)) {
     $runner = Get-Content (Join-Path $PSScriptRoot "..\..\scripts\test-bricscad-v$major-single-footing.ps1") -Raw
-    if (-not $runner.Contains("if (`$UiDriver -ceq 'NATIVE_V1') { [void](Close-Qs3dProxyInformationDialog -Process `$process) }")) {
+    if (-not $runner.Contains("if (`$UiDriver -ceq 'NATIVE_V1' -and -not `$QuantityUi) { [void](Close-Qs3dProxyInformationDialog -Process `$process) }")) {
         throw 'FAIL: observed driver can run PowerShell dialog input.'
     }
     if (-not $runner.Contains("if (`$UiDriver -ceq 'NATIVE_V1' -and `$InteractiveUi -and -not `$process.HasExited -and `$Phase -ceq 'ui')")) {
@@ -117,7 +117,7 @@ foreach ($major in @(25,26)) {
     if (-not $runner.Contains("ui_driver = `$UiDriver") -or -not $runner.Contains("'QS3D_LOCAL022_UI_DRIVER'")) {
         throw 'FAIL: driver identity is not recorded/restored.'
     }
-    if (-not $runner.Contains("if (`$UiDriver -ceq 'NATIVE_V1') { [void]`$process.CloseMainWindow() }")) {
+    if (-not $runner.Contains("if (`$UiDriver -ceq 'NATIVE_V1' -and -not `$QuantityUi) { [void]`$process.CloseMainWindow() }")) {
         throw 'FAIL: observed cleanup can send a PowerShell window message.'
     }
     $exitGuard = [regex]::Match($runner, '(?ms)^            elseif \(\$children.Count -eq 0\) \{\r?\n.*?^            \}').Value

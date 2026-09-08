@@ -10,6 +10,7 @@ param(
     [string]$Profile = 'QS3D-V26-TEST',
     [ValidateRange(60, 3600)][int]$PhaseTimeoutSeconds = 240,
     [switch]$InteractiveUi,
+    [switch]$QuantityUi,
     [switch]$RenderExperiment,
     [switch]$PauseForOperator,
     [ValidateSet('NATIVE_V1','OBSERVED_CLICK_V2')][string]$UiDriver = 'NATIVE_V1',
@@ -21,6 +22,9 @@ param(
 # claims aggregate V25/V26, private-DWG or full-DPI qualification.
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($QuantityUi -and ($InteractiveUi -or $RenderExperiment -or $PauseForOperator -or $UiDriver -cne 'NATIVE_V1')) {
+    throw 'QuantityUi is a separate observed reporting scenario on the native fixture, without old UI input or experiments.'
+}
 if ($UiDriver -cne 'NATIVE_V1' -and -not $InteractiveUi) { throw 'External input requires InteractiveUi.' }
 if ($RenderExperiment -and (-not $InteractiveUi -or $UiDriver -cne 'OBSERVED_CLICK_V2')) {
     throw 'RenderExperiment requires observed UI and never qualifies acceptance.'
@@ -622,6 +626,7 @@ function Get-ProtectedState {
 function Read-Phase([string]$Phase) {
     $path = Join-Path $ArtifactDir ('phase-' + $Phase + '.json')
     $marker = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+    if ($Phase -in @('quantity','quantityreopen')) { return Assert-Local022QuantityPhase $marker $runId $Phase }
     if ($Phase -in @('ui','uisaved','uireopen')) { return Assert-Local022UiPhase $marker $runId $Phase }
     $keys = @($marker.PSObject.Properties.Name)
     foreach ($key in @('schema', 'run_id', 'phase', 'status', 'stage', 'error_code', 'checks')) {
@@ -682,7 +687,7 @@ function Invoke-NativePhase([string]$Phase, [string[]]$Commands) {
         'NETLOAD', ('"' + $pluginDll + '"'), 'NETLOAD', ('"' + $ProbeDll + '"')) + $Commands
     [IO.File]::WriteAllLines($scriptPath, $lines, [Text.Encoding]::ASCII)
     $arguments = '"' + $drawing + '" /L /P "' + $sandbox.NonceProfile + '" /B "' + $scriptPath + '"'
-    $windowStyle = if ($InteractiveUi) { 'Maximized' } else { 'Hidden' }
+    $windowStyle = if ($InteractiveUi -or $QuantityUi) { 'Maximized' } else { 'Hidden' }
     $process = Start-Process -FilePath $bricscadExe -ArgumentList $arguments -WorkingDirectory $privateRoot -PassThru -WindowStyle $windowStyle
     $ownedProcesses.Add($process)
     $launcherId = $process.Id
@@ -698,7 +703,7 @@ function Invoke-NativePhase([string]$Phase, [string[]]$Commands) {
             [void](Read-Phase $Phase)
             Update-Local022PhaseClock $phaseClock ([DateTime]::UtcNow) $Phase $PhaseTimeoutSeconds $PauseForOperator $true
         }
-        if ($UiDriver -ceq 'NATIVE_V1') { [void](Close-Qs3dProxyInformationDialog -Process $process) }
+        if ($UiDriver -ceq 'NATIVE_V1' -and -not $QuantityUi) { [void](Close-Qs3dProxyInformationDialog -Process $process) }
         $process.Refresh()
         if ($UiDriver -ceq 'NATIVE_V1' -and $InteractiveUi -and -not $process.HasExited -and $Phase -ceq 'ui') {
             if (Invoke-Local022UiPendingAction $ArtifactDir $runId $uiSequence $process $bricscadExe) { $uiSequence++ }
@@ -833,6 +838,8 @@ $sectionVerifierPath = Join-Path $repoRoot 'tests\QS3D.LocalQualification.V25\Lo
 $supplementalInputs[$sectionVerifierPath] = Get-Hash $sectionVerifierPath
 $brepVerifierPath = Join-Path $repoRoot 'tests\QS3D.LocalQualification.V25\Local022BrepVerifier.cs'
 $supplementalInputs[$brepVerifierPath] = Get-Hash $brepVerifierPath
+$quantityOraclePath = Join-Path $repoRoot 'tests\QS3D.LocalQualification.V25\Local022QuantityOracle.cs'
+$supplementalInputs[$quantityOraclePath] = Get-Hash $quantityOraclePath
 foreach ($inputPath in @((Join-Path $PSScriptRoot 'local022-ui-input.ps1')) + @(Get-ChildItem (Split-Path $probeSource) -Filter '*.cs' -File | Select-Object -ExpandProperty FullName) + @(Get-ChildItem (Join-Path $repoRoot 'tests\QS3D.LocalQualification.V25') -Filter '*Ui*.cs' -File | Select-Object -ExpandProperty FullName)) {
     $supplementalInputs[$inputPath] = Get-Hash $inputPath
 }
@@ -876,6 +883,7 @@ $freeze = [ordered]@{
     runner_sha256 = $runnerHash; harness_git_sha = $harnessSha
     interactive_ui = [bool]$InteractiveUi; ui_driver = $UiDriver; operator_wait_policy = $operatorWaitPolicy; observed_input_sha256 = $supplementalInputs[$observedInputPath]; supplemental_input_hashes = @($supplementalInputs.Values)
     render_experiment = [bool]$RenderExperiment
+    quantity_ui = [bool]$QuantityUi
     fixture_sha256 = $fixtureHash; host_version = (Get-Item -LiteralPath $bricscadExe).VersionInfo.FileVersion
     host_sha256 = Get-Hash $bricscadExe; pre_existing_host_count = 0
     mcp_test_executed = $false; mcp_requests_issued_by_runner = $false
@@ -884,6 +892,7 @@ $ownedProcesses = [Collections.Generic.List[Diagnostics.Process]]::new()
 $envNames = @('QS3D_LOCAL022_V26_RUN_ID', 'QS3D_LOCAL022_V26_ROOT', 'QS3D_LOCAL022_V26_DRAWING', 'QS3D_LOCAL022_V26_PRODUCT_DLL',
     'QS3D_LOCAL022_V26_PROBE_DLL', 'QS3D_LOCAL022_V26_PHASE', 'QS3D_LOCAL022_UI_DRIVER', 'QS3D_LOCAL022_PAUSE_FOR_OPERATOR', 'QS3D_LOCAL022_RENDER_EXPERIMENT')
 $envBefore = @{}
+$envNames += 'QS3D_LOCAL022_QUANTITY_UI'
 foreach ($name in $envNames) { $envBefore[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 $sandbox = $null
 $failure = $null
@@ -894,6 +903,7 @@ $profileRecoveryExpected = $null
 $profileRecoveryHash = $null
 $profileRecoveryValidated = $false
 $markers = @()
+$quantityMarkers = @()
 $cleanupOk = $false
 $protectedStateOk = $false
 $cleanupErrors = [Collections.Generic.List[string]]::new()
@@ -948,18 +958,25 @@ try {
     $env:QS3D_LOCAL022_UI_DRIVER = $UiDriver
     $env:QS3D_LOCAL022_PAUSE_FOR_OPERATOR = if ($PauseForOperator) { '1' } else { '0' }
     $env:QS3D_LOCAL022_RENDER_EXPERIMENT = if ($RenderExperiment) { '1' } else { '0' }
+    $env:QS3D_LOCAL022_QUANTITY_UI = if ($QuantityUi) { '1' } else { '0' }
     if ($InteractiveUi) {
         # V26's default native Tips/Properties consume the small-screen drawing
         # area. Hide only these in the nonce profile; QS3D panes stay visible.
         $markers += Invoke-NativePhase 'ui' @('OSMODE','0','SNAPMODE','0','DYNMODE','0','QS3D','_.-TOOLPANEL','Tips','_Hide','_.PROPERTIESCLOSE','QL22UI')
         $markers += Read-Phase 'uisaved'
     } else {
-        $markers += Invoke-NativePhase 'run' @('QL22RUN', 'QS3DSAVE', '_.QSAVE', 'QL22SAVED', '_.QUIT', '_Y')
+        $tail = if ($QuantityUi) { @('QL22QTY') } else { @('_.QUIT', '_Y') }
+        $markers += Invoke-NativePhase 'run' (@('QL22RUN', 'QS3DSAVE', '_.QSAVE', 'QL22SAVED') + $tail)
         $markers += Read-Phase 'saved'
+        if ($QuantityUi) { $quantityMarkers += Read-Phase 'quantity' }
     }
     if (-not (Test-Path -LiteralPath ([IO.Path]::ChangeExtension($drawing, '.qsdb')))) { throw 'No persisted product sidecar.' }
     if ($InteractiveUi) { $markers += Invoke-NativePhase 'uireopen' @('QL22UIREOPEN') }
-    else { $markers += Invoke-NativePhase 'reopen' @('QL22REOPEN', '_.QUIT', '_Y') }
+    else {
+        $tail = if ($QuantityUi) { @('QL22QTY') } else { @('_.QUIT', '_Y') }
+        $markers += Invoke-NativePhase 'reopen' (@('QL22REOPEN') + $tail)
+        if ($QuantityUi) { $quantityMarkers += Read-Phase 'quantityreopen' }
+    }
 } catch {
     $failure = $_.Exception.Message
 } finally {
@@ -967,7 +984,7 @@ try {
         try {
             $process.Refresh()
             if (-not $process.HasExited) {
-                if ($UiDriver -ceq 'NATIVE_V1') { [void]$process.CloseMainWindow() }
+                if ($UiDriver -ceq 'NATIVE_V1' -and -not $QuantityUi) { [void]$process.CloseMainWindow() }
                 if (-not $process.WaitForExit(10000)) {
                     Stop-Process -Id $process.Id -Force
                     if (-not $process.WaitForExit(10000)) { throw 'Owned native host did not exit.' }
@@ -1059,7 +1076,7 @@ try {
         $cleanupFailure = [string]::Join(' | ', $cleanupErrors)
     }
 }
-$status = if ($RenderExperiment) { 'DIAGNOSTIC_ONLY' } elseif ($null -eq $failure -and $null -eq $cleanupFailure -and $cleanupOk -and $markers.Count -eq 3) { 'LOCAL_PASS_BOUNDED' } else { 'FAIL_OR_NO_RESULT' }
+$status = if ($RenderExperiment) { 'DIAGNOSTIC_ONLY' } elseif ($null -eq $failure -and $null -eq $cleanupFailure -and $cleanupOk -and $markers.Count -eq 3 -and (-not $QuantityUi -or $quantityMarkers.Count -eq 2)) { 'LOCAL_PASS_BOUNDED' } else { 'FAIL_OR_NO_RESULT' }
 $receipt = [ordered]@{
     schema = 'QS3D_LOCAL022_V26_RECEIPT_V1'; run_id = $runId; status = $status
     product_source_sha = $ProductSourceSha; product_version = $metadata.productVersion
@@ -1070,6 +1087,8 @@ $receipt = [ordered]@{
     profile_cleanup = $profileReceipt; mcp_test_executed = $false; mcp_requests_issued_by_runner = $false
     aggregate_local022_qualified = $false
     interactive_ui_executed = [bool]$InteractiveUi
+    quantity_ui_executed = [bool]$QuantityUi
+    quantity_phases_verified = $quantityMarkers.Count
     render_experiment = [bool]$RenderExperiment
     ui_driver = $UiDriver
     operator_wait_policy = $operatorWaitPolicy

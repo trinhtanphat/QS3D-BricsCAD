@@ -64,7 +64,7 @@ $forward = [scriptblock]::Create(($framework.Parent.Statements | Where-Object {
 foreach ($HostMajor in @(25,26)) {
     foreach ($mode in @($default, $native, $observed)) {
         & {
-            $NativeApi = $mode.NativeApi; $UiDriver = $mode.UiDriver; $PauseForOperator = $mode.Pause; $RenderExperiment = $false
+            $NativeApi = $mode.NativeApi; $UiDriver = $mode.UiDriver; $PauseForOperator = $mode.Pause; $RenderExperiment = $false; $QuantityUi = $false
             $PackageRoot = 'C:\host-free-package'; $taskRepo = 'C:\host-free-harness'; $runRoot = 'C:\host-free-allocation'
             $source = & ([scriptblock]::Create((Get-WrapperAssignment 'source').Right.Extent.Text))
             $v25PackageSha256 = & ([scriptblock]::Create((Get-WrapperAssignment 'v25PackageSha256').Right.Extent.Text))
@@ -132,7 +132,7 @@ function New-NativePredecessor {
     }
 }
 function Invoke-PredecessorGate($Fixture, [bool]$Native=$true) {
-    $HostMajor=26; $NativeApi=$Native; $UiDriver='NATIVE_V1'; $operatorWaitPolicy='WALL_CLOCK_V1'
+    $HostMajor=26; $NativeApi=$Native; $UiDriver='NATIVE_V1'; $operatorWaitPolicy='WALL_CLOCK_V1'; $QuantityUi=$false
     $PrecedingV25Receipt='C:\host-free-receipts\native-v25\receipt.json'; $V26ProvenancePath='C:\host-free-provenance.json'
     $source='87aff7fec452f9a8dd9f641ef84d143edc73514d'
     $v25PackageSha256='6da38fcb3bc5fdb1989e9397fad45da712bf4af6b7690298a2fe83657bcb10ac'

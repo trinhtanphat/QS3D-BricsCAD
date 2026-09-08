@@ -67,7 +67,7 @@ foreach($major in 25,26) {
  if(-not $verdict) { throw 'Missing actual final verdict expression.' }
  foreach($diagnostic in $false,$true) {
   & {
-   $RenderExperiment=$diagnostic; $failure=$null; $cleanupFailure=$null; $cleanupOk=$true; $markers=@(1,2,3)
+   $RenderExperiment=$diagnostic; $failure=$null; $cleanupFailure=$null; $cleanupOk=$true; $markers=@(1,2,3); $QuantityUi=$false; $quantityMarkers=@()
    . ([scriptblock]::Create($verdict))
    $expected=if($diagnostic){'DIAGNOSTIC_ONLY'}else{'LOCAL_PASS_BOUNDED'}
    if($status -cne $expected){throw 'Diagnostic contaminated qualification verdict.'}

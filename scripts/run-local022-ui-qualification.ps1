@@ -7,6 +7,7 @@ param(
     [string]$PrecedingV25Receipt,
     [string]$SourceProfile,
     [switch]$NativeApi,
+    [switch]$QuantityUi,
     [switch]$RenderExperiment,
     [ValidateSet('NATIVE_V1','OBSERVED_CLICK_V2')][string]$UiDriver = 'NATIVE_V1',
     [switch]$PauseForOperator,
@@ -24,6 +25,9 @@ function Get-Local022SourceProfile([string]$Name, [bool]$Specified) {
 }
 $selectedProfile = Get-Local022SourceProfile $SourceProfile $PSBoundParameters.ContainsKey('SourceProfile')
 if (-not $ConfirmTemporaryAutostartPause) { throw 'Explicit temporary-autostart authorization required.' }
+if ($QuantityUi -and (-not $NativeApi -or $RenderExperiment -or $PauseForOperator)) {
+    throw 'QuantityUi requires NativeApi fixture preparation without render experiments or operator pause.'
+}
 if ($NativeApi -and ($PSBoundParameters.ContainsKey('UiDriver') -or $PSBoundParameters.ContainsKey('PauseForOperator'))) {
     throw 'NativeApi cannot be combined with UiDriver or PauseForOperator.'
 }
@@ -114,6 +118,14 @@ if ($HostMajor -eq 26) {
     if ($NativeApi) {
         Assert-Local022NativeV25Predecessor $v25 $allocation $restore $source $v25PackageSha256
         Assert-Local022NativeV25Phases (Join-Path $PSScriptRoot 'test-bricscad-v25-single-footing.ps1') $v25Root $v25.run_id
+        if ($QuantityUi) {
+            . (Join-Path $PSScriptRoot 'local022-ui-input.ps1')
+            Assert-Local022QuantityPredecessor $v25 $allocation
+            foreach ($phase in @('quantity','quantityreopen')) {
+                $marker = Get-Content (Join-Path $v25Root ('phase-' + $phase + '.json')) -Raw | ConvertFrom-Json
+                [void](Assert-Local022QuantityPhase $marker $v25.run_id $phase)
+            }
+        }
     } else {
         if ($v25.ui_driver -cne $UiDriver -or $allocation.ui_driver -cne $UiDriver -or
             $v25.operator_wait_policy -cne $operatorWaitPolicy -or $allocation.operator_wait_policy -cne $operatorWaitPolicy) {
@@ -159,12 +171,13 @@ try {
         ProductSourceSha = $source
         ProbeDll = Join-Path $taskRepo "tests\QS3D.LocalQualification.V$HostMajor\bin\Release\$framework\QS3D.LocalQualification.V$HostMajor.dll"
         ArtifactDir = $runRoot
-        PhaseTimeoutSeconds = if ($UiDriver -ceq 'OBSERVED_CLICK_V2') { 3600 } else { 600 }
+        PhaseTimeoutSeconds = if ($QuantityUi -or $UiDriver -ceq 'OBSERVED_CLICK_V2') { 3600 } else { 600 }
         ConfirmDisposableCopy = $true
         InteractiveUi = -not [bool]$NativeApi
         UiDriver = $UiDriver
         PauseForOperator = [bool]$PauseForOperator
         RenderExperiment = [bool]$RenderExperiment
+        QuantityUi = [bool]$QuantityUi
     }
     if ($null -ne $selectedProfile) { $parameters.Profile = $selectedProfile }
     if ($HostMajor -eq 26) { $parameters.ProvenancePath = $V26ProvenancePath }

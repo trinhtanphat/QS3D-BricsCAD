@@ -1,4 +1,44 @@
 # Test-only, opt-in physical input. No MCP surface or general command execution.
+function Assert-Local022QuantityPhase($Marker, [string]$RunId, [string]$Phase) {
+    $keys = @($Marker.PSObject.Properties.Name)
+    $expected = @('schema','run_id','phase','status','stage','error_code','checks')
+    if ($keys.Count -ne $expected.Count) { throw 'Quantity marker field count mismatch.' }
+    foreach ($key in $keys) { if ($key -cnotmatch '\A[a-z_]+\z') { throw 'Quantity marker key is not canonical ASCII.' } }
+    foreach ($key in $expected) { if ($keys -cnotcontains $key) { throw 'Quantity marker schema mismatch.' } }
+    foreach ($key in @('schema','run_id','phase','status','stage','error_code')) {
+        if ($Marker.$key -isnot [string] -or $Marker.$key -cmatch '[^\x20-\x7e]') { throw 'Quantity marker string is not canonical.' }
+    }
+    if ($RunId -cnotmatch '\A[0-9a-f]{32}\z' -or $Phase -cnotmatch '\A(?:quantity|quantityreopen)\z') { throw 'Invalid expected quantity identity.' }
+    if (-not [string]::Equals($Marker.schema,'QS3D_LOCAL022_NATIVE_UI_V1',[StringComparison]::Ordinal) -or
+        -not [string]::Equals($Marker.run_id,$RunId,[StringComparison]::Ordinal) -or
+        -not [string]::Equals($Marker.phase,$Phase,[StringComparison]::Ordinal)) { throw 'Quantity marker identity mismatch.' }
+    if ($Marker.stage -cnotmatch '\A[a-z0-9_]{1,80}\z' -or $Marker.error_code -cnotmatch '\A[A-Z0-9_]{1,80}\z') { throw 'Unsanitized quantity diagnostic.' }
+    if ($Marker.status -cne 'PASS') { throw ('Quantity failed: ' + $Marker.stage + '/' + $Marker.error_code) }
+    if ($Marker.stage -cne $Phase -or $Marker.error_code -cne 'NONE') { throw 'Quantity PASS contains failure metadata.' }
+    $required = @('actual_product_bq_window','exact_displayed_rows_and_totals','analytic_footing_volume','exact_element_source_identity','reporting_readonly','observed_window_closed')
+    if ($Phase -ceq 'quantity') { $required += @('recalculate_click_fresh_rows','detail_summary_clicks','locate_click_native_selection') }
+    else { $required += 'cold_bq_same_quantities' }
+    $actual = @($Marker.checks.PSObject.Properties.Name | Sort-Object)
+    $required = @($required | Sort-Object)
+    if ($actual.Count -ne $required.Count -or -not [string]::Equals([string]::Join([char]0,$actual),[string]::Join([char]0,$required),[StringComparison]::Ordinal)) { throw 'Quantity assertion coverage mismatch.' }
+    foreach ($check in $Marker.checks.PSObject.Properties) {
+        if ($check.Value -isnot [bool] -or -not $check.Value) { throw 'Quantity assertion is not a true Boolean.' }
+    }
+    return $Marker
+}
+
+function Assert-Local022QuantityPredecessor($Receipt, $Allocation) {
+    foreach ($item in @($Receipt,$Allocation)) {
+        if ($item.run_id -isnot [string] -or $item.run_id -cnotmatch '\A[a-f0-9]{32}\z' -or
+            $item.render_experiment -isnot [bool] -or $item.render_experiment) { throw 'Quantity predecessor identity or diagnostic mode invalid.' }
+    }
+    if (-not [string]::Equals($Receipt.run_id,$Allocation.run_id,[StringComparison]::Ordinal) -or
+        $Receipt.quantity_ui_executed -isnot [bool] -or -not $Receipt.quantity_ui_executed -or
+        $Allocation.quantity_ui -isnot [bool] -or -not $Allocation.quantity_ui -or
+        ($Receipt.quantity_phases_verified -isnot [int] -and $Receipt.quantity_phases_verified -isnot [long]) -or
+        $Receipt.quantity_phases_verified -ne 2) { throw 'Preceding V25 result does not qualify both quantity phases.' }
+}
+
 function Assert-Local022UiPhase($Marker, [string]$RunId, [string]$Phase) {
     $keys = @($Marker.PSObject.Properties.Name)
     $expected = @('schema','run_id','phase','status','stage','error_code','checks')
