@@ -9,7 +9,6 @@ UI = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI"
 DARK_THEME = UI / "WorkspacePanel.DarkHostTheme.cs"
 SCOPE = UI / "WorkspacePanel.ScopeDropdownHostInteraction.cs"
 XAML = UI / "WorkspacePanel.xaml"
-VIEW_MODEL = UI / "ViewModels" / "WorkspaceViewModel.cs"
 
 
 def read(path: Path) -> str:
@@ -31,7 +30,6 @@ def main() -> int:
         dark = read(DARK_THEME)
         scope = read(SCOPE)
         xaml = read(XAML)
-        view_model = read(VIEW_MODEL)
     except (OSError, UnicodeError, RuntimeError) as exc:
         print(f"ERROR: workspace scope/theme preflight could not read source: {exc}", file=sys.stderr)
         return 1
@@ -50,70 +48,67 @@ def main() -> int:
         ),
     )
 
-    # Scope interaction must stay host-safe but presentation-only. Empty/no-active labels
-    # belong in XAML, never as fake rows inside WorkspaceViewModel collections.
     errors += require_tokens(
-        "Workspace scope host interaction",
+        "Workspace scope presentation",
         scope,
         (
             "WireWorkspaceScopeCombo(ZoneCombo);",
             "WireWorkspaceScopeCombo(FloorCombo);",
             "!combo.HasItems",
+            '"Không có Zone"',
+            '"Chưa chọn Zone"',
+            '"Không có Tầng"',
+            '"Chưa chọn Tầng"',
+            "WrapWorkspaceScopeCombo(",
+            "ItemContainerGenerator.ItemsChanged += OnWorkspaceScopeItemsChanged;",
+            "IsHitTestVisible = false",
+            "UpdateWorkspaceScopePlaceholders();",
         ),
     )
+
+    # Programmatic Refresh/Clear must never visually manufacture an active first item when
+    # ActiveZoneId/ActiveFloorId are absent or stale. User-driven changes are deliberately
+    # left alone because _loadingContext is false for a real click.
+    errors += require_tokens(
+        "Workspace active-scope truth",
+        scope,
+        (
+            "NormalizeWorkspaceProgrammaticScopeSelection(ZoneCombo, isZone: true);",
+            "NormalizeWorkspaceProgrammaticScopeSelection(FloorCombo, isZone: false);",
+            "if (!_loadingContext)",
+            "ProjectContextCoordinator.TryGetReadOnly(doc, out var project)",
+            "string.IsNullOrWhiteSpace(project.ActiveZoneId)",
+            "string.IsNullOrWhiteSpace(project.ActiveFloorId)",
+            "return zone == null ? -1 : _viewModel.Zones.IndexOf(zone.Name);",
+            "return floor == null ? -1 : _viewModel.Floors.IndexOf(floor.Name);",
+            "combo.SelectedIndex = expectedIndex;",
+        ),
+    )
+
+    # Presentation text must never become a fake row in the bound data collections.
     errors += forbid_tokens(
-        "Workspace scope host interaction",
+        "Workspace scope presentation",
         scope,
         (
             "EmptyZoneOption",
             "EmptyFloorOption",
             "NormalizeWorkspaceScopeCollection",
-            "CollectionChanged",
-            "ObservableCollection",
+            "ObservableCollection<string>",
+            "items.Add(emptyLabel)",
+            "Zones.Add(EmptyZoneOption)",
+            "Floors.Add(EmptyFloorOption)",
             "DispatcherPriority.DataBind",
         ),
     )
 
     errors += require_tokens(
-        "Workspace scope bindings/placeholders",
+        "Workspace scope bindings",
         xaml,
         (
             'x:Name="ZoneCombo" ItemsSource="{Binding Zones}"',
             'x:Name="FloorCombo" ItemsSource="{Binding Floors}"',
-            'x:Name="ZoneEmptyPlaceholder"',
-            'Text="Không có Zone"',
-            'x:Name="ZoneUnselectedPlaceholder"',
-            'Text="Chưa chọn Zone"',
-            'x:Name="FloorEmptyPlaceholder"',
-            'Text="Không có Tầng"',
-            'x:Name="FloorUnselectedPlaceholder"',
-            'Text="Chưa chọn Tầng"',
-            'Binding="{Binding HasItems, ElementName=ZoneCombo}" Value="False"',
-            'Binding="{Binding SelectedIndex, ElementName=ZoneCombo}" Value="-1"',
-            'Binding="{Binding HasItems, ElementName=FloorCombo}" Value="False"',
-            'Binding="{Binding SelectedIndex, ElementName=FloorCombo}" Value="-1"',
             'x:Name="ModelTree" SelectedItemChanged="OnModelTreeSelectedItemChanged"',
             'Text="MÔ HÌNH"',
-        ),
-    )
-
-    errors += require_tokens(
-        "Workspace active-scope truth",
-        view_model,
-        (
-            "if (_project == null) return -1;",
-            "return zone == null ? -1 : Zones.IndexOf(zone.Name);",
-            "return floor == null ? -1 : Floors.IndexOf(floor.Name);",
-        ),
-    )
-    errors += forbid_tokens(
-        "Workspace active-scope truth",
-        view_model,
-        (
-            "return zone == null ? 0 : Math.Max(0, Zones.IndexOf(zone.Name));",
-            "return floor == null ? 0 : Math.Max(0, Floors.IndexOf(floor.Name));",
-            '"Không có Zone"',
-            '"Không có Tầng"',
         ),
     )
 
@@ -122,7 +117,7 @@ def main() -> int:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    print("Workspace scope/theme preflight PASS: dark contrast, pure placeholders, and no-active selection truth are pinned.")
+    print("Workspace scope/theme preflight PASS: dark contrast, pure placeholders, and active-scope truth are pinned.")
     return 0
 
 
