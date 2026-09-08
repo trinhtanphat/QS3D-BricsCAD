@@ -10,6 +10,7 @@ namespace QS3D.BricsCAD.V25
     internal static class SelectionSyncCoordinator
     {
         private static readonly HashSet<Document> Attached = new HashSet<Document>();
+        private static readonly Dictionary<Document, object> AttachmentTokens = new Dictionary<Document, object>();
         private static readonly HashSet<Document> Refreshing = new HashSet<Document>();
         private static readonly Dictionary<Document, DispatcherTimer> Pending = new Dictionary<Document, DispatcherTimer>();
         private static readonly TimeSpan RefreshDelay = TimeSpan.FromMilliseconds(80d);
@@ -27,6 +28,7 @@ namespace QS3D.BricsCAD.V25
                     document.ImpliedSelectionChanged -= OnImpliedSelectionChanged;
                     return;
                 }
+                AttachmentTokens[document] = new object();
                 Refresh(document);
             }
             catch
@@ -38,6 +40,7 @@ namespace QS3D.BricsCAD.V25
                 }
                 RemovePending(document);
                 Refreshing.Remove(document);
+                AttachmentTokens.Remove(document);
                 Attached.Remove(document);
                 throw;
             }
@@ -50,6 +53,7 @@ namespace QS3D.BricsCAD.V25
             catch { }
             RemovePending(document);
             Refreshing.Remove(document);
+            AttachmentTokens.Remove(document);
             Attached.Remove(document);
         }
 
@@ -61,23 +65,27 @@ namespace QS3D.BricsCAD.V25
 
         public static void Refresh(Document? document)
         {
-            if (document == null || !Attached.Contains(document) || !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;
+            if (document == null ||
+                !Attached.Contains(document) ||
+                !AttachmentTokens.TryGetValue(document, out var attachmentToken) ||
+                !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;
             if (!PaletteCoordinator.IsWorkspaceVisible) return;
             RemovePending(document);
             if (!Refreshing.Add(document)) return;
             try
             {
-                // Palette creation is native/modeless work and may pump host callbacks. Finish it before
-                // taking the document-bound selection snapshot so a re-entrant document switch cannot
-                // cause that snapshot to be applied against a different project's active-document state.
+                // Palette creation and native selection capture may pump modeless/document callbacks.
+                // Preserve the attachment identity captured at entry so detach -> reattach of the same
+                // Document wrapper cannot give this older invocation authority over the new attachment.
                 PaletteCoordinator.EnsureCreated();
                 var snapshots = EntitySnapshotReader.ReadImpliedSelection(document);
-                if (!Attached.Contains(document) || !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;
+                if (!IsCurrentAttachment(document, attachmentToken) ||
+                    !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;
                 PaletteCoordinator.SetInspection(snapshots);
             }
             catch (Exception)
             {
-                if (Attached.Contains(document))
+                if (IsCurrentAttachment(document, attachmentToken))
                 {
                     SelectionSyncStatusPublisher.SetStatusForDocument(document, "Selection sync lỗi. Vui lòng thử lại.");
                 }
@@ -91,6 +99,7 @@ namespace QS3D.BricsCAD.V25
             foreach (var timer in Pending.Values.ToArray()) timer.Stop();
             Pending.Clear();
             Refreshing.Clear();
+            AttachmentTokens.Clear();
         }
 
         private static void OnImpliedSelectionChanged(object sender, EventArgs e)
@@ -130,6 +139,13 @@ namespace QS3D.BricsCAD.V25
                 timer.Stop();
             }
             timer.Start();
+        }
+
+        private static bool IsCurrentAttachment(Document document, object attachmentToken)
+        {
+            return Attached.Contains(document) &&
+                   AttachmentTokens.TryGetValue(document, out var currentToken) &&
+                   ReferenceEquals(currentToken, attachmentToken);
         }
 
         private static void StopPending(Document document)
