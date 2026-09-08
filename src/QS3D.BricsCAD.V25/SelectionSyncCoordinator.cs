@@ -18,19 +18,19 @@ namespace QS3D.BricsCAD.V25
         public static void Attach(Document? document)
         {
             if (document == null || Attached.Contains(document)) return;
+            var attachmentToken = new object();
             var subscribed = false;
-            object? attachmentToken = null;
             try
             {
-                document.ImpliedSelectionChanged += OnImpliedSelectionChanged;
-                subscribed = true;
-                if (!Attached.Add(document))
-                {
-                    document.ImpliedSelectionChanged -= OnImpliedSelectionChanged;
-                    return;
-                }
-                attachmentToken = new object();
+                if (!Attached.Add(document)) return;
                 AttachmentTokens[document] = attachmentToken;
+
+                // Publish exact generation ownership before entering the native subscription boundary.
+                // If the host pumps detach/reattach callbacks while adding the handler, stale outer
+                // cleanup must not gain authority over a newer generation of the same Document wrapper.
+                subscribed = true;
+                document.ImpliedSelectionChanged += OnImpliedSelectionChanged;
+                if (!IsCurrentAttachment(document, attachmentToken)) return;
                 Refresh(document);
             }
             catch
@@ -97,7 +97,7 @@ namespace QS3D.BricsCAD.V25
             AttachmentTokens.Clear();
         }
 
-        private static void RollbackAttachment(Document document, bool subscribed, object? attachmentToken)
+        private static void RollbackAttachment(Document document, bool subscribed, object attachmentToken)
         {
             if (AttachmentTokens.TryGetValue(document, out var currentToken) &&
                 !ReferenceEquals(currentToken, attachmentToken))
@@ -111,10 +111,7 @@ namespace QS3D.BricsCAD.V25
                 catch { }
             }
             RemovePending(document);
-            if (attachmentToken == null)
-                Refreshing.Remove(document);
-            else
-                ReleaseRefresh(document, attachmentToken);
+            ReleaseRefresh(document, attachmentToken);
             AttachmentTokens.Remove(document);
             Attached.Remove(document);
         }
