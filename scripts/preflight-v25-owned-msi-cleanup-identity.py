@@ -12,6 +12,10 @@ ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / "scripts" / "acquire-v25-compile-references.ps1"
 NATIVE_CREATE_DECL = "public static extern SafeFileHandle CreateFileW("
 NATIVE_CREATE_CALL = "$handle = [QS3DV25NativeFileDisposition]::CreateFileW("
+NATIVE_DISPOSITION_DECL = "public static extern bool SetFileInformationByHandle("
+NATIVE_DISPOSITION_CALL = "[QS3DV25NativeFileDisposition]::SetFileInformationByHandle("
+FILE_DISPOSITION_DECL = "public const int FileDispositionInfo = 4;"
+FILE_DISPOSITION_CALL = "[QS3DV25NativeFileDisposition]::FileDispositionInfo"
 
 
 def validate(source: str) -> list[str]:
@@ -45,8 +49,10 @@ def validate(source: str) -> list[str]:
         (desired_delete, "creator handle does not request DELETE access"),
         ("public const uint CREATE_NEW = 1;", "fresh-only CREATE_NEW constant is missing"),
         ("[QS3DV25NativeFileDisposition]::CREATE_NEW", "creator does not use CREATE_NEW"),
-        ("SetFileInformationByHandle", "native handle disposition primitive is missing"),
-        ("FileDispositionInfo", "file disposition information class is missing"),
+        (NATIVE_DISPOSITION_DECL, "native SetFileInformationByHandle declaration is missing"),
+        (NATIVE_DISPOSITION_CALL, "native SetFileInformationByHandle call site is missing"),
+        (FILE_DISPOSITION_DECL, "FileDispositionInfo declaration is missing"),
+        (FILE_DISPOSITION_CALL, "FileDispositionInfo call site is missing"),
         (open_owned, "canonical MSI is not created through the owned native handle helper"),
         (explicit_arm, "owned canonical MSI is not explicitly armed for deletion"),
         (same_handle_rehash, "owned publication handle is not rewound for same-handle verification"),
@@ -196,6 +202,10 @@ def main() -> int:
         ("[QS3DV25NativeFileDisposition]::DELETE", "DELETE access use"),
         ("public const uint CREATE_NEW = 1;", "fresh-only constant"),
         ("[QS3DV25NativeFileDisposition]::CREATE_NEW", "fresh-only use"),
+        (NATIVE_DISPOSITION_DECL, "native disposition declaration"),
+        (NATIVE_DISPOSITION_CALL, "native disposition call site"),
+        (FILE_DISPOSITION_DECL, "FileDispositionInfo declaration"),
+        (FILE_DISPOSITION_CALL, "FileDispositionInfo call site"),
         ("$publishedStream = Open-OwnedMsiPublication -Path $msi", "owned publication helper"),
         ("Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $true", "explicit delete arm"),
         ("$publishedHashBytes = $publishedSha.ComputeHash($publishedStream)", "same-handle verification"),
