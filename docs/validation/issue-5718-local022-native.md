@@ -2,6 +2,61 @@
 
 ## Verdict
 
+Latest licensed attempt (2026-09-08): V25 `quantity-v25-66` is
+**FAIL_OR_NO_RESULT**, with all three native phases and the first actual BQ
+phase passing, but the required cold BQ phase absent. The strict aggregate
+and V26 predecessor gates correctly reject this incomplete receipt.
+
+- Product source `e768d19f967e010d0343f446b98b561dce7c24bb`, pushed harness
+  `47240b3033d869a2e5b2f3d80a3f454d3c08ab75`, RunId
+  `92bd6fff2bce4e508fe9bb3aa087d5fe`, host25.2.10. Allocation ran
+  `2026-09-08T15:49:30.6030671Z`–`2026-09-08T16:04:00.9430522Z`.
+  V25 package is the15b86bcd hash below; actual loaded probe SHA256
+  `b8176775d4625b68f2347554fd35f7644df91dec369ea07360aa12c5d3e6cd34`.
+- Native run15/save8/cold9 assertions passed. The initial real BQ displayed one
+  grouped row, count2, gross/net25.333m3. Supported Computer Use performed
+  Tinh lai, detail (two rows of12.667m3), summary, row selection, Dinh vi and
+  window close. Actual routed events, fresh recalculation rows, strict76/3
+  totals, both source footprints and reporting nonmutation passed all9 BQ
+  assertions. These are new bounded runtime results, not full qualification.
+- After the BQ observer completed at15:58:22Z, the CAD save-on-exit dialog
+  required a physical No for the already saved disposable fixture. The fresh
+  cold process started at16:00:24Z and passed native reopening. Its actual
+  command history then reported `QS3DBQ error: khong the hoan tat thao tac`
+  (localized Vietnamese). No BQ window appeared. The operator inspected this
+  history and deliberately closed only that owned CAD process; no command
+  replay or synthetic quantityreopen marker was used.
+- Receipt: native phases3, quantity phases1, aggregate false. Private fixture
+  cleanup, protected state, original profile pointer/inventory, nonce removal,
+  zero BricsCAD processes and outer original-autostart restoration passed.
+  Profile inventory before/after SHA256 remains285c6889f88f326f165c9b539d83ed47555c03f8343d2826c7c6638a3462cf0c.
+  An exact generated QSDB copy is retained privately for offline reproduction;
+  it is not a customer DWG or a memory dump and is not committed/uploaded.
+- This allocation is consumed. Do not replay66 or admit V26 from it. The
+  failure has returned to source-side diagnosis; earlier quantity volume
+  correction is now demonstrated warm, but cold reporting is not qualified.
+  MCP/browser/tunnel execution remains paused.
+
+Runner follow-up adds a60-second missing-BQ-window failure bound without
+shortening the existing55-minute physical-gesture allowance or changing any
+quantity/identity/native/cleanup oracle. The actual portable wait method has
+an executable regression (missing-method RED before implementation; opening
+boundary and observed-window cases GREEN after). This is harness evidence,
+not a replacement for the missing licensed cold BQ result.
+Both native runners now read a published quantity marker while the process
+remains alive; a failure or foreign RunId immediately enters existing guarded
+cleanup rather than waiting behind a possible save-on-exit dialog. Actual
+polling-statement regressions failed before this wiring and pass afterward.
+PASS still requires normal owned exit and all native/quantity/cleanup evidence.
+
+Source-side reproduction is owned by #6198: the generated local QSDB, loaded
+through the frozen Core, then detached and regenerated (zero dirty elements),
+reproduces the report generation-drift exception. Persisted property ordering
+causes semantic property setters to mark only the new report snapshot stale.
+The live project did not change. The separate fix must preserve real drift
+rejection and public semantic invalidation; this note does not claim it landed
+or that a new licensed cold BQ pass exists.
+
 Post-merge continuation (2026-09-08): #6189 owns the remaining standalone BQ
 qualification work after the released #5718/#5738 harness carrier. PR5738
 merged as `19a62fa66c05034397039bc32944aeeaee6b6f09`; production quantity
@@ -44,7 +99,7 @@ b816 candidate. Actual SDK builds: V25 23.57s, V26 18.49s, zero warnings/errors.
   DLL version mismatch. Its separate source fix must preserve held-byte/hash/
   timeout checks; this harness does not alter or bypass that verifier.
 
-Latest attempt (2026-09-08): V25 `quantity-v25-65` is **FAIL_OR_NO_RESULT**,
+Previous attempt (2026-09-08): V25 `quantity-v25-65` is **FAIL_OR_NO_RESULT**,
 not a BQ verdict. RunId `de6f8cb516864697a3e0d16c25cb998d`, exact pushed
 harness `28df62564ff7277dad6daf2065829b683b3809ae`, product source
 `b816113ea6196ec4ce2dadc763f948f817b334a2`, BricsCAD25.2.10, ran

@@ -76,6 +76,61 @@ Write-Output 'PASS: actual quantity oracle requires analytic 38/3 per footing an
 # The real DWG is still held open by CAD. Replay the actual read-only hash
 # method with a live write handle; File.OpenRead's FileShare.Read would fail.
 $observerSource = Get-Content (Join-Path $PSScriptRoot 'Local022NativeFootingProbeCommands.QuantityUi.cs') -Raw
+$openWaitMethod = [regex]::Match($observerSource, '(?ms)^            private static bool QuantityWindowOpenTimedOut\(.*?^            \}').Value
+if (-not $openWaitMethod) { throw 'FAIL: actual quantity window-open wait policy missing.' }
+$openWaitTypeName = 'Local022QuantityOpenWait_' + [Guid]::NewGuid().ToString('N')
+Add-Type -TypeDefinition (@"
+using System;
+public static class $openWaitTypeName {
+$openWaitMethod
+public static void Run() {
+ var start=new DateTime(2026,9,8,0,0,0,DateTimeKind.Utc);
+ if(QuantityWindowOpenTimedOut(start,start,false)) throw new Exception("immediate opening rejected");
+ if(QuantityWindowOpenTimedOut(start,start.AddSeconds(59.999),false)) throw new Exception("opening grace shortened");
+ if(!QuantityWindowOpenTimedOut(start,start.AddSeconds(60),false)) throw new Exception("missing window still waits for operator deadline");
+ if(!QuantityWindowOpenTimedOut(start,start.AddMinutes(2),false)) throw new Exception("late missing window accepted");
+ if(QuantityWindowOpenTimedOut(start,start.AddMinutes(54),true)) throw new Exception("physical operator wait shortened");
+}
+}
+"@)
+([type]$openWaitTypeName)::Run()
+# Execute the real Tick opening prefix with only host window enumeration and
+# the clock replaced. This catches a timeout that runs before current discovery.
+$tickPrefix = [regex]::Match($observerSource, '(?s)RequireUiContextStable\(_context\);\s*if \(DateTime.UtcNow >= _deadline\).*?(?=\s*_window = windows\[0\];)').Value
+if (-not $tickPrefix) { throw 'FAIL: actual observer opening prefix missing.' }
+$tickPrefix = [regex]::Replace($tickPrefix, '(?s)var windows = PresentationSource.CurrentSources.*?\.ToArray\(\);', 'var windows = Enumerable.Range(0, windowCount).Select(x => new object()).ToArray();')
+$tickPrefix = $tickPrefix.Replace('DateTime.UtcNow','_now')
+$tickTypeName='Local022QuantityOpening_' + [Guid]::NewGuid().ToString('N')
+Add-Type -TypeDefinition (@"
+using System;
+using System.Linq;
+public sealed class $tickTypeName {
+ object _window; readonly object _context = new object();
+ DateTime _startedUtc, _deadline, _now;
+ static void RequireUiContextStable(object context) { }
+ sealed class ProbeException : Exception { public ProbeException(string code):base(code){} }
+$openWaitMethod
+ void Tick(int windowCount) {
+$tickPrefix
+ _window = windows[0];
+ }
+ }
+ public static void Run() {
+  var start=new DateTime(2026,9,8,0,0,0,DateTimeKind.Utc);
+  var test=new $tickTypeName { _startedUtc=start, _deadline=start.AddMinutes(55), _now=start.AddSeconds(60.1) };
+  test.Tick(1);
+  if(test._window==null) throw new Exception("visible near-boundary window was not observed");
+  test._window=null;
+  try { test.Tick(0); } catch(ProbeException e) {
+   if(e.Message=="quantity_product_window_not_opened") return;
+   throw;
+  }
+  throw new Exception("absent window after boundary did not fail");
+ }
+}
+"@)
+([type]$tickTypeName)::Run()
+Write-Output 'PASS: actual missing-window policy stops at 60 seconds without shortening the physical operator window.'
 $hashMethod = [regex]::Match($observerSource, '(?ms)^            private static string HashFile\(string path\).*?^            \}').Value
 if (-not $hashMethod) { throw 'FAIL: actual quantity file hash method missing.' }
 $hashTypeName = 'Local022SharedHash_' + [Guid]::NewGuid().ToString('N')
@@ -214,6 +269,39 @@ foreach ($major in @(25,26)) {
     $tokens=$null; $parseErrors=$null
     $runnerAst = [Management.Automation.Language.Parser]::ParseFile($runnerPath,[ref]$tokens,[ref]$parseErrors)
     if ($parseErrors.Count) { throw "FAIL: V$major runner parse errors." }
+    $quantityPoll = $runnerAst.Find({ param($node)
+        $node -is [Management.Automation.Language.IfStatementAst] -and
+        $node.Clauses[0].Item1.Extent.Text -ceq '$QuantityUi' -and
+        $node.Extent.Text.Contains('$quantityPhase') -and $node.Extent.Text.Contains('Read-Phase')
+    },$true)
+    if ($null -eq $quantityPoll) { throw "FAIL: V$major runner does not observe early quantity failure." }
+    & {
+        # Isolate the actual polling statement; no process, registry or file access.
+        $ArtifactDir='fixture-only'; $runId=$quantityRunId; $QuantityUi=$true
+        $script:quantityPollExists=$true; $script:quantityPollReads=@()
+        function Test-Path { param([string]$LiteralPath) return $script:quantityPollExists }
+        function Read-Phase([string]$Phase) {
+            $script:quantityPollReads += $Phase
+            return Assert-Local022QuantityPhase $script:quantityPollMarker $runId $Phase
+        }
+        foreach ($Phase in @('run','reopen')) {
+            $expectedPhase=if($Phase -ceq 'run'){'quantity'}else{'quantityreopen'}
+            $script:quantityPollMarker=New-QuantityTestMarker $expectedPhase
+            & ([scriptblock]::Create($quantityPoll.Extent.Text))
+            if ($script:quantityPollReads[-1] -cne $expectedPhase) { throw 'FAIL: wrong live quantity phase polled.' }
+            $script:quantityPollMarker.status='FAIL'
+            Assert-QuantityTestRejected 'early quantity failure while host remains live' { & ([scriptblock]::Create($quantityPoll.Extent.Text)) }
+            $script:quantityPollMarker=New-QuantityTestMarker $expectedPhase
+            $script:quantityPollMarker.run_id='f'*32
+            Assert-QuantityTestRejected 'foreign live quantity marker' { & ([scriptblock]::Create($quantityPoll.Extent.Text)) }
+        }
+        $script:quantityPollReads=@(); $script:quantityPollExists=$false
+        & ([scriptblock]::Create($quantityPoll.Extent.Text))
+        if($script:quantityPollReads.Count) { throw 'FAIL: absent quantity marker read.' }
+        $QuantityUi=$false; $script:quantityPollExists=$true
+        & ([scriptblock]::Create($quantityPoll.Extent.Text))
+        if($script:quantityPollReads.Count) { throw 'FAIL: non-quantity mode polled quantity marker.' }
+    }
     $statusNode = $runnerAst.Find({ param($node)
         $node -is [Management.Automation.Language.AssignmentStatementAst] -and $node.Left.Extent.Text -ceq '$status'
     },$true)
@@ -238,3 +326,4 @@ foreach ($major in @(25,26)) {
     }
 }
 Write-Output 'PASS: both actual runner status expressions require all native and quantity markers; diagnostics never become acceptance, native-only mode remains unchanged.'
+Write-Output 'PASS: both actual live polling statements reject failed or foreign quantity markers before host exit; absent markers and native-only mode do not trigger reads.'
