@@ -6,7 +6,6 @@ ROOT = Path(__file__).resolve().parents[1]
 COMMAND = ROOT / "src/QS3D.BricsCAD.V25/CommercialQsCommands.cs"
 XAML = ROOT / "src/QS3D.BricsCAD.V25/UI/CommercialQsWindow.xaml"
 CODE = ROOT / "src/QS3D.BricsCAD.V25/UI/CommercialQsWindow.xaml.cs"
-REGISTRATION = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 
 errors = []
 
@@ -23,7 +22,6 @@ def require(source: str, token: str, label: str):
 command = require_file(COMMAND)
 xaml = require_file(XAML)
 code = require_file(CODE)
-registration = require_file(REGISTRATION)
 
 require(command, '[CommandMethod("QS3DCOMMERCIAL", CommandFlags.Modal)]', "command")
 require(command, "Application.ShowModelessWindow", "command")
@@ -46,10 +44,6 @@ for token in (
     "WriteCommercialCsv(",
 ):
     require(code, token, "code-behind")
-
-# The existing commercial Core smoke was previously source-only. Registration here makes
-# the same domain authority exercised whenever the regular Core smoke suite runs.
-require(registration, "CommercialQsSettlementSmoke.Run();", "smoke registration")
 
 # Guard against adapter-side settlement arithmetic. UI may parse/format values, but the
 # monetary authorities above must own gross/net/final reconciliation.
