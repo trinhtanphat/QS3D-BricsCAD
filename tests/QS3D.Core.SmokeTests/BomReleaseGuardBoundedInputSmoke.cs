@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
@@ -43,7 +44,7 @@ namespace QS3D.Core.SmokeTests
         private static void NegativeCountFailsBeforeEnumerationOrProjectMutation()
         {
             var project = new ProjectState("bom-live-negative-count", "BOM live negative count");
-            project.Elements.Add(null!);
+            SeedProjectTraversalSentinel(project);
             var changeVersion = project.ChangeVersion;
             var updatedUtc = project.UpdatedUtc;
             var handles = new EnumerationFailSet(new HashSet<string>(StringComparer.OrdinalIgnoreCase), reportedCount: -1);
@@ -59,7 +60,7 @@ namespace QS3D.Core.SmokeTests
         private static void OversizedCountFailsBeforeEnumerationOrProjectMutation()
         {
             var project = new ProjectState("bom-live-overflow", "BOM live overflow");
-            project.Elements.Add(null!);
+            SeedProjectTraversalSentinel(project);
             var changeVersion = project.ChangeVersion;
             var updatedUtc = project.UpdatedUtc;
             var handles = new EnumerationFailSet(CreateHandles(MaxLiveGeneratedHandleInputs + 1));
@@ -75,7 +76,7 @@ namespace QS3D.Core.SmokeTests
         private static void DishonestCountCannotEvadeStreamingBound()
         {
             var project = new ProjectState("bom-live-dishonest", "BOM live dishonest count");
-            project.Elements.Add(null!);
+            SeedProjectTraversalSentinel(project);
             var changeVersion = project.ChangeVersion;
             var updatedUtc = project.UpdatedUtc;
             var handles = new DishonestCountSet(MaxLiveGeneratedHandleInputs + 50, reportedCount: 1);
@@ -91,7 +92,7 @@ namespace QS3D.Core.SmokeTests
         private static void CountTraversalMismatchFailsClosedBeforeProjectTraversal()
         {
             var project = new ProjectState("bom-live-count-mismatch", "BOM live count mismatch");
-            project.Elements.Add(null!);
+            SeedProjectTraversalSentinel(project);
             var changeVersion = project.ChangeVersion;
             var updatedUtc = project.UpdatedUtc;
             var handles = new DishonestCountSet(actualCount: 1, reportedCount: 2);
@@ -130,6 +131,15 @@ namespace QS3D.Core.SmokeTests
 
             Require(nullCodes.Contains("BOM_EMPTY", StringComparer.Ordinal), "Null live-handle control lost the BOM_EMPTY diagnostic.");
             Require(emptyCodes.Contains("BOM_EMPTY", StringComparer.Ordinal), "Empty live-handle control lost the BOM_EMPTY diagnostic.");
+        }
+
+        private static void SeedProjectTraversalSentinel(ProjectState project)
+        {
+            var itemsField = project.Elements.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed the BOM project-traversal sentinel.");
+            var items = itemsField.GetValue(project.Elements) as List<ProjectElement>
+                ?? throw new InvalidOperationException("Unexpected ProjectState.Elements backing collection.");
+            items.Add(null!);
         }
 
         private static HashSet<string> CreateHandles(int count)

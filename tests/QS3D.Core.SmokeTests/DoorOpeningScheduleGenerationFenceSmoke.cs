@@ -12,7 +12,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             StableGenerationRemainsAccepted();
-            DirectElementReplacementIsRejectedWithoutProjectVersionHelp();
+            DirectElementReplacementAdvancesProjectVersionAndIsRejected();
             InPlaceOpeningQuantityMutationIsRejected();
             InPlaceDoorPropertyMutationIsRejected();
             InPlaceFloorNameMutationIsRejected();
@@ -34,13 +34,13 @@ namespace QS3D.Core.SmokeTests
             Require(rows[0].SourceHandles.Count == 1 && rows[0].SourceHandles[0] == "D001", "stable door schedule provenance changed");
         }
 
-        private static void DirectElementReplacementIsRejectedWithoutProjectVersionHelp()
+        private static void DirectElementReplacementAdvancesProjectVersionAndIsRejected()
         {
             var project = NewProject(out var door, out _);
             var snapshot = CaptureFence(project);
             var version = project.ChangeVersion;
             project.Elements[0] = NewDoor("D-2");
-            Require(project.ChangeVersion == version, "direct replacement unexpectedly changed project version");
+            Require(project.ChangeVersion == checked(version + 1L), "direct element replacement did not advance project version exactly once");
             ExpectGenerationDrift(() => InvokeFence(project, snapshot), "direct element replacement");
             project.Elements[0] = door;
         }
