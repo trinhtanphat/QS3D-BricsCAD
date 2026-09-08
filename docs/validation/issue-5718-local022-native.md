@@ -2,6 +2,20 @@
 
 ## Verdict
 
+New local candidate admitted for the next reporting allocation: pushed product
+source `b816113ea6196ec4ce2dadc763f948f817b334a2` (#6145 / PR#6169), containing
+the protected #6168 / PR#6171 fix merged on main at
+`74fdde09c2de1d3583f006d57912474133c9e552` (issue6168 closed; remote branch removed).
+Both exact-source SDK builds passed (V25 30.15s, V26 32.15s, zero warnings/errors),
+and separate local unsigned packages were produced without installed-product changes:
+
+- V25 ZIP SHA256 `debf58de98658aad8aa078d158a6b2fae6fafdb9241228b0f4e80e8ca7b4dd25`.
+- V26 ZIP SHA256 `d7f60b9dce98a7e2685e53cadb94d52a98675467d62980f6a1c8d79dce33b1a0`.
+- Both ProductVersion `0.1.0-preview.10307`; source pin is a local PR candidate,
+  **not** an official release despite the version-label field in local provenance.
+- Exact b816 branch run34234095151 and PR run34234100717 passed preflight/core.
+  Later main freshness is a separate merge gate; no runtime verdict yet.
+
 Source remediation checkpoint (2026-09-08, **not new licensed evidence**):
 
 - Quantity source carrier #6145 / PR#6169, pushed head

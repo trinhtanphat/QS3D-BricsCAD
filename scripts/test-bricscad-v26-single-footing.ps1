@@ -327,8 +327,8 @@ function Restore-Qs3dV26ProfileSandbox {
     }
 }
 
-$expectedProductSourceSha = '87aff7fec452f9a8dd9f641ef84d143edc73514d'
-$expectedPackageSha256 = '59498948341f36d408f8bf838e177170c19d99ffc64acaa2070b0524e6b99a81'
+$expectedProductSourceSha = 'b816113ea6196ec4ce2dadc763f948f817b334a2'
+$expectedPackageSha256 = 'd7f60b9dce98a7e2685e53cadb94d52a98675467d62980f6a1c8d79dce33b1a0'
 
 function Assert-Qs3dV26InstalledDesktopRuntime {
     param([AllowNull()][string]$ExpectedRuntimeVersion)
