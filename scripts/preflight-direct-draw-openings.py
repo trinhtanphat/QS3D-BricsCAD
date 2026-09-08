@@ -42,7 +42,8 @@ else:
         "default phải là số hữu hạn > 0",
         "default phải là số hữu hạn >= 0",
         "FinalizeUi(document, sourceId, label, widthM, hostId, regenerated)",
-        "UI sync warning",
+        "DirectDrawUiFailureReporter.ReportPostCommitWarning(document)",
+        "DirectDrawUiFailureReporter.ReportPostCommitSuccess(document, status)",
         "QS3DCUTSELECTEDOPENINGS khi muốn khoét đúng Cửa/Lỗ đang chọn",
     )
     for needle in required:
@@ -57,6 +58,7 @@ else:
         'createdElement.Properties["WidthM"] =',
         'createdElement.Properties["HeightM"] =',
         "new AutoHostLinkCommands().AutoLinkHosts()",
+        "UI sync warning",
     )
     for token in forbidden:
         if token in text:
@@ -114,4 +116,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Door/Opening Direct Draw uses exact single-opening AutoHost on the authorized project, canonical SetProperty writes, active-DWG guards, operation-owned ObjectId cleanup before project restore, post-link semantic verification and non-destructive post-commit UI sync; it exposes Ribbon/Hub actions and never invokes global physical cutting.")
+print("PASS: Door/Opening Direct Draw uses exact single-opening AutoHost on the authorized project, canonical SetProperty writes, active-DWG guards, operation-owned ObjectId cleanup before project restore, post-link semantic verification and source-document-fenced non-destructive post-commit UI sync; it exposes Ribbon/Hub actions and never invokes global physical cutting.")
