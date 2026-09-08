@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "auto-merge-main-prs.yml"
 CI_POLICY_GUARD = ROOT / "scripts" / "preflight-ci-manual-only.py"
 PROFESSIONALISM_GUARD = ROOT / "scripts" / "preflight-repository-professionalism.py"
+ACTIONS_SUPPLY_CHAIN_GUARD = ROOT / "scripts" / "check-actions-pinned.py"
 CI_POLICY_DOC = ROOT / "CI_POLICY.md"
 
 
@@ -24,6 +25,7 @@ for path, label in (
     (WORKFLOW, "workflow"),
     (CI_POLICY_GUARD, "CI policy guard"),
     (PROFESSIONALISM_GUARD, "professionalism guard"),
+    (ACTIONS_SUPPLY_CHAIN_GUARD, "Actions supply-chain guard"),
     (CI_POLICY_DOC, "CI policy document"),
 ):
     if not path.is_file():
@@ -32,6 +34,7 @@ for path, label in (
 text = WORKFLOW.read_text(encoding="utf-8")
 policy = CI_POLICY_GUARD.read_text(encoding="utf-8")
 professionalism = PROFESSIONALISM_GUARD.read_text(encoding="utf-8")
+supply_chain = ACTIONS_SUPPLY_CHAIN_GUARD.read_text(encoding="utf-8")
 ci_policy = CI_POLICY_DOC.read_text(encoding="utf-8")
 
 for token in (
@@ -87,6 +90,14 @@ for token in (
     "retired Hybrid PR Coordinator workflow must remain removed",
 ):
     require(professionalism, token, "professionalism guard")
+
+for token in (
+    'AUTO_MERGE_WORKFLOW = "auto-merge-main-prs.yml"',
+    "workflow_name != AUTO_MERGE_WORKFLOW",
+    "pull_request_target is forbidden for repository workflows except the owner-approved PR metadata automation",
+    "every external workflow action is pinned",
+):
+    require(supply_chain, token, "Actions supply-chain guard")
 
 for token in (
     "## Automatic PR ready/auto-merge arming",
