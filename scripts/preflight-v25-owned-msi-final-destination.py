@@ -16,8 +16,12 @@ PROOF_ASSIGN = "$publishedFinalPath = Get-OwnedMsiFinalPath -Stream $publishedSt
 EXPECTED_ASSIGN = "$expectedPublishedPath = Get-CanonicalAbsolutePath -Path $msi"
 COMPARE = "Test-CanonicalPathEqual -Left $publishedFinalPath -Right $expectedPublishedPath"
 MISMATCH = "Owned canonical MSI creator handle resolved to an unexpected final destination"
+PRECOMMIT_PROOF = "$publishedFinalPathBeforeCommit = Get-OwnedMsiFinalPath -Stream $publishedStream"
+PRECOMMIT_COMPARE = "Test-CanonicalPathEqual -Left $publishedFinalPathBeforeCommit -Right $expectedPublishedPath"
+PRECOMMIT_MISMATCH = "Owned canonical MSI creator handle final destination changed before publication commit"
 OPEN = "$publishedStream = Open-OwnedMsiPublication -Path $msi"
 COPY = "$stagingAdmission.Stream.CopyTo($publishedStream)"
+COMMIT = "Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $false"
 
 
 def fail(message: str) -> None:
@@ -52,8 +56,12 @@ def validate(source: str) -> list[str]:
         (EXPECTED_ASSIGN, "expected canonical publication path is not captured"),
         (COMPARE, "creator-handle final path is not compared with the canonical MSI path"),
         (MISMATCH, "final-destination mismatch does not fail closed"),
+        (PRECOMMIT_PROOF, "creator-handle final path is not re-queried before commit"),
+        (PRECOMMIT_COMPARE, "pre-commit creator-handle final path is not compared with the canonical MSI path"),
+        (PRECOMMIT_MISMATCH, "pre-commit destination drift does not fail closed"),
         (OPEN, "fresh canonical MSI creator is missing"),
         (COPY, "held staging payload copy is missing"),
+        (COMMIT, "owned publication commit disposition is missing"),
     )
     for token, message in required:
         if token not in source:
@@ -65,16 +73,40 @@ def validate(source: str) -> list[str]:
     compare_pos = source.find(COMPARE, max(proof_pos, expected_pos, 0))
     mismatch_pos = source.find(MISMATCH, compare_pos if compare_pos >= 0 else 0)
     copy_pos = source.find(COPY, open_pos + len(OPEN) if open_pos >= 0 else 0)
-    if min(open_pos, proof_pos, expected_pos, compare_pos, mismatch_pos, copy_pos) < 0:
+    precommit_proof_pos = source.find(PRECOMMIT_PROOF, copy_pos + len(COPY) if copy_pos >= 0 else 0)
+    precommit_compare_pos = source.find(PRECOMMIT_COMPARE, precommit_proof_pos if precommit_proof_pos >= 0 else 0)
+    precommit_mismatch_pos = source.find(PRECOMMIT_MISMATCH, precommit_compare_pos if precommit_compare_pos >= 0 else 0)
+    commit_pos = source.find(COMMIT, precommit_mismatch_pos if precommit_mismatch_pos >= 0 else 0)
+    if min(
+        open_pos,
+        proof_pos,
+        expected_pos,
+        compare_pos,
+        mismatch_pos,
+        copy_pos,
+        precommit_proof_pos,
+        precommit_compare_pos,
+        precommit_mismatch_pos,
+        commit_pos,
+    ) < 0:
         failures.append("creator-handle final-destination proof sequence is incomplete")
-    elif not (open_pos < proof_pos < compare_pos < mismatch_pos < copy_pos and open_pos < expected_pos < compare_pos):
-        failures.append(
-            "creator-handle final-destination identity must be proven fail-closed after CREATE_NEW and before any staging payload bytes are copied"
-        )
+    else:
+        if not (
+            open_pos < proof_pos < compare_pos < mismatch_pos < copy_pos
+            and open_pos < expected_pos < compare_pos
+        ):
+            failures.append(
+                "creator-handle final-destination identity must be proven fail-closed after CREATE_NEW and before any staging payload bytes are copied"
+            )
+        if not (
+            copy_pos < precommit_proof_pos < precommit_compare_pos < precommit_mismatch_pos < commit_pos
+        ):
+            failures.append(
+                "creator-handle final-destination identity must be re-proven after payload verification and before delete-disposition commit"
+            )
 
     # Repeating pathname admission is not a substitute for a handle-bound proof.
-    proof_window = source[open_pos:copy_pos] if 0 <= open_pos < copy_pos else ""
-    if proof_window and HANDLE_CALL not in source[source.find(HELPER):open_pos]:
+    if 0 <= open_pos < copy_pos and HANDLE_CALL not in source[source.find(HELPER):open_pos]:
         failures.append("final-destination proof helper must query the creator handle, not only repeat pathname checks")
 
     return failures
@@ -97,6 +129,9 @@ def main() -> int:
         (EXPECTED_ASSIGN, "expected canonical-path capture"),
         (COMPARE, "final-path comparison"),
         (MISMATCH, "fail-closed mismatch branch"),
+        (PRECOMMIT_PROOF, "pre-commit final-path capture"),
+        (PRECOMMIT_COMPARE, "pre-commit final-path comparison"),
+        (PRECOMMIT_MISMATCH, "pre-commit fail-closed mismatch branch"),
     )
     for token, label in mutations:
         if token not in source:
@@ -107,18 +142,33 @@ def main() -> int:
             print(f"FAIL: guard mutation escaped detection: {label}")
             return 1
 
-    # Ordering mutation: moving the proof after CopyTo must fail.
-    if PROOF_ASSIGN not in source or COPY not in source:
-        print("FAIL: ordering mutation fixture is incomplete")
-        return 1
+    # Ordering mutation: moving the first proof after CopyTo must fail.
     without_proof = source.replace(PROOF_ASSIGN, "", 1)
     copy_index = without_proof.find(COPY)
-    ordering_mutated = without_proof[: copy_index + len(COPY)] + "\n" + PROOF_ASSIGN + without_proof[copy_index + len(COPY) :]
+    ordering_mutated = (
+        without_proof[: copy_index + len(COPY)]
+        + "\n"
+        + PROOF_ASSIGN
+        + without_proof[copy_index + len(COPY) :]
+    )
     if not validate(ordering_mutated):
-        print("FAIL: guard mutation escaped detection: proof moved after payload copy")
+        print("FAIL: guard mutation escaped detection: first proof moved after payload copy")
         return 1
 
-    print("PASS: V25 canonical MSI creator handle proves its final destination before payload copy")
+    # Ordering mutation: moving the re-proof after commit must fail.
+    without_reproof = source.replace(PRECOMMIT_PROOF, "", 1)
+    commit_index = without_reproof.find(COMMIT)
+    reproof_mutated = (
+        without_reproof[: commit_index + len(COMMIT)]
+        + "\n"
+        + PRECOMMIT_PROOF
+        + without_reproof[commit_index + len(COMMIT) :]
+    )
+    if not validate(reproof_mutated):
+        print("FAIL: guard mutation escaped detection: pre-commit re-proof moved after commit")
+        return 1
+
+    print("PASS: V25 canonical MSI creator handle proves final destination before copy and commit")
     return 0
 
 
