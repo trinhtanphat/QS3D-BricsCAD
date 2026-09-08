@@ -78,6 +78,7 @@ namespace QS3D.LocalQualification.V25
             private readonly string _diskDigest;
             private readonly Dictionary<string, string> _sources;
             private readonly DispatcherTimer _timer;
+            private readonly DateTime _startedUtc = DateTime.UtcNow;
             private readonly DateTime _deadline = DateTime.UtcNow.AddMinutes(55);
             private Window? _window;
             private DataGrid? _grid;
@@ -114,7 +115,12 @@ namespace QS3D.LocalQualification.V25
                             .Select(x => x.RootVisual).OfType<Window>()
                             .Concat(System.Windows.Application.Current?.Windows.Cast<Window>() ?? Enumerable.Empty<Window>())
                             .Distinct().Where(x => x.GetType().Assembly == _context.Product && x.GetType().Name == "QuantitySummaryWindow" && x.IsVisible).ToArray();
-                        if (windows.Length == 0) return;
+                        if (windows.Length == 0)
+                        {
+                            if (QuantityWindowOpenTimedOut(_startedUtc, DateTime.UtcNow, false))
+                                throw new ProbeException("quantity_product_window_not_opened");
+                            return;
+                        }
                         if (windows.Length != 1) throw new ProbeException("quantity_window_ambiguous");
                         _window = windows[0];
                         if (!ReferenceEquals(Field("_document"), _context.Document) || (string)Field("_projectId") != _project.ProjectId)
@@ -147,6 +153,13 @@ namespace QS3D.LocalQualification.V25
                     Trace("await_" + _stage);
                 }
                 catch (System.Exception error) { Fail(error); }
+            }
+
+            private static bool QuantityWindowOpenTimedOut(DateTime started, DateTime now, bool windowObserved)
+            {
+                // The long bound is for physical operator gestures, not a failed
+                // QS3DBQ command that never produced a window (allocation66).
+                return !windowObserved && now - started >= TimeSpan.FromSeconds(60);
             }
 
             private void OnClick(object sender, RoutedEventArgs args)

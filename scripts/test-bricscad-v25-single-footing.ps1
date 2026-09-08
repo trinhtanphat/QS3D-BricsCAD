@@ -308,6 +308,14 @@ function Invoke-NativePhase([string]$Phase, [string[]]$Commands) {
             [void](Read-Phase $Phase)
             Update-Local022PhaseClock $phaseClock ([DateTime]::UtcNow) $Phase $PhaseTimeoutSeconds $PauseForOperator $true
         }
+        if ($QuantityUi) {
+            $quantityPhase = if ($Phase -ceq 'run') { 'quantity' } else { 'quantityreopen' }
+            if (Test-Path -LiteralPath (Join-Path $ArtifactDir ('phase-' + $quantityPhase + '.json'))) {
+                # Fail before waiting for host exit (which can display a save dialog).
+                # A PASS marker still requires the normal owned-exit/cleanup path.
+                [void](Read-Phase $quantityPhase)
+            }
+        }
         if ($UiDriver -ceq 'NATIVE_V1' -and -not $QuantityUi) { [void](Close-Qs3dProxyInformationDialog -Process $process) }
         $process.Refresh()
         if ($UiDriver -ceq 'NATIVE_V1' -and $InteractiveUi -and -not $process.HasExited -and $Phase -ceq 'ui') {
