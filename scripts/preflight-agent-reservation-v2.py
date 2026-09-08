@@ -14,6 +14,7 @@ PEER_HEAD = "agent/gpt56sol-20260908-c05-v25-final-publish-main-stability/issue-
 STALE_PATH = "scripts/publish-v26-release.ps1"
 CURRENT_MAIN_SHA = "a" * 40
 PEER_HEAD_SHA = "b" * 40
+BLOB_SHA = "c" * 40
 
 
 def load_target():
@@ -45,6 +46,27 @@ def peer() -> dict:
             "repo": {"full_name": REPOSITORY},
         },
     }
+
+
+def assert_git_tree_identity(gate):
+    calls = []
+
+    def run_git(args):
+        calls.append(args)
+        if args[:2] == ["ls-tree", "-z"]:
+            return f"100755 blob {BLOB_SHA}\t{STALE_PATH}\x00"
+        raise AssertionError(args)
+
+    gate._run_git = run_git
+    identity = gate.git_path_identity(CURRENT_MAIN_SHA, STALE_PATH)
+    assert identity == ("100755", "blob", BLOB_SHA), identity
+    assert calls == [[
+        "ls-tree",
+        "-z",
+        CURRENT_MAIN_SHA,
+        "--",
+        f":(literal){STALE_PATH}",
+    ]], calls
 
 
 def run_case(gate, path_is_effective: bool):
@@ -82,6 +104,7 @@ def run_case(gate, path_is_effective: bool):
 
 def main() -> int:
     gate = load_target()
+    assert_git_tree_identity(gate)
 
     stale_conflicts = run_case(gate, path_is_effective=False)
     assert stale_conflicts == [], (
@@ -92,7 +115,7 @@ def main() -> int:
     real_conflicts = run_case(gate, path_is_effective=True)
     assert real_conflicts == [(6096, PEER_HEAD, [STALE_PATH])], real_conflicts
 
-    print("PASS: Reservation-v2 peer path collision uses effective base-snapshot delta")
+    print("PASS: Reservation-v2 peer path collision uses effective base-snapshot Git tree identity")
     return 0
 
 
