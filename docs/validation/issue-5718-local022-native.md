@@ -2,12 +2,48 @@
 
 ## Verdict
 
+Latest licensed topology pair (2026-09-08): **V25 allocation56 and V26 allocation57
+are `LOCAL_PASS_BOUNDED`, all three V3 native phases**, on exact pushed harness
+`1cf3fa8baa43298e1c0b05bc5eeecd319d40bc36` and unchanged frozen product
+`87aff7fec452f9a8dd9f641ef84d143edc73514d`. Main through
+`911b1b0ab92ae6a647ff29d8fd474c3d02430810` is synchronized in the harness, not
+relabelled as tested product. Both use non-interactive `NATIVE_V1 / WALL_CLOCK_V1`
+and fresh disposable `Default` clones.
+
+- V25.2.10: RunId `272a0d94c8ea47b3ba12239cf2a2a708`,
+  `2026-09-08T05:31:33.8583029Z`–`2026-09-08T05:32:29.8281267Z`;
+  probe SHA-256 `5fd5f4b39d188eb62530262cd2337c8fa101c47b8bcf8603cfdfd07b06b085bc`;
+  ZIP SHA-256 `6da38fcb3bc5fdb1989e9397fad45da712bf4af6b7690298a2fe83657bcb10ac`.
+- V26.2.07: RunId `ff8777acbb414c96b373d4db9f4ca35d`,
+  `2026-09-08T05:33:33.5717688Z`–`2026-09-08T05:34:22.4119594Z`;
+  probe SHA-256 `9f72a6d7f1f64125d10f4d2426c6c433cfc9107b25ac75c60b5d68280cf4503e`;
+  ZIP SHA-256 `59498948341f36d408f8bf838e177170c19d99ffc64acaa2070b0524e6b99a81`.
+
+Each host passed run15/15, saved8/8, cold9/9, all strict Boolean assertions and
+matching RunIds. Complete expected fixture BREP vertex/edge/face inventories,
+one exterior shell, straight edge curves/endpoints, outward planar face position
+and area, exterior four-edge loops, two-face incidence and Euler2 passed for every
+initial/regenerated/saved/cold solid. All V2 quarter-section checks and prior
+ownership/volume/cardinality/generic Foundation/save/cold checks remain intact.
+This closes the explicit box/two-axis-taper fixture topology and sampled-section
+gap; it is not arbitrary/private-solid or all-dimensional-range qualification.
+
+Both runners exited0, removed their private fixture copies, restored exact
+original profile inventory/current pointers, removed only owned nonces, verified
+protected state unchanged and left zero hosts. Autostart original byte1/hash and
+timestamp `2026-09-07T02:55:30.6894998Z` were restored after each run. No desktop
+input/capture, MCP request, installed-package or licensing change occurred.
+The product remains unsigned `LOCAL_PR_CANDIDATE`, version0.1.0-preview.10307.
+V26 physical UI53 remains failed. Quantity/Unicode/DPI/private-DWG and applicable
+published-source qualification remain open; #5718/#4034/#72 are not complete.
+Historical limitations below are superseded only for the explicit56/57 fixtures.
+
 Native topology successor (2026-09-08): marker V3 adds the complete expected
 fixture vertex/edge/face inventories, one exterior shell, planar outward faces,
 exterior four-edge loops/areas and closed edge-incidence/Euler checks. Prior
 V2 section54/55 results do not qualify these new assertions. The host-free oracle
 rejects malformed independent fixtures; SDK builds pass. Fresh licensed V25-first/
-V26 V3 execution remains pending on the next exact pushed harness. See
+V26 V3 execution passed in56/57 above. See
 `tests/QS3D.LocalQualification.V25/NATIVE-TOPOLOGY.md` for scope and limits;
 physical UI, private-DWG/DPI/Quantity and release qualification remain separate.
 
