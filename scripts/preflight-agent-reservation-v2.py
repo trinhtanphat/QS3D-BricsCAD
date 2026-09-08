@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Focused regression for Reservation-v2 peer collision against exact current-base tree state."""
+"""Focused regression for Reservation-v2 peer collision against effective current-base peer changes."""
 
 from __future__ import annotations
 
@@ -12,8 +12,11 @@ REPOSITORY = "trinhtanphat/QS3D-BricsCAD"
 CURRENT_HEAD = "agent/gpt56sol-20260908-c05-reservation-peer-current-delta/issue-6100-reservation-peer-current-delta"
 PEER_HEAD = "agent/gpt56sol-20260908-c05-v25-final-publish-main-stability/issue-6095-v25-final-publish-main-stability"
 STALE_PATH = "scripts/publish-v26-release.ps1"
+PEER_ONLY_PATH = "scripts/publish-v25-release.ps1"
+MAIN_ONLY_PATH = "scripts/main-only.ps1"
 CURRENT_MAIN_SHA = "a" * 40
 PEER_HEAD_SHA = "b" * 40
+MERGE_BASE_SHA = "c" * 40
 
 
 def load_target():
@@ -47,27 +50,39 @@ def peer(repo: str = REPOSITORY) -> dict:
     }
 
 
-def assert_exact_peer_delta(gate):
-    calls = []
-    weird = "scripts/name with trailing space "
+def assert_effective_peer_delta(gate):
+    exact_calls = []
+
+    def run_git(args):
+        assert args == ["merge-base", CURRENT_MAIN_SHA, PEER_HEAD_SHA], args
+        return MERGE_BASE_SHA
 
     def run_git_exact(args):
-        calls.append(args)
-        return f"{STALE_PATH}\x00{weird}\x00"
+        exact_calls.append(args)
+        left, right = args[5], args[6]
+        if (left, right) == (MERGE_BASE_SHA, PEER_HEAD_SHA):
+            # STALE_PATH was introduced on the peer but later converged to main.
+            return f"{STALE_PATH}\x00{PEER_ONLY_PATH}\x00"
+        if (left, right) == (CURRENT_MAIN_SHA, PEER_HEAD_SHA):
+            # MAIN_ONLY_PATH differs because main advanced, but the peer never introduced it.
+            return f"{PEER_ONLY_PATH}\x00{MAIN_ONLY_PATH}\x00"
+        raise AssertionError(args)
 
+    gate._run_git = run_git
     gate._run_git_exact = run_git_exact
     paths = gate.effective_changed_paths(CURRENT_MAIN_SHA, PEER_HEAD_SHA)
-    assert paths == [STALE_PATH, weird], paths
-    assert calls == [[
+    assert paths == [PEER_ONLY_PATH], paths
+    expected_prefix = [
         "diff",
         "--name-only",
         "-z",
         "--no-renames",
         "--diff-filter=ACDMRTUXB",
-        CURRENT_MAIN_SHA,
-        PEER_HEAD_SHA,
-        "--",
-    ]], calls
+    ]
+    assert exact_calls == [
+        expected_prefix + [MERGE_BASE_SHA, PEER_HEAD_SHA, "--"],
+        expected_prefix + [CURRENT_MAIN_SHA, PEER_HEAD_SHA, "--"],
+    ], exact_calls
 
 
 def assert_current_delta_is_nul_safe_and_includes_deletes(gate):
@@ -150,17 +165,17 @@ def assert_foreign_peer_fails_closed(gate):
 
 def main() -> int:
     gate = load_target()
-    assert_exact_peer_delta(gate)
+    assert_effective_peer_delta(gate)
     assert_current_delta_is_nul_safe_and_includes_deletes(gate)
 
     stale_conflicts = run_case(gate, [])
-    assert stale_conflicts == [], "peer ancestry noise absent from exact current-base tree delta must not collide"
+    assert stale_conflicts == [], "converged peer ancestry noise and main-only advancement must not collide"
 
     real_conflicts = run_case(gate, [STALE_PATH])
     assert real_conflicts == [(6096, PEER_HEAD, [STALE_PATH])], real_conflicts
     assert_foreign_peer_fails_closed(gate)
 
-    print("PASS: Reservation-v2 peer collision uses exact NUL-safe current-base tree delta")
+    print("PASS: Reservation-v2 peer collision uses effective peer-introduced current-base delta")
     return 0
 
 
