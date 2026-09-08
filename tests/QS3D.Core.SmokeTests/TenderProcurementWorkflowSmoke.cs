@@ -27,8 +27,10 @@ namespace QS3D.Core.SmokeTests
 
             Equal("BID-A", evaluation.RecommendedBidId, "Recommendation must choose the lowest-ranked complete compliant bid.");
             var resultA = evaluation.FindCommercialResult("BID-A");
+            var resultC = evaluation.FindCommercialResult("BID-C");
             Equal(200m, resultA.EvaluatedTotal, "Procurement workflow must reuse tender evaluated totals without recalculation drift.");
-            Equal(1, resultA.Rank, "Complete tender ranking must remain owned by TenderEvaluationService.");
+            Equal(2, resultA.Rank, "Compliance gating must not rewrite the existing commercial tender rank.");
+            Equal(1, resultC.Rank, "The lowest complete commercial bid must retain its TenderEvaluationService rank even when compliance later fails.");
             Require(evaluation.FindComplianceResult("BID-A").PassesMandatoryCompliance, "BID-A should pass mandatory compliance.");
             Require(!evaluation.FindComplianceResult("BID-C").PassesMandatoryCompliance, "BID-C should fail mandatory compliance.");
 
