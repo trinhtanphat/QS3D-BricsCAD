@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
@@ -19,7 +21,7 @@ namespace QS3D.Core.SmokeTests
         private static void PaddedExistingDependencyIsBlockingAndNotNormalized()
         {
             var project = Project("padded");
-            var a = Element("A", " B ");
+            var a = PersistedElement("A", " B ");
             var b = Element("B");
             project.Elements.Add(a);
             project.Elements.Add(b);
@@ -41,7 +43,7 @@ namespace QS3D.Core.SmokeTests
         private static void DuplicateCanonicalDependencyIsBlockingAndFirstEdgeStillParticipatesInCycleAnalysis()
         {
             var project = Project("duplicate");
-            var a = Element("A", "B", "b", "B");
+            var a = PersistedElement("A", "B", "b", "B");
             var b = Element("B", "A");
             project.Elements.Add(a);
             project.Elements.Add(b);
@@ -60,7 +62,7 @@ namespace QS3D.Core.SmokeTests
         private static void MissingTargetContractSurvivesSeparatePaddedTokens()
         {
             var project = Project("missing-with-padding");
-            var source = Element("SOURCE", " missing-target ", "MISSING-TARGET", " existing ");
+            var source = PersistedElement("SOURCE", " missing-target ", "MISSING-TARGET", " existing ");
             project.Elements.Add(source);
             project.Elements.Add(Element("EXISTING"));
 
@@ -92,6 +94,26 @@ namespace QS3D.Core.SmokeTests
             var element = new ProjectElement(id, ElementCategory.CustomQuantity, string.Empty, string.Empty, string.Empty);
             foreach (var dependency in dependencies) element.DependsOn.Add(dependency);
             return element;
+        }
+
+        private static ProjectElement PersistedElement(string id, params string[] dependencies)
+        {
+            var element = new ProjectElement(id, ElementCategory.CustomQuantity, string.Empty, string.Empty, string.Empty);
+            foreach (var dependency in dependencies) AddPersistedDependency(element, dependency);
+            return element;
+        }
+
+        private static void AddPersistedDependency(ProjectElement element, string dependency)
+        {
+            var relationField = typeof(ProjectElement).GetField("_dependsOn", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("ProjectElement persisted dependency backing relation field is unavailable.");
+            var relation = relationField.GetValue(element)
+                ?? throw new Exception("ProjectElement persisted dependency backing relation is unavailable.");
+            var valuesField = relation.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("ProjectElement persisted dependency backing values field is unavailable.");
+            var values = valuesField.GetValue(relation) as List<string>
+                ?? throw new Exception("ProjectElement persisted dependency backing values are unavailable.");
+            values.Add(dependency);
         }
 
         private static void Require(bool condition, string message)

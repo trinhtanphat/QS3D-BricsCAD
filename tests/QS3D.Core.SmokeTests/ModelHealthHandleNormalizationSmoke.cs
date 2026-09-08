@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
@@ -22,7 +23,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("P-health-source-case", "Source handle case normalization");
             var element = new ProjectElement("E1", ElementCategory.Room, string.Empty, string.Empty, string.Empty);
-            element.SourceHandles.Add(" ab12 ");
+            AddPersistedSourceHandle(element, " ab12 ");
             project.Elements.Add(element);
 
             var liveHandles = new HashSet<string>(StringComparer.Ordinal) { "AB12" };
@@ -35,8 +36,8 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("P-health-blank-orphan", "Blank source handle orphan detection");
             var element = new ProjectElement("E2", ElementCategory.Room, string.Empty, string.Empty, string.Empty);
-            element.SourceHandles.Add(string.Empty);
-            element.SourceHandles.Add(" DEAD ");
+            AddPersistedSourceHandle(element, string.Empty);
+            AddPersistedSourceHandle(element, " DEAD ");
             project.Elements.Add(element);
 
             var issues = new ModelHealthService().Inspect(project, new HashSet<string>(StringComparer.Ordinal));
@@ -48,7 +49,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("P-health-blank-only", "Blank-only source handle normalization");
             var element = new ProjectElement("E4", ElementCategory.Room, string.Empty, string.Empty, string.Empty);
-            element.SourceHandles.Add("   ");
+            AddPersistedSourceHandle(element, "   ");
             project.Elements.Add(element);
 
             var issues = new ModelHealthService().Inspect(project, new HashSet<string>(StringComparer.Ordinal));
@@ -71,6 +72,19 @@ namespace QS3D.Core.SmokeTests
             var issues = new ModelHealthService().Inspect(project, liveGeneratedSolidHandles: liveGeneratedHandles);
             if (issues.Any(x => x.Code == "GENERATED_SOLID_MISSING" && string.Equals(x.ElementId, element.Id, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("ModelHealthHandleNormalizationSmoke: generated Solid3d handles must compare case-insensitively after trimming.");
+        }
+
+        private static void AddPersistedSourceHandle(ProjectElement element, string sourceHandle)
+        {
+            var relationField = typeof(ProjectElement).GetField("_sourceHandles", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement persisted source-handle backing relation field is unavailable.");
+            var relation = relationField.GetValue(element)
+                ?? throw new InvalidOperationException("ProjectElement persisted source-handle backing relation is unavailable.");
+            var valuesField = relation.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement persisted source-handle backing values field is unavailable.");
+            var values = valuesField.GetValue(relation) as List<string>
+                ?? throw new InvalidOperationException("ProjectElement persisted source-handle backing values are unavailable.");
+            values.Add(sourceHandle);
         }
     }
 }
