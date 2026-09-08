@@ -16,6 +16,7 @@ NATIVE_DISPOSITION_DECL = "public static extern bool SetFileInformationByHandle(
 NATIVE_DISPOSITION_CALL = "[QS3DV25NativeFileDisposition]::SetFileInformationByHandle("
 FILE_DISPOSITION_DECL = "public const int FileDispositionInfo = 4;"
 FILE_DISPOSITION_CALL = "[QS3DV25NativeFileDisposition]::FileDispositionInfo"
+FILE_DISPOSITION_BOOLEAN = "[MarshalAs(UnmanagedType.U1)]\n        public bool DeleteFile;"
 
 
 def validate(source: str) -> list[str]:
@@ -53,6 +54,7 @@ def validate(source: str) -> list[str]:
         (NATIVE_DISPOSITION_CALL, "native SetFileInformationByHandle call site is missing"),
         (FILE_DISPOSITION_DECL, "FileDispositionInfo declaration is missing"),
         (FILE_DISPOSITION_CALL, "FileDispositionInfo call site is missing"),
+        (FILE_DISPOSITION_BOOLEAN, "FILE_DISPOSITION_INFO.DeleteFile must marshal as one-byte native BOOLEAN"),
         (open_owned, "canonical MSI is not created through the owned native handle helper"),
         (explicit_arm, "owned canonical MSI is not explicitly armed for deletion"),
         (same_handle_rehash, "owned publication handle is not rewound for same-handle verification"),
@@ -134,7 +136,7 @@ using System;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 public static class Qs3dDispositionProbe {
-  [StructLayout(LayoutKind.Sequential)] public struct FILE_DISPOSITION_INFO { [MarshalAs(UnmanagedType.Bool)] public bool DeleteFile; }
+  [StructLayout(LayoutKind.Sequential)] public struct FILE_DISPOSITION_INFO { [MarshalAs(UnmanagedType.U1)] public bool DeleteFile; }
   public const int FileDispositionInfo = 4;
   public const uint GENERIC_READ = 0x80000000;
   public const uint GENERIC_WRITE = 0x40000000;
@@ -206,6 +208,7 @@ def main() -> int:
         (NATIVE_DISPOSITION_CALL, "native disposition call site"),
         (FILE_DISPOSITION_DECL, "FileDispositionInfo declaration"),
         (FILE_DISPOSITION_CALL, "FileDispositionInfo call site"),
+        (FILE_DISPOSITION_BOOLEAN, "one-byte native BOOLEAN layout"),
         ("$publishedStream = Open-OwnedMsiPublication -Path $msi", "owned publication helper"),
         ("Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $true", "explicit delete arm"),
         ("$publishedHashBytes = $publishedSha.ComputeHash($publishedStream)", "same-handle verification"),
