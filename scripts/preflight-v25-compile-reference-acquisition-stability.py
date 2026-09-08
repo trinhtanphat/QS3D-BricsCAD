@@ -110,7 +110,7 @@ def main() -> int:
         "$publishedHashBytes = $publishedSha.ComputeHash($publishedStream)",
         "[string]::Equals($publishedHash, [string]$stagingAdmission.Sha256",
         "Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $false",
-        "$publishedByThisAttempt = $false",
+        "$publishedByThisAttempt = $false\n            $publishedStream.Dispose()",
         "$publishedAdmission = Open-PinnedMsiReadLock -Path $msi -ExpectedSha256 $expected",
         "Assert-PinnedMsiStable -State $publishedAdmission -Label 'immediately after held-generation publication commit'",
         "after Authenticode verification",
