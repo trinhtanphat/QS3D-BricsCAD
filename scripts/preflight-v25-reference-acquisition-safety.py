@@ -8,6 +8,9 @@ TARGET = ROOT / "scripts" / "acquire-v25-compile-references.ps1"
 CLOUD_WORKFLOW = ROOT / ".github" / "workflows" / "release-v25-cloud.yml"
 
 STAGING_OPEN = "$stagingAdmission = Open-PinnedMsiReadLock -Path $staging -ExpectedSha256 $expected"
+OWNED_OPEN = "$publishedStream = Open-OwnedMsiPublication -Path $msi"
+DELETE_ARM = "Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $true"
+DELETE_CLEAR = "Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $false"
 DESTINATION_READMIT = "$publishedAdmission = Open-PinnedMsiReadLock -Path $msi -ExpectedSha256 $expected"
 
 
@@ -44,9 +47,16 @@ def validate_helper(text: str) -> None:
     require(text, "New-Item -ItemType Directory -Path $extract | Out-Null", "non-Force fresh ExtractDir creation")
     require(text, "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging", "isolated staged download")
     require(text, STAGING_OPEN, "staged held admission retained through publication")
-    require(text, "[IO.FileMode]::CreateNew", "fresh-only canonical destination")
+    require(text, "CreateFileW", "native fresh canonical creator")
+    require(text, "public const uint DELETE = 0x00010000;", "native delete access")
+    require(text, "public const uint CREATE_NEW = 1;", "fresh-only canonical destination")
+    require(text, OWNED_OPEN, "handle-owned canonical publication")
+    require(text, DELETE_ARM, "explicit cancelable delete arm")
     require(text, "$stagingAdmission.Stream.CopyTo($publishedStream)", "held-stream canonical publication")
     require(text, "$publishedStream.Flush($true)", "durable canonical publication")
+    require(text, "$publishedStream.Position = 0", "same-handle publication rewind")
+    require(text, "$publishedHashBytes = $publishedSha.ComputeHash($publishedStream)", "same-handle publication hash")
+    require(text, DELETE_CLEAR, "explicit publication commit")
     require(text, DESTINATION_READMIT, "post-publication held re-admission")
     require(text, "Canonical MSI destination appeared before held-generation publication; refusing destructive replacement.",
             "destination race refusal")
@@ -69,6 +79,7 @@ def validate_helper(text: str) -> None:
     forbid(text, "[IO.File]::Move($staging, $msi)", "pathname canonical publication")
     forbid(text, "Remove-Item -LiteralPath $msi -Force", "destructive unbound canonical replacement")
     forbid(text, "[IO.FileMode]::OpenOrCreate", "reusable canonical destination")
+    forbid(text, "[IO.FileOptions]::DeleteOnClose", "uncancelable create-time delete-on-close")
 
     absent = "if (Test-Path -LiteralPath $extract)"
     create = "New-Item -ItemType Directory -Path $extract | Out-Null"
@@ -81,14 +92,20 @@ def validate_helper(text: str) -> None:
     require_before(text, absent, create, "existing ExtractDir refusal before non-Force creation")
     require_before(text, "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging", STAGING_OPEN,
                    "staged download before held admission")
-    require_before(text, STAGING_OPEN, "[IO.FileMode]::CreateNew",
-                   "held staging admission before fresh publication")
-    require_before(text, "[IO.FileMode]::CreateNew", "$stagingAdmission.Stream.CopyTo($publishedStream)",
-                   "fresh destination before held-byte copy")
+    require_before(text, STAGING_OPEN, OWNED_OPEN,
+                   "held staging admission before fresh handle-owned publication")
+    require_before(text, OWNED_OPEN, DELETE_ARM,
+                   "fresh handle-owned destination before explicit delete arm")
+    require_before(text, DELETE_ARM, "$stagingAdmission.Stream.CopyTo($publishedStream)",
+                   "explicit delete arm before held-byte copy")
     require_before(text, "$stagingAdmission.Stream.CopyTo($publishedStream)", "$publishedStream.Flush($true)",
                    "held-byte copy before durable flush")
-    require_before(text, "$publishedStream.Flush($true)", DESTINATION_READMIT,
-                   "durable publication before canonical re-admission")
+    require_before(text, "$publishedStream.Flush($true)", "$publishedHashBytes = $publishedSha.ComputeHash($publishedStream)",
+                   "durable publication before same-handle verification")
+    require_before(text, "$publishedHashBytes = $publishedSha.ComputeHash($publishedStream)", DELETE_CLEAR,
+                   "same-handle verification before explicit publication commit")
+    require_before(text, DELETE_CLEAR, DESTINATION_READMIT,
+                   "explicit publication commit before canonical re-admission")
     require_before(text, "$msiState = Open-PinnedMsiReadLock -Path $msi",
                    "Get-AuthenticodeSignature -FilePath $msiState.Path",
                    "final held admission before Authenticode")
@@ -161,8 +178,14 @@ def main() -> None:
                     text.replace(STAGING_OPEN, "$stagingAdmission = $null", 1),
                     "removed retained staged admission")
     expect_rejected(validate_helper,
-                    text.replace("[IO.FileMode]::CreateNew", "[IO.FileMode]::OpenOrCreate", 1),
-                    "made canonical destination reusable")
+                    text.replace("public const uint CREATE_NEW = 1;", "public const uint OPEN_ALWAYS = 4;", 1),
+                    "removed fresh-only creator disposition")
+    expect_rejected(validate_helper,
+                    text.replace(OWNED_OPEN, "$publishedStream = $null", 1),
+                    "removed owned publication helper")
+    expect_rejected(validate_helper,
+                    text.replace(DELETE_ARM, "# delete disposition arm removed", 1),
+                    "removed cancelable delete arm")
     expect_rejected(validate_helper,
                     text.replace("$stagingAdmission.Stream.CopyTo($publishedStream)",
                                  "[IO.File]::Move($staging, $msi)", 1),
@@ -170,6 +193,13 @@ def main() -> None:
     expect_rejected(validate_helper,
                     text.replace("$publishedStream.Flush($true)", "$publishedStream.Flush()", 1),
                     "removed durable publication flush")
+    expect_rejected(validate_helper,
+                    text.replace("$publishedHashBytes = $publishedSha.ComputeHash($publishedStream)",
+                                 "$publishedHashBytes = @()", 1),
+                    "removed same-handle publication hash")
+    expect_rejected(validate_helper,
+                    text.replace(DELETE_CLEAR, "# explicit commit removed", 1),
+                    "removed explicit publication commit")
     expect_rejected(validate_helper,
                     text.replace(DESTINATION_READMIT, "$publishedAdmission = $null", 1),
                     "removed canonical post-publication admission")
