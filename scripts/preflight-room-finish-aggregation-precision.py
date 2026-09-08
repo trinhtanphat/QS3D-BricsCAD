@@ -9,9 +9,10 @@ smoke = SMOKE.read_text(encoding="utf-8")
 
 required_source = [
     "var aggregations = new Dictionary<string, FinishAggregationState>",
-    "aggregation.LengthM.Add(metrics.LengthM",
-    "aggregation.AreaM2.Add(metrics.AreaM2",
-    "aggregation.PrimaryQuantity.Add(primary",
+    "foreach (var item in snapshot.WorkItems)",
+    "aggregation.LengthM.Add(item.LengthM",
+    "aggregation.AreaM2.Add(item.AreaM2",
+    "aggregation.PrimaryQuantity.Add(item.PrimaryQuantity",
     "row.LengthM = aggregation.LengthM.Value",
     "row.AreaM2 = aggregation.AreaM2.Value",
     "row.PrimaryQuantity = aggregation.PrimaryQuantity.Value",
@@ -26,9 +27,12 @@ for forbidden in [
     "row.LengthM = Add(row.LengthM",
     "row.AreaM2 = Add(row.AreaM2",
     "row.PrimaryQuantity = Add(row.PrimaryQuantity",
+    "aggregation.LengthM.Add(metrics.LengthM",
+    "aggregation.AreaM2.Add(metrics.AreaM2",
+    "aggregation.PrimaryQuantity.Add(primary",
 ]:
     if forbidden in source:
-        raise SystemExit(f"Room Finish aggregation precision regressed to pairwise fail-fast accumulation: {forbidden}")
+        raise SystemExit(f"Room Finish aggregation precision regressed to stale/live or pairwise accumulation: {forbidden}")
 
 required_smoke = [
     "10000000000000000d",
@@ -43,4 +47,4 @@ for token in required_smoke:
     if token not in smoke:
         raise SystemExit(f"Room Finish aggregation precision guard missing smoke token: {token}")
 
-print("PASS Room Finish compensated aggregation preserves representable small contributions without weakening final precision refusal")
+print("PASS Room Finish compensated aggregation consumes the captured work-item generation, preserves representable small contributions, and does not weaken final precision refusal")
