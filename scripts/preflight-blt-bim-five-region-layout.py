@@ -78,8 +78,8 @@ else:
 
     if "SetVisibility(workspace, properties: false, right, quantityInsight);" not in text:
         errors.append("legacy three-argument visibility must keep dedicated Properties opt-in only")
-    if "if (_properties != null) _properties.Visible = properties;" not in text:
-        errors.append("dedicated Properties visibility must remain centrally controllable")
+    if 'SetPaletteVisibility(propertiesPalette, _properties, properties, "Properties");' not in text:
+        errors.append("dedicated Properties visibility must remain centrally controllable through transactional visibility apply")
 
 print("QS3D BLT3D BIM owner-reference layout preflight")
 if errors:

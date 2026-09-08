@@ -76,7 +76,7 @@ namespace QS3D.BricsCAD.V25
                 _nativeDatabaseIdentity = requestedIdentity;
                 if (ReferenceEquals(_unpublishedCandidate, candidate))
                     _unpublishedCandidate = null;
-                Report(document, "Commercial QS workspace opened: Variation • IPC • Final Account • Export.");
+                Report(document, "Commercial QS workspace opened: Variation • IPC • Final Account • Tender • CVR • XLSX.");
             }
             catch (Exception)
             {

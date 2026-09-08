@@ -109,7 +109,8 @@ for needle in (
     "_quantityInsightPanel?.ClearQuantityInsights(status);",
     "SetVisibility(workspace: false, right: false, quantityInsight: true);",
     "private static void SetVisibility(bool workspace, bool right, bool quantityInsight)",
-    "if (_quantityInsight != null) _quantityInsight.Visible = quantityInsight;",
+    'SetPaletteVisibility(quantityPalette, _quantityInsight, quantityInsight, "QuantityInsight");',
+    "TryRestorePaletteVisibility(quantityPalette, _quantityInsight, quantityWasVisible);",
 ):
     if needle not in palette:
         errors.append("PaletteCoordinator missing rollback-safe quantity workspace integration: " + needle)
@@ -151,5 +152,5 @@ if errors:
 print(
     "PASS: the BLT-inspired far-right quantity workspace is backed by live read-only QS3D element-detail reporting, "
     "selection highlighting, direct CAD locate/zoom, QS3DREGEN/QS3DBQ dispatch, project totals, rollback-safe pre-publication "
-    "PaletteSet ownership, centralized visibility, and the existing drawing/Xref/layer manager remains wired to its real handlers."
+    "PaletteSet ownership, transactional centralized visibility, and the existing drawing/Xref/layer manager remains wired to its real handlers."
 )
