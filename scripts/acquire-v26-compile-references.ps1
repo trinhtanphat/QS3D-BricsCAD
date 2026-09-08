@@ -269,7 +269,7 @@ function Publish-AdmittedV26Installer {
                 Assert-NoExistingReparseComponent -Path $Destination -Label 'Failed owned V26 canonical MSI publication'
                 $failedPublication = Get-OrdinaryFileOrNull -Path $Destination -Label 'Failed owned V26 canonical MSI publication'
                 if ($null -ne $failedPublication) {
-                    Remove-Item -LiteralPath $Destination -Force -ErrorAction Stop
+                    [IO.File]::Delete($Destination)
                 }
                 if (Test-Path -LiteralPath $Destination) {
                     throw 'V26 canonical MSI pathname still exists after owned failed-publication cleanup.'
