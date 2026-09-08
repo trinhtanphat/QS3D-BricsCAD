@@ -610,6 +610,7 @@ try {
                 $backup = $installFull + '.backup-' + [Guid]::NewGuid().ToString('N')
                 Move-Item -LiteralPath $installFull -Destination $backup
             }
+            Assert-StagedPayloadAdmission -Directory $stage -AdmittedHashes $packageAdmission.Hashes -AdmittedCommands $commands -SignedRequired:$RequireSigned -SignerThumbprint $ExpectedSignerThumbprint
             Move-Item -LiteralPath $stage -Destination $installFull
             $payloadCommitted = $true
         }
