@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 
@@ -84,7 +85,12 @@ namespace QS3D.Core.SmokeTests
         private static void RejectsNullSemanticEntry()
         {
             var project = new ProjectState("P-null", "Fail-visible diagnostics");
-            project.Elements.Add(null!);
+            var itemsField = project.Elements.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed corrupt slab-mesh project state.");
+            var items = itemsField.GetValue(project.Elements) as List<ProjectElement>
+                ?? throw new InvalidOperationException("Unexpected ProjectState.Elements backing collection.");
+            items.Add(null!);
+
             try
             {
                 Inspect(project, "AA");

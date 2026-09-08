@@ -37,8 +37,8 @@ namespace QS3D.Core.SmokeTests
                 yield return "B1";
             }
 
-            ThrowsOwnershipFreshness(() => new RegenerationPreviewService().PreviewSubset(project, Targets()));
-            Equal(beforeVersion, project.ChangeVersion, "direct replacement must leave ChangeVersion unchanged");
+            ThrowsProjectFreshness(() => new RegenerationPreviewService().PreviewSubset(project, Targets()));
+            Equal(beforeVersion + 1L, project.ChangeVersion, "direct replacement must advance ChangeVersion exactly once");
             if (ReferenceEquals(project.Elements[index], original))
                 throw new InvalidOperationException("RegenerationPreviewStructuralFreshnessSmoke replacement fixture did not change element ownership.");
             True(!project.FindElement("B1")!.Quantities.ContainsKey("NetVolumeM3"), "failed preview must not mutate live target quantities");
@@ -173,7 +173,7 @@ namespace QS3D.Core.SmokeTests
             return beam;
         }
 
-        private static void ThrowsOwnershipFreshness(Action action)
+        private static void ThrowsProjectFreshness(Action action)
         {
             try
             {
@@ -181,11 +181,11 @@ namespace QS3D.Core.SmokeTests
             }
             catch (InvalidOperationException ex)
             {
-                if (ex.Message.IndexOf("element ownership changed", StringComparison.Ordinal) >= 0) return;
-                throw new InvalidOperationException("Unexpected regeneration preview ownership-freshness error.", ex);
+                if (ex.Message.IndexOf("Project changed while regeneration preview scope was being established; recompute preview.", StringComparison.Ordinal) >= 0) return;
+                throw new InvalidOperationException("Unexpected regeneration preview project-freshness error.", ex);
             }
 
-            throw new InvalidOperationException("Expected regeneration preview ownership-freshness rejection.");
+            throw new InvalidOperationException("Expected regeneration preview project-freshness rejection.");
         }
 
         private static void ThrowsStateFreshness(Action action, string elementId)

@@ -32,7 +32,7 @@ namespace QS3D.Core.SmokeTests
             }
 
             ThrowsStructuralFreshness(() => Engine().RegenerateDirtySubset(project, Targets()));
-            Equal(beforeVersion, project.ChangeVersion, "direct replacement must leave ChangeVersion unchanged");
+            Equal(beforeVersion + 1L, project.ChangeVersion, "direct replacement must advance ChangeVersion exactly once");
             var current = project.FindElement("B1")!;
             if (ReferenceEquals(current, original))
                 throw new InvalidOperationException("RegenerationEngineSubsetStructuralFreshnessSmoke replacement fixture did not change target ownership.");
@@ -85,7 +85,7 @@ namespace QS3D.Core.SmokeTests
             }
             catch (InvalidOperationException ex)
             {
-                if (ex.Message.IndexOf("element structure changed", StringComparison.Ordinal) >= 0) return;
+                if (ex.Message.IndexOf("Project state changed while materializing regeneration target ids", StringComparison.Ordinal) >= 0) return;
                 throw new InvalidOperationException("Unexpected targeted-regeneration structural-freshness error.", ex);
             }
 

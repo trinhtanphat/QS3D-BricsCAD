@@ -124,7 +124,11 @@ namespace QS3D.Core.SmokeTests
             ExpectThrows<InvalidOperationException>(() => MeasurementWorkItemCoverageEvaluator.Evaluate(duplicate, catalog));
 
             var nullElement = new ProjectState("null", "Null");
-            nullElement.Elements.Add(null!);
+            var itemsField = nullElement.Elements.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed corrupt measurement coverage project state.");
+            var items = itemsField.GetValue(nullElement.Elements) as List<ProjectElement>
+                ?? throw new InvalidOperationException("Unexpected ProjectState.Elements backing collection.");
+            items.Add(null!);
             ExpectThrows<InvalidOperationException>(() => MeasurementWorkItemCoverageEvaluator.Evaluate(nullElement, catalog));
 
             var nonFinite = new ProjectState("nan", "NaN");
