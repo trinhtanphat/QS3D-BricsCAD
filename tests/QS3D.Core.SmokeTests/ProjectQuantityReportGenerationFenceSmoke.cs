@@ -72,7 +72,15 @@ namespace QS3D.Core.SmokeTests
                 foreach (var dependency in source.DependsOn) replacement.DependsOn.Add(dependency);
                 foreach (var property in source.Properties) replacement.Properties.Add(property.Key, property.Value);
                 foreach (var quantity in source.Quantities) replacement.Quantities.Add(quantity.Key, quantity.Value);
-                p.Elements[0] = replacement;
+
+                // StructuralRevisionList intentionally calls ProjectState.Touch() through its public setter.
+                // This regression must model the historical identity-bypass that ChangeVersion cannot detect,
+                // so inject the value-equivalent replacement into the private backing list only.
+                var itemsField = p.Elements.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?? throw new MissingFieldException(p.Elements.GetType().FullName, "_items");
+                var items = itemsField.GetValue(p.Elements) as IList<ProjectElement>
+                    ?? throw new InvalidOperationException("Project element backing list is unavailable for generation-fence regression injection.");
+                items[0] = replacement;
             });
             ExpectGenerationDrift(project, "equivalent element instance replacement");
             if (project.ChangeVersion != version) throw new InvalidOperationException("Equivalent element replacement unexpectedly changed ProjectState.ChangeVersion; regression no longer exercises the instance-identity bypass.");

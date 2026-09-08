@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
@@ -19,7 +21,11 @@ namespace QS3D.Core.SmokeTests
         private static void NullElementFailsVisible()
         {
             var project = new ProjectState("health-grid-null", "Grid null health");
-            project.Elements.Add(null!);
+            var itemsField = project.Elements.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed corrupt Grid Naming project state.");
+            var items = itemsField.GetValue(project.Elements) as List<ProjectElement>
+                ?? throw new InvalidOperationException("Unexpected ProjectState.Elements backing collection.");
+            items.Add(null!);
 
             try
             {

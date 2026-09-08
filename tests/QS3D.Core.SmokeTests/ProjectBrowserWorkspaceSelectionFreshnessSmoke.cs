@@ -54,8 +54,8 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining(
                 () => ProjectBrowserWorkspaceCoordinator.ApplySelection(project, state, Selection(), "B-001"),
-                "Project element structure changed while Project Browser selection ids were being enumerated");
-            Equal(beforeVersion, project.ChangeVersion, "direct replacement revision");
+                "Project changed while Project Browser selection ids were being enumerated");
+            Equal(beforeVersion + 1, project.ChangeVersion, "direct replacement revision");
             if (ReferenceEquals(project.Elements[index], original))
                 throw new InvalidOperationException("ProjectBrowserWorkspaceSelectionFreshnessSmoke replacement fixture did not change element ownership.");
         }
