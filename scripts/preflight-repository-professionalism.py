@@ -311,8 +311,12 @@ def main() -> int:
             "### Dependabot generated-PR boundary",
             "GitHub Dependabot may create dependency-update PRs directly",
             "does **not** receive merge authority",
-            "## Automatic PR ready/auto-merge arming",
+            "## Automatic Ready PR refresh/auto-merge arming",
             ".github/workflows/auto-merge-main-prs.yml",
+            "Draft is a manual hold",
+            "update-branch",
+            "expected_head_sha",
+            "contents: write",
             "Repository-wide native auto-merge arming is explicitly enabled",
             "branch protection and required checks remain authoritative",
             "Repository-wide blind direct merge remains disabled",
@@ -376,27 +380,36 @@ def main() -> int:
             require(
                 text,
                 (
-                    "name: Auto-ready and auto-merge main PRs",
+                    "name: Auto-update and auto-merge ready main PRs",
                     "pull_request_target:",
-                    "contents: read",
+                    "push:",
+                    "contents: write",
                     "pull-requests: write",
+                    "github.event_name == 'pull_request_target'",
                     "github.event.pull_request.base.ref == 'main'",
+                    "github.event_name == 'push'",
+                    "github.ref == 'refs/heads/main'",
                     "gh pr view",
                     "isDraft",
+                    "isCrossRepository",
+                    "mergeStateStatus",
+                    "headRefOid",
                     "autoMergeRequest",
-                    "gh pr ready",
+                    "update-branch",
+                    "expected_head_sha",
+                    "gh pr list",
                     "gh pr merge --auto --merge",
                 ),
-                "owner-approved PR auto-merge metadata workflow",
+                "owner-approved Ready PR auto-update/auto-merge workflow",
                 failures,
             )
             for forbidden in (
-                "actions/checkout", "--admin", "contents: write", "actions: write", "issues: write",
+                "actions/checkout", "--admin", "actions: write", "issues: write",
                 "packages: write", "id-token: write", "git push", "gh release", "gh workflow run",
-                "github.event.pull_request.head.sha", "github.event.pull_request.head.ref",
+                "github.event.pull_request.head.sha", "github.event.pull_request.head.ref", "gh pr ready",
             ):
                 if forbidden in text:
-                    failures.append(f"{AUTO_MERGE_WORKFLOW}: forbidden metadata-automation token present: {forbidden}")
+                    failures.append(f"{AUTO_MERGE_WORKFLOW}: forbidden Ready-PR automation token present: {forbidden}")
             for match in re.finditer(r"gh\s+pr\s+merge[^\n]*", text):
                 command = match.group(0).strip()
                 if "gh pr merge --auto --merge" not in command:
@@ -420,7 +433,7 @@ def main() -> int:
     print(" - every task/integration branch push and every PR can emit stable required contexts while non-build changes avoid redundant Core/V25 builds")
     print(" - synthetic generated fixtures are treated as build-relevant validation inputs")
     print(" - external scheduler/controller-worker orchestration artifacts are kept out of the QS3D source tree")
-    print(f" - only {AUTO_MERGE_WORKFLOW} may mark main PRs Ready and arm native auto-merge; direct PR merge primitives remain forbidden")
+    print(f" - only {AUTO_MERGE_WORKFLOW} may update stale same-repository Ready main PRs and arm native auto-merge; Draft remains a manual hold and direct PR merge primitives remain forbidden")
     print(" - retired Hybrid PR Coordinator workflow must remain removed")
     return 0
 
