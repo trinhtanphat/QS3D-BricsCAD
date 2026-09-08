@@ -31,12 +31,32 @@ def validate_source(source: str) -> None:
         raise AssertionError("V26 checksum rollback/cleanup still pathname-deletes mutable generations: " + ", ".join(present))
 
     publication = source.index("$publicationStarted = $true")
-    rollback = source.index("catch {")
+    rollback = source.index("catch {", publication)
     owned_remove = source.rfind("Remove-OwnedChecksumGeneration")
     if publication >= rollback:
         raise AssertionError("V26 checksum publication intent must precede rollback handling")
     if owned_remove <= rollback:
         raise AssertionError("V26 checksum rollback must invoke generation-owned cleanup inside/after rollback handling")
+
+    for token in (
+        "$tempGeneration = New-OwnedChecksumGeneration",
+        "$originalOutputGeneration = Open-OwnedChecksumGeneration",
+        "publishedGeneration.Identity, $tempGeneration.Identity",
+        "backupProof.Identity, $originalOutputGeneration.Identity",
+    ):
+        if token not in source:
+            raise AssertionError("V26 checksum generation ownership is not bound across publication/rollback: " + token)
+
+
+def expect_mutation_failure(source: str, token: str) -> None:
+    mutated = source.replace(token, "MUTATED_" + token)
+    if mutated == source:
+        raise AssertionError("mutation token not present in checksum rollback source: " + token)
+    try:
+        validate_source(mutated)
+    except AssertionError:
+        return
+    raise AssertionError("mutation unexpectedly passed after removing checksum rollback primitive: " + token)
 
 
 source = SOURCE_PATH.read_text(encoding="utf-8")
@@ -51,12 +71,6 @@ for token in (
     "Get-OwnedChecksumGenerationIdentity",
     "Remove-OwnedChecksumGeneration",
 ):
-    mutated = source.replace(token, "MUTATED_" + token, 1)
-    try:
-        validate_source(mutated)
-    except AssertionError:
-        pass
-    else:
-        raise AssertionError("mutation unexpectedly passed after removing checksum rollback primitive: " + token)
+    expect_mutation_failure(source, token)
 
-print("PASS V26 checksum rollback is generation-owned and rejects pathname-delete regression")
+print("PASS V26 checksum rollback is generation-owned, identity-bound across publication/restore, and rejects pathname-delete regression")
