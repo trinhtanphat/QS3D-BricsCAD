@@ -7,6 +7,7 @@ param(
     [string]$PrecedingV25Receipt,
     [string]$SourceProfile,
     [switch]$NativeApi,
+    [switch]$RenderExperiment,
     [ValidateSet('NATIVE_V1','OBSERVED_CLICK_V2')][string]$UiDriver = 'NATIVE_V1',
     [switch]$PauseForOperator,
     [Parameter(Mandatory=$true)][switch]$ConfirmTemporaryAutostartPause
@@ -27,6 +28,9 @@ if ($NativeApi -and ($PSBoundParameters.ContainsKey('UiDriver') -or $PSBoundPara
     throw 'NativeApi cannot be combined with UiDriver or PauseForOperator.'
 }
 if ($PauseForOperator -and $UiDriver -cne 'OBSERVED_CLICK_V2') { throw 'Operator pause requires OBSERVED_CLICK_V2.' }
+if ($RenderExperiment -and ($NativeApi -or $UiDriver -cne 'OBSERVED_CLICK_V2')) {
+    throw 'RenderExperiment requires observed UI and cannot qualify native or UI acceptance.'
+}
 $operatorWaitPolicy = if ($PauseForOperator) { 'PAUSE_FOR_OPERATOR_V1' } else { 'WALL_CLOCK_V1' }
 $taskRepo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $source = '87aff7fec452f9a8dd9f641ef84d143edc73514d'
@@ -160,6 +164,7 @@ try {
         InteractiveUi = -not [bool]$NativeApi
         UiDriver = $UiDriver
         PauseForOperator = [bool]$PauseForOperator
+        RenderExperiment = [bool]$RenderExperiment
     }
     if ($null -ne $selectedProfile) { $parameters.Profile = $selectedProfile }
     if ($HostMajor -eq 26) { $parameters.ProvenancePath = $V26ProvenancePath }

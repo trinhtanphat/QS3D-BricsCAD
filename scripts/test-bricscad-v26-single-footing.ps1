@@ -10,6 +10,7 @@ param(
     [string]$Profile = 'QS3D-V26-TEST',
     [ValidateRange(60, 3600)][int]$PhaseTimeoutSeconds = 240,
     [switch]$InteractiveUi,
+    [switch]$RenderExperiment,
     [switch]$PauseForOperator,
     [ValidateSet('NATIVE_V1','OBSERVED_CLICK_V2')][string]$UiDriver = 'NATIVE_V1',
     [Parameter(Mandatory = $true)][switch]$ConfirmDisposableCopy
@@ -21,6 +22,9 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ($UiDriver -cne 'NATIVE_V1' -and -not $InteractiveUi) { throw 'External input requires InteractiveUi.' }
+if ($RenderExperiment -and (-not $InteractiveUi -or $UiDriver -cne 'OBSERVED_CLICK_V2')) {
+    throw 'RenderExperiment requires observed UI and never qualifies acceptance.'
+}
 function Get-Local022OperatorWaitPolicy([bool]$Pause, [bool]$Interactive, [string]$Driver) {
     if ($Pause -and (-not $Interactive -or $Driver -cne 'OBSERVED_CLICK_V2')) {
         throw 'Operator pause requires explicit observed interactive UI.'
@@ -871,13 +875,14 @@ $freeze = [ordered]@{
     probe_source_sha256 = $probeSourceHash; probe_project_sha256 = $probeProjectHash; dotnet_sdk = $dotnetVersion
     runner_sha256 = $runnerHash; harness_git_sha = $harnessSha
     interactive_ui = [bool]$InteractiveUi; ui_driver = $UiDriver; operator_wait_policy = $operatorWaitPolicy; observed_input_sha256 = $supplementalInputs[$observedInputPath]; supplemental_input_hashes = @($supplementalInputs.Values)
+    render_experiment = [bool]$RenderExperiment
     fixture_sha256 = $fixtureHash; host_version = (Get-Item -LiteralPath $bricscadExe).VersionInfo.FileVersion
     host_sha256 = Get-Hash $bricscadExe; pre_existing_host_count = 0
     mcp_test_executed = $false; mcp_requests_issued_by_runner = $false
 }
 $ownedProcesses = [Collections.Generic.List[Diagnostics.Process]]::new()
 $envNames = @('QS3D_LOCAL022_V26_RUN_ID', 'QS3D_LOCAL022_V26_ROOT', 'QS3D_LOCAL022_V26_DRAWING', 'QS3D_LOCAL022_V26_PRODUCT_DLL',
-    'QS3D_LOCAL022_V26_PROBE_DLL', 'QS3D_LOCAL022_V26_PHASE', 'QS3D_LOCAL022_UI_DRIVER', 'QS3D_LOCAL022_PAUSE_FOR_OPERATOR')
+    'QS3D_LOCAL022_V26_PROBE_DLL', 'QS3D_LOCAL022_V26_PHASE', 'QS3D_LOCAL022_UI_DRIVER', 'QS3D_LOCAL022_PAUSE_FOR_OPERATOR', 'QS3D_LOCAL022_RENDER_EXPERIMENT')
 $envBefore = @{}
 foreach ($name in $envNames) { $envBefore[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 $sandbox = $null
@@ -942,6 +947,7 @@ try {
     $env:QS3D_LOCAL022_V26_PROBE_DLL = $ProbeDll
     $env:QS3D_LOCAL022_UI_DRIVER = $UiDriver
     $env:QS3D_LOCAL022_PAUSE_FOR_OPERATOR = if ($PauseForOperator) { '1' } else { '0' }
+    $env:QS3D_LOCAL022_RENDER_EXPERIMENT = if ($RenderExperiment) { '1' } else { '0' }
     if ($InteractiveUi) {
         # V26's default native Tips/Properties consume the small-screen drawing
         # area. Hide only these in the nonce profile; QS3D panes stay visible.
@@ -1053,7 +1059,7 @@ try {
         $cleanupFailure = [string]::Join(' | ', $cleanupErrors)
     }
 }
-$status = if ($null -eq $failure -and $null -eq $cleanupFailure -and $cleanupOk -and $markers.Count -eq 3) { 'LOCAL_PASS_BOUNDED' } else { 'FAIL_OR_NO_RESULT' }
+$status = if ($RenderExperiment) { 'DIAGNOSTIC_ONLY' } elseif ($null -eq $failure -and $null -eq $cleanupFailure -and $cleanupOk -and $markers.Count -eq 3) { 'LOCAL_PASS_BOUNDED' } else { 'FAIL_OR_NO_RESULT' }
 $receipt = [ordered]@{
     schema = 'QS3D_LOCAL022_V26_RECEIPT_V1'; run_id = $runId; status = $status
     product_source_sha = $ProductSourceSha; product_version = $metadata.productVersion
@@ -1064,6 +1070,7 @@ $receipt = [ordered]@{
     profile_cleanup = $profileReceipt; mcp_test_executed = $false; mcp_requests_issued_by_runner = $false
     aggregate_local022_qualified = $false
     interactive_ui_executed = [bool]$InteractiveUi
+    render_experiment = [bool]$RenderExperiment
     ui_driver = $UiDriver
     operator_wait_policy = $operatorWaitPolicy
 }

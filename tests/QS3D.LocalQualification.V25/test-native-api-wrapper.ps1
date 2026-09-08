@@ -64,7 +64,7 @@ $forward = [scriptblock]::Create(($framework.Parent.Statements | Where-Object {
 foreach ($HostMajor in @(25,26)) {
     foreach ($mode in @($default, $native, $observed)) {
         & {
-            $NativeApi = $mode.NativeApi; $UiDriver = $mode.UiDriver; $PauseForOperator = $mode.Pause
+            $NativeApi = $mode.NativeApi; $UiDriver = $mode.UiDriver; $PauseForOperator = $mode.Pause; $RenderExperiment = $false
             $PackageRoot = 'C:\host-free-package'; $taskRepo = 'C:\host-free-harness'; $runRoot = 'C:\host-free-allocation'
             $source = & ([scriptblock]::Create((Get-WrapperAssignment 'source').Right.Extent.Text))
             $v25PackageSha256 = & ([scriptblock]::Create((Get-WrapperAssignment 'v25PackageSha256').Right.Extent.Text))

@@ -48,6 +48,7 @@ namespace QS3D.LocalQualification.V25
         private static readonly TimeSpan UiStageTimeout = TimeSpan.FromSeconds(25);
         private static UiController? _uiController;
         private static UiRunState? _uiRunState;
+        private static DispatcherTimer? _renderExperimentTimer;
 
         private static bool RequiresPhysicalHover(string? driver)
         {
@@ -67,6 +68,15 @@ namespace QS3D.LocalQualification.V25
                 context = BindContext("ui");
                 RequireMeterDrawing(context.Document);
                 RequireMcpMutationBoundaryPaused(context.Product);
+                var experiment = Environment.GetEnvironmentVariable("QS3D_LOCAL022_RENDER_EXPERIMENT");
+                if (experiment != null && experiment != "0" && experiment != "1")
+                    throw new ProbeException("render_experiment_flag_invalid");
+                if (experiment == "1")
+                {
+                    if (!ObservedClickDriver) throw new ProbeException("render_experiment_requires_observed_driver");
+                    StartRenderExperiment(context);
+                    return;
+                }
                 lock (Sync)
                 {
                     if (_uiController != null || _uiRunState != null)
@@ -82,6 +92,49 @@ namespace QS3D.LocalQualification.V25
                 WriteUiFailure(context, "ui", "ui_bind", error);
                 QueueOwnedQuit(context, true);
             }
+        }
+
+        private static void StartRenderExperiment(Context context)
+        {
+            if (_renderExperimentTimer != null || _uiController != null || _uiRunState != null)
+                throw new ProbeException("render_experiment_state_preexists");
+            RequireUiOutputAbsent(context, "ui");
+            RequireUiOutputAbsent(context, "uisaved");
+            var experiment = new UiRenderExperiment(DateTime.UtcNow);
+            var timer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher.CurrentDispatcher)
+            { Interval = TimeSpan.FromSeconds(1) };
+            _renderExperimentTimer = timer;
+            var lastStage = string.Empty;
+            Action<string> trace = stage => File.AppendAllText(RequireUiChildPath(context, "render-experiment.private.txt"),
+                DateTime.UtcNow.ToString("O") + " diagnostic_only=true stage=" + stage +
+                " process_render_mode=" + RenderOptions.ProcessRenderMode +
+                " render_tier=" + (RenderCapability.Tier >> 16).ToString(CultureInfo.InvariantCulture) + "\n");
+            timer.Tick += (sender, args) =>
+            {
+                try
+                {
+                    RequireUiContextStable(context);
+                    var stage = experiment.Advance(DateTime.UtcNow);
+                    if (stage != lastStage) { trace(stage); lastStage = stage; }
+                    if (stage != "complete") return;
+                    timer.Stop();
+                    experiment.Dispose();
+                    WriteUiMarker(context, "ui", "DIAGNOSTIC_ONLY", "render_experiment", "NOT_QUALIFICATION",
+                        new Dictionary<string, bool>(StringComparer.Ordinal));
+                    _renderExperimentTimer = null;
+                    QueueOwnedQuit(context, true);
+                }
+                catch (System.Exception error)
+                {
+                    timer.Stop();
+                    try { experiment.Dispose(); trace("error_restored"); }
+                    catch { error = new ProbeException("render_experiment_restore_failed"); }
+                    _renderExperimentTimer = null;
+                    WriteUiFailure(context, "ui", "render_experiment", error);
+                    QueueOwnedQuit(context, true);
+                }
+            };
+            timer.Start();
         }
 
         [CommandMethod("QL22UISAVED", CommandFlags.Modal)]

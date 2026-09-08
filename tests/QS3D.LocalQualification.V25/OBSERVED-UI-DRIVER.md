@@ -118,6 +118,43 @@ PowerShell close-window message; the runner can terminate only its owned test
 process if normal scoped probe shutdown does not complete.
 Reference: [Bricsys PromptedForPoint](https://developer.bricsys.com/bricscad/help/en_US/CurVer/DevRef/source/html/56081019-d553-bb3d-55f1-afa769b9fee3.htm).
 
+## Opt-in rendering isolation (diagnosis, not qualification)
+
+`-RenderExperiment -UiDriver OBSERVED_CLICK_V2` on the existing wrapper runs a
+five-minute Default → SoftwareOnly → Default experiment in the **owned test
+process only**. The original frozen product, disposable drawing, nonce profile,
+paused MCP boundary, exact pushed harness and cleanup prerequisites still apply.
+No registry/driver/Windows graphics setting is changed. The first120 seconds use
+the existing default WPF process mode; seconds120–240 use software rendering;
+seconds240–300 restore Default. Supported Computer Use observations should cover
+all three stages, using the same layout after baseline preparation. The private
+trace records stage, confirmed process mode and reported WPF tier; a mode value
+or completed timer is not proof of pixels. A backwards clock or >15-second tick
+gap aborts instead of claiming the missing observation interval.
+
+This route never starts the authoring controller or publishes action/ACK
+requests. It emits a `DIAGNOSTIC_ONLY` UI marker with no acceptance checks, which
+the unchanged strict phase validator rejects. The runner's final receipt also
+unconditionally says `DIAGNOSTIC_ONLY` when the explicit switch is set, even if
+three synthetic markers were supplied. A nonzero runner exit is expected and
+does not itself mean cleanup failed. Inspect all restoration receipts separately.
+The original process mode is restored before normal completion and on a caught
+failure; a terminated process cannot persist its process-local render mode.
+
+Default/native qualification explicitly sets the inherited experiment flag to0,
+then restores the previous environment value in existing cleanup. Both allocation
+and receipt freeze the boolean switch. Diagnostic receipts cannot qualify a V25
+predecessor, replace V26 UI acceptance, or establish a driver/product fix. After a
+useful differential result, diagnose the actual source/environment boundary before
+changing a production default. Preserve consumed allocations; no unchanged replay.
+
+The behavioral test compiles the actual state machine against controlled render
+property doubles and replays actual entry/verdict expressions in both runners.
+It covers boundaries, completion, disposal, clock gaps, setter/restore failures,
+an inadmissible baseline and the non-PASS gate. It does not render WPF or run CAD.
+
+Reference: [Microsoft WPF render-thread diagnosis and process-local rendering](https://learn.microsoft.com/en-us/troubleshoot/developer/dotnet/framework/general/wpf-render-thread-failures).
+
 ## Separate native API qualification
 
 The wrapper's opt-in `-NativeApi` runs the existing non-interactive native
