@@ -14,6 +14,7 @@ HELPER = "function Get-OwnedMsiFinalPath {"
 HANDLE_CALL = "[QS3DV25NativeFileDisposition]::GetFinalPathNameByHandleW("
 NORMALIZE_UNC = "\\\\?\\UNC\\"
 NORMALIZE_DOS = "\\\\?\\"
+DOS_BRANCH = "elseif ($resolved.StartsWith('\\\\?\\', [StringComparison]::OrdinalIgnoreCase)) {"
 PROOF_ASSIGN = "$publishedFinalPath = Get-OwnedMsiFinalPath -Stream $publishedStream"
 EXPECTED_ASSIGN = "$expectedPublishedPath = Get-CanonicalAbsolutePath -Path $msi"
 COMPARE = "Test-CanonicalPathEqual -Left $publishedFinalPath -Right $expectedPublishedPath"
@@ -123,6 +124,14 @@ def main() -> int:
         if not validate(mutated):
             print(f"FAIL: guard mutation escaped detection: {label}")
             return 1
+
+    if DOS_BRANCH not in source:
+        print("FAIL: mutation fixture missing: exact DOS normalization branch")
+        return 1
+    dos_branch_mutated = source.replace(DOS_BRANCH, "MUTATED-DOS-NORMALIZATION-BRANCH", 1)
+    if not validate(dos_branch_mutated):
+        print("FAIL: guard mutation escaped detection: exact DOS normalization branch")
+        return 1
 
     without_proof = source.replace(PROOF_ASSIGN, "", 1)
     copy_index = without_proof.find(COPY)
