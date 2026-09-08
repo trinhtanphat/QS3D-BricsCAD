@@ -425,45 +425,239 @@ function Assert-AuthenticodeSigner {
     }
 }
 
-function Assert-SafeArchive {
+function Expand-VerifiedHeldArchive {
     param(
-        [string]$ZipPath,
-        [string]$DestinationRoot,
-        [int64]$MaxExpandedBytes,
-        [int]$MaxEntries
+        [Parameter(Mandatory = $true)][string]$ZipPath,
+        [Parameter(Mandatory = $true)][ValidatePattern('^[0-9A-Fa-f]{64}$')][string]$ExpectedSha256,
+        [Parameter(Mandatory = $true)][string]$DestinationRoot,
+        [Parameter(Mandatory = $true)][int64]$MaxPackageBytes,
+        [Parameter(Mandatory = $true)][int64]$MaxExpandedBytes,
+        [Parameter(Mandatory = $true)][int]$MaxEntries
     )
 
-    $archive = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
-    try {
-        $root = [IO.Path]::GetFullPath($DestinationRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
-        [int64]$expandedBytes = 0
-        $entryCount = 0
-        foreach ($entry in $archive.Entries) {
-            $entryCount++
-            if ($entryCount -gt $MaxEntries) { throw "Package archive exceeds the allowed entry count ($MaxEntries)." }
-            $name = [string]$entry.FullName
-            if ([string]::IsNullOrWhiteSpace($name) -or $name.IndexOf([char]0) -ge 0 -or [IO.Path]::IsPathRooted($name) -or $name.Contains('\') -or $name.Contains(':')) {
-                throw "Unsafe package archive entry: $name"
-            }
-            $relative = $name.TrimEnd('/')
-            if ([string]::IsNullOrWhiteSpace($relative)) { throw "Unsafe package archive entry: $name" }
-            $segments = @($relative.Split('/'))
-            if (@($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) {
-                throw "Unsafe package archive entry: $name"
-            }
-            $target = [IO.Path]::GetFullPath((Join-Path $DestinationRoot ($relative.Replace('/', [IO.Path]::DirectorySeparatorChar))))
-            if (-not $target.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { throw "Unsafe package archive entry: $name" }
-            $entryLength = [int64]$entry.Length
-            if ($entryLength -lt 0 -or $expandedBytes -gt ($MaxExpandedBytes - $entryLength)) {
-                throw "Package expanded size exceeds the allowed maximum ($MaxExpandedBytes bytes)."
-            }
-            $expandedBytes += $entryLength
+    if ($MaxPackageBytes -le 0 -or $MaxExpandedBytes -le 0 -or $MaxEntries -le 0) {
+        throw 'Archive safety limits must all be positive.'
+    }
+
+    function Assert-ExistingExtractionPathChain {
+        param(
+            [Parameter(Mandatory = $true)][string]$Path,
+            [Parameter(Mandatory = $true)][string]$BoundaryRoot,
+            [switch]$AllowOutsideBoundary
+        )
+
+        $pathFull = [IO.Path]::GetFullPath($Path).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+        $boundaryFull = [IO.Path]::GetFullPath($BoundaryRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+        $boundaryPrefix = $boundaryFull + [IO.Path]::DirectorySeparatorChar
+        if (-not $AllowOutsideBoundary -and
+            -not [string]::Equals($pathFull, $boundaryFull, [StringComparison]::OrdinalIgnoreCase) -and
+            -not $pathFull.StartsWith($boundaryPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Package extraction validation escaped the extraction root: $pathFull"
         }
-        if ($entryCount -eq 0) { throw 'Downloaded package archive contains no entries.' }
+
+        $probe = $pathFull
+        while (-not (Test-Path -LiteralPath $probe)) {
+            $parent = [IO.Path]::GetDirectoryName($probe)
+            if ([string]::IsNullOrWhiteSpace($parent) -or [string]::Equals($parent, $probe, [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Package extraction path has no existing ancestor: $pathFull"
+            }
+            $probe = [IO.Path]::GetFullPath($parent).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+        }
+
+        $cursor = Get-Item -LiteralPath $probe -Force -ErrorAction Stop
+        $reachedBoundary = $false
+        while ($null -ne $cursor) {
+            $cursorFull = [IO.Path]::GetFullPath([string]$cursor.FullName).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+            $isBoundary = [string]::Equals($cursorFull, $boundaryFull, [StringComparison]::OrdinalIgnoreCase)
+            if (-not $AllowOutsideBoundary -and -not $isBoundary -and -not $cursorFull.StartsWith($boundaryPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Package extraction validation escaped the extraction root: $cursorFull"
+            }
+            if (($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                if ($isBoundary) { throw "Package extraction root is a reparse point: $cursorFull" }
+                throw "Package extraction target traverses a reparse-point directory: $cursorFull"
+            }
+            if ($isBoundary) {
+                $reachedBoundary = $true
+                break
+            }
+            $cursor = $cursor.Parent
+        }
+        if (-not $AllowOutsideBoundary -and -not $reachedBoundary) {
+            throw "Package extraction path does not resolve through the extraction root: $pathFull"
+        }
     }
-    finally {
-        $archive.Dispose()
+
+    function Ensure-SafeExtractionDirectory {
+        param(
+            [Parameter(Mandatory = $true)][string]$Path,
+            [Parameter(Mandatory = $true)][string]$BoundaryRoot
+        )
+
+        $boundaryFull = [IO.Path]::GetFullPath($BoundaryRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+        $boundaryPrefix = $boundaryFull + [IO.Path]::DirectorySeparatorChar
+        $pathFull = [IO.Path]::GetFullPath($Path).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+        if (-not [string]::Equals($pathFull, $boundaryFull, [StringComparison]::OrdinalIgnoreCase) -and
+            -not $pathFull.StartsWith($boundaryPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Package extraction directory escaped the extraction root: $pathFull"
+        }
+
+        Assert-ExistingExtractionPathChain -Path $boundaryFull -BoundaryRoot $boundaryFull
+        if ([string]::Equals($pathFull, $boundaryFull, [StringComparison]::OrdinalIgnoreCase)) { return }
+
+        $relative = $pathFull.Substring($boundaryPrefix.Length)
+        $current = $boundaryFull
+        foreach ($segment in $relative.Split([IO.Path]::DirectorySeparatorChar)) {
+            if ([string]::IsNullOrWhiteSpace($segment)) { throw "Package extraction directory has an empty path segment: $pathFull" }
+            Assert-ExistingExtractionPathChain -Path $current -BoundaryRoot $boundaryFull
+            $next = [IO.Path]::GetFullPath((Join-Path $current $segment))
+            if (Test-Path -LiteralPath $next) {
+                if (-not (Test-Path -LiteralPath $next -PathType Container)) {
+                    throw "Package extraction directory target already exists as a non-directory: $next"
+                }
+            }
+            else {
+                [IO.Directory]::CreateDirectory($next) | Out-Null
+            }
+            Assert-ExistingExtractionPathChain -Path $next -BoundaryRoot $boundaryFull
+            $current = $next
+        }
     }
+
+    $zipStream = [IO.File]::Open($ZipPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        if ($zipStream.Length -le 0 -or $zipStream.Length -gt $MaxPackageBytes) {
+            throw "Downloaded package size $($zipStream.Length) bytes is outside the allowed range (max $MaxPackageBytes)."
+        }
+
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try {
+            $zipStream.Position = 0
+            $actualSha256 = ([BitConverter]::ToString($sha.ComputeHash($zipStream))).Replace('-', '').ToUpperInvariant()
+        }
+        finally { $sha.Dispose() }
+        if (-not [string]::Equals($actualSha256, $ExpectedSha256, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Downloaded package SHA-256 does not match the update manifest.'
+        }
+
+        $zipStream.Position = 0
+        $archive = [IO.Compression.ZipArchive]::new($zipStream, [IO.Compression.ZipArchiveMode]::Read, $true)
+        try {
+            $destinationFull = [IO.Path]::GetFullPath($DestinationRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+            $rootPrefix = $destinationFull + [IO.Path]::DirectorySeparatorChar
+            $seenTargets = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+            $fileRelatives = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+            $records = [Collections.Generic.List[object]]::new()
+            $invalidFileNameChars = [IO.Path]::GetInvalidFileNameChars()
+            [int64]$expandedBytes = 0
+            $entryCount = 0
+
+            foreach ($entry in $archive.Entries) {
+                $entryCount++
+                if ($entryCount -gt $MaxEntries) { throw "Package archive exceeds the allowed entry count ($MaxEntries)." }
+
+                $name = [string]$entry.FullName
+                if ([string]::IsNullOrWhiteSpace($name) -or $name.IndexOf([char]0) -ge 0 -or [IO.Path]::IsPathRooted($name) -or $name.Contains('\') -or $name.Contains(':')) {
+                    throw "Unsafe package archive entry: $name"
+                }
+                $isDirectory = $name.EndsWith('/', [StringComparison]::Ordinal)
+                $relative = $name.TrimEnd('/')
+                if ([string]::IsNullOrWhiteSpace($relative)) { throw "Unsafe package archive entry: $name" }
+                $segments = @($relative.Split('/'))
+                if ($segments.Count -eq 0) { throw "Unsafe package archive entry: $name" }
+                foreach ($segment in $segments) {
+                    if ([string]::IsNullOrWhiteSpace($segment) -or $segment -eq '.' -or $segment -eq '..' -or
+                        $segment.IndexOfAny($invalidFileNameChars) -ge 0 -or
+                        $segment.EndsWith('.', [StringComparison]::Ordinal) -or $segment.EndsWith(' ', [StringComparison]::Ordinal) -or
+                        $segment -match '^(?i:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)') {
+                        throw "Unsafe package archive entry segment '$segment' in '$name'."
+                    }
+                }
+
+                $normalizedRelative = $segments -join '/'
+                $target = [IO.Path]::GetFullPath((Join-Path $destinationFull ($normalizedRelative.Replace('/', [IO.Path]::DirectorySeparatorChar))))
+                if (-not $target.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw "Unsafe package archive entry: $name" }
+                if (-not $seenTargets.Add($target)) { throw "Duplicate or case-ambiguous package archive target: $name" }
+
+                $entryLength = [int64]$entry.Length
+                if ($entryLength -lt 0 -or $expandedBytes -gt ($MaxExpandedBytes - $entryLength)) {
+                    throw "Package expanded size exceeds the allowed maximum ($MaxExpandedBytes bytes)."
+                }
+                if ($isDirectory -and $entryLength -ne 0) { throw "Package directory entry must have zero length: $name" }
+                $expandedBytes += $entryLength
+                if (-not $isDirectory) { $null = $fileRelatives.Add($normalizedRelative) }
+                $records.Add([pscustomobject]@{
+                    Entry = $entry
+                    Relative = $normalizedRelative
+                    Target = $target
+                    IsDirectory = $isDirectory
+                    Length = $entryLength
+                })
+            }
+            if ($entryCount -eq 0) { throw 'Downloaded package archive contains no entries.' }
+
+            foreach ($record in $records) {
+                $parts = @(([string]$record.Relative).Split('/'))
+                for ($index = 1; $index -lt $parts.Count; $index++) {
+                    $ancestor = ($parts[0..($index - 1)] -join '/')
+                    if ($fileRelatives.Contains($ancestor)) {
+                        throw "Package archive file/directory target conflict: $($record.Relative) has file ancestor $ancestor."
+                    }
+                }
+            }
+
+            Assert-ExistingExtractionPathChain -Path $destinationFull -BoundaryRoot $destinationFull -AllowOutsideBoundary
+            [IO.Directory]::CreateDirectory($destinationFull) | Out-Null
+            $rootItem = Get-Item -LiteralPath $destinationFull -Force -ErrorAction Stop
+            if (($rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Package extraction root is a reparse point: $($rootItem.FullName)"
+            }
+            Assert-ExistingExtractionPathChain -Path $destinationFull -BoundaryRoot $destinationFull
+
+            foreach ($record in $records) {
+                if ($record.IsDirectory) {
+                    Ensure-SafeExtractionDirectory -Path ([string]$record.Target) -BoundaryRoot $destinationFull
+                    continue
+                }
+
+                $parent = [IO.Path]::GetDirectoryName([string]$record.Target)
+                Ensure-SafeExtractionDirectory -Path $parent -BoundaryRoot $destinationFull
+                Assert-ExistingExtractionPathChain -Path $parent -BoundaryRoot $destinationFull
+
+                $entryStream = $record.Entry.Open()
+                $output = $null
+                $completed = $false
+                try {
+                    Assert-ExistingExtractionPathChain -Path $parent -BoundaryRoot $destinationFull
+                    $output = [IO.File]::Open([string]$record.Target, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+                    $buffer = New-Object byte[] 65536
+                    [int64]$written = 0
+                    while ($true) {
+                        $read = $entryStream.Read($buffer, 0, $buffer.Length)
+                        if ($read -le 0) { break }
+                        if ($written -gt ([int64]$record.Length - [int64]$read)) {
+                            throw "Package archive entry expanded beyond its admitted length: $($record.Relative)"
+                        }
+                        $output.Write($buffer, 0, $read)
+                        $written += [int64]$read
+                    }
+                    if ($written -ne [int64]$record.Length) {
+                        throw "Package archive entry length changed during held extraction: $($record.Relative)"
+                    }
+                    $output.Flush($true)
+                    $completed = $true
+                }
+                finally {
+                    if ($output) { $output.Dispose() }
+                    $entryStream.Dispose()
+                    if (-not $completed -and (Test-Path -LiteralPath ([string]$record.Target))) {
+                        Remove-Item -LiteralPath ([string]$record.Target) -Force -ErrorAction SilentlyContinue
+                    }
+                }
+            }
+        }
+        finally { $archive.Dispose() }
+    }
+    finally { $zipStream.Dispose() }
 }
 
 function Assert-PackageRoot {
@@ -576,13 +770,14 @@ try {
         if ($zipFile.Length -le 0 -or $zipFile.Length -gt $maxBytes) {
             throw "Downloaded package size $($zipFile.Length) bytes is outside the allowed range (max $maxBytes)."
         }
-        $actualZipHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToUpperInvariant()
-        if ($actualZipHash -ne $expectedZipHash) { throw 'Downloaded package SHA-256 does not match the update manifest.' }
 
         $maxExpandedBytes = [int64]$MaxExpandedPackageSizeMB * 1MB
-        Assert-SafeArchive -ZipPath $zipPath -DestinationRoot $extractRoot -MaxExpandedBytes $maxExpandedBytes -MaxEntries $MaxArchiveEntries
-        New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
-        Expand-Archive -LiteralPath $zipPath -DestinationPath $extractRoot -Force
+        Expand-VerifiedHeldArchive -ZipPath $zipPath `
+            -ExpectedSha256 $expectedZipHash `
+            -DestinationRoot $extractRoot `
+            -MaxPackageBytes $maxBytes `
+            -MaxExpandedBytes $maxExpandedBytes `
+            -MaxEntries $MaxArchiveEntries
         Assert-PackageRoot -Directory $extractRoot -ExpectedSigner $expectedSigner
 
         $downloadedPluginPath = Join-Path $extractRoot 'QS3D.BricsCAD.V25.dll'
