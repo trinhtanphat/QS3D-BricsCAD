@@ -5,6 +5,7 @@ param(
     [ValidatePattern('^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$')][string]$PackageReleaseTag,
     [Parameter(Mandatory = $true)][ValidatePattern('^[0-9A-Fa-f]{40}$')][string]$SourceCommit,
     [string]$HostReferenceStatePath = $env:V26_HOST_REFERENCE_STATE,
+    [string]$InstallerSha256 = $env:BRICSCAD_V26_PINNED_MSI_SHA256,
     [Parameter(Mandatory = $true)][string]$OutputPath
 )
 
@@ -72,6 +73,10 @@ function Read-StrictUtf8Json([string]$Path, [string]$Label) {
     finally { $stream.Dispose() }
 }
 
+if ([string]::IsNullOrWhiteSpace($InstallerSha256) -or $InstallerSha256 -cnotmatch '^[0-9a-f]{64}$') {
+    throw 'V26 admitted installer SHA-256 must be canonical lowercase 64-hex.'
+}
+
 $hostState = Read-StrictUtf8Json -Path $HostReferenceStatePath -Label 'V26 host-reference state'
 if ([int]$hostState.Version -ne 1) { throw 'V26 host-reference state version must be 1.' }
 $hostFiles = @($hostState.Files)
@@ -127,11 +132,12 @@ try {
         productVersion = $productVersion
         sourceCommit = $SourceCommit.ToLowerInvariant()
         packageSha256 = $zipHash
+        installerSha256 = $InstallerSha256
         hostReferences = @($hostReferences)
     }
     $parent = Split-Path -Parent ([IO.Path]::GetFullPath($OutputPath))
     if (-not (Test-Path -LiteralPath $parent -PathType Container)) { New-Item -ItemType Directory -Path $parent | Out-Null }
     $provenance | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $OutputPath -Encoding UTF8
-    [pscustomobject]@{ SourceCommit = $provenance.sourceCommit; PackageSha256 = $zipHash; ProductVersion = $productVersion; HostReferences = @($hostReferences) }
+    [pscustomobject]@{ SourceCommit = $provenance.sourceCommit; PackageSha256 = $zipHash; ProductVersion = $productVersion; InstallerSha256 = $InstallerSha256; HostReferences = @($hostReferences) }
 }
 finally { $zipStream.Dispose() }

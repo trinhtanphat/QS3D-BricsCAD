@@ -7,6 +7,7 @@ param(
     [Parameter(Mandatory = $true)][ValidatePattern('^[0-9A-Fa-f]{40}$')][string]$ExpectedSourceCommit,
     [Parameter(Mandatory = $true)][string]$ExpectedReleaseTag,
     [string]$ExpectedPackageReleaseTag,
+    [string]$ExpectedInstallerSha256 = $env:BRICSCAD_V26_PINNED_MSI_SHA256,
     [string]$AdmittedScript
 )
 
@@ -67,6 +68,25 @@ function Read-HeldText([pscustomobject]$Held, [string]$Label, [int64]$MaxBytes =
     catch [Text.DecoderFallbackException] { throw "$Label is not strict UTF-8." }
 }
 
+function Get-JsonPropertyOccurrenceCount([string]$JsonText, [string]$PropertyName) {
+    $count = 0
+    $propertyPattern = '"(?:\\["\\/bfnrt]|\\u[0-9A-Fa-f]{4}|[^"\\\x00-\x1F])*"\s*:'
+    foreach ($match in [Text.RegularExpressions.Regex]::Matches($JsonText, $propertyPattern)) {
+        $colon = $match.Value.LastIndexOf(':')
+        if ($colon -le 0) { continue }
+        $encodedName = $match.Value.Substring(0, $colon).Trim()
+        try { $decodedName = [string]($encodedName | ConvertFrom-Json -ErrorAction Stop) }
+        catch { continue }
+        if ([string]::Equals($decodedName, $PropertyName, [StringComparison]::Ordinal)) { $count++ }
+    }
+    return $count
+}
+
+if ([string]::IsNullOrWhiteSpace($ExpectedInstallerSha256) -or $ExpectedInstallerSha256 -cnotmatch '^[0-9A-Fa-f]{64}$') {
+    throw 'Expected admitted V26 installer SHA-256 must be 64-hex.'
+}
+$expectedInstallerSha256Canonical = $ExpectedInstallerSha256.ToLowerInvariant()
+
 $held = New-Object 'System.Collections.Generic.List[object]'
 try {
     $zipHeld = Open-Held -Path $PackageZip -Label 'V26 candidate ZIP'; $held.Add($zipHeld) | Out-Null
@@ -80,12 +100,19 @@ try {
     if ($checksumText -notmatch '^([0-9A-Fa-f]{64})  QS3D-BricsCAD-V26\.zip$') { throw 'V26 candidate checksum is malformed.' }
     if (-not [string]::Equals($Matches[1], $zipHash, [StringComparison]::OrdinalIgnoreCase)) { throw 'V26 candidate checksum does not bind the held ZIP generation.' }
 
-    try { $provenance = (Read-HeldText -Held $provenanceHeld -Label 'V26 candidate provenance') | ConvertFrom-Json -ErrorAction Stop }
+    $provenanceText = Read-HeldText -Held $provenanceHeld -Label 'V26 candidate provenance'
+    if ((Get-JsonPropertyOccurrenceCount -JsonText $provenanceText -PropertyName 'installerSha256') -ne 1) {
+        throw 'V26 candidate provenance must contain exactly one installerSha256 property.'
+    }
+    try { $provenance = $provenanceText | ConvertFrom-Json -ErrorAction Stop }
     catch { throw "V26 candidate provenance JSON is invalid: $($_.Exception.Message)" }
     if ([string]$provenance.product -ne 'QS3D' -or [string]$provenance.target -ne 'BricsCAD V26 x64') { throw 'V26 candidate provenance product/target identity is invalid.' }
     if (-not [string]::Equals([string]$provenance.releaseTag, $ExpectedReleaseTag, [StringComparison]::Ordinal)) { throw 'V26 candidate provenance release tag mismatch.' }
     if (-not [string]::Equals([string]$provenance.sourceCommit, $ExpectedSourceCommit, [StringComparison]::OrdinalIgnoreCase)) { throw 'V26 candidate provenance source commit mismatch.' }
     if (-not [string]::Equals([string]$provenance.packageSha256, $zipHash, [StringComparison]::OrdinalIgnoreCase)) { throw 'V26 candidate provenance package digest mismatch.' }
+    $installerSha256 = [string]$provenance.installerSha256
+    if ($installerSha256 -cnotmatch '^[0-9a-f]{64}$') { throw 'V26 candidate provenance installer SHA-256 is noncanonical.' }
+    if (-not [string]::Equals($installerSha256, $expectedInstallerSha256Canonical, [StringComparison]::Ordinal)) { throw 'V26 candidate provenance installer digest mismatch.' }
 
     $hostReferences = @($provenance.hostReferences)
     if ($hostReferences.Count -ne $requiredHostNames.Count) { throw 'V26 candidate provenance must contain exactly four held host-reference identities.' }
@@ -130,7 +157,7 @@ try {
     }
 
     foreach ($item in $held) { Assert-Held -Held $item -Label 'V26 candidate identity input' }
-    $identity = [pscustomobject]@{ SourceCommit=$ExpectedSourceCommit.ToLowerInvariant(); ReleaseTag=$ExpectedReleaseTag; ProductVersion=[string]$metadata.productVersion; PackageSha256=$zipHash; Signed=($null -ne $updateHeld); HostReferences=$hostReferences }
+    $identity = [pscustomobject]@{ SourceCommit=$ExpectedSourceCommit.ToLowerInvariant(); ReleaseTag=$ExpectedReleaseTag; ProductVersion=[string]$metadata.productVersion; PackageSha256=$zipHash; InstallerSha256=$installerSha256; Signed=($null -ne $updateHeld); HostReferences=$hostReferences }
     if ($null -ne $admittedScriptBlock) {
         & $admittedScriptBlock
         foreach ($item in $held) { Assert-Held -Held $item -Label 'V26 candidate identity input after publication' }
