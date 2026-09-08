@@ -30,7 +30,7 @@ public static class QS3DV25NativeFileDisposition
     [StructLayout(LayoutKind.Sequential)]
     public struct FILE_DISPOSITION_INFO
     {
-        [MarshalAs(UnmanagedType.Bool)]
+        [MarshalAs(UnmanagedType.U1)]
         public bool DeleteFile;
     }
 
