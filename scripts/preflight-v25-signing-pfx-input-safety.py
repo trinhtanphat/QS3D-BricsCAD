@@ -89,19 +89,31 @@ def main() -> None:
     )
 
     require(source, "Remove-ImportedCertificates -Thumbprints $importedNewThumbprints", "ephemeral certificate rollback")
+    require(source, "$operationError = $null", "operation failure preservation")
+    require(source, "$cleanupError = $null", "PFX cleanup failure capture")
+    require(source, "Remove-Item -LiteralPath $pfxPath -Force -ErrorAction Stop", "mandatory temporary PFX cleanup")
+    require(source, "if (Test-Path -LiteralPath $pfxPath -ErrorAction Stop)", "post-delete PFX absence verification")
+    require(source, "Temporary signing PFX still exists after cleanup", "cleanup persistence failure")
+    require(source, "Signing operation failed and temporary PFX cleanup also failed.", "aggregate operation/PFX cleanup failure")
     require(source, "[Array]::Clear($bytes, 0, $bytes.Length)", "decoded secret zeroing")
-    require(source, "Remove-Item -LiteralPath $pfxPath -Force -ErrorAction SilentlyContinue", "temporary PFX cleanup")
+    require_before(
+        source,
+        "Remove-Item -LiteralPath $pfxPath -Force -ErrorAction Stop",
+        "[Array]::Clear($bytes, 0, $bytes.Length)",
+        "PFX path cleanup must be attempted before decoded secret buffer zeroing",
+    )
 
     forbidden = (
+        "Remove-Item -LiteralPath $pfxPath -Force -ErrorAction SilentlyContinue",
         "Get-ChildItem -Path Cert:\\CurrentUser\\My | Remove-Item",
         "Remove-Item -Path Cert:\\CurrentUser\\My",
         "taskkill",
     )
     for token in forbidden:
         if token in source:
-            fail(f"signing PFX importer contains forbidden broad cleanup primitive: {token}")
+            fail(f"signing PFX importer contains forbidden broad/fail-open cleanup primitive: {token}")
 
-    print("V25 signing PFX input/temp-path safety preflight: PASS")
+    print("V25 signing PFX input/temp-path/cleanup safety preflight: PASS")
 
 
 if __name__ == "__main__":
