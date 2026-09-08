@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -39,7 +40,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = Project("P-QSDB-XML-TEXT");
             var element = new ProjectElement("E-QSDB-XML-TEXT", ElementCategory.Beam, string.Empty, string.Empty, string.Empty);
-            element.DependsOn.Add("DEP-\u0001");
+            AddPersistedDependency(element, "DEP-\u0001");
             project.Elements.Add(element);
             AssertPreflightFailure(project, "invalid-relation-control");
         }
@@ -93,6 +94,19 @@ namespace QS3D.Core.SmokeTests
                 SchemaVersion = ProjectState.CurrentSchemaVersion - 1
             };
             return project;
+        }
+
+        private static void AddPersistedDependency(ProjectElement element, string dependency)
+        {
+            var relationField = typeof(ProjectElement).GetField("_dependsOn", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement persisted dependency backing relation field was not found.");
+            var relation = relationField.GetValue(element)
+                ?? throw new InvalidOperationException("ProjectElement persisted dependency backing relation was not found.");
+            var valuesField = relation.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement persisted dependency backing values field was not found.");
+            var values = valuesField.GetValue(relation) as List<string>
+                ?? throw new InvalidOperationException("ProjectElement persisted dependency backing values were not found.");
+            values.Add(dependency);
         }
 
         private static void AssertPreflightFailure(ProjectState project, string suffix)
