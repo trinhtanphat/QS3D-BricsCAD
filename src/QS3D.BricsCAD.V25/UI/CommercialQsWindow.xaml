@@ -1,8 +1,8 @@
 <Window x:Class="QS3D.BricsCAD.V25.UI.CommercialQsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="QS3D • Commercial QS" Height="760" Width="1180"
-        MinWidth="960" MinHeight="620" WindowStartupLocation="CenterOwner">
+        Title="QS3D • Commercial QS" Height="820" Width="1220"
+        MinWidth="980" MinHeight="650" WindowStartupLocation="CenterOwner">
     <Window.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -28,11 +28,11 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel>
                     <TextBlock Text="COMMERCIAL QS" FontWeight="Bold" FontSize="20"/>
-                    <TextBlock Text="Variation • IPC • Final Account — monetary authority stays in QS3D.Core.Commercial"
+                    <TextBlock Text="Variation • IPC • Final Account • Tender • CVR — validated commercial authority stays in QS3D.Core"
                                Style="{StaticResource Caption}" Margin="0,4,0,0"/>
                 </StackPanel>
-                <Button Grid.Column="1" Content="EXPORT CSV" Padding="18,7" Margin="12,0,0,0"
-                        Click="OnExportCommercialCsv" ToolTip="Export the currently validated Core results"/>
+                <Button Grid.Column="1" Content="EXPORT XLSX" Padding="18,7" Margin="12,0,0,0"
+                        Click="OnExportCommercialWorkbook" ToolTip="Export validated Core results with audit provenance"/>
             </Grid>
         </Border>
 
@@ -198,6 +198,122 @@
                     <TextBlock x:Name="FinalAccountSummary" Grid.Row="3" Margin="0,18,0,0" FontWeight="SemiBold"
                                Text="Build a Variation register first, then reconcile through FinalAccountService." TextWrapping="Wrap"/>
                 </Grid>
+            </TabItem>
+
+            <TabItem Header="TENDER / PROCUREMENT">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="10">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="110"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Package ID" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TenderPackageIdBox" Grid.Column="1" Text="PKG-001" Margin="0,0,12,0"/>
+                            <TextBlock Grid.Column="2" Text="Currency" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TenderCurrencyBox" Grid.Column="3" Text="VND" Margin="0,0,12,0"/>
+                            <TextBlock Grid.Column="4" Text="Revision" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TenderPackageRevisionBox" Grid.Column="5" Text="R1"/>
+                        </Grid>
+                        <TextBlock Text="Description" Margin="0,10,0,4" Style="{StaticResource Caption}"/>
+                        <TextBox x:Name="TenderDescriptionBox" Text="Main works procurement package"/>
+                        <TextBlock Text="Requirements: item code | description | unit | quantity" Margin="0,10,0,4" Style="{StaticResource Caption}"/>
+                        <TextBox x:Name="TenderRequirementLinesBox" Height="72" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12"
+                                 Text="A | Concrete works | m3 | 100&#x0a;B | Reinforcement works | kg | 1000"/>
+                        <TextBlock Text="Mandatory compliance: code | description | true/false" Margin="0,10,0,4" Style="{StaticResource Caption}"/>
+                        <TextBox x:Name="TenderComplianceRequirementLinesBox" Height="58" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12"
+                                 Text="INSURANCE | Valid insurance | true"/>
+                        <TextBlock Text="Bid prices: bid id | bidder | item code | unit rate" Margin="0,10,0,4" Style="{StaticResource Caption}"/>
+                        <TextBox x:Name="TenderBidLinesBox" Height="90" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12"
+                                 Text="BID-A | Alpha Contractor | A | 900000&#x0a;BID-A | Alpha Contractor | B | 120000&#x0a;BID-B | Beta Contractor | A | 950000&#x0a;BID-B | Beta Contractor | B | 125000"/>
+                        <TextBlock Text="Compliance responses: bid id | requirement code | true/false | note" Margin="0,10,0,4" Style="{StaticResource Caption}"/>
+                        <TextBox x:Name="TenderComplianceResponseLinesBox" Height="72" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12"
+                                 Text="BID-A | INSURANCE | true | verified&#x0a;BID-B | INSURANCE | true | verified"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                            <Button Content="EVALUATE TENDER" Padding="16,6" Click="OnEvaluateTender"/>
+                            <TextBlock x:Name="TenderSummary" Margin="12,7,0,0" FontWeight="SemiBold" Text="Evaluate a closed package through TenderProcurementService." TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <Grid Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="130"/>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="110"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Award ID" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TenderAwardIdBox" Grid.Column="1" Text="AWD-001" Margin="0,0,12,0"/>
+                            <TextBlock Grid.Column="2" Text="Bid" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TenderAwardBidBox" Grid.Column="3" Text="BID-A" Margin="0,0,12,0"/>
+                            <TextBlock Grid.Column="4" Text="Award revision" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TenderAwardRevisionBox" Grid.Column="5" Text="R1" Margin="0,0,12,0"/>
+                            <Button Grid.Column="6" Content="AWARD TENDER" Padding="16,6" Click="OnAwardTender"/>
+                        </Grid>
+                        <TextBlock x:Name="TenderAwardSummary" Margin="0,10,0,0" FontWeight="SemiBold" Text="No award recorded yet." TextWrapping="Wrap"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="CVR / FORECAST">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="10">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="140"/>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="100"/>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="100"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Period ID" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="CvrPeriodIdBox" Grid.Column="1" Text="P-2026-09" Margin="0,0,12,0"/>
+                            <TextBlock Grid.Column="2" Text="Currency" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="CvrCurrencyBox" Grid.Column="3" Text="VND" Margin="0,0,12,0"/>
+                            <TextBlock Grid.Column="4" Text="Revision" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="CvrRevisionBox" Grid.Column="5" Text="R1"/>
+                        </Grid>
+                        <UniformGrid Columns="4" Margin="0,12,0,0">
+                            <StackPanel Margin="0,0,8,0"><TextBlock Text="Original budget" Style="{StaticResource Caption}"/><TextBox x:Name="CvrOriginalBudgetBox" Text="1000000000"/></StackPanel>
+                            <StackPanel Margin="0,0,8,0"><TextBlock Text="Approved variation net" Style="{StaticResource Caption}"/><TextBox x:Name="CvrVariationNetBox" Text="120000000"/></StackPanel>
+                            <StackPanel Margin="0,0,8,0"><TextBlock Text="Committed cost" Style="{StaticResource Caption}"/><TextBox x:Name="CvrCommittedCostBox" Text="900000000"/></StackPanel>
+                            <StackPanel><TextBlock Text="Actual cost" Style="{StaticResource Caption}"/><TextBox x:Name="CvrActualCostBox" Text="400000000"/></StackPanel>
+                        </UniformGrid>
+                        <UniformGrid Columns="3" Margin="0,12,0,0">
+                            <StackPanel Margin="0,0,8,0"><TextBlock Text="Accrued cost" Style="{StaticResource Caption}"/><TextBox x:Name="CvrAccruedCostBox" Text="100000000"/></StackPanel>
+                            <StackPanel Margin="0,0,8,0"><TextBlock Text="Earned value" Style="{StaticResource Caption}"/><TextBox x:Name="CvrEarnedValueBox" Text="650000000"/></StackPanel>
+                            <StackPanel><TextBlock Text="Forecast cost to complete" Style="{StaticResource Caption}"/><TextBox x:Name="CvrForecastToCompleteBox" Text="450000000"/></StackPanel>
+                        </UniformGrid>
+                        <Button Content="EVALUATE CVR" HorizontalAlignment="Left" Padding="16,6" Margin="0,12,0,0" Click="OnEvaluateCvr"/>
+                        <TextBlock x:Name="CvrSummary" Margin="0,10,0,0" FontWeight="SemiBold" Text="Evaluate the commercial control period through Core." TextWrapping="Wrap"/>
+                        <Separator Margin="0,14,0,12"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="110"/>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="210"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Next revision" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="CvrTransitionRevisionBox" Grid.Column="1" Text="R2" Margin="0,0,12,0"/>
+                            <TextBlock Grid.Column="2" Text="Reopen reason" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="CvrReopenReasonBox" Grid.Column="3" Text="Forecast update required" Margin="0,0,12,0"/>
+                            <Button Grid.Column="4" Content="FREEZE" Padding="14,6" Margin="0,0,8,0" Click="OnFreezeCvr"/>
+                            <Button Grid.Column="5" Content="REOPEN" Padding="14,6" Click="OnReopenCvr"/>
+                        </Grid>
+                        <Grid Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="110"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Revised forecast to complete" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="CvrRevisedForecastBox" Grid.Column="1" Text="400000000" Margin="0,0,12,0"/>
+                            <TextBlock Grid.Column="2" Text="Revision" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="CvrForecastRevisionBox" Grid.Column="3" Text="R3" Margin="0,0,12,0"/>
+                            <Button Grid.Column="4" Content="REVISE FORECAST" Padding="14,6" Click="OnReviseCvrForecast"/>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
         </TabControl>
 

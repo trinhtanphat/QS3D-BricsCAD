@@ -77,35 +77,14 @@ def validate(source: str) -> list[str]:
     precommit_compare_pos = source.find(PRECOMMIT_COMPARE, precommit_proof_pos if precommit_proof_pos >= 0 else 0)
     precommit_mismatch_pos = source.find(PRECOMMIT_MISMATCH, precommit_compare_pos if precommit_compare_pos >= 0 else 0)
     commit_pos = source.find(COMMIT, precommit_mismatch_pos if precommit_mismatch_pos >= 0 else 0)
-    if min(
-        open_pos,
-        proof_pos,
-        expected_pos,
-        compare_pos,
-        mismatch_pos,
-        copy_pos,
-        precommit_proof_pos,
-        precommit_compare_pos,
-        precommit_mismatch_pos,
-        commit_pos,
-    ) < 0:
+    if min(open_pos, proof_pos, expected_pos, compare_pos, mismatch_pos, copy_pos, precommit_proof_pos, precommit_compare_pos, precommit_mismatch_pos, commit_pos) < 0:
         failures.append("creator-handle final-destination proof sequence is incomplete")
     else:
-        if not (
-            open_pos < proof_pos < compare_pos < mismatch_pos < copy_pos
-            and open_pos < expected_pos < compare_pos
-        ):
-            failures.append(
-                "creator-handle final-destination identity must be proven fail-closed after CREATE_NEW and before any staging payload bytes are copied"
-            )
-        if not (
-            copy_pos < precommit_proof_pos < precommit_compare_pos < precommit_mismatch_pos < commit_pos
-        ):
-            failures.append(
-                "creator-handle final-destination identity must be re-proven after payload verification and before delete-disposition commit"
-            )
+        if not (open_pos < proof_pos < compare_pos < mismatch_pos < copy_pos and open_pos < expected_pos < compare_pos):
+            failures.append("creator-handle final-destination identity must be proven fail-closed after CREATE_NEW and before any staging payload bytes are copied")
+        if not (copy_pos < precommit_proof_pos < precommit_compare_pos < precommit_mismatch_pos < commit_pos):
+            failures.append("creator-handle final-destination identity must be re-proven after payload verification and before delete-disposition commit")
 
-    # Repeating pathname admission is not a substitute for a handle-bound proof.
     if 0 <= open_pos < copy_pos and HANDLE_CALL not in source[source.find(HELPER):open_pos]:
         failures.append("final-destination proof helper must query the creator handle, not only repeat pathname checks")
 
@@ -120,7 +99,6 @@ def main() -> int:
             print(f"FAIL: {message}")
         return 1
 
-    # Mutation-lock every semantic site so duplicate literals cannot create false confidence.
     mutations = (
         (DECL, "native final-path declaration"),
         (HELPER, "final-path helper"),
@@ -142,28 +120,16 @@ def main() -> int:
             print(f"FAIL: guard mutation escaped detection: {label}")
             return 1
 
-    # Ordering mutation: moving the first proof after CopyTo must fail.
     without_proof = source.replace(PROOF_ASSIGN, "", 1)
     copy_index = without_proof.find(COPY)
-    ordering_mutated = (
-        without_proof[: copy_index + len(COPY)]
-        + "\n"
-        + PROOF_ASSIGN
-        + without_proof[copy_index + len(COPY) :]
-    )
+    ordering_mutated = without_proof[: copy_index + len(COPY)] + "\n" + PROOF_ASSIGN + without_proof[copy_index + len(COPY) :]
     if not validate(ordering_mutated):
         print("FAIL: guard mutation escaped detection: first proof moved after payload copy")
         return 1
 
-    # Ordering mutation: moving the re-proof after commit must fail.
     without_reproof = source.replace(PRECOMMIT_PROOF, "", 1)
     commit_index = without_reproof.find(COMMIT)
-    reproof_mutated = (
-        without_reproof[: commit_index + len(COMMIT)]
-        + "\n"
-        + PRECOMMIT_PROOF
-        + without_reproof[commit_index + len(COMMIT) :]
-    )
+    reproof_mutated = without_reproof[: commit_index + len(COMMIT)] + "\n" + PRECOMMIT_PROOF + without_reproof[commit_index + len(COMMIT) :]
     if not validate(reproof_mutated):
         print("FAIL: guard mutation escaped detection: pre-commit re-proof moved after commit")
         return 1

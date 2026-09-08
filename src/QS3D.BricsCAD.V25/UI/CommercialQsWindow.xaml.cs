@@ -3,13 +3,14 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using Bricscad.ApplicationServices;
 using Microsoft.Win32;
+using QS3D.Core.Audit;
 using QS3D.Core.Commercial;
 using QS3D.Core.Cost;
+using QS3D.Core.Export;
 
 namespace QS3D.BricsCAD.V25.UI
 {
@@ -19,6 +20,11 @@ namespace QS3D.BricsCAD.V25.UI
         private CommercialVariationRegister? _variationRegister;
         private InterimPaymentCertificate? _ipc;
         private FinalAccountResult? _finalAccount;
+        private TenderProcurementPackage? _tenderPackage;
+        private TenderProcurementEvaluation? _tenderEvaluation;
+        private TenderAwardDecision? _tenderAward;
+        private CommercialControlPeriod? _cvrPeriod;
+        private CommercialCostControlResult? _cvrResult;
 
         public CommercialQsWindow(Document document)
         {
@@ -153,25 +159,190 @@ namespace QS3D.BricsCAD.V25.UI
             }
         }
 
-        private void OnExportCommercialCsv(object sender, RoutedEventArgs e)
+        private void OnEvaluateTender(object sender, RoutedEventArgs e)
         {
             try
             {
-                if (_variationRegister == null && _ipc == null && _finalAccount == null)
-                    throw new InvalidOperationException("Build at least one validated commercial result before export.");
+                var packageId = RequireToken(TenderPackageIdBox.Text, "tender package id");
+                var currency = CanonicalCurrency(TenderCurrencyBox.Text);
+                _tenderPackage = new TenderProcurementPackage(
+                    packageId,
+                    RequireText(TenderDescriptionBox.Text, "tender package description"),
+                    currency,
+                    ProcurementPackageStatus.Closed,
+                    ParseTenderRequirements(TenderRequirementLinesBox.Text),
+                    ParseTenderComplianceRequirements(TenderComplianceRequirementLinesBox.Text),
+                    ParseTenderBids(TenderBidLinesBox.Text, currency),
+                    new CommercialRevisionRef("procurement-package", packageId, RequireToken(TenderPackageRevisionBox.Text, "tender package revision")));
 
+                _tenderEvaluation = new TenderProcurementService().Evaluate(
+                    _tenderPackage,
+                    ParseTenderComplianceResponses(TenderComplianceResponseLinesBox.Text));
+                _tenderAward = null;
+                CommercialWorkflowAudit.RecordTenderEvaluation(CommercialAudit(), _tenderEvaluation);
+
+                if (!string.IsNullOrWhiteSpace(_tenderEvaluation.RecommendedBidId))
+                    TenderAwardBidBox.Text = _tenderEvaluation.RecommendedBidId;
+                TenderSummary.Text = string.Format(
+                    CultureInfo.InvariantCulture,
+                    "Package {0} • {1} bid(s) • recommended {2} • revision {3}",
+                    _tenderPackage.PackageId,
+                    _tenderPackage.Bids.Count,
+                    string.IsNullOrWhiteSpace(_tenderEvaluation.RecommendedBidId) ? "none" : _tenderEvaluation.RecommendedBidId,
+                    _tenderPackage.Revision.RevisionId);
+                TenderAwardSummary.Text = "No award recorded for the current evaluation.";
+                SetStatus("Tender evaluated by TenderProcurementService; audit event recorded in the canonical QS3D project state.");
+            }
+            catch (Exception ex)
+            {
+                SetStatus("Tender evaluation rejected: " + ex.Message);
+            }
+        }
+
+        private void OnAwardTender(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var package = RequireTenderPackage();
+                var evaluation = RequireTenderEvaluation();
+                var awardId = RequireToken(TenderAwardIdBox.Text, "tender award id");
+                _tenderAward = new TenderProcurementService().Award(
+                    package,
+                    evaluation,
+                    awardId,
+                    RequireToken(TenderAwardBidBox.Text, "tender award bid id"),
+                    new CommercialRevisionRef("procurement-award", awardId, RequireToken(TenderAwardRevisionBox.Text, "tender award revision")));
+                CommercialWorkflowAudit.RecordTenderAward(CommercialAudit(), _tenderAward);
+                TenderAwardSummary.Text = string.Format(
+                    CultureInfo.InvariantCulture,
+                    "Award {0} • {1} / {2} • evaluated total {3:N2} {4} • revision {5}",
+                    _tenderAward.AwardId,
+                    _tenderAward.BidId,
+                    _tenderAward.Bidder,
+                    _tenderAward.EvaluatedTotal,
+                    _tenderAward.Currency,
+                    _tenderAward.AwardRevision.RevisionId);
+                SetStatus("Tender award validated by TenderProcurementService and recorded in the canonical audit trail.");
+            }
+            catch (Exception ex)
+            {
+                SetStatus("Tender award rejected: " + ex.Message);
+            }
+        }
+
+        private void OnEvaluateCvr(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var periodId = RequireToken(CvrPeriodIdBox.Text, "CVR period id");
+                _cvrPeriod = new CommercialControlPeriod(
+                    periodId,
+                    CanonicalCurrency(CvrCurrencyBox.Text),
+                    CommercialControlPeriodStatus.Open,
+                    ParseDecimal(CvrOriginalBudgetBox.Text, "CVR original budget"),
+                    ParseDecimal(CvrVariationNetBox.Text, "CVR approved variation net change"),
+                    ParseDecimal(CvrCommittedCostBox.Text, "CVR committed cost"),
+                    ParseDecimal(CvrActualCostBox.Text, "CVR actual cost"),
+                    ParseDecimal(CvrAccruedCostBox.Text, "CVR accrued cost"),
+                    ParseDecimal(CvrEarnedValueBox.Text, "CVR earned value"),
+                    ParseDecimal(CvrForecastToCompleteBox.Text, "CVR forecast cost to complete"),
+                    string.Empty,
+                    new CommercialRevisionRef("commercial-control-period", periodId, RequireToken(CvrRevisionBox.Text, "CVR revision")));
+                _cvrResult = new CommercialCostControlService().Evaluate(_cvrPeriod);
+                CommercialWorkflowAudit.RecordCvrEvaluation(CommercialAudit(), _cvrResult);
+                UpdateCvrSummary();
+                SetStatus("CVR evaluated by CommercialCostControlService; Core owns revised budget, EAC, variance and margin.");
+            }
+            catch (Exception ex)
+            {
+                SetStatus("CVR evaluation rejected: " + ex.Message);
+            }
+        }
+
+        private void OnFreezeCvr(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var period = RequireCvrPeriod();
+                _cvrPeriod = new CommercialCostControlService().Freeze(
+                    period,
+                    CvrRevision(period.PeriodId, CvrTransitionRevisionBox.Text, "CVR freeze revision"));
+                _cvrResult = new CommercialCostControlService().Evaluate(_cvrPeriod);
+                CommercialWorkflowAudit.RecordCvrFreeze(CommercialAudit(), _cvrPeriod);
+                UpdateCvrSummary();
+                SetStatus("CVR period frozen with a fresh Core revision.");
+            }
+            catch (Exception ex)
+            {
+                SetStatus("CVR freeze rejected: " + ex.Message);
+            }
+        }
+
+        private void OnReopenCvr(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var period = RequireCvrPeriod();
+                _cvrPeriod = new CommercialCostControlService().Reopen(
+                    period,
+                    RequireText(CvrReopenReasonBox.Text, "CVR reopen reason"),
+                    CvrRevision(period.PeriodId, CvrTransitionRevisionBox.Text, "CVR reopen revision"));
+                _cvrResult = new CommercialCostControlService().Evaluate(_cvrPeriod);
+                CommercialWorkflowAudit.RecordCvrReopen(CommercialAudit(), _cvrPeriod);
+                UpdateCvrSummary();
+                SetStatus("CVR period reopened with explicit reason and fresh Core revision.");
+            }
+            catch (Exception ex)
+            {
+                SetStatus("CVR reopen rejected: " + ex.Message);
+            }
+        }
+
+        private void OnReviseCvrForecast(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var period = RequireCvrPeriod();
+                _cvrPeriod = new CommercialCostControlService().ReviseForecast(
+                    period,
+                    ParseDecimal(CvrRevisedForecastBox.Text, "CVR revised forecast cost to complete"),
+                    CvrRevision(period.PeriodId, CvrForecastRevisionBox.Text, "CVR forecast revision"));
+                _cvrResult = new CommercialCostControlService().Evaluate(_cvrPeriod);
+                CommercialWorkflowAudit.RecordCvrForecastRevision(CommercialAudit(), _cvrPeriod, _cvrResult);
+                UpdateCvrSummary();
+                SetStatus("CVR forecast revised through CommercialCostControlService with fresh revision provenance.");
+            }
+            catch (Exception ex)
+            {
+                SetStatus("CVR forecast revision rejected: " + ex.Message);
+            }
+        }
+
+        private void OnExportCommercialWorkbook(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var snapshot = new CommercialQsWorkbookSnapshot(
+                    _variationRegister,
+                    _ipc,
+                    _finalAccount,
+                    _tenderPackage,
+                    _tenderEvaluation,
+                    _tenderAward,
+                    _cvrResult);
                 var dialog = new SaveFileDialog
                 {
-                    Title = "Export Commercial QS CSV",
-                    Filter = "CSV (*.csv)|*.csv",
+                    Title = "Export Commercial QS XLSX",
+                    Filter = "Excel Workbook (*.xlsx)|*.xlsx",
                     AddExtension = true,
-                    DefaultExt = ".csv",
-                    FileName = "QS3D-Commercial-" + SafeDrawingStem(_document) + ".csv"
+                    DefaultExt = ".xlsx",
+                    FileName = "QS3D-Commercial-" + SafeDrawingStem(_document) + ".xlsx"
                 };
                 if (dialog.ShowDialog(this) != true) return;
 
-                WriteCommercialCsv(dialog.FileName);
-                SetStatus("Commercial CSV exported from validated Core results: " + dialog.FileName);
+                CommercialQsWorkbook.Export(dialog.FileName, snapshot);
+                CommercialWorkflowAudit.RecordReportExport(CommercialAudit(), CommercialQsWorkbook.SchemaVersion, dialog.FileName);
+                SetStatus("Commercial XLSX exported from validated Core results and recorded in the canonical audit trail: " + dialog.FileName);
             }
             catch (Exception ex)
             {
@@ -179,41 +350,31 @@ namespace QS3D.BricsCAD.V25.UI
             }
         }
 
-        private void WriteCommercialCsv(string path)
+        private void UpdateCvrSummary()
         {
-            var rows = new List<string>
+            if (_cvrResult == null)
             {
-                Csv("section", "id", "metric", "value", "currency", "detail")
-            };
-
-            if (_variationRegister != null)
-            {
-                foreach (var variation in _variationRegister.Variations)
-                {
-                    rows.Add(Csv("variation", variation.VariationId, "proposed_amount", Invariant(variation.ProposedAmount), variation.Currency, variation.Description));
-                    rows.Add(Csv("variation", variation.VariationId, "approved_amount", Invariant(variation.ApprovedAmount), variation.Currency, variation.Status.ToString()));
-                    rows.Add(Csv("variation", variation.VariationId, "revision", variation.Revision.RevisionId, variation.Currency, variation.Revision.SourceKind));
-                }
-                rows.Add(Csv("variation_register", "register", "approved_net_change", Invariant(_variationRegister.ApprovedNetChange), _variationRegister.Currency, "Core validated"));
+                CvrSummary.Text = "No CVR result is available.";
+                return;
             }
+            CvrSummary.Text = string.Format(
+                CultureInfo.InvariantCulture,
+                "{0} • {1} • revised budget {2:N2} • cost to date {3:N2} • committed exposure {4:N2} • EAC {5:N2} • variance {6:N2} • CVR margin {7:N2} {8} • revision {9}",
+                _cvrResult.PeriodId,
+                _cvrResult.Status,
+                _cvrResult.RevisedBudget,
+                _cvrResult.CostToDate,
+                _cvrResult.CommittedExposure,
+                _cvrResult.ForecastFinalCost,
+                _cvrResult.ForecastVariance,
+                _cvrResult.CvrMargin,
+                _cvrResult.Currency,
+                _cvrResult.Revision.RevisionId);
+        }
 
-            if (_ipc != null)
-            {
-                rows.Add(Csv("ipc", _ipc.CertificateId, "gross_certified_this_period", Invariant(_ipc.GrossCertifiedThisPeriod), _ipc.Currency, "Core result"));
-                rows.Add(Csv("ipc", _ipc.CertificateId, "retention_this_period", Invariant(_ipc.RetentionThisPeriod), _ipc.Currency, "Core result"));
-                rows.Add(Csv("ipc", _ipc.CertificateId, "net_certified_this_period", Invariant(_ipc.NetCertifiedThisPeriod), _ipc.Currency, "Core result"));
-                rows.Add(Csv("ipc", _ipc.CertificateId, "cumulative_net_certified", Invariant(_ipc.CumulativeNetCertified), _ipc.Currency, "Core result"));
-            }
-
-            if (_finalAccount != null)
-            {
-                rows.Add(Csv("final_account", _finalAccount.FinalAccountId, "final_contract_value", Invariant(_finalAccount.FinalContractValue), _finalAccount.Currency, "Core result"));
-                rows.Add(Csv("final_account", _finalAccount.FinalAccountId, "amount_due", Invariant(_finalAccount.AmountDue), _finalAccount.Currency, "Core result"));
-                rows.Add(Csv("final_account", _finalAccount.FinalAccountId, "recovery_due", Invariant(_finalAccount.RecoveryDue), _finalAccount.Currency, "Core result"));
-                rows.Add(Csv("final_account", _finalAccount.FinalAccountId, "unreleased_retention", Invariant(_finalAccount.UnreleasedRetention), _finalAccount.Currency, "Core result"));
-            }
-
-            File.WriteAllText(path, string.Join("\r\n", rows) + "\r\n", new UTF8Encoding(false));
+        private AuditTrail CommercialAudit()
+        {
+            return AuditTrail.ForProject(ProjectContextCoordinator.GetOrCreate(_document));
         }
 
         private CommercialVariationRegister RequireVariationRegister()
@@ -221,6 +382,27 @@ namespace QS3D.BricsCAD.V25.UI
             if (_variationRegister == null)
                 throw new InvalidOperationException("Build and validate the Variation register first.");
             return _variationRegister;
+        }
+
+        private TenderProcurementPackage RequireTenderPackage()
+        {
+            if (_tenderPackage == null)
+                throw new InvalidOperationException("Evaluate a closed Tender package first.");
+            return _tenderPackage;
+        }
+
+        private TenderProcurementEvaluation RequireTenderEvaluation()
+        {
+            if (_tenderEvaluation == null)
+                throw new InvalidOperationException("Evaluate a closed Tender package first.");
+            return _tenderEvaluation;
+        }
+
+        private CommercialControlPeriod RequireCvrPeriod()
+        {
+            if (_cvrPeriod == null)
+                throw new InvalidOperationException("Evaluate a CVR period first.");
+            return _cvrPeriod;
         }
 
         private static IReadOnlyList<CommercialVariation> ParseVariationRows(string text, string currency)
@@ -281,6 +463,84 @@ namespace QS3D.BricsCAD.V25.UI
             return rows;
         }
 
+        private static IReadOnlyList<TenderRequirement> ParseTenderRequirements(string text)
+        {
+            var rows = new List<TenderRequirement>();
+            foreach (var line in NonEmptyLines(text))
+            {
+                var parts = SplitPipe(line, 4, "tender requirement");
+                rows.Add(new TenderRequirement(
+                    RequireToken(parts[0], "tender requirement item code"),
+                    RequireText(parts[1], "tender requirement description"),
+                    RequireToken(parts[2], "tender requirement unit").ToLowerInvariant(),
+                    ParseDecimal(parts[3], "tender requirement quantity")));
+            }
+            if (rows.Count == 0) throw new FormatException("At least one tender requirement is required.");
+            return rows;
+        }
+
+        private static IReadOnlyList<TenderComplianceRequirement> ParseTenderComplianceRequirements(string text)
+        {
+            var rows = new List<TenderComplianceRequirement>();
+            foreach (var line in NonEmptyLines(text))
+            {
+                var parts = SplitPipe(line, 3, "tender compliance requirement");
+                rows.Add(new TenderComplianceRequirement(
+                    RequireToken(parts[0], "tender compliance code"),
+                    RequireText(parts[1], "tender compliance description"),
+                    ParseBoolean(parts[2], "tender compliance mandatory flag")));
+            }
+            return rows;
+        }
+
+        private static IReadOnlyList<TenderBid> ParseTenderBids(string text, string currency)
+        {
+            var grouped = new Dictionary<string, TenderBidBuilder>(StringComparer.OrdinalIgnoreCase);
+            foreach (var line in NonEmptyLines(text))
+            {
+                var parts = SplitPipe(line, 4, "tender bid price");
+                var bidId = RequireToken(parts[0], "tender bid id");
+                var bidder = RequireText(parts[1], "tender bidder");
+                if (!grouped.TryGetValue(bidId, out var builder))
+                {
+                    builder = new TenderBidBuilder(bidder);
+                    grouped.Add(bidId, builder);
+                }
+                else if (!string.Equals(builder.Bidder, bidder, StringComparison.Ordinal))
+                {
+                    throw new FormatException("Tender bid " + bidId + " uses inconsistent bidder names.");
+                }
+                builder.Lines.Add(new TenderQuoteLine(
+                    RequireToken(parts[2], "tender bid item code"),
+                    ParseDecimal(parts[3], "tender bid unit rate")));
+            }
+            if (grouped.Count == 0) throw new FormatException("At least one tender bid is required.");
+            return grouped
+                .OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(x => new TenderBid(x.Key, x.Value.Bidder, currency, x.Value.Lines))
+                .ToArray();
+        }
+
+        private static IReadOnlyList<TenderComplianceResponse> ParseTenderComplianceResponses(string text)
+        {
+            var rows = new List<TenderComplianceResponse>();
+            foreach (var line in NonEmptyLines(text))
+            {
+                var parts = SplitPipe(line, 4, "tender compliance response");
+                rows.Add(new TenderComplianceResponse(
+                    RequireToken(parts[0], "tender compliance bid id"),
+                    RequireToken(parts[1], "tender compliance requirement code"),
+                    ParseBoolean(parts[2], "tender compliance result"),
+                    parts[3].Trim()));
+            }
+            return rows;
+        }
+
+        private static CommercialRevisionRef CvrRevision(string periodId, string revision, string label)
+        {
+            return new CommercialRevisionRef("commercial-control-period", periodId, RequireToken(revision, label));
+        }
+
         private static IEnumerable<string> NonEmptyLines(string text)
         {
             return (text ?? string.Empty)
@@ -325,18 +585,12 @@ namespace QS3D.BricsCAD.V25.UI
             return parsed;
         }
 
-        private static string Csv(params string[] values)
+        private static bool ParseBoolean(string value, string label)
         {
-            return string.Join(",", values.Select(EscapeCsv));
+            if (!bool.TryParse((value ?? string.Empty).Trim(), out var parsed))
+                throw new FormatException(label + " must be true or false.");
+            return parsed;
         }
-
-        private static string EscapeCsv(string value)
-        {
-            var text = value ?? string.Empty;
-            return "\"" + text.Replace("\"", "\"\"") + "\"";
-        }
-
-        private static string Invariant(decimal value) => value.ToString(CultureInfo.InvariantCulture);
 
         private void SetStatus(string text)
         {
@@ -370,6 +624,18 @@ namespace QS3D.BricsCAD.V25.UI
 
             public ProgressContractItem ContractItem { get; }
             public ProgressClaimLine ClaimLine { get; }
+        }
+
+        private sealed class TenderBidBuilder
+        {
+            public TenderBidBuilder(string bidder)
+            {
+                Bidder = bidder;
+                Lines = new List<TenderQuoteLine>();
+            }
+
+            public string Bidder { get; }
+            public List<TenderQuoteLine> Lines { get; }
         }
     }
 }
