@@ -80,9 +80,9 @@ boq_smoke = read(BOQ_SMOKE)
 
 # Require executable hostile-enumerator regressions in the pinned tree rather
 # than trusting a parent-repository version literal.
-if schedule_smoke and "CurrentReadCount" not in schedule_smoke:
+if schedule_smoke and "CurrentReads" not in schedule_smoke:
     errors.append("schedule no-overread smoke does not observe Current reads")
-if boq_smoke and "CurrentReadCount" not in boq_smoke:
+if boq_smoke and "CurrentReads" not in boq_smoke:
     errors.append("BOQ no-overread smoke does not observe Current reads")
 
 require_known_count_shape("schedule", schedule)
