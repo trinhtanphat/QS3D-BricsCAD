@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -175,7 +176,11 @@ namespace QS3D.Core.SmokeTests
             var family = new ProjectFamily("f-atomic", "Tường", ElementCategory.ArchitecturalWall);
             family.Properties["Material"] = "Vật liệu cũ";
             project.Families.Add(family);
-            project.Elements.Add(null!);
+            var itemsField = project.Elements.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed corrupt material reference graph.");
+            var items = itemsField.GetValue(project.Elements) as List<ProjectElement>
+                ?? throw new InvalidOperationException("Unexpected ProjectState.Elements backing collection.");
+            items.Add(null!);
 
             Throws<InvalidOperationException>(() => ProjectMaterialCatalog.UpsertCustom(project, "mat-atomic", "Vật liệu mới", "m²", ""));
             if (ProjectMaterialCatalog.GetCustom(project).Single().Name != "Vật liệu cũ")
