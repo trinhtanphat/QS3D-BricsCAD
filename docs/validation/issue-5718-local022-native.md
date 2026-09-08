@@ -2,8 +2,86 @@
 
 ## Verdict
 
+Latest controlled comparison (2026-09-08): allocation59 completed
+`DIAGNOSTIC_ONLY`; the subsequent control-free allocation60 is
+`FAIL_OR_NO_RESULT / PRE_QS3D_NATIVE_STARTUP_WAIT`. Neither qualifies V26 UI.
+Both used exact pushed harness `8aa17bfe9f73cfd0c1d74927bb2b9de4a7f4f5dc`,
+main through `c1de4bf46ab10b46698312b35f1202e14113f8e7`, unchanged frozen
+product87aff/packages below, BricsCAD26.2.07 and the accepted cleaned V25 UI48
+predecessor. Probe SHA-256 for both:
+`115d8cb6718a6001878cc17b46d4ab3025cb5e769daa82f6ebd19928ee425e6d`.
+
+- `ui-render-controls-v26-59`, RunId `35b06991e19e48989d2ae9c35ff9f9b7`,
+  `07:19:53.1087279Z`–`07:25:31.7446866Z`: no agent input, activation,
+  float/re-dock or resize was performed. The runner launched maximized; supported
+  captures showed the independent native AddVisual palette and owned opaque WPF
+  window at their initial positions. Both visibly changed sequence/background:
+  Default011/012 then022–024; SoftwareOnly065/066 then085/086; restored
+  Default120–122 then132/133. QS3D Workspace and Drawing/Layer content was visible
+  throughout these observations, unlike58. The owner answered **yes** to seeing
+  the two colored controls change numbers directly on the monitor; that reply
+  is not phase-specific and does not retroactively establish what was on-screen
+  during58. Native title/interior values occasionally differ by one or two ticks
+  across sequential captures, not a same-instant rendering assertion.
+- The private trace records baseline at `07:20:27.5335445Z`, SoftwareOnly at
+  `07:22:24.4376780Z`, restored Default at `07:24:24.8424661Z` and complete at
+  `07:25:24.8924171Z`. Both controls report loaded/visible with HwndSource;
+  reported tier2 remains a capability value. The unchanged strict validator
+  rejects the diagnostic marker with empty checks; expected wrapper exit1,
+  zero acceptance phases/actions/ACKs. Default now displaying pixels contradicts
+  a blanket "V26 requires SoftwareOnly" conclusion, but the additional native/WPF
+  surfaces and periodic invalidations may themselves affect shared presentation.
+  No product fix or driver defect is inferred.
+- `ui-control-free-v26-60`, RunId `929012c48e1e4184a882348664baace5`,
+  `07:26:17.7044629Z`–`07:34:05.3999517Z`: explicitly `render_experiment=false`,
+  no witness surfaces and no Computer Use query/input during startup. This fresh
+  control-free comparison followed newly observed Default repaint, not a replay
+  or relabelling of53. Owned PID15072 remained windowless, with no QS3D or
+  coreclr module, no baseline and zero action/ACK/phase files. Resetting the
+  prior JavaScript session did not release it.
+- With the owner's explicit allocation60 local-only memory-dump consent, the
+  guarded capture and pinned offline reader executed against the exact
+  allocation/hash/PID/parent/start time. Thread0 waits in
+  `UIAutomationCore!OverlappedIOManager::AddChannel_AnyThread`, reached through
+  `HandleHookMessage`/`HookMessageWndProc` while native `lispex` initializes under
+  `LdrpCallInitRoutine` / `cadapp!CaApp::loadLispex`. Dump threads40/41 wait in
+  `ntdll!LdrpDrainWorkQueue` / `LdrpInitializeThread`. This reproduces the native
+  startup/UIA-loader interaction class seen in41, before QS3D can execute; it
+  does not identify the initiating accessibility client. Eight-thread WCT found
+  no cycle in its bounded sample; one separate thread waited toward dwm.exe,
+  not proof that DWM caused the main-thread wait. One offline batch requested
+  nonexistent dump thread42 and failed; a new40/41-only log completed. No such
+  partial reader result is called PASS. Raw dumps/logs remain private and ignored.
+- At `07:34:04.6824107Z`, after exact guard revalidation and confirmation that
+  startup still had not reached QS3D, the operator intentionally stopped only
+  PID15072. The live runner completed its own finally and exited1. This is not a
+  spontaneous crash, expired phase timeout, functional assertion failure or
+  evidence about control-free QS3D rendering:60 never reached that comparison.
+
+Both receipts verify full private/protected-state/profile cleanup, matching
+inventory hash `7ce59ffcc79f4bc2734e4469f0d42af164704ca8b81174a23c49e7a14e2d5eee`,
+original pointer and nonce removal. Exact OpenAI autostart byte1/hash and
+`2026-09-07T02:55:30.6894998Z` timestamp were restored. Final independent inspection
+found zero BricsCAD/tunnel processes. Installed product, licensing, Windows
+settings and MCP were untouched. Preserve consumed59/60; do not retry60 unchanged
+or add a permanent rendering workaround. The next UI execution needs a native
+startup environment that is not already stalled in this UIA/loader interaction.
+
+Exact8aa automatic CI completed SUCCESS: PR run34198752530
+(`preflight`101972439237, `core`101973549736), push34198747081
+(`branch-preflight`101972420248, `branch-core`101973413920), and metadata34198828569
+(`metadata-preflight`101972678093, `metadata-core`101973520515). The complete
+host-free suite and both SDK builds passed before this runtime; current V26
+launch builds also passed0 warnings/errors. This CI is not runtime acceptance
+and does not qualify a later documentation head. V25 UI48 and native56/57 retain
+their bounded passes; V26 physical UI, Quantity/Unicode/DPI/private-DWG and
+published-source acceptance remain incomplete. PR5738 stays draft.
+
+Reference for interpreting, not proving, the observed native loader wait:
+[Microsoft DLL initialization restrictions](https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-best-practices).
+
 Owner reply (2026-09-08): the owner did not watch allocation58. Therefore there
-is still no direct-monitor confirmation; do not reinterpret that reply as either
+is still no direct-monitor confirmation for58; do not reinterpret that reply as either
 "monitor blank" or "capture-only". The next bounded diagnostic adds two simple
 independent repaint witnesses (native AddVisual palette and opaque WPF window)
 with changing sequence numbers, fixed initial positions and separate supported
