@@ -78,7 +78,8 @@ jobs:
                   payload["target_url"] = target_url
               request_json("POST", f"/repos/{repo}/statuses/{head_sha}", payload)
 
-          # A pending status is fail-closed if the bridge is cancelled unexpectedly.
+          # Pending is deliberately written first: cancellation or bridge failure cannot
+          # leave a newly authorized success for this bridge execution.
           for context in required:
               post_status(context, "pending", "Awaiting exact-head Shared CI result")
 
@@ -98,7 +99,6 @@ jobs:
                       continue
                   path = str(run.get("path") or "")
                   name = str(run.get("name") or "")
-                  # Only the canonical Shared CI workflow can authorize these contexts.
                   if not (path.endswith("/.github/workflows/ci.yml") or path == ".github/workflows/ci.yml" or name == "Shared CI"):
                       continue
                   if str(run.get("head_sha") or "").lower() != head_sha:
@@ -114,9 +114,9 @@ jobs:
                   name = str(check.get("name") or "")
                   if name not in required:
                       continue
-                  prs = check.get("pull_requests") or []
-                  if not any(int(pr.get("number") or 0) == pr_number for pr in prs):
-                      continue
+                  # The workflow run itself is already bound to exact PR number + head SHA.
+                  # Check-run pull_requests can legitimately be empty, so bind jobs to the
+                  # canonical run by details_url instead of failing open/closed on that field.
                   details = str(check.get("details_url") or "")
                   if f"/actions/runs/{ci_run_id}" not in details:
                       continue
@@ -163,8 +163,8 @@ jobs:
                       post_status(context, "failure", f"Exact-head Shared CI failed: {reason}", target)
                   raise SystemExit(f"required status bridge fail-closed: {reason}")
 
-              # Re-query once immediately before publication and require that the same
-              # run is still newest, preventing a rerun race between admission and write.
+              # Re-query immediately before publication and require the same newest run
+              # and terminal checks, closing the admission->status-write rerun race.
               confirm = matching_ci_runs()
               if not confirm or int(confirm[0].get("id") or 0) != ci_run_id:
                   last_reason = "Canonical Shared CI changed during status admission"
