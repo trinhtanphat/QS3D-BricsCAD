@@ -112,21 +112,25 @@ The coordinator validates the exact combined tree and does not silently drop par
 
 The combined candidate must satisfy the applicable protected checks/freshness before authorized merge.
 
-## Automatic PR ready/auto-merge arming
+## Automatic Ready PR refresh/auto-merge arming
 
-`.github/workflows/auto-merge-main-prs.yml` is the single owner-approved PR metadata automation for pull requests targeting `main`.
+`.github/workflows/auto-merge-main-prs.yml` is the single owner-approved Ready-PR reconciliation automation for pull requests targeting `main`.
 
-It automatically marks a draft PR Ready for review and idempotently arms GitHub native auto-merge. Repository-wide native auto-merge arming is explicitly enabled for PRs targeting `main`; branch protection and required checks remain authoritative.
+**Draft is a manual hold.** The workflow must not mark Draft PRs Ready and must not arm them for merge. A human or authorized agent lifts the hold by explicitly marking the PR Ready.
 
-The workflow does not perform the final merge. GitHub protected-main rules still require the current candidate to satisfy fresh successful `preflight` and `core`, strict freshness, mergeability and every other effective repository rule before GitHub may merge it.
+For Ready same-repository PRs, the workflow reacts to PR lifecycle events and to every push on `main`. When GitHub reports a PR as `BEHIND`, it calls the official `update-branch` operation using the current `headRefOid` as `expected_head_sha`. That optimistic lock prevents updating a head that changed after inspection. Cross-repository PRs and merge-conflicted PRs are skipped rather than mutated.
 
-The workflow uses `pull_request_target` only for trusted base-repository metadata operations. It must never checkout or execute PR head code, inspect or execute the PR head SHA/ref, write repository contents, dispatch releases, call a direct pull-request merge endpoint, use `--admin`, or bypass protected-main rules.
+After any needed refresh, the workflow idempotently arms GitHub native auto-merge. Repository-wide native auto-merge arming is explicitly enabled for Ready PRs targeting `main`; branch protection and required checks remain authoritative.
 
-The automation uses the repository `GITHUB_TOKEN` with only `contents: read` and `pull-requests: write`. It may call `gh pr ready` and `gh pr merge --auto --merge` solely to update PR readiness and arm native auto-merge. The `--auto` operation is queue arming, not a direct merge authorization.
+The workflow does not perform the final merge. GitHub protected-main rules still require the current candidate to satisfy fresh successful `preflight` and `core`, strict freshness, mergeability and every other effective repository rule before GitHub may merge it. Updating a stale branch changes the candidate, so normal PR CI must validate the new exact head before merge.
 
-The retired `.github/workflows/hybrid-pr-coordinator.yml` must remain absent. Automatic branch refresh/update-branch behavior is not part of this workflow and is not authorized by this policy.
+`pull_request_target` is used only for trusted base-repository metadata operations, and the `push` handler operates only on `refs/heads/main`. The workflow must never checkout or execute PR head code, force-push, dispatch releases, call a direct pull-request merge endpoint, use `--admin`, or bypass protected-main rules. It may read `headRefOid` only as metadata for the `expected_head_sha` optimistic lock.
 
-This is a narrow repository-owner authorization for metadata automation, not permission for ordinary agents or arbitrary workflows to directly merge unrelated PRs. Repository-wide blind direct merge remains disabled.
+The automation uses the repository `GITHUB_TOKEN` with `contents: write` and `pull-requests: write`. `contents: write` exists solely because GitHub's `update-branch` operation requires permission to write the same-repository PR head; direct content commits/ref rewrites remain forbidden. It may call `gh pr merge --auto --merge` only to arm native auto-merge. The `--auto` operation is queue arming, not a direct merge authorization.
+
+The retired `.github/workflows/hybrid-pr-coordinator.yml` must remain absent.
+
+This is a narrow repository-owner authorization for Ready-PR reconciliation and native auto-merge arming, not permission for ordinary agents or arbitrary workflows to directly merge unrelated PRs. Repository-wide blind direct merge remains disabled.
 
 ## Exact-main automatic V25 cloud CI
 
@@ -140,7 +144,7 @@ Automatic validation authorization does not imply release authorization.
 
 ## Manual workflows
 
-Workflows other than shared `ci.yml`, the approved `auto-merge-main-prs.yml` PR metadata automation and the approved main dispatcher remain owner-controlled manual lanes unless a current canonical policy explicitly says otherwise.
+Workflows other than shared `ci.yml`, the approved `auto-merge-main-prs.yml` Ready-PR reconciliation automation and the approved main dispatcher remain owner-controlled manual lanes unless a current canonical policy explicitly says otherwise.
 
 Release workflows retain their own confirmation/protection boundaries.
 
@@ -150,11 +154,11 @@ A normal `continue all`, `fix bug`, source change, docs change or CI remediation
 
 GitHub Dependabot may create dependency-update PRs directly from committed Dependabot configuration.
 
-Dependabot itself does **not** receive merge authority, write `main`, bypass checks or publish releases. A Dependabot PR targeting `main` is subject to the same repository-owned Ready/auto-merge arming workflow as any other PR, and protected-main checks remain authoritative.
+Dependabot itself does **not** receive merge authority, write `main`, bypass checks or publish releases. A Dependabot PR targeting `main` is subject to the same repository-owned Ready/refresh/auto-merge automation as any other PR, and protected-main checks remain authoritative.
 
 Dependabot PRs still require the protected current-candidate checks applicable to `main`.
 
-Repository-wide blind direct merge remains disabled; repository-wide native auto-merge arming is explicitly enabled only through the owner-approved metadata workflow.
+Repository-wide blind direct merge remains disabled; repository-wide native auto-merge arming is explicitly enabled only through the owner-approved Ready-PR automation.
 
 ## LOCAL_ONLY evidence
 
@@ -180,7 +184,7 @@ In particular:
 - automatic branch pushes must remain available for exact-head evidence;
 - PR path filters must not suppress required protected contexts;
 - shared validation must remain non-publishing/read-only;
-- `.github/workflows/auto-merge-main-prs.yml` is the only workflow authorized to mark main-targeting PRs Ready and arm GitHub native auto-merge;
+- `.github/workflows/auto-merge-main-prs.yml` is the only workflow authorized to update stale same-repository Ready PRs targeting `main` through `update-branch` and arm GitHub native auto-merge; Draft remains a manual hold;
 - the retired `.github/workflows/hybrid-pr-coordinator.yml` must remain absent;
 - the approved main dispatcher must remain narrow;
 - release workflows must retain their explicit safety/confirmation requirements.
