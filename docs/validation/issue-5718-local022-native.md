@@ -2,6 +2,65 @@
 
 ## Verdict
 
+Latest rendering isolation (2026-09-08): V26 allocation58 is **`DIAGNOSTIC_ONLY`**,
+not qualification. It produced an observed Default/SoftwareOnly/Default
+difference on the same frozen product, without authoring requests or changing a
+production/default Windows setting. Exact harness
+`c41f2f5c48c6f320a579b333a344de0fc23fc995`, product
+`87aff7fec452f9a8dd9f641ef84d143edc73514d`, V26.2.07;
+RunId `7c2d14f4de90418c827ede08302f3090`;
+`2026-09-08T05:55:30.2177293Z`–`2026-09-08T06:01:07.4930069Z`;
+probe SHA-256 `15ae39cc9911bf1d20a7e554d963495b066459c26665948755db515691dd31ed`;
+V26 ZIP SHA-256 `59498948341f36d408f8bf838e177170c19d99ffc64acaa2070b0524e6b99a81`.
+The fresh disposable Default clone followed the accepted same-product V25 UI48;
+this diagnostic-only mode does not replace a V25-first qualification sequence.
+
+Observed with supported Computer Use, no accessibility query:
+
+- Baseline trace at05:56:03.8365554Z confirmed process mode Default, WPF tier2.
+  Both QS3D interiors appeared blank before and after physical maximize; native
+  ribbon/CAD viewport were visible. No authoring controller/actions were started.
+- SoftwareOnly was confirmed at05:58:03.2314869Z. Initial capture and a physical
+  palette-area scroll still showed blank interiors. Physically floating the
+  Workspace then revealed its actual Unicode controls/tree and the right panel.
+  Re-docking retained visible contents. The double-click also opened the native
+  Filter panel after re-docking; this incidental nonce-profile layout change is
+  recorded, not described as an identical-layout comparison.
+- Default was restored at06:00:02.7418648Z. Existing contents initially remained
+  visible; a tree-area scroll did not visibly update them. Physically floating
+  Workspace again made both QS3D interiors blank, while native CAD/Filter stayed
+  visible. Thus "contents remained visible immediately after restoring Default"
+  is not evidence of continued WPF repainting.
+- Completion at06:01:02.5794405Z confirmed Default. The UI marker explicitly has
+  `status=DIAGNOSTIC_ONLY`, `error_code=NOT_QUALIFICATION`, empty checks. The
+  unchanged phase validator refused it; final receipt also says DIAGNOSTIC_ONLY,
+  zero phases. Exit1 is the expected non-qualification path, not cleanup failure.
+
+This narrows the investigation to accelerated WPF presentation/capture behavior;
+it does not distinguish a real on-monitor defect from capture interoperability,
+prove an Intel-driver defect, or authorize a production-wide software-rendering
+default. Default is the requested process policy and tier2 is a capability report,
+not a measurement of the backend used by each individual render target.
+Direct owner observation of the blank state remains needed for that
+distinction. Read-only machine facts: Windows11 Pro build26200, Intel UHD620,
+driver27.20.100.9664 dated2021-06-01, display1366×768. No System/Application
+warning/error/critical events were returned for the prior53 diagnostic interval;
+absence of those events is not proof of a healthy rendering pipeline.
+
+Private fixture removal, original profile inventory/current pointer restoration,
+nonce removal, protected state and exact original autostart byte/hash/timestamp
+all verified; zero hosts, no MCP requests, no installed package/license/driver or
+Windows setting changes. Computer Use was reset after cleanup. Allocation58 is
+consumed; do not replay it unchanged or call its software-rendered view UI PASS.
+The diagnostic helper, mode/restore failure tests, actual runner verdict gates,
+full focused suite and both SDK builds passed before execution. Prior exact7e80
+PR34191257939 (`preflight`101949648023/`core`101950321061) and push34191254528
+passed; that green evidence does not qualify newer harness commits or runtime UI.
+Exact c41f2f5 code PR34192478507 (`preflight`101953187462/`core`101953932034)
+and push34192473602 (`branch-preflight`101953171376/`branch-core`101953890470)
+subsequently passed too. Newer documentation/main-sync heads require fresh CI.
+Native56/57 and physical V25 UI48 retain their accepted bounded scopes below.
+
 Latest licensed topology pair (2026-09-08): **V25 allocation56 and V26 allocation57
 are `LOCAL_PASS_BOUNDED`, all three V3 native phases**, on exact pushed harness
 `1cf3fa8baa43298e1c0b05bc5eeecd319d40bc36` and unchanged frozen product
