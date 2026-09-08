@@ -26,6 +26,7 @@ permissions:
   actions: read
   pull-requests: read
   issues: read
+  statuses: write
 
 concurrency:
   # Keep push, PR code, and PR metadata validation in separate cancellation domains. GitHub
@@ -175,6 +176,33 @@ jobs:
       - name: Source-validation terminal marker
         if: ${{ !cancelled() && steps.scope.outputs.source_validation == 'true' }}
         run: echo "Independent source-validation safety gates completed."
+      - name: Mirror preflight result into required commit status
+        if: ${{ always() && github.event_name == 'pull_request' && github.event.action != 'edited' && github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          QS3D_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          QS3D_JOB_STATUS: ${{ job.status }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $state = if ($env:QS3D_JOB_STATUS -eq 'success') { 'success' } else { 'failure' }
+          $description = if ($state -eq 'success') { 'Shared CI preflight succeeded' } else { "Shared CI preflight ended $($env:QS3D_JOB_STATUS)" }
+          $payload = @{
+            state = $state
+            context = 'preflight'
+            description = $description
+            target_url = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          } | ConvertTo-Json -Compress
+          Invoke-RestMethod `
+            -Method Post `
+            -Uri "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/statuses/$env:QS3D_HEAD_SHA" `
+            -Headers @{
+              Authorization = "Bearer $env:GITHUB_TOKEN"
+              Accept = 'application/vnd.github+json'
+              'X-GitHub-Api-Version' = '2022-11-28'
+            } `
+            -ContentType 'application/json' `
+            -Body $payload | Out-Null
 
   core:
     name: ${{ github.event_name == 'push' && 'branch-core' || github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata-core' || github.event_name == 'pull_request' && 'core' || 'dispatch-core' }}
@@ -282,3 +310,30 @@ jobs:
             -SnapshotDir (Join-Path $env:RUNNER_TEMP 'qs3d-v25-local-qualification-reference-snapshot') `
             -Configuration Release `
             -Platform x64
+      - name: Mirror core result into required commit status
+        if: ${{ always() && github.event_name == 'pull_request' && github.event.action != 'edited' && github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          QS3D_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          QS3D_JOB_STATUS: ${{ job.status }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $state = if ($env:QS3D_JOB_STATUS -eq 'success') { 'success' } else { 'failure' }
+          $description = if ($state -eq 'success') { 'Shared CI core succeeded' } else { "Shared CI core ended $($env:QS3D_JOB_STATUS)" }
+          $payload = @{
+            state = $state
+            context = 'core'
+            description = $description
+            target_url = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          } | ConvertTo-Json -Compress
+          Invoke-RestMethod `
+            -Method Post `
+            -Uri "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/statuses/$env:QS3D_HEAD_SHA" `
+            -Headers @{
+              Authorization = "Bearer $env:GITHUB_TOKEN"
+              Accept = 'application/vnd.github+json'
+              'X-GitHub-Api-Version' = '2022-11-28'
+            } `
+            -ContentType 'application/json' `
+            -Body $payload | Out-Null
