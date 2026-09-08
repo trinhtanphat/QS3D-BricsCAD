@@ -57,6 +57,28 @@ The live project did not change. The separate fix must preserve real drift
 rejection and public semantic invalidation; this note does not claim it landed
 or that a new licensed cold BQ pass exists.
 
+Source checkpoint (2026-09-09): #6198 / PR6224 pushed
+`ac3701659d0c9f369c3ab117b7f9c2c56f710762`, reconciled through protected main
+`19e87a624feedccd1d2f49c8d0888d1263e4b93d`. The Core build has zero
+warnings/errors; the complete Core smoke suite and both persisted-copy and
+existing generation-fence preflights pass. The exact privately retained66 QSDB
+now passes offline Load/detached/regenerate0/Group76/3/Detail2x38/3, with its
+disk hash unchanged. Synthetic tests preserve real post-capture mutation
+refusal and source/preview/disk state. Review also caught a capacity guard lost
+by bypassing semantic Add: the public SetProperty10001 regression failed before
+an explicit snapshot bound, then passed with10000 accepted and10001 refused in
+both report modes. Protected current-head CI and actual licensed rerun are
+still required; this is REMOTE_SAFE, not LOCAL_PASS.
+
+The owner's architecture review request was checked against the nearby
+reconstruction boundaries. QSDB deserialization and ProjectStateSnapshot
+already use persistence-only copies and restore metadata; RoomFinishSchedule
+and DoorOpeningSchedule use plain dictionary/DTO snapshots. No second reachable
+equivalent defect was identified in this bounded inspection. The correction
+separates reconstruction from semantic editing without changing the BricsCAD
+hosted-plugin boundary or weakening the public model lifecycle. This is not a
+whole-system architecture certification or grounds for an unrelated rewrite.
+
 Post-merge continuation (2026-09-08): #6189 owns the remaining standalone BQ
 qualification work after the released #5718/#5738 harness carrier. PR5738
 merged as `19a62fa66c05034397039bc32944aeeaee6b6f09`; production quantity
