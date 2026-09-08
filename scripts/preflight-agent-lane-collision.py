@@ -312,6 +312,20 @@ def _run_git_exact(args: list[str]) -> str:
     return completed.stdout
 
 
+def parse_nul_paths(raw: str, source: str) -> list[str]:
+    if raw == "":
+        return []
+    parts = raw.split("\0")
+    if not parts or parts[-1] != "":
+        raise RuntimeError(f"{source} did not return a NUL-terminated path list")
+    parts.pop()
+    if any(path == "" for path in parts):
+        raise RuntimeError(f"{source} returned an empty pathname")
+    if len(set(parts)) != len(parts):
+        raise RuntimeError(f"{source} returned duplicate pathnames")
+    return parts
+
+
 def marker_activation_time() -> datetime | None:
     marker = Path(MARKER_PATH)
     if not marker.is_file():
@@ -562,35 +576,6 @@ def fetch_pr_files(
     return [str(item.get("filename") or "") for item in items if item.get("filename")]
 
 
-def git_path_identity(commit_sha: str, path: str) -> tuple[str, str, str] | None:
-    commit = str(commit_sha or "").strip().lower()
-    if not re.fullmatch(r"[0-9a-f]{40}", commit):
-        raise RuntimeError("Git tree path identity requires an exact 40-hex commit SHA")
-    raw = _run_git_exact(["ls-tree", "-z", commit, "--", f":(literal){path}"])
-    entries = raw.split("\0")
-    if entries and entries[-1] == "":
-        entries.pop()
-    if not entries:
-        return None
-    if len(entries) != 1:
-        raise RuntimeError(f"Git tree identity for '{path}' returned multiple entries")
-    metadata, separator, returned_path = entries[0].partition("\t")
-    if not separator or returned_path != path:
-        raise RuntimeError(f"Git tree identity for '{path}' returned an unexpected pathname")
-    parts = metadata.split(" ")
-    if len(parts) != 3:
-        raise RuntimeError(f"Git tree identity for '{path}' returned malformed metadata")
-    mode, kind, object_sha = parts
-    object_sha = object_sha.lower()
-    if not re.fullmatch(r"[0-7]{6}", mode):
-        raise RuntimeError(f"Git tree identity for '{path}' returned invalid mode '{mode}'")
-    if kind not in {"blob", "tree", "commit"}:
-        raise RuntimeError(f"Git tree identity for '{path}' returned invalid type '{kind}'")
-    if not re.fullmatch(r"[0-9a-f]{40}", object_sha):
-        raise RuntimeError(f"Git tree identity for '{path}' returned invalid object SHA")
-    return mode, kind, object_sha
-
-
 def ensure_peer_commit(peer_head_sha: str) -> None:
     peer_sha = str(peer_head_sha or "").strip().lower()
     if not re.fullmatch(r"[0-9a-f]{40}", peer_sha):
@@ -601,21 +586,35 @@ def ensure_peer_commit(peer_head_sha: str) -> None:
         raise RuntimeError(f"fetched peer commit identity drifted: expected {peer_sha}, got {resolved or '<missing>'}")
 
 
-def path_changed_between_commits(
-    api_url: str,
-    repository: str,
-    current_main_sha: str,
-    peer_head_sha: str,
-    path: str,
-    token: str,
-) -> bool:
-    del api_url, repository, token
-    return git_path_identity(current_main_sha, path) != git_path_identity(peer_head_sha, path)
+def effective_changed_paths(base_sha: str, peer_head_sha: str) -> list[str]:
+    base = str(base_sha or "").strip().lower()
+    peer = str(peer_head_sha or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", base) or not re.fullmatch(r"[0-9a-f]{40}", peer):
+        raise RuntimeError("effective peer delta requires exact 40-hex base and peer commit SHAs")
+    raw = _run_git_exact([
+        "diff",
+        "--name-only",
+        "-z",
+        "--no-renames",
+        "--diff-filter=ACDMRTUXB",
+        base,
+        peer,
+        "--",
+    ])
+    return parse_nul_paths(raw, "effective peer tree delta")
 
 
 def current_changed_paths(base_ref: str) -> list[str]:
-    raw = _run_git(["diff", "--name-only", "--diff-filter=ACMRTUXB", f"origin/{base_ref}...HEAD"])
-    return [line.strip().replace("\\", "/") for line in raw.splitlines() if line.strip()]
+    raw = _run_git_exact([
+        "diff",
+        "--name-only",
+        "-z",
+        "--no-renames",
+        "--diff-filter=ACDMRTUXB",
+        f"origin/{base_ref}...HEAD",
+        "--",
+    ])
+    return parse_nul_paths(raw, "current branch delta")
 
 
 def _event_actor(event: dict) -> str:
@@ -738,6 +737,7 @@ def canonical_open_pr_path_conflicts(
     token: str,
     current_pr_number: int,
 ) -> list[tuple[int, str, list[str]]]:
+    del api_url, token
     if not changed_paths:
         return []
     current_order = reservation_order(current_issue)
@@ -765,28 +765,14 @@ def canonical_open_pr_path_conflicts(
                 continue
         except (ValueError, TypeError):
             pass
-        peer_files = set(fetch_pr_files(api_url, repository, peer_number, token))
-        candidate_overlap = sorted(changed.intersection(peer_files))
-        if not candidate_overlap:
-            continue
         peer_head_sha = str(peer_head.get("sha") or "").strip().lower()
         if not re.fullmatch(r"[0-9a-f]{40}", peer_head_sha):
             raise RuntimeError(f"PR #{peer_number} peer head SHA is missing or invalid")
         ensure_peer_commit(peer_head_sha)
-        effective_overlap = [
-            path
-            for path in candidate_overlap
-            if path_changed_between_commits(
-                api_url,
-                repository,
-                current_main_sha,
-                peer_head_sha,
-                path,
-                token,
-            )
-        ]
-        if effective_overlap:
-            conflicts.append((peer_number, peer_ref, effective_overlap))
+        peer_paths = set(effective_changed_paths(current_main_sha, peer_head_sha))
+        overlap = sorted(changed.intersection(peer_paths))
+        if overlap:
+            conflicts.append((peer_number, peer_ref, overlap))
     return sorted(conflicts)
 
 
@@ -831,7 +817,7 @@ def main() -> int:
             if pull_request_is_terminal(current_pr_number, open_prs):
                 print(
                     "PASS: pull_request carrier is no longer open; "
-                    "terminal reservation validation is skipped before Issue validation because that queued carrier is terminal and cannot merge."
+                    "terminal reservation validation is skipped before Issue/path collision checks."
                 )
                 return 0
             lane_key, lane_conflicts = validate_pull_request_event(event, repository, open_prs)
