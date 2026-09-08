@@ -6,7 +6,9 @@ PACKAGER = ROOT / "scripts" / "package-v26.ps1"
 NORMALIZED_ZIP_ENTRY = "$entryName = $fullName.Substring($packagePrefix.Length).Replace([IO.Path]::DirectorySeparatorChar, '/').Replace([IO.Path]::AltDirectorySeparatorChar, '/')"
 ZIP_ENTRY_BACKSLASH_REJECTION = "$entryName.Contains('\\')"
 MANIFEST_BACKSLASH_REJECTION = "$relativePath.Contains('\\')"
-OWNED_CREATE = "$destinationStream = [IO.File]::Open($destination, [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)"
+OWNED_CREATE = "$destinationStream = Open-OwnedPackageOutput -Path $destination"
+NATIVE_CREATE = "CreateFileW("
+DELETE_ACCESS = "GENERIC_READ | GENERIC_WRITE | DELETE"
 ARM_DELETE = "Set-PackageOutputDeleteDisposition -Stream $destinationStream -Delete $true"
 ZIP_CREATE = "$archive = [IO.Compression.ZipArchive]::new($destinationStream, [IO.Compression.ZipArchiveMode]::Create, $true)"
 DURABLE_FLUSH = "$destinationStream.Flush($true)"
@@ -56,14 +58,19 @@ def validate(text: str) -> None:
     require("New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc" in text,
             "V26 final ZIP creation must route through the deterministic writer.")
 
-    # Candidate-caused publication safety: the deterministic writer must create
-    # the final pathname itself as one exact owned generation. A closed temp
-    # pathname followed by pathname Move/Delete reintroduces a substitution
-    # window and makes the bytes hashed after publication unverifiable.
+    # Publication safety: create the final pathname as one fresh exclusive
+    # generation with DELETE access, arm deletion on that same handle before any
+    # archive bytes are written, and cancel deletion only after durable flush.
+    require("function Open-OwnedPackageOutput {" in text,
+            "V26 deterministic ZIP publication must expose an owned output opener.")
     require("function Set-PackageOutputDeleteDisposition {" in text,
             "V26 deterministic ZIP publication must expose handle-bound rollback/commit disposition.")
     require("FILE_DISPOSITION_INFO" in text and "SetFileInformationByHandle" in text,
             "V26 deterministic ZIP publication must use native handle disposition for exact-generation rollback.")
+    require(NATIVE_CREATE in text and "CREATE_NEW" in text,
+            "V26 deterministic ZIP publication must create the final generation through native fresh-only CreateFileW.")
+    require(DELETE_ACCESS in text,
+            "V26 deterministic ZIP output handle must request DELETE together with read/write access before FileDispositionInfo rollback is armed.")
     require(OWNED_CREATE in text,
             "V26 deterministic ZIP must create the final destination fresh-only through the owned output handle.")
     require(ARM_DELETE in text,
@@ -107,8 +114,11 @@ for marker in (
     "gitCommit = $gitCommit",
     "generatedUtc = $sourceTimestampUtc.ToString('o')",
     "New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc",
+    "function Open-OwnedPackageOutput {",
     "function Set-PackageOutputDeleteDisposition {",
     "SetFileInformationByHandle",
+    NATIVE_CREATE,
+    DELETE_ACCESS,
     OWNED_CREATE,
     ARM_DELETE,
     ZIP_CREATE,
