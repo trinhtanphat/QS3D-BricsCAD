@@ -58,16 +58,18 @@ def main() -> int:
 
     install_cad = install.find("$runningBricsCAD = @(Get-RunningBricsCADProcessDetails)")
     install_lock = install.find("$updateMutex = Enter-Qs3dUpdateMutex")
-    install_integrity = install.find("$commands = Assert-PackageIntegrity")
+    install_integrity = install.find("$packageAdmission = Assert-PackageIntegrity -Directory $package")
+    install_commands = install.find("$commands = @($packageAdmission.Commands)")
     install_identity = install.find("Assert-PackageIdentity -Directory $package")
     install_snapshots = install.find("$registrySnapshots = @(")
     install_stage = install.find("New-Item -ItemType Directory -Path $stage -Force")
+    install_staged_admission = install.find("Assert-StagedPayloadAdmission -Directory $stage -AdmittedHashes $packageAdmission.Hashes")
     install_rollback = install.find("throw $originalError")
     install_release = install.rfind("Exit-Qs3dUpdateMutex -Mutex $updateMutex")
-    if min(install_cad, install_lock, install_integrity, install_identity, install_snapshots, install_stage, install_rollback, install_release) < 0 or not (
-        install_cad < install_lock < install_integrity < install_identity < install_snapshots < install_stage < install_rollback < install_release
+    if min(install_cad, install_lock, install_integrity, install_commands, install_identity, install_snapshots, install_stage, install_staged_admission, install_rollback, install_release) < 0 or not (
+        install_cad < install_lock < install_integrity < install_commands < install_identity < install_snapshots < install_stage < install_staged_admission < install_rollback < install_release
     ):
-        raise AssertionError("installer must refuse live CAD, acquire cross-entry lock before package/registry state, and hold it through commit/rollback")
+        raise AssertionError("installer must refuse live CAD, acquire cross-entry lock before source admission/registry state, bind commands to admitted source bytes, re-admit staged bytes, and hold the lock through commit/rollback")
 
     uninstall_cad = uninstall.find("if (Get-Process -Name bricscad -ErrorAction SilentlyContinue)")
     uninstall_lock = uninstall.find("$updateMutex = Enter-Qs3dUpdateMutex")
@@ -91,8 +93,11 @@ def main() -> int:
     require(update, "Installed QS3D productVersion changed during update preparation", "secure updater stale-state recheck")
     require(install, "Duplicate SHA256SUMS payload entry", "installer complete hash-manifest integrity")
     require(install, "Unhashed package payload", "installer unhashed-file rejection")
+    require(install, "$packageAdmission = Assert-PackageIntegrity -Directory $package", "installer source package admission")
+    require(install, "$commands = @($packageAdmission.Commands)", "installer admitted command snapshot")
     require(install, "Assert-PackageIdentity -Directory $package", "installer package identity binding")
     require(install, "Unblock-File -LiteralPath $destination -ErrorAction Stop", "installer MOTW clearing after verified copy")
+    require(install, "Assert-StagedPayloadAdmission -Directory $stage -AdmittedHashes $packageAdmission.Hashes", "installer staged payload re-admission")
     require(install, "Restore-DemandLoadSnapshot", "installer DemandLoad rollback")
     require(install, "throw $originalError", "installer original failure propagation")
     require(uninstall, "Refusing to remove a custom install directory outside the QS3D LocalAppData scope", "uninstaller custom-path guard")
@@ -113,7 +118,7 @@ def main() -> int:
 
     print(
         "PASS: detached/manual secure update, direct install, and rollback-safe direct uninstall share the same per-user Windows mutex; "
-        "all direct mutation entry points fail fast on contention and hold ownership through bounded update/install/rollback/removal completion; "
+        "all direct mutation entry points fail fast on contention and hold ownership through bounded update/install/staged-admission/rollback/removal completion; "
         "recursive uninstall remains bound to canonical metadata plus both managed DLL identities."
     )
     return 0

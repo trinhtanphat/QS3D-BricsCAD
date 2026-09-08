@@ -106,8 +106,30 @@ function Assert-PackageIntegrity {
     $packageRootPath = [IO.Path]::GetFullPath($Directory).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
     $packageRoot = $packageRootPath + [IO.Path]::DirectorySeparatorChar
     $manifestEntries = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $manifestHashes = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $manifestLines = [Collections.Generic.List[string]]::new()
+    $manifestStream = [IO.File]::Open($manifest, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try {
+            $manifestStream.Position = 0
+            $manifestSha256 = ([BitConverter]::ToString($sha.ComputeHash($manifestStream))).Replace('-', '').ToUpperInvariant()
+        }
+        finally { $sha.Dispose() }
+
+        $manifestStream.Position = 0
+        $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
+        $reader = [IO.StreamReader]::new($manifestStream, $strictUtf8, $true, 4096, $true)
+        try {
+            while (-not $reader.EndOfStream) { $manifestLines.Add($reader.ReadLine()) }
+        }
+        catch [Text.DecoderFallbackException] { throw 'SHA256SUMS.txt is not valid UTF-8/ASCII text.' }
+        finally { $reader.Dispose() }
+    }
+    finally { $manifestStream.Dispose() }
+
     $verified = 0
-    foreach ($line in Get-Content -LiteralPath $manifest) {
+    foreach ($line in $manifestLines) {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
         if ($line -notmatch '^([0-9A-Fa-f]{64})\s{2}(.+)$') { throw "Invalid SHA256SUMS entry: $line" }
         $expected = $Matches[1].ToUpperInvariant()
@@ -127,9 +149,11 @@ function Assert-PackageIntegrity {
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing package payload: $name" }
         $actual = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToUpperInvariant()
         if ($actual -ne $expected) { throw "SHA-256 mismatch for $name" }
+        $manifestHashes.Add($name, $expected)
         $verified++
     }
     if ($verified -eq 0) { throw 'SHA256SUMS.txt contains no payload entries.' }
+    $manifestHashes.Add('SHA256SUMS.txt', $manifestSha256)
 
     $actualEntries = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($packageFile in Get-ChildItem -LiteralPath $Directory -File -Recurse) {
@@ -169,7 +193,83 @@ function Assert-PackageIntegrity {
     if (-not (Test-Path -LiteralPath $commandsPath -PathType Leaf)) { throw 'COMMANDS.txt is missing.' }
     $commands = @(Get-Content -LiteralPath $commandsPath | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Sort-Object -Unique)
     if ($commands.Count -eq 0 -or -not ($commands -contains 'QS3D')) { throw 'COMMANDS.txt does not contain the QS3D entry command.' }
-    return $commands
+    return [pscustomobject]@{
+        Hashes = $manifestHashes
+        Commands = $commands
+    }
+}
+
+function Assert-StagedPayloadAdmission {
+    param(
+        [string]$Directory,
+        $AdmittedHashes,
+        [string[]]$AdmittedCommands,
+        [switch]$SignedRequired,
+        [string]$SignerThumbprint
+    )
+
+    if (-not (Test-Path -LiteralPath $Directory -PathType Container)) { throw "Staged payload directory is missing: $Directory" }
+    if ($null -eq $AdmittedHashes -or $AdmittedHashes.Count -eq 0) { throw 'Staged payload admission requires a non-empty admitted hash snapshot.' }
+
+    $stageRootPath = [IO.Path]::GetFullPath($Directory).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $stageRootItem = Get-Item -LiteralPath $stageRootPath -Force -ErrorAction Stop
+    if (-not $stageRootItem.PSIsContainer -or ($stageRootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Staged payload root must be an ordinary non-reparse directory: $stageRootPath"
+    }
+
+    $stageRoot = $stageRootPath + [IO.Path]::DirectorySeparatorChar
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $stageChildren = @(Get-ChildItem -LiteralPath $Directory -Force -ErrorAction Stop)
+    foreach ($stageFile in $stageChildren) {
+        if ($stageFile.PSIsContainer -or -not ($stageFile -is [IO.FileInfo]) -or ($stageFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Staged payload contains a directory, reparse point, or non-regular entry: $($stageFile.FullName)"
+        }
+        $fullPath = [IO.Path]::GetFullPath($stageFile.FullName)
+        if (-not $fullPath.StartsWith($stageRoot, [StringComparison]::OrdinalIgnoreCase)) { throw "Staged payload escaped stage root: $($stageFile.FullName)" }
+        $relative = $fullPath.Substring($stageRoot.Length).Replace([IO.Path]::DirectorySeparatorChar, '/').Replace([IO.Path]::AltDirectorySeparatorChar, '/')
+        if ($relative.Contains('/')) { throw "Staged payload must contain top-level files only: $relative" }
+        if (-not $seen.Add($relative)) { throw "Duplicate/case-colliding staged payload path: $relative" }
+        if (-not $AdmittedHashes.ContainsKey($relative)) { throw "Staged payload was not part of source admission: $relative" }
+        $path = [string]$stageFile.FullName
+        $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToUpperInvariant()
+        $expected = [string]$AdmittedHashes[$relative]
+        if (-not [string]::Equals($actual, $expected, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Staged payload SHA-256 differs from admitted source bytes: $relative"
+        }
+    }
+    if ($seen.Count -eq 0) { throw 'Staged payload contains no files.' }
+
+    foreach ($requiredName in @(
+        'QS3D.BricsCAD.V25.dll',
+        'QS3D.Core.dll',
+        'COMMANDS.txt',
+        'PACKAGE-METADATA.json',
+        'README.txt',
+        'SHA256SUMS.txt',
+        'uninstall-v25-autoload.ps1',
+        'update-v25.ps1'
+    )) {
+        if (-not $seen.Contains($requiredName)) { throw "Staged payload is missing required admitted file: $requiredName" }
+    }
+    if ($seen.Count -ne 8) { throw "Staged payload contains an unexpected file count: $($seen.Count)" }
+
+    Assert-PackageIdentity -Directory $Directory
+
+    $expectedSigner = Normalize-Thumbprint $SignerThumbprint
+    foreach ($name in @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll', 'uninstall-v25-autoload.ps1', 'update-v25.ps1')) {
+        $path = Join-Path $Directory $name
+        if ($SignedRequired -or $expectedSigner.Length -gt 0) {
+            Assert-AuthenticodeSigner -Path $path -ExpectedSigner $expectedSigner -Label ("Staged QS3D executable payload " + $name)
+        }
+    }
+
+    $stagedCommands = @(Get-Content -LiteralPath (Join-Path $Directory 'COMMANDS.txt') | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Sort-Object -Unique)
+    if ($stagedCommands.Count -ne $AdmittedCommands.Count) { throw 'Staged COMMANDS.txt differs from the admitted command snapshot.' }
+    for ($index = 0; $index -lt $stagedCommands.Count; $index++) {
+        if (-not [string]::Equals([string]$stagedCommands[$index], [string]$AdmittedCommands[$index], [StringComparison]::Ordinal)) {
+            throw 'Staged COMMANDS.txt differs from the admitted command snapshot.'
+        }
+    }
 }
 
 function Convert-ToStrictSemVerIdentity {
@@ -461,7 +561,8 @@ try {
     }
 
     $package = (Resolve-Path -LiteralPath $PackageDirectory).Path
-    $commands = Assert-PackageIntegrity -Directory $package -SignedRequired:$RequireSigned -SignerThumbprint $ExpectedSignerThumbprint
+    $packageAdmission = Assert-PackageIntegrity -Directory $package -SignedRequired:$RequireSigned -SignerThumbprint $ExpectedSignerThumbprint
+    $commands = @($packageAdmission.Commands)
     Assert-PackageIdentity -Directory $package
     $targets = @(Get-RegistryTargets -RequestedVersions $VersionKeys -RequestedLanguages $LanguageKeys)
 
@@ -500,6 +601,8 @@ try {
                 Copy-Item -LiteralPath $source -Destination $destination -Force
                 Unblock-File -LiteralPath $destination -ErrorAction Stop
             }
+
+            Assert-StagedPayloadAdmission -Directory $stage -AdmittedHashes $packageAdmission.Hashes -AdmittedCommands $commands -SignedRequired:$RequireSigned -SignerThumbprint $ExpectedSignerThumbprint
 
             if (Test-Path -LiteralPath $installFull) {
                 if (-not $Force) { throw "Install directory already exists: $installFull" }
