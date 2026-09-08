@@ -94,16 +94,38 @@ elseif (-not [string]::Equals($signatureStatus, "Valid", [StringComparison]::Ord
     Write-Warning "Authenticode publisher validation was explicitly bypassed. Status='$signatureStatus', signer='$publisher'."
 }
 
-$windowsInstaller = New-Object -ComObject WindowsInstaller.Installer
-$database = $windowsInstaller.OpenDatabase($MsiPath, 0)
-$productNameView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductName''')
-$productNameView.Execute()
-$productNameRecord = $productNameView.Fetch()
-$productName = if ($productNameRecord) { [string]$productNameRecord.StringData(1) } else { "" }
-$productVersionView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')
-$productVersionView.Execute()
-$productVersionRecord = $productVersionView.Fetch()
-$productVersion = if ($productVersionRecord) { [string]$productVersionRecord.StringData(1) } else { "" }
+$windowsInstaller = $null
+$database = $null
+$productNameView = $null
+$productNameRecord = $null
+$productVersionView = $null
+$productVersionRecord = $null
+try {
+    $windowsInstaller = New-Object -ComObject WindowsInstaller.Installer
+    $database = $windowsInstaller.OpenDatabase($MsiPath, 0)
+    $productNameView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductName''')
+    $productNameView.Execute()
+    $productNameRecord = $productNameView.Fetch()
+    $productName = if ($productNameRecord) { [string]$productNameRecord.StringData(1) } else { "" }
+    $productVersionView = $database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductVersion''')
+    $productVersionView.Execute()
+    $productVersionRecord = $productVersionView.Fetch()
+    $productVersion = if ($productVersionRecord) { [string]$productVersionRecord.StringData(1) } else { "" }
+}
+finally {
+    foreach ($comObject in @(
+        $productVersionRecord,
+        $productVersionView,
+        $productNameRecord,
+        $productNameView,
+        $database,
+        $windowsInstaller
+    )) {
+        if ($null -ne $comObject -and [Runtime.InteropServices.Marshal]::IsComObject($comObject)) {
+            [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($comObject)
+        }
+    }
+}
 if ([string]::IsNullOrWhiteSpace($productName) -or $productName -notmatch '(?i)\bBricsCAD\b') {
     throw "MSI ProductName does not identify BricsCAD: '$productName'."
 }
