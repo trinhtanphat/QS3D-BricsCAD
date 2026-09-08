@@ -1,0 +1,190 @@
+name: Required Status Bridge
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  checks: read
+  actions: read
+  statuses: write
+
+concurrency:
+  group: required-status-bridge-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+  cancel-in-progress: true
+
+jobs:
+  bridge:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPOSITORY: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      CURRENT_RUN_ID: ${{ github.run_id }}
+    steps:
+      - name: Mirror exact-head Shared CI checks to protected contexts
+        shell: python
+        run: |
+          import json
+          import os
+          import sys
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          repo = os.environ["REPOSITORY"]
+          pr_number = int(os.environ["PR_NUMBER"])
+          head_sha = os.environ["HEAD_SHA"].strip().lower()
+          current_run_id = int(os.environ["CURRENT_RUN_ID"])
+          token = os.environ["GH_TOKEN"]
+          required = ("preflight", "core")
+          api = "https://api.github.com"
+
+          if len(head_sha) != 40 or any(ch not in "0123456789abcdef" for ch in head_sha):
+              raise SystemExit("exact pull-request head SHA is invalid")
+
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": f"Bearer {token}",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "User-Agent": "qs3d-required-status-bridge",
+          }
+
+          def request_json(method, path, payload=None):
+              data = None if payload is None else json.dumps(payload).encode("utf-8")
+              request = urllib.request.Request(api + path, data=data, method=method, headers=headers)
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      raw = response.read().decode("utf-8")
+                      return json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as exc:
+                  detail = exc.read().decode("utf-8", errors="replace")
+                  raise RuntimeError(f"GitHub API {method} {path} failed HTTP {exc.code}: {detail}") from exc
+
+          def post_status(context, state, description, target_url=None):
+              payload = {
+                  "state": state,
+                  "context": context,
+                  "description": description[:140],
+              }
+              if target_url:
+                  payload["target_url"] = target_url
+              request_json("POST", f"/repos/{repo}/statuses/{head_sha}", payload)
+
+          # A pending status is fail-closed if the bridge is cancelled unexpectedly.
+          for context in required:
+              post_status(context, "pending", "Awaiting exact-head Shared CI result")
+
+          def matching_ci_runs():
+              query = urllib.parse.urlencode({
+                  "event": "pull_request",
+                  "head_sha": head_sha,
+                  "per_page": "100",
+              })
+              payload = request_json("GET", f"/repos/{repo}/actions/runs?{query}")
+              runs = []
+              for run in payload.get("workflow_runs", []):
+                  if int(run.get("id") or 0) == current_run_id:
+                      continue
+                  prs = run.get("pull_requests") or []
+                  if not any(int(pr.get("number") or 0) == pr_number for pr in prs):
+                      continue
+                  path = str(run.get("path") or "")
+                  name = str(run.get("name") or "")
+                  # Only the canonical Shared CI workflow can authorize these contexts.
+                  if not (path.endswith("/.github/workflows/ci.yml") or path == ".github/workflows/ci.yml" or name == "Shared CI"):
+                      continue
+                  if str(run.get("head_sha") or "").lower() != head_sha:
+                      continue
+                  runs.append(run)
+              runs.sort(key=lambda r: (str(r.get("created_at") or ""), int(r.get("id") or 0)), reverse=True)
+              return runs
+
+          def check_runs_for_ci_run(ci_run_id):
+              payload = request_json("GET", f"/repos/{repo}/commits/{head_sha}/check-runs?per_page=100")
+              selected = {}
+              for check in payload.get("check_runs", []):
+                  name = str(check.get("name") or "")
+                  if name not in required:
+                      continue
+                  prs = check.get("pull_requests") or []
+                  if not any(int(pr.get("number") or 0) == pr_number for pr in prs):
+                      continue
+                  details = str(check.get("details_url") or "")
+                  if f"/actions/runs/{ci_run_id}" not in details:
+                      continue
+                  prior = selected.get(name)
+                  if prior is None or int(check.get("id") or 0) > int(prior.get("id") or 0):
+                      selected[name] = check
+              return selected
+
+          deadline = time.monotonic() + (22 * 60)
+          last_reason = "Shared CI run not visible yet"
+          while time.monotonic() < deadline:
+              runs = matching_ci_runs()
+              if not runs:
+                  last_reason = "No canonical Shared CI run for exact PR/head"
+                  time.sleep(10)
+                  continue
+
+              # Always bind to the newest canonical run. A stale successful run cannot
+              # authorize the status while a newer rerun exists on the same head SHA.
+              ci_run = runs[0]
+              ci_run_id = int(ci_run.get("id") or 0)
+              ci_status = str(ci_run.get("status") or "")
+              ci_conclusion = ci_run.get("conclusion")
+              checks = check_runs_for_ci_run(ci_run_id)
+
+              missing = [name for name in required if name not in checks]
+              if missing or ci_status != "completed":
+                  last_reason = f"Shared CI {ci_run_id} not terminal; missing={missing}, status={ci_status}"
+                  time.sleep(10)
+                  continue
+
+              failures = []
+              for name in required:
+                  check = checks[name]
+                  status = str(check.get("status") or "")
+                  conclusion = str(check.get("conclusion") or "")
+                  if status != "completed" or conclusion != "success":
+                      failures.append(f"{name}={status}/{conclusion or '<none>'}")
+
+              target = str(ci_run.get("html_url") or "") or None
+              if failures or str(ci_conclusion or "") != "success":
+                  reason = ", ".join(failures) or f"Shared CI conclusion={ci_conclusion or '<none>'}"
+                  for context in required:
+                      post_status(context, "failure", f"Exact-head Shared CI failed: {reason}", target)
+                  raise SystemExit(f"required status bridge fail-closed: {reason}")
+
+              # Re-query once immediately before publication and require that the same
+              # run is still newest, preventing a rerun race between admission and write.
+              confirm = matching_ci_runs()
+              if not confirm or int(confirm[0].get("id") or 0) != ci_run_id:
+                  last_reason = "Canonical Shared CI changed during status admission"
+                  time.sleep(5)
+                  continue
+              confirm_checks = check_runs_for_ci_run(ci_run_id)
+              if set(confirm_checks) != set(required) or any(
+                  str(confirm_checks[name].get("status") or "") != "completed" or
+                  str(confirm_checks[name].get("conclusion") or "") != "success"
+                  for name in required
+              ):
+                  last_reason = "Required check identity/result changed during status admission"
+                  time.sleep(5)
+                  continue
+
+              for context in required:
+                  post_status(context, "success", f"Exact-head Shared CI {context} succeeded", target)
+              print(f"PASS: mirrored exact PR #{pr_number} head {head_sha} from canonical Shared CI run {ci_run_id}")
+              sys.exit(0)
+
+          for context in required:
+              post_status(context, "failure", f"Required status bridge timed out: {last_reason}")
+          raise SystemExit(f"required status bridge timeout: {last_reason}")
