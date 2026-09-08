@@ -1,10 +1,10 @@
-# V25 Cloud Stale-Source Handoff Implementation Plan
+# V25 Cloud Stale-Source Recovery Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** use the repository's verification and finishing workflow before claiming completion or merging.
 
-**Goal:** Make a V25 cloud release that becomes stale before its first persistent release mutation complete as an auditable successful no-op, then let the canonical dispatcher safely hand the same preview ordinal to current protected `main` and dispatch a fresh exact-source release.
+**Goal:** Prevent a V25 cloud release from publishing an exact source SHA that has become stale while allowing the canonical dispatcher to re-evaluate protected `main` without ever reassigning a previously reserved preview ordinal.
 
-**Architecture:** Keep stale-source classification in `release-v25-cloud.yml`, but replace only the release-relevant-drift throw with a successful superseded terminal path before draft-release creation. Keep all retry authority in `dispatch-v25-cloud-after-main-integration.yml`; it derives the effective append-only reservation owner from complete reservation/fence pairs and permits an owner handoff only when a successful canonical upstream release run proves the old owner, ancestry to current protected `main` is valid, and the normal tag/published-release gates still admit dispatch. Any malformed, dangling, mismatched, noncanonical, or non-ancestor state remains fail-closed.
+**Architecture:** Keep release-relevant drift classification in `.github/workflows/release-v25-cloud.yml`. When drift is proven before the first persistent release mutation, the release emits an auditable superseded marker and completes as a successful no-op. The existing `.github/workflows/dispatch-v25-cloud-after-main-integration.yml` already listens for successful completion of the canonical release workflow, resolves that event to current protected `main`, and preserves immutable preview ownership: if the committed ordinal belongs to another source SHA, it performs no reservation/dispatch and requires protected-main `ProductVersion` to advance. Issue #1441 remains the append-only reservation ledger.
 
 **Tech Stack:** GitHub Actions YAML, PowerShell 7, GitHub REST/CLI calls already used by the workflows, Python 3.12 source/preflight guards.
 
@@ -13,10 +13,10 @@
 ## Global Constraints
 
 - Never publish a V25 release built from a source SHA when protected `main` has release-relevant changes after that SHA.
-- The release workflow must not directly dispatch its own retry.
-- Retry authority stays in the canonical post-integration dispatcher and its append-only Issue #1085 reservation ledger.
-- Handoff requires authenticated canonical `workflow_run` provenance and descendant protected-main ancestry; ambiguity fails closed.
-- Existing tag/version/published-release checks remain authoritative.
+- Never rebind, recycle, delete, or reinterpret a historical preview reservation/fence to make an ordinal reusable.
+- The release workflow must not dispatch its own retry.
+- Retry authority stays in the canonical post-integration dispatcher and Issue #1441 ledger.
+- Existing ancestry, tag, published-release, version, package-integrity, and exact-source checks remain authoritative.
 - Licensed BricsCAD V25/V26 runtime evidence is not fabricated or promoted by this cloud workflow.
 
 ---
@@ -24,96 +24,57 @@
 ### Task 1: Lock the stale-source recovery contract
 
 **Files:**
-- Create: `scripts/preflight-v25-cloud-release-stale-source-handoff.py`
-- Modify: none
+- Modify: `scripts/preflight-v25-cloud-release-stale-source-handoff.py`
 
-**Interfaces:**
-- Consumes: `.github/workflows/release-v25-cloud.yml`, `.github/workflows/dispatch-v25-cloud-after-main-integration.yml`
-- Produces: an auto-discovered source guard that fails until the recovery contract exists.
+- [x] Replace the unsafe same-ordinal handoff expectations with a successful-no-op contract.
+- [x] Require `V25_RELEASE_SUPERSEDED`, a GitHub Actions notice, and `exit 0` before `$body = @{`.
+- [x] Require the dispatcher to wake only from a successful canonical release `workflow_run` and resolve it to current `main`.
+- [x] Require existing immutable reservation/fence ownership logic and forbid rebind tokens.
+- [x] Require the committed V25 preview ordinal to be strictly newer than burned ordinal `10307`, with `Version`, `FileVersion`, and `InformationalVersion` bound to the same ordinal.
 
-- [x] **Step 1: Write the failing source guard**
+### Task 2: Advance the burned preview identity
 
-Require an auditable `V25_RELEASE_SUPERSEDED` marker before the draft-release body, require the legacy stale release-relevant throw to be absent, and require dispatcher tokens for upstream run/head provenance, effective-owner tracking, default-deny handoff state, canonical Actions-run verification, and handoff admission before durable dispatch mutation.
+**Files:**
+- Modify: `src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj`
 
-- [ ] **Step 2: Run the guard and verify RED**
+- [x] Verify `10308` is absent from Issue #1441 reservations, Git tag refs, and GitHub releases.
+- [x] Advance the committed V25 identity from `0.1.0-preview.10307` to `0.1.0-preview.10308` across all product/file/informational version surfaces.
+- [x] Leave historical `10307` ownership unchanged even though its old tag/release is no longer present.
 
-Run through Shared CI's `python scripts/preflight-all.py` on the canonical `agent/**` PR carrier. Expected failure: `preflight-v25-cloud-release-stale-source-handoff.py` reports missing production contract tokens, not branch-admission or lane-reservation failure.
-
-### Task 2: Make stale release completion a safe no-op
+### Task 3: Make pre-mutation stale release completion a safe no-op
 
 **Files:**
 - Modify: `.github/workflows/release-v25-cloud.yml`
-- Test: `scripts/preflight-v25-cloud-release-stale-source-handoff.py`
 
-**Interfaces:**
-- Consumes: existing `SOURCE_SHA`, `RELEASE_TAG`, protected-main API/fetch identity and release-relevant path classification.
-- Produces: successful workflow completion only when release-relevant drift is proven before the first persistent release mutation.
+- [x] Preserve exact `SOURCE_SHA` ancestry and API/fetch identity validation.
+- [x] Preserve release-relevant path classification.
+- [x] When `git diff --quiet` returns `1` before the first persistent release mutation, emit an auditable warning/notice/summary and `V25_RELEASE_SUPERSEDED source_sha=<old> current_main=<new>`.
+- [x] Exit the publish step with status `0` before draft-release creation.
+- [x] Preserve malformed ancestry, API/fetch mismatch, git-diff errors, and post-mutation publication races as hard failures.
 
-- [ ] **Step 1: Replace only the release-relevant drift throw**
-
-When `git diff --quiet` returns `1`, emit `V25_RELEASE_SUPERSEDED source_sha=<old> current_main=<new> release_tag=<tag> run_id=<run>` plus a GitHub Actions notice and terminate the PowerShell publish step successfully before `$body = @{` can be reached. Preserve non-ancestor, API/fetch mismatch, git-diff error, and later protected-main race failures as hard failures.
-
-- [ ] **Step 2: Verify ordering and static contract**
-
-Run `python scripts/preflight-v25-cloud-release-stale-source-handoff.py`. Expected at this intermediate point: release-side assertions pass; dispatcher-side assertions still fail.
-
-### Task 3: Authenticate append-only dispatcher ownership handoff
+### Task 4: Verify dispatcher ownership remains immutable
 
 **Files:**
-- Modify: `.github/workflows/dispatch-v25-cloud-after-main-integration.yml`
-- Test: `scripts/preflight-v25-cloud-release-stale-source-handoff.py`
+- Production dispatcher change: none expected.
 
-**Interfaces:**
-- Consumes: `github.event.workflow_run.id`, `github.event.workflow_run.head_sha`, existing Issue #1085 reservation/fence comments, current protected-main SHA, current tag/version gates.
-- Produces: a new reservation/fence pair for current protected main only after old effective owner provenance is proven.
+- [x] Confirm successful release workflow completion already triggers the canonical dispatcher.
+- [x] Confirm `workflow_run` is rebound to exact current protected `main` for a fresh release decision.
+- [x] Confirm a committed ordinal owned by another source exits without reserve/dispatch and explicitly requires `ProductVersion` advance.
+- [x] Confirm no same-ordinal handoff/rebind code is introduced.
 
-- [ ] **Step 1: Bind upstream workflow-run identity**
+### Task 5: Exact-head CI, review, and merge
 
-Expose `UPSTREAM_RELEASE_RUN_ID` and `UPSTREAM_RELEASE_HEAD_SHA` to the dispatcher job. For non-`workflow_run` events these values are empty/default and cannot authorize handoff.
-
-- [ ] **Step 2: Derive the effective owner from complete append-only pairs**
-
-Parse bot-authored reservation and dispatch-fence markers in ledger order. Track the latest complete coherent pair as `latest_reservation_source` / `latest_dispatch_fence_source`; reject malformed duplicate/conflicting/dangling ownership rather than treating historical handoff rows as a permanent conflict.
-
-- [ ] **Step 3: Admit only canonical stale-run handoff**
-
-Initialize `handoff_rebind=0`. If current source differs from the effective owner, require `workflow_run`, require the upstream head SHA to equal that owner, fetch `actions/runs/${UPSTREAM_RELEASE_RUN_ID}`, require canonical workflow path `.github/workflows/release-v25-cloud.yml`, successful completed `workflow_dispatch` provenance on `main`, and require old owner to be an ancestor of current protected main. Log `V25 preview reservation handoff admitted` and set `handoff_rebind=1` only after all checks pass.
-
-- [ ] **Step 4: Append new owner/fence and dispatch normally**
-
-Reuse the existing immediate protected-main rebind/version/tag checks before the first durable reservation/fence side effect. Append a new reservation for the current source when handoff is admitted, append its dispatch fence, then invoke the canonical release workflow with exact current `source_sha`. Do not mutate/delete historical ledger comments.
-
-- [ ] **Step 5: Run source guards**
-
-Run `python scripts/preflight-v25-cloud-release-stale-source-handoff.py` and aggregate `python scripts/preflight-all.py`. Expected: both PASS.
-
-### Task 4: Exact-head CI, review, and merge
-
-**Files:**
-- Modify: none unless review/CI finds a concrete defect.
-
-**Interfaces:**
-- Consumes: PR exact head, protected `preflight` and `core` contexts, mergeability/current-main state.
-- Produces: merged protected-main fix only from a verified current candidate.
-
-- [ ] **Step 1: Inspect exact PR diff**
-
-Confirm the carrier changes only the four Reservation-v2 `Expected-Paths` and that no release/package/runtime invariant was weakened outside the intended stale no-op/handoff path.
-
-- [ ] **Step 2: Obtain exact-head Shared CI**
-
-Require authoritative PR `preflight` and `core` GREEN for the exact candidate SHA. If protected `main` moves, reconcile before merge and require fresh exact-head evidence.
-
-- [ ] **Step 3: Mark ready and re-check mergeability/currentness**
-
-Do not treat draft or stale checks as merge evidence. Confirm the PR is ready, mergeable, and based on current protected main according to repository policy.
-
-- [ ] **Step 4: Merge with expected head SHA**
-
-Merge only with the verified expected PR head SHA. After merge, verify the resulting protected-main SHA and leave licensed runtime status unchanged unless real licensed-host evidence exists.
+- [ ] Reconcile the canonical PR branch with current protected `main` without dropping Reservation-v2 metadata.
+- [ ] Run the aggregate feature source guards and authoritative PR CI on the exact candidate head.
+- [ ] Inspect the final PR diff and ensure only the intended release workflow, guard, plan, and V25 version identity changed.
+- [ ] Require current exact-head GREEN and mergeability before merge.
+- [ ] Merge PR #6150 and verify protected `main` contains the merge result.
+- [ ] Inspect immediate post-merge CI/release automation for a new blocking regression; keep licensed runtime status unchanged without real licensed-host evidence.
 
 ## Self-Review
 
-- Spec coverage: stale publication is still blocked; recovery is dispatcher-owned; provenance, ancestry, append-only ledger behavior, idempotency, and exact-head merge verification each have an explicit task.
-- Placeholder scan: no deferred implementation placeholders are present.
-- Interface consistency: release produces a successful canonical `workflow_run`; dispatcher consumes that run ID/head SHA and emits a new reservation/fence pair before dispatching the fresh release.
+- Stale pre-mutation publication remains impossible.
+- Successful stale no-op wakes the existing dispatcher instead of recursively dispatching from the release workflow.
+- Burned ordinal `10307` is not reused; fresh committed identity `10308` is used only after ledger/tag/release checks showed it was unused.
+- Historical reservation/fence rows stay append-only and immutable.
+- The change does not weaken package integrity, exact source/tag binding, or licensed-runtime evidence policy.
