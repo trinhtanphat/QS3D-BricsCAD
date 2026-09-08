@@ -53,6 +53,8 @@ namespace QS3D.Core.Measurement
 
             RequireObservedCount(knownCount, items.Count, nameof(traces));
             RequireKnownCountStable(traces, knownCount, nameof(traces));
+            if (knownCount.HasValue)
+                RequireStableTraceGeneration(traces, knownCount.Value, items);
             items.Sort(CompareTraces);
             Traces = new ReadOnlyCollection<MeasurementTrace>(items.ToArray());
         }
@@ -114,6 +116,72 @@ namespace QS3D.Core.Measurement
             var observedCount = RequireSupportedCount(traces, paramName);
             if (observedCount != admittedCount)
                 throw new ArgumentException("Measurement snapshot count changed during enumeration.", paramName);
+        }
+
+        private static void RequireStableTraceGeneration(
+            IEnumerable<MeasurementTrace> traces,
+            int admittedCount,
+            IReadOnlyList<MeasurementTrace> admittedTraces)
+        {
+            // Count was rebound immediately before this generation check. Do not add
+            // more Count probes here: this pass verifies content only and preserves the
+            // deterministic Count-observation contract around the primary traversal.
+            if (traces is ICollection<MeasurementTrace> collection)
+            {
+                var copied = new MeasurementTrace[admittedCount];
+                try
+                {
+                    collection.CopyTo(copied, 0);
+                }
+                catch (NotSupportedException)
+                {
+                    RequireStableTraceGenerationByReplay(traces, admittedTraces);
+                    return;
+                }
+
+                if (copied.Length != admittedTraces.Count)
+                    ThrowTraceContentChanged();
+
+                for (var i = 0; i < copied.Length; i++)
+                {
+                    var trace = copied[i];
+                    if (trace == null || !admittedTraces[i].Equals(trace))
+                        ThrowTraceContentChanged();
+                }
+                return;
+            }
+
+            RequireStableTraceGenerationByReplay(traces, admittedTraces);
+        }
+
+        private static void RequireStableTraceGenerationByReplay(
+            IEnumerable<MeasurementTrace> traces,
+            IReadOnlyList<MeasurementTrace> admittedTraces)
+        {
+            var index = 0;
+            using (var enumerator = traces.GetEnumerator())
+            {
+                while (true)
+                {
+                    if (!enumerator.MoveNext())
+                        break;
+                    if (index >= admittedTraces.Count)
+                        ThrowTraceContentChanged();
+
+                    var trace = enumerator.Current;
+                    if (trace == null || !admittedTraces[index].Equals(trace))
+                        ThrowTraceContentChanged();
+                    index++;
+                }
+            }
+
+            if (index != admittedTraces.Count)
+                ThrowTraceContentChanged();
+        }
+
+        private static void ThrowTraceContentChanged()
+        {
+            throw new InvalidOperationException("Measurement snapshot trace source content changed during traversal.");
         }
 
         private static ArgumentException TraceCountError(string paramName)

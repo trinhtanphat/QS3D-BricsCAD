@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using QS3D.Core.Domain;
+using QS3D.Core.Mapping;
+using QS3D.Core.Measurement;
 using QS3D.Core.Model;
 using QS3D.Core.Takeoff;
 using QS3D.Core.Units;
@@ -16,6 +19,8 @@ namespace QS3D.Core.SmokeTests
             TakeoffResultUnitCanonicality();
             MissingMetricStillFailsThroughCanonicalPath();
             InvalidDrawingUnitStillFailsThroughCanonicalPath();
+            MeasurementSnapshotRejectsSameCountGenerationDrift();
+            MappingCatalogRejectsSameCountGenerationDrift();
         }
 
         private static void CanonicalResultParityAndProvenance()
@@ -220,6 +225,44 @@ namespace QS3D.Core.SmokeTests
             Equal(canonicalMessage, tracedMessage, "Trace projection must preserve canonical drawing-unit validation before Count.");
         }
 
+        private static void MeasurementSnapshotRejectsSameCountGenerationDrift()
+        {
+            var first = QuantityEngine.CalculateWithTrace(
+                new EntitySnapshot("GEN-MEASURE-A", "Point", "QTO"),
+                TakeoffKind.Count,
+                DrawingUnit.Meter).Trace;
+            var second = QuantityEngine.CalculateWithTrace(
+                new EntitySnapshot("GEN-MEASURE-B", "Point", "QTO"),
+                TakeoffKind.Count,
+                DrawingUnit.Meter).Trace;
+            var source = new SameCountGeneration<MeasurementTrace>(first, second);
+
+            Throws<InvalidOperationException>(() => new MeasurementSnapshot(source));
+            Equal(2, source.EnumerationCount,
+                "Measurement snapshot must verify the admitted fixed-count source generation exactly once after traversal.");
+        }
+
+        private static void MappingCatalogRejectsSameCountGenerationDrift()
+        {
+            var first = new MeasurementWorkItemMapping(
+                "GEN-MAP-A",
+                ElementCategory.StructuralWall,
+                "GEN-MEASURE-A",
+                "GEN-CLASS-A",
+                "GEN-WORK-A");
+            var second = new MeasurementWorkItemMapping(
+                "GEN-MAP-B",
+                ElementCategory.StructuralWall,
+                "GEN-MEASURE-B",
+                "GEN-CLASS-B",
+                "GEN-WORK-B");
+            var source = new SameCountGeneration<MeasurementWorkItemMapping>(first, second);
+
+            Throws<InvalidOperationException>(() => new MeasurementWorkItemMappingCatalog(source));
+            Equal(2, source.EnumerationCount,
+                "Mapping catalog must verify the admitted fixed-count source generation exactly once after traversal.");
+        }
+
         private static string Capture<TException>(Action action) where TException : Exception
         {
             try
@@ -254,6 +297,43 @@ namespace QS3D.Core.SmokeTests
         {
             if (!EqualityComparer<T>.Default.Equals(expected, actual))
                 throw new InvalidOperationException(message + " Expected: " + expected + "; actual: " + actual + ".");
+        }
+
+        private static void Throws<TException>(Action action) where TException : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (TException)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException("Expected " + typeof(TException).Name + ".");
+        }
+
+        private sealed class SameCountGeneration<T> : IReadOnlyCollection<T>
+        {
+            private readonly T _firstGeneration;
+            private readonly T _laterGeneration;
+
+            internal SameCountGeneration(T firstGeneration, T laterGeneration)
+            {
+                _firstGeneration = firstGeneration;
+                _laterGeneration = laterGeneration;
+            }
+
+            public int Count => 1;
+            internal int EnumerationCount { get; private set; }
+
+            public IEnumerator<T> GetEnumerator()
+            {
+                EnumerationCount++;
+                yield return EnumerationCount == 1 ? _firstGeneration : _laterGeneration;
+            }
+
+            System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
         }
     }
 }
