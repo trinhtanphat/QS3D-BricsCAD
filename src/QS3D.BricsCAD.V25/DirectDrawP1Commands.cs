@@ -724,13 +724,12 @@ namespace QS3D.BricsCAD.V25
                 if (!string.IsNullOrWhiteSpace(generatedHandle)) CadHandleService.Select(document, new[] { generatedHandle });
                 else if (!sourceId.IsNull && sourceId.IsValid) document.Editor.SetImpliedSelection(new[] { sourceId });
                 document.Editor.Regen();
-                PaletteCoordinator.SetStatus(status);
+                DirectDrawUiFailureReporter.ReportPostCommitSuccess(document, status);
                 document.Editor.WriteMessage("\nQS3D " + status);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                try { document.Editor.WriteMessage("\nQS3D " + status + " UI sync warning: " + ex.Message); }
-                catch { }
+                DirectDrawUiFailureReporter.ReportPostCommitWarning(document);
             }
         }
 
@@ -745,10 +744,9 @@ namespace QS3D.BricsCAD.V25
         private static void Guard(Document document, string operation, Action action)
         {
             try { action(); }
-            catch (Exception ex)
+            catch (Exception)
             {
-                document.Editor.WriteMessage("\n" + operation + " error: " + ex.Message);
-                PaletteCoordinator.SetStatus(operation + " lỗi: " + ex.Message);
+                DirectDrawUiFailureReporter.ReportOperationFailure(document, operation);
             }
         }
     }
