@@ -24,13 +24,8 @@ registration = read(REGISTRATION)
 for token in (
     "using System.Text;",
     "new Dictionary<string, RoomFinishScheduleRow>(StringComparer.OrdinalIgnoreCase)",
-    "var key = GroupKey(",
-    "floorId,",
-    "roomKey,",
-    "element.Category.ToString(),",
-    "familyId,",
-    "material,",
-    "unitHint);",
+    'var roomKey = item.RoomId.Length > 0 ? item.RoomId : "(unlinked)";',
+    "var key = GroupKey(item.FloorId, roomKey, item.Category, item.FamilyId, item.Material, item.UnitHint);",
     "private static string GroupKey(params string[] tokens)",
     "var key = new StringBuilder();",
     "foreach (var raw in tokens)",
@@ -55,23 +50,23 @@ else:
     if key_start < 0:
         errors.append("RoomFinishSchedule Build must construct grouped identity through GroupKey")
     else:
-        key_end = build.find("unitHint);", key_start)
+        key_end = build.find("item.UnitHint);", key_start)
         if key_end < 0:
-            errors.append("RoomFinishSchedule GroupKey call must include unitHint as the final grouping token")
+            errors.append("RoomFinishSchedule GroupKey call must include captured item.UnitHint as the final grouping token")
         else:
             key_call = build[key_start:key_end]
             ordered = [
-                "floorId",
+                "item.FloorId",
                 "roomKey",
-                "element.Category.ToString()",
-                "familyId",
-                "material",
+                "item.Category",
+                "item.FamilyId",
+                "item.Material",
             ]
             cursor = -1
             for token in ordered:
                 next_pos = key_call.find(token, cursor + 1)
                 if next_pos < 0 or next_pos <= cursor:
-                    errors.append("RoomFinishSchedule GroupKey tokens are missing or reordered at: " + token)
+                    errors.append("RoomFinishSchedule captured GroupKey tokens are missing or reordered at: " + token)
                     break
                 cursor = next_pos
 
@@ -123,4 +118,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Room Finish grouping uses collision-free length-prefixed identity, preserves case-insensitive grouping, and regression coverage proves the historical six-token collision with accepted printable-delimiter floor/room tuples while retaining valid Room finish identity and normal grouping/provenance.")
+print("PASS: Room Finish grouping consumes captured work-item identity, uses collision-free length-prefixed keys, preserves case-insensitive grouping, and regression coverage proves the historical six-token collision while retaining normal grouping/provenance.")

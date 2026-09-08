@@ -23,7 +23,8 @@ checks = {
         "RoomFinishScheduleRow", "RoomFinishScheduleBuilder", "ElementCategory.FloorFinish", "ElementCategory.Waterproofing",
         "ElementCategory.Skirting", "ElementCategory.WallFinish", "ElementCategory.CeilingFinish",
         "AutoRoomLifecycle.IsExcludedFromQuantity(project, element)", "AutoRoomLifecycle.ResolveRoomReferenceId(project, element)",
-        "ProjectMaterialCatalog.GetAll(project)", 'var roomKey = roomId.Length > 0 ? roomId : "(unlinked)"',
+        "ProjectMaterialCatalog.GetAll(project)", 'var roomKey = item.RoomId.Length > 0 ? item.RoomId : "(unlinked)"',
+        "foreach (var item in snapshot.WorkItems)",
         'FirstQuantity(element, "NetFinishAreaM2", "SideAreaM2", "AreaM2")',
         'FirstQuantity(element, "SkirtingLengthM", "InnerPerimeterM", "PerimeterM", "LengthM")',
         'FirstQuantity(element, "TopAreaM2", "AreaM2")', 'FirstQuantity(element, "BottomAreaM2", "AreaM2")',
@@ -73,6 +74,16 @@ for relative in (required[2], required[3]):
         if forbidden in text:
             errors.append(relative + " must not regenerate/build schedule from live read-only project state: " + forbidden)
 
+source_text = (ROOT / required[0]).read_text(encoding="utf-8") if (ROOT / required[0]).is_file() else ""
+for forbidden in (
+    'var roomKey = roomId.Length > 0 ? roomId : "(unlinked)"',
+    "aggregation.LengthM.Add(metrics.LengthM",
+    "aggregation.AreaM2.Add(metrics.AreaM2",
+    "aggregation.PrimaryQuantity.Add(primary",
+):
+    if forbidden in source_text:
+        errors.append(required[0] + " must not regress Room Finish row generation to live/local aggregation input: " + forbidden)
+
 commands = []
 for path in (ROOT / "src/QS3D.BricsCAD.V25").rglob("*.cs"):
     commands += re.findall(r'CommandMethod\("([A-Za-z0-9_]+)"', path.read_text(encoding="utf-8"))
@@ -82,4 +93,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: room-finish schedule keeps stable room provenance, stale/orphan exclusion, lazy quantity fallbacks, detached read-only freshness, overflow-safe summaries, material inheritance and real XLSX export.")
+print("PASS: room-finish schedule keeps stable room provenance, captured-generation aggregation, stale/orphan exclusion, lazy quantity fallbacks, detached read-only freshness, overflow-safe summaries, material inheritance and real XLSX export.")

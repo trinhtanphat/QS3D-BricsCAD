@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
@@ -24,7 +26,7 @@ namespace QS3D.Core.SmokeTests
             var project = NewProject("set-atomic", out var first, out var second);
             first.Properties["Scale"] = "1";
             second.Properties["Scale"] = "1";
-            second.Properties[" LegacyKey "] = "legacy";
+            SeedLegacyPersistedProperty(second, " LegacyKey ", "legacy");
             MarkClean(first, second);
             var beforeVersion = project.ChangeVersion;
 
@@ -44,7 +46,7 @@ namespace QS3D.Core.SmokeTests
             var project = NewProject("multiply-atomic", out var first, out var second);
             first.Properties["Scale"] = "2";
             second.Properties["Scale"] = "3";
-            second.Properties[" "] = "legacy";
+            SeedLegacyPersistedProperty(second, " ", "legacy");
             MarkClean(first, second);
             var beforeVersion = project.ChangeVersion;
 
@@ -63,7 +65,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = NewProject("set-noop", out var element, out _);
             element.Properties["Scale"] = "2";
-            element.Properties[" LegacyKey "] = "legacy";
+            SeedLegacyPersistedProperty(element, " LegacyKey ", "legacy");
             element.MarkClean(ElementDirtyFlags.All);
             var beforeVersion = project.ChangeVersion;
 
@@ -79,7 +81,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = NewProject("multiply-noop", out var element, out _);
             element.Properties["Scale"] = "2";
-            element.Properties[" LegacyKey "] = "legacy";
+            SeedLegacyPersistedProperty(element, " LegacyKey ", "legacy");
             element.MarkClean(ElementDirtyFlags.All);
             var beforeVersion = project.ChangeVersion;
 
@@ -125,6 +127,17 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(first);
             project.Elements.Add(second);
             return project;
+        }
+
+        private static void SeedLegacyPersistedProperty(ProjectElement element, string key, string value)
+        {
+            var field = typeof(ProjectElement).GetField("_properties", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (field == null)
+                throw new InvalidOperationException("Legacy property-map smoke fixture could not resolve the persisted ProjectElement backing map.");
+            var backing = field.GetValue(element) as Dictionary<string, string>;
+            if (backing == null)
+                throw new InvalidOperationException("Legacy property-map smoke fixture resolved an unexpected ProjectElement backing-map type.");
+            backing.Add(key, value);
         }
 
         private static void MarkClean(ProjectElement first, ProjectElement second)
