@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
@@ -30,7 +31,7 @@ namespace QS3D.Core.SmokeTests
             var element = new ProjectElement("element-1", ElementCategory.ArchitecturalWall);
             element.SourceHandles.Add("AB12");
             if (poisonTraversal)
-                element.DependsOn.Add("   ");
+                AddPersistedDependency(element, "   ");
             project.Elements.Add(element);
             return project;
         }
@@ -100,6 +101,19 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Exact-bound Locate root input must be fully consumed.");
             if (handles.Count != 1 || !string.Equals(handles[0], "AB12", StringComparison.Ordinal))
                 throw new Exception("Exact-bound duplicate canonical roots must resolve deterministically without duplicate handles.");
+        }
+
+        private static void AddPersistedDependency(ProjectElement element, string dependency)
+        {
+            var relationField = typeof(ProjectElement).GetField("_dependsOn", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement persisted dependency backing relation field was not found.");
+            var relation = relationField.GetValue(element)
+                ?? throw new InvalidOperationException("ProjectElement persisted dependency backing relation was not found.");
+            var valuesField = relation.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement persisted dependency backing values field was not found.");
+            var values = valuesField.GetValue(relation) as List<string>
+                ?? throw new InvalidOperationException("ProjectElement persisted dependency backing values were not found.");
+            values.Add(dependency);
         }
 
         private static void ExpectInvalidOperation(Action action, string expectedMessageFragment)

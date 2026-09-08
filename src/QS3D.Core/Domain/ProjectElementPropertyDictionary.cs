@@ -1,11 +1,15 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
+using System.Xml;
 
 namespace QS3D.Core.Domain
 {
     internal sealed class ProjectElementPropertyDictionary : IDictionary<string, string>
     {
+        private const int MaximumPropertyEntries = 10000;
+
         private readonly ProjectElement _owner;
         private readonly Dictionary<string, string> _values;
 
@@ -18,7 +22,12 @@ namespace QS3D.Core.Domain
         public string this[string key]
         {
             get => _values[key];
-            set => _owner.SetProperty(key, value);
+            set
+            {
+                var canonical = ValidateMutationInput(key, value);
+                RequireCapacityForNewKey(canonical);
+                _owner.SetProperty(key, value);
+            }
         }
 
         public ICollection<string> Keys => _values.Keys;
@@ -26,7 +35,13 @@ namespace QS3D.Core.Domain
         public int Count => _values.Count;
         public bool IsReadOnly => false;
 
-        public void Add(string key, string value) => _owner.AddProperty(key, value);
+        public void Add(string key, string value)
+        {
+            var canonical = ValidateMutationInput(key, value);
+            RequireCapacityForNewKey(canonical);
+            _owner.AddProperty(key, value);
+        }
+
         public void Add(KeyValuePair<string, string> item) => Add(item.Key, item.Value);
 
         public void Clear() => _owner.ClearProperties();
@@ -61,6 +76,45 @@ namespace QS3D.Core.Domain
         internal bool RemovePersistenceValue(string key)
         {
             return _values.Remove(key);
+        }
+
+        private static string ValidateMutationInput(string key, string value)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+                throw new ArgumentException("Property name is required.", "name");
+            if (key.Any(char.IsControl))
+                throw new ArgumentException("Property name cannot contain control characters.", "name");
+
+            var canonical = key.Trim();
+            try
+            {
+                XmlConvert.VerifyXmlChars(canonical);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException("Property name contains characters that are invalid in XML.", "name", ex);
+            }
+
+            try
+            {
+                XmlConvert.VerifyXmlChars(value ?? string.Empty);
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException("Property value contains characters that are invalid in XML.", nameof(value), ex);
+            }
+
+            return canonical;
+        }
+
+        private void RequireCapacityForNewKey(string canonicalKey)
+        {
+            if (_values.ContainsKey(canonicalKey)) return;
+            if (_values.Count >= MaximumPropertyEntries)
+            {
+                throw new InvalidOperationException(
+                    "Property collection exceeds the maximum supported cardinality of " + MaximumPropertyEntries + ".");
+            }
         }
     }
 }

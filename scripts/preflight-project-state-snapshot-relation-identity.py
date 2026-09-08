@@ -71,12 +71,15 @@ def main() -> int:
         'ExpectRejectedRelation(true, " A1 ", "padded source handle")',
         'ExpectRejectedRelation(false, " HOST ", "padded dependency")',
         'PreservesRepairableDuplicateRelations();',
-        'element.SourceHandles.Add("A1")',
-        'element.SourceHandles.Add("a1")',
-        'element.DependsOn.Add("HOST")',
-        'element.DependsOn.Add("host")',
+        'AddPersistedRelation(element, true, "A1")',
+        'AddPersistedRelation(element, true, "a1")',
+        'AddPersistedRelation(element, false, "HOST")',
+        'AddPersistedRelation(element, false, "host")',
+        'private static void AddPersistedRelation(ProjectElement element, bool sourceHandle, string value)',
         'const string handle = "HANDLE-\\U0001F680"',
         'const string dependency = "HOST-\\U0001F680"',
+        'element.SourceHandles.Add(handle);',
+        'element.DependsOn.Add(dependency);',
     ):
         require(smoke, token, "deterministic relation-identity smoke coverage")
 

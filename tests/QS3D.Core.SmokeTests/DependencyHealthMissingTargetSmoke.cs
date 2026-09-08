@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 
@@ -38,8 +40,17 @@ namespace QS3D.Core.SmokeTests
         private static ProjectElement Element(string id, params string[] dependencies)
         {
             var element = new ProjectElement(id, ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
-            foreach (var dependency in dependencies) element.DependsOn.Add(dependency);
+            foreach (var dependency in dependencies) AddPersistedDependency(element, dependency);
             return element;
+        }
+
+        private static void AddPersistedDependency(ProjectElement element, string dependency)
+        {
+            var valuesField = element.DependsOn.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed malformed persisted dependency health state.");
+            var values = valuesField.GetValue(element.DependsOn) as List<string>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement.DependsOn backing collection.");
+            values.Add(dependency);
         }
     }
 }

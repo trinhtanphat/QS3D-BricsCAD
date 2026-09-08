@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import sys
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 errors = []
@@ -73,6 +74,7 @@ update_commands = read("src/QS3D.BricsCAD.V26/Updates/UpdateCommands.cs")
 update_center = read("src/QS3D.BricsCAD.V25/Updates/UpdateCenterWindow.cs")
 v26_update_center = preprocess_for_v26(update_center)
 cloudflare_onboarding = read("src/QS3D.BricsCAD.V25/McpCloudflareAccountOnboarding.cs")
+transport_supervisor = read("src/QS3D.BricsCAD.V25/McpTransportSupervisor.cs")
 cloudflared_bootstrapper = read("src/QS3D.BricsCAD.V25/McpCloudflaredBootstrapper.cs")
 update_preferences = read("src/QS3D.BricsCAD.V25/Updates/UpdatePreferences.cs")
 v25_release_client = read("src/QS3D.BricsCAD.V25/Updates/GitHubReleaseClient.cs")
@@ -118,8 +120,29 @@ for token in ("#if BRICSCAD_V26", "var hasPreviewDownload = false;", "#if !BRICS
     require(update_center, token, "shared Update Center V26 preview isolation")
 for token in ("private bool _previewScheduled;", "private string? _previewScheduledDetail;", "private async System.Threading.Tasks.Task DownloadPreviewAsync"):
     require(update_center, token, "V25 preview scheduling implementation")
-for token in ("_previewDownloading", "_previewScheduled", "_previewScheduledDetail", "DownloadPreviewAsync", "UpdateDownloadProgress", "VerifiedReleaseDownloader"):
+for token in ("_previewDownloading", "_previewScheduled", "_previewScheduledDetail", "DownloadPreviewAsync", "UpdateDownloadProgress", "VerifiedReleaseDownloader", "PreviewInstallReceipt", "_postRestartDiagnostic", "TryApplyPostRestartReceipt"):
     forbid(v26_update_center, token, "V26 preprocessed Update Center")
+require(v26_update_center, "NormalizeReleaseVersion(current)", "shared current-release comparison")
+require(v26_update_center, "NormalizeReleaseVersion(release.Tag)", "shared selected-release comparison")
+require(update_center, "PreviewInstallReceipt.MatchesLoadedAssembly", "V25 receipt verification retained")
+require(update_center, "PreviewInstallReceipt.TryDelete()", "V25 receipt cleanup retained")
+# The shared helper must retain the previous version-only normalization exactly,
+# without linking V25's receipt path/read/delete implementation into V26.
+receipt = read("src/QS3D.BricsCAD.V25/Updates/PreviewInstallReceipt.cs")
+normalizers = []
+for source, name in ((update_center, "NormalizeReleaseVersion"), (receipt, "NormalizeVersion")):
+    match = re.search(r"static string " + name + r"\(string\? value\)\s*\{([^}]+)\}", source)
+    if not match:
+        errors.append(f"missing comparable version normalizer: {name}")
+    else:
+        normalizers.append(re.sub(r"\s+", "", match.group(1)))
+if len(normalizers) == 2 and normalizers[0] != normalizers[1]:
+    errors.append("shared release version normalization changed existing V25 semantics")
+require(
+    transport_supervisor,
+    '#pragma warning disable SYSLIB0014\n                var request = (HttpWebRequest)WebRequest.Create("https://" + hostname + "/mcp");\n#pragma warning restore SYSLIB0014',
+    "shared transport readiness targeted net8 compatibility",
+)
 require(
     cloudflare_onboarding,
     "#pragma warning disable SYSLIB0014\n                var request = (HttpWebRequest)WebRequest.Create(uri);\n#pragma warning restore SYSLIB0014",
