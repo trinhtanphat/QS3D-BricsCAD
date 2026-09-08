@@ -30,8 +30,7 @@ public static class QS3DV25NativeFileDisposition
     [StructLayout(LayoutKind.Sequential)]
     public struct FILE_DISPOSITION_INFO
     {
-        [MarshalAs(UnmanagedType.U1)]
-        public bool DeleteFile;
+        public byte DeleteFile;
     }
 
     public const int FileDispositionInfo = 4;
@@ -98,7 +97,7 @@ function Set-OwnedMsiDeleteDisposition {
     )
 
     $info = New-Object 'QS3DV25NativeFileDisposition+FILE_DISPOSITION_INFO'
-    $info.DeleteFile = $Delete
+    $info.DeleteFile = if ($Delete) { [byte]1 } else { [byte]0 }
     $size = [Runtime.InteropServices.Marshal]::SizeOf($info)
     $ok = [QS3DV25NativeFileDisposition]::SetFileInformationByHandle(
         $Stream.SafeFileHandle,
