@@ -230,6 +230,184 @@ function New-SiblingTempPath {
     return Join-Path $parent (".$leaf.$([Guid]::NewGuid().ToString('N'))$Suffix")
 }
 
+if (-not ('QS3DV25HeldZipPublication' -as [type])) {
+    Add-Type -TypeDefinition @"
+using System;
+using System.ComponentModel;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
+
+public static class QS3DV25HeldZipPublication
+{
+    public const int FileRenameInfo = 3;
+    public const uint GENERIC_READ = 0x80000000;
+    public const uint DELETE = 0x00010000;
+    public const uint FILE_SHARE_READ = 0x00000001;
+    public const uint OPEN_EXISTING = 3;
+    public const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFileW(
+        string lpFileName,
+        uint dwDesiredAccess,
+        uint dwShareMode,
+        IntPtr lpSecurityAttributes,
+        uint dwCreationDisposition,
+        uint dwFlagsAndAttributes,
+        IntPtr hTemplateFile);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetFileInformationByHandle(
+        SafeFileHandle hFile,
+        int FileInformationClass,
+        IntPtr lpFileInformation,
+        uint dwBufferSize);
+
+    public static SafeFileHandle OpenHeldReadDelete(string path)
+    {
+        string fullPath = Path.GetFullPath(path);
+        SafeFileHandle handle = CreateFileW(
+            fullPath,
+            GENERIC_READ | DELETE,
+            FILE_SHARE_READ,
+            IntPtr.Zero,
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL,
+            IntPtr.Zero);
+        if (handle == null || handle.IsInvalid)
+        {
+            int errorCode = Marshal.GetLastWin32Error();
+            if (handle != null) handle.Dispose();
+            throw new Win32Exception(errorCode, "Failed to open staged ZIP as a held read/delete generation.");
+        }
+        return handle;
+    }
+
+    public static void SetFileInformationByHandleFileRenameInfo(
+        SafeFileHandle handle,
+        string targetPath,
+        bool replaceIfExists)
+    {
+        if (handle == null || handle.IsInvalid || handle.IsClosed)
+            throw new ArgumentException("Held ZIP handle is invalid.", "handle");
+
+        string fullTarget = Path.GetFullPath(targetPath);
+        byte[] nameBytes = Encoding.Unicode.GetBytes(fullTarget);
+        int rootDirectoryOffset = IntPtr.Size == 8 ? 8 : 4;
+        int fileNameLengthOffset = rootDirectoryOffset + IntPtr.Size;
+        int fileNameOffset = fileNameLengthOffset + sizeof(uint);
+        int bufferSize = checked(fileNameOffset + nameBytes.Length);
+        IntPtr buffer = Marshal.AllocHGlobal(bufferSize);
+        try
+        {
+            byte[] zeros = new byte[bufferSize];
+            Marshal.Copy(zeros, 0, buffer, bufferSize);
+            Marshal.WriteByte(buffer, 0, replaceIfExists ? (byte)1 : (byte)0);
+            Marshal.WriteIntPtr(buffer, rootDirectoryOffset, IntPtr.Zero);
+            Marshal.WriteInt32(buffer, fileNameLengthOffset, nameBytes.Length);
+            Marshal.Copy(nameBytes, 0, IntPtr.Add(buffer, fileNameOffset), nameBytes.Length);
+
+            if (!SetFileInformationByHandle(handle, FileRenameInfo, buffer, (uint)bufferSize))
+            {
+                int errorCode = Marshal.GetLastWin32Error();
+                throw new Win32Exception(errorCode, "Held staged ZIP rename failed.");
+            }
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+}
+"@
+}
+
+function Open-HeldVerifiedZipGeneration {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$ExpectedSha256
+    )
+
+    $safePath = Assert-SafeFile -Path $Path -Label 'staged PackageZip held-generation input'
+    $handle = [QS3DV25HeldZipPublication]::OpenHeldReadDelete($safePath)
+    $stream = $null
+    $sha = $null
+    try {
+        $stream = [IO.FileStream]::new($handle, [IO.FileAccess]::Read, 1048576, $false)
+        if ($stream.Length -le 0) { throw 'Held staged ZIP generation is empty.' }
+        $sha = [Security.Cryptography.SHA256]::Create()
+        $digest = $sha.ComputeHash($stream)
+        $actual = (-join ($digest | ForEach-Object { $_.ToString('X2') }))
+        $stream.Position = 0
+        if (-not [string]::Equals($actual, $ExpectedSha256, [StringComparison]::Ordinal)) {
+            throw "Staged ZIP changed before held-generation admission. Expected $ExpectedSha256, got $actual."
+        }
+
+        return [pscustomobject]@{
+            Stream = $stream
+            Sha256 = $actual
+            Length = [int64]$stream.Length
+        }
+    }
+    catch {
+        if ($null -ne $stream) { $stream.Dispose() }
+        else { $handle.Dispose() }
+        throw
+    }
+    finally {
+        if ($null -ne $sha) { $sha.Dispose() }
+    }
+}
+
+function Assert-HeldVerifiedZipStable {
+    param([Parameter(Mandatory = $true)]$HeldZip)
+
+    if ($null -eq $HeldZip.Stream -or -not $HeldZip.Stream.CanRead) {
+        throw 'Held staged ZIP stream is unavailable.'
+    }
+    if ([int64]$HeldZip.Stream.Length -ne [int64]$HeldZip.Length) {
+        throw 'Held staged ZIP length changed after admission.'
+    }
+
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        $HeldZip.Stream.Position = 0
+        $digest = $sha.ComputeHash($HeldZip.Stream)
+        $actual = (-join ($digest | ForEach-Object { $_.ToString('X2') }))
+        $HeldZip.Stream.Position = 0
+        if (-not [string]::Equals($actual, [string]$HeldZip.Sha256, [StringComparison]::Ordinal)) {
+            throw "Held staged ZIP generation changed after admission. Expected $($HeldZip.Sha256), got $actual."
+        }
+    }
+    finally {
+        $sha.Dispose()
+    }
+}
+
+function Publish-HeldVerifiedZipGeneration {
+    param(
+        [Parameter(Mandatory = $true)]$HeldZip,
+        [Parameter(Mandatory = $true)][string]$TargetPath,
+        [Parameter(Mandatory = $true)][bool]$ReplaceIfExists
+    )
+
+    $target = Assert-SafeOptionalFileTarget -Path $TargetPath -Label 'PackageZip held-publication target'
+    $expectedHash = [string]$HeldZip.Sha256
+    $null = $HeldZip.Stream
+    Assert-HeldVerifiedZipStable -HeldZip $HeldZip
+    [QS3DV25HeldZipPublication]::SetFileInformationByHandleFileRenameInfo(
+        $HeldZip.Stream.SafeFileHandle,
+        $target,
+        $ReplaceIfExists)
+    Assert-HeldVerifiedZipStable -HeldZip $HeldZip
+    if (-not [string]::Equals([string]$HeldZip.Sha256, $expectedHash, [StringComparison]::Ordinal)) {
+        throw 'Held staged ZIP admitted identity changed across publication.'
+    }
+}
+
 function Write-Utf8NoBomText {
     param([string]$Path, [string]$Text)
     $encoding = [Text.UTF8Encoding]::new($false, $true)
@@ -570,6 +748,7 @@ $manifestPublished = $false
 $zipPublished = $false
 $zipExistedBeforePublish = $false
 $transactionCommitted = $false
+$heldZip = $null
 
 try {
     $metadataJson = $metadata | ConvertTo-Json -Depth 8
@@ -611,23 +790,30 @@ try {
     }
     Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package
     $stagedZipHash = Assert-ZipManifestIntegrity -ZipPath $tempZip
+    $heldZip = Open-HeldVerifiedZipGeneration -Path $tempZip -ExpectedSha256 $stagedZipHash
 
     if (Test-Path -LiteralPath $zip) {
-        $zip = Assert-SafeOptionalFileTarget -Path $zip -Label 'PackageZip'
+        $zip = Assert-SafeFile -Path $zip -Label 'PackageZip before held publication'
         $zipExistedBeforePublish = $true
-        [IO.File]::Replace($tempZip, $zip, $zipBackup, $true)
+        if (Test-Path -LiteralPath $zipBackup) {
+            throw "PackageZip backup path unexpectedly exists: $zipBackup"
+        }
+        [IO.File]::Copy($zip, $zipBackup, $false)
+        $zipBackup = Assert-SafeFile -Path $zipBackup -Label 'original PackageZip rollback backup'
     }
-    else {
-        [IO.File]::Move($tempZip, $zip)
-    }
+
+    Publish-HeldVerifiedZipGeneration -HeldZip $heldZip -TargetPath $zip -ReplaceIfExists $zipExistedBeforePublish
     $zipPublished = $true
 
+    Assert-HeldVerifiedZipStable -HeldZip $heldZip
     $zip = Assert-SafeFile -Path $zip -Label 'finalized PackageZip'
-    $installedZipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToUpperInvariant()
+    $installedZipHash = [string]$heldZip.Sha256
     if (-not [string]::Equals($installedZipHash, $stagedZipHash, [StringComparison]::Ordinal)) {
         throw "Finalized ZIP generation mismatch. Expected $stagedZipHash, got $installedZipHash."
     }
     $transactionCommitted = $true
+    $heldZip.Stream.Dispose()
+    $heldZip = $null
 
     Write-Host "FINALIZED: $zip"
     Write-Host "Signer: $expectedSigner"
@@ -638,6 +824,12 @@ try {
 catch {
     $originalError = $_
     $rollbackErrors = New-Object 'System.Collections.Generic.List[string]'
+
+    if ($null -ne $heldZip) {
+        try { $heldZip.Stream.Dispose() }
+        catch { $rollbackErrors.Add("release held finalized ZIP generation: $($_.Exception.Message)") }
+        $heldZip = $null
+    }
 
     if ($zipPublished) {
         try {
@@ -694,6 +886,11 @@ catch {
     throw $originalError
 }
 finally {
+    if ($null -ne $heldZip) {
+        try { $heldZip.Stream.Dispose() } catch { }
+        $heldZip = $null
+    }
+
     foreach ($temporary in @($metadataStage, $manifestStage, $tempZip, $metadataRollbackDiscard, $zipRollbackDiscard)) {
         if (Test-Path -LiteralPath $temporary) {
             Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue

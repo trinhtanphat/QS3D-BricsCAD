@@ -2,7 +2,6 @@
 import ntpath
 from pathlib import Path
 
-# Rollback-only PackageZip deletion is permitted only after the rollback marker.
 ROOT = Path(__file__).resolve().parents[1]
 FINALIZER = ROOT / "scripts" / "finalize-v25-signed-package.ps1"
 
@@ -26,13 +25,6 @@ def first(text: str, tokens: tuple[str, ...]) -> int:
 def main() -> int:
     check(FINALIZER.is_file(), "missing scripts/finalize-v25-signed-package.ps1")
     text = FINALIZER.read_text(encoding="utf-8")
-    atomic = all(token in text for token in (
-        "function Read-BoundedUtf8Text",
-        "$metadataStage = New-SiblingTempPath",
-        "$manifestStage = New-SiblingTempPath",
-        "$tempZip = New-SiblingTempPath",
-        "Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package",
-    ))
 
     package_tokens = (
         "$packagePath = Assert-SafeContainedDirectory -Path $PackageDirectory -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'",
@@ -87,50 +79,55 @@ def main() -> int:
     identity_order = (package, extension, outside, signer, product, managed, product_version, approval)
     check(min(identity_order) >= 0 and list(identity_order) == sorted(identity_order), "containment/signer/managed identity must all precede approval")
 
-    if atomic:
-        tokens = (
-            "$metadataStage = New-SiblingTempPath",
-            "Write-Utf8NoBomText -Path $metadataStage",
-            "[IO.File]::Replace($metadataStage, $metadataPath, $metadataBackup, $true)",
-            "[IO.File]::Move($hashManifest, $manifestBackup)",
-            "[IO.File]::WriteAllLines($manifestStage",
-            "[IO.File]::Move($manifestStage, $hashManifest)",
-            "Compress-Archive -Path (Join-Path $package '*') -DestinationPath $tempZip -CompressionLevel Optimal",
-            "Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package",
-            "[IO.File]::Replace($tempZip, $zip, $zipBackup, $true)",
-            "[IO.File]::Move($tempZip, $zip)",
-            "$transactionCommitted = $true",
-            "restore original manifest",
-            "restore original metadata",
-            "Rollback also failed",
-        )
-        for token in tokens:
-            check(token in text, "atomic signed-finalizer contract missing: " + token)
-        zip_remove = text.find("Remove-Item -LiteralPath $zip -Force")
-        rollback_marker = text.find("$originalError = $_")
-        check(
-            zip_remove < 0 or (rollback_marker >= 0 and rollback_marker < zip_remove),
-            "atomic publication may delete PackageZip only during rollback",
-        )
-        existing = (approval,) + tuple(text.find(token) for token in tokens[:9:1] if token != "[IO.File]::Move($tempZip, $zip)")
-        check(min(existing) >= 0 and list(existing) == sorted(existing), "atomic publication order drift")
-        verify = text.find("Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package")
-        move_new = text.find("[IO.File]::Move($tempZip, $zip)")
-        committed = text.find("$transactionCommitted = $true")
-        check(verify < move_new < committed, "new ZIP must publish only after staged verification")
-    else:
-        legacy = (
-            "$metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $metadataPath -Encoding UTF8",
-            "Remove-Item -LiteralPath $hashManifest -Force",
-            "Remove-Item -LiteralPath $zip -Force",
-            "Compress-Archive -Path (Join-Path $package '*') -DestinationPath $zip -CompressionLevel Optimal",
-        )
-        for token in legacy:
-            check(token in text, "legacy signed-finalizer contract missing: " + token)
-        order = (approval,) + tuple(text.find(token) for token in legacy)
-        check(min(order) >= 0 and list(order) == sorted(order), "legacy publication order drift")
+    atomic_tokens = (
+        "$metadataStage = New-SiblingTempPath",
+        "Write-Utf8NoBomText -Path $metadataStage",
+        "[IO.File]::Replace($metadataStage, $metadataPath, $metadataBackup, $true)",
+        "[IO.File]::Move($hashManifest, $manifestBackup)",
+        "[IO.File]::WriteAllLines($manifestStage",
+        "[IO.File]::Move($manifestStage, $hashManifest)",
+        "Compress-Archive -Path (Join-Path $package '*') -DestinationPath $tempZip -CompressionLevel Optimal",
+        "Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package",
+        "$stagedZipHash = Assert-ZipManifestIntegrity -ZipPath $tempZip",
+        "$heldZip = Open-HeldVerifiedZipGeneration -Path $tempZip -ExpectedSha256 $stagedZipHash",
+        "Publish-HeldVerifiedZipGeneration -HeldZip $heldZip -TargetPath $zip -ReplaceIfExists $zipExistedBeforePublish",
+        "[QS3DV25HeldZipPublication]::SetFileInformationByHandleFileRenameInfo(",
+        "$installedZipHash = [string]$heldZip.Sha256",
+        "$transactionCommitted = $true",
+        "restore original manifest",
+        "restore original metadata",
+        "Rollback also failed",
+    )
+    for token in atomic_tokens:
+        check(token in text, "atomic signed-finalizer contract missing: " + token)
 
-    print("PASS: signed V25 finalizer identity/containment precedes " + ("failure-atomic" if atomic else "legacy") + " publication")
+    for forbidden in (
+        "[IO.File]::Replace($tempZip, $zip, $zipBackup, $true)",
+        "[IO.File]::Move($tempZip, $zip)",
+        "Get-FileHash -LiteralPath $zip -Algorithm SHA256",
+    ):
+        check(forbidden not in text, "superseded pathname publication/identity token remains: " + forbidden)
+
+    zip_remove = text.find("Remove-Item -LiteralPath $zip -Force")
+    rollback_marker = text.find("$originalError = $_")
+    check(zip_remove < 0 or (rollback_marker >= 0 and rollback_marker < zip_remove), "atomic publication may delete PackageZip only during rollback")
+
+    ordered = (
+        approval,
+        text.find("$metadataStage = New-SiblingTempPath"),
+        text.find("[IO.File]::Replace($metadataStage, $metadataPath, $metadataBackup, $true)"),
+        text.find("[IO.File]::Move($hashManifest, $manifestBackup)"),
+        text.find("[IO.File]::Move($manifestStage, $hashManifest)"),
+        text.find("Compress-Archive -Path (Join-Path $package '*') -DestinationPath $tempZip -CompressionLevel Optimal"),
+        text.find("Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package"),
+        text.find("$stagedZipHash = Assert-ZipManifestIntegrity -ZipPath $tempZip"),
+        text.find("$heldZip = Open-HeldVerifiedZipGeneration -Path $tempZip -ExpectedSha256 $stagedZipHash"),
+        text.find("Publish-HeldVerifiedZipGeneration -HeldZip $heldZip -TargetPath $zip -ReplaceIfExists $zipExistedBeforePublish"),
+        text.find("$transactionCommitted = $true"),
+    )
+    check(min(ordered) >= 0 and list(ordered) == sorted(ordered), "atomic held-generation publication order drift")
+
+    print("PASS: signed V25 finalizer identity/containment precedes failure-atomic held-generation publication")
     return 0
 
 

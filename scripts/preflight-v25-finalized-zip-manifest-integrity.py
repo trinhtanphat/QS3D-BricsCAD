@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard finalized V25 ZIPs against manifest/archive byte drift."""
+"""Guard finalized V25 ZIPs against manifest/archive byte drift and publication identity drift."""
 
 from __future__ import annotations
 
@@ -54,75 +54,15 @@ def _run_behavioral_fixtures(verifier: str, failures: list[str]) -> None:
         fixtures: list[tuple[str, bool, list[tuple[str, bytes]]]] = []
 
         valid_manifest = _manifest([("alpha.txt", alpha), ("nested/beta.bin", beta)])
-        fixtures.append(
-            (
-                "valid exact coverage",
-                True,
-                [("alpha.txt", alpha), ("nested/beta.bin", beta), ("SHA256SUMS.txt", valid_manifest)],
-            )
-        )
-        fixtures.append(
-            (
-                "mutated payload after manifest creation",
-                False,
-                [("alpha.txt", alpha + b"MUTATED"), ("SHA256SUMS.txt", _manifest([("alpha.txt", alpha)]))],
-            )
-        )
-        fixtures.append(
-            (
-                "missing manifest record",
-                False,
-                [("alpha.txt", alpha), ("nested/beta.bin", beta), ("SHA256SUMS.txt", _manifest([("alpha.txt", alpha)]))],
-            )
-        )
-        fixtures.append(
-            (
-                "extra manifest record",
-                False,
-                [
-                    ("alpha.txt", alpha),
-                    ("SHA256SUMS.txt", _manifest([("alpha.txt", alpha), ("ghost.txt", b"ghost")]))
-                ],
-            )
-        )
-        fixtures.append(
-            (
-                "malformed lowercase hash",
-                False,
-                [
-                    ("alpha.txt", alpha),
-                    (
-                        "SHA256SUMS.txt",
-                        f"{hashlib.sha256(alpha).hexdigest()}  alpha.txt\n".encode("ascii"),
-                    ),
-                ],
-            )
-        )
-        fixtures.append(
-            (
-                "unsafe manifest traversal",
-                False,
-                [
-                    ("alpha.txt", alpha),
-                    ("SHA256SUMS.txt", _manifest([("../alpha.txt", alpha)])),
-                ],
-            )
-        )
+        fixtures.append(("valid exact coverage", True, [("alpha.txt", alpha), ("nested/beta.bin", beta), ("SHA256SUMS.txt", valid_manifest)]))
+        fixtures.append(("mutated payload after manifest creation", False, [("alpha.txt", alpha + b"MUTATED"), ("SHA256SUMS.txt", _manifest([("alpha.txt", alpha)]))]))
+        fixtures.append(("missing manifest record", False, [("alpha.txt", alpha), ("nested/beta.bin", beta), ("SHA256SUMS.txt", _manifest([("alpha.txt", alpha)]))]))
+        fixtures.append(("extra manifest record", False, [("alpha.txt", alpha), ("SHA256SUMS.txt", _manifest([("alpha.txt", alpha), ("ghost.txt", b"ghost")]))]))
+        fixtures.append(("malformed lowercase hash", False, [("alpha.txt", alpha), ("SHA256SUMS.txt", f"{hashlib.sha256(alpha).hexdigest()}  alpha.txt\n".encode("ascii"))]))
+        fixtures.append(("unsafe manifest traversal", False, [("alpha.txt", alpha), ("SHA256SUMS.txt", _manifest([("../alpha.txt", alpha)]))]))
         duplicate_manifest = _manifest([("Alpha.txt", alpha), ("alpha.txt", beta)])
-        fixtures.append(
-            (
-                "case-insensitive duplicate archive entry",
-                False,
-                [("Alpha.txt", alpha), ("alpha.txt", beta), ("SHA256SUMS.txt", duplicate_manifest)],
-            )
-        )
-        fixtures.append(
-            (
-                "oversized checksum manifest",
-                False,
-                [("alpha.txt", alpha), ("SHA256SUMS.txt", b"X" * (4 * 1024 * 1024 + 1))],
-            )
-        )
+        fixtures.append(("case-insensitive duplicate archive entry", False, [("Alpha.txt", alpha), ("alpha.txt", beta), ("SHA256SUMS.txt", duplicate_manifest)]))
+        fixtures.append(("oversized checksum manifest", False, [("alpha.txt", alpha), ("SHA256SUMS.txt", b"X" * (4 * 1024 * 1024 + 1))]))
 
         for index, (label, should_pass, entries) in enumerate(fixtures):
             archive_path = temp / f"fixture-{index}.zip"
@@ -172,7 +112,8 @@ def main() -> int:
     function_start = source.find("function Assert-ZipManifestIntegrity")
     call_site = source.find("$stagedZipHash = Assert-ZipManifestIntegrity -ZipPath $tempZip")
     zip_shape_check = source.find("Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package")
-    replace_call = source.find("[IO.File]::Replace($tempZip, $zip, $zipBackup, $true)")
+    held_open = source.find("$heldZip = Open-HeldVerifiedZipGeneration -Path $tempZip -ExpectedSha256 $stagedZipHash")
+    publish_call = source.find("Publish-HeldVerifiedZipGeneration -HeldZip $heldZip -TargetPath $zip -ReplaceIfExists $zipExistedBeforePublish")
 
     required = (
         "function Assert-ZipManifestIntegrity",
@@ -189,16 +130,19 @@ def main() -> int:
         "$fileStream.Position = 0",
         "$outerDigest = $outerHash.ComputeHash($fileStream)",
         "$stagedZipHash = Assert-ZipManifestIntegrity -ZipPath $tempZip",
+        "$heldZip = Open-HeldVerifiedZipGeneration -Path $tempZip -ExpectedSha256 $stagedZipHash",
+        "Publish-HeldVerifiedZipGeneration -HeldZip $heldZip -TargetPath $zip -ReplaceIfExists $zipExistedBeforePublish",
+        "Assert-HeldVerifiedZipStable -HeldZip $heldZip",
     )
     for token in required:
         if token not in source:
             failures.append(f"finalized ZIP byte-integrity contract is incomplete; missing: {token}")
 
     verifier = ""
-    if min(function_start, call_site, zip_shape_check, replace_call) < 0:
-        failures.append("could not bound finalized ZIP shape/manifest/generation validation")
-    elif not (zip_shape_check < call_site < replace_call):
-        failures.append("completed ZIP must pass shape then same-handle manifest-entry byte validation/digest admission before publication")
+    if min(function_start, call_site, zip_shape_check, held_open, publish_call) < 0:
+        failures.append("could not bound finalized ZIP shape/manifest/held-generation publication validation")
+    elif not (zip_shape_check < call_site < held_open < publish_call):
+        failures.append("completed ZIP must pass shape then same-handle manifest-entry validation/digest admission, then held-generation admission before publication")
 
     if function_start >= 0:
         function_end = source.find("\nfunction ", function_start + 1)
@@ -224,8 +168,13 @@ def main() -> int:
             if token not in verifier:
                 failures.append(f"ZIP manifest verifier is not fail-closed enough; missing: {token}")
 
-    if "Get-FileHash -LiteralPath $tempZip" in source:
-        failures.append("outer digest must come from the same locked stream as manifest verification, not a pathname reopen")
+    for forbidden in (
+        "Get-FileHash -LiteralPath $tempZip",
+        "[IO.File]::Replace($tempZip, $zip, $zipBackup, $true)",
+        "[IO.File]::Move($tempZip, $zip)",
+    ):
+        if forbidden in source:
+            failures.append("manifest-admitted ZIP must not be reopened/published by pathname; forbidden: " + forbidden)
 
     if not failures and verifier:
         _run_behavioral_fixtures(verifier, failures)
@@ -235,7 +184,7 @@ def main() -> int:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
 
-    print("PASS: finalized V25 ZIP validates actual entry bytes and admits its outer digest from one locked generation with adversarial fixtures")
+    print("PASS: finalized V25 ZIP validates entry bytes, admits its outer digest from one locked verifier generation, then publishes the held matching generation")
     return 0
 
 
