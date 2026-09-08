@@ -6,6 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = ROOT / "scripts" / "write-v26-package-checksum.ps1"
+PINNED_NATIVE_OPEN = "return OpenCore(path, GenericRead | FileReadAttributes, OpenExisting, FileShareRead);"
 
 
 def validate_source(source: str) -> None:
@@ -17,20 +18,23 @@ def validate_source(source: str) -> None:
         "Open-PinnedChecksumGeneration",
         "Get-OwnedChecksumGenerationIdentity",
         "Remove-OwnedChecksumGeneration",
+        PINNED_NATIVE_OPEN,
     )
     missing = [token for token in required if token not in source]
     if missing:
-        raise AssertionError("V26 checksum transaction lacks generation-owned primitive(s): " + ", ".join(missing))
+        raise AssertionError("V26 checksum transaction lacks generation-owned/pinned primitive(s): " + ", ".join(missing))
 
     forbidden = (
         "Remove-Item -LiteralPath $outputFullPath",
         "Remove-SafeChecksumLeaf -Path $tempPath",
         "Remove-SafeChecksumLeaf -Path $backupPath",
         "$publishedGeneration = Open-OwnedChecksumGeneration -Path $outputFullPath",
+        "return OpenCore(path, GenericRead | FileReadAttributes, OpenExisting, FileShareRead | FileShareWrite);",
+        "return OpenCore(path, GenericRead | FileReadAttributes, OpenExisting, FileShareRead | FileShareDelete);",
     )
     present = [token for token in forbidden if token in source]
     if present:
-        raise AssertionError("V26 checksum transaction still permits pathname/replacement race primitive(s): " + ", ".join(present))
+        raise AssertionError("V26 checksum transaction still permits pathname/replacement/write race primitive(s): " + ", ".join(present))
 
     publication = source.index("$publicationStarted = $true")
     rollback = source.index("catch {", publication)
@@ -56,7 +60,7 @@ def validate_source(source: str) -> None:
     pinned_close = source.index("Close-OwnedChecksumGeneration -Generation $publishedGeneration", committed)
     if not (pinned_open < published_read < committed < pinned_close):
         raise AssertionError(
-            "published checksum generation must remain replacement-pinned across pathname byte verification and publication commit"
+            "published checksum generation must remain read-only replacement-pinned across pathname byte verification and publication commit"
         )
 
 
@@ -74,7 +78,7 @@ def expect_mutation_failure(source: str, token: str) -> None:
 source = SOURCE_PATH.read_text(encoding="utf-8")
 validate_source(source)
 
-# Mutation-lock semantic primitives independently so declaration/call-site drift cannot pass silently.
+# Mutation-lock semantic primitives independently so declaration/call-site/share-mode drift cannot pass silently.
 for token in (
     "GetFileInformationByHandle",
     "SetFileInformationByHandle",
@@ -83,7 +87,8 @@ for token in (
     "Open-PinnedChecksumGeneration",
     "Get-OwnedChecksumGenerationIdentity",
     "Remove-OwnedChecksumGeneration",
+    PINNED_NATIVE_OPEN,
 ):
     expect_mutation_failure(source, token)
 
-print("PASS V26 checksum publication/rollback is generation-owned and replacement-pinned through commit")
+print("PASS V26 checksum publication/rollback is generation-owned and read-only replacement-pinned through commit")
