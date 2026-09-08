@@ -9,7 +9,7 @@ attach_start = text.find("public static void Attach(Document? document)")
 detach_start = text.find("public static void Detach(Document? document)", attach_start)
 refresh_start = text.find("public static void Refresh(Document? document)", detach_start)
 stop_start = text.find("public static void Stop()", refresh_start)
-rollback_start = text.find("private static void RollbackAttachment(Document document, bool subscribed, object? attachmentToken)", stop_start)
+rollback_start = text.find("private static void RollbackAttachment(Document document, bool subscribed, object attachmentToken)", stop_start)
 release_start = text.find("private static void ReleaseRefresh(Document document, object attachmentToken)", rollback_start)
 handler_start = text.find("private static void OnImpliedSelectionChanged", release_start)
 if min(attach_start, detach_start, refresh_start, stop_start, rollback_start, release_start, handler_start) < 0:
@@ -28,13 +28,25 @@ required = [
     "private static readonly Dictionary<Document, object> Refreshing",
     "Refreshing[document] = attachmentToken;",
     "ReleaseRefresh(document, attachmentToken);",
-    "object? attachmentToken = null;",
+    "var attachmentToken = new object();",
+    "AttachmentTokens[document] = attachmentToken;",
     "RollbackAttachment(document, subscribed, attachmentToken);",
 ]
 for needle in required:
     if needle not in text:
         print("ERROR: SelectionSync attachment/refresh ownership must be generation aware; missing", needle)
         sys.exit(1)
+
+claim_token = attach.find("var attachmentToken = new object();")
+claim_attached = attach.find("Attached.Add(document)")
+publish_token = attach.find("AttachmentTokens[document] = attachmentToken;")
+subscribe = attach.find("document.ImpliedSelectionChanged += OnImpliedSelectionChanged;")
+refresh_call = attach.find("Refresh(document);")
+if min(claim_token, claim_attached, publish_token, subscribe, refresh_call) < 0 or not (
+    claim_token < claim_attached < publish_token < subscribe < refresh_call
+):
+    print("ERROR: Attach must publish its exact generation before entering native event-subscription/reentrancy boundary")
+    sys.exit(1)
 
 if "finally { Refreshing.Remove(document); }" in refresh:
     print("ERROR: stale refresh generation can unconditionally remove a newer generation's ownership")
@@ -78,4 +90,4 @@ for label, body in [("RollbackAttachment", rollback), ("ReleaseRefresh", release
             print(f"ERROR: {label} must remain synchronous bookkeeping only; found {forbidden}")
             sys.exit(1)
 
-print("PASS: SelectionSync attach rollback and refresh cleanup are fenced to exact attachment generations")
+print("PASS: SelectionSync generation is published before subscription; rollback and refresh cleanup are exact-generation fenced")
