@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             DirectAddUsesSemanticLifecycle();
             DirectMutationUsesSemanticValidation();
             RemoveAndClearUseSemanticLifecycle();
+            PairRemovalUsesCanonicalIdentity();
             NoOpMutationsStayStable();
         }
 
@@ -99,6 +100,30 @@ namespace QS3D.Core.SmokeTests
             Equal(0, element.Quantities.Count);
             Has(element.Dirty, ElementDirtyFlags.Quantity);
             Changed(beforeClear, element.UpdatedUtc, "Direct quantity Clear must advance element persistence lifecycle.");
+        }
+
+        private static void PairRemovalUsesCanonicalIdentity()
+        {
+            var element = new ProjectElement("E-QTY-PAIR-REMOVE", ElementCategory.Slab);
+            element.SetQuantity("Area", 5d);
+            element.MarkClean(ElementDirtyFlags.All);
+            var before = element.UpdatedUtc;
+            var quantities = (ICollection<KeyValuePair<string, double>>)element.Quantities;
+
+            if (!quantities.Remove(new KeyValuePair<string, double>(" area ", 5d)))
+                throw new Exception("Pair removal must canonicalize quantity identity before matching.");
+            Equal(0, element.Quantities.Count);
+            Has(element.Dirty, ElementDirtyFlags.Quantity);
+            Changed(before, element.UpdatedUtc, "Effective pair removal must advance element persistence lifecycle.");
+
+            element.SetQuantity("Area", 5d);
+            element.MarkClean(ElementDirtyFlags.All);
+            before = element.UpdatedUtc;
+            if (quantities.Remove(new KeyValuePair<string, double>(" area ", 6d)))
+                throw new Exception("Pair removal with a mismatched value must report false.");
+            Equal(1, element.Quantities.Count);
+            Equal(ElementDirtyFlags.None, element.Dirty);
+            Equal(before, element.UpdatedUtc);
         }
 
         private static void NoOpMutationsStayStable()
