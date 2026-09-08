@@ -16,11 +16,13 @@ required_smoke = [
 
 required_source = [
     "RequireStableKnownCountDuringTraversal(records, knownCount)",
-    "RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum)",
+    "private static IReadOnlyList<T> SnapshotWithAdmittedCount<T>(",
+    "RequireStableSnapshotKnownCountDuringTraversal(source, admittedCount, paramName, maximum)",
     "while (true)",
     "if (!enumerator.MoveNext())",
     "CommercialGuard.RequireCanProcessNext(knownCount, snapshot.Count, \"Commercial audit batch source\")",
-    "RequireCanProcessNext(knownCount, result.Count, paramName)",
+    "RequireCanProcessNext(admittedCount, result.Count, paramName)",
+    "var snapshot = SnapshotWithAdmittedCount(source, paramName, maximum, admittedCount);",
 ]
 
 missing = [token for token in required_smoke if token not in smoke]
@@ -40,15 +42,21 @@ audit_current = source.index("var record = enumerator.Current", audit_overrun)
 if not audit_loop < audit_pre < audit_move < audit_post < audit_overrun < audit_current:
     raise SystemExit("Commercial audit traversal must rebind Count before and after MoveNext, then guard before semantic Current.")
 
-snapshot_method = source.index("internal static IReadOnlyList<T> Snapshot<T>")
+snapshot_method = source.index("private static IReadOnlyList<T> SnapshotWithAdmittedCount<T>(")
 snapshot_loop = source.index("while (true)", snapshot_method)
-snapshot_pre = source.index("RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum)", snapshot_loop)
+snapshot_pre = source.index("RequireStableSnapshotKnownCountDuringTraversal(source, admittedCount, paramName, maximum)", snapshot_loop)
 snapshot_move = source.index("if (!enumerator.MoveNext())", snapshot_pre)
-snapshot_post = source.index("RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum)", snapshot_move)
-snapshot_overrun = source.index("RequireCanProcessNext(knownCount, result.Count, paramName)", snapshot_post)
+snapshot_post = source.index("RequireStableSnapshotKnownCountDuringTraversal(source, admittedCount, paramName, maximum)", snapshot_move)
+snapshot_overrun = source.index("RequireCanProcessNext(admittedCount, result.Count, paramName)", snapshot_post)
 snapshot_current = source.index("var item = enumerator.Current", snapshot_overrun)
 if not snapshot_loop < snapshot_pre < snapshot_move < snapshot_post < snapshot_overrun < snapshot_current:
-    raise SystemExit("Commercial shared snapshot traversal must rebind Count before and after MoveNext, then guard before semantic Current.")
+    raise SystemExit("Commercial shared snapshot traversal must rebind the originally admitted Count before and after MoveNext, then guard before semantic Current.")
+
+stable_method = source.index("internal static IReadOnlyList<T> SnapshotStableGeneration<T>(")
+stable_end = source.index("internal static void RequireCanProcessNext", stable_method)
+stable = source[stable_method:stable_end]
+if "var snapshot = Snapshot(source, paramName, maximum);" in stable:
+    raise SystemExit("Commercial stable-generation snapshot must not perform a second Count admission.")
 
 # Historical N+1/null precedence must remain explicitly pinned.
 for token in [
@@ -58,4 +66,4 @@ for token in [
     if token not in legacy_guard:
         raise SystemExit("Historical commercial known-count guard was weakened; missing: " + token)
 
-print("PASS commercial transient known-Count stability source contract")
+print("PASS commercial transient known-Count stability source contract with single admitted-count traversal")

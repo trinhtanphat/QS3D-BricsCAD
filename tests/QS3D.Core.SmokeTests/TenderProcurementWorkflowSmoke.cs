@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using QS3D.Core.Commercial;
 using QS3D.Core.Cost;
 
@@ -11,6 +13,8 @@ namespace QS3D.Core.SmokeTests
             ReusesTenderRankingAndComplianceForRecommendation();
             AwardFailsClosedForIncompleteOrNonCompliantBid();
             DraftPackageCannotBeEvaluated();
+            ReboundKnownCountDoesNotConsumeSurplusCurrent();
+            ZeroKnownCountReboundConsumesNoCurrent();
         }
 
         private static void ReusesTenderRankingAndComplianceForRecommendation()
@@ -71,6 +75,51 @@ namespace QS3D.Core.SmokeTests
             Expect<InvalidOperationException>(
                 () => new TenderProcurementService().Evaluate(Package(ProcurementPackageStatus.Draft), Array.Empty<TenderComplianceResponse>()),
                 "Draft procurement packages must not enter bid evaluation.");
+        }
+
+        private static void ReboundKnownCountDoesNotConsumeSurplusCurrent()
+        {
+            var responses = HostileResponses(1, 2);
+
+            Expect<InvalidOperationException>(
+                () => new TenderProcurementService().Evaluate(Package(ProcurementPackageStatus.Closed), responses),
+                "A commercial snapshot whose known Count changes after admission must fail closed.");
+
+            Require(
+                responses.CurrentReads <= 1,
+                "A rebound known Count must not authorize a surplus Current read beyond the originally admitted cardinality.");
+            RequireDisposed(responses);
+        }
+
+        private static void ZeroKnownCountReboundConsumesNoCurrent()
+        {
+            var responses = HostileResponses(0, 2);
+
+            Expect<InvalidOperationException>(
+                () => new TenderProcurementService().Evaluate(Package(ProcurementPackageStatus.Closed), responses),
+                "A zero-count commercial snapshot that rebounds before traversal must fail closed.");
+
+            Equal(0, responses.CurrentReads, "An originally admitted zero Count must authorize no Current reads.");
+            RequireDisposed(responses);
+        }
+
+        private static FlippingKnownCountCollection<TenderComplianceResponse> HostileResponses(int admittedCount, int reboundCount)
+        {
+            return new FlippingKnownCountCollection<TenderComplianceResponse>(
+                new[]
+                {
+                    new TenderComplianceResponse("BID-A", "INSURANCE", true, "verified"),
+                    new TenderComplianceResponse("BID-B", "INSURANCE", true, "verified")
+                },
+                admittedCount,
+                reboundCount);
+        }
+
+        private static void RequireDisposed<T>(FlippingKnownCountCollection<T> source)
+        {
+            Require(
+                source.EnumeratorCreations == 0 || source.DisposeCalls == source.EnumeratorCreations,
+                "Any commercial snapshot enumerator acquired before a Count-drift failure must be disposed.");
         }
 
         private static TenderProcurementPackage Package(ProcurementPackageStatus status)
@@ -149,6 +198,81 @@ namespace QS3D.Core.SmokeTests
                 return;
             }
             throw new Exception(message);
+        }
+
+        private sealed class FlippingKnownCountCollection<T> : IReadOnlyCollection<T>
+        {
+            private readonly IReadOnlyList<T> _items;
+            private readonly int _admittedCount;
+            private readonly int _reboundCount;
+            private int _countReads;
+
+            internal FlippingKnownCountCollection(IReadOnlyList<T> items, int admittedCount, int reboundCount)
+            {
+                _items = items ?? throw new ArgumentNullException(nameof(items));
+                if (_items.Count < 2)
+                    throw new ArgumentException("At least two items are required for the hostile Count fixture.", nameof(items));
+                _admittedCount = admittedCount;
+                _reboundCount = reboundCount;
+            }
+
+            public int Count
+            {
+                get
+                {
+                    _countReads++;
+                    return _countReads == 1 ? _admittedCount : _reboundCount;
+                }
+            }
+
+            internal int CurrentReads { get; private set; }
+            internal int EnumeratorCreations { get; private set; }
+            internal int DisposeCalls { get; private set; }
+
+            public IEnumerator<T> GetEnumerator()
+            {
+                EnumeratorCreations++;
+                return new TrackingEnumerator(this, _items);
+            }
+
+            IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+            private sealed class TrackingEnumerator : IEnumerator<T>
+            {
+                private readonly FlippingKnownCountCollection<T> _owner;
+                private readonly IReadOnlyList<T> _items;
+                private int _index = -1;
+
+                internal TrackingEnumerator(FlippingKnownCountCollection<T> owner, IReadOnlyList<T> items)
+                {
+                    _owner = owner;
+                    _items = items;
+                }
+
+                public T Current
+                {
+                    get
+                    {
+                        _owner.CurrentReads++;
+                        return _items[_index];
+                    }
+                }
+
+                object IEnumerator.Current => Current!;
+
+                public bool MoveNext()
+                {
+                    _index++;
+                    return _index < _items.Count;
+                }
+
+                public void Reset() => throw new NotSupportedException();
+
+                public void Dispose()
+                {
+                    _owner.DisposeCalls++;
+                }
+            }
         }
     }
 }
