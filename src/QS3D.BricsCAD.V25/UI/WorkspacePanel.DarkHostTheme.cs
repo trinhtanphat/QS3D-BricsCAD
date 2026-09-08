@@ -50,6 +50,19 @@ namespace QS3D.BricsCAD.V25.UI
                 PinScopeComboStyle(FloorCombo, comboStyle);
             }
 
+            // Static ModelTree items are created while the BricsCAD PaletteSet host is still
+            // resolving application-level styles. Pin the QS3D TreeViewItem style explicitly
+            // onto every current model/category node so host styles cannot leave light/default
+            // foreground or selection chrome on the dark Workspace surface.
+            if (TryFindResource(typeof(TreeViewItem)) is Style treeItemStyle)
+            {
+                Resources[typeof(TreeViewItem)] = treeItemStyle;
+                PinModelTreeItemStyles(ModelTree.Items, treeItemStyle);
+            }
+            ModelTree.SetResourceReference(Control.BackgroundProperty, "Bg0Brush");
+            ModelTree.SetResourceReference(Control.ForegroundProperty, "TextBrush");
+            ModelTree.SetResourceReference(Control.BorderBrushProperty, "BorderBrush");
+
             // TreeViewItem/ListBoxItem/ListViewItem styles in Theme.xaml deliberately keep
             // the stock WPF container templates. Those templates can resolve active/inactive
             // selection brushes through SystemColors. Shadow all four keys at the Workspace
@@ -65,6 +78,18 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 PinWorkspaceSelectionResource(SystemColors.HighlightTextBrushKey, selectionTextBrush);
                 PinWorkspaceSelectionResource(SystemColors.InactiveSelectionHighlightTextBrushKey, selectionTextBrush);
+            }
+        }
+
+        private static void PinModelTreeItemStyles(ItemCollection items, Style treeItemStyle)
+        {
+            foreach (var rawItem in items)
+            {
+                if (!(rawItem is TreeViewItem item))
+                    continue;
+
+                item.Style = treeItemStyle;
+                PinModelTreeItemStyles(item.Items, treeItemStyle);
             }
         }
 
