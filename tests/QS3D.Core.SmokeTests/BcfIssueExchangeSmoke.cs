@@ -23,6 +23,7 @@ namespace QS3D.Core.SmokeTests
             BuildingSmartIdentityAndCameraShapesFailClosed();
             DanglingAndDuplicateReferencesFailClosed();
             MalformedPayloadFailsClosed();
+            DtdBearingPayloadsFailClosedBeforeSemanticUse();
             OversizedSemanticPayloadFailsBeforeXmlParse();
             OversizedFreeTextFailsAtSerializerBoundary();
             AmbiguousXmlStructureFailsClosed();
@@ -124,6 +125,21 @@ namespace QS3D.Core.SmokeTests
         {
             ThrowsInvalidData(() => BcfIssueExchangeSerializer.Deserialize("<BcfIssueExchange schemaVersion=\"2.1\"></BcfIssueExchange>"), "Unsupported BCF schema versions must fail closed.");
             ThrowsInvalidData(() => BcfIssueExchangeSerializer.Deserialize("<broken"), "Malformed BCF XML must fail closed.");
+        }
+
+        private static void DtdBearingPayloadsFailClosedBeforeSemanticUse()
+        {
+            var valid = BcfIssueExchangeSerializer.Serialize(BuildFixture(false));
+            var inlineDtd = "<!DOCTYPE BcfIssueExchange [<!ENTITY version '3.0'>]>" +
+                valid.Replace("schemaVersion=\"3.0\"", "schemaVersion=\"&version;\"");
+            ThrowsInvalidData(
+                () => BcfIssueExchangeSerializer.Deserialize(inlineDtd),
+                "BCF issue exchange XML with an inline DTD/entity must fail closed before entity expansion.");
+
+            var externalDtd = "<!DOCTYPE BcfIssueExchange SYSTEM \"https://invalid.example/qs3d-bcf.dtd\">" + valid;
+            ThrowsInvalidData(
+                () => BcfIssueExchangeSerializer.Deserialize(externalDtd),
+                "BCF issue exchange XML with an external DTD must fail closed before resolver use.");
         }
 
         private static void OversizedSemanticPayloadFailsBeforeXmlParse()
