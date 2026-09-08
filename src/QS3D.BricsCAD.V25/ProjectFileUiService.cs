@@ -447,11 +447,21 @@ namespace QS3D.BricsCAD.V25
         private static void ShowError(string operation, Exception exception)
         {
             if (exception is OperationCanceledException) return;
-            System.Windows.MessageBox.Show(
-                exception.Message,
-                "QS3D — " + operation,
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
+
+            var message = "Không thể hoàn tất thao tác " + operation + ". Vui lòng thử lại.";
+            try
+            {
+                System.Windows.MessageBox.Show(
+                    message,
+                    "QS3D — " + operation,
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+            catch
+            {
+                // Error presentation is best-effort. Do not allow UI failures to
+                // escape the reporter or replace the original operation outcome.
+            }
         }
     }
 }
