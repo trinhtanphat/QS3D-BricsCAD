@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Mapping;
@@ -49,8 +50,20 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("coverage-quantity-bound", "Coverage quantity bound");
             var element = new ProjectElement("E", ElementCategory.Slab);
-            for (var i = 0; i < quantityCount; i++)
+            var semanticCount = Math.Min(quantityCount, MaximumFindings);
+            for (var i = 0; i < semanticCount; i++)
                 element.SetQuantity("Q" + i.ToString("D5"), 1d);
+
+            if (quantityCount > MaximumFindings)
+            {
+                var quantityField = typeof(ProjectElement).GetField("_quantityValues", BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?? throw new InvalidOperationException("Unable to seed persisted quantity-overflow fixture.");
+                var quantities = quantityField.GetValue(element) as Dictionary<string, double>
+                    ?? throw new InvalidOperationException("Unexpected ProjectElement quantity backing dictionary.");
+                for (var i = MaximumFindings; i < quantityCount; i++)
+                    quantities.Add("Q" + i.ToString("D5"), 1d);
+            }
+
             element.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(element);
             return project;
