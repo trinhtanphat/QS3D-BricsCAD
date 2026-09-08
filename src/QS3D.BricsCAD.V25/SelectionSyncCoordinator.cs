@@ -19,6 +19,7 @@ namespace QS3D.BricsCAD.V25
         {
             if (document == null || Attached.Contains(document)) return;
             var subscribed = false;
+            object? attachmentToken = null;
             try
             {
                 document.ImpliedSelectionChanged += OnImpliedSelectionChanged;
@@ -28,20 +29,13 @@ namespace QS3D.BricsCAD.V25
                     document.ImpliedSelectionChanged -= OnImpliedSelectionChanged;
                     return;
                 }
-                AttachmentTokens[document] = new object();
+                attachmentToken = new object();
+                AttachmentTokens[document] = attachmentToken;
                 Refresh(document);
             }
             catch
             {
-                if (subscribed)
-                {
-                    try { document.ImpliedSelectionChanged -= OnImpliedSelectionChanged; }
-                    catch { }
-                }
-                RemovePending(document);
-                Refreshing.Remove(document);
-                AttachmentTokens.Remove(document);
-                Attached.Remove(document);
+                RollbackAttachment(document, subscribed, attachmentToken);
                 throw;
             }
         }
@@ -101,6 +95,28 @@ namespace QS3D.BricsCAD.V25
             Pending.Clear();
             Refreshing.Clear();
             AttachmentTokens.Clear();
+        }
+
+        private static void RollbackAttachment(Document document, bool subscribed, object? attachmentToken)
+        {
+            if (AttachmentTokens.TryGetValue(document, out var currentToken) &&
+                !ReferenceEquals(currentToken, attachmentToken))
+            {
+                return;
+            }
+
+            if (subscribed)
+            {
+                try { document.ImpliedSelectionChanged -= OnImpliedSelectionChanged; }
+                catch { }
+            }
+            RemovePending(document);
+            if (attachmentToken == null)
+                Refreshing.Remove(document);
+            else
+                ReleaseRefresh(document, attachmentToken);
+            AttachmentTokens.Remove(document);
+            Attached.Remove(document);
         }
 
         private static void ReleaseRefresh(Document document, object attachmentToken)
