@@ -400,7 +400,7 @@ namespace QS3D.BricsCAD.V25
                 PaletteCoordinator.RefreshProject();
                 if (!sourceId.IsNull && sourceId.IsValid) document.Editor.SetImpliedSelection(new[] { sourceId });
                 document.Editor.Regen();
-                PaletteCoordinator.SetStatus(status);
+                DirectDrawUiFailureReporter.ReportPostCommitSuccess(document, status);
                 document.Editor.WriteMessage("\nQS3D " + status);
             }
             catch (Exception)
