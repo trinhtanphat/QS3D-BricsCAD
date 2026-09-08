@@ -39,6 +39,11 @@ finally_start = selection.find("finally", catch_start if catch_start >= 0 else 0
 catch_body = selection[catch_start:finally_start if finally_start >= 0 else len(selection)] if catch_start >= 0 else ""
 if catch_body and "PaletteCoordinator.SetStatus(" in catch_body:
     errors.append("selection-sync exception path must not publish through unbound process-wide SetStatus")
+if catch_body:
+    attached_guard = catch_body.find("Attached.Contains(document)")
+    status_publish = catch_body.find("SelectionSyncStatusPublisher.SetStatusForDocument")
+    if attached_guard < 0 or status_publish < 0 or attached_guard > status_publish:
+        errors.append("selection-sync exception path must verify source Document is still attached before status publication")
 
 method_start = publisher.find("public static void SetStatusForDocument")
 method_body = publisher[method_start:] if method_start >= 0 else ""
@@ -83,7 +88,7 @@ if tick_body:
 
 refresh_start = selection.find("public static void Refresh(Document? document)")
 refresh_end = selection.find("public static void Stop()", refresh_start if refresh_start >= 0 else 0)
-refresh_body = selection[refresh_start:refresh_end if refresh_end >= 0 else len(selection)] if refresh_start >= 0 else ""
+refresh_body = selection[refresh_start:refresh_end if refresh_start >= 0 and refresh_end >= 0 else len(selection)] if refresh_start >= 0 else ""
 if refresh_body and "!Attached.Contains(document)" not in refresh_body:
     errors.append("Refresh must fail closed for detached Documents even when a stale callback is already queued")
 
@@ -93,4 +98,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: selection-sync errors retain exact source-document affinity and detached/stale timers fail closed before palette work.")
+print("PASS: selection-sync errors retain exact source-document affinity; detached status paths and stale timers fail closed before palette work.")
