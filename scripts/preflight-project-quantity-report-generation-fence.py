@@ -81,7 +81,7 @@ for token in [
     'types: new[] { typeof(ProjectState), snapshot.GetType() }',
     'method.Invoke(null, new[] { (object)project, snapshot })',
     'StructuralReplacementWithoutTouchFailsClosed();',
-    'Equal(originalVersion + 1, project.ChangeVersion);',
+    'Equal(checked(originalVersion + 1L), project.ChangeVersion);',
 ]:
     if token not in legacy_revision_smoke:
         raise SystemExit("Legacy quantity revision smoke is not bound to the immutable generation snapshot contract: " + token)
