@@ -105,12 +105,20 @@ namespace QS3D.BricsCAD.V25
         private static void OnImpliedSelectionChanged(object sender, EventArgs e)
         {
             var document = sender as Document ?? Application.DocumentManager.MdiActiveDocument;
-            if (document == null || !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;
+            if (document == null ||
+                !Attached.Contains(document) ||
+                !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;
             ScheduleRefresh(document);
         }
 
         private static void ScheduleRefresh(Document document)
         {
+            if (!Attached.Contains(document))
+            {
+                RemovePending(document);
+                return;
+            }
+
             if (!PaletteCoordinator.IsWorkspaceVisible)
             {
                 StopPending(document);
@@ -124,12 +132,12 @@ namespace QS3D.BricsCAD.V25
                 {
                     timer.Stop();
                     if (!Pending.TryGetValue(document, out var current) ||
-                        !ReferenceEquals(current, timer) ||
-                        !Attached.Contains(document))
+                        !ReferenceEquals(current, timer))
                     {
                         return;
                     }
                     Pending.Remove(document);
+                    if (!Attached.Contains(document)) return;
                     Refresh(document);
                 };
                 Pending[document] = timer;
