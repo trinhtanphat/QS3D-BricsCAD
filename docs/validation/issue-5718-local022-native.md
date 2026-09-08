@@ -2,6 +2,41 @@
 
 ## Verdict
 
+Latest licensed native API pair (2026-09-08): **V25 allocation51 and V26
+allocation52 are `LOCAL_PASS_BOUNDED`, three phases each**, on exact pushed
+harness `764c7252312dd41cc0deddc0add3808c8637a8d9` and unchanged frozen source
+`87aff7fec452f9a8dd9f641ef84d143edc73514d`. This harness includes main through
+`f6ae8d38be09dceba556380157f1abdf56a8a21a`; main synchronization does not change
+the tested product. Both use `NATIVE_V1 / WALL_CLOCK_V1`, explicit non-interactive
+mode and disposable `Default` clones, not physical-UI proof.
+
+- V25.2.10, RunId `3d28f3d0b6d04e37ad51c6092bb9a2db`,
+  `2026-09-08T04:32:19.3455660Z`–`2026-09-08T04:33:16.9779888Z`;
+  probe SHA-256 `6dae0825a3b17dc62865ef6d31b77ef6ba53eeff904e17e07e8273c11e34de1b`;
+  ZIP SHA-256 `6da38fcb3bc5fdb1989e9397fad45da712bf4af6b7690298a2fe83657bcb10ac`.
+- V26.2.07, RunId `682ae380b1e74ed081ca1db0489a2dd8`,
+  `2026-09-08T04:33:56.6895476Z`–`2026-09-08T04:34:59.0143887Z`;
+  probe SHA-256 `85307881eabb44293d2d508ebf7e970c6a1e458cf8eeca6a078a25cfe0c6430d`;
+  ZIP SHA-256 `59498948341f36d408f8bf838e177170c19d99ffc64acaa2070b0524e6b99a81`.
+
+Each host passed all thirteen `run`, six `saved` and seven fresh-process `reopen`
+checks, including H2=0/H2>0 repeated native placement, mass/volume/extents and
+ownership, Family regeneration/former-output erasure, generic Foundation
+rejection before mutation, production QS3DSAVE/native QSAVE and cold semantic
+identity/cardinality/dimensions. Both runners exited0, removed only their private
+fixture copies and nonce profiles, restored the exact original inventory/current
+pointer, and verified unchanged protected state with zero residual hosts. Both
+wrappers restored original autostart byte1/hash and timestamp
+`2026-09-07T02:55:30.6894998Z`; Cloudflare stayed paused. No MCP request or desktop
+input/capture was issued for this API pair. Package kind remains unsigned
+`LOCAL_PR_CANDIDATE`, version0.1.0-preview.10307, not official release evidence.
+
+This closes the current87aff native generic-Foundation evidence gap only. V26
+physical UI/save/cold still needs qualification after the consumed50 failure;
+topology/taper sections, Quantity/Unicode/DPI/private-DWG and applicable published
+source evidence remain open. No aggregate #5718/#4034/#72 or MCP PASS is claimed.
+Earlier dated checkpoints below remain historical and must not override this pair.
+
 Runner checkpoint (2026-09-08): the wrapper now has an explicit `-NativeApi`
 route for the unchanged native run/save/cold tests on frozen source87aff.
 V26 admission requires same-source/package V25 native evidence, explicit mode,
