@@ -14,7 +14,7 @@ required = (
     "var snapshots = EntitySnapshotReader.ReadImpliedSelection(document);",
     "if (!ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;",
     "PaletteCoordinator.SetInspection(snapshots);",
-    'PaletteCoordinator.SetStatus("Selection sync lỗi. Vui lòng thử lại.");',
+    'SelectionSyncStatusPublisher.SetStatusForDocument(document, "Selection sync lỗi. Vui lòng thử lại.");',
 )
 for token in required:
     if token not in text:
@@ -22,6 +22,7 @@ for token in required:
 
 for forbidden in (
     "PaletteCoordinator.SetInspection(EntitySnapshotReader.ReadImpliedSelection(document));",
+    'PaletteCoordinator.SetStatus("Selection sync lỗi. Vui lòng thử lại.");',
     'PaletteCoordinator.SetStatus("Selection sync lỗi: " + ex.Message);',
 ):
     if forbidden in text:
