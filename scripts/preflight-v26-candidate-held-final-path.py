@@ -12,7 +12,7 @@ MAX_SOURCE_BYTES = 256 * 1024
 DECL = "public static extern uint GetFinalPathNameByHandleW("
 HELPER = "function Get-HeldFinalPath {"
 HANDLE_CALL = "[QS3DV26HeldFileIdentity]::GetFinalPathNameByHandleW("
-SAFE_HANDLE = "$Stream.SafeFileHandle"
+HANDLE_INVOCATION = "$length = [QS3DV26HeldFileIdentity]::GetFinalPathNameByHandleW($Stream.SafeFileHandle, $builder, [uint32]$builder.Capacity, 0)"
 UNC_BRANCH = "if ($resolved.StartsWith('\\\\?\\UNC\\', [StringComparison]::OrdinalIgnoreCase)) {"
 DOS_BRANCH = "elseif ($resolved.StartsWith('\\\\?\\', [StringComparison]::OrdinalIgnoreCase)) {"
 CANONICAL = "[IO.Path]::GetFullPath($item.FullName)"
@@ -48,7 +48,7 @@ def validate(source: str) -> list[str]:
         (DECL, "GetFinalPathNameByHandleW declaration is missing"),
         (HELPER, "held-handle final-path helper is missing"),
         (HANDLE_CALL, "held-handle final-path invocation is missing"),
-        (SAFE_HANDLE, "final-path query is not bound to the held stream SafeFileHandle"),
+        (HANDLE_INVOCATION, "final-path query is not bound to the exact held stream SafeFileHandle"),
         (UNC_BRANCH, "extended UNC final-path normalization is missing"),
         (DOS_BRANCH, "extended DOS final-path normalization is missing"),
         (CANONICAL, "canonical admitted pathname capture is missing"),
@@ -63,7 +63,7 @@ def validate(source: str) -> list[str]:
             failures.append(message)
 
     helper_pos = source.find(HELPER)
-    call_pos = source.find(HANDLE_CALL, helper_pos if helper_pos >= 0 else 0)
+    call_pos = source.find(HANDLE_INVOCATION, helper_pos if helper_pos >= 0 else 0)
     open_pos = source.find(OPEN)
     proof_pos = source.find(PROOF, open_pos + len(OPEN) if open_pos >= 0 else 0)
     compare_pos = source.find(COMPARE, proof_pos + len(PROOF) if proof_pos >= 0 else 0)
@@ -71,9 +71,8 @@ def validate(source: str) -> list[str]:
     return_pos = source.find(RETURN, mismatch_pos if mismatch_pos >= 0 else 0)
     if min(helper_pos, call_pos, open_pos, proof_pos, compare_pos, mismatch_pos, return_pos) < 0:
         failures.append("held-handle final-path proof sequence is incomplete")
-    else:
-        if not (helper_pos < call_pos < open_pos < proof_pos < compare_pos < mismatch_pos < return_pos):
-            failures.append("opened handle final-path identity must be proven fail-closed after open and before held state is returned")
+    elif not (helper_pos < call_pos < open_pos < proof_pos < compare_pos < mismatch_pos < return_pos):
+        failures.append("opened handle final-path identity must be proven fail-closed after open and before held state is returned")
 
     if "Resolve-OrdinaryFile -Path $Path -Label $Label" not in source:
         failures.append("ordinary-file/reparse pathname admission was removed")
@@ -93,8 +92,7 @@ def main() -> int:
     mutations = (
         (DECL, "native final-path declaration"),
         (HELPER, "held final-path helper"),
-        (HANDLE_CALL, "native final-path invocation"),
-        (SAFE_HANDLE, "exact held SafeFileHandle"),
+        (HANDLE_INVOCATION, "native final-path invocation on exact held SafeFileHandle"),
         (UNC_BRANCH, "extended UNC normalization"),
         (DOS_BRANCH, "extended DOS normalization"),
         (CANONICAL, "canonical admitted path capture"),
