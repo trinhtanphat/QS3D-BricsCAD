@@ -5,6 +5,9 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 ACQUIRE = ROOT / "scripts/acquire-v25-compile-references.ps1"
 
+NATIVE_CREATE_DECL = "public static extern SafeFileHandle CreateFileW("
+NATIVE_CREATE_CALL = "$handle = [QS3DV25NativeFileDisposition]::CreateFileW("
+
 REQUIRED = (
     "function Open-PinnedMsiReadLock",
     "function Test-PinnedMsiGeneration",
@@ -15,7 +18,8 @@ REQUIRED = (
     "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging",
     "$stagingAdmission = Open-PinnedMsiReadLock -Path $staging -ExpectedSha256 $expected",
     "Assert-NoExistingReparseComponent -Path $msi -Label 'MsiPath before held-generation publication'",
-    "CreateFileW",
+    NATIVE_CREATE_DECL,
+    NATIVE_CREATE_CALL,
     "public const uint DELETE = 0x00010000;",
     "public const uint CREATE_NEW = 1;",
     "$publishedStream = Open-OwnedMsiPublication -Path $msi",
@@ -65,6 +69,12 @@ def validate(text: str) -> list[str]:
         if token in text:
             failures.append(f"unsafe acquisition path/traversal marker remains: {token}")
 
+    native_decl = text.find(NATIVE_CREATE_DECL)
+    native_call = text.find(NATIVE_CREATE_CALL, native_decl if native_decl >= 0 else 0)
+    owned_helper = text.find("function Open-OwnedMsiPublication")
+    if not (0 <= native_decl < owned_helper < native_call):
+        failures.append("native CreateFileW declaration must back the exact owned-publication call site")
+
     download = text.find("Invoke-WebRequest -Uri $candidate.Url -OutFile $staging")
     staged_admission = text.find("$stagingAdmission = Open-PinnedMsiReadLock -Path $staging -ExpectedSha256 $expected")
     owned_open = text.find("$publishedStream = Open-OwnedMsiPublication -Path $msi", staged_admission)
@@ -108,7 +118,8 @@ def main() -> int:
         "$sha.ComputeHash($stream)",
         "Invoke-WebRequest -Uri $candidate.Url -OutFile $staging",
         "$stagingAdmission = Open-PinnedMsiReadLock -Path $staging -ExpectedSha256 $expected",
-        "CreateFileW",
+        NATIVE_CREATE_DECL,
+        NATIVE_CREATE_CALL,
         "public const uint DELETE = 0x00010000;",
         "public const uint CREATE_NEW = 1;",
         "$publishedStream = Open-OwnedMsiPublication -Path $msi",
