@@ -82,7 +82,7 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("signed-zero", "Signed zero");
             var element = CleanQuantityElement("signed-zero-element", ElementCategory.Slab, "NetVolumeM3", 1d);
             var negativeZero = BitConverter.Int64BitsToDouble(long.MinValue);
-            element.Quantities["NetVolumeM3"] = negativeZero;
+            SeedPersistedQuantity(element, "NetVolumeM3", negativeZero);
             project.Elements.Add(element);
 
             var finding = MeasurementWorkItemCoverageEvaluator.Evaluate(project, Catalog()).Single();
@@ -129,19 +129,19 @@ namespace QS3D.Core.SmokeTests
 
             var nonFinite = new ProjectState("nan", "NaN");
             var nan = CleanQuantityElement("NaN", ElementCategory.Slab, "NetVolumeM3", 1d);
-            nan.Quantities["NetVolumeM3"] = double.NaN;
+            SeedPersistedQuantity(nan, "NetVolumeM3", double.NaN);
             nonFinite.Elements.Add(nan);
             ExpectThrows<InvalidOperationException>(() => MeasurementWorkItemCoverageEvaluator.Evaluate(nonFinite, catalog));
 
             var finiteNegative = new ProjectState("negative", "Negative");
             var negative = CleanQuantityElement("Negative", ElementCategory.Slab, "NetVolumeM3", 1d);
-            negative.Quantities["NetVolumeM3"] = -double.Epsilon;
+            SeedPersistedQuantity(negative, "NetVolumeM3", -double.Epsilon);
             finiteNegative.Elements.Add(negative);
             ExpectThrows<InvalidOperationException>(() => MeasurementWorkItemCoverageEvaluator.Evaluate(finiteNegative, catalog));
 
             var paddedQuantity = new ProjectState("padded", "Padded");
             var padded = new ProjectElement("Padded", ElementCategory.Slab);
-            padded.Quantities[" NetVolumeM3"] = 1d;
+            SeedPersistedQuantity(padded, " NetVolumeM3", 1d);
             padded.MarkClean(ElementDirtyFlags.All);
             paddedQuantity.Elements.Add(padded);
             ExpectThrows<InvalidOperationException>(() => MeasurementWorkItemCoverageEvaluator.Evaluate(paddedQuantity, catalog));
@@ -195,6 +195,15 @@ namespace QS3D.Core.SmokeTests
             element.SetQuantity(quantityKey, value);
             element.MarkClean(ElementDirtyFlags.All);
             return element;
+        }
+
+        private static void SeedPersistedQuantity(ProjectElement element, string key, double value)
+        {
+            var quantitiesField = typeof(ProjectElement).GetField("_quantityValues", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement quantity backing field changed; update corruption regression intentionally.");
+            var quantities = quantitiesField.GetValue(element) as Dictionary<string, double>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement quantity backing dictionary.");
+            quantities[key] = value;
         }
 
         private static MeasurementWorkItemMappingCatalog Catalog() =>
