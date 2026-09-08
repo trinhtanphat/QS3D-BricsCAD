@@ -55,8 +55,28 @@ def main():
         "Rollback",
         "Restart-BricsCAD",
         "Start-Process -FilePath $env:QS3D_PREVIEW_BRICSCAD",
+        "function Assert-Unblocked([string]$Path, [string]$Label)",
+        'Get-Item -LiteralPath $Path -Stream "Zone.Identifier" -ErrorAction SilentlyContinue',
+        "Unblock-File -LiteralPath $destination -ErrorAction Stop",
+        "Assert-Unblocked $destination ('installed payload ' + $entry.RelativePath)",
     ):
         require(installer, needle, installer_rel)
+
+    replace = installer.find("[IO.File]::Replace($temp, $destination, $null, $true)")
+    move = installer.find("[IO.File]::Move($temp, $destination)")
+    unblock = installer.find("Unblock-File -LiteralPath $destination -ErrorAction Stop")
+    motw_verify = installer.find("Assert-Unblocked $destination ('installed payload ' + $entry.RelativePath)")
+    installed_hash = installer.find("Assert-Hash $destination $entry.StageSha256 ('installed payload ' + $entry.RelativePath)")
+    if min(replace, move, unblock, motw_verify, installed_hash) < 0 or not max(replace, move) < unblock < motw_verify < installed_hash:
+        raise SystemExit(
+            "FAIL: preview apply must replace/move the exact file, clear its MOTW, verify Zone.Identifier is absent, then verify installed SHA-256"
+        )
+
+    for needle in (
+        "Get-ChildItem $env:QS3D_PREVIEW_INSTALL_ROOT -Recurse",
+        "Get-ChildItem -LiteralPath $env:QS3D_PREVIEW_INSTALL_ROOT -Recurse",
+    ):
+        forbid(installer, needle, installer_rel)
 
     for needle in (
         "internal sealed class UpdateDownloadProgress",
@@ -146,6 +166,7 @@ def main():
 
     print(
         "PASS: verified V25 preview package is staged and re-hashed, adapter/Core replacement remains deferred until BricsCAD exits, "
+        "every exact installed preview file has MOTW cleared and Zone.Identifier absence verified before its installed hash is accepted, "
         "rollback is preserved, the exact BricsCAD executable is restarted after apply/recovery, downloader progress is shown only during active apply/download states, "
         "preview capability copy stays coherent with the primary action, update-on-close uses dark-theme checkbox chrome and defaults OFF unless persisted by the user, "
         "current/latest versions use fresh green when equal and red-vs-green when different, GitHub 403/rate-limit responses remain bounded, "
