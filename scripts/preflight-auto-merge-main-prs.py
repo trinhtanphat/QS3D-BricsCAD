@@ -6,6 +6,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "auto-merge-main-prs.yml"
 CI_POLICY_GUARD = ROOT / "scripts" / "preflight-ci-manual-only.py"
+PROFESSIONALISM_GUARD = ROOT / "scripts" / "preflight-repository-professionalism.py"
+CI_POLICY_DOC = ROOT / "CI_POLICY.md"
 
 
 def require(text: str, token: str, label: str = "workflow") -> None:
@@ -18,13 +20,19 @@ def forbid(text: str, token: str, label: str = "workflow") -> None:
         raise SystemExit(f"auto-merge main PR preflight: {label} forbidden token present: {token}")
 
 
-if not WORKFLOW.is_file():
-    raise SystemExit(f"auto-merge main PR preflight: workflow missing: {WORKFLOW.relative_to(ROOT)}")
-if not CI_POLICY_GUARD.is_file():
-    raise SystemExit(f"auto-merge main PR preflight: policy guard missing: {CI_POLICY_GUARD.relative_to(ROOT)}")
+for path, label in (
+    (WORKFLOW, "workflow"),
+    (CI_POLICY_GUARD, "CI policy guard"),
+    (PROFESSIONALISM_GUARD, "professionalism guard"),
+    (CI_POLICY_DOC, "CI policy document"),
+):
+    if not path.is_file():
+        raise SystemExit(f"auto-merge main PR preflight: {label} missing: {path.relative_to(ROOT)}")
 
 text = WORKFLOW.read_text(encoding="utf-8")
 policy = CI_POLICY_GUARD.read_text(encoding="utf-8")
+professionalism = PROFESSIONALISM_GUARD.read_text(encoding="utf-8")
+ci_policy = CI_POLICY_DOC.read_text(encoding="utf-8")
 
 for token in (
     "pull_request_target:",
@@ -70,5 +78,29 @@ for token in (
     '"--admin"',
 ):
     require(policy, token, "CI policy guard")
+
+for token in (
+    'AUTO_MERGE_WORKFLOW = "auto-merge-main-prs.yml"',
+    "workflow.name != AUTO_MERGE_WORKFLOW",
+    '"gh pr merge --auto --merge"',
+    '"--admin"',
+    "retired Hybrid PR Coordinator workflow must remain removed",
+):
+    require(professionalism, token, "professionalism guard")
+
+for token in (
+    "## Automatic PR ready/auto-merge arming",
+    ".github/workflows/auto-merge-main-prs.yml",
+    "does not perform the final merge",
+    "Repository-wide native auto-merge arming is explicitly enabled",
+    "branch protection and required checks remain authoritative",
+):
+    require(ci_policy, token, "CI policy document")
+
+for token in (
+    "Repository-wide blind auto-merge remains intentionally disabled",
+    ".github/workflows/hybrid-pr-coordinator.yml` is the single owner-approved queue coordinator",
+):
+    forbid(ci_policy, token, "CI policy document")
 
 print("PASS auto-merge main PR policy source guard")
