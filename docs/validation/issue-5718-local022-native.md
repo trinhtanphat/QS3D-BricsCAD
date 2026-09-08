@@ -2,6 +2,40 @@
 
 ## Verdict
 
+Source remediation checkpoint (2026-09-08, **not new licensed evidence**):
+
+- Quantity source carrier #6145 / PR#6169, pushed head
+  `0493ee9f6955a818952d0a5da2b16886891b7f8f` (main through
+  `698c6cd3765279215cb514fa174c496d0685feda`). The actual Core regression
+  reproduced the stale prism result before implementation; canonical six-dimension
+  projection now runs at native creation/edit and Core dirty regeneration. Stale
+  concrete aliases/deductions are removed so later user rules remain authoritative;
+  incompatible measured evidence fails closed and unqualified old prism formwork
+  totals are removed. No BQ display or strict runtime oracle change.
+- Full Core smoke suite passed before the latest main reconciliation, including
+  clean-state reporting, custom rules, box/taper/legacy/invalid/overflow/atomicity
+  and ordinary Foundation cases. V25 SDK build passed with zero warnings/errors.
+  Branch run34232269662 on initial sourcea53 failed the existing extracted scope
+  test because it omitted the new policy dependency. This was fixed on the same
+  carrier by compiling the actual policy/math and checking actual element-contract
+  quantity refresh; that executable regression passes. The complete Core suite
+  was then rerun on049 after reconciliation and finished **ALL PASS**. Fresh
+  protected CI remains required; this is still source-only evidence.
+- Separate source build carrier #6168 / PR#6171, pushed head
+  `1fb659c7503f73a7ea8a3089a024dc689e294a69`, repairs independently reproduced
+  V26 CS0103 updater-receipt references and targeted SYSLIB0014 compatibility.
+  Both actual SDK builds passed on that exact head: V26 26.51s, V25 36.46s,
+  zero warnings/errors. V26 never reads/deletes V25 receipt state; version
+  normalization is unchanged. No MCP traffic or transport behavior was tested.
+- The complete existing LOCAL-022 host-free runner suite passed after main698
+  reconciliation, including strict quantity oracle, write-open hashing, exact
+  phase/predecessor/status refusal and all prior input/native guards. It executed
+  no CAD, native input or tunnel request.
+- Do not run frozen87aff again for this known BQ failure. After the source fixes
+  are combined through their protected carriers, pin matched fresh package hashes,
+  push the clean harness, then execute a new V25 quantity allocation before V26.
+  Allocation64 remains FAIL; no new quantity/native/physical PASS is claimed.
+
 Latest reporting result (2026-09-08): **`FAIL_OR_NO_RESULT /
 QUANTITY_GROSS_VOLUME`**, V25 allocation64. The real production `QS3DBQ`
 window's visible DataGrid contained one grouped row, count 2, gross/net **16 m³**.
