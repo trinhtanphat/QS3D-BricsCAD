@@ -35,6 +35,13 @@ def require(source: str, needle: str, label: str) -> int:
     return index
 
 
+def require_after(source: str, needle: str, after_index: int, label: str) -> int:
+    index = source.find(needle, after_index)
+    if index < 0:
+        fail(f"missing {label} after offset {after_index}: {needle}")
+    return index
+
+
 def require_before(source: str, first: str, second: str, label: str) -> None:
     first_index = require(source, first, label + " first token")
     second_index = require(source, second, label + " second token")
@@ -69,25 +76,49 @@ def main() -> None:
     )
 
     # The expected certificate must be absent before this attempt and the bounded
-    # bytes must be validated before a persisted key is created.
+    # bytes must be validated before a persisted key is created. Validate the
+    # probe call by ordered semantic tokens instead of indentation/newline shape.
     require(source, "if ($existing -contains $expected)", "pre-existing expected-certificate rejection")
-    probe_import = "$probeCertificate.Import(\n            $bytes,\n            $Password,\n            [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::UserKeySet)"
-    require(source, probe_import, "non-persistent probe import")
+    probe_start = require(source, "$probeCertificate.Import(", "non-persistent probe import")
+    probe_bytes = require_after(source, "$bytes,", probe_start, "probe byte input")
+    probe_password = require_after(source, "$Password,", probe_bytes, "probe SecureString password input")
+    probe_flag = require_after(
+        source,
+        "[Security.Cryptography.X509Certificates.X509KeyStorageFlags]::UserKeySet",
+        probe_password,
+        "probe non-persistent UserKeySet flag",
+    )
+    probe_end = require_after(source, ")", probe_flag, "probe import close")
     require(source, "$probeCertificate.HasPrivateKey", "probe private-key admission")
     require(source, "Test-CodeSigningEku $probeCertificate", "probe Code Signing EKU admission")
     require(source, "$probeCertificate.NotBefore", "probe NotBefore admission")
     require(source, "$probeCertificate.NotAfter", "probe NotAfter admission")
     require(source, "$probeCertificate.Dispose()", "probe certificate disposal")
 
-    persistent_flags = (
-        "$keyStorageFlags = [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::UserKeySet -bor\n"
-        "        [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::PersistKeySet"
+    # Persist only after the probe succeeds. Check the flag composition by token
+    # order so harmless PowerShell formatting cannot weaken or break the guard.
+    certificate_new = require(
+        source,
+        "$certificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new()",
+        "persistent in-memory certificate",
+    )
+    key_flags_start = require_after(source, "$keyStorageFlags =", certificate_new, "persistent key-storage flags")
+    persistent_user_flag = require_after(
+        source,
+        "[Security.Cryptography.X509Certificates.X509KeyStorageFlags]::UserKeySet",
+        key_flags_start,
+        "persistent CurrentUser key flag",
+    )
+    persistent_persist_flag = require_after(
+        source,
+        "[Security.Cryptography.X509Certificates.X509KeyStorageFlags]::PersistKeySet",
+        persistent_user_flag,
+        "persistent key flag",
     )
     memory_import = "$certificate.Import($bytes, $Password, $keyStorageFlags)"
-    require(source, "$certificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new()", "persistent in-memory certificate")
-    require(source, persistent_flags, "non-exportable CurrentUser persisted-key flags")
-    require(source, memory_import, "direct in-memory PFX import")
-    require_before(source, probe_import, memory_import, "probe validation must precede persisted-key import")
+    memory_import_index = require_after(source, memory_import, persistent_persist_flag, "direct in-memory PFX import")
+    if probe_end >= memory_import_index:
+        fail("probe validation must precede persisted-key import")
 
     store_ctor = "[Security.Cryptography.X509Certificates.X509Store]::new("
     store_open = "$store.Open([Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)"
