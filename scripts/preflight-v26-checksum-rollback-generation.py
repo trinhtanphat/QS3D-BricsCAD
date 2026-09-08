@@ -47,21 +47,43 @@ def validate_source(source: str) -> None:
     for token in (
         "$tempGeneration = New-OwnedChecksumGeneration",
         "$originalOutputGeneration = Open-OwnedChecksumGeneration",
+        "$publishedAttemptIdentity = $tempGeneration.Identity",
         "$publishedGeneration = Open-PinnedChecksumGeneration -Path $outputFullPath",
-        "publishedGeneration.Identity, $tempGeneration.Identity",
+        "publishedGeneration.Identity, $publishedAttemptIdentity",
+        "$rollbackPublishedGeneration = Open-OwnedChecksumGeneration -Path $outputFullPath",
+        "rollbackPublishedGeneration.Identity, $publishedAttemptIdentity",
+        "Remove-OwnedChecksumGeneration -Generation $rollbackPublishedGeneration",
         "backupProof.Identity, $originalOutputGeneration.Identity",
     ):
         if token not in source:
             raise AssertionError("V26 checksum generation ownership is not bound across publication/rollback: " + token)
 
-    pinned_open = source.index("$publishedGeneration = Open-PinnedChecksumGeneration -Path $outputFullPath")
+    publish_call_positions = [
+        p for p in (
+            source.find("[IO.File]::Replace($tempPath", publication),
+            source.find("[IO.File]::Move($tempPath", publication),
+        ) if p >= 0
+    ]
+    if len(publish_call_positions) != 2:
+        raise AssertionError("V26 checksum publication must retain both Replace and Move paths")
+    publish_done = max(publish_call_positions)
+    identity_capture = source.index("$publishedAttemptIdentity = $tempGeneration.Identity", publish_done)
+    creator_close = source.index("Close-OwnedChecksumGeneration -Generation $tempGeneration", identity_capture)
+    creator_clear = source.index("$tempGeneration = $null", creator_close)
+    pinned_open = source.index("$publishedGeneration = Open-PinnedChecksumGeneration -Path $outputFullPath", creator_clear)
     published_read = source.index("$publishedText = [IO.File]::ReadAllText", pinned_open)
     committed = source.index("$publicationCommitted = $true", published_read)
     pinned_close = source.index("Close-OwnedChecksumGeneration -Generation $publishedGeneration", committed)
-    if not (pinned_open < published_read < committed < pinned_close):
+    if not (publish_done < identity_capture < creator_close < creator_clear < pinned_open < published_read < committed < pinned_close < rollback):
         raise AssertionError(
-            "published checksum generation must remain read-only replacement-pinned across pathname byte verification and publication commit"
+            "published checksum lifecycle must close the write/delete creator before read-only pinning and keep the pin through commit"
         )
+
+    rollback_reopen = source.index("$rollbackPublishedGeneration = Open-OwnedChecksumGeneration -Path $outputFullPath", rollback)
+    rollback_compare = source.index("rollbackPublishedGeneration.Identity, $publishedAttemptIdentity", rollback_reopen)
+    rollback_remove = source.index("Remove-OwnedChecksumGeneration -Generation $rollbackPublishedGeneration", rollback_compare)
+    if not (rollback < rollback_reopen < rollback_compare < rollback_remove):
+        raise AssertionError("rollback must identity-prove the pathname before handle-bound deletion of the published attempt generation")
 
 
 def expect_mutation_failure(source: str, token: str) -> None:
@@ -78,7 +100,7 @@ def expect_mutation_failure(source: str, token: str) -> None:
 source = SOURCE_PATH.read_text(encoding="utf-8")
 validate_source(source)
 
-# Mutation-lock semantic primitives independently so declaration/call-site/share-mode drift cannot pass silently.
+# Mutation-lock semantic primitives and lifecycle transitions independently.
 for token in (
     "GetFileInformationByHandle",
     "SetFileInformationByHandle",
@@ -88,7 +110,10 @@ for token in (
     "Get-OwnedChecksumGenerationIdentity",
     "Remove-OwnedChecksumGeneration",
     PINNED_NATIVE_OPEN,
+    "$publishedAttemptIdentity = $tempGeneration.Identity",
+    "$rollbackPublishedGeneration = Open-OwnedChecksumGeneration -Path $outputFullPath",
+    "Remove-OwnedChecksumGeneration -Generation $rollbackPublishedGeneration",
 ):
     expect_mutation_failure(source, token)
 
-print("PASS V26 checksum publication/rollback is generation-owned and read-only replacement-pinned through commit")
+print("PASS V26 checksum publication/rollback is generation-owned, read-only pinned through commit, and identity-bound on rollback")
