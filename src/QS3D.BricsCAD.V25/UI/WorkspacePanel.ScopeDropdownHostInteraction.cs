@@ -36,7 +36,7 @@ namespace QS3D.BricsCAD.V25.UI
         private bool _workspaceScopeEmptyStateRefreshQueued;
         private bool _workspaceZoneEmptyStateInjected;
         private bool _workspaceFloorEmptyStateInjected;
-        private WorkspaceViewModel _workspaceScopeEmptyStateViewModel;
+        private WorkspaceViewModel? _workspaceScopeEmptyStateViewModel;
 
         private static bool RegisterWorkspaceScopeDropdownHostInteraction()
         {
@@ -93,7 +93,7 @@ namespace QS3D.BricsCAD.V25.UI
             QueueWorkspaceScopeEmptyStateRefresh();
         }
 
-        private void AttachWorkspaceScopeEmptyStateViewModel(WorkspaceViewModel viewModel)
+        private void AttachWorkspaceScopeEmptyStateViewModel(WorkspaceViewModel? viewModel)
         {
             if (ReferenceEquals(_workspaceScopeEmptyStateViewModel, viewModel))
                 return;
