@@ -60,10 +60,37 @@ if method_body:
         if forbidden in method_body:
             errors.append("status affinity fence must remain synchronous presentation-only: " + forbidden)
 
+# A DispatcherTimer Tick can already be queued when Detach removes/stops its timer. The
+# callback must prove that its timer is still the canonical pending timer for the exact
+# attached Document before it can re-enter Refresh. This also closes detach -> reattach
+# ABA, where a stale timer from the first attachment must not gain authority from the
+# second attachment merely because the same Document wrapper is attached again.
+tick_start = selection.find("timer.Tick +=")
+tick_end = selection.find("};", tick_start if tick_start >= 0 else 0)
+tick_body = selection[tick_start:tick_end if tick_end >= 0 else len(selection)] if tick_start >= 0 else ""
+for needle in [
+    "Pending.TryGetValue(document, out var current)",
+    "ReferenceEquals(current, timer)",
+    "Attached.Contains(document)",
+]:
+    if needle not in tick_body:
+        errors.append("selection-sync queued Tick must fail closed after detach/ABA before Refresh: " + needle)
+if tick_body:
+    authority = tick_body.find("Pending.TryGetValue(document, out var current)")
+    refresh = tick_body.find("Refresh(document);")
+    if authority < 0 or refresh < 0 or authority > refresh:
+        errors.append("queued Tick canonical-timer authority check must execute before Refresh")
+
+refresh_start = selection.find("public static void Refresh(Document? document)")
+refresh_end = selection.find("public static void Stop()", refresh_start if refresh_start >= 0 else 0)
+refresh_body = selection[refresh_start:refresh_end if refresh_end >= 0 else len(selection)] if refresh_start >= 0 else ""
+if refresh_body and "!Attached.Contains(document)" not in refresh_body:
+    errors.append("Refresh must fail closed for detached Documents even when a stale callback is already queued")
+
 print("QS3D selection-sync status document-affinity preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: selection-sync errors retain exact source-document affinity and fail closed before stale cross-DWG status publication.")
+print("PASS: selection-sync errors retain exact source-document affinity and detached/stale timers fail closed before palette work.")
