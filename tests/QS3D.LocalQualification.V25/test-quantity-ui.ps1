@@ -73,6 +73,35 @@ namespace $quantityNamespace {
 ([type]($quantityNamespace + '.OracleCases'))::Run()
 Write-Output 'PASS: actual quantity oracle requires analytic 38/3 per footing and 76/3 total, complete unique semantic/source identity and true concrete evidence.'
 
+# The real DWG is still held open by CAD. Replay the actual read-only hash
+# method with a live write handle; File.OpenRead's FileShare.Read would fail.
+$observerSource = Get-Content (Join-Path $PSScriptRoot 'Local022NativeFootingProbeCommands.QuantityUi.cs') -Raw
+$hashMethod = [regex]::Match($observerSource, '(?ms)^            private static string HashFile\(string path\).*?^            \}').Value
+if (-not $hashMethod) { throw 'FAIL: actual quantity file hash method missing.' }
+$hashTypeName = 'Local022SharedHash_' + [Guid]::NewGuid().ToString('N')
+Add-Type -TypeDefinition (@"
+using System;
+using System.IO;
+using System.Linq;
+using System.Globalization;
+public static class $hashTypeName {
+$hashMethod
+public static void Run() {
+ var path=Path.GetTempFileName();
+ try {
+  using(var held=new FileStream(path,FileMode.Open,FileAccess.ReadWrite,FileShare.ReadWrite)) {
+   held.Write(new byte[]{1,2,3,4},0,4); held.Flush(true);
+   var actual=HashFile(path);
+   if(actual!="9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a") throw new Exception("shared read hash differs");
+   if(held.Length!=4) throw new Exception("hash changed fixture");
+  }
+ } finally { File.Delete(path); }
+}
+}
+"@)
+([type]$hashTypeName)::Run()
+Write-Output 'PASS: actual quantity hash reads a write-open fixture without changing it; private temporary fixture removed.'
+
 . (Join-Path $PSScriptRoot '../../scripts/local022-ui-input.ps1')
 $quantityRunId = '0123456789abcdef0123456789abcdef'
 $quantityCommon = @('actual_product_bq_window','exact_displayed_rows_and_totals','analytic_footing_volume','exact_element_source_identity','reporting_readonly','observed_window_closed')

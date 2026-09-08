@@ -208,7 +208,7 @@ namespace QS3D.LocalQualification.V25
             private static string HashFile(string path)
             {
                 using (var hash = System.Security.Cryptography.SHA256.Create())
-                using (var stream = File.OpenRead(path))
+                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                     return string.Concat(hash.ComputeHash(stream).Select(x => x.ToString("x2", CultureInfo.InvariantCulture)));
             }
             private object Field(string name) => _window!.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(_window)
