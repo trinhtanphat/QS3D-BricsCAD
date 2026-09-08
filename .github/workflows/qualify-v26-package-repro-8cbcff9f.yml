@@ -1,0 +1,210 @@
+name: QS3D V26 Package Repro Qualification 8cbcff9f
+
+on:
+  push:
+    branches:
+      - qualification/v26-repro-8cbcff9f
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qs3d-v26-package-repro-8cbcff9f
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    runs-on: [self-hosted, windows, x64, bricscad-v26]
+    timeout-minutes: 30
+    env:
+      CANDIDATE_SHA: 8cbcff9faabb6c366b61c5b68f913df6427f6ecf
+      BRICSCAD_V26_DIR: ${{ vars.BRICSCAD_V26_DIR }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 8cbcff9faabb6c366b61c5b68f913df6427f6ecf
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Bind and validate exact V26 source/reference generation
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = ([string](git rev-parse --verify HEAD)).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $head -ne $env:CANDIDATE_SHA) {
+            throw "Qualification checkout is not exact candidate SHA $env:CANDIDATE_SHA; got $head"
+          }
+          if ([string]::IsNullOrWhiteSpace($env:BRICSCAD_V26_DIR)) {
+            throw 'BRICSCAD_V26_DIR repository variable is required on the V26 self-hosted runner.'
+          }
+          $statePath = Join-Path $env:RUNNER_TEMP 'qs3d-v26-repro-host-reference-state.json'
+          "V26_REPRO_HOST_REFERENCE_STATE=$statePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & .\scripts\assert-v26-host-reference-safety.ps1 -BricsCadDir $env:BRICSCAD_V26_DIR -StatePath $statePath | Out-Null
+
+      - name: Build exact-source V26 packaging inputs
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet build src\QS3D.Core\QS3D.Core.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Core Release build failed.' }
+          & .\scripts\build-v26-with-stable-references.ps1 `
+            -BricsCadDir $env:BRICSCAD_V26_DIR `
+            -StatePath $env:V26_REPRO_HOST_REFERENCE_STATE `
+            -ProjectPath 'src\QS3D.BricsCAD.V26\QS3D.BricsCAD.V26.csproj' `
+            -Configuration Release `
+            -Platform x64
+
+      - name: Package twice and prove byte-identical V26 ZIP
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Add-Type -AssemblyName System.IO.Compression
+
+          function Get-ZipEvidence {
+            param([Parameter(Mandatory = $true)][string]$Path)
+            $stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+            try {
+              $archive = [IO.Compression.ZipArchive]::new($stream, [IO.Compression.ZipArchiveMode]::Read, $true)
+              try {
+                $rows = New-Object 'System.Collections.Generic.List[object]'
+                foreach ($entry in $archive.Entries) {
+                  $entryStream = $entry.Open()
+                  try {
+                    $sha = [Security.Cryptography.SHA256]::Create()
+                    try { $payloadHash = ([BitConverter]::ToString($sha.ComputeHash($entryStream))).Replace('-', '').ToLowerInvariant() }
+                    finally { $sha.Dispose() }
+                  }
+                  finally { $entryStream.Dispose() }
+                  $rows.Add([pscustomobject]@{
+                    name = $entry.FullName
+                    timestampUtc = $entry.LastWriteTime.UtcDateTime.ToString('o')
+                    length = [int64]$entry.Length
+                    sha256 = $payloadHash
+                  })
+                }
+                return @($rows)
+              }
+              finally { $archive.Dispose() }
+            }
+            finally { $stream.Dispose() }
+          }
+
+          function Assert-ByteIdentical {
+            param([Parameter(Mandatory = $true)][string]$Left, [Parameter(Mandatory = $true)][string]$Right)
+            $a = [IO.File]::OpenRead($Left)
+            $b = [IO.File]::OpenRead($Right)
+            try {
+              if ($a.Length -ne $b.Length) { throw "ZIP byte length differs: $($a.Length) != $($b.Length)" }
+              $bufferA = New-Object byte[] 1048576
+              $bufferB = New-Object byte[] 1048576
+              $offset = [int64]0
+              while (($readA = $a.Read($bufferA, 0, $bufferA.Length)) -gt 0) {
+                $readB = $b.Read($bufferB, 0, $bufferB.Length)
+                if ($readA -ne $readB) { throw "ZIP read length differs at offset $offset" }
+                for ($i = 0; $i -lt $readA; $i++) {
+                  if ($bufferA[$i] -ne $bufferB[$i]) { throw "ZIP bytes differ at offset $($offset + $i)" }
+                }
+                $offset += $readA
+              }
+              if ($b.ReadByte() -ne -1) { throw 'Second ZIP contains trailing bytes.' }
+            }
+            finally { $a.Dispose(); $b.Dispose() }
+          }
+
+          $first = Join-Path $env:RUNNER_TEMP 'QS3D-BricsCAD-V26.first.zip'
+          $second = Join-Path $env:RUNNER_TEMP 'QS3D-BricsCAD-V26.second.zip'
+          Remove-Item -LiteralPath $first, $second -Force -ErrorAction SilentlyContinue
+
+          & .\scripts\package-v26.ps1
+          if (-not $?) { throw 'First V26 package run failed.' }
+          $zip = (Resolve-Path 'dist\QS3D-BricsCAD-V26.zip').Path
+          Copy-Item -LiteralPath $zip -Destination $first
+          $firstHash = (Get-FileHash -LiteralPath $first -Algorithm SHA256).Hash.ToLowerInvariant()
+          $firstEvidence = @(Get-ZipEvidence -Path $first)
+
+          & .\scripts\package-v26.ps1
+          if (-not $?) { throw 'Second V26 package run failed.' }
+          $zip = (Resolve-Path 'dist\QS3D-BricsCAD-V26.zip').Path
+          Copy-Item -LiteralPath $zip -Destination $second
+          $secondHash = (Get-FileHash -LiteralPath $second -Algorithm SHA256).Hash.ToLowerInvariant()
+          $secondEvidence = @(Get-ZipEvidence -Path $second)
+
+          if ($firstHash -ne $secondHash) { throw "V26 package SHA-256 mismatch: $firstHash != $secondHash" }
+          Assert-ByteIdentical -Left $first -Right $second
+
+          $firstEvidenceJson = $firstEvidence | ConvertTo-Json -Depth 5 -Compress
+          $secondEvidenceJson = $secondEvidence | ConvertTo-Json -Depth 5 -Compress
+          if (-not [string]::Equals($firstEvidenceJson, $secondEvidenceJson, [StringComparison]::Ordinal)) {
+            throw 'V26 ZIP ordered entries/timestamps/payload hashes differ between package runs.'
+          }
+
+          $packageRoot = (Resolve-Path 'dist\QS3D-BricsCAD-V26').Path.TrimEnd('\')
+          $metadata = Get-Content -LiteralPath (Join-Path $packageRoot 'PACKAGE-METADATA.json') -Raw | ConvertFrom-Json
+          if (-not [string]::Equals(([string]$metadata.gitCommit).ToLowerInvariant(), $env:CANDIDATE_SHA, [StringComparison]::Ordinal)) {
+            throw "PACKAGE-METADATA gitCommit does not equal exact candidate SHA: $($metadata.gitCommit)"
+          }
+          $expectedTimestamp = [DateTimeOffset]::Parse((([string](git show -s --format=%cI $env:CANDIDATE_SHA)).Trim()), [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+          $actualTimestamp = [DateTimeOffset]::Parse(([string]$metadata.generatedUtc), [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+          if ($expectedTimestamp.UtcTicks -ne $actualTimestamp.UtcTicks) {
+            throw "PACKAGE-METADATA generatedUtc is not source-bound: expected=$expectedTimestamp actual=$actualTimestamp"
+          }
+
+          $manifestPath = Join-Path $packageRoot 'SHA256SUMS.txt'
+          $manifestNames = New-Object 'System.Collections.Generic.List[string]'
+          foreach ($line in Get-Content -LiteralPath $manifestPath) {
+            if ($line -notmatch '^[0-9A-Fa-f]{64}  (.+)$') { throw "Malformed SHA256SUMS line: $line" }
+            $manifestNames.Add($Matches[1])
+          }
+          $sortedManifest = [string[]]@($manifestNames)
+          [Array]::Sort($sortedManifest, [StringComparer]::Ordinal)
+          if ($manifestNames.Count -ne $sortedManifest.Length) { throw 'Manifest count mismatch.' }
+          for ($i = 0; $i -lt $sortedManifest.Length; $i++) {
+            if (-not [string]::Equals($manifestNames[$i], $sortedManifest[$i], [StringComparison]::Ordinal)) {
+              throw 'SHA256SUMS.txt is not ordinal-sorted.'
+            }
+          }
+
+          $prefix = $packageRoot + [IO.Path]::DirectorySeparatorChar
+          $actualNames = New-Object 'System.Collections.Generic.List[string]'
+          foreach ($file in Get-ChildItem -LiteralPath $packageRoot -Recurse -File) {
+            $relative = $file.FullName.Substring($prefix.Length).Replace([IO.Path]::DirectorySeparatorChar, '/').Replace([IO.Path]::AltDirectorySeparatorChar, '/')
+            if (-not [string]::Equals($relative, 'SHA256SUMS.txt', [StringComparison]::Ordinal)) { $actualNames.Add($relative) }
+          }
+          $sortedActual = [string[]]@($actualNames)
+          [Array]::Sort($sortedActual, [StringComparer]::Ordinal)
+          if ($sortedActual.Length -ne $sortedManifest.Length) { throw 'SHA256SUMS.txt does not cover every staged package file.' }
+          for ($i = 0; $i -lt $sortedActual.Length; $i++) {
+            if (-not [string]::Equals($sortedActual[$i], $sortedManifest[$i], [StringComparison]::Ordinal)) {
+              throw "SHA256SUMS coverage mismatch: actual=$($sortedActual[$i]) manifest=$($sortedManifest[$i])"
+            }
+          }
+
+          foreach ($forbidden in @('BrxMgd.dll','TD_Mgd.dll','TD_MgdBrep.dll')) {
+            if (Get-ChildItem -LiteralPath $packageRoot -Recurse -File | Where-Object { [string]::Equals($_.Name, $forbidden, [StringComparison]::OrdinalIgnoreCase) }) {
+              throw "Proprietary BricsCAD runtime assembly leaked into V26 package: $forbidden"
+            }
+          }
+          foreach ($scriptName in @('install-v26-autoload.ps1','uninstall-v26-autoload.ps1','update-v26.ps1')) {
+            $text = Get-Content -LiteralPath (Join-Path $packageRoot $scriptName) -Raw
+            if ($text -match '(?i)v25') { throw "Generated V26 script leaked a V25 token: $scriptName" }
+          }
+
+          Write-Host "V26_REPRO_CANDIDATE=$env:CANDIDATE_SHA"
+          Write-Host "V26_REPRO_FIRST_SHA256=$firstHash"
+          Write-Host "V26_REPRO_SECOND_SHA256=$secondHash"
+          Write-Host 'V26_REPRO_BYTE_IDENTICAL=true'
+          Write-Host 'V26_REPRO_ENTRY_EVIDENCE_IDENTICAL=true'
+          Write-Host 'V26_REPRO_MANIFEST_COVERAGE=true'
+          @"
+          ### V26 package reproducibility qualification
+          - Candidate: `$env:CANDIDATE_SHA`
+          - First SHA-256: `$firstHash`
+          - Second SHA-256: `$secondHash`
+          - Byte-identical: true
+          - Ordered ZIP entry/timestamp/payload evidence identical: true
+          - Manifest coverage + ordinal ordering: true
+          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
