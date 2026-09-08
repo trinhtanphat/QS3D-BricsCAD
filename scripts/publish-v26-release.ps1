@@ -225,6 +225,7 @@ $admittedAssets = @{}
 $verifiedAssetIds = @{}
 $publishPatchAttempted = $false
 $publicationSafetyInvalidated = $false
+$publicationSafetyKnownInvalid = $false
 
 try {
   $tagRefUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/git/refs"
@@ -403,6 +404,8 @@ try {
   }
 
   $publishPatchAttempted = $true
+  # Once the mutation starts, publication safety is unproven until protected main is revalidated.
+  $publicationSafetyInvalidated = $true
   $publishRequest = @{
     draft = $false
     tag_name = $env:RELEASE_TAG
@@ -414,9 +417,11 @@ try {
   $published = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body $publishRequest
   try {
     Assert-ProtectedMainStableForPublisherMutation -Phase 'post-release-publish'
+    $publicationSafetyInvalidated = $false
   }
   catch {
     $publicationSafetyInvalidated = $true
+    $publicationSafetyKnownInvalid = $true
     throw "V26 release publication completed, but protected-main safety revalidation failed after publish PATCH: $($_.Exception.Message)"
   }
   Assert-PublishedReleaseMatchesVerifiedTransaction `
@@ -439,7 +444,10 @@ catch {
       $reconciledRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
       if ($reconciledRelease.draft -eq $false) {
         if (-not $publishPatchAttempted) { throw "V26 release became published before this workflow attempted the final publish PATCH." }
-        if ($publicationSafetyInvalidated) { throw "V26 release is published, but post-PATCH protected-main safety was invalidated; refusing ambiguous acknowledgement success. Manual release review is required." }
+        if ($publicationSafetyKnownInvalid) { throw "V26 release is published, but post-PATCH protected-main safety was already observed invalid; refusing acknowledgement recovery. Manual release review is required." }
+        Assert-ProtectedMainStableForPublisherMutation -Phase 'publish-acknowledgement-reconciliation'
+        $publicationSafetyInvalidated = $false
+        if ($publicationSafetyInvalidated) { throw "V26 release publication safety remains unproven after acknowledgement reconciliation; refusing success. Manual release review is required." }
         Assert-PublishedReleaseMatchesVerifiedTransaction `
           -ReleaseSnapshot $reconciledRelease `
           -ReleaseUri $releaseUri `
