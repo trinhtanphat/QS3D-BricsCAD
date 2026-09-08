@@ -64,9 +64,20 @@ report_start = source.find("private static void ReportPaletteFailure", restore_h
 set_helper = source[set_helper_start:restore_helper_start if restore_helper_start >= 0 else len(source)] if set_helper_start >= 0 else ""
 restore_helper = source[restore_helper_start:report_start if report_start >= 0 else len(source)] if restore_helper_start >= 0 else ""
 
-for needle in ["ReferenceEquals(expected, current)", "expected.Visible = visible;"]:
+for needle in [
+    "if (expected == null) return;",
+    "if (!ReferenceEquals(expected, current))",
+    "throw new InvalidOperationException",
+    "expected.Visible = visible;",
+]:
     if needle not in set_helper:
-        errors.append("apply helper must fence exact native PaletteSet ownership: " + needle)
+        errors.append("apply helper must fail closed on stale native PaletteSet ownership: " + needle)
+stale_guard = set_helper.find("if (!ReferenceEquals(expected, current))")
+stale_throw = set_helper.find("throw new InvalidOperationException", stale_guard if stale_guard >= 0 else 0)
+apply_pos = set_helper.find("expected.Visible = visible;")
+if min(stale_guard, stale_throw, apply_pos) < 0 or not (stale_guard < stale_throw < apply_pos):
+    errors.append("apply helper must reject stale ownership before native visibility mutation")
+
 for needle in ["ReferenceEquals(expected, current)", "expected.Visible = priorVisibility.Value;", "catch"]:
     if needle not in restore_helper:
         errors.append("rollback helper must be exact-instance and best-effort: " + needle)
@@ -90,4 +101,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: palette visibility transitions snapshot, exact-fence, rollback best-effort, and rethrow on native failure.")
+print("PASS: palette visibility transitions snapshot, exact-fence, fail closed on stale apply, rollback best-effort, and rethrow on native failure.")
