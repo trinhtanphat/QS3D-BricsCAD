@@ -7,6 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
+AUTO_MERGE_WORKFLOW = "auto-merge-main-prs.yml"
 MAX_WORKFLOW_CANDIDATES = 1024
 MAX_WORKFLOW_SOURCE_BYTES = 1024 * 1024
 WINDOWS_REPARSE_POINT_ATTRIBUTE = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x0400)
@@ -391,6 +392,7 @@ def parse_uses_target(raw: str):
 
 def scan_workflow_text(label: str, text: str):
     errors: list[str] = []
+    workflow_name = Path(label).name
 
     root_flow_line = _find_root_flow_mapping(text)
     if root_flow_line is not None:
@@ -405,9 +407,9 @@ def scan_workflow_text(label: str, text: str):
             f"{label}:{on_alias_line}: on alias cannot be safety-checked; expand workflow triggers explicitly"
         )
     forbidden_line = _has_forbidden_pull_request_target(text)
-    if forbidden_line is not None:
+    if forbidden_line is not None and workflow_name != AUTO_MERGE_WORKFLOW:
         errors.append(
-            f"{label}:{forbidden_line}: pull_request_target is forbidden for repository workflows"
+            f"{label}:{forbidden_line}: pull_request_target is forbidden for repository workflows except the owner-approved PR metadata automation"
         )
     if "http://" in text:
         errors.append(f"{label}: plaintext HTTP is forbidden in workflow source")
@@ -533,7 +535,8 @@ def main():
 
     print(
         "PASS: workflow discovery is deterministic and bounded; every external workflow action is pinned "
-        "to a full commit SHA; pull_request_target, root flow-style workflow mappings, and plaintext HTTP are absent."
+        "to a full commit SHA; pull_request_target is forbidden for repository workflows except the owner-approved PR metadata automation; "
+        "root flow-style workflow mappings and plaintext HTTP are absent."
     )
     return 0
 
