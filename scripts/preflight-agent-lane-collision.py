@@ -297,6 +297,21 @@ def _run_git(args: list[str]) -> str:
     return completed.stdout.strip()
 
 
+def _run_git_exact(args: list[str]) -> str:
+    completed = subprocess.run(
+        ["git", *args],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="strict",
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout).strip()
+        raise RuntimeError(f"git {' '.join(args)} failed: {detail}")
+    return completed.stdout
+
+
 def marker_activation_time() -> datetime | None:
     marker = Path(MARKER_PATH)
     if not marker.is_file():
@@ -547,30 +562,43 @@ def fetch_pr_files(
     return [str(item.get("filename") or "") for item in items if item.get("filename")]
 
 
-def fetch_path_identity(
-    api_url: str,
-    repository: str,
-    ref: str,
-    path: str,
-    token: str,
-) -> tuple[str, str] | None:
-    owner_repo = urllib.parse.quote(repository, safe="/")
-    encoded_path = urllib.parse.quote(path, safe="/")
-    encoded_ref = urllib.parse.quote(ref, safe="")
-    url = f"{api_url.rstrip('/')}/repos/{owner_repo}/contents/{encoded_path}?ref={encoded_ref}"
-    try:
-        payload = _request_json(url, token)
-    except urllib.error.HTTPError as exc:
-        if exc.code == 404:
-            return None
-        raise
-    if not isinstance(payload, dict):
-        raise RuntimeError(f"GitHub contents identity for '{path}' at {ref} was not an object")
-    kind = str(payload.get("type") or "").strip()
-    sha = str(payload.get("sha") or "").strip().lower()
-    if not kind or not re.fullmatch(r"[0-9a-f]{40}", sha):
-        raise RuntimeError(f"GitHub contents identity for '{path}' at {ref} was incomplete")
-    return kind, sha
+def git_path_identity(commit_sha: str, path: str) -> tuple[str, str, str] | None:
+    commit = str(commit_sha or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise RuntimeError("Git tree path identity requires an exact 40-hex commit SHA")
+    raw = _run_git_exact(["ls-tree", "-z", commit, "--", f":(literal){path}"])
+    entries = raw.split("\0")
+    if entries and entries[-1] == "":
+        entries.pop()
+    if not entries:
+        return None
+    if len(entries) != 1:
+        raise RuntimeError(f"Git tree identity for '{path}' returned multiple entries")
+    metadata, separator, returned_path = entries[0].partition("\t")
+    if not separator or returned_path != path:
+        raise RuntimeError(f"Git tree identity for '{path}' returned an unexpected pathname")
+    parts = metadata.split(" ")
+    if len(parts) != 3:
+        raise RuntimeError(f"Git tree identity for '{path}' returned malformed metadata")
+    mode, kind, object_sha = parts
+    object_sha = object_sha.lower()
+    if not re.fullmatch(r"[0-7]{6}", mode):
+        raise RuntimeError(f"Git tree identity for '{path}' returned invalid mode '{mode}'")
+    if kind not in {"blob", "tree", "commit"}:
+        raise RuntimeError(f"Git tree identity for '{path}' returned invalid type '{kind}'")
+    if not re.fullmatch(r"[0-9a-f]{40}", object_sha):
+        raise RuntimeError(f"Git tree identity for '{path}' returned invalid object SHA")
+    return mode, kind, object_sha
+
+
+def ensure_peer_commit(peer_head_sha: str) -> None:
+    peer_sha = str(peer_head_sha or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", peer_sha):
+        raise RuntimeError("peer head SHA is missing or invalid")
+    _run_git(["fetch", "--no-tags", "--quiet", "origin", peer_sha])
+    resolved = _run_git(["rev-parse", f"{peer_sha}^{{commit}}"] ).strip().lower()
+    if resolved != peer_sha:
+        raise RuntimeError(f"fetched peer commit identity drifted: expected {peer_sha}, got {resolved or '<missing>'}")
 
 
 def path_changed_between_commits(
@@ -581,13 +609,8 @@ def path_changed_between_commits(
     path: str,
     token: str,
 ) -> bool:
-    current_identity = fetch_path_identity(
-        api_url, repository, current_main_sha, path, token
-    )
-    peer_identity = fetch_path_identity(
-        api_url, repository, peer_head_sha, path, token
-    )
-    return current_identity != peer_identity
+    del api_url, repository, token
+    return git_path_identity(current_main_sha, path) != git_path_identity(peer_head_sha, path)
 
 
 def current_changed_paths(base_ref: str) -> list[str]:
@@ -734,7 +757,9 @@ def canonical_open_pr_path_conflicts(
             continue
         head_repo = str((peer_head.get("repo") or {}).get("full_name") or "")
         if head_repo and head_repo != repository:
-            continue
+            raise RuntimeError(
+                f"PR #{peer_number} locked peer '{peer_ref}' is not in repository '{repository}'"
+            )
         try:
             if peer_reservation_time(peer, open_issues) >= current_order:
                 continue
@@ -747,6 +772,7 @@ def canonical_open_pr_path_conflicts(
         peer_head_sha = str(peer_head.get("sha") or "").strip().lower()
         if not re.fullmatch(r"[0-9a-f]{40}", peer_head_sha):
             raise RuntimeError(f"PR #{peer_number} peer head SHA is missing or invalid")
+        ensure_peer_commit(peer_head_sha)
         effective_overlap = [
             path
             for path in candidate_overlap
@@ -805,7 +831,7 @@ def main() -> int:
             if pull_request_is_terminal(current_pr_number, open_prs):
                 print(
                     "PASS: pull_request carrier is no longer open; "
-                    "terminal reservation validation is skipped before Issue/path collision checks."
+                    "terminal reservation validation is skipped before Issue validation because that queued carrier is terminal and cannot merge."
                 )
                 return 0
             lane_key, lane_conflicts = validate_pull_request_event(event, repository, open_prs)
@@ -924,6 +950,7 @@ def main() -> int:
         ValueError,
         RuntimeError,
         json.JSONDecodeError,
+        UnicodeError,
         urllib.error.URLError,
         subprocess.SubprocessError,
     ) as exc:
