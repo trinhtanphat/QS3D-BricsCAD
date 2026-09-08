@@ -269,7 +269,10 @@ def is_hard_auto_dispatch_guard(expression):
 
 
 def is_hard_auto_merge_guard(expression):
-    return normalize_expression(expression) == "github.event.pull_request.base.ref == 'main'"
+    return normalize_expression(expression) == (
+        "(github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main') || "
+        "(github.event_name == 'push' && github.ref == 'refs/heads/main')"
+    )
 
 
 def is_hard_validation_guard(expression):
@@ -340,13 +343,13 @@ def validate_guard_parser():
         errors.append("automatic dispatcher guard parser regression")
 
     auto_merge_good = extract_job_if_expression([
-        "    if: ${{ github.event.pull_request.base.ref == 'main' }}"
+        "    if: ${{ (github.event_name == 'pull_request_target' && github.event.pull_request.base.ref == 'main') || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}"
     ])
     auto_merge_bad = extract_job_if_expression([
-        "    if: ${{ github.event.pull_request.base.ref == 'main' || github.actor == 'trusted' }}"
+        "    if: ${{ github.event_name == 'pull_request_target' || github.ref == 'refs/heads/main' }}"
     ])
     if not is_hard_auto_merge_guard(auto_merge_good) or is_hard_auto_merge_guard(auto_merge_bad):
-        errors.append("automatic PR merge guard parser regression")
+        errors.append("automatic PR reconciliation guard parser regression")
 
     if parse_trigger_name('  "push":') != "push" or parse_trigger_name('  "pull_request":') != "pull_request":
         errors.append("trigger parser must support quoted automatic validation keys")
@@ -516,9 +519,9 @@ for path, text in workflow_sources:
                 errors.append(f"{path.name}: unexpected automatic dispatcher job: {job_name}")
 
     elif path.name == AUTO_MERGE_WORKFLOW:
-        expected = {"pull_request_target"}
+        expected = {"pull_request_target", "push"}
         if trigger_names != expected:
-            errors.append(f"{path.name}: approved PR metadata automation must expose exactly pull_request_target; got {sorted(trigger_names)}")
+            errors.append(f"{path.name}: approved Ready PR automation must expose exactly pull_request_target + push; got {sorted(trigger_names)}")
 
         pr_target_block = "\n".join(trigger_blocks.get("pull_request_target", []))
         require_tokens(
@@ -526,25 +529,29 @@ for path, text in workflow_sources:
             ("types:", "- opened", "- reopened", "- synchronize", "- ready_for_review", "- converted_to_draft"),
             f"{path.name} pull_request_target",
         )
+        push_block = "\n".join(trigger_blocks.get("push", []))
+        require_tokens(push_block, ("branches:", "- main"), f"{path.name} push")
         require_tokens(text, (
-            "contents: read", "pull-requests: write", "cancel-in-progress: true",
-            "GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}", "gh pr view", "isDraft", "autoMergeRequest",
-            "gh pr ready", "gh pr merge --auto --merge",
+            "contents: write", "pull-requests: write", "cancel-in-progress: true",
+            "GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}", "gh pr view", "isDraft", "isCrossRepository",
+            "mergeStateStatus", "headRefOid", "autoMergeRequest", "baseRefName",
+            "update-branch", "expected_head_sha", "gh pr list", "--base main", "--state open", "--limit 1000",
+            "gh pr merge --auto --merge",
         ), path.name)
         for forbidden in (
-            "actions/checkout", "contents: write", "actions: write", "issues: write", "packages: write", "id-token: write",
+            "actions/checkout", "actions: write", "issues: write", "packages: write", "id-token: write",
             "gh workflow run", "gh release", "git push", "actions/create-release", "softprops/action-gh-release",
-            "--admin", "github.event.pull_request.head.sha", "github.event.pull_request.head.ref",
+            "--admin", "github.event.pull_request.head.sha", "github.event.pull_request.head.ref", "gh pr ready",
         ):
             if forbidden in text:
-                errors.append(f"{path.name}: PR metadata automation contains forbidden token: {forbidden}")
+                errors.append(f"{path.name}: Ready PR reconciliation automation contains forbidden token: {forbidden}")
 
-        expected_jobs = {"enable-auto-merge"}
+        expected_jobs = {"reconcile-and-arm"}
         if {name for name, _ in job_blocks} != expected_jobs:
-            errors.append(f"{path.name}: PR metadata automation jobs must be exactly {sorted(expected_jobs)}")
-        auto_merge_job = next((block for name, block in job_blocks if name == "enable-auto-merge"), None)
+            errors.append(f"{path.name}: Ready PR reconciliation jobs must be exactly {sorted(expected_jobs)}")
+        auto_merge_job = next((block for name, block in job_blocks if name == "reconcile-and-arm"), None)
         if not is_hard_auto_merge_guard(extract_job_if_expression(auto_merge_job) if auto_merge_job is not None else None):
-            errors.append(f"{path.name}/enable-auto-merge: job must hard-require the PR base branch to be main")
+            errors.append(f"{path.name}/reconcile-and-arm: job must hard-fence PR events to base main and push events to refs/heads/main")
 
     elif path.name == HYBRID_COORDINATOR:
         errors.append(f"{path.name}: retired Hybrid PR Coordinator workflow must remain removed")
@@ -600,5 +607,5 @@ if errors:
 
 print(
     "PASS: every agent/integration push produces exact-head branch CI, every PR emits stable required contexts, governance/docs-only candidates remain lightweight through internal scope classification, "
-    "build-relevant candidates run Core plus V25 compile, main owns exact-source V25 dispatch with a bounded successful-release wakeup, the owner-approved PR metadata automation remains non-publishing and base-main fenced, the Hybrid PR Coordinator workflow remains retired, and releases retain explicit confirmation."
+    "build-relevant candidates run Core plus V25 compile, main owns exact-source V25 dispatch with a bounded successful-release wakeup, the owner-approved Ready PR automation may refresh stale same-repository heads and arm native auto-merge while Draft remains a manual hold, the Hybrid PR Coordinator workflow remains retired, and releases retain explicit confirmation."
 )
