@@ -221,7 +221,7 @@ function Test-ActualPhases([string]$Mutation) {
         $phase=[IO.Path]::GetFileNameWithoutExtension($LiteralPath).Substring(6)
         $checks=[ordered]@{}
         foreach($key in $requiredByPhase[$phase]) { $checks[$key]=$true }
-        $marker=[ordered]@{schema='QS3D_LOCAL022_NATIVE_V2';run_id=('a'*32);phase=$phase;status='PASS';stage=$phase;error_code='NONE';checks=$checks}
+        $marker=[ordered]@{schema='QS3D_LOCAL022_NATIVE_V3';run_id=('a'*32);phase=$phase;status='PASS';stage=$phase;error_code='NONE';checks=$checks}
         if($phase -ceq 'run') {
             switch($Mutation) {
                 'missing' { throw 'test_missing_marker' }

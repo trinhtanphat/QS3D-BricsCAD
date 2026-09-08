@@ -109,6 +109,7 @@ foreach($major in @(25,26)) {
     if(([regex]::Matches($probe,'VerifySolid\([^;]+verifySections: true\);')).Count -ne 5 -or
         $probe -notmatch 'bool verifySections = false' -or
         $probe -notmatch 'SectionVerifier.Verify\(solid' -or
+        $probe -notmatch 'BrepVerifier.Verify\(solid' -or
         $probe -notmatch 'catch \(InvalidOperationException error\)') { throw "FAIL: V$major section integration bypassed." }
 }
 Write-Output 'PASS: both native probes cover initial/regenerated/saved/cold sections; existing physical UI callers remain opt-out.'
@@ -121,18 +122,22 @@ foreach($major in @(25,26)) {
     $requiredByPhase=& ([scriptblock]::Create($coverage.Right.Extent.Text))
     . ([scriptblock]::Create($read.Extent.Text))
     $ArtifactDir='C:\host-free-sections'; $runId='a'*32
-    $schema=if($major -eq 25){'QS3D_LOCAL022_NATIVE_V2'}else{'QS3D_LOCAL022_V26_NATIVE_V2'}
+    $schema=if($major -eq 25){'QS3D_LOCAL022_NATIVE_V3'}else{'QS3D_LOCAL022_V26_NATIVE_V3'}
     foreach($phase in @('run','saved','reopen')) {
         $key=switch($phase){run{'native_rectangular_sections'} saved{'saved_native_rectangular_sections'} reopen{'reopened_native_rectangular_sections'}}
         if($requiredByPhase[$phase] -cnotcontains $key){throw "FAIL: V$major/$phase section assertion is optional."}
-        foreach($mutation in @('','missing','false','string','old_schema')) {
+        foreach($mutation in @('','missing','false','string','old_schema','section_only','missing_brep','false_brep','string_brep')) {
             function Get-Content {param($LiteralPath,[switch]$Raw)
                 if($LiteralPath -cne "C:\host-free-sections\phase-$phase.json"){throw 'Unexpected evidence path.'}
                 $checks=[ordered]@{};foreach($name in $requiredByPhase[$phase]){$checks[$name]=$true}
                 $marker=[ordered]@{schema=$schema;run_id=$runId;phase=$phase;status='PASS';stage=$phase;error_code='NONE';checks=$checks}
                 switch($mutation){
                     missing{$checks.Remove($key)} false{$checks[$key]=$false} string{$checks[$key]='true'}
-                    old_schema{$marker.schema=$schema.Replace('_V2','_V1')}
+                    old_schema{$marker.schema=$schema.Replace('_V3','_V1')}
+                    section_only{$marker.schema=$schema.Replace('_V3','_V2')}
+                    missing_brep{$checks.Remove($key.Replace('rectangular_sections','brep_topology'))}
+                    false_brep{$checks[$key.Replace('rectangular_sections','brep_topology')]=$false}
+                    string_brep{$checks[$key.Replace('rectangular_sections','brep_topology')]='true'}
                 }
                 $marker | ConvertTo-Json -Depth 5 -Compress
             }
@@ -143,4 +148,4 @@ foreach($major in @(25,26)) {
         }
     }
 }
-Write-Output 'PASS: both actual V2 native validators require section evidence in every phase; V1/missing/false/string checks cannot qualify it.'
+Write-Output 'PASS: both actual V3 native validators require section and topology evidence in every phase; V1/V2/missing/false/string checks cannot qualify it.'

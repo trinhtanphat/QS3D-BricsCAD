@@ -2,6 +2,15 @@
 
 ## Verdict
 
+Native topology successor (2026-09-08): marker V3 adds the complete expected
+fixture vertex/edge/face inventories, one exterior shell, planar outward faces,
+exterior four-edge loops/areas and closed edge-incidence/Euler checks. Prior
+V2 section54/55 results do not qualify these new assertions. The host-free oracle
+rejects malformed independent fixtures; SDK builds pass. Fresh licensed V25-first/
+V26 V3 execution remains pending on the next exact pushed harness. See
+`tests/QS3D.LocalQualification.V25/NATIVE-TOPOLOGY.md` for scope and limits;
+physical UI, private-DWG/DPI/Quantity and release qualification remain separate.
+
 Latest licensed section pair (2026-09-08): **V25 allocation54 and V26 allocation55
 are `LOCAL_PASS_BOUNDED`, all three V2 native phases** on exact pushed harness
 `8a0650fcb9416497410c7ce4c1572dce72f6bf7d` and unchanged frozen product source

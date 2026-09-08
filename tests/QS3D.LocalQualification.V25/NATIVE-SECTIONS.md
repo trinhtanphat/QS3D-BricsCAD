@@ -1,5 +1,9 @@
 # LOCAL-022 native cross-section qualification
 
+Current native marker V3 additionally requires the native BREP fixture oracle
+described in `NATIVE-TOPOLOGY.md`. Historical V2 allocations54/55 qualify the
+section checks below, not the later topology requirements.
+
 Native marker V2 extends the existing native API matrix without changing the
 physical UI driver, frozen product or installed package. V1 markers remain valid
 only for their historical bounded evidence; they cannot qualify V2 assertions.
@@ -27,6 +31,6 @@ describes native plane/solid intersection; the installed V25/V26 SDK builds
 validate the APIs used by this standalone probe.
 
 Use the existing wrapper's explicit `-NativeApi` on a committed/pushed exact
-harness and a fresh disposable allocation. V25 must pass all V2 run/save/cold
+harness and a fresh disposable allocation. V25 must pass all current run/save/cold
 checks and cleanup before V26; the wrapper reads actual phase markers and rejects
-older V1 receipts as section proof. Preserve earlier consumed allocations.
+older V1 receipts as section proof and V2 as topology proof. Preserve earlier consumed allocations.

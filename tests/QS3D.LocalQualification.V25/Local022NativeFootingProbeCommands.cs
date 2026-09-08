@@ -24,7 +24,7 @@ namespace QS3D.LocalQualification.V25
     /// </summary>
     public sealed partial class Local022NativeFootingProbeCommands
     {
-        private const string Schema = "QS3D_LOCAL022_NATIVE_V2";
+        private const string Schema = "QS3D_LOCAL022_NATIVE_V3";
         private const string RunIdVariable = "QS3D_LOCAL022_RUN_ID";
         private const string RootVariable = "QS3D_LOCAL022_ROOT";
         private const string DrawingVariable = "QS3D_LOCAL022_DRAWING";
@@ -101,6 +101,7 @@ namespace QS3D.LocalQualification.V25
                 "tapered_repeated_placement", true,
                 "solid_mass_volume_extents", true,
                 "native_rectangular_sections", true,
+                "native_brep_topology", true,
                 "generated_ownership", true,
                 "family_regeneration", true,
                 "former_generated_handle_erased", true,
@@ -131,6 +132,7 @@ namespace QS3D.LocalQualification.V25
                 "native_database_still_open", true,
                 "saved_semantic_native_state", true,
                 "saved_native_rectangular_sections", true,
+                "saved_native_brep_topology", true,
                 "saved_exact_cardinality", true);
         }
 
@@ -152,6 +154,7 @@ namespace QS3D.LocalQualification.V25
                 "reopened_generated_solids_live", true,
                 "reopened_dimensions_volume_extents", true,
                 "reopened_native_rectangular_sections", true,
+                "reopened_native_brep_topology", true,
                 "reopened_exact_cardinality", true);
         }
 
@@ -448,6 +451,8 @@ namespace QS3D.LocalQualification.V25
                     try
                     {
                         QS3D.LocalQualification.SectionVerifier.Verify(solid, dimensions.L1M, dimensions.W1M,
+                            dimensions.L2M, dimensions.W2M, dimensions.H1M, dimensions.H2M, center);
+                        QS3D.LocalQualification.BrepVerifier.Verify(solid, dimensions.L1M, dimensions.W1M,
                             dimensions.L2M, dimensions.W2M, dimensions.H1M, dimensions.H2M, center);
                     }
                     catch (InvalidOperationException error) { throw new ProbeException(stage + "_" + error.Message); }
