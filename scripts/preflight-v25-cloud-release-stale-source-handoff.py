@@ -46,8 +46,8 @@ if "throw " in stale_block:
 require_before(
     release,
     "V25_RELEASE_SUPERSEDED source_sha=",
-    "$body = @{",
-    "superseded release no-op before first draft-release mutation",
+    '$release = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases"',
+    "superseded release no-op before draft-release POST mutation",
 )
 
 # The successful release completion wakes only the canonical dispatcher. The
