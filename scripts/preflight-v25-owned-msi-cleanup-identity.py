@@ -30,11 +30,15 @@ def validate(source: str) -> list[str]:
     pathname_delete = "[IO.File]::Delete($msi)"
     reopened_cleanup = "Get-OrdinaryFileOrNull -Path $msi -Label 'Failed owned canonical MSI publication'"
     create_time_delete = "[IO.FileOptions]::DeleteOnClose"
+    delete_access = "public const uint DELETE = 0x00010000;"
+    desired_delete = "[QS3DV25NativeFileDisposition]::DELETE"
 
     required_tokens = (
         ("CreateFileW", "native creator handle with DELETE access is missing"),
-        ("GENERIC_READ | GENERIC_WRITE | DELETE", "creator handle does not request DELETE access"),
-        ("CREATE_NEW", "creator handle is not fresh-only"),
+        (delete_access, "native DELETE access constant is missing"),
+        (desired_delete, "creator handle does not request DELETE access"),
+        ("public const uint CREATE_NEW = 1;", "fresh-only CREATE_NEW constant is missing"),
+        ("[QS3DV25NativeFileDisposition]::CREATE_NEW", "creator does not use CREATE_NEW"),
         ("SetFileInformationByHandle", "native handle disposition primitive is missing"),
         ("FileDispositionInfo", "file disposition information class is missing"),
         (open_owned, "canonical MSI is not created through the owned native handle helper"),
@@ -107,8 +111,10 @@ def main() -> int:
 
     mutation_tokens = (
         ("CreateFileW", "native creator"),
-        ("GENERIC_READ | GENERIC_WRITE | DELETE", "DELETE access"),
-        ("CREATE_NEW", "fresh-only create"),
+        ("public const uint DELETE = 0x00010000;", "DELETE access constant"),
+        ("[QS3DV25NativeFileDisposition]::DELETE", "DELETE access use"),
+        ("public const uint CREATE_NEW = 1;", "fresh-only constant"),
+        ("[QS3DV25NativeFileDisposition]::CREATE_NEW", "fresh-only use"),
         ("$publishedStream = Open-OwnedMsiPublication -Path $msi", "owned publication helper"),
         ("Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $true", "explicit delete arm"),
         ("$publishedHashBytes = $publishedSha.ComputeHash($publishedStream)", "same-handle verification"),
