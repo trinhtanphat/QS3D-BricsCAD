@@ -61,9 +61,9 @@ namespace QS3D.BricsCAD.V25
 
         public static void Refresh(Document? document)
         {
-            if (document == null || !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;
+            if (document == null || !Attached.Contains(document) || !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;
             if (!PaletteCoordinator.IsWorkspaceVisible) return;
-            StopPending(document);
+            RemovePending(document);
             if (!Refreshing.Add(document)) return;
             try
             {
@@ -72,7 +72,7 @@ namespace QS3D.BricsCAD.V25
                 // cause that snapshot to be applied against a different project's active-document state.
                 PaletteCoordinator.EnsureCreated();
                 var snapshots = EntitySnapshotReader.ReadImpliedSelection(document);
-                if (!ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;
+                if (!Attached.Contains(document) || !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;
                 PaletteCoordinator.SetInspection(snapshots);
             }
             catch (Exception)
@@ -111,6 +111,13 @@ namespace QS3D.BricsCAD.V25
                 timer.Tick += (_, __) =>
                 {
                     timer.Stop();
+                    if (!Pending.TryGetValue(document, out var current) ||
+                        !ReferenceEquals(current, timer) ||
+                        !Attached.Contains(document))
+                    {
+                        return;
+                    }
+                    Pending.Remove(document);
                     Refresh(document);
                 };
                 Pending[document] = timer;
