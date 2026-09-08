@@ -81,8 +81,8 @@ require("Get-ChildItem -LiteralPath $dist -Recurse -File" not in package_active,
 def legacy_package_producer_safe(source):
     return (
         "$hashLines = Get-SafePackageFiles -PackageRoot $dist | ForEach-Object" in source
-        and "Get-ManifestRelativePath -FilePath $_.FullName -PackageRoot $dist" in source
-        and "Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName" in source
+        and "$hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash" in source
+        and "$relativePath = $_.FullName.Substring($distFull.Length + 1).Replace([IO.Path]::DirectorySeparatorChar, '/')" in source
     )
 
 
