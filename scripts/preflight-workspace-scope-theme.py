@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard Workspace model-tree contrast and Zone/Floor empty-state contracts."""
+"""Guard Workspace model-tree contrast and truthful Zone/Floor scope presentation."""
 
 from pathlib import Path
 import sys
@@ -19,6 +19,10 @@ def read(path: Path) -> str:
 
 def require_tokens(label: str, text: str, tokens: tuple[str, ...]) -> list[str]:
     return [f"{label} missing contract token: {token}" for token in tokens if token not in text]
+
+
+def forbid_tokens(label: str, text: str, tokens: tuple[str, ...]) -> list[str]:
+    return [f"{label} must not contain legacy token: {token}" for token in tokens if token in text]
 
 
 def main() -> int:
@@ -43,23 +47,60 @@ def main() -> int:
             'ModelTree.SetResourceReference(Control.ForegroundProperty, "TextBrush")',
         ),
     )
+
     errors += require_tokens(
-        "Workspace scope empty state",
+        "Workspace scope presentation",
         scope,
         (
-            'private const string EmptyZoneOption = "Không có Zone";',
-            'private const string EmptyFloorOption = "Không có Tầng";',
-            "DataContextChanged += OnWorkspaceScopeEmptyStateDataContextChanged;",
-            "ZoneCombo.SelectionChanged += OnWorkspaceScopeZoneSelectionChanged;",
-            "Zones.CollectionChanged += OnWorkspaceScopeCollectionChanged;",
-            "Floors.CollectionChanged += OnWorkspaceScopeCollectionChanged;",
-            "DispatcherPriority.DataBind",
-            "NormalizeWorkspaceScopeCollection(",
-            "EnsureWorkspaceScopeSelection(ZoneCombo, viewModel.ActiveZoneIndex());",
-            "EnsureWorkspaceScopeSelection(FloorCombo, viewModel.ActiveFloorIndex());",
-            "_loadingContext = true;",
+            "WireWorkspaceScopeCombo(ZoneCombo);",
+            "WireWorkspaceScopeCombo(FloorCombo);",
+            "!combo.HasItems",
+            '"Không có Zone"',
+            '"Chưa chọn Zone"',
+            '"Không có Tầng"',
+            '"Chưa chọn Tầng"',
+            "WrapWorkspaceScopeCombo(",
+            "ItemContainerGenerator.ItemsChanged += OnWorkspaceScopeItemsChanged;",
+            "IsHitTestVisible = false",
+            "UpdateWorkspaceScopePlaceholders();",
         ),
     )
+
+    # Programmatic Refresh/Clear must never visually manufacture an active first item when
+    # ActiveZoneId/ActiveFloorId are absent or stale. User-driven changes are deliberately
+    # left alone because _loadingContext is false for a real click.
+    errors += require_tokens(
+        "Workspace active-scope truth",
+        scope,
+        (
+            "NormalizeWorkspaceProgrammaticScopeSelection(ZoneCombo, isZone: true);",
+            "NormalizeWorkspaceProgrammaticScopeSelection(FloorCombo, isZone: false);",
+            "if (!_loadingContext)",
+            "ProjectContextCoordinator.TryGetReadOnly(doc, out var project)",
+            "string.IsNullOrWhiteSpace(project.ActiveZoneId)",
+            "string.IsNullOrWhiteSpace(project.ActiveFloorId)",
+            "return zone == null ? -1 : _viewModel.Zones.IndexOf(zone.Name);",
+            "return floor == null ? -1 : _viewModel.Floors.IndexOf(floor.Name);",
+            "combo.SelectedIndex = expectedIndex;",
+        ),
+    )
+
+    # Presentation text must never become a fake row in the bound data collections.
+    errors += forbid_tokens(
+        "Workspace scope presentation",
+        scope,
+        (
+            "EmptyZoneOption",
+            "EmptyFloorOption",
+            "NormalizeWorkspaceScopeCollection",
+            "ObservableCollection<string>",
+            "items.Add(emptyLabel)",
+            "Zones.Add(EmptyZoneOption)",
+            "Floors.Add(EmptyFloorOption)",
+            "DispatcherPriority.DataBind",
+        ),
+    )
+
     errors += require_tokens(
         "Workspace scope bindings",
         xaml,
@@ -71,17 +112,12 @@ def main() -> int:
         ),
     )
 
-    # The empty-state rows are presentation-only. They must not be persisted as project
-    # Zone/Floor definitions or routed through the normal mutation handlers.
-    if "ProjectZoneService" in scope or "ProjectFloorService" in scope:
-        errors.append("Workspace scope empty-state partial must remain presentation-only")
-
     if errors:
         for error in errors:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    print("Workspace scope/theme preflight PASS: ModelTree dark contrast and Zone/Floor empty states are pinned.")
+    print("Workspace scope/theme preflight PASS: dark contrast, pure placeholders, and active-scope truth are pinned.")
     return 0
 
 
