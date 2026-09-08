@@ -117,6 +117,15 @@ namespace QS3D.Core.SmokeTests
             identical.SourceHandles[0] = "AA11";
             Equal(ElementDirtyFlags.None, identical.Dirty);
             Equal(identicalBefore, identical.UpdatedUtc);
+
+            var caseOnly = CleanElement();
+            Seed(caseOnly.SourceHandles, "AA11");
+            caseOnly.MarkClean(ElementDirtyFlags.All);
+            var caseOnlyBefore = caseOnly.UpdatedUtc;
+            caseOnly.SourceHandles[0] = "aa11";
+            Equal("AA11", caseOnly.SourceHandles[0]);
+            Equal(ElementDirtyFlags.None, caseOnly.Dirty);
+            Equal(caseOnlyBefore, caseOnly.UpdatedUtc);
         }
 
         private static void RejectedMutationsAreAtomic()
