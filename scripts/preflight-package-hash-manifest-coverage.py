@@ -56,9 +56,9 @@ update_source = read(UPDATE)
 package_active = executable_lines(package_source)
 
 # Both package construction and signed-package finalization must traverse the payload
-# fail-closed: reparse/non-regular entries are rejected before hashing. This preserves
-# complete manifest coverage without reopening the staging tree through an unchecked
-# recursive pathname enumeration.
+# fail-closed: reparse/non-regular entries are rejected before hashing. Package creation
+# may use the legacy safe pipeline or the deterministic ordinal dictionary producer;
+# both must enumerate payload files exclusively through Get-SafePackageFiles.
 package_traversal_tokens = (
     "function Get-SafePackageFiles",
     "Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop",
@@ -66,7 +66,6 @@ package_traversal_tokens = (
     "Package staging contains a reparse-backed entry",
     "$files.Add($item)",
     "return @($files | Sort-Object FullName)",
-    "$hashLines = Get-SafePackageFiles -PackageRoot $dist | ForEach-Object",
     "SHA256SUMS.txt",
     "Get-FileHash",
     "-Algorithm SHA256",
@@ -75,6 +74,33 @@ for token in package_traversal_tokens:
     require(token in package_source, f"package-v25.ps1 safe hash traversal missing token: {token}")
 require("Get-ChildItem $dist -Recurse -File" not in package_active,
         "package-v25.ps1 must not bypass safe package traversal with recursive Get-ChildItem")
+require("Get-ChildItem -LiteralPath $dist -Recurse -File" not in package_active,
+        "package-v25.ps1 must not bypass safe package traversal with literal recursive Get-ChildItem")
+
+
+def legacy_package_producer_safe(source):
+    return (
+        "$hashLines = Get-SafePackageFiles -PackageRoot $dist | ForEach-Object" in source
+        and "Get-ManifestRelativePath -FilePath $_.FullName -PackageRoot $dist" in source
+        and "Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName" in source
+    )
+
+
+def deterministic_package_producer_safe(source):
+    return (
+        "foreach ($file in Get-SafePackageFiles -PackageRoot $dist)" in source
+        and "$manifestHashes = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)" in source
+        and "$manifestHashes.Add($relativePath, (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash)" in source
+        and "$manifestEntryNames = [string[]]@($manifestHashes.Keys)" in source
+        and "[Array]::Sort($manifestEntryNames, [StringComparer]::Ordinal)" in source
+        and "$hashLines = @($manifestEntryNames | ForEach-Object" in source
+    )
+
+
+require(
+    legacy_package_producer_safe(package_source) or deterministic_package_producer_safe(package_source),
+    "package-v25.ps1 must use the admitted legacy or deterministic safe manifest producer",
+)
 
 finalizer_tokens = (
     "function Get-SafePackageFiles",
@@ -145,23 +171,31 @@ if update_source:
         "updater must bind ZIP digest, ZipArchive admission and entry extraction to the held generation before delegating installation",
     )
 
-# Deterministic regression probes: the guard must reject both traversal bypass and a
-# producer that silently drops the staging reparse rejection used by safe hashing.
+# Deterministic regression probes: the guard must reject traversal bypass and a
+# producer that silently drops staging reparse rejection, for either admitted producer.
 def producer_safe(source):
     active = executable_lines(source)
     return (
         "function Get-SafePackageFiles" in source
-        and "$hashLines = Get-SafePackageFiles -PackageRoot $dist | ForEach-Object" in source
         and "Package staging contains a reparse-backed entry" in source
         and "Get-ChildItem $dist -Recurse -File" not in active
+        and "Get-ChildItem -LiteralPath $dist -Recurse -File" not in active
+        and (legacy_package_producer_safe(source) or deterministic_package_producer_safe(source))
     )
 
+
 require(producer_safe(package_source), "package producer safe-traversal model baseline must pass")
-require(not producer_safe(package_source.replace(
+unsafe_enumeration = package_source.replace(
     "$hashLines = Get-SafePackageFiles -PackageRoot $dist | ForEach-Object",
-    "$hashLines = Get-ChildItem $dist -Recurse -File | Sort-Object FullName | ForEach-Object",
+    "$hashLines = Get-ChildItem -LiteralPath $dist -Recurse -File | Sort-Object FullName | ForEach-Object",
     1,
-)), "package producer safe-traversal model must reject recursive pathname enumeration")
+).replace(
+    "foreach ($file in Get-SafePackageFiles -PackageRoot $dist)",
+    "foreach ($file in Get-ChildItem -LiteralPath $dist -Recurse -File)",
+    1,
+)
+require(not producer_safe(unsafe_enumeration),
+        "package producer safe-traversal model must reject recursive pathname enumeration")
 require(not producer_safe(package_source.replace(
     "Package staging contains a reparse-backed entry",
     "Package staging permits a reparse-backed entry",
