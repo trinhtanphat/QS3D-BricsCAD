@@ -192,7 +192,7 @@ public static class Qs3dChecksumGenerationNative
 
     public static SafeFileHandle OpenPinnedChecksumGeneration(string path)
     {
-        return OpenCore(path, GenericRead | FileReadAttributes, OpenExisting, FileShareRead | FileShareWrite);
+        return OpenCore(path, GenericRead | FileReadAttributes, OpenExisting, FileShareRead);
     }
 
     public static SafeFileHandle CreateOwnedChecksumGeneration(string path, byte[] bytes)
@@ -365,6 +365,7 @@ $publicationStarted = $false
 $publicationCommitted = $false
 $rollbackAttempted = $false
 $tempGeneration = $null
+$publishedAttemptIdentity = $null
 
 try {
     if (Test-Path -LiteralPath $backupPath) { throw "Refusing to reuse checksum backup path: $backupPath" }
@@ -381,9 +382,6 @@ try {
         throw "V26 checksum destination appeared after preflight validation: $outputFullPath"
     }
 
-    # Mark mutation intent before Replace/Move: either API can alter the destination
-    # and still throw before returning. The held staging handle follows that exact generation
-    # through rename/replace so rollback can delete only the generation this attempt created.
     $publicationStarted = $true
     if ($hadExistingOutput) {
         [IO.File]::Replace($tempPath, $outputFullPath, $backupPath, $true)
@@ -392,10 +390,14 @@ try {
         [IO.File]::Move($tempPath, $outputFullPath)
     }
 
+    $publishedAttemptIdentity = $tempGeneration.Identity
+    Close-OwnedChecksumGeneration -Generation $tempGeneration
+    $tempGeneration = $null
+
     $publishedItem = Resolve-OrdinaryNonReparseFile -Path $outputFullPath -Label 'Published V26 checksum'
     $publishedGeneration = Open-PinnedChecksumGeneration -Path $outputFullPath -Label 'Published V26 checksum generation proof'
     try {
-        if (-not [string]::Equals($publishedGeneration.Identity, $tempGeneration.Identity, [StringComparison]::Ordinal)) {
+        if (-not [string]::Equals($publishedGeneration.Identity, $publishedAttemptIdentity, [StringComparison]::Ordinal)) {
             throw 'Published V26 checksum pathname no longer names the generation created by this publication attempt.'
         }
         $publishedText = [IO.File]::ReadAllText($publishedItem.FullName, [Text.Encoding]::ASCII).TrimEnd("`r", "`n")
@@ -416,6 +418,14 @@ catch {
             if ($null -ne $tempGeneration) {
                 Remove-OwnedChecksumGeneration -Generation $tempGeneration
                 $tempGeneration = $null
+            }
+            elseif (-not [string]::IsNullOrWhiteSpace($publishedAttemptIdentity) -and (Test-Path -LiteralPath $outputFullPath)) {
+                $rollbackPublishedGeneration = Open-OwnedChecksumGeneration -Path $outputFullPath -Label 'V26 checksum rollback published attempt generation'
+                if (-not [string]::Equals($rollbackPublishedGeneration.Identity, $publishedAttemptIdentity, [StringComparison]::Ordinal)) {
+                    Close-OwnedChecksumGeneration -Generation $rollbackPublishedGeneration
+                    throw 'V26 checksum rollback destination no longer names the generation created by this publication attempt.'
+                }
+                Remove-OwnedChecksumGeneration -Generation $rollbackPublishedGeneration
             }
 
             if ($hadExistingOutput) {
@@ -456,8 +466,6 @@ catch {
                     }
                 }
                 else {
-                    # Replace can throw before creating its backup. In that case accept the state
-                    # only if the still-published generation and original bytes are both proven unchanged.
                     $unchangedOutput = Open-OwnedChecksumGeneration -Path $outputFullPath -Label 'V26 checksum rollback unchanged-destination generation proof'
                     try {
                         if (-not [string]::Equals($unchangedOutput.Identity, $originalOutputGeneration.Identity, [StringComparison]::Ordinal)) {
