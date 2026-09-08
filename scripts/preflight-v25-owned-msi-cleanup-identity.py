@@ -16,7 +16,8 @@ NATIVE_DISPOSITION_DECL = "public static extern bool SetFileInformationByHandle(
 NATIVE_DISPOSITION_CALL = "[QS3DV25NativeFileDisposition]::SetFileInformationByHandle("
 FILE_DISPOSITION_DECL = "public const int FileDispositionInfo = 4;"
 FILE_DISPOSITION_CALL = "[QS3DV25NativeFileDisposition]::FileDispositionInfo"
-FILE_DISPOSITION_BOOLEAN = "[MarshalAs(UnmanagedType.U1)]\n        public bool DeleteFile;"
+FILE_DISPOSITION_BOOLEAN = "public byte DeleteFile;"
+DELETE_VALUE_ASSIGNMENT = "$info.DeleteFile = if ($Delete) { [byte]1 } else { [byte]0 }"
 
 
 def validate(source: str) -> list[str]:
@@ -54,7 +55,8 @@ def validate(source: str) -> list[str]:
         (NATIVE_DISPOSITION_CALL, "native SetFileInformationByHandle call site is missing"),
         (FILE_DISPOSITION_DECL, "FileDispositionInfo declaration is missing"),
         (FILE_DISPOSITION_CALL, "FileDispositionInfo call site is missing"),
-        (FILE_DISPOSITION_BOOLEAN, "FILE_DISPOSITION_INFO.DeleteFile must marshal as one-byte native BOOLEAN"),
+        (FILE_DISPOSITION_BOOLEAN, "FILE_DISPOSITION_INFO.DeleteFile must use one-byte native BOOLEAN storage"),
+        (DELETE_VALUE_ASSIGNMENT, "managed delete state is not converted to exact native BOOLEAN bytes"),
         (open_owned, "canonical MSI is not created through the owned native handle helper"),
         (explicit_arm, "owned canonical MSI is not explicitly armed for deletion"),
         (same_handle_rehash, "owned publication handle is not rewound for same-handle verification"),
@@ -136,7 +138,7 @@ using System;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 public static class Qs3dDispositionProbe {
-  [StructLayout(LayoutKind.Sequential)] public struct FILE_DISPOSITION_INFO { [MarshalAs(UnmanagedType.U1)] public bool DeleteFile; }
+  [StructLayout(LayoutKind.Sequential)] public struct FILE_DISPOSITION_INFO { public byte DeleteFile; }
   public const int FileDispositionInfo = 4;
   public const uint GENERIC_READ = 0x80000000;
   public const uint GENERIC_WRITE = 0x40000000;
@@ -156,7 +158,8 @@ function Open-Probe([string]$Path) {
   return [IO.FileStream]::new($h,[IO.FileAccess]::ReadWrite,4096,$false)
 }
 function Set-Probe([IO.FileStream]$Stream,[bool]$Delete) {
-  $d = New-Object 'Qs3dDispositionProbe+FILE_DISPOSITION_INFO'; $d.DeleteFile=$Delete
+  $d = New-Object 'Qs3dDispositionProbe+FILE_DISPOSITION_INFO'
+  $d.DeleteFile = if ($Delete) { [byte]1 } else { [byte]0 }
   $z=[Runtime.InteropServices.Marshal]::SizeOf($d)
   if (-not [Qs3dDispositionProbe]::SetFileInformationByHandle($Stream.SafeFileHandle,[Qs3dDispositionProbe]::FileDispositionInfo,[ref]$d,[uint32]$z)) {
     throw "SetFileInformationByHandle failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
@@ -209,6 +212,7 @@ def main() -> int:
         (FILE_DISPOSITION_DECL, "FileDispositionInfo declaration"),
         (FILE_DISPOSITION_CALL, "FileDispositionInfo call site"),
         (FILE_DISPOSITION_BOOLEAN, "one-byte native BOOLEAN layout"),
+        (DELETE_VALUE_ASSIGNMENT, "native BOOLEAN value assignment"),
         ("$publishedStream = Open-OwnedMsiPublication -Path $msi", "owned publication helper"),
         ("Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $true", "explicit delete arm"),
         ("$publishedHashBytes = $publishedSha.ComputeHash($publishedStream)", "same-handle verification"),
