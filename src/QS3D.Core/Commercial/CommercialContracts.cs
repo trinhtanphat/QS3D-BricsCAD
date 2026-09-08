@@ -355,34 +355,44 @@ namespace QS3D.Core.Commercial
             where T : class
         {
             if (source == null) throw new ArgumentNullException(paramName);
+            var admittedCount = SnapshotKnownCount(source, paramName, maximum);
+            return SnapshotWithAdmittedCount(source, paramName, maximum, admittedCount);
+        }
 
-            var knownCount = SnapshotKnownCount(source, paramName, maximum);
-            var result = knownCount.HasValue
-                ? new List<T>(knownCount.Value)
+        private static IReadOnlyList<T> SnapshotWithAdmittedCount<T>(
+            IEnumerable<T> source,
+            string paramName,
+            int maximum,
+            int? admittedCount)
+            where T : class
+        {
+            RequireStableSnapshotKnownCount(source, admittedCount, paramName, maximum);
+            var result = admittedCount.HasValue
+                ? new List<T>(admittedCount.Value)
                 : new List<T>();
             using (var enumerator = source.GetEnumerator())
             {
                 while (true)
                 {
-                    RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum);
+                    RequireStableSnapshotKnownCountDuringTraversal(source, admittedCount, paramName, maximum);
                     if (!enumerator.MoveNext())
                         break;
-                    RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum);
-                    RequireCanProcessNext(knownCount, result.Count, paramName);
+                    RequireStableSnapshotKnownCountDuringTraversal(source, admittedCount, paramName, maximum);
+                    RequireCanProcessNext(admittedCount, result.Count, paramName);
                     if (result.Count == maximum)
                         throw new InvalidOperationException(paramName + " supports at most " + maximum + " entries.");
 
                     var item = enumerator.Current;
-                    RequireStableSnapshotKnownCountDuringTraversal(source, knownCount, paramName, maximum);
+                    RequireStableSnapshotKnownCountDuringTraversal(source, admittedCount, paramName, maximum);
                     if (item == null)
                         throw new ArgumentException(paramName + " contains a null item.", paramName);
                     result.Add(item);
                 }
             }
 
-            if (knownCount.HasValue && result.Count != knownCount.Value)
+            if (admittedCount.HasValue && result.Count != admittedCount.Value)
                 throw new InvalidOperationException(paramName + " known Count does not match completed traversal cardinality.");
-            RequireStableSnapshotKnownCount(source, knownCount, paramName, maximum);
+            RequireStableSnapshotKnownCount(source, admittedCount, paramName, maximum);
 
             return new ReadOnlyCollection<T>(result.ToArray());
         }
@@ -398,7 +408,7 @@ namespace QS3D.Core.Commercial
             if (source == null) throw new ArgumentNullException(paramName);
 
             var admittedCount = SnapshotKnownCount(source, paramName, maximum);
-            var snapshot = Snapshot(source, paramName, maximum);
+            var snapshot = SnapshotWithAdmittedCount(source, paramName, maximum, admittedCount);
             RequireStableSnapshotKnownCount(source, admittedCount, paramName, maximum);
             RequireStableSnapshotGeneration(source, admittedCount, snapshot, semanticEquals, paramName, maximum);
             return snapshot;
