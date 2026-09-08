@@ -28,18 +28,6 @@ function Resolve-OrdinaryFile([string]$Path, [string]$Label) {
     return $item
 }
 
-function Resolve-OrdinaryDirectory([string]$Path, [string]$Label) {
-    if ([string]::IsNullOrWhiteSpace($Path)) { throw "$Label path must not be empty." }
-    $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
-    if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "$Label must be an ordinary non-reparse directory: $Path" }
-    $cursor = $item
-    while ($null -ne $cursor) {
-        if (($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "$Label path contains a reparse-point directory: $($cursor.FullName)" }
-        $cursor = $cursor.Parent
-    }
-    return $item
-}
-
 function Get-HeldSha256([IO.Stream]$Stream) {
     $Stream.Position = 0
     $sha = [Security.Cryptography.SHA256]::Create()
@@ -147,40 +135,9 @@ try {
         installerSha256 = $InstallerSha256
         hostReferences = @($hostReferences)
     }
-
-    $outputFull = [IO.Path]::GetFullPath($OutputPath)
-    $parent = Split-Path -Parent $outputFull
+    $parent = Split-Path -Parent ([IO.Path]::GetFullPath($OutputPath))
     if (-not (Test-Path -LiteralPath $parent -PathType Container)) { New-Item -ItemType Directory -Path $parent | Out-Null }
-    $null = Resolve-OrdinaryDirectory -Path $parent -Label 'V26 provenance output directory'
-    if (Test-Path -LiteralPath $outputFull) { $null = Resolve-OrdinaryFile -Path $outputFull -Label 'V26 provenance output' }
-
-    $tempPath = Join-Path $parent ('.' + [IO.Path]::GetFileName($outputFull) + '.' + [Guid]::NewGuid().ToString('N') + '.tmp')
-    $tempStream = [IO.File]::Open($tempPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-    try {
-        $writer = [IO.StreamWriter]::new($tempStream, $strictUtf8, 4096, $true)
-        try {
-            $writer.Write(($provenance | ConvertTo-Json -Depth 5))
-            $writer.Write([Environment]::NewLine)
-            $writer.Flush()
-        }
-        finally { $writer.Dispose() }
-        $tempStream.Flush($true)
-    }
-    finally { $tempStream.Dispose() }
-
-    try {
-        if (Test-Path -LiteralPath $outputFull) {
-            $null = Resolve-OrdinaryFile -Path $outputFull -Label 'V26 provenance output'
-            [IO.File]::Replace($tempPath, $outputFull, $null)
-        }
-        else {
-            [IO.File]::Move($tempPath, $outputFull)
-        }
-    }
-    finally {
-        if (Test-Path -LiteralPath $tempPath) { Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue }
-    }
-
+    $provenance | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $OutputPath -Encoding UTF8
     [pscustomobject]@{ SourceCommit = $provenance.sourceCommit; PackageSha256 = $zipHash; ProductVersion = $productVersion; InstallerSha256 = $InstallerSha256; HostReferences = @($hostReferences) }
 }
 finally { $zipStream.Dispose() }
