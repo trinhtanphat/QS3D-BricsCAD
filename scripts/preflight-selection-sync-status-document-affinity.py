@@ -65,10 +65,6 @@ if method_body:
         if forbidden in method_body:
             errors.append("status affinity fence must remain synchronous presentation-only: " + forbidden)
 
-# Detach followed by reattach of the same Document wrapper is an ABA boundary. An in-flight
-# Refresh from the old attachment must not regain authority merely because Attached.Contains
-# becomes true again. Capture a per-attachment identity token and require exact token identity
-# after native/modeless work and again before exception status publication.
 for needle in [
     "private static readonly Dictionary<Document, object> AttachmentTokens",
     "AttachmentTokens[document] = new object();",
@@ -88,25 +84,50 @@ for needle in [
     if needle not in helper_body:
         errors.append("attachment-generation helper must require exact current token identity: " + needle)
 
-# A DispatcherTimer Tick can already be queued when Detach removes/stops its timer. The
-# callback must prove that its timer is still the canonical pending timer for the exact
-# attached Document before it can re-enter Refresh. This closes queued-timer detach/reattach
-# ABA independently of the in-flight Refresh attachment-token fence above.
+# A selection event can already be queued when Detach unsubscribes. A late callback must not
+# recreate Pending state for a detached Document. Fence both the event callback and the
+# scheduling boundary so alternate/internal callers cannot retain a stale native wrapper.
+event_start = selection.find("private static void OnImpliedSelectionChanged")
+event_end = selection.find("private static void ScheduleRefresh", event_start if event_start >= 0 else 0)
+event_body = selection[event_start:event_end if event_end >= 0 else len(selection)] if event_start >= 0 else ""
+if event_body:
+    attached = event_body.find("Attached.Contains(document)")
+    schedule = event_body.find("ScheduleRefresh(document);")
+    if attached < 0 or schedule < 0 or attached > schedule:
+        errors.append("queued selection event must verify Document is still attached before scheduling refresh")
+
+schedule_start = selection.find("private static void ScheduleRefresh(Document document)")
+schedule_end = selection.find("private static bool IsCurrentAttachment", schedule_start if schedule_start >= 0 else 0)
+schedule_body = selection[schedule_start:schedule_end if schedule_end >= 0 else len(selection)] if schedule_start >= 0 else ""
+if schedule_body:
+    detached_guard = schedule_body.find("!Attached.Contains(document)")
+    first_pending_lookup = schedule_body.find("Pending.TryGetValue(document")
+    if detached_guard < 0 or first_pending_lookup < 0 or detached_guard > first_pending_lookup:
+        errors.append("ScheduleRefresh must fail closed for detached Documents before creating/reusing Pending timer state")
+
+# A DispatcherTimer Tick can already be queued when Detach removes/stops its timer. If a late
+# event managed to recreate this timer, its canonical Tick must consume its own Pending entry
+# before checking attachment. That prevents a detached stopped timer from retaining Document
+# affinity indefinitely, while an older non-canonical timer must never remove a newer timer.
 tick_start = selection.find("timer.Tick +=")
 tick_end = selection.find("};", tick_start if tick_start >= 0 else 0)
 tick_body = selection[tick_start:tick_end if tick_end >= 0 else len(selection)] if tick_start >= 0 else ""
 for needle in [
     "Pending.TryGetValue(document, out var current)",
     "ReferenceEquals(current, timer)",
+    "Pending.Remove(document);",
     "Attached.Contains(document)",
 ]:
     if needle not in tick_body:
-        errors.append("selection-sync queued Tick must fail closed after detach/ABA before Refresh: " + needle)
+        errors.append("selection-sync queued Tick stale-lifetime fence missing token: " + needle)
 if tick_body:
     authority = tick_body.find("Pending.TryGetValue(document, out var current)")
+    identity = tick_body.find("ReferenceEquals(current, timer)")
+    remove = tick_body.find("Pending.Remove(document);")
+    attached = tick_body.find("Attached.Contains(document)")
     refresh = tick_body.find("Refresh(document);")
-    if authority < 0 or refresh < 0 or authority > refresh:
-        errors.append("queued Tick canonical-timer authority check must execute before Refresh")
+    if min(authority, identity, remove, attached, refresh) < 0 or not (authority < identity < remove < attached < refresh):
+        errors.append("canonical Tick must validate timer identity, consume Pending, then verify attachment before Refresh")
 
 refresh_start = selection.find("public static void Refresh(Document? document)")
 refresh_end = selection.find("public static void Stop()", refresh_start if refresh_start >= 0 else 0)
@@ -126,4 +147,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: selection-sync status retains exact document and attachment-generation affinity; stale timers and detach/reattach ABA fail closed before palette work.")
+print("PASS: selection-sync status retains exact document/attachment affinity and detached queued events/timers cannot retain stale Document state.")
