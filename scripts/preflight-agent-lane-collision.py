@@ -297,6 +297,35 @@ def _run_git(args: list[str]) -> str:
     return completed.stdout.strip()
 
 
+def _run_git_exact(args: list[str]) -> str:
+    completed = subprocess.run(
+        ["git", *args],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="strict",
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout).strip()
+        raise RuntimeError(f"git {' '.join(args)} failed: {detail}")
+    return completed.stdout
+
+
+def parse_nul_paths(raw: str, source: str) -> list[str]:
+    if raw == "":
+        return []
+    parts = raw.split("\0")
+    if not parts or parts[-1] != "":
+        raise RuntimeError(f"{source} did not return a NUL-terminated path list")
+    parts.pop()
+    if any(path == "" for path in parts):
+        raise RuntimeError(f"{source} returned an empty pathname")
+    if len(set(parts)) != len(parts):
+        raise RuntimeError(f"{source} returned duplicate pathnames")
+    return parts
+
+
 def marker_activation_time() -> datetime | None:
     marker = Path(MARKER_PATH)
     if not marker.is_file():
@@ -498,6 +527,7 @@ def _request_json(url: str, token: str) -> object:
     with urllib.request.urlopen(request, timeout=20) as response:
         return json.loads(response.read().decode("utf-8"))
 
+
 def _fetch_paged(api_url: str, repository: str, endpoint: str, token: str) -> list[dict]:
     owner_repo = urllib.parse.quote(repository, safe="/")
     collected: list[dict] = []
@@ -546,9 +576,56 @@ def fetch_pr_files(
     return [str(item.get("filename") or "") for item in items if item.get("filename")]
 
 
+def ensure_peer_commit(peer_head_sha: str) -> None:
+    peer_sha = str(peer_head_sha or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", peer_sha):
+        raise RuntimeError("peer head SHA is missing or invalid")
+    _run_git(["fetch", "--no-tags", "--quiet", "origin", peer_sha])
+    resolved = _run_git(["rev-parse", f"{peer_sha}^{{commit}}"] ).strip().lower()
+    if resolved != peer_sha:
+        raise RuntimeError(f"fetched peer commit identity drifted: expected {peer_sha}, got {resolved or '<missing>'}")
+
+
+def _exact_diff_paths(left: str, right: str, source: str) -> list[str]:
+    raw = _run_git_exact([
+        "diff",
+        "--name-only",
+        "-z",
+        "--no-renames",
+        "--diff-filter=ACDMRTUXB",
+        left,
+        right,
+        "--",
+    ])
+    return parse_nul_paths(raw, source)
+
+
+def effective_changed_paths(base_sha: str, peer_head_sha: str) -> list[str]:
+    base = str(base_sha or "").strip().lower()
+    peer = str(peer_head_sha or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", base) or not re.fullmatch(r"[0-9a-f]{40}", peer):
+        raise RuntimeError("effective peer delta requires exact 40-hex base and peer commit SHAs")
+    merge_base = _run_git(["merge-base", base, peer]).strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", merge_base):
+        raise RuntimeError("effective peer delta could not resolve an exact merge-base commit")
+    introduced = set(_exact_diff_paths(merge_base, peer, "peer-introduced delta"))
+    if not introduced:
+        return []
+    still_different = set(_exact_diff_paths(base, peer, "current-base peer tree delta"))
+    return sorted(introduced.intersection(still_different))
+
+
 def current_changed_paths(base_ref: str) -> list[str]:
-    raw = _run_git(["diff", "--name-only", "--diff-filter=ACMRTUXB", f"origin/{base_ref}...HEAD"])
-    return [line.strip().replace("\\", "/") for line in raw.splitlines() if line.strip()]
+    raw = _run_git_exact([
+        "diff",
+        "--name-only",
+        "-z",
+        "--no-renames",
+        "--diff-filter=ACDMRTUXB",
+        f"origin/{base_ref}...HEAD",
+        "--",
+    ])
+    return parse_nul_paths(raw, "current branch delta")
 
 
 def _event_actor(event: dict) -> str:
@@ -671,29 +748,40 @@ def canonical_open_pr_path_conflicts(
     token: str,
     current_pr_number: int,
 ) -> list[tuple[int, str, list[str]]]:
+    del api_url, token
     if not changed_paths:
         return []
     current_order = reservation_order(current_issue)
     changed = set(changed_paths)
+    current_main_sha = _run_git(["rev-parse", "origin/main^{commit}"]).strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", current_main_sha):
+        raise RuntimeError("current protected main commit identity could not be resolved")
     conflicts: list[tuple[int, str, list[str]]] = []
 
     for peer in open_prs:
         peer_number = int(peer.get("number") or 0)
         if peer_number == current_pr_number:
             continue
-        peer_ref = str((peer.get("head") or {}).get("ref") or "")
+        peer_head = peer.get("head") or {}
+        peer_ref = str(peer_head.get("ref") or "")
         if peer_ref == current_head_ref or not peer_ref.startswith(LOCKED_PREFIXES):
             continue
-        head_repo = str(((peer.get("head") or {}).get("repo") or {}).get("full_name") or "")
+        head_repo = str((peer_head.get("repo") or {}).get("full_name") or "")
         if head_repo and head_repo != repository:
-            continue
+            raise RuntimeError(
+                f"PR #{peer_number} locked peer '{peer_ref}' is not in repository '{repository}'"
+            )
         try:
             if peer_reservation_time(peer, open_issues) >= current_order:
                 continue
         except (ValueError, TypeError):
             pass
-        peer_files = set(fetch_pr_files(api_url, repository, peer_number, token))
-        overlap = sorted(changed.intersection(peer_files))
+        peer_head_sha = str(peer_head.get("sha") or "").strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{40}", peer_head_sha):
+            raise RuntimeError(f"PR #{peer_number} peer head SHA is missing or invalid")
+        ensure_peer_commit(peer_head_sha)
+        peer_paths = set(effective_changed_paths(current_main_sha, peer_head_sha))
+        overlap = sorted(changed.intersection(peer_paths))
         if overlap:
             conflicts.append((peer_number, peer_ref, overlap))
     return sorted(conflicts)
@@ -859,6 +947,7 @@ def main() -> int:
         ValueError,
         RuntimeError,
         json.JSONDecodeError,
+        UnicodeError,
         urllib.error.URLError,
         subprocess.SubprocessError,
     ) as exc:
