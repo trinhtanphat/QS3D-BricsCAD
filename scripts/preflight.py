@@ -89,7 +89,7 @@ workflow_dir = ROOT / ".github/workflows"
 automatic_workflows = {
     "ci.yml",
     "dispatch-v25-cloud-after-main-integration.yml",
-    "hybrid-pr-coordinator.yml",
+    "auto-merge-main-prs.yml",
 }
 if workflow_dir.is_dir():
     workflow_files = sorted(
