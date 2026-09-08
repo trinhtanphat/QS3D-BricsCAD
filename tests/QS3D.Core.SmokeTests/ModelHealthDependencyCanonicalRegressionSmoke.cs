@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
@@ -57,10 +59,28 @@ namespace QS3D.Core.SmokeTests
             target.SetProperty("LengthM", "1");
             owner.SetProperty("LengthM", "1");
             foreach (var dependency in dependencies)
-                owner.DependsOn.Add(dependency);
+            {
+                if (string.Equals(dependency, dependency.Trim(), StringComparison.Ordinal))
+                    owner.DependsOn.Add(dependency);
+                else
+                    AddPersistedDependency(owner, dependency);
+            }
             project.Elements.Add(target);
             project.Elements.Add(owner);
             return project;
+        }
+
+        private static void AddPersistedDependency(ProjectElement element, string dependency)
+        {
+            var relationField = typeof(ProjectElement).GetField("_dependsOn", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement persisted dependency backing relation field is unavailable.");
+            var relation = relationField.GetValue(element)
+                ?? throw new InvalidOperationException("ProjectElement persisted dependency backing relation is unavailable.");
+            var valuesField = relation.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement persisted dependency backing values field is unavailable.");
+            var values = valuesField.GetValue(relation) as List<string>
+                ?? throw new InvalidOperationException("ProjectElement persisted dependency backing values are unavailable.");
+            values.Add(dependency);
         }
 
         private static void Equal<T>(T expected, T actual, string label)

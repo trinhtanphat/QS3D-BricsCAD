@@ -33,10 +33,15 @@ def mutate_scoped(text: str, marker: str, start_marker: str | None = None, next_
 
 
 def validate(text: str) -> None:
+    walker = function_body(
+        text,
+        "function Get-SafePayloadFiles {",
+        "function Assert-StagedPayloadAdmission {",
+    )
     staged = function_body(
         text,
         "function Assert-StagedPayloadAdmission {",
-        "function Convert-ToStrictSemVerIdentity {",
+        "function Assert-NoZoneIdentifier {",
     )
 
     require("Hashes = $manifestHashes" in text,
@@ -57,33 +62,49 @@ def validate(text: str) -> None:
     require("$manifestHashes.Add('SHA256SUMS.txt', $manifestSha256)" in text,
             "The staged manifest must be bound to the exact held manifest generation.")
 
-    stage_call = "Assert-StagedPayloadAdmission -Directory $stage"
-    require(text.count(stage_call) >= 2,
-            "Installer must validate staged payload bytes after copying and revalidate the same contract immediately before commit.")
-    require(text.count("-AdmittedHashes $packageAdmission.Hashes") >= 2,
-            "Both staged admissions must compare against the frozen manifest hashes from source admission.")
+    require("[Collections.Generic.Queue[string]]::new()" in walker,
+            "Recursive staged admission must walk directories explicitly instead of trusting broad recursive traversal.")
+    require("$pending.Enqueue($rootPath)" in walker and "$pending.Enqueue([string]$entry.FullName)" in walker,
+            "Recursive staged admission must enqueue only directories it has inspected.")
+    require("$entry.Attributes -band [IO.FileAttributes]::ReparsePoint" in walker,
+            "Recursive staged admission must reject every reparse-backed descendant before traversal.")
+    require("$entry.PSIsContainer" in walker and "$entry -is [IO.FileInfo]" in walker,
+            "Recursive staged admission must distinguish ordinary directories from ordinary files.")
+
+    require("$stageFiles = @(Get-SafePayloadFiles -Directory $Directory)" in staged,
+            "Staged admission must validate the complete recursively staged file set.")
+    require("Get-FileHash -LiteralPath $path -Algorithm SHA256" in staged,
+            "Staged admission must hash every staged payload file.")
+    require("$AdmittedHashes.ContainsKey($relative)" in staged,
+            "Every staged file must be bound to the frozen source-admission hash set.")
+    require("foreach ($relative in $AdmittedHashes.Keys)" in staged and "if (-not $seen.Contains([string]$relative))" in staged,
+            "Every frozen admitted payload path must be present in the staged tree.")
+    require("$seen.Count -ne $AdmittedHashes.Count" in staged,
+            "Staged admission must require exact set cardinality without a fixed file count.")
     require("Assert-PackageIdentity -Directory $Directory" in staged,
             "Staged admission must re-bind package identity to staged DLL/metadata bytes.")
-    require("Get-FileHash -LiteralPath $path -Algorithm SHA256" in staged,
-            "Staged admission must hash staged payload bytes.")
     require("Assert-AuthenticodeSigner -Path $path" in staged,
             "Staged executable payloads must have signer admission after staging.")
-    require("$stageRootItem = Get-Item -LiteralPath $stageRootPath -Force -ErrorAction Stop" in staged,
-            "Staged admission must inspect the exact stage root before trusting descendants.")
-    require("$stageRootItem.Attributes -band [IO.FileAttributes]::ReparsePoint" in staged,
-            "Staged admission must reject a reparse-backed stage root.")
-    require("$stageChildren = @(Get-ChildItem -LiteralPath $Directory -Force -ErrorAction Stop)" in staged,
-            "Staged admission must enumerate every top-level stage entry, not silently skip directories.")
-    require("$stageFile.Attributes -band [IO.FileAttributes]::ReparsePoint" in staged,
-            "Staged admission must reject reparse-backed staged entries.")
-    require("$relative.Contains('/')" in staged,
-            "Standalone installer staging must reject nested entries instead of silently admitting hidden subtrees.")
+    require("'install-v25-autoload.ps1'" in staged,
+            "The complete staged package must retain the signed installer bootstrap itself.")
+    require("$relative.Contains('/')" not in staged,
+            "Staged admission must allow manifest-authorized nested payload paths such as Samples/.")
+    require("$seen.Count -ne 8" not in staged,
+            "Staged admission must not hard-code the historical eight-file payload.")
+
+    stage_call = "Assert-StagedPayloadAdmission -Directory $stage -AdmittedHashes $packageAdmission.Hashes"
+    install_call = "Assert-StagedPayloadAdmission -Directory $installFull -AdmittedHashes $packageAdmission.Hashes"
+    require(text.count(stage_call) >= 2,
+            "Installer must validate staged payload bytes after copying and again immediately before commit.")
+    require(install_call in text,
+            "Installer must re-admit the committed InstallDirectory before DemandLoad registration.")
 
     copy_pos = text.find("Copy-Item -LiteralPath $source -Destination $destination -Force")
     first_stage_pos = text.find(stage_call)
     backup_pos = text.find("Move-Item -LiteralPath $installFull -Destination $backup")
     final_stage_pos = text.rfind(stage_call)
     commit_pos = text.find("Move-Item -LiteralPath $stage -Destination $installFull")
+    installed_pos = text.find(install_call)
     require(copy_pos >= 0 and first_stage_pos > copy_pos,
             "Initial staged admission must occur after source bytes have been copied into the stage.")
     require(backup_pos > first_stage_pos,
@@ -92,13 +113,17 @@ def validate(text: str) -> None:
             "Final staged admission must revalidate the stage after any existing-install backup window.")
     require(commit_pos > final_stage_pos,
             "Final staged admission must occur immediately before the stage is committed into InstallDirectory.")
+    require(installed_pos > commit_pos,
+            "Committed InstallDirectory must be re-admitted after the atomic stage move and before registration.")
 
 
 text = INSTALLER.read_text(encoding="utf-8")
 validate(text)
 
+WALKER_START = "function Get-SafePayloadFiles {"
+WALKER_END = "function Assert-StagedPayloadAdmission {"
 STAGED_START = "function Assert-StagedPayloadAdmission {"
-STAGED_END = "function Convert-ToStrictSemVerIdentity {"
+STAGED_END = "function Assert-NoZoneIdentifier {"
 
 for marker, scope in (
     ("Hashes = $manifestHashes", None),
@@ -106,17 +131,20 @@ for marker, scope in (
     ("$commands = @($packageAdmission.Commands)", None),
     ("$manifestStream = [IO.File]::Open($manifest, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)", None),
     ("$manifestHashes.Add('SHA256SUMS.txt', $manifestSha256)", None),
-    ("Assert-StagedPayloadAdmission -Directory $stage", None),
-    ("-AdmittedHashes $packageAdmission.Hashes", None),
-    ("Assert-PackageIdentity -Directory $Directory", "staged"),
+    ("[Collections.Generic.Queue[string]]::new()", "walker"),
+    ("$entry.Attributes -band [IO.FileAttributes]::ReparsePoint", "walker"),
+    ("$stageFiles = @(Get-SafePayloadFiles -Directory $Directory)", "staged"),
     ("Get-FileHash -LiteralPath $path -Algorithm SHA256", "staged"),
+    ("$AdmittedHashes.ContainsKey($relative)", "staged"),
+    ("foreach ($relative in $AdmittedHashes.Keys)", "staged"),
+    ("$seen.Count -ne $AdmittedHashes.Count", "staged"),
+    ("Assert-PackageIdentity -Directory $Directory", "staged"),
     ("Assert-AuthenticodeSigner -Path $path", "staged"),
-    ("$stageRootItem = Get-Item -LiteralPath $stageRootPath -Force -ErrorAction Stop", "staged"),
-    ("$stageRootItem.Attributes -band [IO.FileAttributes]::ReparsePoint", "staged"),
-    ("$stageChildren = @(Get-ChildItem -LiteralPath $Directory -Force -ErrorAction Stop)", "staged"),
-    ("$stageFile.Attributes -band [IO.FileAttributes]::ReparsePoint", "staged"),
+    ("Assert-StagedPayloadAdmission -Directory $installFull -AdmittedHashes $packageAdmission.Hashes", None),
 ):
-    if scope == "staged":
+    if scope == "walker":
+        mutated = mutate_scoped(text, marker, WALKER_START, WALKER_END)
+    elif scope == "staged":
         mutated = mutate_scoped(text, marker, STAGED_START, STAGED_END)
     else:
         mutated = mutate_scoped(text, marker)
@@ -127,4 +155,4 @@ for marker, scope in (
     else:
         raise SystemExit(f"Mutation probe unexpectedly passed after removing: {marker}")
 
-print("PASS V25 installer staged payload admission fence")
+print("PASS V25 installer recursive staged payload admission fence")

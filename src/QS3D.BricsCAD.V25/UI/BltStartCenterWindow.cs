@@ -191,6 +191,7 @@ namespace QS3D.BricsCAD.V25.UI
             catch
             {
                 _hostRefreshQueued = false;
+                _queuedActiveDrawingRecordIntent = ActiveDrawingRecordIntent.Preserve;
             }
         }
 

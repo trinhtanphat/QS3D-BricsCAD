@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 
@@ -20,13 +21,13 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("P1", "Dependency blank target");
             var target = Element("TARGET");
             var source = Element("SOURCE");
-            source.DependsOn.Add(null!);
-            source.DependsOn.Add(string.Empty);
-            source.DependsOn.Add("   ");
-            source.DependsOn.Add(" target ");
-            source.DependsOn.Add("TAR\nGET");
-            source.DependsOn.Add("TARGET\t");
-            source.DependsOn.Add("TARGET\0BROKEN");
+            AddPersistedDependency(source, null!);
+            AddPersistedDependency(source, string.Empty);
+            AddPersistedDependency(source, "   ");
+            AddPersistedDependency(source, " target ");
+            AddPersistedDependency(source, "TAR\nGET");
+            AddPersistedDependency(source, "TARGET\t");
+            AddPersistedDependency(source, "TARGET\0BROKEN");
 
             var validSource = Element("VALID-SOURCE");
             validSource.DependsOn.Add("TARGET");
@@ -75,8 +76,8 @@ namespace QS3D.Core.SmokeTests
             {
                 var sourceId = "CONTROL-" + index;
                 var source = Element(sourceId);
-                source.DependsOn.Add("TARGET" + controls[index] + "BROKEN");
-                source.DependsOn.Add("TARGET" + controls[index] + "SECOND");
+                AddPersistedDependency(source, "TARGET" + controls[index] + "BROKEN");
+                AddPersistedDependency(source, "TARGET" + controls[index] + "SECOND");
                 project.Elements.Add(source);
             }
 
@@ -103,9 +104,9 @@ namespace QS3D.Core.SmokeTests
             var targetA = Element("TARGET-A");
             var targetB = Element("TARGET-B");
             var mixed = Element("MIXED");
-            mixed.DependsOn.Add("TARGET-A");
-            mixed.DependsOn.Add("TARGET-B\u0000INJECTED");
-            mixed.DependsOn.Add("TARGET-A");
+            AddPersistedDependency(mixed, "TARGET-A");
+            AddPersistedDependency(mixed, "TARGET-B\u0000INJECTED");
+            AddPersistedDependency(mixed, "TARGET-A");
 
             var canonical = Element("CANONICAL");
             canonical.DependsOn.Add("TARGET-B");
@@ -156,6 +157,15 @@ namespace QS3D.Core.SmokeTests
         private static ProjectElement Element(string id)
         {
             return new ProjectElement(id, ElementCategory.ArchitecturalWall, string.Empty, string.Empty, string.Empty);
+        }
+
+        private static void AddPersistedDependency(ProjectElement element, string dependency)
+        {
+            var valuesField = element.DependsOn.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed malformed persisted dependency health state.");
+            var values = valuesField.GetValue(element.DependsOn) as List<string>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement.DependsOn backing collection.");
+            values.Add(dependency);
         }
     }
 }

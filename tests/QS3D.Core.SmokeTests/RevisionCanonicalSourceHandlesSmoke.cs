@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Revisions;
@@ -59,14 +61,14 @@ namespace QS3D.Core.SmokeTests
         private static void BlankHandleFailsClosed()
         {
             var project = Project();
-            project.FindElement("E1")!.SourceHandles.Add(" ");
+            SeedPersistedSourceHandle(project.FindElement("E1")!, " ");
             Throws<InvalidOperationException>(() => new RevisionService().Capture(project, "r"));
         }
 
         private static void PaddedHandleFailsClosed()
         {
             var project = Project();
-            project.FindElement("E1")!.SourceHandles.Add(" AA ");
+            SeedPersistedSourceHandle(project.FindElement("E1")!, " AA ");
             Throws<InvalidOperationException>(() => new RevisionService().Capture(project, "r"));
         }
 
@@ -75,8 +77,17 @@ namespace QS3D.Core.SmokeTests
             var project = Project();
             var element = project.FindElement("E1")!;
             element.SourceHandles.Add("AA");
-            element.SourceHandles.Add("aa");
+            SeedPersistedSourceHandle(element, "aa");
             Throws<InvalidOperationException>(() => new RevisionService().Capture(project, "r"));
+        }
+
+        private static void SeedPersistedSourceHandle(ProjectElement element, string value)
+        {
+            var valuesField = element.SourceHandles.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed malformed persisted SourceHandles state.");
+            var values = valuesField.GetValue(element.SourceHandles) as List<string>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement.SourceHandles backing collection.");
+            values.Add(value);
         }
 
         private static RevisionSnapshot Snapshot(params string[] handles)

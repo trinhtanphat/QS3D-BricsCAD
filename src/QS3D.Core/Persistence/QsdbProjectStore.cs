@@ -174,9 +174,9 @@ namespace QS3D.Core.Persistence
                         DrawingFingerprint = RawValue(item, "drawingFingerprint")
                     };
                     foreach (var handle in item.Element("handles")?.Elements("h") ?? Enumerable.Empty<XElement>())
-                        if (!string.IsNullOrWhiteSpace(handle.Value)) element.SourceHandles.Add(handle.Value.Trim());
+                        if (!string.IsNullOrWhiteSpace(handle.Value)) element.AddSourceHandlePersistenceValue(handle.Value.Trim());
                     foreach (var dep in item.Element("dependencies")?.Elements("d") ?? Enumerable.Empty<XElement>())
-                        if (!string.IsNullOrWhiteSpace(dep.Value)) element.DependsOn.Add(dep.Value.Trim());
+                        if (!string.IsNullOrWhiteSpace(dep.Value)) element.AddDependencyPersistenceValue(dep.Value.Trim());
                     ReadStringMap(item.Element("properties"), "p", element.Properties);
                     var quantities = item.Element("quantities");
                     if (quantities != null)
