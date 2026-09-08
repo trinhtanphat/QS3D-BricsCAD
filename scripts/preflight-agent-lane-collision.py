@@ -498,6 +498,7 @@ def _request_json(url: str, token: str) -> object:
     with urllib.request.urlopen(request, timeout=20) as response:
         return json.loads(response.read().decode("utf-8"))
 
+
 def _fetch_paged(api_url: str, repository: str, endpoint: str, token: str) -> list[dict]:
     owner_repo = urllib.parse.quote(repository, safe="/")
     collected: list[dict] = []
@@ -544,6 +545,49 @@ def fetch_pr_files(
 ) -> list[str]:
     items = _fetch_paged(api_url, repository, f"pulls/{pr_number}/files?", token)
     return [str(item.get("filename") or "") for item in items if item.get("filename")]
+
+
+def fetch_path_identity(
+    api_url: str,
+    repository: str,
+    ref: str,
+    path: str,
+    token: str,
+) -> tuple[str, str] | None:
+    owner_repo = urllib.parse.quote(repository, safe="/")
+    encoded_path = urllib.parse.quote(path, safe="/")
+    encoded_ref = urllib.parse.quote(ref, safe="")
+    url = f"{api_url.rstrip('/')}/repos/{owner_repo}/contents/{encoded_path}?ref={encoded_ref}"
+    try:
+        payload = _request_json(url, token)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return None
+        raise
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"GitHub contents identity for '{path}' at {ref} was not an object")
+    kind = str(payload.get("type") or "").strip()
+    sha = str(payload.get("sha") or "").strip().lower()
+    if not kind or not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise RuntimeError(f"GitHub contents identity for '{path}' at {ref} was incomplete")
+    return kind, sha
+
+
+def path_changed_between_commits(
+    api_url: str,
+    repository: str,
+    current_main_sha: str,
+    peer_head_sha: str,
+    path: str,
+    token: str,
+) -> bool:
+    current_identity = fetch_path_identity(
+        api_url, repository, current_main_sha, path, token
+    )
+    peer_identity = fetch_path_identity(
+        api_url, repository, peer_head_sha, path, token
+    )
+    return current_identity != peer_identity
 
 
 def current_changed_paths(base_ref: str) -> list[str]:
@@ -675,16 +719,20 @@ def canonical_open_pr_path_conflicts(
         return []
     current_order = reservation_order(current_issue)
     changed = set(changed_paths)
+    current_main_sha = _run_git(["rev-parse", "origin/main^{commit}"]).strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", current_main_sha):
+        raise RuntimeError("current protected main commit identity could not be resolved")
     conflicts: list[tuple[int, str, list[str]]] = []
 
     for peer in open_prs:
         peer_number = int(peer.get("number") or 0)
         if peer_number == current_pr_number:
             continue
-        peer_ref = str((peer.get("head") or {}).get("ref") or "")
+        peer_head = peer.get("head") or {}
+        peer_ref = str(peer_head.get("ref") or "")
         if peer_ref == current_head_ref or not peer_ref.startswith(LOCKED_PREFIXES):
             continue
-        head_repo = str(((peer.get("head") or {}).get("repo") or {}).get("full_name") or "")
+        head_repo = str((peer_head.get("repo") or {}).get("full_name") or "")
         if head_repo and head_repo != repository:
             continue
         try:
@@ -693,9 +741,26 @@ def canonical_open_pr_path_conflicts(
         except (ValueError, TypeError):
             pass
         peer_files = set(fetch_pr_files(api_url, repository, peer_number, token))
-        overlap = sorted(changed.intersection(peer_files))
-        if overlap:
-            conflicts.append((peer_number, peer_ref, overlap))
+        candidate_overlap = sorted(changed.intersection(peer_files))
+        if not candidate_overlap:
+            continue
+        peer_head_sha = str(peer_head.get("sha") or "").strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{40}", peer_head_sha):
+            raise RuntimeError(f"PR #{peer_number} peer head SHA is missing or invalid")
+        effective_overlap = [
+            path
+            for path in candidate_overlap
+            if path_changed_between_commits(
+                api_url,
+                repository,
+                current_main_sha,
+                peer_head_sha,
+                path,
+                token,
+            )
+        ]
+        if effective_overlap:
+            conflicts.append((peer_number, peer_ref, effective_overlap))
     return sorted(conflicts)
 
 
