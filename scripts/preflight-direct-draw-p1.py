@@ -45,6 +45,8 @@ required = {
         'ElementCategory.WallPier',
         'ElementCategory.StructuralWall',
         'ElementCategory.Foundation',
+        "DirectDrawUiFailureReporter.ReportPostCommitWarning(document)",
+        "DirectDrawUiFailureReporter.ReportPostCommitSuccess(document, status)",
     ],
     "src/QS3D.BricsCAD.V25/Build3DCommands.cs": [
         'CommandMethod("QS3DBUILD3D"',
@@ -137,7 +139,7 @@ if source.is_file():
     text = source.read_text(encoding="utf-8")
     if "new Build3DCommands().Build3D()" not in text:
         errors.append("Direct Draw P1 must reuse canonical QS3DBUILD3D rather than fork native category builders")
-    for forbidden in ("new WallFootprintEngine()", "CreateBox(", "CreateExtrudedSolid(", "return value > 0d ? value : fallback;"):
+    for forbidden in ("new WallFootprintEngine()", "CreateBox(", "CreateExtrudedSolid(", "return value > 0d ? value : fallback;", "UI sync warning"):
         if forbidden in text:
             errors.append("Direct Draw P1 contains stale/duplicated authoring behavior: " + forbidden)
     for key in ("ThicknessM", "HeightM", "BottomOffsetM"):
@@ -194,12 +196,16 @@ if source.is_file():
         errors.append("Direct Draw P1 rollback must atomically remove and verify both operation source and generated CAD")
 
     finalize_body = text.split("private static void FinalizeUi", 1)[-1].split("private static void EnsureActive", 1)[0]
-    if "try" not in finalize_body or "UI sync warning" not in finalize_body:
-        errors.append("Direct Draw P1 UI finalization must be best-effort and must not convert a successful CAD/project commit into rollback")
+    if "try" not in finalize_body or "DirectDrawUiFailureReporter.ReportPostCommitWarning(document);" not in finalize_body:
+        errors.append("Direct Draw P1 UI finalization must be best-effort and route failures through the stable post-commit warning")
+    if "DirectDrawUiFailureReporter.ReportPostCommitSuccess(document, status);" not in finalize_body:
+        errors.append("Direct Draw P1 success status must be source-document fenced through the shared reporter")
+    if "PaletteCoordinator.SetStatus(status);" in finalize_body:
+        errors.append("Direct Draw P1 FinalizeUi must not publish process-wide success status without the shared source-document fence")
 
 print("QS3D Direct Draw P1 preflight")
 if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: Native Direct Draw P1 compiles its project snapshot rollback contract, exposes WallPier two-point LINE and multi-segment open-POLYLINE authoring through the canonical path-profile builder, reuses canonical QS3DBUILD3D and preserves ownership-safe lifecycle invariants; the separately implemented Door/Opening extension is present, uniquely registered, host-aware and guarded with physical boolean kept explicit.")
+print("PASS: Native Direct Draw P1 compiles its project snapshot rollback contract, exposes WallPier two-point LINE and multi-segment open-POLYLINE authoring through the canonical path-profile builder, reuses canonical QS3DBUILD3D and preserves ownership-safe lifecycle invariants; post-commit warning/success reporting is redacted and source-document fenced; the separately implemented Door/Opening extension is present, uniquely registered, host-aware and guarded with physical boolean kept explicit.")
