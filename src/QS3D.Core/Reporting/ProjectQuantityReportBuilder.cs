@@ -295,6 +295,10 @@ namespace QS3D.Core.Reporting
             internal static ElementSnapshot Capture(ProjectState project, ProjectElement source)
             {
                 if (source == null) throw new InvalidOperationException("Project contains a null semantic element entry.");
+                // Preserve the dictionary facade's report-copy capacity guard
+                // when using the non-mutating persistence reconstruction path.
+                if (source.Properties.Count > 10000)
+                    throw new InvalidOperationException("Property collection exceeds the maximum supported cardinality of 10000.");
                 var clone = new ProjectElement(source.Id, source.Category, source.FamilyId, source.FloorId, source.ZoneId)
                 {
                     DrawingFingerprint = source.DrawingFingerprint

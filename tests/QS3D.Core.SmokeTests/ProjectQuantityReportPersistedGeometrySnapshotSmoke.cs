@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             PersistedGeometryReportsWithoutMutation();
+            SnapshotPreservesPropertyCapacityGuard();
         }
 
         private static void PersistedGeometryReportsWithoutMutation()
@@ -86,7 +87,36 @@ namespace QS3D.Core.SmokeTests
             Require(Math.Abs(rows[0].GrossConcreteM3 - 76d / 3d) < 1e-12 && Math.Abs(rows[0].NetConcreteM3 - 76d / 3d) < 1e-12, "summary quantity");
             Require(rows[0].SourceHandles.SequenceEqual(new[] { "A1", "A2" }), "summary source provenance");
             var details = ProjectQuantityReportBuilder.Detail(project);
-            Require(details.Count == 2 && details.All(row => row.Count == 1 && Math.Abs(row.NetConcreteM3 - 38d / 3d) < 1e-12), "detail quantity");
+            Require(details.Count == 2 && details.All(row => row.Count == 1 &&
+                Math.Abs(row.GrossConcreteM3 - 38d / 3d) < 1e-12 &&
+                Math.Abs(row.NetConcreteM3 - 38d / 3d) < 1e-12), "detail quantity");
+        }
+
+        private static void SnapshotPreservesPropertyCapacityGuard()
+        {
+            var project = new ProjectState("P-BQ-CAPACITY", "Synthetic report capacity");
+            var element = new ProjectElement("E-CAPACITY", ElementCategory.Foundation);
+            project.Elements.Add(element);
+            // SetProperty is a legal direct route that predates the dictionary
+            // facade's capacity guard; reporting must retain its own refusal.
+            for (var index = 0; index < 10000; index++) element.SetProperty("Key" + index, "Value");
+            Require(ProjectQuantityReportBuilder.Group(project).Count == 1, "capacity boundary summary rejected");
+            Require(ProjectQuantityReportBuilder.Detail(project).Count == 1, "capacity boundary detail rejected");
+            element.SetProperty("Overflow", "Value");
+            foreach (var detail in new[] { false, true })
+            {
+                try
+                {
+                    if (detail) _ = ProjectQuantityReportBuilder.Detail(project);
+                    else _ = ProjectQuantityReportBuilder.Group(project);
+                }
+                catch (InvalidOperationException error) when (error.Message.Contains("maximum supported cardinality"))
+                {
+                    Require(element.Properties.Count == 10001 && element.Properties["Overflow"] == "Value", "capacity refusal mutated source");
+                    continue;
+                }
+                throw new InvalidOperationException("Quantity snapshot accepted an oversized public property collection.");
+            }
         }
 
         private static void RejectsActualPostCaptureDrift(ProjectState project, bool detail)

@@ -8,6 +8,7 @@ end = source.index("private sealed class FloorSnapshot", start)
 capture = source[start:end]
 for token in [
     "clone.Properties as ProjectElementPropertyDictionary",
+    "if (source.Properties.Count > 10000)",
     'throw new InvalidOperationException("Quantity snapshot requires the canonical element property store.")',
     "foreach (var property in source.Properties) properties.SetPersistenceValue(property.Key, property.Value);",
     "source,\n                    clone,",
@@ -40,6 +41,11 @@ for token in [
     'project.Elements[0].Properties[ProjectElement.GeneratedSolidStateKey] == "stale"',
     "RejectsActualPostCaptureDrift(ProjectStateSnapshot.CreateDetachedCopy(cold), false)",
     "RejectsActualPostCaptureDrift(ProjectStateSnapshot.CreateDetachedCopy(cold), true)",
+    "SnapshotPreservesPropertyCapacityGuard();",
+    'element.SetProperty("Overflow", "Value");',
+    '"capacity boundary summary rejected"',
+    '"capacity boundary detail rejected"',
+    '"Quantity snapshot accepted an oversized public property collection."',
 ]:
     if token not in smoke:
         raise SystemExit("Missing executable persisted quantity snapshot regression: " + token)
