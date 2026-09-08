@@ -12,8 +12,7 @@ MAX_SOURCE_BYTES = 256 * 1024
 DECL = "public static extern uint GetFinalPathNameByHandleW("
 HELPER = "function Get-OwnedMsiFinalPath {"
 HANDLE_CALL = "[QS3DV25NativeFileDisposition]::GetFinalPathNameByHandleW("
-NORMALIZE_UNC = "\\\\?\\UNC\\"
-NORMALIZE_DOS = "\\\\?\\"
+UNC_BRANCH = "if ($resolved.StartsWith('\\\\?\\UNC\\', [StringComparison]::OrdinalIgnoreCase)) {"
 DOS_BRANCH = "elseif ($resolved.StartsWith('\\\\?\\', [StringComparison]::OrdinalIgnoreCase)) {"
 PROOF_ASSIGN = "$publishedFinalPath = Get-OwnedMsiFinalPath -Stream $publishedStream"
 EXPECTED_ASSIGN = "$expectedPublishedPath = Get-CanonicalAbsolutePath -Path $msi"
@@ -53,8 +52,8 @@ def validate(source: str) -> list[str]:
         (HELPER, "owned-handle final-path helper is missing"),
         (HANDLE_CALL, "owned-handle GetFinalPathNameByHandleW call is missing"),
         ("$Stream.SafeFileHandle", "final-path query must use the owned publication stream handle"),
-        (NORMALIZE_UNC, "extended UNC final-path normalization is missing"),
-        (NORMALIZE_DOS, "extended DOS final-path normalization is missing"),
+        (UNC_BRANCH, "extended UNC final-path normalization branch is missing"),
+        (DOS_BRANCH, "extended DOS final-path normalization branch is missing"),
         (PROOF_ASSIGN, "creator-handle final path is not captured"),
         (EXPECTED_ASSIGN, "expected canonical publication path is not captured"),
         (COMPARE, "creator-handle final path is not compared with the canonical MSI path"),
@@ -106,8 +105,8 @@ def main() -> int:
         (DECL, "native final-path declaration"),
         (HELPER, "final-path helper"),
         (HANDLE_CALL, "native final-path invocation"),
-        (NORMALIZE_UNC, "extended UNC final-path normalization"),
-        (NORMALIZE_DOS, "extended DOS final-path normalization"),
+        (UNC_BRANCH, "extended UNC final-path normalization branch"),
+        (DOS_BRANCH, "extended DOS final-path normalization branch"),
         (PROOF_ASSIGN, "creator-handle final-path capture"),
         (EXPECTED_ASSIGN, "expected canonical-path capture"),
         (COMPARE, "final-path comparison"),
@@ -125,9 +124,6 @@ def main() -> int:
             print(f"FAIL: guard mutation escaped detection: {label}")
             return 1
 
-    if DOS_BRANCH not in source:
-        print("FAIL: mutation fixture missing: exact DOS normalization branch")
-        return 1
     dos_branch_mutated = source.replace(DOS_BRANCH, "MUTATED-DOS-NORMALIZATION-BRANCH", 1)
     if not validate(dos_branch_mutated):
         print("FAIL: guard mutation escaped detection: exact DOS normalization branch")
