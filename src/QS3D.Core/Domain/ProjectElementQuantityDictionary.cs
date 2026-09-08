@@ -37,15 +37,16 @@ namespace QS3D.Core.Domain
 
         public bool Remove(KeyValuePair<string, double> item)
         {
-            var candidate = item.Key == null ? null : item.Key.Trim();
-            if (candidate == null || !_values.TryGetValue(candidate, out var existing))
-                return _owner.RemoveQuantity(item.Key);
+            var key = item.Key ?? string.Empty;
+            var candidate = key.Trim();
+            if (!_values.TryGetValue(candidate, out var existing))
+                return _owner.RemoveQuantity(key);
 
             // Reuse the owner boundary to validate/canonicalize the caller-supplied key without
             // mutating state: assigning the already-stored value is an intentional semantic no-op.
-            _owner.SetQuantity(item.Key, existing);
+            _owner.SetQuantity(key, existing);
             if (!existing.Equals(item.Value)) return false;
-            return _owner.RemoveQuantity(item.Key);
+            return _owner.RemoveQuantity(key);
         }
 
         public bool TryGetValue(string key, out double value) => _values.TryGetValue(key, out value);
