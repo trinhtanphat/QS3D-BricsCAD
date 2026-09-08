@@ -9,9 +9,11 @@ required = [
     "private static bool IsActiveDocument(Document document)",
     "ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)",
     "private static void RefreshProjectForDocument(Document document)",
-    "private static void TrySetPaletteStatus(Document document, string message)",
+    "private static void SetPaletteStatusForDocument(Document document, string message)",
+    "private static void TrySetPaletteStatusForDocument(Document document, string message)",
     "RefreshProjectForDocument(document);",
-    "TrySetPaletteStatus(document, message);",
+    "SetPaletteStatusForDocument(document, message);",
+    "TrySetPaletteStatusForDocument(document, message);",
 ]
 missing = [needle for needle in required if needle not in text]
 if missing:
@@ -20,33 +22,29 @@ if missing:
         print("  missing:", needle)
     sys.exit(1)
 
-is_active_start = text.find("private static bool IsActiveDocument(Document document)")
-is_active_end = text.find("private static", is_active_start + 1)
-if is_active_end < 0:
-    is_active_end = len(text)
-is_active_body = text[is_active_start:is_active_end]
+
+def method_body(signature: str) -> str:
+    start = text.find(signature)
+    if start < 0:
+        return ""
+    end = text.find("private static", start + len(signature))
+    if end < 0:
+        end = len(text)
+    return text[start:end]
+
+
+is_active_body = method_body("private static bool IsActiveDocument(Document document)")
 if "ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)" not in is_active_body:
     print("ERROR: Beam Stirrup affinity helper must use exact Document reference identity")
     sys.exit(1)
 
-refresh_start = text.find("private static void RefreshProjectForDocument(Document document)")
-status_start = text.find("private static void TrySetPaletteStatus(Document document, string message)")
-if refresh_start < 0 or status_start < 0:
-    print("ERROR: cannot locate Beam Stirrup document-affine palette helpers")
-    sys.exit(1)
-
-refresh_end = text.find("private static", refresh_start + 1)
-if refresh_end < 0:
-    refresh_end = len(text)
-refresh_body = text[refresh_start:refresh_end]
-status_end = text.find("private static", status_start + 1)
-if status_end < 0:
-    status_end = len(text)
-status_body = text[status_start:status_end]
+refresh_body = method_body("private static void RefreshProjectForDocument(Document document)")
+set_status_body = method_body("private static void SetPaletteStatusForDocument(Document document, string message)")
+try_status_body = method_body("private static void TrySetPaletteStatusForDocument(Document document, string message)")
 
 for name, body, mutation in [
     ("RefreshProjectForDocument", refresh_body, "PaletteCoordinator.RefreshProject();"),
-    ("TrySetPaletteStatus", status_body, "PaletteCoordinator.SetStatus(message);"),
+    ("SetPaletteStatusForDocument", set_status_body, "PaletteCoordinator.SetStatus(message);"),
 ]:
     guard = body.find("IsActiveDocument(document)")
     mutate = body.find(mutation)
@@ -54,11 +52,22 @@ for name, body, mutation in [
         print(f"ERROR: {name} must fail closed on source-document affinity before process-wide palette mutation")
         sys.exit(1)
 
-# Every process-wide palette mutation in this command must live behind one of the
-# two source-document-affine helpers. Native editor output remains tied to the
-# captured source Document and is intentionally not redirected to current MDI.
+if "try" not in try_status_body or "SetPaletteStatusForDocument(document, message);" not in try_status_body or "catch" not in try_status_body:
+    print("ERROR: Health/Report status helper must preserve best-effort exception containment while delegating to the affinity fence")
+    sys.exit(1)
+
+# Direct process-wide palette mutations are centralized behind the exact-source
+# helpers. Native editor output remains tied to the captured source Document.
+refresh_start = text.find("private static void RefreshProjectForDocument(Document document)")
+refresh_end = text.find("private static", refresh_start + 1)
+if refresh_end < 0:
+    refresh_end = len(text)
+set_start = text.find("private static void SetPaletteStatusForDocument(Document document, string message)")
+set_end = text.find("private static", set_start + 1)
+if set_end < 0:
+    set_end = len(text)
 outside_refresh = text[:refresh_start] + text[refresh_end:]
-outside_status = text[:status_start] + text[status_end:]
+outside_status = text[:set_start] + text[set_end:]
 if "PaletteCoordinator.RefreshProject();" in outside_refresh:
     print("ERROR: Beam Stirrup contains an unfenced direct project-palette refresh")
     sys.exit(1)
@@ -66,27 +75,27 @@ if "PaletteCoordinator.SetStatus(" in outside_status:
     print("ERROR: Beam Stirrup contains an unfenced direct palette status publication")
     sys.exit(1)
 
-finalize_start = text.find("private static void FinalizeUi(Document document, string message)")
-status_helper_start = text.find("private static void TrySetPaletteStatus", finalize_start)
-if finalize_start < 0 or status_helper_start < 0:
-    print("ERROR: cannot locate Beam Stirrup FinalizeUi/status helper boundary")
-    sys.exit(1)
-finalize_body = text[finalize_start:status_helper_start]
+finalize_body = method_body("private static void FinalizeUi(Document document, string message)")
 refresh_call = finalize_body.find("RefreshProjectForDocument(document);")
 regen = finalize_body.find("document.Editor.Regen();")
-status_call = finalize_body.find("TrySetPaletteStatus(document, message);")
+status_call = finalize_body.find("SetPaletteStatusForDocument(document, message);")
 write = finalize_body.find("document.Editor.WriteMessage")
 if min(refresh_call, regen, status_call, write) < 0 or not (refresh_call < regen < status_call < write):
-    print("ERROR: Beam Stirrup finalization must preserve refresh/regen/status/editor ordering while fencing palette work")
+    print("ERROR: Beam Stirrup finalization must preserve refresh/regen/status/editor ordering and non-best-effort status semantics")
+    sys.exit(1)
+if "TrySetPaletteStatusForDocument(document, message);" in finalize_body:
+    print("ERROR: FinalizeUi must not swallow status exceptions that previously entered its UI-sync warning path")
     sys.exit(1)
 
-report_start = text.find("private static void Report(Document document, string message)")
-write_helper_start = text.find("private static void TryWriteMessage", report_start)
-if report_start < 0 or write_helper_start < 0:
-    print("ERROR: cannot locate Beam Stirrup Report/Write helper boundary")
+health_start = text.find("public void BeamStirrupHealth()")
+health_end = text.find("private static List<ProjectElement>", health_start)
+health_body = text[health_start:health_end] if health_start >= 0 and health_end >= 0 else ""
+if "TrySetPaletteStatusForDocument(document, message);" not in health_body:
+    print("ERROR: Beam Stirrup Health must publish palette status through the exact-source best-effort helper")
     sys.exit(1)
-report_body = text[report_start:write_helper_start]
-if "TrySetPaletteStatus(document, message);" not in report_body or "TryWriteMessage(document," not in report_body:
+
+report_body = method_body("private static void Report(Document document, string message)")
+if "TrySetPaletteStatusForDocument(document, message);" not in report_body or "TryWriteMessage(document," not in report_body:
     print("ERROR: Beam Stirrup Report must route status through source-document affinity and retain exact-source editor output")
     sys.exit(1)
 
@@ -97,7 +106,7 @@ for forbidden in [
     "SendStringToExecute",
     "Dispatcher.BeginInvoke",
 ]:
-    if forbidden in refresh_body or forbidden in status_body:
+    if forbidden in refresh_body or forbidden in set_status_body or forbidden in try_status_body:
         print("ERROR: Beam Stirrup palette affinity helpers must remain presentation-only:", forbidden)
         sys.exit(1)
 
