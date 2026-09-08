@@ -7,12 +7,12 @@ text = SOURCE.read_text(encoding="utf-8")
 
 attach_start = text.find("public static void Attach(Document? document)")
 detach_start = text.find("public static void Detach(Document? document)", attach_start)
-refresh_start = text.find("public static void Refresh(Document? document)", detach_start)
+refresh_start = text.find("public static void Refresh(Document? document, object attachmentToken)", detach_start)
 stop_start = text.find("public static void Stop()", refresh_start)
 rollback_start = text.find("private static void RollbackAttachment(Document document, bool subscribed, object attachmentToken, EventHandler attachmentHandler)", stop_start)
 release_start = text.find("private static void ReleaseRefresh(Document document, object attachmentToken)", rollback_start)
 handler_start = text.find("private static void OnImpliedSelectionChanged(Document document, object attachmentToken)", release_start)
-schedule_start = text.find("private static void ScheduleRefresh(Document document)", handler_start)
+schedule_start = text.find("private static void ScheduleRefresh(Document document, object attachmentToken)", handler_start)
 if min(attach_start, detach_start, refresh_start, stop_start, rollback_start, release_start, handler_start, schedule_start) < 0:
     print("ERROR: cannot locate SelectionSync generation-ownership methods")
     sys.exit(1)
@@ -26,6 +26,7 @@ refresh = text[refresh_start:stop_start]
 rollback = text[rollback_start:release_start]
 release = text[release_start:handler_start]
 handler = text[handler_start:schedule_start]
+schedule = text[schedule_start:text.find("private static bool IsCurrentAttachment", schedule_start)]
 
 required = [
     "private static readonly Dictionary<Document, object> Refreshing",
@@ -49,7 +50,7 @@ claim_attached = attach.find("Attached.Add(document)")
 publish_token = attach.find("AttachmentTokens[document] = attachmentToken;")
 publish_handler = attach.find("AttachmentHandlers[document] = attachmentHandler;")
 subscribe = attach.find("document.ImpliedSelectionChanged += attachmentHandler;")
-refresh_call = attach.find("Refresh(document);")
+refresh_call = attach.find("Refresh(document, attachmentToken);")
 if min(claim_token, claim_handler, claim_attached, publish_token, publish_handler, subscribe, refresh_call) < 0 or not (
     claim_token < claim_handler < claim_attached < publish_token < publish_handler < subscribe < refresh_call
 ):
@@ -68,11 +69,25 @@ for needle in [
 for needle in [
     "IsCurrentAttachment(document, attachmentToken)",
     "ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)",
-    "ScheduleRefresh(document);",
+    "ScheduleRefresh(document, attachmentToken);",
 ]:
     if needle not in handler:
         print("ERROR: stale SelectionSync callbacks must fail closed on exact attachment generation/active document; missing", needle)
         sys.exit(1)
+
+for needle in [
+    "IsCurrentAttachment(document, attachmentToken)",
+    "Refresh(document, attachmentToken);",
+]:
+    if needle not in schedule:
+        print("ERROR: queued SelectionSync refresh must retain and revalidate the exact attachment generation; missing", needle)
+        sys.exit(1)
+if "Refresh(document);" in schedule or "ScheduleRefresh(Document document)" in text:
+    print("ERROR: queued SelectionSync refresh must not discard attachment generation ownership")
+    sys.exit(1)
+if "AttachmentTokens.TryGetValue(document, out var attachmentToken)" in refresh:
+    print("ERROR: Refresh must not recapture a newer attachment token for stale queued work")
+    sys.exit(1)
 
 if "finally { Refreshing.Remove(document); }" in refresh:
     print("ERROR: stale refresh generation can unconditionally remove a newer generation's ownership")
@@ -104,11 +119,12 @@ for needle in [
         print("ERROR: ReleaseRefresh must remove only the exact captured attachment generation; missing", needle)
         sys.exit(1)
 
+entry_fence = refresh.find("IsCurrentAttachment(document, attachmentToken)")
 claim = refresh.find("Refreshing[document] = attachmentToken;")
 work = refresh.find("PaletteCoordinator.EnsureCreated();")
 release_call = refresh.find("ReleaseRefresh(document, attachmentToken);")
-if claim < 0 or work < 0 or release_call < 0 or not (claim < work < release_call):
-    print("ERROR: SelectionSync refresh generation must be claimed before modeless/native work and released afterward")
+if min(entry_fence, claim, work, release_call) < 0 or not (entry_fence < claim < work < release_call):
+    print("ERROR: SelectionSync refresh must validate/claim the exact generation before modeless/native work and release afterward")
     sys.exit(1)
 
 for label, body in [("RollbackAttachment", rollback), ("ReleaseRefresh", release)]:
@@ -117,4 +133,4 @@ for label, body in [("RollbackAttachment", rollback), ("ReleaseRefresh", release
             print(f"ERROR: {label} must remain synchronous bookkeeping only; found {forbidden}")
             sys.exit(1)
 
-print("PASS: SelectionSync token, handler, callback, rollback, and refresh cleanup are exact-generation fenced")
+print("PASS: SelectionSync token, handler, queued callback, rollback, and refresh cleanup are exact-generation fenced")
