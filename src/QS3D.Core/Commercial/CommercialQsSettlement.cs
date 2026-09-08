@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using QS3D.Core.Cost;
 
 namespace QS3D.Core.Commercial
@@ -158,14 +159,18 @@ namespace QS3D.Core.Commercial
         internal InterimPaymentCertificate(
             string certificateId,
             string currency,
+            string? previousCertificateId,
             ProgressClaimResult progress,
             CommercialVariationRegister variations,
             IReadOnlyList<VariationCertificationLine> variationCertificationLines,
+            IReadOnlyDictionary<string, decimal> variationCertifiedToDate,
             decimal variationCertifiedThisPeriod,
             decimal grossCertifiedThisPeriod,
             decimal variationRetentionThisPeriod,
             decimal retentionThisPeriod,
+            decimal previousRetentionHeld,
             decimal retentionRelease,
+            decimal retainedBalanceAfterCertificate,
             decimal advanceRecovery,
             decimal otherDeductions,
             decimal netCertifiedThisPeriod,
@@ -174,14 +179,18 @@ namespace QS3D.Core.Commercial
         {
             CertificateId = certificateId;
             Currency = currency;
+            PreviousCertificateId = previousCertificateId;
             Progress = progress;
             Variations = variations;
             VariationCertificationLines = variationCertificationLines;
+            VariationCertifiedToDate = variationCertifiedToDate;
             VariationCertifiedThisPeriod = variationCertifiedThisPeriod;
             GrossCertifiedThisPeriod = grossCertifiedThisPeriod;
             VariationRetentionThisPeriod = variationRetentionThisPeriod;
             RetentionThisPeriod = retentionThisPeriod;
+            PreviousRetentionHeld = previousRetentionHeld;
             RetentionRelease = retentionRelease;
+            RetainedBalanceAfterCertificate = retainedBalanceAfterCertificate;
             AdvanceRecovery = advanceRecovery;
             OtherDeductions = otherDeductions;
             NetCertifiedThisPeriod = netCertifiedThisPeriod;
@@ -191,14 +200,18 @@ namespace QS3D.Core.Commercial
 
         public string CertificateId { get; }
         public string Currency { get; }
+        public string? PreviousCertificateId { get; }
         public ProgressClaimResult Progress { get; }
         public CommercialVariationRegister Variations { get; }
         public IReadOnlyList<VariationCertificationLine> VariationCertificationLines { get; }
+        public IReadOnlyDictionary<string, decimal> VariationCertifiedToDate { get; }
         public decimal VariationCertifiedThisPeriod { get; }
         public decimal GrossCertifiedThisPeriod { get; }
         public decimal VariationRetentionThisPeriod { get; }
         public decimal RetentionThisPeriod { get; }
+        public decimal PreviousRetentionHeld { get; }
         public decimal RetentionRelease { get; }
+        public decimal RetainedBalanceAfterCertificate { get; }
         public decimal AdvanceRecovery { get; }
         public decimal OtherDeductions { get; }
         public decimal NetCertifiedThisPeriod { get; }
@@ -220,7 +233,75 @@ namespace QS3D.Core.Commercial
             decimal retentionRelease = 0m,
             decimal advanceRecovery = 0m,
             decimal otherDeductions = 0m,
-            decimal previousNetCertified = 0m)
+            decimal previousNetCertified = 0m,
+            decimal previousRetentionHeld = 0m)
+        {
+            return CreateCore(
+                certificateId,
+                currency,
+                null,
+                progress,
+                variations,
+                variationCertificationLines,
+                variationRetentionThisPeriod,
+                retentionRelease,
+                advanceRecovery,
+                otherDeductions,
+                previousNetCertified,
+                previousRetentionHeld,
+                null);
+        }
+
+        public InterimPaymentCertificate CreateNext(
+            string certificateId,
+            string currency,
+            InterimPaymentCertificate previousCertificate,
+            ProgressClaimResult progress,
+            CommercialVariationRegister variations,
+            IEnumerable<VariationCertificationLine> variationCertificationLines,
+            decimal variationRetentionThisPeriod = 0m,
+            decimal retentionRelease = 0m,
+            decimal advanceRecovery = 0m,
+            decimal otherDeductions = 0m)
+        {
+            if (previousCertificate == null) throw new ArgumentNullException(nameof(previousCertificate));
+            certificateId = CommercialGuard.RequireToken(certificateId, nameof(certificateId));
+            currency = RateBookContract.RequireCurrency(currency, nameof(currency));
+            if (string.Equals(certificateId, previousCertificate.CertificateId, StringComparison.Ordinal))
+                throw new InvalidOperationException("An IPC cannot use the same certificate id as its previous certificate.");
+            if (!string.Equals(currency, previousCertificate.Currency, StringComparison.Ordinal))
+                throw new InvalidOperationException("IPC currency must match the previous certificate currency.");
+
+            return CreateCore(
+                certificateId,
+                currency,
+                previousCertificate.CertificateId,
+                progress,
+                variations,
+                variationCertificationLines,
+                variationRetentionThisPeriod,
+                retentionRelease,
+                advanceRecovery,
+                otherDeductions,
+                previousCertificate.CumulativeNetCertified,
+                previousCertificate.RetainedBalanceAfterCertificate,
+                previousCertificate.VariationCertifiedToDate);
+        }
+
+        private static InterimPaymentCertificate CreateCore(
+            string certificateId,
+            string currency,
+            string? previousCertificateId,
+            ProgressClaimResult progress,
+            CommercialVariationRegister variations,
+            IEnumerable<VariationCertificationLine> variationCertificationLines,
+            decimal variationRetentionThisPeriod,
+            decimal retentionRelease,
+            decimal advanceRecovery,
+            decimal otherDeductions,
+            decimal previousNetCertified,
+            decimal previousRetentionHeld,
+            IReadOnlyDictionary<string, decimal>? previousVariationCertifiedToDate)
         {
             certificateId = CommercialGuard.RequireToken(certificateId, nameof(certificateId));
             currency = RateBookContract.RequireCurrency(currency, nameof(currency));
@@ -233,6 +314,7 @@ namespace QS3D.Core.Commercial
             RequireNonNegative(advanceRecovery, nameof(advanceRecovery));
             RequireNonNegative(otherDeductions, nameof(otherDeductions));
             RequireNonNegative(previousNetCertified, nameof(previousNetCertified));
+            RequireNonNegative(previousRetentionHeld, nameof(previousRetentionHeld));
 
             var lines = CommercialGuard.SnapshotStableGeneration(
                 variationCertificationLines,
@@ -240,6 +322,18 @@ namespace QS3D.Core.Commercial
                 MaximumVariationLines,
                 SameCertificationLineState);
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var certifiedToDate = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+            if (previousVariationCertifiedToDate != null)
+            {
+                foreach (var pair in previousVariationCertifiedToDate)
+                {
+                    var variationId = CommercialGuard.RequireToken(pair.Key, nameof(previousVariationCertifiedToDate));
+                    if (certifiedToDate.ContainsKey(variationId))
+                        throw new InvalidOperationException("Previous IPC variation certification history contains duplicate variation ids.");
+                    certifiedToDate.Add(variationId, pair.Value);
+                }
+            }
+
             var variationCertifiedThisPeriod = 0m;
             for (var i = 0; i < lines.Count; i++)
             {
@@ -251,7 +345,26 @@ namespace QS3D.Core.Commercial
                 if (!variations.TryGet(line.VariationId, out var variation))
                     throw new InvalidOperationException(
                         "Variation certification references unknown variation: " + line.VariationId + ".");
+
+                if (previousVariationCertifiedToDate != null)
+                {
+                    var expectedPrevious = certifiedToDate.TryGetValue(line.VariationId, out var carriedPrevious)
+                        ? carriedPrevious
+                        : 0m;
+                    if (line.PreviousCertified != expectedPrevious)
+                    {
+                        throw new InvalidOperationException(
+                            "Variation " + line.VariationId +
+                            " previous certified value does not match the previous IPC certificate history.");
+                    }
+                }
+
                 RequireCertifiableVariation(variation, line);
+                var cumulative = CommercialGuard.Add(
+                    line.PreviousCertified,
+                    line.CertifiedThisPeriod,
+                    "variation cumulative certification history");
+                certifiedToDate[line.VariationId] = cumulative;
                 variationCertifiedThisPeriod = CommercialGuard.Add(
                     variationCertifiedThisPeriod,
                     line.CertifiedThisPeriod,
@@ -266,6 +379,17 @@ namespace QS3D.Core.Commercial
                 progress.RetentionThisPeriod,
                 variationRetentionThisPeriod,
                 "IPC retention this period");
+            var retainedBeforeRelease = CommercialGuard.Add(
+                previousRetentionHeld,
+                retentionThisPeriod,
+                "IPC retained balance before release");
+            if (retentionRelease > retainedBeforeRelease)
+                throw new InvalidOperationException("IPC retention release exceeds the retained balance available for release.");
+            var retainedBalanceAfterCertificate = CommercialGuard.Subtract(
+                retainedBeforeRelease,
+                retentionRelease,
+                "IPC retained balance after release");
+
             var netCertifiedThisPeriod = CommercialGuard.Subtract(
                 grossCertifiedThisPeriod,
                 retentionThisPeriod,
@@ -293,14 +417,18 @@ namespace QS3D.Core.Commercial
             return new InterimPaymentCertificate(
                 certificateId,
                 currency,
+                previousCertificateId,
                 progress,
                 variations,
                 lines,
+                new ReadOnlyDictionary<string, decimal>(certifiedToDate),
                 variationCertifiedThisPeriod,
                 grossCertifiedThisPeriod,
                 variationRetentionThisPeriod,
                 retentionThisPeriod,
+                previousRetentionHeld,
                 retentionRelease,
+                retainedBalanceAfterCertificate,
                 advanceRecovery,
                 otherDeductions,
                 netCertifiedThisPeriod,
