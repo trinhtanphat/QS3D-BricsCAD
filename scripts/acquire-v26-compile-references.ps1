@@ -373,7 +373,12 @@ if ($null -eq $admission) {
             }
         }
         catch {
-            Write-Warning "BricsCAD V26 installer source $($candidate.Name) failed admission: $($_.Exception.Message)"
+            $sourceFailure = $_.Exception.Message
+            Assert-NoExistingReparseComponent -Path $msi -Label 'V26 MSI canonical path after source failure'
+            if (Test-Path -LiteralPath $msi) {
+                throw "BricsCAD V26 installer source $($candidate.Name) failed and left the canonical V26 MSI destination non-fresh: $sourceFailure"
+            }
+            Write-Warning "BricsCAD V26 installer source $($candidate.Name) failed admission: $sourceFailure"
         }
         finally {
             Remove-Item -LiteralPath $staging -Force -ErrorAction SilentlyContinue
