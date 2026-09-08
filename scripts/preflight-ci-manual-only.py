@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 VALIDATION_WORKFLOW = "ci.yml"
 AUTO_DISPATCHER = "dispatch-v25-cloud-after-main-integration.yml"
+AUTO_MERGE_WORKFLOW = "auto-merge-main-prs.yml"
 HYBRID_COORDINATOR = "hybrid-pr-coordinator.yml"
 RELEASE_WORKFLOWS = {"release-v25.yml", "release-v25-cloud.yml", "release-v26.yml"}
 MAX_WORKFLOW_SOURCE_BYTES = 1024 * 1024
@@ -267,6 +268,10 @@ def is_hard_auto_dispatch_guard(expression):
     )
 
 
+def is_hard_auto_merge_guard(expression):
+    return normalize_expression(expression) == "github.event.pull_request.base.ref == 'main'"
+
+
 def is_hard_validation_guard(expression):
     return normalize_expression(expression) == (
         "github.event_name == 'workflow_dispatch' || "
@@ -334,6 +339,15 @@ def validate_guard_parser():
     if not is_hard_auto_dispatch_guard(auto_good) or is_hard_auto_dispatch_guard(auto_bad):
         errors.append("automatic dispatcher guard parser regression")
 
+    auto_merge_good = extract_job_if_expression([
+        "    if: ${{ github.event.pull_request.base.ref == 'main' }}"
+    ])
+    auto_merge_bad = extract_job_if_expression([
+        "    if: ${{ github.event.pull_request.base.ref == 'main' || github.actor == 'trusted' }}"
+    ])
+    if not is_hard_auto_merge_guard(auto_merge_good) or is_hard_auto_merge_guard(auto_merge_bad):
+        errors.append("automatic PR merge guard parser regression")
+
     if parse_trigger_name('  "push":') != "push" or parse_trigger_name('  "pull_request":') != "pull_request":
         errors.append("trigger parser must support quoted automatic validation keys")
 
@@ -387,7 +401,7 @@ if not workflow_sources:
     errors.append("no GitHub Actions workflows found")
 
 workflow_names = {path.name for path, _ in workflow_sources}
-for required_workflow in (VALIDATION_WORKFLOW, AUTO_DISPATCHER):
+for required_workflow in (VALIDATION_WORKFLOW, AUTO_DISPATCHER, AUTO_MERGE_WORKFLOW):
     if required_workflow not in workflow_names:
         errors.append(f"missing owner-approved workflow: {required_workflow}")
 
@@ -501,12 +515,43 @@ for path, text in workflow_sources:
             if job_name != "dispatch":
                 errors.append(f"{path.name}: unexpected automatic dispatcher job: {job_name}")
 
+    elif path.name == AUTO_MERGE_WORKFLOW:
+        expected = {"pull_request_target"}
+        if trigger_names != expected:
+            errors.append(f"{path.name}: approved PR metadata automation must expose exactly pull_request_target; got {sorted(trigger_names)}")
+
+        pr_target_block = "\n".join(trigger_blocks.get("pull_request_target", []))
+        require_tokens(
+            pr_target_block,
+            ("types:", "- opened", "- reopened", "- synchronize", "- ready_for_review", "- converted_to_draft"),
+            f"{path.name} pull_request_target",
+        )
+        require_tokens(text, (
+            "contents: read", "pull-requests: write", "cancel-in-progress: true",
+            "GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}", "gh pr view", "isDraft", "autoMergeRequest",
+            "gh pr ready", "gh pr merge --auto --merge",
+        ), path.name)
+        for forbidden in (
+            "actions/checkout", "contents: write", "actions: write", "issues: write", "packages: write", "id-token: write",
+            "gh workflow run", "gh release", "git push", "actions/create-release", "softprops/action-gh-release",
+            "--admin", "github.event.pull_request.head.sha", "github.event.pull_request.head.ref",
+        ):
+            if forbidden in text:
+                errors.append(f"{path.name}: PR metadata automation contains forbidden token: {forbidden}")
+
+        expected_jobs = {"enable-auto-merge"}
+        if {name for name, _ in job_blocks} != expected_jobs:
+            errors.append(f"{path.name}: PR metadata automation jobs must be exactly {sorted(expected_jobs)}")
+        auto_merge_job = next((block for name, block in job_blocks if name == "enable-auto-merge"), None)
+        if not is_hard_auto_merge_guard(extract_job_if_expression(auto_merge_job) if auto_merge_job is not None else None):
+            errors.append(f"{path.name}/enable-auto-merge: job must hard-require the PR base branch to be main")
+
     elif path.name == HYBRID_COORDINATOR:
         errors.append(f"{path.name}: retired Hybrid PR Coordinator workflow must remain removed")
 
     else:
         if trigger_names != {"workflow_dispatch"}:
-            errors.append(f"{path.name}: only {VALIDATION_WORKFLOW} and {AUTO_DISPATCHER} may use automatic triggers; got {sorted(trigger_names)}")
+            errors.append(f"{path.name}: only {VALIDATION_WORKFLOW}, {AUTO_DISPATCHER}, and {AUTO_MERGE_WORKFLOW} may use automatic triggers; got {sorted(trigger_names)}")
         for job_name, job_lines in job_blocks:
             if not is_hard_manual_dispatch_guard(extract_job_if_expression(job_lines)):
                 errors.append(f"{path.name}/{job_name}: job must hard-guard github.event_name == 'workflow_dispatch'")
@@ -555,5 +600,5 @@ if errors:
 
 print(
     "PASS: every agent/integration push produces exact-head branch CI, every PR emits stable required contexts, governance/docs-only candidates remain lightweight through internal scope classification, "
-    "build-relevant candidates run Core plus V25 compile, main owns exact-source V25 dispatch with a bounded successful-release wakeup, the Hybrid PR Coordinator workflow remains retired, and releases retain explicit confirmation."
+    "build-relevant candidates run Core plus V25 compile, main owns exact-source V25 dispatch with a bounded successful-release wakeup, the owner-approved PR metadata automation remains non-publishing and base-main fenced, the Hybrid PR Coordinator workflow remains retired, and releases retain explicit confirmation."
 )
