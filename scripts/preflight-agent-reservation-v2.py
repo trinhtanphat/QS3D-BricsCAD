@@ -36,14 +36,14 @@ def issue(number: int, created_at: str) -> dict:
     }
 
 
-def peer() -> dict:
+def peer(repo: str = REPOSITORY) -> dict:
     return {
         "number": 6096,
         "created_at": "2026-09-07T23:44:46Z",
         "head": {
             "ref": PEER_HEAD,
             "sha": PEER_HEAD_SHA,
-            "repo": {"full_name": REPOSITORY},
+            "repo": {"full_name": repo},
         },
     }
 
@@ -67,6 +67,24 @@ def assert_git_tree_identity(gate):
         "--",
         f":(literal){STALE_PATH}",
     ]], calls
+
+
+def assert_mode_only_change(gate):
+    original = gate.git_path_identity
+    gate.git_path_identity = lambda sha, _path: (
+        ("100644", "blob", BLOB_SHA) if sha == CURRENT_MAIN_SHA else ("100755", "blob", BLOB_SHA)
+    )
+    try:
+        assert gate.path_changed_between_commits(
+            "https://api.github.test",
+            REPOSITORY,
+            CURRENT_MAIN_SHA,
+            PEER_HEAD_SHA,
+            STALE_PATH,
+            "token",
+        )
+    finally:
+        gate.git_path_identity = original
 
 
 def run_case(gate, path_is_effective: bool):
@@ -105,9 +123,32 @@ def run_case(gate, path_is_effective: bool):
     return conflicts
 
 
+def assert_foreign_peer_fails_closed(gate):
+    current = issue(6100, "2026-09-08T01:21:37Z")
+    older = issue(6095, "2026-09-07T23:44:40Z")
+    gate._run_git = lambda args: CURRENT_MAIN_SHA if args == ["rev-parse", "origin/main^{commit}"] else ""
+    try:
+        gate.canonical_open_pr_path_conflicts(
+            current,
+            CURRENT_HEAD,
+            [STALE_PATH],
+            [peer("someone/fork")],
+            [current, older],
+            "https://api.github.test",
+            REPOSITORY,
+            "token",
+            6101,
+        )
+    except RuntimeError as exc:
+        assert "not in repository" in str(exc), exc
+        return
+    raise AssertionError("locked foreign peer must fail closed")
+
+
 def main() -> int:
     gate = load_target()
     assert_git_tree_identity(gate)
+    assert_mode_only_change(gate)
 
     stale_conflicts = run_case(gate, path_is_effective=False)
     assert stale_conflicts == [], (
@@ -117,6 +158,7 @@ def main() -> int:
 
     real_conflicts = run_case(gate, path_is_effective=True)
     assert real_conflicts == [(6096, PEER_HEAD, [STALE_PATH])], real_conflicts
+    assert_foreign_peer_fails_closed(gate)
 
     print("PASS: Reservation-v2 peer path collision uses effective base-snapshot Git tree identity")
     return 0
