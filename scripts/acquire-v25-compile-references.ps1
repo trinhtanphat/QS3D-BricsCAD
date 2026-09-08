@@ -375,7 +375,7 @@ else {
                     Assert-NoExistingReparseComponent -Path $msi -Label 'Failed owned canonical MSI publication'
                     $failedPublication = Get-OrdinaryFileOrNull -Path $msi -Label 'Failed owned canonical MSI publication'
                     if ($null -ne $failedPublication) {
-                        Remove-Item -LiteralPath $msi -Force
+                        [IO.File]::Delete($msi)
                     }
                     if (Test-Path -LiteralPath $msi) {
                         throw 'Canonical MSI pathname still exists after owned failed-publication cleanup.'
