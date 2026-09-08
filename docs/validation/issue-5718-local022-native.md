@@ -2,6 +2,92 @@
 
 ## Verdict
 
+Latest physical UI result (2026-09-08): V26 allocation62 is
+**`LOCAL_PASS_BOUNDED`**, with all three phases verified: UI19/19,
+saved8/8 and fresh-process reopen9/9. This closes the bounded V26 physical
+placement/edit/save/cold-reopen gap; it does not qualify the remaining
+Quantity/Unicode/DPI/private-DWG or applicable published-source matrix.
+
+- Allocation `ui-control-free-v26-62`, RunId
+  `98e70b530daf469c90ebd622fd6a8521`, ran
+  `2026-09-08T09:48:08.6304693Z`–`2026-09-08T10:10:03.5531987Z` on exact
+  pushed harness `c7bc19b93198678878f2a228e7294d62fed2feab`, BricsCAD26.2.07,
+  unchanged frozen product `87aff7fec452f9a8dd9f641ef84d143edc73514d`,
+  `OBSERVED_CLICK_V2 / PAUSE_FOR_OPERATOR_V1`, `render_experiment=false`.
+  V26 ZIP SHA-256:
+  `59498948341f36d408f8bf838e177170c19d99ffc64acaa2070b0524e6b99a81`;
+  probe SHA-256:
+  `62bee80c05cd772dfbaac1b2ea338e3adaf8279ce7460596ffe4391342eef0e3`.
+  ProductVersion remains0.1.0-preview.10307, an unsigned local PR candidate,
+  not the official release. The admitted predecessor is accepted V25 UI48.
+- After the owner rebooted Windows (boot07:48:50.500Z), the earlier61 reached
+  QS3D but was closed by the owner. The owner explicitly confirmed that closure
+  before this fresh62. This permits a new uninterrupted attempt; it is not
+  evidence that the native startup/UIA wait was fixed or its cause identified.
+  The new62 reached LocateWorkspace at09:49:13.9214401Z and SelectTree at
+  09:49:13.9278258Z, roughly65 seconds after runner start. This is one startup
+  observation, not a latency benchmark or general stability claim.
+- All21 acceptance actions were actually performed through supported Computer
+  Use and acknowledged only after refreshed observation: tree selection,
+  Add/Esc cancellation, Add/six dimension inputs/OK, first draw/two centre
+  clicks/Enter, Family scope/H2 edit, second draw/third centre/Esc.
+  The actual UI used top view. Visible caret/selection and resulting text
+  confirmed numeric focus; accessibility reported the same generic edit index
+  for different dialog fields and was unavailable in the hosted property pane,
+  so its index alone was not used as proof. Real tree-scrollbar and Properties
+  splitter/scrollbar gestures exposed the requested rows without helper-side
+  WPF mutation. The three independently witnessed native points matched the
+  pre-click expected points; generated geometry did not define those targets.
+- H2=0 produced two real solids; physical Family H2=1000 regenerated both old
+  outputs, with former handles erased, and a third physical click created the
+  tapered case. The unchanged UI validator passed cancellation nonmutation,
+  six-field layout/input, ownership/extents, exact cardinality, repeated picks,
+  Family regeneration and Enter/Esc termination. Production QS3DSAVE and native
+  QSAVE passed the saved-state checks. Fresh-process reopen passed exact digest,
+  project/Family/semantic identity, cardinality and live solid dimensions,
+  volume and extents. No input or Computer Use query was sent during cold startup.
+- Runner exit0; all private/protected-state/profile cleanup checks passed,
+  including original current pointer, nonce removal and matching profile
+  inventory hash
+  `7ce59ffcc79f4bc2734e4469f0d42af164704ca8b81174a23c49e7a14e2d5eee`.
+  Original OpenAI autostart hash
+  `6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b`
+  and timestamp `2026-09-07T02:55:30.6894998Z` were restored. Independent final
+  process inspection found zero BricsCAD/tunnel processes. Installed product,
+  licensing and Windows graphics settings were unchanged; MCP remained paused.
+  Raw screenshots, action files, drawings and dump data are not published.
+
+The receipt intentionally retains `aggregate_local022_qualified=false`.
+V25 UI48 and native56/57 retain their exact bounded passes; no newer source,
+arbitrary private solid, all-range geometry or released package is implicitly
+qualified. After62 cleanup, main `937e2485c25fb2d833bf8a9a4cfe7ac6f202e1f0`
+was merged into the same task branch without touching the frozen product.
+The runtime harness remains c7bc19b93, not that later integration head.
+
+### Consumed V26 allocation61 — owner-closed interruption
+
+`ui-reboot-v26-61`, RunId `31f1a2eab5434d8ea6646773be08345e`, ran
+`2026-09-08T07:53:15.5212762Z`–`2026-09-08T08:04:02.1992677Z` on the same
+c7bc19b93 harness, product/package/probe and control-free mode as62. It reached
+QS3D after reboot and recorded five actual SENT ACKs through InputL1=2000.
+Request6 InputW1=2000 was only clicked and its existing1600 selected with Ctrl+A;
+no replacement text or ACK6 was sent. The trace entered InputW1 at
+07:58:30.6452212Z and never advanced. The owner explicitly confirmed closing
+the test window around15:04 local. Diagnostics record exit_code=0 without a
+phase marker; this is an owner-closed interruption, not a demonstrated crash,
+product defect or UI timeout. The immutable receipt stays `FAIL_OR_NO_RESULT`,
+zero verified phases and aggregate false. All private/protected-state/profile
+cleanup and original autostart hash/timestamp restoration passed; cleanup_failure
+is null. Preserve consumed61 and do not replay its outstanding action.
+
+Exact c7bc19b93 CI also passed independently: PR34200192746
+(`preflight`101976976207, `core`101977964259), push34200185059
+(`branch-preflight`101976950432, `branch-core`101977923172), metadata34200236593
+(`metadata-preflight`101977109833, `metadata-core`101978109391). These are source
+checks, not the basis of the runtime verdict or evidence for a later head.
+
+### Historical controlled comparison59/60
+
 Latest controlled comparison (2026-09-08): allocation59 completed
 `DIAGNOSTIC_ONLY`; the subsequent control-free allocation60 is
 `FAIL_OR_NO_RESULT / PRE_QS3D_NATIVE_STARTUP_WAIT`. Neither qualifies V26 UI.
