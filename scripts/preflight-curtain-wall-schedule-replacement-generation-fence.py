@@ -43,7 +43,7 @@ def main() -> int:
 
     require(smoke, "EquivalentElementReplacementWithoutTouchFailsClosed", "regression smoke")
     require(smoke, "project.Elements[0] = replacement", "regression replacement reproduction")
-    require(smoke, "Equal(originalVersion, project.ChangeVersion)", "regression no-touch proof")
+    require(smoke, "Equal(checked(originalVersion + 1L), project.ChangeVersion)", "regression structural-revision proof")
     require(smoke, "ReferenceEquals(original, replacement)", "regression distinct-instance proof")
     require(smoke, "Project changed while the curtain wall schedule was being built", "regression fail-closed assertion")
 
