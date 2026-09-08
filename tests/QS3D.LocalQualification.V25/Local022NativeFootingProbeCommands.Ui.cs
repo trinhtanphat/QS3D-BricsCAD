@@ -100,25 +100,34 @@ namespace QS3D.LocalQualification.V25
                 throw new ProbeException("render_experiment_state_preexists");
             RequireUiOutputAbsent(context, "ui");
             RequireUiOutputAbsent(context, "uisaved");
-            var experiment = new UiRenderExperiment(DateTime.UtcNow);
+            UiRenderControls controls;
+            using (var process = Process.GetCurrentProcess())
+                controls = new UiRenderControls(process.MainWindowHandle, Guid.ParseExact(context.RunId, "N"));
+            UiRenderExperiment experiment;
+            try { experiment = new UiRenderExperiment(DateTime.UtcNow); }
+            catch { controls.Dispose(); throw; }
             var timer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher.CurrentDispatcher)
             { Interval = TimeSpan.FromSeconds(1) };
             _renderExperimentTimer = timer;
             var lastStage = string.Empty;
+            var ticks = 0;
             Action<string> trace = stage => File.AppendAllText(RequireUiChildPath(context, "render-experiment.private.txt"),
                 DateTime.UtcNow.ToString("O") + " diagnostic_only=true stage=" + stage +
                 " process_render_mode=" + RenderOptions.ProcessRenderMode +
-                " render_tier=" + (RenderCapability.Tier >> 16).ToString(CultureInfo.InvariantCulture) + "\n");
+                " render_tier=" + (RenderCapability.Tier >> 16).ToString(CultureInfo.InvariantCulture) +
+                " " + controls.Snapshot() + "\n");
             timer.Tick += (sender, args) =>
             {
                 try
                 {
                     RequireUiContextStable(context);
                     var stage = experiment.Advance(DateTime.UtcNow);
-                    if (stage != lastStage) { trace(stage); lastStage = stage; }
+                    controls.Update(stage, ++ticks / 2);
+                    if (stage != lastStage || ticks % 10 == 0) { trace(stage); lastStage = stage; }
                     if (stage != "complete") return;
                     timer.Stop();
                     experiment.Dispose();
+                    controls.Dispose();
                     WriteUiMarker(context, "ui", "DIAGNOSTIC_ONLY", "render_experiment", "NOT_QUALIFICATION",
                         new Dictionary<string, bool>(StringComparer.Ordinal));
                     _renderExperimentTimer = null;
@@ -129,6 +138,8 @@ namespace QS3D.LocalQualification.V25
                     timer.Stop();
                     try { experiment.Dispose(); trace("error_restored"); }
                     catch { error = new ProbeException("render_experiment_restore_failed"); }
+                    try { controls.Dispose(); }
+                    catch { error = new ProbeException("render_controls_cleanup_failed"); }
                     _renderExperimentTimer = null;
                     WriteUiFailure(context, "ui", "render_experiment", error);
                     QueueOwnedQuit(context, true);

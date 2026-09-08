@@ -2,6 +2,18 @@
 
 ## Verdict
 
+Owner reply (2026-09-08): the owner did not watch allocation58. Therefore there
+is still no direct-monitor confirmation; do not reinterpret that reply as either
+"monitor blank" or "capture-only". The next bounded diagnostic adds two simple
+independent repaint witnesses (native AddVisual palette and opaque WPF window)
+with changing sequence numbers, fixed initial positions and separate supported
+captures. This is a new hosting/repaint isolation scenario, not an unchanged58
+retry or a software-rendering acceptance workaround. No production fix is yet
+inferred. The same branch incorporates main through
+`c1de4bf46ab10b46698312b35f1202e14113f8e7`; the frozen product remains87aff.
+The exact new pushed harness and actual allocation verdict must be recorded
+separately after execution. MCP stays paused and all older verdicts stay intact.
+
 Latest rendering isolation (2026-09-08): V26 allocation58 is **`DIAGNOSTIC_ONLY`**,
 not qualification. It produced an observed Default/SoftwareOnly/Default
 difference on the same frozen product, without authoring requests or changing a

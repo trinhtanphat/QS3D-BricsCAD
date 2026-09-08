@@ -155,6 +155,36 @@ an inadmissible baseline and the non-PASS gate. It does not render WPF or run CA
 
 Reference: [Microsoft WPF render-thread diagnosis and process-local rendering](https://learn.microsoft.com/en-us/troubleshoot/developer/dotnet/framework/general/wpf-render-thread-failures).
 
+The next diagnostic revision adds independent repaint controls: one probe-owned
+floating native `PaletteSet.AddVisual(..., true)` and one opaque owned WPF Window,
+each with its own explicitly styled Border/TextBlock (no QS3D visual, binding,
+resource dictionary or virtualized collection). The existing one-second timer
+updates a visible sequence and alternating background every two ticks. The same
+sequence appears in the WPF window's native title. A private ten-tick trace names
+the assigned sequence, stage, load/visibility and presentation-source type; these
+are state diagnostics, never claims that pixels reached the screen.
+
+Observe each returned window separately as needed. Aim for two distinct displayed
+sequences in each Default/SoftwareOnly/restored-Default stage. Keep the control
+surfaces at their startup positions and avoid floating/re-docking QS3D while
+collecting that comparison; allocation58 changed mode and native parenting in
+the same interval, so its visible contents were not an isolated repaint result.
+Initial maximization may be needed before the first observation; record it.
+
+If the plain WPF window repaints but the native palette witness does not, focus
+on native hosting/presentation. If both independent witnesses repaint while QS3D
+does not, investigate the product visual composition/lifetime. If native title
+sequence advances but both WPF interiors do not, narrow to shared WPF presentation
+or capture. None of these replaces direct-monitor evidence or proves a GPU defect.
+The paired controls are closed/disposed before normal diagnostic completion and
+on errors; partial constructor failures also clean already-created surfaces. No
+new timer/dispatcher, forced layout/render, user input, production default or
+qualification assertion is added. A consumed old allocation cannot be relabelled
+as this new controlled experiment.
+
+References: [Bricsys AddVisual](https://developer.bricsys.com/bricscad/help/en_US/V25/DevRef/source/html/dfb87171-68ae-c400-2399-0c6a2e0eac12.htm),
+[Microsoft native owner for WPF Window](https://learn.microsoft.com/en-us/dotnet/api/system.windows.interop.windowinterophelper).
+
 ## Separate native API qualification
 
 The wrapper's opt-in `-NativeApi` runs the existing non-interactive native

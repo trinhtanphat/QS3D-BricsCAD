@@ -16,6 +16,8 @@
     <BricsCadDir Condition="'$(BricsCadDir)' == ''">$(BRICSCAD_V26_DIR)</BricsCadDir>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\QS3D.LocalQualification.V25\Local022UiRenderControls.cs"
+             Link="Local022UiRenderControls.cs" />
     <Compile Include="..\QS3D.LocalQualification.V25\Local022UiRenderExperiment.cs"
              Link="Local022UiRenderExperiment.cs" />
     <Compile Include="..\QS3D.LocalQualification.V25\Local022BrepVerifier.cs"
