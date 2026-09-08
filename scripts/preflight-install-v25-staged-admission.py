@@ -60,8 +60,8 @@ def validate(text: str) -> None:
     stage_call = "Assert-StagedPayloadAdmission -Directory $stage"
     require(text.count(stage_call) >= 2,
             "Installer must validate staged payload bytes after copying and revalidate the same contract immediately before commit.")
-    require("-AdmittedHashes $packageAdmission.Hashes" in text,
-            "Staged admission must compare against the frozen manifest hashes from source admission.")
+    require(text.count("-AdmittedHashes $packageAdmission.Hashes") >= 2,
+            "Both staged admissions must compare against the frozen manifest hashes from source admission.")
     require("Assert-PackageIdentity -Directory $Directory" in staged,
             "Staged admission must re-bind package identity to staged DLL/metadata bytes.")
     require("Get-FileHash -LiteralPath $path -Algorithm SHA256" in staged,
