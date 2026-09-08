@@ -9,7 +9,7 @@ attach_start = text.find("public static void Attach(Document? document)")
 detach_start = text.find("public static void Detach(Document? document)", attach_start)
 refresh_start = text.find("public static void Refresh(Document? document)", detach_start)
 stop_start = text.find("public static void Stop()", refresh_start)
-rollback_start = text.find("private static void RollbackAttachment(Document document, bool subscribed, object attachmentToken)", stop_start)
+rollback_start = text.find("private static void RollbackAttachment(Document document, bool subscribed, object attachmentToken, EventHandler attachmentHandler)", stop_start)
 release_start = text.find("private static void ReleaseRefresh(Document document, object attachmentToken)", rollback_start)
 handler_start = text.find("private static void OnImpliedSelectionChanged", release_start)
 if min(attach_start, detach_start, refresh_start, stop_start, rollback_start, release_start, handler_start) < 0:
@@ -20,38 +20,53 @@ if not (attach_start < detach_start < refresh_start < stop_start < rollback_star
     sys.exit(1)
 
 attach = text[attach_start:detach_start]
+detach = text[detach_start:refresh_start]
 refresh = text[refresh_start:stop_start]
 rollback = text[rollback_start:release_start]
 release = text[release_start:handler_start]
 
 required = [
     "private static readonly Dictionary<Document, object> Refreshing",
+    "private static readonly Dictionary<Document, EventHandler> AttachmentHandlers",
     "Refreshing[document] = attachmentToken;",
     "ReleaseRefresh(document, attachmentToken);",
     "var attachmentToken = new object();",
+    "EventHandler attachmentHandler = (sender, args) => OnImpliedSelectionChanged(sender, args);",
     "AttachmentTokens[document] = attachmentToken;",
-    "RollbackAttachment(document, subscribed, attachmentToken);",
+    "AttachmentHandlers[document] = attachmentHandler;",
+    "RollbackAttachment(document, subscribed, attachmentToken, attachmentHandler);",
 ]
 for needle in required:
     if needle not in text:
-        print("ERROR: SelectionSync attachment/refresh ownership must be generation aware; missing", needle)
+        print("ERROR: SelectionSync attachment/subscription/refresh ownership must be generation aware; missing", needle)
         sys.exit(1)
 
 claim_token = attach.find("var attachmentToken = new object();")
+claim_handler = attach.find("EventHandler attachmentHandler = (sender, args) => OnImpliedSelectionChanged(sender, args);")
 claim_attached = attach.find("Attached.Add(document)")
 publish_token = attach.find("AttachmentTokens[document] = attachmentToken;")
-subscribe = attach.find("document.ImpliedSelectionChanged += OnImpliedSelectionChanged;")
+publish_handler = attach.find("AttachmentHandlers[document] = attachmentHandler;")
+subscribe = attach.find("document.ImpliedSelectionChanged += attachmentHandler;")
 refresh_call = attach.find("Refresh(document);")
-if min(claim_token, claim_attached, publish_token, subscribe, refresh_call) < 0 or not (
-    claim_token < claim_attached < publish_token < subscribe < refresh_call
+if min(claim_token, claim_handler, claim_attached, publish_token, publish_handler, subscribe, refresh_call) < 0 or not (
+    claim_token < claim_handler < claim_attached < publish_token < publish_handler < subscribe < refresh_call
 ):
-    print("ERROR: Attach must publish its exact generation before entering native event-subscription/reentrancy boundary")
+    print("ERROR: Attach must publish exact token+handler generation before entering native subscription/reentrancy boundary")
     sys.exit(1)
+
+for needle in [
+    "AttachmentHandlers.TryGetValue(document, out var attachmentHandler)",
+    "AttachmentHandlers.Remove(document);",
+    "document.ImpliedSelectionChanged -= attachmentHandler",
+]:
+    if needle not in detach:
+        print("ERROR: Detach must remove only the exact current attachment handler; missing", needle)
+        sys.exit(1)
 
 if "finally { Refreshing.Remove(document); }" in refresh:
     print("ERROR: stale refresh generation can unconditionally remove a newer generation's ownership")
     sys.exit(1)
-if "Refreshing.Remove(document);" in attach or "AttachmentTokens.Remove(document);" in attach or "Attached.Remove(document);" in attach:
+if "Refreshing.Remove(document);" in attach or "AttachmentTokens.Remove(document);" in attach or "AttachmentHandlers.Remove(document);" in attach or "Attached.Remove(document);" in attach:
     print("ERROR: Attach catch must not blindly roll back a newer reattachment generation")
     sys.exit(1)
 
@@ -59,13 +74,14 @@ for needle in [
     "AttachmentTokens.TryGetValue(document, out var currentToken)",
     "!ReferenceEquals(currentToken, attachmentToken)",
     "return;",
-    "document.ImpliedSelectionChanged -= OnImpliedSelectionChanged",
+    "document.ImpliedSelectionChanged -= attachmentHandler",
     "RemovePending(document);",
+    "AttachmentHandlers.Remove(document);",
     "AttachmentTokens.Remove(document);",
     "Attached.Remove(document);",
 ]:
     if needle not in rollback:
-        print("ERROR: RollbackAttachment must preserve a newer generation and clean only the failed owner; missing", needle)
+        print("ERROR: RollbackAttachment must preserve newer generations and clean only its exact handler/token; missing", needle)
         sys.exit(1)
 
 for needle in [
@@ -90,4 +106,4 @@ for label, body in [("RollbackAttachment", rollback), ("ReleaseRefresh", release
             print(f"ERROR: {label} must remain synchronous bookkeeping only; found {forbidden}")
             sys.exit(1)
 
-print("PASS: SelectionSync generation is published before subscription; rollback and refresh cleanup are exact-generation fenced")
+print("PASS: SelectionSync token, subscription handler, rollback, and refresh cleanup are exact-generation fenced")
