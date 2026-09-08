@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
+using QS3D.Core.Services;
 
 namespace QS3D.BricsCAD.V25
 {
@@ -132,6 +133,9 @@ namespace QS3D.BricsCAD.V25
             element.Properties[VolumeKey] = Encode(dimensions.VolumeM3);
             element.Properties["VolumeM3"] = Encode(dimensions.VolumeM3);
             element.Properties["ThicknessM"] = Encode(dimensions.TotalHeightM);
+            // Placement and Family regeneration mark the element clean immediately afterward.
+            // Refresh reporting quantities now; a later dirty-only BQ pass cannot repair them.
+            SingleFootingQuantityPolicy.Apply(element, dimensions);
         }
 
         private static void WriteDimensions(System.Collections.Generic.IDictionary<string, string> properties, SingleFootingDimensions dimensions)
