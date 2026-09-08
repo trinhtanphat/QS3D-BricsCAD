@@ -30,10 +30,13 @@ if direct:
         for token in (
             "PaletteCoordinator.RefreshProject();",
             "document.Editor.Regen();",
-            "PaletteCoordinator.SetStatus(status);",
+            "DirectDrawUiFailureReporter.ReportPostCommitSuccess(document, status);",
+            "DirectDrawUiFailureReporter.ReportPostCommitWarning(document);",
         ):
             if token not in finalize:
                 errors.append("STT2: FinalizeUi lost post-commit UI token: " + token)
+        if "PaletteCoordinator.SetStatus(status);" in finalize:
+            errors.append("STT2: Direct Draw FinalizeUi must not publish process-wide palette status without the source-document fence")
         if "QS3DVIEW3D" in finalize or "SendStringToExecute" in finalize:
             errors.append("STT2: Direct Draw FinalizeUi must preserve the user's current viewport and must not queue an automatic view-switch command")
 
@@ -106,4 +109,4 @@ if errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("PASS: live-sheet STT2-STT5 source regressions remain guarded (Direct Draw preserves viewport, Family custom key/copy stays safe, quantity-detail selection stays bounded, and QS3DSETUP theme construction stays valid).")
+print("PASS: live-sheet STT2-STT5 source regressions remain guarded (Direct Draw preserves viewport and source-document-fenced UI truth, Family custom key/copy stays safe, quantity-detail selection stays bounded, and QS3DSETUP theme construction stays valid).")
