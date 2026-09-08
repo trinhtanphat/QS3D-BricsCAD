@@ -54,8 +54,10 @@ else:
         body.find("bool? rightWasVisible"),
         body.find("bool? quantityWasVisible"),
     )
-    catch_pos = body.find("catch")
-    rollback_pos = body.find("TryRestorePaletteVisibility(quantityPalette")
+    # Search for the real failure-path catch only after the final ownership fence. This avoids
+    # false negatives if explanatory comments before the fence happen to contain the word "catch".
+    catch_pos = body.find("catch", final_ownership if final_ownership >= 0 else 0)
+    rollback_pos = body.find("TryRestorePaletteVisibility(quantityPalette", catch_pos if catch_pos >= 0 else 0)
     rethrow_pos = body.find("throw;", rollback_pos if rollback_pos >= 0 else 0)
     if min(first_apply, last_apply, final_ownership, last_snapshot, catch_pos, rollback_pos, rethrow_pos) < 0 or not (
         last_snapshot < first_apply <= last_apply < final_ownership < catch_pos < rollback_pos < rethrow_pos
