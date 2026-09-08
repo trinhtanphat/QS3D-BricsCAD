@@ -457,7 +457,9 @@ namespace QS3D.BricsCAD.V25
 
         private static void SetPaletteVisibility(PaletteSet? expected, PaletteSet? current, bool visible, string operation)
         {
-            if (expected == null || !ReferenceEquals(expected, current)) return;
+            if (expected == null) return;
+            if (!ReferenceEquals(expected, current))
+                throw new InvalidOperationException("Palette ownership changed during " + operation + " visibility transition.");
             expected.Visible = visible;
         }
 
