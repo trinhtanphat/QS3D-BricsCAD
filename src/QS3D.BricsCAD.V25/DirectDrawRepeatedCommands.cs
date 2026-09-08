@@ -408,8 +408,7 @@ namespace QS3D.BricsCAD.V25
 
         private static void Report(Document document, string message)
         {
-            try { document.Editor.WriteMessage("\nQS3D " + message); } catch { }
-            try { PaletteCoordinator.SetStatus(message); } catch { }
+            DirectDrawUiFailureReporter.ReportMessage(document, message);
         }
 
         private sealed class RepeatedDefaults
