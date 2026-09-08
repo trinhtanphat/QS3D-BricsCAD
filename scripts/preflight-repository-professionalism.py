@@ -38,6 +38,7 @@ MAX_OPEN_IDENTITY_ATTEMPTS = 2
 WINDOWS_REPARSE_POINT_ATTRIBUTE = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x0400)
 SELF_PATH = "scripts/preflight-repository-professionalism.py"
 HYBRID_COORDINATOR = "hybrid-pr-coordinator.yml"
+AUTO_MERGE_WORKFLOW = "auto-merge-main-prs.yml"
 
 
 def _metadata_type_error(metadata) -> str | None:
@@ -309,8 +310,12 @@ def main() -> int:
             "required `preflight` and `core` must be terminal `SUCCESS`",
             "### Dependabot generated-PR boundary",
             "GitHub Dependabot may create dependency-update PRs directly",
-            "does **not** authorize Dependabot to merge",
-            "Repository-wide blind auto-merge remains intentionally disabled",
+            "does **not** receive merge authority",
+            "## Automatic PR ready/auto-merge arming",
+            ".github/workflows/auto-merge-main-prs.yml",
+            "Repository-wide native auto-merge arming is explicitly enabled",
+            "branch protection and required checks remain authoritative",
+            "Repository-wide blind direct merge remains disabled",
             "repository-metadata tier",
             "policy/source-guard tier",
             "full build tier",
@@ -345,10 +350,6 @@ def main() -> int:
     if "paths:" in pr_trigger or "paths-ignore:" in pr_trigger:
         failures.append("shared CI pull_request trigger must always emit protected-main required contexts and must not use path filters")
 
-    globally_forbidden_merge_tokens = (
-        "pull_request_target:", "gh pr merge", "enable-pull-request-auto-merge",
-    )
-    native_automerge_token = "enablepullrequestautomerge"
     workflows_dir = ROOT / ".github" / "workflows"
     workflow_paths = sorted(
         (path for path in workflows_dir.iterdir() if path.suffix.lower() in {".yml", ".yaml"}),
@@ -360,32 +361,49 @@ def main() -> int:
             failures.append(f"unsafe workflow source for autonomous-merge scan: {workflow.name}: {error}")
             continue
         lowered = text.lower()
-        for token in globally_forbidden_merge_tokens:
-            if token in lowered:
-                failures.append(f"{workflow.name}: autonomous main-merge primitive is forbidden by repository governance: {token}")
-        if native_automerge_token in lowered and workflow.name != HYBRID_COORDINATOR:
-            failures.append(
-                f"{workflow.name}: GitHub native auto-merge arming is reserved for {HYBRID_COORDINATOR}"
-            )
-        if re.search(r"repos/[^\s\"']+/pulls/[^\s\"']+/merge(?:[\s\"']|$)", lowered):
-            failures.append(f"{workflow.name}: direct pull-request merge API call is forbidden by repository governance")
 
         if workflow.name == HYBRID_COORDINATOR:
+            failures.append("retired Hybrid PR Coordinator workflow must remain removed")
+            continue
+
+        if workflow.name != AUTO_MERGE_WORKFLOW:
+            for token in ("pull_request_target:", "gh pr merge", "enable-pull-request-auto-merge", "enablepullrequestautomerge"):
+                if token in lowered:
+                    failures.append(
+                        f"{workflow.name}: autonomous main-merge arming primitive is reserved for {AUTO_MERGE_WORKFLOW}: {token}"
+                    )
+        else:
             require(
                 text,
                 (
-                    "name: QS3D Hybrid PR Coordinator",
-                    '  "pull_request":', '  "push":',
-                    "enablePullRequestAutoMerge", "QS3D_AUTOMERGE_TOKEN",
-                    "/update-branch", "expected_head_sha", "no-automerge",
-                    "head.repo.full_name", "base.ref", "draft",
-                    "group: qs3d-hybrid-pr-coordinator", "cancel-in-progress: false",
+                    "name: Auto-ready and auto-merge main PRs",
+                    "pull_request_target:",
+                    "contents: read",
+                    "pull-requests: write",
+                    "github.event.pull_request.base.ref == 'main'",
+                    "gh pr view",
+                    "isDraft",
+                    "autoMergeRequest",
+                    "gh pr ready",
+                    "gh pr merge --auto --merge",
                 ),
-                "hybrid PR coordinator",
+                "owner-approved PR auto-merge metadata workflow",
                 failures,
             )
-            if "contents: write" in text or "actions: write" in text:
-                failures.append(f"{HYBRID_COORDINATOR}: workflow-level write permissions must stay narrow")
+            for forbidden in (
+                "actions/checkout", "--admin", "contents: write", "actions: write", "issues: write",
+                "packages: write", "id-token: write", "git push", "gh release", "gh workflow run",
+                "github.event.pull_request.head.sha", "github.event.pull_request.head.ref",
+            ):
+                if forbidden in text:
+                    failures.append(f"{AUTO_MERGE_WORKFLOW}: forbidden metadata-automation token present: {forbidden}")
+            for match in re.finditer(r"gh\s+pr\s+merge[^\n]*", text):
+                command = match.group(0).strip()
+                if "gh pr merge --auto --merge" not in command:
+                    failures.append(f"{AUTO_MERGE_WORKFLOW}: only native auto-merge arming is permitted: {command}")
+
+        if re.search(r"repos/[^\s\"']+/pulls/[^\s\"']+/merge(?:[\s\"']|$)", lowered):
+            failures.append(f"{workflow.name}: direct pull-request merge API call is forbidden by repository governance")
 
     if failures:
         print("Repository professionalism preflight FAILED")
@@ -402,7 +420,8 @@ def main() -> int:
     print(" - every task/integration branch push and every PR can emit stable required contexts while non-build changes avoid redundant Core/V25 builds")
     print(" - synthetic generated fixtures are treated as build-relevant validation inputs")
     print(" - external scheduler/controller-worker orchestration artifacts are kept out of the QS3D source tree")
-    print(f" - only {HYBRID_COORDINATOR} may arm GitHub native auto-merge; direct PR merge primitives remain forbidden")
+    print(f" - only {AUTO_MERGE_WORKFLOW} may mark main PRs Ready and arm native auto-merge; direct PR merge primitives remain forbidden")
+    print(" - retired Hybrid PR Coordinator workflow must remain removed")
     return 0
 
 
