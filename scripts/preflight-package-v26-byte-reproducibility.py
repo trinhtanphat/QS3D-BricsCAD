@@ -4,8 +4,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGER = ROOT / "scripts" / "package-v26.ps1"
 NORMALIZED_ZIP_ENTRY = "$entryName = $fullName.Substring($packagePrefix.Length).Replace([IO.Path]::DirectorySeparatorChar, '/').Replace([IO.Path]::AltDirectorySeparatorChar, '/')"
-ZIP_ENTRY_BACKSLASH_REJECTION = "$entryName.Contains('\\')"
-MANIFEST_BACKSLASH_REJECTION = "$relativePath.Contains('\\')"
+ZIP_ENTRY_BACKSLASH_REJECTION = r"$entryName.Contains('\')"
+MANIFEST_BACKSLASH_REJECTION = r"$relativePath.Contains('\')"
 OWNED_CREATE = "$destinationStream = Open-OwnedPackageOutput -Path $destination"
 NATIVE_CREATE_DECL = "private static extern SafeFileHandle CreateFileW("
 NATIVE_CREATE_CALL = "SafeFileHandle handle = CreateFileW("
