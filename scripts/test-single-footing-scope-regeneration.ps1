@@ -87,6 +87,8 @@ function Read-ScopeCompilationUnit([string]$Path) {
 $editor = (Read-ScopeCompilationUnit 'src/QS3D.BricsCAD.V25/UI/WorkspacePanel.SingleFooting.Properties.cs').Replace('partial class WorkspacePanel','partial class ScopeEditorFixture')
 $contract = Read-ScopeCompilationUnit 'src/QS3D.BricsCAD.V25/SingleFootingContract.cs'
 $geometry = Read-ScopeCompilationUnit 'src/QS3D.Core/Geometry/SingleFootingGeometry.cs'
+$quantityPolicy = Read-ScopeCompilationUnit 'src/QS3D.Core/Services/SingleFootingQuantityPolicy.cs'
+$quantityMath = Read-ScopeCompilationUnit 'src/QS3D.Core/Services/QuantityMath.cs'
 $row = Read-ScopeCompilationUnit 'src/QS3D.BricsCAD.V25/UI/ViewModels/PropertyRowViewModel.cs'
 $editorFixture = @'
 #nullable enable
@@ -98,6 +100,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
+using QS3D.Core.Services;
 using QS3D.BricsCAD.V25.UI.ViewModels;
 using Application = ScopeHostApplication;
 public static class ScopeHostApplication { public static ScopeDocuments DocumentManager = new ScopeDocuments(); }
@@ -111,8 +114,11 @@ namespace QS3D.Core.Domain {
         public Dictionary<string,string> Properties = new Dictionary<string,string>();
     }
     public sealed class ProjectElement {
+        public string Id = "footing";
         public ElementCategory Category = ElementCategory.Foundation;
         public Dictionary<string,string> Properties = new Dictionary<string,string>();
+        public Dictionary<string,double> Quantities = new Dictionary<string,double>();
+        public void SetQuantity(string key, double value) { Quantities[key] = value; }
     }
     public sealed class ProjectState {
         public ProjectFamily? Family;
@@ -123,6 +129,13 @@ namespace QS3D.Core.Domain {
         }
     }
 }
+namespace QS3D.Core.Services {
+    // Only identifiers are needed by the actual footing policy's refusal branch.
+    public static class MeasuredSolidQuantityPolicy {
+        public const string VolumeProperty = "MeasuredSolidVolumeM3";
+        public const string SurfaceAreaProperty = "MeasuredSolidSurfaceAreaM2";
+    }
+}
 namespace QS3D.BricsCAD.V25 {
     internal static class ExistingProjectMutationContext {
         public static ProjectState Require(ScopeDocument doc, string operation) {
@@ -131,8 +144,12 @@ namespace QS3D.BricsCAD.V25 {
     }
     internal static class SingleFootingRegenerationService {
         public static int Calls;
+        public static double LastVolume;
         public static int ApplyFamilyDimensions(ScopeDocument doc, ProjectState project, ProjectFamily family, SingleFootingDimensions dimensions) {
-            Calls++; SingleFootingContract.Apply(family, dimensions); return 2;
+            Calls++; SingleFootingContract.Apply(family, dimensions);
+            var element = new ProjectElement(); element.SetQuantity("GrossVolumeM3", 999d);
+            SingleFootingContract.Apply(element, dimensions);
+            LastVolume = element.Quantities["GrossVolumeM3"]; return 2;
         }
     }
 }
@@ -158,6 +175,8 @@ namespace QS3D.BricsCAD.V25.UI {
             panel.H2().Value = "1000";
             if (SingleFootingRegenerationService.Calls != 1 || SingleFootingContract.Read(family).H2M != 1 || panel.H2().Value != "1000")
                 throw new Exception("Physical row callback lost validated mm-to-native path");
+            if (Math.Abs(SingleFootingRegenerationService.LastVolume - 19d / 3d) > 1e-12d)
+                throw new Exception("Actual element contract failed to refresh footing quantities during edit");
             foreach (var invalid in new[]{"-1","NaN","Infinity","invalid"}) {
                 panel.H2().Value = invalid;
                 if (SingleFootingRegenerationService.Calls != 1 || panel.H2().Value != "1000") throw new Exception("Invalid H2 reached native mutation");
@@ -184,7 +203,7 @@ namespace QS3D.BricsCAD.V25.UI {
     }
 }
 '@
-Add-Type -TypeDefinition ($editorFixture + "`n" + $editor + "`n" + $contract + "`n" + $geometry + "`n" + $row)
+Add-Type -TypeDefinition ($editorFixture + "`n" + $editor + "`n" + $contract + "`n" + $geometry + "`n" + $row + "`n" + $quantityPolicy + "`n" + $quantityMath)
 [QS3D.BricsCAD.V25.UI.ScopeEditorFixture]::Run()
 Write-Output 'PASS: actual six-mm renderer/row setter invokes native-regeneration boundary; invalid dimensions, missing/stale/duplicate/suppressed contexts refuse; malformed footing remains read-only.'
 
