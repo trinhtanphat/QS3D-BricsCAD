@@ -48,11 +48,16 @@ namespace QS3D.Core.Domain
             MarkRelationChanged();
         }
 
-        public bool Contains(string item) => _values.Contains(item);
+        public bool Contains(string item) => IndexOf(item) >= 0;
         public void CopyTo(string[] array, int arrayIndex) => _values.CopyTo(array, arrayIndex);
         public IEnumerator<string> GetEnumerator() => _values.GetEnumerator();
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-        public int IndexOf(string item) => _values.IndexOf(item);
+
+        public int IndexOf(string item)
+        {
+            if (!TryCanonicalizeLookup(item, out var canonical)) return -1;
+            return FindCanonicalIndex(canonical);
+        }
 
         public void Insert(int index, string item)
         {
@@ -65,7 +70,7 @@ namespace QS3D.Core.Domain
         public bool Remove(string item)
         {
             var canonical = RequireRelationValue(item);
-            var index = _values.IndexOf(canonical);
+            var index = FindCanonicalIndex(canonical);
             if (index < 0) return false;
             _values.RemoveAt(index);
             MarkRelationChanged();
@@ -110,6 +115,34 @@ namespace QS3D.Core.Domain
         private void MarkRelationChanged()
         {
             _owner.MarkDirty(ElementDirtyFlags.Relations);
+        }
+
+        private int FindCanonicalIndex(string canonical)
+        {
+            for (var i = 0; i < _values.Count; i++)
+            {
+                if (string.Equals(_values[i], canonical, StringComparison.OrdinalIgnoreCase))
+                    return i;
+            }
+            return -1;
+        }
+
+        private static bool TryCanonicalizeLookup(string value, out string canonical)
+        {
+            canonical = string.Empty;
+            if (string.IsNullOrWhiteSpace(value)) return false;
+            var candidate = value.Trim();
+            if (candidate.Any(char.IsControl)) return false;
+            try
+            {
+                XmlConvert.VerifyXmlChars(candidate);
+            }
+            catch (XmlException)
+            {
+                return false;
+            }
+            canonical = candidate;
+            return true;
         }
 
         private void RequireUnique(string value, int? replacingIndex)
