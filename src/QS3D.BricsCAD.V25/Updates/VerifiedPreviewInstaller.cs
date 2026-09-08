@@ -675,6 +675,11 @@ function Assert-Hash([string]$Path, [string]$Expected, [string]$Label) {
         throw ($Label + ' SHA-256 mismatch.')
     }
 }
+function Assert-Unblocked([string]$Path, [string]$Label) {
+    if (-not [System.IO.File]::Exists($Path)) { throw ($Label + ' is missing.') }
+    $zone = Get-Item -LiteralPath $Path -Stream ""Zone.Identifier"" -ErrorAction SilentlyContinue
+    if ($null -ne $zone) { throw ($Label + ' still has Zone.Identifier after MOTW cleanup.') }
+}
 function Decode-RelativePath([string]$Encoded) {
     if ([string]::IsNullOrWhiteSpace($Encoded)) { throw 'Preview manifest relative path is empty.' }
     try {
@@ -779,6 +784,8 @@ function Mirror-Payload {
             [IO.File]::Move($temp, $destination)
         }
         [void]$script:appliedEntries.Add($entry)
+        Unblock-File -LiteralPath $destination -ErrorAction Stop
+        Assert-Unblocked $destination ('installed payload ' + $entry.RelativePath)
         Assert-Hash $destination $entry.StageSha256 ('installed payload ' + $entry.RelativePath)
     }
 }
