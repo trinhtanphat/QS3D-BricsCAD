@@ -121,6 +121,7 @@ $tempRootCandidate = if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) { [IO.P
 $tempRoot = Assert-SafeTempDirectory -Path $tempRootCandidate
 $pfxPath = Join-Path $tempRoot ('qs3d-signing-' + [Guid]::NewGuid().ToString('N') + '.pfx')
 $importedNewThumbprints = @()
+$operationError = $null
 
 try {
     [IO.File]::WriteAllBytes($pfxPath, $bytes)
@@ -163,14 +164,44 @@ try {
     Write-Output ("IMPORTED_THUMBPRINTS=" + ($importedNewThumbprints -join ','))
 }
 catch {
+    $operationError = $_.Exception
+    $certificateCleanupError = $null
     if ($importedNewThumbprints.Count -gt 0) {
-        Remove-ImportedCertificates -Thumbprints $importedNewThumbprints
+        try {
+            Remove-ImportedCertificates -Thumbprints $importedNewThumbprints
+        }
+        catch {
+            $certificateCleanupError = $_.Exception
+        }
+    }
+    if ($null -ne $certificateCleanupError) {
+        $operationError = [AggregateException]::new(
+            'Signing operation failed and imported certificate cleanup also failed.',
+            [Exception[]]@($operationError, $certificateCleanupError))
+        throw $operationError
     }
     throw
 }
 finally {
-    if (Test-Path -LiteralPath $pfxPath) {
-        Remove-Item -LiteralPath $pfxPath -Force -ErrorAction SilentlyContinue
+    $cleanupError = $null
+    try {
+        if (Test-Path -LiteralPath $pfxPath -ErrorAction Stop) {
+            Remove-Item -LiteralPath $pfxPath -Force -ErrorAction Stop
+            if (Test-Path -LiteralPath $pfxPath -ErrorAction Stop) {
+                throw "Temporary signing PFX still exists after cleanup: $pfxPath"
+            }
+        }
+    }
+    catch {
+        $cleanupError = $_.Exception
     }
     [Array]::Clear($bytes, 0, $bytes.Length)
+    if ($null -ne $cleanupError) {
+        if ($null -ne $operationError) {
+            throw [AggregateException]::new(
+                'Signing operation failed and temporary PFX cleanup also failed.',
+                [Exception[]]@($operationError, $cleanupError))
+        }
+        throw $cleanupError
+    }
 }
