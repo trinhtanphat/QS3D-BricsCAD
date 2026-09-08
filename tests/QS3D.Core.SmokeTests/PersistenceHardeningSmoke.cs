@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
@@ -110,8 +111,12 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("snapshot-nested-bound", "Snapshot nested bound");
             var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall);
+            var propertiesField = typeof(ProjectElement).GetField("_properties", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed oversized property snapshot state.");
+            var rawProperties = propertiesField.GetValue(element) as Dictionary<string, string>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement property backing collection.");
             for (var index = 0; index <= 10000; index++)
-                element.Properties.Add("P" + index, index.ToString());
+                rawProperties.Add("P" + index, index.ToString());
             project.Elements.Add(element);
 
             var rejected = false;

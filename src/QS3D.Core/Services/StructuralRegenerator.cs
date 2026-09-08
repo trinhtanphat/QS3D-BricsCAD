@@ -174,6 +174,8 @@ namespace QS3D.Core.Services
 
         private static void RegenerateFoundation(ProjectState project, ProjectElement element)
         {
+            if (SingleFootingQuantityPolicy.TryApply(element)) return;
+
             var area = QuantityMath.Positive(SemanticNumber.Get(element, "BaseAreaM2", SemanticNumber.Get(element, "AreaM2")));
             double thickness;
             if (!ElementVerticalPlacementService.HasAnyLevelConfiguration(element))
