@@ -109,7 +109,7 @@ namespace QS3D.BricsCAD.V25
                 var issues = new GeneratedBeamStirrupHealthService().Inspect(project, live);
                 var summary = new HealthSummary(issues);
                 var message = "Beam Stirrup Health: " + summary.Errors + " lỗi • " + summary.Warnings + " cảnh báo • " + summary.Info + " thông tin";
-                TrySetPaletteStatus(message);
+                TrySetPaletteStatusForDocument(document, message);
                 document.Editor.WriteMessage("\nQS3D " + message);
                 foreach (var issue in issues.Take(50))
                     document.Editor.WriteMessage("\n  [" + issue.Severity + "] " + issue.Code + " • " + issue.ElementId + " • " + issue.Message);
@@ -131,9 +131,9 @@ namespace QS3D.BricsCAD.V25
         {
             try
             {
-                PaletteCoordinator.RefreshProject();
+                RefreshProjectForDocument(document);
                 document.Editor.Regen();
-                PaletteCoordinator.SetStatus(message);
+                SetPaletteStatusForDocument(document, message);
                 document.Editor.WriteMessage("\nQS3D " + message);
             }
             catch (Exception)
@@ -142,15 +142,39 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void TrySetPaletteStatus(string message)
+        private static bool IsActiveDocument(Document document)
         {
-            try { PaletteCoordinator.SetStatus(message); }
+            try
+            {
+                return ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void RefreshProjectForDocument(Document document)
+        {
+            if (!IsActiveDocument(document)) return;
+            PaletteCoordinator.RefreshProject();
+        }
+
+        private static void SetPaletteStatusForDocument(Document document, string message)
+        {
+            if (!IsActiveDocument(document)) return;
+            PaletteCoordinator.SetStatus(message);
+        }
+
+        private static void TrySetPaletteStatusForDocument(Document document, string message)
+        {
+            try { SetPaletteStatusForDocument(document, message); }
             catch { }
         }
 
         private static void Report(Document document, string message)
         {
-            TrySetPaletteStatus(message);
+            TrySetPaletteStatusForDocument(document, message);
             TryWriteMessage(document, "\nQS3D " + message);
         }
 
