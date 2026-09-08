@@ -428,10 +428,48 @@ namespace QS3D.BricsCAD.V25
 
         private static void SetVisibility(bool workspace, bool properties, bool right, bool quantityInsight)
         {
-            if (_workspace != null) _workspace.Visible = workspace;
-            if (_properties != null) _properties.Visible = properties;
-            if (_right != null) _right.Visible = right;
-            if (_quantityInsight != null) _quantityInsight.Visible = quantityInsight;
+            var workspacePalette = _workspace;
+            var propertiesPalette = _properties;
+            var rightPalette = _right;
+            var quantityPalette = _quantityInsight;
+
+            bool? workspaceWasVisible = workspacePalette?.Visible;
+            bool? propertiesWereVisible = propertiesPalette?.Visible;
+            bool? rightWasVisible = rightPalette?.Visible;
+            bool? quantityWasVisible = quantityPalette?.Visible;
+
+            try
+            {
+                SetPaletteVisibility(workspacePalette, _workspace, workspace, "Workspace");
+                SetPaletteVisibility(propertiesPalette, _properties, properties, "Properties");
+                SetPaletteVisibility(rightPalette, _right, right, "Right");
+                SetPaletteVisibility(quantityPalette, _quantityInsight, quantityInsight, "QuantityInsight");
+            }
+            catch
+            {
+                TryRestorePaletteVisibility(quantityPalette, _quantityInsight, quantityWasVisible);
+                TryRestorePaletteVisibility(rightPalette, _right, rightWasVisible);
+                TryRestorePaletteVisibility(propertiesPalette, _properties, propertiesWereVisible);
+                TryRestorePaletteVisibility(workspacePalette, _workspace, workspaceWasVisible);
+                throw;
+            }
+        }
+
+        private static void SetPaletteVisibility(PaletteSet? expected, PaletteSet? current, bool visible, string operation)
+        {
+            if (expected == null || !ReferenceEquals(expected, current)) return;
+            expected.Visible = visible;
+        }
+
+        private static void TryRestorePaletteVisibility(PaletteSet? expected, PaletteSet? current, bool? priorVisibility)
+        {
+            if (expected == null || !priorVisibility.HasValue || !ReferenceEquals(expected, current)) return;
+            try { expected.Visible = priorVisibility.Value; }
+            catch
+            {
+                // Rollback is best-effort. Continue restoring the remaining exact instances and
+                // preserve the original native visibility failure as the transition outcome.
+            }
         }
 
         private static void ReportPaletteFailure(string operation)
