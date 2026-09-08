@@ -45,6 +45,8 @@ Use the narrowest truthful claim. If required scope expands, update the same Iss
 
 The current machine gate may fail closed when actual changed files fall outside the declared paths or overlap an earlier active reservation/PR.
 
+For overlap with an earlier open same-repository agent/integration PR, `pulls/{N}/files` is only a candidate-path index. A candidate path is treated as an effective peer mutation only when its exact object identity at that peer head differs from the workflow's protected-`main` base snapshot. This prevents stale PR ancestry from reserving a path that has already converged to current main, while preserving collisions for additions, deletions, type changes, and differing blobs. Missing or invalid peer/base identities and GitHub API failures remain fail-closed.
+
 ## One active carrier
 
 One Lane-Key has at most:
