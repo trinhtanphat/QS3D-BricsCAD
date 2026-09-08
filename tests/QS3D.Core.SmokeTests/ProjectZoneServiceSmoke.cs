@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.SmokeTests
@@ -81,7 +83,11 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("p-corrupt", "Zone atomicity");
             var z1 = ProjectZoneService.Create(project, "z1", "Khu A");
             var z2 = ProjectZoneService.Create(project, "z2", "Khu B");
-            project.Elements.Add(null!);
+            var itemsField = project.Elements.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed corrupt zone-service project state.");
+            var items = itemsField.GetValue(project.Elements) as List<ProjectElement>
+                ?? throw new InvalidOperationException("Unexpected ProjectState.Elements backing collection.");
+            items.Add(null!);
 
             Throws<InvalidOperationException>(() => ProjectZoneService.Update(project, z2.Id, "Khu B mới"));
             if (z2.Name != "Khu B") throw new Exception("Rejected zone update must not partially mutate the zone name.");
