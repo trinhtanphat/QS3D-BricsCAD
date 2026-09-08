@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 
@@ -21,8 +22,8 @@ namespace QS3D.Core.SmokeTests
         {
             var project = NewProject();
             var element = NewRoom("R1");
-            element.SourceHandles.Add("ABCD");
-            element.SourceHandles.Add("abcd");
+            AddPersistedSourceHandle(element, "ABCD");
+            AddPersistedSourceHandle(element, "abcd");
             project.Elements.Add(element);
 
             var issues = new ModelHealthService().Inspect(
@@ -139,6 +140,15 @@ namespace QS3D.Core.SmokeTests
             False(
                 issues.Any(x => x.Code == "DUPLICATE_SOURCE_HANDLE" && x.ElementId == "R1"),
                 "One malformed textual SourceHandle must remain a unique identity.");
+        }
+
+        private static void AddPersistedSourceHandle(ProjectElement element, string handle)
+        {
+            var valuesField = element.SourceHandles.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed duplicate persisted model-health SourceHandles.");
+            var values = valuesField.GetValue(element.SourceHandles) as List<string>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement.SourceHandles backing collection.");
+            values.Add(handle);
         }
 
         private static ProjectState NewProject()

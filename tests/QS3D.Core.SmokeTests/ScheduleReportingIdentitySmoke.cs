@@ -113,7 +113,7 @@ namespace QS3D.Core.SmokeTests
             var paddedProject = BaseScheduleProject("schedule-source-handle-padding", ElementCategory.Slab, out var family);
             family.Properties["Material"] = "Concrete";
             var padded = new ProjectElement("HANDLE-PAD", ElementCategory.Slab, family.Id, "floor", "zone");
-            padded.SourceHandles.Add(" AA ");
+            SeedPersistedSourceHandle(padded, " AA ");
             padded.Quantities["VolumeM3"] = 1d;
             paddedProject.Elements.Add(padded);
             ExpectThrowsContaining<InvalidOperationException>(
@@ -259,6 +259,17 @@ namespace QS3D.Core.SmokeTests
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
                 ?? throw new Exception("Missing ProjectElement backing field '" + fieldName + "'.");
             field.SetValue(element, value);
+        }
+
+        private static void SeedPersistedSourceHandle(ProjectElement element, string value)
+        {
+            var valuesField = element.SourceHandles.GetType().GetField(
+                "_values",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new Exception("Missing ProjectElement SourceHandles persistence backing values.");
+            var values = valuesField.GetValue(element.SourceHandles) as List<string>
+                ?? throw new Exception("Unexpected ProjectElement SourceHandles persistence backing collection.");
+            values.Add(value);
         }
 
         private static void AssertProvenance(ProjectState project, string projectId, string drawingFingerprint, IList<string> handles)

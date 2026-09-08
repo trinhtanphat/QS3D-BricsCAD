@@ -22,7 +22,7 @@ namespace QS3D.Core.SmokeTests
         private static void LinkRejectsMalformedNonMatchingDependencyBeforeMutation()
         {
             var state = CreateState();
-            state.Opening.DependsOn.Add("legacy-\uD800");
+            SeedLegacyPersistedDependency(state.Opening, "legacy-\uD800");
 
             ThrowsInvalid(
                 () => state.Service.LinkOpening(state.Project, state.Opening.Id, state.Wall.Id),
@@ -36,7 +36,7 @@ namespace QS3D.Core.SmokeTests
         private static void LinkRejectsControlBearingDependencyBeforeMutation()
         {
             var state = CreateState();
-            state.Opening.DependsOn.Add("legacy-\u0001-id");
+            SeedLegacyPersistedDependency(state.Opening, "legacy-\u0001-id");
 
             ThrowsInvalid(
                 () => state.Service.LinkOpening(state.Project, state.Opening.Id, state.Wall.Id),
@@ -49,7 +49,7 @@ namespace QS3D.Core.SmokeTests
         private static void LinkRejectsMalformedHostGraphDependencyBeforeMutation()
         {
             var state = CreateState();
-            state.Wall.DependsOn.Add("graph-\uFFFF-id");
+            SeedLegacyPersistedDependency(state.Wall, "graph-\uFFFF-id");
 
             ThrowsInvalid(
                 () => state.Service.LinkOpening(state.Project, state.Opening.Id, state.Wall.Id),
@@ -111,6 +111,23 @@ namespace QS3D.Core.SmokeTests
             if (backing == null)
                 throw new InvalidOperationException("Legacy host-link identity smoke fixture resolved an unexpected ProjectElement backing-map type.");
             backing.Add(key, value);
+        }
+
+        private static void SeedLegacyPersistedDependency(ProjectElement element, string dependency)
+        {
+            var relationField = typeof(ProjectElement).GetField("_dependsOn", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (relationField == null)
+                throw new InvalidOperationException("Legacy host-link identity smoke fixture could not resolve the persisted dependency relation.");
+            var relation = relationField.GetValue(element);
+            if (relation == null)
+                throw new InvalidOperationException("Legacy host-link identity smoke fixture resolved an unavailable persisted dependency relation.");
+            var valuesField = relation.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (valuesField == null)
+                throw new InvalidOperationException("Legacy host-link identity smoke fixture could not resolve persisted dependency values.");
+            var values = valuesField.GetValue(relation) as List<string>;
+            if (values == null)
+                throw new InvalidOperationException("Legacy host-link identity smoke fixture resolved unexpected persisted dependency values.");
+            values.Add(dependency);
         }
 
         private static void ThrowsInvalid(Action action, string expectedMessage)
