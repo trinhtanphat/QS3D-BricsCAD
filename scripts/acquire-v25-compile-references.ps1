@@ -19,6 +19,97 @@ if ($expected -notmatch '^[0-9A-F]{64}$') {
     throw 'ExpectedSha256 must be one 64-hex SHA-256 digest.'
 }
 
+if (-not ('QS3DV25NativeFileDisposition' -as [type])) {
+    Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+
+public static class QS3DV25NativeFileDisposition
+{
+    [StructLayout(LayoutKind.Sequential)]
+    public struct FILE_DISPOSITION_INFO
+    {
+        public byte DeleteFile;
+    }
+
+    public const int FileDispositionInfo = 4;
+    public const uint GENERIC_READ = 0x80000000;
+    public const uint GENERIC_WRITE = 0x40000000;
+    public const uint DELETE = 0x00010000;
+    public const uint CREATE_NEW = 1;
+    public const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern SafeFileHandle CreateFileW(
+        string lpFileName,
+        uint dwDesiredAccess,
+        uint dwShareMode,
+        IntPtr lpSecurityAttributes,
+        uint dwCreationDisposition,
+        uint dwFlagsAndAttributes,
+        IntPtr hTemplateFile);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetFileInformationByHandle(
+        SafeFileHandle hFile,
+        int FileInformationClass,
+        ref FILE_DISPOSITION_INFO lpFileInformation,
+        uint dwBufferSize);
+}
+"@
+}
+
+function Open-OwnedMsiPublication {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $desiredAccess = [QS3DV25NativeFileDisposition]::GENERIC_READ -bor
+        [QS3DV25NativeFileDisposition]::GENERIC_WRITE -bor
+        [QS3DV25NativeFileDisposition]::DELETE
+    $handle = [QS3DV25NativeFileDisposition]::CreateFileW(
+        $Path,
+        [uint32]$desiredAccess,
+        0,
+        [IntPtr]::Zero,
+        [QS3DV25NativeFileDisposition]::CREATE_NEW,
+        [QS3DV25NativeFileDisposition]::FILE_ATTRIBUTE_NORMAL,
+        [IntPtr]::Zero)
+    if ($null -eq $handle -or $handle.IsInvalid) {
+        $errorCode = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        if ($null -ne $handle) { $handle.Dispose() }
+        throw "Failed to create fresh owned canonical MSI. Win32Error=$errorCode"
+    }
+
+    try {
+        return [IO.FileStream]::new($handle, [IO.FileAccess]::ReadWrite, 1048576, $false)
+    }
+    catch {
+        $handle.Dispose()
+        throw
+    }
+}
+
+function Set-OwnedMsiDeleteDisposition {
+    param(
+        [Parameter(Mandatory = $true)][IO.FileStream]$Stream,
+        [Parameter(Mandatory = $true)][bool]$Delete
+    )
+
+    $info = New-Object 'QS3DV25NativeFileDisposition+FILE_DISPOSITION_INFO'
+    $info.DeleteFile = if ($Delete) { [byte]1 } else { [byte]0 }
+    $size = [Runtime.InteropServices.Marshal]::SizeOf($info)
+    $ok = [QS3DV25NativeFileDisposition]::SetFileInformationByHandle(
+        $Stream.SafeFileHandle,
+        [QS3DV25NativeFileDisposition]::FileDispositionInfo,
+        [ref]$info,
+        [uint32]$size)
+    if (-not $ok) {
+        $errorCode = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        throw "Failed to update owned MSI delete disposition. Win32Error=$errorCode"
+    }
+}
+
 function Get-CanonicalAbsolutePath {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -331,26 +422,41 @@ else {
                 throw 'Canonical MSI destination appeared before held-generation publication; refusing destructive replacement.'
             }
 
-            $publishedStream = [IO.File]::Open(
-                $msi,
-                [IO.FileMode]::CreateNew,
-                [IO.FileAccess]::Write,
-                [IO.FileShare]::None
-            )
+            # Create a fresh canonical generation with DELETE access but without
+            # FILE_FLAG_DELETE_ON_CLOSE. The delete disposition is explicitly
+            # armed below so it can also be explicitly cancelled at commit.
+            $publishedStream = Open-OwnedMsiPublication -Path $msi
             $publishedByThisAttempt = $true
+            Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $true
+
             $stagingAdmission.Stream.Position = 0
             $stagingAdmission.Stream.CopyTo($publishedStream)
             $publishedStream.Flush($true)
+
+            $publishedStream.Position = 0
+            $publishedSha = [Security.Cryptography.SHA256]::Create()
+            try {
+                $publishedHashBytes = $publishedSha.ComputeHash($publishedStream)
+            }
+            finally {
+                $publishedSha.Dispose()
+            }
+            $publishedHash = ([BitConverter]::ToString($publishedHashBytes)).Replace('-', '').ToUpperInvariant()
+            if (-not [string]::Equals($publishedHash, [string]$stagingAdmission.Sha256, [StringComparison]::Ordinal)) {
+                throw 'Canonical MSI SHA256 does not match the held staging generation after publication.'
+            }
+            if (-not [string]::Equals($publishedHash, $expected, [StringComparison]::Ordinal)) {
+                throw 'Canonical MSI SHA256 no longer matches the pinned expected installer identity before commit.'
+            }
+
+            # Commit only this exact explicitly-armed handle-owned generation.
+            Set-OwnedMsiDeleteDisposition -Stream $publishedStream -Delete $false
+            $publishedByThisAttempt = $false
             $publishedStream.Dispose()
             $publishedStream = $null
 
-            # Re-admit the exact canonical bytes immediately after durable
-            # publication while the staging generation is still held.
             $publishedAdmission = Open-PinnedMsiReadLock -Path $msi -ExpectedSha256 $expected
-            Assert-PinnedMsiStable -State $publishedAdmission -Label 'immediately after held-generation publication'
-            if (-not [string]::Equals([string]$publishedAdmission.Sha256, [string]$stagingAdmission.Sha256, [StringComparison]::Ordinal)) {
-                throw 'Canonical MSI SHA256 does not match the held staging generation after publication.'
-            }
+            Assert-PinnedMsiStable -State $publishedAdmission -Label 'immediately after held-generation publication commit'
 
             $sourceName = $candidate.Name
             break
@@ -358,10 +464,6 @@ else {
         catch {
             $sourceFailure = $_.Exception.Message
 
-            # A failed attempt may have already won CreateNew on the canonical
-            # pathname. Close our handles before cleanup, and only roll back a
-            # pathname that this exact attempt created. If cleanup cannot be
-            # proven complete, stop instead of poisoning every later fallback.
             if ($null -ne $publishedAdmission) {
                 $publishedAdmission.Stream.Dispose()
                 $publishedAdmission = $null
@@ -370,20 +472,8 @@ else {
                 $publishedStream.Dispose()
                 $publishedStream = $null
             }
-            if ($publishedByThisAttempt) {
-                try {
-                    Assert-NoExistingReparseComponent -Path $msi -Label 'Failed owned canonical MSI publication'
-                    $failedPublication = Get-OrdinaryFileOrNull -Path $msi -Label 'Failed owned canonical MSI publication'
-                    if ($null -ne $failedPublication) {
-                        [IO.File]::Delete($msi)
-                    }
-                    if (Test-Path -LiteralPath $msi) {
-                        throw 'Canonical MSI pathname still exists after owned failed-publication cleanup.'
-                    }
-                }
-                catch {
-                    throw "BricsCAD V25 installer source failed: $($candidate.Name) • $sourceFailure; owned canonical MSI cleanup failed: $($_.Exception.Message)"
-                }
+            if ($publishedByThisAttempt -and (Test-Path -LiteralPath $msi)) {
+                throw "BricsCAD V25 installer source failed: $($candidate.Name) • $sourceFailure; exact handle-owned cleanup could not prove canonical pathname removal, so replacement identity is uncertain and fallback is refused."
             }
 
             Write-Warning "BricsCAD V25 installer source failed: $($candidate.Name) • $sourceFailure"
