@@ -301,7 +301,13 @@ namespace QS3D.Core.Reporting
                 };
                 foreach (var handle in source.SourceHandles) clone.SourceHandles.Add(handle);
                 foreach (var dependency in source.DependsOn) clone.DependsOn.Add(dependency);
-                foreach (var property in source.Properties) clone.Properties.Add(property.Key, property.Value);
+                // Snapshot reconstruction is not a semantic edit. Public Add can
+                // mark a copied generated output stale when persisted ordering
+                // puts its handle before a geometry property, corrupting this
+                // frozen generation even though the source did not change.
+                var properties = clone.Properties as ProjectElementPropertyDictionary
+                    ?? throw new InvalidOperationException("Quantity snapshot requires the canonical element property store.");
+                foreach (var property in source.Properties) properties.SetPersistenceValue(property.Key, property.Value);
                 foreach (var quantity in source.Quantities) clone.Quantities.Add(quantity.Key, quantity.Value);
                 var resolvedSourceHandles = SourceHandleResolver.Resolve(project, new[] { source.Id }).ToList().AsReadOnly();
                 return new ElementSnapshot(
