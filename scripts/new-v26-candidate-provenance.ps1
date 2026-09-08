@@ -96,11 +96,12 @@ public static class Qs3dProvenanceGenerationNative
 {
     private const uint DeleteAccess = 0x00010000;
     private const uint GenericRead = 0x80000000;
+    private const uint GenericWrite = 0x40000000;
     private const uint FileReadAttributes = 0x00000080;
     private const uint FileShareRead = 0x00000001;
     private const uint FileShareWrite = 0x00000002;
     private const uint FileShareDelete = 0x00000004;
-    private const uint OpenExisting = 3;
+    private const uint CreateNew = 1;
     private const uint FileAttributeNormal = 0x00000080;
     private const uint FileFlagOpenReparsePoint = 0x00200000;
     private const uint FileAttributeReparsePoint = 0x00000400;
@@ -149,6 +150,14 @@ public static class Qs3dProvenanceGenerationNative
         SafeFileHandle file, FileInfoByHandleClass informationClass,
         ref FileDispositionInformation information, uint bufferSize);
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool WriteFile(
+        SafeFileHandle file, byte[] buffer, uint bytesToWrite,
+        out uint bytesWritten, IntPtr overlapped);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool FlushFileBuffers(SafeFileHandle file);
+
     private static ByHandleFileInformation Information(SafeFileHandle handle)
     {
         if (handle == null || handle.IsInvalid || handle.IsClosed)
@@ -161,24 +170,37 @@ public static class Qs3dProvenanceGenerationNative
         return information;
     }
 
-    public static SafeFileHandle OpenOwnedProvenanceGeneration(string path)
+    public static SafeFileHandle CreateOwnedProvenanceGeneration(string path, byte[] bytes)
     {
         var handle = CreateFileW(
             path,
-            GenericRead | DeleteAccess | FileReadAttributes,
+            GenericRead | GenericWrite | DeleteAccess | FileReadAttributes,
             FileShareRead | FileShareWrite | FileShareDelete,
             IntPtr.Zero,
-            OpenExisting,
+            CreateNew,
             FileAttributeNormal | FileFlagOpenReparsePoint,
             IntPtr.Zero);
         if (handle == null || handle.IsInvalid)
         {
             var error = Marshal.GetLastWin32Error();
             if (handle != null) handle.Dispose();
-            throw new Win32Exception(error, "Unable to bind owned provenance generation handle: " + path);
+            throw new Win32Exception(error, "Unable to create owned provenance generation: " + path);
         }
-        try { Information(handle); return handle; }
-        catch { handle.Dispose(); throw; }
+        try
+        {
+            Information(handle);
+            uint written;
+            if (bytes.Length > 0 && (!WriteFile(handle, bytes, (uint)bytes.Length, out written, IntPtr.Zero) || written != (uint)bytes.Length))
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Unable to write owned provenance generation.");
+            if (!FlushFileBuffers(handle))
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Unable to flush owned provenance generation.");
+            return handle;
+        }
+        catch
+        {
+            handle.Dispose();
+            throw;
+        }
     }
 
     public static string GetOwnedProvenanceGenerationIdentity(SafeFileHandle handle)
@@ -198,12 +220,14 @@ public static class Qs3dProvenanceGenerationNative
 '@
 }
 
-function Open-OwnedProvenanceGeneration([string]$Path, [string]$Label) {
-    $item = Resolve-OrdinaryFile -Path $Path -Label $Label
-    $handle = [Qs3dProvenanceGenerationNative]::OpenOwnedProvenanceGeneration($item.FullName)
+function New-OwnedProvenanceGeneration([string]$Path, [byte[]]$Bytes, [string]$Label) {
+    if (Test-Path -LiteralPath $Path) { throw "Refusing to reuse V26 provenance staging path: $Path" }
+    $parentPath = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($Path))
+    $null = Resolve-OrdinaryDirectory -Path $parentPath -Label "$Label parent"
+    $handle = [Qs3dProvenanceGenerationNative]::CreateOwnedProvenanceGeneration([IO.Path]::GetFullPath($Path), $Bytes)
     try {
         $identity = [Qs3dProvenanceGenerationNative]::GetOwnedProvenanceGenerationIdentity($handle)
-        return [pscustomobject]@{ Handle=$handle; Identity=$identity; Path=$item.FullName; Label=$Label }
+        return [pscustomobject]@{ Handle=$handle; Identity=$identity; Path=[IO.Path]::GetFullPath($Path); Label=$Label }
     }
     catch { $handle.Dispose(); throw }
 }
@@ -295,20 +319,11 @@ try {
     if (Test-Path -LiteralPath $outputFull) { $null = Resolve-OrdinaryFile -Path $outputFull -Label 'V26 provenance output' }
 
     $tempPath = Join-Path $parent ('.' + [IO.Path]::GetFileName($outputFull) + '.' + [Guid]::NewGuid().ToString('N') + '.tmp')
-    $tempStream = [IO.File]::Open($tempPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-    try {
-        $writer = [IO.StreamWriter]::new($tempStream, $strictUtf8, 4096, $true)
-        try {
-            $writer.Write(($provenance | ConvertTo-Json -Depth 5))
-            $writer.Write([Environment]::NewLine)
-            $writer.Flush()
-        }
-        finally { $writer.Dispose() }
-        $tempStream.Flush($true)
-    }
-    finally { $tempStream.Dispose() }
+    $provenanceText = ($provenance | ConvertTo-Json -Depth 5) + [Environment]::NewLine
+    $provenanceBytes = $strictUtf8.GetBytes($provenanceText)
+    if ($provenanceBytes.Length -gt $maxMetadataBytes) { throw 'V26 candidate provenance exceeds the metadata safety limit.' }
 
-    $tempGeneration = Open-OwnedProvenanceGeneration -Path $tempPath -Label 'V26 provenance staging generation'
+    $tempGeneration = New-OwnedProvenanceGeneration -Path $tempPath -Bytes $provenanceBytes -Label 'V26 provenance staging generation'
     $publicationCommitted = $false
     try {
         if (Test-Path -LiteralPath $outputFull) {
