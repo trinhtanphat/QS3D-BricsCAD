@@ -131,15 +131,21 @@ installer_tokens = (
     "Unhashed package payload",
     "SHA256SUMS entry does not map to a regular package file",
     "$actualEntries.Count -ne $manifestEntries.Count",
+    "$packageAdmission = Assert-PackageIntegrity -Directory $package",
+    "Assert-StagedPayloadAdmission -Directory $stage -AdmittedHashes $packageAdmission.Hashes",
 )
 for token in installer_tokens:
     require(token in install_source, f"installer manifest-coverage guard missing token: {token}")
 
 if install_source:
     coverage_index = install_source.find("Unhashed package payload")
-    mutation_index = install_source.find("$commands = Assert-PackageIntegrity")
-    require(coverage_index >= 0 and mutation_index >= 0 and coverage_index < mutation_index,
-            "installer must define complete manifest coverage before the install path invokes package integrity")
+    admission_index = install_source.find("$packageAdmission = Assert-PackageIntegrity -Directory $package")
+    staged_admission_index = install_source.find("Assert-StagedPayloadAdmission -Directory $stage -AdmittedHashes $packageAdmission.Hashes")
+    require(
+        coverage_index >= 0 and admission_index >= 0 and staged_admission_index >= 0
+        and coverage_index < admission_index < staged_admission_index,
+        "installer must define complete manifest coverage before source admission and revalidate staged bytes against that admitted hash snapshot before commit",
+    )
 
 updater_tokens = (
     "function Expand-VerifiedHeldArchive",
