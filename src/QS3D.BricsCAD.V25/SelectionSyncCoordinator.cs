@@ -11,6 +11,7 @@ namespace QS3D.BricsCAD.V25
     {
         private static readonly HashSet<Document> Attached = new HashSet<Document>();
         private static readonly Dictionary<Document, object> AttachmentTokens = new Dictionary<Document, object>();
+        private static readonly Dictionary<Document, EventHandler> AttachmentHandlers = new Dictionary<Document, EventHandler>();
         private static readonly Dictionary<Document, object> Refreshing = new Dictionary<Document, object>();
         private static readonly Dictionary<Document, DispatcherTimer> Pending = new Dictionary<Document, DispatcherTimer>();
         private static readonly TimeSpan RefreshDelay = TimeSpan.FromMilliseconds(80d);
@@ -19,23 +20,30 @@ namespace QS3D.BricsCAD.V25
         {
             if (document == null || Attached.Contains(document)) return;
             var attachmentToken = new object();
+            EventHandler attachmentHandler = (sender, args) => OnImpliedSelectionChanged(sender, args);
             var subscribed = false;
             try
             {
                 if (!Attached.Add(document)) return;
                 AttachmentTokens[document] = attachmentToken;
+                AttachmentHandlers[document] = attachmentHandler;
 
                 // Publish exact generation ownership before entering the native subscription boundary.
-                // If the host pumps detach/reattach callbacks while adding the handler, stale outer
-                // cleanup must not gain authority over a newer generation of the same Document wrapper.
+                // The generation-specific delegate lets stale outer work unsubscribe only its own
+                // handler if the host pumps detach/reattach callbacks while += is in progress.
                 subscribed = true;
-                document.ImpliedSelectionChanged += OnImpliedSelectionChanged;
-                if (!IsCurrentAttachment(document, attachmentToken)) return;
+                document.ImpliedSelectionChanged += attachmentHandler;
+                if (!IsCurrentAttachment(document, attachmentToken))
+                {
+                    try { document.ImpliedSelectionChanged -= attachmentHandler; }
+                    catch { }
+                    return;
+                }
                 Refresh(document);
             }
             catch
             {
-                RollbackAttachment(document, subscribed, attachmentToken);
+                RollbackAttachment(document, subscribed, attachmentToken, attachmentHandler);
                 throw;
             }
         }
@@ -43,12 +51,22 @@ namespace QS3D.BricsCAD.V25
         public static void Detach(Document? document)
         {
             if (document == null || !Attached.Contains(document)) return;
-            try { document.ImpliedSelectionChanged -= OnImpliedSelectionChanged; }
-            catch { }
+            AttachmentHandlers.TryGetValue(document, out var attachmentHandler);
+
+            // Unpublish current ownership before crossing the native unsubscribe boundary. A nested
+            // reattach may now publish a new generation, while this teardown retains only its exact
+            // generation-specific handler and therefore cannot unsubscribe the replacement.
             RemovePending(document);
             Refreshing.Remove(document);
+            AttachmentHandlers.Remove(document);
             AttachmentTokens.Remove(document);
             Attached.Remove(document);
+
+            if (attachmentHandler != null)
+            {
+                try { document.ImpliedSelectionChanged -= attachmentHandler; }
+                catch { }
+            }
         }
 
         public static void DetachByName(string? fileName)
@@ -94,26 +112,34 @@ namespace QS3D.BricsCAD.V25
             foreach (var timer in Pending.Values.ToArray()) timer.Stop();
             Pending.Clear();
             Refreshing.Clear();
+            AttachmentHandlers.Clear();
             AttachmentTokens.Clear();
         }
 
-        private static void RollbackAttachment(Document document, bool subscribed, object attachmentToken)
+        private static void RollbackAttachment(Document document, bool subscribed, object attachmentToken, EventHandler attachmentHandler)
         {
             if (AttachmentTokens.TryGetValue(document, out var currentToken) &&
                 !ReferenceEquals(currentToken, attachmentToken))
             {
                 return;
             }
+            if (AttachmentHandlers.TryGetValue(document, out var currentHandler) &&
+                !ReferenceEquals(currentHandler, attachmentHandler))
+            {
+                return;
+            }
+
+            RemovePending(document);
+            ReleaseRefresh(document, attachmentToken);
+            AttachmentHandlers.Remove(document);
+            AttachmentTokens.Remove(document);
+            Attached.Remove(document);
 
             if (subscribed)
             {
-                try { document.ImpliedSelectionChanged -= OnImpliedSelectionChanged; }
+                try { document.ImpliedSelectionChanged -= attachmentHandler; }
                 catch { }
             }
-            RemovePending(document);
-            ReleaseRefresh(document, attachmentToken);
-            AttachmentTokens.Remove(document);
-            Attached.Remove(document);
         }
 
         private static void ReleaseRefresh(Document document, object attachmentToken)
