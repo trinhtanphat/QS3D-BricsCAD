@@ -242,7 +242,11 @@ namespace QS3D.Core.Domain
         public void MarkGeneratedCurtainFrameStale(string reason)
         {
             var normalizedReason = NormalizeStaleReason(reason);
-            var changed = MarkGeneratedOutputStale(GeneratedCurtainFrameHandlesKey, GeneratedCurtainFrameStateKey, GeneratedCurtainFrameStaleSnapshotKey, out var hasOutput);
+            var changed = MarkGeneratedOutputStale(
+                GeneratedCurtainFrameHandlesKey,
+                GeneratedCurtainFrameStateKey,
+                GeneratedCurtainFrameStaleSnapshotKey,
+                out var hasOutput);
             if (!hasOutput) return;
             changed |= SetAggregateStaleReason(normalizedReason);
             if (changed) UpdatedUtc = DateTime.UtcNow;
@@ -259,7 +263,17 @@ namespace QS3D.Core.Domain
 
         public bool IsGeneratedGeometryStale()
         {
-            return IsGeneratedSolidStale() || IsGeneratedRebarStale() || IsGeneratedShapeRebarStale() || IsGeneratedTieRebarStale() || IsGeneratedBeamStirrupStale() || IsGeneratedSlabMeshStale() || IsGeneratedWallMeshStale() || IsGeneratedFoundationMeshStale() || IsGeneratedCurtainFrameStale() || IsGeneratedCurtainPanelStale();
+            return
+                IsGeneratedSolidStale() ||
+                IsGeneratedRebarStale() ||
+                IsGeneratedShapeRebarStale() ||
+                IsGeneratedTieRebarStale() ||
+                IsGeneratedBeamStirrupStale() ||
+                IsGeneratedSlabMeshStale() ||
+                IsGeneratedWallMeshStale() ||
+                IsGeneratedFoundationMeshStale() ||
+                IsGeneratedCurtainFrameStale() ||
+                IsGeneratedCurtainPanelStale();
         }
 
         public bool IsGeneratedSolidStale() => IsGeneratedOutputStale(GeneratedSolidHandleKey, GeneratedSolidStateKey, GeneratedSolidStaleSnapshotKey);
@@ -287,19 +301,44 @@ namespace QS3D.Core.Domain
         public void ClearGeneratedGeometryStale()
         {
             var propertyCount = _properties.Count;
-            Remove(GeneratedSolidStateKey); Remove(GeneratedSolidStaleSnapshotKey); Remove(GeneratedRebarStateKey); Remove(GeneratedRebarStaleSnapshotKey); Remove(GeneratedShapeRebarStateKey); Remove(GeneratedShapeRebarStaleSnapshotKey); Remove(GeneratedTieRebarStateKey); Remove(GeneratedTieRebarStaleSnapshotKey); Remove(GeneratedBeamStirrupStateKey); Remove(GeneratedBeamStirrupStaleSnapshotKey); Remove(GeneratedSlabMeshStateKey); Remove(GeneratedSlabMeshStaleSnapshotKey); Remove(GeneratedWallMeshStateKey); Remove(GeneratedWallMeshStaleSnapshotKey); Remove(GeneratedFoundationMeshStateKey); Remove(GeneratedFoundationMeshStaleSnapshotKey); Remove(GeneratedCurtainFrameStateKey); Remove(GeneratedCurtainFrameStaleSnapshotKey); Remove(GeneratedCurtainPanelStateKey); Remove(GeneratedCurtainPanelStaleSnapshotKey); Remove(GeneratedGeometryStateKey); Remove(GeneratedGeometryStaleReasonKey);
+            Remove(GeneratedSolidStateKey);
+            Remove(GeneratedSolidStaleSnapshotKey);
+            Remove(GeneratedRebarStateKey);
+            Remove(GeneratedRebarStaleSnapshotKey);
+            Remove(GeneratedShapeRebarStateKey);
+            Remove(GeneratedShapeRebarStaleSnapshotKey);
+            Remove(GeneratedTieRebarStateKey);
+            Remove(GeneratedTieRebarStaleSnapshotKey);
+            Remove(GeneratedBeamStirrupStateKey);
+            Remove(GeneratedBeamStirrupStaleSnapshotKey);
+            Remove(GeneratedSlabMeshStateKey);
+            Remove(GeneratedSlabMeshStaleSnapshotKey);
+            Remove(GeneratedWallMeshStateKey);
+            Remove(GeneratedWallMeshStaleSnapshotKey);
+            Remove(GeneratedFoundationMeshStateKey);
+            Remove(GeneratedFoundationMeshStaleSnapshotKey);
+            Remove(GeneratedCurtainFrameStateKey);
+            Remove(GeneratedCurtainFrameStaleSnapshotKey);
+            Remove(GeneratedCurtainPanelStateKey);
+            Remove(GeneratedCurtainPanelStaleSnapshotKey);
+            Remove(GeneratedGeometryStateKey);
+            Remove(GeneratedGeometryStaleReasonKey);
             if (_properties.Count != propertyCount) UpdatedUtc = DateTime.UtcNow;
         }
 
         internal void RestorePersistenceState(ElementDirtyFlags dirty, DateTime updatedUtc)
         {
             if ((dirty & ~ElementDirtyFlags.All) != 0) throw new ArgumentOutOfRangeException(nameof(dirty));
-            if (updatedUtc.Kind != DateTimeKind.Utc) throw new ArgumentException("Element persistence timestamp must be UTC.", nameof(updatedUtc));
+            if (updatedUtc.Kind != DateTimeKind.Utc)
+                throw new ArgumentException("Element persistence timestamp must be UTC.", nameof(updatedUtc));
             Dirty = dirty;
             UpdatedUtc = updatedUtc;
         }
 
-        internal void TouchPersistenceState() => UpdatedUtc = DateTime.UtcNow;
+        internal void TouchPersistenceState()
+        {
+            UpdatedUtc = DateTime.UtcNow;
+        }
 
         private void MarkPropertyChanged(string key)
         {
@@ -314,7 +353,8 @@ namespace QS3D.Core.Domain
         {
             if ((flags & ~ElementDirtyFlags.All) != 0) throw new ArgumentOutOfRangeException(nameof(flags));
             if (flags == ElementDirtyFlags.None) return;
-            if (markGeneratedGeometryStale) MarkGeneratedGeometryStale("Semantic/source state changed.");
+            if (markGeneratedGeometryStale)
+                MarkGeneratedGeometryStale("Semantic/source state changed.");
             Dirty |= flags;
             UpdatedUtc = DateTime.UtcNow;
         }
@@ -376,8 +416,15 @@ namespace QS3D.Core.Domain
 
         private static string RequireXmlText(string value, string parameterName, string label)
         {
-            try { XmlConvert.VerifyXmlChars(value); return value; }
-            catch (XmlException ex) { throw new ArgumentException(label + " contains characters that are invalid in XML.", parameterName, ex); }
+            try
+            {
+                XmlConvert.VerifyXmlChars(value);
+                return value;
+            }
+            catch (XmlException ex)
+            {
+                throw new ArgumentException(label + " contains characters that are invalid in XML.", parameterName, ex);
+            }
         }
 
         private static string NormalizeStaleReason(string? reason)
@@ -388,23 +435,50 @@ namespace QS3D.Core.Domain
 
         private static ElementCategory RequireCategory(ElementCategory value)
         {
-            if (!Enum.IsDefined(typeof(ElementCategory), value)) throw new ArgumentOutOfRangeException(nameof(value), value, "Element category must be a defined ElementCategory.");
+            if (!Enum.IsDefined(typeof(ElementCategory), value))
+                throw new ArgumentOutOfRangeException(nameof(value), value, "Element category must be a defined ElementCategory.");
             return value;
         }
 
         private bool MarkGeneratedOutputStale(string outputKey, string stateKey, string snapshotKey, out bool hasOutput)
         {
-            var signature = OutputSignature(outputKey); hasOutput = signature.Length > 0; if (!hasOutput) return false; var changed = false;
-            if (!_properties.TryGetValue(stateKey, out var state) || !string.Equals(state, StaleValue, StringComparison.Ordinal)) { _properties[stateKey] = StaleValue; changed = true; }
-            if (!_properties.TryGetValue(snapshotKey, out var snapshot) || !string.Equals(CanonicalHandleSignature(snapshot), signature, StringComparison.OrdinalIgnoreCase)) { _properties[snapshotKey] = signature; changed = true; }
+            var signature = OutputSignature(outputKey);
+            hasOutput = signature.Length > 0;
+            if (!hasOutput) return false;
+
+            var changed = false;
+            if (!_properties.TryGetValue(stateKey, out var state) || !string.Equals(state, StaleValue, StringComparison.Ordinal))
+            {
+                _properties[stateKey] = StaleValue;
+                changed = true;
+            }
+            if (!_properties.TryGetValue(snapshotKey, out var snapshot) ||
+                !string.Equals(CanonicalHandleSignature(snapshot), signature, StringComparison.OrdinalIgnoreCase))
+            {
+                _properties[snapshotKey] = signature;
+                changed = true;
+            }
             return changed;
         }
 
         private bool MarkGeneratedCurtainPanelOutputStale(out bool hasOutput)
         {
-            var signature = CurtainPanelOutputSignature(); hasOutput = signature.Length > 0; if (!hasOutput) return false; var changed = false;
-            if (!_properties.TryGetValue(GeneratedCurtainPanelStateKey, out var state) || !string.Equals(state, StaleValue, StringComparison.Ordinal)) { _properties[GeneratedCurtainPanelStateKey] = StaleValue; changed = true; }
-            if (!_properties.TryGetValue(GeneratedCurtainPanelStaleSnapshotKey, out var snapshot) || !string.Equals(CanonicalHandleSignature(snapshot), signature, StringComparison.OrdinalIgnoreCase)) { _properties[GeneratedCurtainPanelStaleSnapshotKey] = signature; changed = true; }
+            var signature = CurtainPanelOutputSignature();
+            hasOutput = signature.Length > 0;
+            if (!hasOutput) return false;
+
+            var changed = false;
+            if (!_properties.TryGetValue(GeneratedCurtainPanelStateKey, out var state) || !string.Equals(state, StaleValue, StringComparison.Ordinal))
+            {
+                _properties[GeneratedCurtainPanelStateKey] = StaleValue;
+                changed = true;
+            }
+            if (!_properties.TryGetValue(GeneratedCurtainPanelStaleSnapshotKey, out var snapshot) ||
+                !string.Equals(CanonicalHandleSignature(snapshot), signature, StringComparison.OrdinalIgnoreCase))
+            {
+                _properties[GeneratedCurtainPanelStaleSnapshotKey] = signature;
+                changed = true;
+            }
             return changed;
         }
 
@@ -412,20 +486,30 @@ namespace QS3D.Core.Domain
         {
             if (!_properties.TryGetValue(GeneratedCurtainPanelStateKey, out var state) || !string.Equals(state, StaleValue, StringComparison.OrdinalIgnoreCase)) return false;
             var current = CurtainPanelOutputSignature();
-            return _properties.TryGetValue(GeneratedCurtainPanelStaleSnapshotKey, out var snapshot) && !string.IsNullOrWhiteSpace(snapshot) && current.Length > 0 && string.Equals(CanonicalHandleSignature(snapshot), current, StringComparison.OrdinalIgnoreCase);
+            return _properties.TryGetValue(GeneratedCurtainPanelStaleSnapshotKey, out var snapshot) &&
+                   !string.IsNullOrWhiteSpace(snapshot) &&
+                   current.Length > 0 &&
+                   string.Equals(CanonicalHandleSignature(snapshot), current, StringComparison.OrdinalIgnoreCase);
         }
 
         private string CurtainPanelOutputSignature()
         {
-            var handles = OutputSignature(GeneratedCurtainPanelHandlesKey); if (handles.Length > 0) return handles;
-            return _properties.TryGetValue(GeneratedCurtainPanelBuildStateKey, out var state) && string.Equals((state ?? string.Empty).Trim(), GeneratedCurtainPanelBuildCompleteValue, StringComparison.OrdinalIgnoreCase) ? "@COMPLETE_EMPTY" : string.Empty;
+            var handles = OutputSignature(GeneratedCurtainPanelHandlesKey);
+            if (handles.Length > 0) return handles;
+            return _properties.TryGetValue(GeneratedCurtainPanelBuildStateKey, out var state) &&
+                   string.Equals((state ?? string.Empty).Trim(), GeneratedCurtainPanelBuildCompleteValue, StringComparison.OrdinalIgnoreCase)
+                ? "@COMPLETE_EMPTY"
+                : string.Empty;
         }
 
         private bool IsGeneratedOutputStale(string outputKey, string stateKey, string snapshotKey)
         {
             if (!_properties.TryGetValue(stateKey, out var state) || !string.Equals(state, StaleValue, StringComparison.OrdinalIgnoreCase)) return false;
             var current = OutputSignature(outputKey);
-            return _properties.TryGetValue(snapshotKey, out var snapshot) && !string.IsNullOrWhiteSpace(snapshot) && current.Length > 0 && string.Equals(CanonicalHandleSignature(snapshot), current, StringComparison.OrdinalIgnoreCase);
+            return _properties.TryGetValue(snapshotKey, out var snapshot) &&
+                   !string.IsNullOrWhiteSpace(snapshot) &&
+                   current.Length > 0 &&
+                   string.Equals(CanonicalHandleSignature(snapshot), current, StringComparison.OrdinalIgnoreCase);
         }
 
         private string OutputSignature(string outputKey)
@@ -436,27 +520,45 @@ namespace QS3D.Core.Domain
 
         private static string CanonicalHandleSignature(string raw)
         {
-            return string.Join(";", (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries).Select(GeneratedHandleIdentity.Normalize).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
+            return string.Join(";", (raw ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(GeneratedHandleIdentity.Normalize).Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
         }
 
         private bool SetAggregateStaleReason(string reason)
         {
-            var normalizedReason = string.IsNullOrWhiteSpace(reason) ? "Semantic/source state changed." : reason.Trim(); var changed = false;
-            if (!_properties.TryGetValue(GeneratedGeometryStateKey, out var state) || !string.Equals(state, StaleValue, StringComparison.Ordinal)) { _properties[GeneratedGeometryStateKey] = StaleValue; changed = true; }
-            if (!_properties.TryGetValue(GeneratedGeometryStaleReasonKey, out var existingReason) || !string.Equals(existingReason, normalizedReason, StringComparison.Ordinal)) { _properties[GeneratedGeometryStaleReasonKey] = normalizedReason; changed = true; }
+            var normalizedReason = string.IsNullOrWhiteSpace(reason) ? "Semantic/source state changed." : reason.Trim();
+            var changed = false;
+            if (!_properties.TryGetValue(GeneratedGeometryStateKey, out var state) || !string.Equals(state, StaleValue, StringComparison.Ordinal))
+            {
+                _properties[GeneratedGeometryStateKey] = StaleValue;
+                changed = true;
+            }
+            if (!_properties.TryGetValue(GeneratedGeometryStaleReasonKey, out var existingReason) ||
+                !string.Equals(existingReason, normalizedReason, StringComparison.Ordinal))
+            {
+                _properties[GeneratedGeometryStaleReasonKey] = normalizedReason;
+                changed = true;
+            }
             return changed;
         }
 
         private void ClearGeneratedOutputStale(string stateKey, string snapshotKey)
         {
-            var propertyCount = _properties.Count; Remove(stateKey); Remove(snapshotKey); ClearAggregateStaleIfResolved(); if (_properties.Count != propertyCount) UpdatedUtc = DateTime.UtcNow;
+            var propertyCount = _properties.Count;
+            Remove(stateKey); Remove(snapshotKey); ClearAggregateStaleIfResolved();
+            if (_properties.Count != propertyCount) UpdatedUtc = DateTime.UtcNow;
         }
 
         private void ClearAggregateStaleIfResolved()
         {
-            if (IsGeneratedGeometryStale()) return; Remove(GeneratedGeometryStateKey); Remove(GeneratedGeometryStaleReasonKey);
+            if (IsGeneratedGeometryStale()) return;
+            Remove(GeneratedGeometryStateKey); Remove(GeneratedGeometryStaleReasonKey);
         }
 
-        private void Remove(string key) => _properties.Remove(key);
+        private void Remove(string key)
+        {
+            _properties.Remove(key);
+        }
     }
 }
