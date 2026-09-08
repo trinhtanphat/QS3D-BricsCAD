@@ -57,9 +57,11 @@ def validate(source: str) -> None:
 
 
 def expect_mutation_failure(source: str, token: str) -> None:
-    mutated = source.replace(token, "MUTATED_" + token)
+    mutated = source.replace(token, "<REMOVED_PROVENANCE_PRIMITIVE>")
     if mutated == source:
         raise AssertionError("mutation token missing from provenance source: " + token)
+    if token in mutated:
+        raise AssertionError("mutation failed to remove provenance transaction primitive: " + token)
     try:
         validate(mutated)
     except (AssertionError, ValueError):
