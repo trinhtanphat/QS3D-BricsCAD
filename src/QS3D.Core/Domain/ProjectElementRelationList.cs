@@ -8,6 +8,8 @@ namespace QS3D.Core.Domain
 {
     internal sealed class ProjectElementRelationList : IList<string>
     {
+        private const int MaximumRelationEntries = 10000;
+
         private readonly ProjectElement _owner;
         private readonly List<string> _values;
 
@@ -37,6 +39,7 @@ namespace QS3D.Core.Domain
         {
             var canonical = RequireRelationValue(item);
             RequireUnique(canonical, null);
+            RequireCapacityForAddition();
             _values.Add(canonical);
             MarkRelationChanged();
         }
@@ -63,6 +66,7 @@ namespace QS3D.Core.Domain
         {
             var canonical = RequireRelationValue(item);
             RequireUnique(canonical, null);
+            RequireCapacityForAddition();
             _values.Insert(index, canonical);
             MarkRelationChanged();
         }
@@ -115,6 +119,12 @@ namespace QS3D.Core.Domain
         private void MarkRelationChanged()
         {
             _owner.MarkDirty(ElementDirtyFlags.Relations);
+        }
+
+        private void RequireCapacityForAddition()
+        {
+            if (_values.Count >= MaximumRelationEntries)
+                throw new InvalidOperationException("Relation collection exceeds the maximum supported cardinality of " + MaximumRelationEntries + ".");
         }
 
         private int FindCanonicalIndex(string canonical)
