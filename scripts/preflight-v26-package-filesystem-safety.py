@@ -97,7 +97,7 @@ def validate(text: str) -> None:
 def mutation_probe(source: str, token: str, replacement: str, label: str) -> None:
     if token not in source:
         raise SystemExit(f"mutation setup missing {label}")
-    mutated = source.replace(token, replacement, 1)
+    mutated = source.replace(token, replacement)
     try:
         validate(mutated)
     except SystemExit:
