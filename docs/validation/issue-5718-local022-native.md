@@ -2,6 +2,45 @@
 
 ## Verdict
 
+Latest V26 UI allocation53 (2026-09-08) is **`FAIL_OR_NO_RESULT /
+UI_TIMEOUT_SELECTTREE`**, zero acceptance requests/ACKs and zero verified phases.
+Exact pushed harness `9b9820b9f33694a8afd3f384be25f7bdb5e8aac7`, unchanged frozen
+product `87aff7fec452f9a8dd9f641ef84d143edc73514d`, V26.2.07, disposable `Default`
+clone, `OBSERVED_CLICK_V2 / PAUSE_FOR_OPERATOR_V1`;
+RunId `78193408bb554370a71ae6f77b4e05a7`;
+`2026-09-08T04:52:07.5939454Z`–`2026-09-08T05:03:23.2470235Z`;
+probe SHA-256 `0b3edf2cdb40de1365e0cd035da9e79878659e8bcbc5ebee47f58e723ffd9df3`;
+V26 ZIP SHA-256 `59498948341f36d408f8bf838e177170c19d99ffc64acaa2070b0524e6b99a81`.
+
+The first state request returned occluding browser pixels; no browser input was
+sent. Selecting/activating the exact test window then showed native CAD and static
+QS3D contents. Physical maximize, tree-area scrolling and floating the palette
+did not expose a usable tree; both QS3D interiors ultimately appeared blank.
+Explicit accessibility observation returned null. No guessed tree click, direct
+WPF mutation, render setting change, memory dump or invented ACK was used.
+The unchanged600-second preparation deadline emitted the actual failure marker.
+
+New passive traces repeatedly recorded `command_active=0`, controller and
+Workspace managed thread1, and `same_dispatcher=true`. Render notification totals
+advanced after physical layout operations (for example35/36/0 posted/completed/
+aborted at04:53:27Z,76/68/13 at04:54:58Z). These are notification totals, not a
+matched pending-operation count. They narrow a continuously active script or
+completely unresponsive UI-dispatcher hypothesis, but do not establish displayed
+pixels or distinguish product/host rendering from capture failure. Direct owner
+pixel confirmation was requested and had not arrived at this checkpoint.
+
+The runner exited1 with its expected nonqualification error. All cleanup checks
+passed: owned private fixture removed, zero hosts, original current-profile
+pointer/inventory restored, nonce removed and protected state unchanged. The
+wrapper restored autostart byte1/hash and timestamp
+`2026-09-07T02:55:30.6894998Z`. MCP remained paused and untested. Allocation53 is
+consumed; do not replay unchanged. V25 UI48 and native51/52 remain accepted only
+for their separately documented bounded coverage. No aggregate PASS or merge.
+
+Exact9b982 PR34188484540 preflight101941514717/core101942131358 and
+push34188481793 branch-preflight101941505767/branch-core101942184104 all succeeded.
+Those greens do not qualify runtime or a later documentation head.
+
 Presentation diagnostic successor (2026-09-08): the observed UI runner now
 records passive Render-priority hook totals, raw CMDACTIVE and controller/Workspace
 dispatcher identity at most once per ten seconds. It adds no queue operations,
@@ -9,8 +48,8 @@ forced layout, graphics setting, physical input or acceptance check. Completion
 and failure detach the observer; query/log failures remain diagnostic-only.
 Host-free event/integration tests and the full runner suite pass; both frozen
 product/SDK probe builds report zero warnings/errors. This is new diagnostic
-instrumentation, not a UI fix or PASS. The next fresh V26 allocation pins its
-exact pushed harness while retaining accepted V25 UI48 and native51/52.
+instrumentation, not a UI fix or PASS. Allocation53 above executed this exact
+diagnostic successor while retaining accepted V25 UI48 and native51/52.
 
 Exact documentation head `72d9a3a05846206bcd28671e68e644e8af51cf64` passed
 PR34187600716 preflight101938985471/core101939570240 and push34187597498
