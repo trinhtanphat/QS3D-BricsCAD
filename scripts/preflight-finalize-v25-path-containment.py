@@ -49,9 +49,15 @@ package_positions = [pos(token) for token in package_init_tokens if pos(token) >
 if not package_positions:
     errors.append("missing contained PackageDirectory initialization")
 
-for forbidden in ("Remove-Item $zip", "Remove-Item $hashManifest", 'Compress-Archive -Path "$package/*"'):
+for forbidden in (
+    "Remove-Item $zip",
+    "Remove-Item $hashManifest",
+    'Compress-Archive -Path "$package/*"',
+    "[IO.File]::Replace($tempZip, $zip, $zipBackup, $true)",
+    "[IO.File]::Move($tempZip, $zip)",
+):
     if forbidden in source:
-        errors.append(f"unsafe finalizer token remains: {forbidden}")
+        errors.append(f"unsafe/superseded finalizer token remains: {forbidden}")
 
 contain_dir = pos("function Assert-SafeContainedDirectory")
 contain_file = pos("function Assert-SafeContainedOptionalFileTarget")
@@ -83,8 +89,10 @@ if atomic_mode:
         "Compress-Archive -Path (Join-Path $package '*') -DestinationPath $tempZip -CompressionLevel Optimal",
         "$tempZip = Assert-SafeOptionalFileTarget -Path $tempZip -Label 'staged PackageZip'",
         "Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package",
-        "[IO.File]::Replace($tempZip, $zip, $zipBackup, $true)",
-        "[IO.File]::Move($tempZip, $zip)",
+        "$stagedZipHash = Assert-ZipManifestIntegrity -ZipPath $tempZip",
+        "$heldZip = Open-HeldVerifiedZipGeneration -Path $tempZip -ExpectedSha256 $stagedZipHash",
+        "Publish-HeldVerifiedZipGeneration -HeldZip $heldZip -TargetPath $zip -ReplaceIfExists $zipExistedBeforePublish",
+        "[QS3DV25HeldZipPublication]::SetFileInformationByHandleFileRenameInfo(",
         "restore original manifest",
         "restore original metadata",
         "Rollback also failed",
@@ -97,10 +105,7 @@ if atomic_mode:
         "$manifestBackup = New-SiblingTempPath -TargetPath $hashManifest",
     ):
         if forbidden_backup in source:
-            errors.append(
-                "atomic transaction backup must not be staged inside PackageDirectory: "
-                + forbidden_backup
-            )
+            errors.append("atomic transaction backup must not be staged inside PackageDirectory: " + forbidden_backup)
 
     zip_remove = pos("Remove-Item -LiteralPath $zip -Force")
     rollback_marker = pos("$originalError = $_")
@@ -122,41 +127,15 @@ if atomic_mode:
         pos("[IO.File]::Move($manifestStage, $hashManifest)"),
         pos("Compress-Archive -Path (Join-Path $package '*') -DestinationPath $tempZip -CompressionLevel Optimal"),
         pos("Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package"),
-        pos("[IO.File]::Replace($tempZip, $zip, $zipBackup, $true)"),
+        pos("$stagedZipHash = Assert-ZipManifestIntegrity -ZipPath $tempZip"),
+        pos("$heldZip = Open-HeldVerifiedZipGeneration -Path $tempZip -ExpectedSha256 $stagedZipHash"),
+        pos("Publish-HeldVerifiedZipGeneration -HeldZip $heldZip -TargetPath $zip -ReplaceIfExists $zipExistedBeforePublish"),
         pos("$transactionCommitted = $true"),
     )
     if min(ordered) >= 0 and list(ordered) != sorted(ordered):
-        errors.append("atomic finalizer must stage, verify, then publish the existing ZIP before commit")
-    new_zip = pos("[IO.File]::Move($tempZip, $zip)")
-    verify = pos("Assert-ZipMatchesPackage -ZipPath $tempZip -PackageRoot $package")
-    committed = pos("$transactionCommitted = $true")
-    if min(new_zip, verify, committed) >= 0 and not verify < new_zip < committed:
-        errors.append("atomic finalizer must verify the staged ZIP before publishing a new ZIP")
+        errors.append("atomic finalizer must stage, verify, hold, then publish the exact ZIP generation before commit")
 else:
-    legacy_required = (
-        "$packagePath = Assert-SafeContainedDirectory -Path $PackageDirectory -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'",
-        "Remove-Item -LiteralPath $hashManifest -Force",
-        "Remove-Item -LiteralPath $zip -Force",
-        "Compress-Archive -Path (Join-Path $package '*') -DestinationPath $zip -CompressionLevel Optimal",
-    )
-    for token in legacy_required:
-        require(token, "legacy containment/finalizer contract token")
-    ordered = (
-        should,
-        pos("$metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $metadataPath -Encoding UTF8"),
-        pos("Remove-Item -LiteralPath $hashManifest -Force"),
-        pos("$hashLines | Set-Content -LiteralPath $hashManifest -Encoding ASCII"),
-        pos("Remove-Item -LiteralPath $zip -Force"),
-        pos("Compress-Archive -Path (Join-Path $package '*') -DestinationPath $zip -CompressionLevel Optimal"),
-    )
-    if min(ordered) >= 0 and list(ordered) != sorted(ordered):
-        errors.append("destructive signed-finalizer operations are not in the guarded expected order")
-    package_rechecks = post_should.count("$package = Assert-SafeContainedDirectory -Path $package -RepositoryRoot $repositoryRoot -Label 'PackageDirectory'")
-    zip_rechecks = post_should.count("$zip = Assert-SafeContainedOptionalFileTarget -Path $zip -RepositoryRoot $repositoryRoot -Label 'PackageZip'")
-    if package_rechecks < 4:
-        errors.append(f"expected repeated PackageDirectory containment revalidation after ShouldProcess, found {package_rechecks}")
-    if zip_rechecks < 4:
-        errors.append(f"expected repeated PackageZip containment revalidation after ShouldProcess, found {zip_rechecks}")
+    errors.append("V25 signed-package finalizer must use the failure-atomic publication contract")
 
 if errors:
     print("finalize-v25 path containment preflight FAILED:", file=sys.stderr)
@@ -164,5 +143,4 @@ if errors:
         print(f" - {error}", file=sys.stderr)
     raise SystemExit(1)
 
-mode = "failure-atomic" if atomic_mode else "legacy"
-print(f"finalize-v25 path containment preflight PASS ({mode} publication contract)")
+print("finalize-v25 path containment preflight PASS (failure-atomic held-generation publication contract)")

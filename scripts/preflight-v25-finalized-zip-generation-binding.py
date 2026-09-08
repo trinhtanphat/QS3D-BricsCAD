@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Require the finalized V25 ZIP installed at PackageZip to match the verified staged generation."""
+"""Require the finalized V25 ZIP publication to remain bound to the verified staged file generation."""
 
 from __future__ import annotations
 
@@ -20,21 +20,32 @@ def main() -> int:
         verifier_end = len(source)
     verifier = source[verifier_start:verifier_end] if verifier_start >= 0 else ""
 
+    held_helper_start = source.find("function Publish-HeldVerifiedZipGeneration")
+    held_helper_end = source.find("\nfunction ", held_helper_start + 1) if held_helper_start >= 0 else -1
+    if held_helper_start >= 0 and held_helper_end < 0:
+        held_helper_end = len(source)
+    held_helper = source[held_helper_start:held_helper_end] if held_helper_start >= 0 else ""
+
     manifest_verify = source.find("$stagedZipHash = Assert-ZipManifestIntegrity -ZipPath $tempZip")
-    replace_call = source.find("[IO.File]::Replace($tempZip, $zip, $zipBackup, $true)")
-    move_call = source.find("[IO.File]::Move($tempZip, $zip)")
-    installed_hash = source.find("$installedZipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToUpperInvariant()")
+    held_open = source.find("$heldZip = Open-HeldVerifiedZipGeneration -Path $tempZip -ExpectedSha256 $stagedZipHash")
+    publish_call = source.find("Publish-HeldVerifiedZipGeneration -HeldZip $heldZip -TargetPath $zip -ReplaceIfExists $zipExistedBeforePublish")
+    installed_hash = source.find("$installedZipHash = [string]$heldZip.Sha256")
     mismatch_check = source.find("[string]::Equals($installedZipHash, $stagedZipHash, [StringComparison]::Ordinal)")
-    committed = source.find("$transactionCommitted = $true", max(replace_call, move_call, 0))
+    committed = source.find("$transactionCommitted = $true", max(publish_call, 0))
 
     required = (
         "$zipPublished = $false",
         "$zipExistedBeforePublish = $false",
         "$zipRollbackDiscard",
         "$stagedZipHash = Assert-ZipManifestIntegrity -ZipPath $tempZip",
-        "$installedZipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToUpperInvariant()",
+        "$heldZip = Open-HeldVerifiedZipGeneration -Path $tempZip -ExpectedSha256 $stagedZipHash",
+        "function Assert-HeldVerifiedZipStable",
+        "function Publish-HeldVerifiedZipGeneration",
+        "[QS3DV25HeldZipPublication]::SetFileInformationByHandleFileRenameInfo(",
+        "$installedZipHash = [string]$heldZip.Sha256",
         "[string]::Equals($installedZipHash, $stagedZipHash, [StringComparison]::Ordinal)",
         "Finalized ZIP generation mismatch",
+        "$heldZip.Stream.Dispose()",
     )
     for token in required:
         if token not in source:
@@ -55,16 +66,31 @@ def main() -> int:
         if token not in verifier:
             failures.append(f"manifest validation must return the outer digest from the same locked file handle; missing: {token}")
 
-    if "Get-FileHash -LiteralPath $tempZip" in source:
-        failures.append("staged ZIP must not be reopened by pathname for its admitted digest after manifest verification")
+    held_required = (
+        "$expectedHash = [string]$HeldZip.Sha256",
+        "Assert-HeldVerifiedZipStable -HeldZip $HeldZip",
+        "[QS3DV25HeldZipPublication]::SetFileInformationByHandleFileRenameInfo(",
+        "$HeldZip.Stream.SafeFileHandle",
+        "Assert-HeldVerifiedZipStable -HeldZip $HeldZip",
+        "Held staged ZIP admitted identity changed across publication",
+    )
+    for token in held_required:
+        if token not in held_helper:
+            failures.append(f"held publication helper is incomplete; missing: {token}")
 
-    if min(manifest_verify, replace_call, move_call, installed_hash, mismatch_check, committed) < 0:
-        failures.append("could not bound same-handle verify/install/reverify/commit sequence")
-    else:
-        if not (manifest_verify < replace_call < installed_hash < mismatch_check < committed):
-            failures.append("existing-target finalization must obtain same-handle verified digest, replace, rehash destination, compare, then commit")
-        if not (manifest_verify < move_call < installed_hash < mismatch_check < committed):
-            failures.append("new-target finalization must obtain same-handle verified digest, move, rehash destination, compare, then commit")
+    for forbidden in (
+        "Get-FileHash -LiteralPath $tempZip",
+        "[IO.File]::Replace($tempZip, $zip, $zipBackup, $true)",
+        "[IO.File]::Move($tempZip, $zip)",
+        "$installedZipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToUpperInvariant()",
+    ):
+        if forbidden in source:
+            failures.append("generation-bound publication must not reopen/publish by pathname; forbidden: " + forbidden)
+
+    if min(manifest_verify, held_open, publish_call, installed_hash, mismatch_check, committed) < 0:
+        failures.append("could not bound same-generation verify/hold/publish/commit sequence")
+    elif not (manifest_verify < held_open < publish_call < installed_hash < mismatch_check < committed):
+        failures.append("finalization must obtain same-handle verified digest, hold that generation, publish its handle, compare admitted identity, then commit")
 
     catch_start = source.find("catch {", source.find("try {", source.find("$transactionCommitted = $false")))
     finally_start = source.find("\nfinally {", catch_start)
@@ -79,7 +105,7 @@ def main() -> int:
     )
     for token in rollback_required:
         if token not in catch_body:
-            failures.append(f"post-install verification failure cannot restore/remove the published ZIP safely; missing: {token}")
+            failures.append(f"publication failure cannot restore/remove the published ZIP safely; missing: {token}")
 
     if "continue-on-error" in source.lower():
         failures.append("finalizer must not hide generation-binding failures with continue-on-error")
@@ -89,7 +115,7 @@ def main() -> int:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
 
-    print("PASS: finalized V25 ZIP uses one locked generation for manifest verification+digest, then rebinds destination before transaction commit")
+    print("PASS: finalized V25 ZIP remains bound to one held verified generation through native handle publication and commit")
     return 0
 
 
