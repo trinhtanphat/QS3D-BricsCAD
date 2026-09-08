@@ -184,44 +184,98 @@ namespace QS3D.Core.SmokeTests
 
         private static void NonCanonicalHandleAndDependencyFailBeforePersistence()
         {
-            var project = NewProject("handle-key");
+            RejectSemanticRelationThenPersistedCorruption(
+                NewProject("handle-key"),
+                true,
+                " 1A ",
+                false,
+                "Padded source handle was silently accepted by the domain boundary.",
+                "Padded source handle was silently persisted/normalized.");
+
+            RejectSemanticRelationThenPersistedCorruption(
+                NewProject("dependency-key"),
+                false,
+                " E2 ",
+                false,
+                "Padded dependency id was silently accepted by the domain boundary.",
+                "Padded dependency id was silently persisted/normalized.");
+
+            RejectSemanticRelationThenPersistedCorruption(
+                NewProject("blank-handle"),
+                true,
+                "   ",
+                false,
+                "Blank source handle was silently accepted by the domain boundary.",
+                "Blank source handle was silently dropped during persistence.");
+
+            RejectSemanticRelationThenPersistedCorruption(
+                NewProject("duplicate-handle-exact"),
+                true,
+                "1A",
+                true,
+                "Exact duplicate source handle was silently accepted by the domain boundary.",
+                "Exact duplicate source handles were persisted even though the QSDB reader rejects them.");
+
+            RejectSemanticRelationThenPersistedCorruption(
+                NewProject("duplicate-handle-case"),
+                true,
+                "1a",
+                true,
+                "Case-only duplicate source handle was silently accepted by the domain boundary.",
+                "Case-only duplicate source handles were persisted even though source identity is case-insensitive.");
+
+            RejectSemanticRelationThenPersistedCorruption(
+                NewProject("duplicate-dependency-exact"),
+                false,
+                "E2",
+                true,
+                "Exact duplicate dependency id was silently accepted by the domain boundary.",
+                "Exact duplicate dependency ids were persisted even though the QSDB reader rejects them.");
+
+            RejectSemanticRelationThenPersistedCorruption(
+                NewProject("duplicate-dependency-case"),
+                false,
+                "e2",
+                true,
+                "Case-only duplicate dependency id was silently accepted by the domain boundary.",
+                "Case-only duplicate dependency ids were persisted even though dependency identity is case-insensitive.");
+        }
+
+        private static void RejectSemanticRelationThenPersistedCorruption(
+            ProjectState project,
+            bool sourceHandle,
+            string value,
+            bool duplicate,
+            string domainMessage,
+            string persistenceMessage)
+        {
             var element = AddElement(project);
-            element.SourceHandles.Add(" 1A ");
-            RejectSave(project, "Padded source handle was silently persisted/normalized.");
+            var relation = sourceHandle ? element.SourceHandles : element.DependsOn;
+            var canonical = value.Trim();
+            if (duplicate)
+                relation.Add(sourceHandle && string.Equals(value, "1a", StringComparison.Ordinal) ? "1A" :
+                    !sourceHandle && string.Equals(value, "e2", StringComparison.Ordinal) ? "E2" : canonical);
 
-            project = NewProject("dependency-key");
-            element = AddElement(project);
-            element.DependsOn.Add(" E2 ");
-            RejectSave(project, "Padded dependency id was silently persisted/normalized.");
+            var countBeforeRejectedMutation = relation.Count;
+            var rejectedAtDomainBoundary = false;
+            try { relation.Add(value); }
+            catch (ArgumentException) { rejectedAtDomainBoundary = true; }
+            if (!rejectedAtDomainBoundary) throw new Exception(domainMessage);
+            if (relation.Count != countBeforeRejectedMutation)
+                throw new Exception("Rejected relation mutation changed the public collection.");
 
-            project = NewProject("blank-handle");
-            element = AddElement(project);
-            element.SourceHandles.Add("   ");
-            RejectSave(project, "Blank source handle was silently dropped during persistence.");
+            AddPersistedRelation(element, sourceHandle, value);
+            RejectSave(project, persistenceMessage);
+        }
 
-            project = NewProject("duplicate-handle-exact");
-            element = AddElement(project);
-            element.SourceHandles.Add("1A");
-            element.SourceHandles.Add("1A");
-            RejectSave(project, "Exact duplicate source handles were persisted even though the QSDB reader rejects them.");
-
-            project = NewProject("duplicate-handle-case");
-            element = AddElement(project);
-            element.SourceHandles.Add("1A");
-            element.SourceHandles.Add("1a");
-            RejectSave(project, "Case-only duplicate source handles were persisted even though source identity is case-insensitive.");
-
-            project = NewProject("duplicate-dependency-exact");
-            element = AddElement(project);
-            element.DependsOn.Add("E2");
-            element.DependsOn.Add("E2");
-            RejectSave(project, "Exact duplicate dependency ids were persisted even though the QSDB reader rejects them.");
-
-            project = NewProject("duplicate-dependency-case");
-            element = AddElement(project);
-            element.DependsOn.Add("E2");
-            element.DependsOn.Add("e2");
-            RejectSave(project, "Case-only duplicate dependency ids were persisted even though dependency identity is case-insensitive.");
+        private static void AddPersistedRelation(ProjectElement element, bool sourceHandle, string value)
+        {
+            var relation = sourceHandle ? element.SourceHandles : element.DependsOn;
+            var valuesField = relation.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement relation backing list field is unavailable.");
+            var values = valuesField.GetValue(relation) as List<string>
+                ?? throw new InvalidOperationException("ProjectElement relation backing list is unavailable.");
+            values.Add(value);
         }
 
         private static void NullAuditEventFailsClosed()
