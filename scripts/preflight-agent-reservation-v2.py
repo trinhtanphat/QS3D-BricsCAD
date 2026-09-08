@@ -12,6 +12,8 @@ REPOSITORY = "trinhtanphat/QS3D-BricsCAD"
 CURRENT_HEAD = "agent/gpt56sol-20260908-c05-reservation-peer-current-delta/issue-6100-reservation-peer-current-delta"
 PEER_HEAD = "agent/gpt56sol-20260908-c05-v25-final-publish-main-stability/issue-6095-v25-final-publish-main-stability"
 STALE_PATH = "scripts/publish-v26-release.ps1"
+CURRENT_MAIN_SHA = "a" * 40
+PEER_HEAD_SHA = "b" * 40
 
 
 def load_target():
@@ -39,7 +41,7 @@ def peer() -> dict:
         "created_at": "2026-09-07T23:44:46Z",
         "head": {
             "ref": PEER_HEAD,
-            "sha": "peer-head-sha",
+            "sha": PEER_HEAD_SHA,
             "repo": {"full_name": REPOSITORY},
         },
     }
@@ -50,7 +52,10 @@ def run_case(gate, path_is_effective: bool):
     older = issue(6095, "2026-09-07T23:44:40Z")
 
     gate.fetch_pr_files = lambda *_args, **_kwargs: [STALE_PATH]
-    gate._run_git = lambda args: "current-main-sha" if args[:2] == ["rev-parse", "origin/main^{commit}"] else ""
+    gate.fetch_branch_head_sha = lambda *_args, **_kwargs: CURRENT_MAIN_SHA
+    gate._run_git = lambda _args: (_ for _ in ()).throw(
+        AssertionError("peer collision must not bind protected-main identity from a stale local ref")
+    )
     observed = []
 
     def path_changed(api_url, repository, current_main_sha, peer_head_sha, path, token):
@@ -69,7 +74,7 @@ def run_case(gate, path_is_effective: bool):
         "token",
         6101,
     )
-    assert observed == [("current-main-sha", "peer-head-sha", STALE_PATH)], observed
+    assert observed == [(CURRENT_MAIN_SHA, PEER_HEAD_SHA, STALE_PATH)], observed
     return conflicts
 
 
