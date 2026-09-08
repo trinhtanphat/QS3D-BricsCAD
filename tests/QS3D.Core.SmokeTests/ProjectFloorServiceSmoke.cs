@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.SmokeTests
@@ -68,7 +70,11 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("p-corrupt", "Floor atomicity");
             var f1 = ProjectFloorService.Create(project, "f1", "Tầng 1", 0d);
             var f2 = ProjectFloorService.Create(project, "f2", "Tầng 2", 3.6d);
-            project.Elements.Add(null!);
+            var itemsField = project.Elements.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed corrupt floor-service project state.");
+            var items = itemsField.GetValue(project.Elements) as List<ProjectElement>
+                ?? throw new InvalidOperationException("Unexpected ProjectState.Elements backing collection.");
+            items.Add(null!);
 
             Throws<InvalidOperationException>(() => ProjectFloorService.Update(project, f2.Id, "Tầng 2 mới", 4d));
             if (f2.Name != "Tầng 2" || Math.Abs(f2.ElevationM - 3.6d) > 1e-12d)
