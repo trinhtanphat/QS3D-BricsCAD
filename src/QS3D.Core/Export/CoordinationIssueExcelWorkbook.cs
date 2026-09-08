@@ -27,6 +27,11 @@ namespace QS3D.Core.Export
         private const int MaxColumns = 16384;
         private const long MaxWorkbookBytes = 128L * 1024L * 1024L;
         private const long MaxXmlCharacters = 64L * 1024L * 1024L;
+        private const long MaxExportXmlEntryBytes = 32L * 1024L * 1024L;
+        private const long MaxExportXmlTotalBytes = 64L * 1024L * 1024L;
+        private const long MaxExportWorkbookBytes = 64L * 1024L * 1024L;
+        private static readonly DateTimeOffset FixedZipTimestamp = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        private static readonly Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private const string WorksheetRelationshipTypeHttp = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
         private const string WorksheetRelationshipTypeHttps = "https://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
         private static readonly XNamespace SpreadsheetNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -93,15 +98,23 @@ namespace QS3D.Core.Export
             var tempPath = AtomicFileCommit.CreateTempPath(fullPath);
             try
             {
+                long totalExportXmlBytes = 0L;
                 using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
-                using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, false, Encoding.UTF8))
+                using (var boundedArchive = new BoundedArchiveWriteStream(stream, MaxExportWorkbookBytes, true))
                 {
-                    WriteEntry(archive, "[Content_Types].xml", ContentTypesXml);
-                    WriteEntry(archive, "_rels/.rels", RootRelationshipsXml);
-                    WriteEntry(archive, "xl/workbook.xml", WorkbookXml);
-                    WriteEntry(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml);
-                    WriteEntry(archive, "xl/worksheets/sheet1.xml", BuildSheet(new[] { "KEY", "VALUE" }, metaRows));
-                    WriteEntry(archive, "xl/worksheets/sheet2.xml", BuildSheet(IssueHeaders, issueRows));
+                    using (var archive = new ZipArchive(boundedArchive, ZipArchiveMode.Create, true, StrictUtf8))
+                    {
+                        WriteEntry(archive, "[Content_Types].xml", ContentTypesXml, ref totalExportXmlBytes);
+                        WriteEntry(archive, "_rels/.rels", RootRelationshipsXml, ref totalExportXmlBytes);
+                        WriteEntry(archive, "xl/workbook.xml", WorkbookXml, ref totalExportXmlBytes);
+                        WriteEntry(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml, ref totalExportXmlBytes);
+                        WriteSheet(archive, "xl/worksheets/sheet1.xml", new[] { "KEY", "VALUE" }, metaRows, ref totalExportXmlBytes);
+                        WriteSheet(archive, "xl/worksheets/sheet2.xml", IssueHeaders, issueRows, ref totalExportXmlBytes);
+                    }
+                    boundedArchive.Flush();
+                    if (stream.Length <= 0L || stream.Length > MaxExportWorkbookBytes)
+                        throw new InvalidDataException("Coordination issue workbook export exceeds the supported archive size.");
+                    stream.Flush(true);
                 }
                 XlsxPackageValidator.Validate(
                     tempPath,
@@ -470,29 +483,50 @@ namespace QS3D.Core.Export
             return reference.HasValue ? reference.Value.Handle.Value : string.Empty;
         }
 
-        private static string BuildSheet(IReadOnlyList<string> headers, IReadOnlyList<IReadOnlyList<string>> rows)
+        private static void WriteSheet(
+            ZipArchive archive,
+            string name,
+            IReadOnlyList<string> headers,
+            IReadOnlyList<IReadOnlyList<string>> rows,
+            ref long totalExportXmlBytes)
         {
-            var builder = new StringBuilder();
-            builder.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
-            builder.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>");
-            AppendRow(builder, 1, headers);
-            for (var i = 0; i < rows.Count; i++) AppendRow(builder, i + 2, rows[i]);
-            builder.Append("</sheetData></worksheet>");
-            return builder.ToString();
+            using (var buffer = new MemoryStream())
+            {
+                using (var bounded = new BoundedEntryWriteStream(buffer, MaxExportXmlEntryBytes, true))
+                using (var writer = new StreamWriter(bounded, StrictUtf8, 4096, true))
+                {
+                    writer.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+                    writer.Write("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>");
+                    WriteRow(writer, 1, headers);
+                    for (var i = 0; i < rows.Count; i++) WriteRow(writer, i + 2, rows[i]);
+                    writer.Write("</sheetData></worksheet>");
+                    writer.Flush();
+                }
+
+                ReserveExportXmlBytes(ref totalExportXmlBytes, buffer.Length, name);
+                buffer.Position = 0L;
+                var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
+                entry.LastWriteTime = FixedZipTimestamp;
+                using (var output = entry.Open()) buffer.CopyTo(output);
+            }
         }
 
-        private static void AppendRow(StringBuilder builder, int rowNumber, IReadOnlyList<string> values)
+        private static void WriteRow(TextWriter writer, int rowNumber, IReadOnlyList<string> values)
         {
-            builder.Append("<row r=\"").Append(rowNumber.ToString(CultureInfo.InvariantCulture)).Append("\">");
+            writer.Write("<row r=\"");
+            writer.Write(rowNumber.ToString(CultureInfo.InvariantCulture));
+            writer.Write("\">");
             for (var i = 0; i < values.Count; i++)
             {
                 var value = values[i] ?? string.Empty;
                 if (value.Length > 32767) throw new InvalidDataException("Coordination issue workbook cell exceeds the Excel text limit.");
-                builder.Append("<c r=\"").Append(CellReference(i, rowNumber)).Append("\" t=\"inlineStr\"><is><t xml:space=\"preserve\">")
-                    .Append(SecurityElement.Escape(value) ?? string.Empty)
-                    .Append("</t></is></c>");
+                writer.Write("<c r=\"");
+                writer.Write(CellReference(i, rowNumber));
+                writer.Write("\" t=\"inlineStr\"><is><t xml:space=\"preserve\">");
+                writer.Write(SecurityElement.Escape(value) ?? string.Empty);
+                writer.Write("</t></is></c>");
             }
-            builder.Append("</row>");
+            writer.Write("</row>");
         }
 
         private static string CellReference(int column, int row)
@@ -508,10 +542,134 @@ namespace QS3D.Core.Export
             return name + row.ToString(CultureInfo.InvariantCulture);
         }
 
-        private static void WriteEntry(ZipArchive archive, string name, string content)
+        private static void WriteEntry(ZipArchive archive, string name, string content, ref long totalExportXmlBytes)
         {
+            var bytes = StrictUtf8.GetBytes(content);
+            if (bytes.LongLength > MaxExportXmlEntryBytes)
+                throw new InvalidDataException("Coordination issue workbook XML part exceeds the export entry limit: " + name + ".");
+            ReserveExportXmlBytes(ref totalExportXmlBytes, bytes.LongLength, name);
             var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
-            using (var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false))) writer.Write(content);
+            entry.LastWriteTime = FixedZipTimestamp;
+            using (var output = entry.Open()) output.Write(bytes, 0, bytes.Length);
+        }
+
+        private static void ReserveExportXmlBytes(ref long totalExportXmlBytes, long entryBytes, string name)
+        {
+            if (entryBytes < 0L || entryBytes > MaxExportXmlEntryBytes)
+                throw new InvalidDataException("Coordination issue workbook XML part exceeds the export entry limit: " + name + ".");
+            if (totalExportXmlBytes > MaxExportXmlTotalBytes - entryBytes)
+                throw new InvalidDataException("Coordination issue workbook exceeds the aggregate uncompressed XML export limit.");
+            totalExportXmlBytes += entryBytes;
+        }
+
+        private sealed class BoundedEntryWriteStream : Stream
+        {
+            private readonly Stream _inner;
+            private readonly long _maxLength;
+            private readonly bool _leaveOpen;
+
+            public BoundedEntryWriteStream(Stream inner, long maxLength, bool leaveOpen)
+            {
+                _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+                if (maxLength <= 0L) throw new ArgumentOutOfRangeException(nameof(maxLength));
+                _maxLength = maxLength;
+                _leaveOpen = leaveOpen;
+            }
+
+            public override bool CanRead => false;
+            public override bool CanSeek => _inner.CanSeek;
+            public override bool CanWrite => _inner.CanWrite;
+            public override long Length => _inner.Length;
+            public override long Position { get => _inner.Position; set { EnsureProjectedLength(value, 0); _inner.Position = value; } }
+            public override void Flush() => _inner.Flush();
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            public override long Seek(long offset, SeekOrigin origin)
+            {
+                var target = origin == SeekOrigin.Begin ? offset : origin == SeekOrigin.Current ? checked(_inner.Position + offset) : checked(_inner.Length + offset);
+                EnsureProjectedLength(target, 0);
+                return _inner.Seek(offset, origin);
+            }
+            public override void SetLength(long value)
+            {
+                EnsureProjectedLength(value, 0);
+                _inner.SetLength(value);
+            }
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+                if (offset < 0 || count < 0 || offset > buffer.Length - count) throw new ArgumentOutOfRangeException();
+                EnsureProjectedLength(_inner.Position, count);
+                _inner.Write(buffer, offset, count);
+            }
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing && !_leaveOpen) _inner.Dispose();
+                base.Dispose(disposing);
+            }
+            private void EnsureProjectedLength(long position, int additionalBytes)
+            {
+                if (position < 0L) throw new IOException("Cannot seek before the start of the bounded XLSX entry stream.");
+                long projected;
+                try { projected = checked(position + additionalBytes); }
+                catch (OverflowException) { throw new InvalidDataException("Coordination issue workbook XML part exceeds the export entry limit."); }
+                projected = Math.Max(projected, _inner.Length);
+                if (projected > _maxLength) throw new InvalidDataException("Coordination issue workbook XML part exceeds the export entry limit.");
+            }
+        }
+
+        private sealed class BoundedArchiveWriteStream : Stream
+        {
+            private readonly Stream _inner;
+            private readonly long _maxLength;
+            private readonly bool _leaveOpen;
+
+            public BoundedArchiveWriteStream(Stream inner, long maxLength, bool leaveOpen)
+            {
+                _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+                if (maxLength <= 0L) throw new ArgumentOutOfRangeException(nameof(maxLength));
+                _maxLength = maxLength;
+                _leaveOpen = leaveOpen;
+            }
+
+            public override bool CanRead => false;
+            public override bool CanSeek => _inner.CanSeek;
+            public override bool CanWrite => _inner.CanWrite;
+            public override long Length => _inner.Length;
+            public override long Position { get => _inner.Position; set { EnsureProjectedLength(value, 0); _inner.Position = value; } }
+            public override void Flush() => _inner.Flush();
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            public override long Seek(long offset, SeekOrigin origin)
+            {
+                var target = origin == SeekOrigin.Begin ? offset : origin == SeekOrigin.Current ? checked(_inner.Position + offset) : checked(_inner.Length + offset);
+                EnsureProjectedLength(target, 0);
+                return _inner.Seek(offset, origin);
+            }
+            public override void SetLength(long value)
+            {
+                EnsureProjectedLength(value, 0);
+                _inner.SetLength(value);
+            }
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+                if (offset < 0 || count < 0 || offset > buffer.Length - count) throw new ArgumentOutOfRangeException();
+                EnsureProjectedLength(_inner.Position, count);
+                _inner.Write(buffer, offset, count);
+            }
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing && !_leaveOpen) _inner.Dispose();
+                base.Dispose(disposing);
+            }
+            private void EnsureProjectedLength(long position, int additionalBytes)
+            {
+                if (position < 0L) throw new IOException("Cannot seek before the start of the bounded XLSX archive stream.");
+                long projected;
+                try { projected = checked(position + additionalBytes); }
+                catch (OverflowException) { throw new InvalidDataException("Coordination issue workbook export exceeds the supported archive size."); }
+                projected = Math.Max(projected, _inner.Length);
+                if (projected > _maxLength) throw new InvalidDataException("Coordination issue workbook export exceeds the supported archive size.");
+            }
         }
 
         private const string RootRelationshipsXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>";
