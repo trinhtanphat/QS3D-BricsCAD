@@ -45,6 +45,8 @@ def require_before(source: str, first: str, second: str, label: str) -> None:
 def main() -> None:
     source = load_source()
 
+    # Preserve bounded secret admission before any certificate/key-store work.
+    require(source, "[Security.SecureString] $Password", "SecureString password parameter")
     require(source, "$maxPfxDecodedBytes = 1048576", "decoded PFX limit")
     require(source, "$maxPfxBase64Chars = 1398104", "encoded PFX limit")
     require(source, "if ($encodedPfx.Length -gt $maxPfxBase64Chars)", "pre-decode encoded-size guard")
@@ -59,61 +61,93 @@ def main() -> None:
         "if ($bytes.Length -lt 256 -or $bytes.Length -gt $maxPfxDecodedBytes)",
         "decoded-size guard",
     )
-
-    require(source, "function Assert-SafeTempDirectory", "temp-directory validator")
-    require(source, "-PathType Container", "temp-directory container check")
-    require(source, "[IO.FileAttributes]::ReparsePoint", "reparse-point rejection")
-    require(source, "Temporary directory must not be a filesystem root", "filesystem-root rejection")
     require_before(
         source,
-        "$tempRoot = Assert-SafeTempDirectory -Path $tempRootCandidate",
-        "$pfxPath = Join-Path $tempRoot",
-        "temp root must be validated before choosing the secret path",
+        "if ($bytes.Length -lt 256 -or $bytes.Length -gt $maxPfxDecodedBytes)",
+        "$certificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new()",
+        "decoded-size admission must precede persistent certificate import",
     )
 
-    require(source, "function Assert-SafeTempFile", "temp-file validator")
-    require(source, "Temporary PFX escaped the validated temporary directory", "temp-file containment check")
-    require(source, "-PathType Leaf", "temp-file leaf check")
-    require(source, "-not ($item -is [IO.FileInfo])", "regular-file check")
-    require_before(
-        source,
-        "[IO.File]::WriteAllBytes($pfxPath, $bytes)",
-        "$pfxPath = Assert-SafeTempFile -Path $pfxPath -TempRoot $tempRoot",
-        "written PFX must be revalidated before import",
-    )
-    require_before(
-        source,
-        "$pfxPath = Assert-SafeTempFile -Path $pfxPath -TempRoot $tempRoot",
-        "Import-PfxCertificate",
-        "temp PFX validation must precede certificate import",
-    )
+    # The expected certificate must be absent before this attempt and the bounded
+    # bytes must be validated before a persisted key is created.
+    require(source, "if ($existing -contains $expected)", "pre-existing expected-certificate rejection")
+    probe_import = "$probeCertificate.Import(\n            $bytes,\n            $Password,\n            [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::UserKeySet)"
+    require(source, probe_import, "non-persistent probe import")
+    require(source, "$probeCertificate.HasPrivateKey", "probe private-key admission")
+    require(source, "Test-CodeSigningEku $probeCertificate", "probe Code Signing EKU admission")
+    require(source, "$probeCertificate.NotBefore", "probe NotBefore admission")
+    require(source, "$probeCertificate.NotAfter", "probe NotAfter admission")
+    require(source, "$probeCertificate.Dispose()", "probe certificate disposal")
 
-    require(source, "Remove-ImportedCertificates -Thumbprints $importedNewThumbprints", "ephemeral certificate rollback")
-    require(source, "$operationError = $null", "operation failure preservation")
-    require(source, "$cleanupError = $null", "PFX cleanup failure capture")
-    require(source, "Remove-Item -LiteralPath $pfxPath -Force -ErrorAction Stop", "mandatory temporary PFX cleanup")
-    require(source, "if (Test-Path -LiteralPath $pfxPath -ErrorAction Stop)", "post-delete PFX absence verification")
-    require(source, "Temporary signing PFX still exists after cleanup", "cleanup persistence failure")
-    require(source, "Signing operation failed and temporary PFX cleanup also failed.", "aggregate operation/PFX cleanup failure")
-    require(source, "[Array]::Clear($bytes, 0, $bytes.Length)", "decoded secret zeroing")
-    require_before(
-        source,
-        "Remove-Item -LiteralPath $pfxPath -Force -ErrorAction Stop",
-        "[Array]::Clear($bytes, 0, $bytes.Length)",
-        "PFX path cleanup must be attempted before decoded secret buffer zeroing",
+    persistent_flags = (
+        "$keyStorageFlags = [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::UserKeySet -bor\n"
+        "        [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::PersistKeySet"
     )
+    memory_import = "$certificate.Import($bytes, $Password, $keyStorageFlags)"
+    require(source, "$certificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new()", "persistent in-memory certificate")
+    require(source, persistent_flags, "non-exportable CurrentUser persisted-key flags")
+    require(source, memory_import, "direct in-memory PFX import")
+    require_before(source, probe_import, memory_import, "probe validation must precede persisted-key import")
 
+    store_ctor = "[Security.Cryptography.X509Certificates.X509Store]::new("
+    store_open = "$store.Open([Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)"
+    rollback_arm = "$importedNewThumbprints = @($expected)"
+    store_add = "$store.Add($certificate)"
+    require(source, store_ctor, "X509Store constructor")
+    require(source, "[Security.Cryptography.X509Certificates.StoreName]::My", "My store identity")
+    require(source, "[Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser", "CurrentUser store identity")
+    require(source, store_open, "read/write certificate-store open")
+    require(source, rollback_arm, "bounded rollback ownership arm")
+    require(source, store_add, "held-store certificate add")
+    require_before(source, memory_import, store_open, "memory import must precede store open")
+    require_before(source, store_open, rollback_arm, "store must be open before rollback ownership is armed")
+    require_before(source, rollback_arm, store_add, "rollback ownership must be armed before store add")
+
+    # Preserve exact expected-certificate admission and bounded rollback.
+    require(source, "if ($candidates.Count -ne 1)", "exactly-one expected certificate admission")
+    require(source, "$candidate.NotBefore", "imported NotBefore admission")
+    require(source, "$candidate.NotAfter", "imported NotAfter admission")
+    require(source, "$importedNewThumbprints -notcontains $expected", "new-import proof")
+    rollback = "Remove-ImportedCertificates -Thumbprints $importedNewThumbprints"
+    require(source, rollback, "bounded certificate rollback")
+    require(source, "$operationError = $_.Exception", "operation failure preservation")
+    require(source, "Signing operation failed and imported certificate cleanup also failed.", "aggregate operation/rollback failure")
+
+    store_close = "$store.Close()"
+    certificate_dispose = "$certificate.Dispose()"
+    byte_zero = "[Array]::Clear($bytes, 0, $bytes.Length)"
+    require(source, store_close, "store close")
+    require(source, certificate_dispose, "persistent certificate disposal")
+    require(source, byte_zero, "decoded secret zeroing")
+    require_before(source, store_add, store_close, "store consumption must precede store close")
+    require_before(source, store_add, certificate_dispose, "store consumption must precede certificate disposal")
+    require_before(source, store_close, byte_zero, "store close must precede decoded secret zeroing")
+    require_before(source, certificate_dispose, byte_zero, "certificate disposal must precede decoded secret zeroing")
+
+    # The secret must never return to a filesystem pathname and the password must
+    # never be converted to plaintext for import.
     forbidden = (
-        "Remove-Item -LiteralPath $pfxPath -Force -ErrorAction SilentlyContinue",
+        "[IO.File]::WriteAllBytes(",
+        "Import-PfxCertificate",
+        "Assert-SafeTempDirectory",
+        "Assert-SafeTempFile",
+        "$pfxPath",
+        "RUNNER_TEMP",
+        "GetTempPath()",
+        "Remove-Item -LiteralPath $pfxPath",
+        "[Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable",
+        "SecureStringToBSTR",
+        "PtrToString",
+        "GetNetworkCredential().Password",
         "Get-ChildItem -Path Cert:\\CurrentUser\\My | Remove-Item",
         "Remove-Item -Path Cert:\\CurrentUser\\My",
         "taskkill",
     )
     for token in forbidden:
         if token in source:
-            fail(f"signing PFX importer contains forbidden broad/fail-open cleanup primitive: {token}")
+            fail(f"signing PFX importer contains forbidden pathname/plaintext/broad-cleanup primitive: {token}")
 
-    print("V25 signing PFX input/temp-path/cleanup safety preflight: PASS")
+    print("V25 signing PFX bounded in-memory input/rollback safety preflight: PASS")
 
 
 if __name__ == "__main__":
