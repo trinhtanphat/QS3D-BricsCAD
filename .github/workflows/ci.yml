@@ -29,17 +29,17 @@ permissions:
   statuses: write
 
 concurrency:
-  # Keep push, PR code, and PR metadata validation in separate cancellation domains. GitHub
-  # materializes cancelled jobs as check-runs on the candidate SHA, so cross-event cancellation
-  # can block protected-branch required contexts even when the surviving run is GREEN.
-  # Repository identity isolates forks with equal branch names; same-event superseded work still
-  # cancels normally within its own class.
-  group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata' || github.event_name == 'pull_request' && 'pull_request' || github.event_name == 'push' && 'push' || 'dispatch' }}-${{ github.run_attempt > 1 && github.run_id || 0 }}
+  # Serialize every PR action for one repository/head branch in the same cancellation domain.
+  # Same-repository PR jobs use non-required candidate-* check-run names and publish the stable
+  # `preflight` / `core` required contexts only from the surviving run. Fork PRs cannot publish
+  # statuses, so they retain `preflight` / `core` check-run names as their admission surface.
+  # Push and manual-dispatch work remain isolated from PR cancellation domains.
+  group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ github.event_name == 'pull_request' && 'pull_request' || github.event_name == 'push' && 'push' || 'dispatch' }}-${{ github.run_attempt > 1 && github.run_id || 0 }}
   cancel-in-progress: true
 
 jobs:
   preflight:
-    name: ${{ github.event_name == 'push' && 'branch-preflight' || github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata-preflight' || github.event_name == 'pull_request' && 'preflight' || 'dispatch-preflight' }}
+    name: ${{ github.event_name == 'push' && 'branch-preflight' || github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'candidate-preflight' || github.event_name == 'pull_request' && 'preflight' || 'dispatch-preflight' }}
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request' }}
     runs-on: windows-latest
     timeout-minutes: 30
@@ -194,7 +194,7 @@ jobs:
             -Body $payload | Out-Null
 
   core:
-    name: ${{ github.event_name == 'push' && 'branch-core' || github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata-core' || github.event_name == 'pull_request' && 'core' || 'dispatch-core' }}
+    name: ${{ github.event_name == 'push' && 'branch-core' || github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'candidate-core' || github.event_name == 'pull_request' && 'core' || 'dispatch-core' }}
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request' }}
     needs: preflight
     runs-on: windows-latest
