@@ -1,5 +1,7 @@
 using System;
+using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Coordination;
 using QS3D.Core.Export;
@@ -15,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             UnifiedWorkbookRoundTripsClashAndDuplicate();
             DuplicateIdentityRejectsHandleOnlyAuthority();
             MixedDrawingWorkbookFailsClosed();
+            RejectsOversizedWorksheetBeforeArchiveCommit();
         }
 
         private static void DuplicateIdentityUsesSemanticPairAndCanonicalEvidence()
@@ -86,6 +89,44 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
+        private static void RejectsOversizedWorksheetBeforeArchiveCommit()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-coordination-unified-bound-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "bounded.xlsx");
+            var sentinel = new byte[] { 0x51, 0x53, 0x33, 0x44, 0x2D, 0x53, 0x45, 0x4E, 0x54, 0x49, 0x4E, 0x45, 0x4C };
+            File.WriteAllBytes(path, sentinel);
+            try
+            {
+                const int rowCount = 1100;
+                var comment = new string('X', 32767);
+                var duplicates = new CoordinationDuplicateExportRow[rowCount];
+                for (var index = 0; index < duplicates.Length; index++)
+                {
+                    var leftHandle = (index * 2 + 1).ToString("X", CultureInfo.InvariantCulture);
+                    var rightHandle = (index * 2 + 2).ToString("X", CultureInfo.InvariantCulture);
+                    duplicates[index] = CoordinationDuplicateExportRow.Create(
+                        "drawing-fp",
+                        "EL-A-" + index.ToString(CultureInfo.InvariantCulture), leftHandle,
+                        "EL-B-" + index.ToString(CultureInfo.InvariantCulture), rightHandle,
+                        DuplicateMatchKind.ExactGeometry,
+                        "Column", "Column", "L03", comment);
+                }
+
+                Throws<InvalidDataException>(() => CoordinationUnifiedWorkbookExporter.Export(
+                    path, Array.Empty<CoordinationClashExportRow>(), duplicates));
+                EqualBytes(sentinel, File.ReadAllBytes(path), "destination sentinel changed after oversized worksheet rejection");
+                if (Directory.GetFiles(directory, "bounded.xlsx.*.tmp").Any())
+                    throw new InvalidOperationException("CoordinationUnifiedWorkbookSmoke: owned temp was not cleaned after oversized worksheet rejection.");
+            }
+            finally
+            {
+                try { Directory.Delete(directory, true); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+        }
+
         private static void TryDelete(string path)
         {
             try { if (File.Exists(path)) File.Delete(path); }
@@ -111,6 +152,12 @@ namespace QS3D.Core.SmokeTests
             if (!string.Equals(expected, actual, StringComparison.Ordinal))
                 throw new InvalidOperationException(
                     "CoordinationUnifiedWorkbookSmoke: " + message + ". Expected '" + expected + "', got '" + actual + "'.");
+        }
+
+        private static void EqualBytes(byte[] expected, byte[] actual, string message)
+        {
+            if (!expected.SequenceEqual(actual))
+                throw new InvalidOperationException("CoordinationUnifiedWorkbookSmoke: " + message + ".");
         }
     }
 }
