@@ -5,32 +5,49 @@ root = Path(__file__).resolve().parents[1]
 path = root / "scripts" / "new-v26-update-manifest.ps1"
 text = path.read_text(encoding="utf-8")
 
+exact_cleanup = "Remove-ExactGeneratedScriptGeneration -Path $tempScript -ExpectedIdentity $generatedIdentity"
+workspace_cleanup = "Remove-HeldManifestWorkspace -Handle $workspaceHandle"
 required = [
     "$primaryFailure = $null",
     "catch {\n    $primaryFailure = $_\n    throw\n}",
-    "if ($null -eq $primaryFailure)",
-    "Remove-V26ManifestTemporaryWorkspaceStrict",
-    "Remove-V26ManifestTemporaryWorkspaceBestEffort",
-    "still exists after cleanup",
+    "$workspaceHandle = Open-HeldManifestWorkspace -Path $tempRoot",
+    "$generatedIdentity = Get-HeldGeneratedScriptIdentity -Stream $generatedStream",
+    exact_cleanup,
+    workspace_cleanup,
     "Secondary V26 manifest held-stream cleanup failed while preserving the primary failure",
-    "Secondary V26 manifest script cleanup failed while preserving the primary failure",
-    "Secondary V26 manifest workspace cleanup failed while preserving the primary failure",
+    "Secondary V26 manifest exact-script cleanup failed while preserving the primary failure",
+    "Secondary V26 manifest held-workspace cleanup failed while preserving the primary failure",
     "[IO.FileShare]::Read",
     "Read-HeldStrictUtf8",
-    "refusing recursive cleanup",
 ]
 missing = [token for token in required if token not in text]
 if missing:
     raise SystemExit("V26 update-manifest cleanup primary-failure guard missing: " + ", ".join(missing))
 
-primary_branch = text.index("if ($null -eq $primaryFailure)")
-strict_call = text.index("Remove-V26ManifestTemporaryWorkspaceStrict -ScriptPath", primary_branch)
-best_effort_call = text.index("Remove-V26ManifestTemporaryWorkspaceBestEffort -ScriptPath", primary_branch)
-secondary_stream = text.index("Secondary V26 manifest held-stream cleanup failed while preserving the primary failure", primary_branch)
-if not (primary_branch < strict_call < secondary_stream < best_effort_call):
-    raise SystemExit("Cleanup branches are not ordered strict-on-success / suppressed-secondary-on-primary-failure.")
+# Each secondary cleanup stage is strict when no primary failure exists, but its
+# own cleanup exception is suppressed when the transformer/manifest operation is
+# already failing so primary evidence is never replaced.
+strict_rethrow = "if ($null -eq $primaryFailure) { throw }"
+if text.count(strict_rethrow) < 3:
+    raise SystemExit("V26 update-manifest cleanup must rethrow secondary cleanup failures on success for stream, script, and workspace stages.")
 
-if "Remove-Item -LiteralPath $RootPath -Recurse" in text or "Remove-Item -LiteralPath $tempRoot -Recurse" in text:
-    raise SystemExit("Recursive cleanup is forbidden for the V26 manifest temporary workspace.")
+finally_index = text.index("finally {")
+stream_dispose = text.index("$generatedStream.Dispose()", finally_index)
+script_cleanup = text.index(exact_cleanup, stream_dispose)
+workspace_cleanup_index = text.index(workspace_cleanup, script_cleanup)
+workspace_dispose = text.index("$workspaceHandle.Dispose()", workspace_cleanup_index)
+if not finally_index < stream_dispose < script_cleanup < workspace_cleanup_index < workspace_dispose:
+    raise SystemExit("Cleanup order must be held-stream dispose -> exact script generation cleanup -> held workspace delete -> workspace handle dispose.")
 
-print("PASS V26 update-manifest preserves primary failure across stream/path cleanup and retains strict success cleanup")
+for forbidden in (
+    "Remove-V26ManifestTemporaryWorkspaceStrict",
+    "Remove-V26ManifestTemporaryWorkspaceBestEffort",
+    "Remove-Item -LiteralPath $tempScript",
+    "Remove-Item -LiteralPath $tempRoot",
+    "Remove-Item -LiteralPath $RootPath",
+    "Remove-Item -LiteralPath $ScriptPath",
+):
+    if forbidden in text:
+        raise SystemExit("V26 update-manifest primary-failure cleanup must not fall back to pathname cleanup: " + forbidden)
+
+print("PASS V26 update-manifest preserves primary failure across held-generation cleanup and remains strict on success")
