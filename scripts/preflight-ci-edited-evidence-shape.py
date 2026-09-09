@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Regression guard for malformed PR-edited workflow evidence response members."""
+"""Regression guard for malformed and mutable PR-edited workflow evidence."""
 
 from __future__ import annotations
 
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
-import sys
 from urllib.parse import parse_qs, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -95,7 +95,42 @@ def main() -> int:
         print(f"ERROR: valid 100+1 evidence pagination regressed: count={len(runs)} calls={calls}")
         return 1
 
-    print("PASS: PR-edited workflow evidence rejects malformed members fail-closed and preserves valid pagination")
+    # GitHub's workflow-run REST object exposes immutable run.head_sha, but its
+    # nested pull_requests head/base records drift with the live PR. A valid-
+    # looking nested exact base therefore must not let edited-event runtime skip
+    # source/build validation. Exercise verify_runtime, not just the helper, so
+    # a future optimization cannot accidentally restore mutable-snapshot trust.
+    emitted: list[bool] = []
+    original_env = os.environ.copy()
+    original_fetch = module.fetch_prior_runs
+    original_emit = module.emit_reuse_output
+    try:
+        os.environ.update({
+            "GITHUB_REPOSITORY": "trinhtanphat/QS3D-BricsCAD",
+            "GITHUB_TOKEN": "token",
+            "QS3D_EXPECTED_HEAD_SHA": "a" * 40,
+            "QS3D_EXPECTED_BASE_SHA": "b" * 40,
+            "QS3D_EXPECTED_BASE_REF": "main",
+            "QS3D_EXPECTED_PR_NUMBER": "123",
+            "GITHUB_RUN_ID": "200",
+        })
+        module.fetch_prior_runs = lambda repository, token, expected_sha: [valid]
+        module.emit_reuse_output = emitted.append
+        module.verify_runtime()
+    finally:
+        module.fetch_prior_runs = original_fetch
+        module.emit_reuse_output = original_emit
+        os.environ.clear()
+        os.environ.update(original_env)
+
+    if emitted != [False]:
+        print(
+            "ERROR: edited-event runtime trusted mutable nested PR head/base evidence; "
+            f"reuse outputs={emitted}"
+        )
+        return 1
+
+    print("PASS: PR-edited evidence rejects malformed members and never reuses mutable nested PR base metadata")
     return 0
 
 
