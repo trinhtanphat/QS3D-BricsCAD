@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Focused regression for Reservation-v2 peer collision against effective current-base peer changes."""
+"""Focused regression for Reservation-v2 peer/current collision against effective protected-base changes."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ MAIN_ONLY_PATH = "scripts/main-only.ps1"
 CURRENT_MAIN_SHA = "a" * 40
 PEER_HEAD_SHA = "b" * 40
 MERGE_BASE_SHA = "c" * 40
+CURRENT_HEAD_SHA = "d" * 40
 
 
 def load_target():
@@ -86,25 +87,50 @@ def assert_effective_peer_delta(gate):
 
 
 def assert_current_delta_is_nul_safe_and_includes_deletes(gate):
-    calls = []
+    git_calls = []
+    exact_calls = []
     deleted = "scripts/deleted file.ps1"
 
-    def run_git_exact(args):
-        calls.append(args)
-        return deleted + "\x00"
+    def run_git(args):
+        git_calls.append(args)
+        if args == ["rev-parse", "origin/main^{commit}"]:
+            return CURRENT_MAIN_SHA
+        if args == ["rev-parse", "HEAD^{commit}"]:
+            return CURRENT_HEAD_SHA
+        if args == ["merge-base", CURRENT_MAIN_SHA, CURRENT_HEAD_SHA]:
+            return MERGE_BASE_SHA
+        raise AssertionError(args)
 
+    def run_git_exact(args):
+        exact_calls.append(args)
+        left, right = args[5], args[6]
+        if (left, right) in {
+            (MERGE_BASE_SHA, CURRENT_HEAD_SHA),
+            (CURRENT_MAIN_SHA, CURRENT_HEAD_SHA),
+        }:
+            return deleted + "\x00"
+        raise AssertionError(args)
+
+    gate._run_git = run_git
     gate._run_git_exact = run_git_exact
     paths = gate.current_changed_paths("main")
     assert paths == [deleted], paths
-    assert calls == [[
+    assert git_calls == [
+        ["rev-parse", "origin/main^{commit}"],
+        ["rev-parse", "HEAD^{commit}"],
+        ["merge-base", CURRENT_MAIN_SHA, CURRENT_HEAD_SHA],
+    ], git_calls
+    expected_prefix = [
         "diff",
         "--name-only",
         "-z",
         "--no-renames",
         "--diff-filter=ACDMRTUXB",
-        "origin/main...HEAD",
-        "--",
-    ]], calls
+    ]
+    assert exact_calls == [
+        expected_prefix + [MERGE_BASE_SHA, CURRENT_HEAD_SHA, "--"],
+        expected_prefix + [CURRENT_MAIN_SHA, CURRENT_HEAD_SHA, "--"],
+    ], exact_calls
 
 
 def run_case(gate, peer_paths: list[str]):
@@ -175,7 +201,7 @@ def main() -> int:
     assert real_conflicts == [(6096, PEER_HEAD, [STALE_PATH])], real_conflicts
     assert_foreign_peer_fails_closed(gate)
 
-    print("PASS: Reservation-v2 peer collision uses effective peer-introduced current-base delta")
+    print("PASS: Reservation-v2 peer/current collision uses effective protected-base deltas")
     return 0
 
 
