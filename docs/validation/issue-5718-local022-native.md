@@ -1319,4 +1319,5 @@ solids/private drawings, formwork/Excel/BBS, full Unicode/DPI, all reporting,
 published-release acceptance or MCP. `aggregate_local022_qualified=false`;
 the existing V25/V26 authoring and older native cells retain their own scope.
 MCP/tunnel tests remain paused. V26 is still blocked before execution by the
-actual current-source CA2255 build error; source evidence was handed to #6154.
+actual current-source CA2255 build error. The dedicated open source handoff is
+#6279; original tooltip issue #6154 is already closed/merged.
