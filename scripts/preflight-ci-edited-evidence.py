@@ -150,7 +150,16 @@ def fetch_prior_runs(repository: str, token: str, expected_sha: str) -> list[dic
         runs = payload.get("workflow_runs") if isinstance(payload, dict) else None
         if not isinstance(runs, list):
             raise RuntimeError("GitHub Actions evidence response omitted workflow_runs")
-        collected.extend(run for run in runs if isinstance(run, dict))
+        malformed_index = next(
+            (index for index, run in enumerate(runs) if not isinstance(run, dict)),
+            None,
+        )
+        if malformed_index is not None:
+            raise RuntimeError(
+                f"GitHub Actions evidence response page {page} contained a non-object entry "
+                f"at index {malformed_index}"
+            )
+        collected.extend(runs)
         if len(runs) < PER_PAGE:
             break
     return collected
