@@ -166,7 +166,7 @@ jobs:
 
   core:
     name: ${{ github.event_name == 'push' && 'branch-core' || github.event_name == 'pull_request' && 'core' || 'dispatch-core' }}
-    if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request') }}
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request') }}
     needs: preflight
     runs-on: windows-latest
     timeout-minutes: 60
@@ -179,7 +179,7 @@ jobs:
       - name: Require successful preflight admission
         if: ${{ needs.preflight.result != 'success' }}
         shell: pwsh
-        run: throw "Preflight admission did not succeed (result=$${{ needs.preflight.result }}); core fails closed so the stable required check cannot retain stale success."
+        run: throw "Preflight admission did not succeed (result=${{ needs.preflight.result }}); core fails closed so the stable required check cannot retain stale success."
       - name: Lightweight non-build candidate
         if: ${{ needs.preflight.outputs.build_validation != 'true' }}
         shell: pwsh
