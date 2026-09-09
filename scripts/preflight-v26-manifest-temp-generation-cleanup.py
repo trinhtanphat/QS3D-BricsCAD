@@ -27,7 +27,10 @@ def main() -> None:
         "native identity proof": "GetFileInformationByHandle(handle",
         "native delete disposition": "SetFileInformationByHandle(handle",
         "delete access": "GENERIC_READ | DELETE",
+        "directory share closes delete/rename": "FILE_SHARE_READ | FILE_SHARE_WRITE",
         "directory backup semantics": "FILE_FLAG_BACKUP_SEMANTICS",
+        "reparse-open suppression": "FILE_FLAG_OPEN_REPARSE_POINT",
+        "reparse attribute rejection": "FILE_ATTRIBUTE_REPARSE_POINT",
     }
     for label, token in required.items():
         if token not in source:
@@ -38,10 +41,11 @@ def main() -> None:
         "Remove-Item -LiteralPath $RootPath",
         "Remove-Item -LiteralPath $tempScript",
         "Remove-Item -LiteralPath $tempRoot",
+        "FILE_SHARE_DELETE",
     )
     for token in forbidden:
         if token in source:
-            fail(f"pathname cleanup can unlink a replacement generation: {token}")
+            fail(f"unsafe temp-generation cleanup primitive remains: {token}")
 
     workspace_open = source.find("$workspaceHandle = Open-HeldManifestWorkspace -Path $tempRoot")
     generated_open = source.find("$generatedStream = [IO.File]::Open(")
@@ -56,7 +60,7 @@ def main() -> None:
     if not (workspace_open < generated_open < capture < invoke < post_assert < dispose < script_cleanup < workspace_cleanup):
         fail("workspace must stay held while exact script generation is executed, validated, and safely deleted")
 
-    print("PASS: V26 update-manifest script/workspace cleanup is exact-generation owned.")
+    print("PASS: V26 update-manifest script/workspace cleanup is exact non-reparse generation owned.")
 
 
 if __name__ == "__main__":
