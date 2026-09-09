@@ -111,3 +111,54 @@ top-level geometry, exact formwork/aggregate-detail parity, highlight, export an
 full save/reopen acceptance under #4041. Keep #4041 open and its evidence PR draft
 while this acceptance remains incomplete. Do not close parent #72/#4034 or infer
 MCP completion from these results.
+# 2026-09-09 continued Quantity Insight observation
+
+The earlier evidence PR #6238 merged at
+`51f5b60e85cd6c422660f94b665648f518518abb`; its implementation reservation was
+released, not the incomplete licensed acceptance. Historical keep-draft wording
+below describes that earlier checkpoint, not the current PR state. The sole
+continued carrier is #4041 / PR #6280,
+`agent/local021-review-20260909-a7810f3c/issue-4041-raft-quantity`.
+It publishes `run-quantity-observation.ps1` and its host-free guard tests without
+machine-specific paths or private fixture payloads.
+
+## Consumed quantity-ui-06: NOT QUALIFIED, blank presentation
+
+- Exact product source: `af6c585190efb80581e286add7027540e7cc7c52`, local unsigned
+  post-merge package, **not published-release qualification**.
+- Executed clean pushed harness: `7480328802a458e70f1842cb9cf48a5518daea56`.
+- Run ID: `b9056b5190ee4a07b7adf2f4eac9b8f5`; V25.2.10 x64; fresh Default clone.
+- Adapter SHA-256: `48f8ceb4c0456451b34c0b798f0ac255d0a9dd944711fc6751235e7f9c440c93`.
+- Core SHA-256: `90e9d9dfc1a2fc80d64400401fdcbf454cecd2d53d71cac96b73a5391411f383`.
+- Runner SHA-256: `20f31fc2c90711cbdfd22053384278d1d77b0d0fe3d87a175b8101f6ea960958`.
+- Started `2026-09-09T07:04:57.6749653Z`; ended
+  `2026-09-09T07:09:44.3898553Z` (under five minutes).
+
+Actual runtime identity/baseline was verified and the native raft wireframe
+was visible. Quantity Insight opened but its body remained blank after ordinary
+maximize and float actions. The host responded to Escape and native commands.
+Calling production `QS3D` displayed blank Workspace/Right interiors as well.
+Production `QS3DBQ` opened its actual modeless window, but its raster stayed
+white and supported accessibility returned null. No quantities, exact faces,
+highlight, schema, top-level placement or export were qualified in this run.
+
+There is a useful but non-isolating control: LOCAL022 allocation67 used the same
+frozen product and Default-profile clone and visibly rendered BQ, including its
+fresh-process cold result. It differed in drawing, loaded test observer and
+startup sequence. This does **not** identify a source/GPU/driver/capture cause.
+Do not rerun consumed06 unchanged or convert the other fixture's BQ PASS into
+raft/Quantity Insight evidence.
+
+The operator ended observation early. Final receipt is
+`OBSERVATION_FINISHED_NOT_AGGREGATE_PASS`, with aggregate false and process exit
+code zero for the observation runner, **not product PASS**. Owned-host forced
+close fallback was required; graceful exit is false. Profile inventory/current
+pointer, nonce removal, original autostart, installed payload/registration and
+original fixture preservation were verified. Independent final process inspection
+found zero BricsCAD hosts. Private copied fixture/receipts remain local.
+
+Before this allocation, the new wrapper rejected concatenated fixture-path input
+before allocating any host/profile/preferences. Parenthesized path expressions
+and a replay of the exact AST expression fixed that harness-only error; focused
+tests passed before the clean pushed execution above. It was not a product
+failure or a consumed host allocation.
