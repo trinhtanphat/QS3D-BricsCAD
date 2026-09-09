@@ -61,9 +61,9 @@ namespace QS3D.BricsCAD.V25
                     PlaceOne(document, project, family, dimensions, point.Value);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Report(document, "QS3DDRAWSINGLEFOOTING lỗi: " + ex.Message);
+                Report(document, "QS3DDRAWSINGLEFOOTING failed. See diagnostics for details.");
             }
         }
 
@@ -383,7 +383,12 @@ namespace QS3D.BricsCAD.V25
         private static void Report(Document document, string message)
         {
             try { document.Editor.WriteMessage("\n" + message); } catch { }
-            try { PaletteCoordinator.SetStatus(message); } catch { }
+            try
+            {
+                if (ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                    PaletteCoordinator.SetStatus(message);
+            }
+            catch { }
         }
     }
 }
