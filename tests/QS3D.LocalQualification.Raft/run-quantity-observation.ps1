@@ -4,7 +4,8 @@ param(
  [Parameter(Mandatory=$true)][ValidatePattern('^[A-Fa-f0-9]{64}$')][string]$ExpectedCoreSha256,
  [Parameter(Mandatory=$true)][string]$ProductWorktree,
  [Parameter(Mandatory=$true)][string]$InputPrefix,
- [Parameter(Mandatory=$true)][ValidatePattern('^[a-z0-9-]{4,50}$')][string]$AllocationName
+ [Parameter(Mandatory=$true)][ValidatePattern('^[a-z0-9-]{4,50}$')][string]$AllocationName,
+ [ValidateSet('Hidden','Maximized')][string]$WindowMode='Hidden'
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
@@ -54,6 +55,7 @@ Copy-Item -LiteralPath ($prior+'.qsdb') -Destination (Join-Path $root 'quantity-
 $runId=[Guid]::NewGuid().ToString('N'); $runtime=Join-Path $root 'runtime.txt'; $finish=Join-Path $root 'operator-finish.json'
 $record=[ordered]@{schema='QS3D_LOCAL021_QUANTITY_OBSERVED_V1'; run_id=$runId; harness_sha=$harnessSha; source_profile='Default'; source_sha='af6c585190efb80581e286add7027540e7cc7c52'; product_kind='LOCAL_POSTMERGE_DIAGNOSTIC_NOT_PUBLISHED_RELEASE'; plugin_sha256=$ExpectedPluginSha256; core_sha256=$ExpectedCoreSha256; started_utc=[DateTime]::UtcNow.ToString('o'); wrapper_sha256=(Hash $PSCommandPath); input_dwg_sha256=(Hash $drawing); input_qsdb_sha256=(Hash (Join-Path $root 'quantity-raft.qsdb')); status='RUNNING'; aggregate_local021_pass=$false; baseline_verified=$false; cleanup=$null; autostart_restored=$false; protected_install_unchanged=$false; force_close_fallback=$false}
 function Record {$record | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $root 'receipt.json') -Encoding utf8}
+$record.launch_window_mode=$WindowMode
 . (Join-Path $repo 'scripts\v25-profile-sandbox.ps1')
 $sandbox=$null; $proc=$null; $failure=$null; $paused=$false
 $runtimeEnvBefore=[Environment]::GetEnvironmentVariable('QS3D_RUNTIME_RESULT','Process')
@@ -67,7 +69,7 @@ try {
  $env:QS3D_RUNTIME_RESULT=$runtime
  $scr=Join-Path $root 'start.scr'
  @('FILEDIA','0','CMDECHO','1','SAVETIME','0','NETLOAD',('"'+$plugin+'"'),'QS3DRUNTIMEPROBE','QS3DRELOAD','_.VPOINT','1,-1,1','_.ZOOM','_Extents','(progn (vl-load-com) (setq qs (ssget "_X" ''((0 . "3DSOLID")))) (if (and qs (= (sslength qs) 1) (equal (/ (vla-get-Volume (vlax-ename->vla-object (ssname qs 0))) 1e9) 19.2 1e-7)) (progn (sssetfirst nil qs) (command "QS3DQUANTITYINSIGHT")) (princ "NATIVE_PRECHECK_FAILED")))','') | Set-Content $scr -Encoding ascii
- $proc=Start-Process -FilePath $exe -ArgumentList ('"'+$drawing+'" /P "'+$sandbox.NonceProfile+'" /B "'+$scr+'"') -WorkingDirectory $root -WindowStyle Hidden -PassThru
+ $proc=Start-Process -FilePath $exe -ArgumentList ('"'+$drawing+'" /P "'+$sandbox.NonceProfile+'" /B "'+$scr+'"') -WorkingDirectory $root -WindowStyle $WindowMode -PassThru
  $record.process_id=$proc.Id; $record.process_start_utc=$proc.StartTime.ToUniversalTime().ToString('o'); Record
  $deadline=[DateTime]::UtcNow.AddSeconds(150)
  while(-not (Test-Path $runtime)){if($proc.HasExited){throw 'Host exited before baseline.'}; if([DateTime]::UtcNow -ge $deadline){throw 'Baseline timeout.'}; Start-Sleep -Milliseconds 500}

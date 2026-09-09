@@ -94,3 +94,11 @@ forced owned-host closure, restores profile/current pointer, original autostart
 bytes/time and process environment, verifies installed and original fixture
 hashes, and checks zero CAD/tunnel processes. The copied allocation fixture is
 retained as private diagnostic evidence, not a claim of private-file deletion.
+
+`WindowMode` defaults to `Hidden`. With explicit owner permission for visible
+UI work, `-WindowMode Maximized` changes only the native process startup window
+mode; its exact value is recorded in the receipt. This permits a bounded
+comparison with LOCAL-022 allocation67's visible startup after allocation06's
+hidden-start grey/white surfaces. Product bytes, fixture, script, profile and
+all validation/cleanup gates remain identical. It is not a rendering workaround,
+proof of a cause, or permission to label a visually blank result PASS.

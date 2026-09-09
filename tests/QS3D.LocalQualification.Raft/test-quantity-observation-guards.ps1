@@ -4,6 +4,13 @@ $runner=Join-Path $PSScriptRoot 'run-quantity-observation.ps1'
 $parseErrors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile($runner,[ref]$null,[ref]$parseErrors)
 if($parseErrors.Count){throw 'Runner must parse.'}
+$windowParameter=@($ast.ParamBlock.Parameters | Where-Object {$_.Name.VariablePath.UserPath -ceq 'WindowMode'})
+if($windowParameter.Count -ne 1 -or $windowParameter[0].DefaultValue.SafeGetValue() -cne 'Hidden'){throw 'Hidden remains the safe default.'}
+$windowValidation=@($windowParameter[0].Attributes | Where-Object {$_.TypeName.Name -ceq 'ValidateSet'})
+if($windowValidation.Count -ne 1 -or (@($windowValidation[0].PositionalArguments | ForEach-Object {$_.SafeGetValue()}) -join ',') -cne 'Hidden,Maximized'){throw 'Only two explicitly recorded startup modes are supported.'}
+$launch=@($ast.FindAll({param($n) $n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -ceq 'Start-Process'},$true))
+if($launch.Count -ne 1 -or $launch[0].Extent.Text -cnotmatch '-WindowStyle \$WindowMode\b'){throw 'Actual host launch must use the selected mode.'}
+if($ast.Extent.Text -cnotmatch '\$record\.launch_window_mode=\$WindowMode'){throw 'Receipt must bind the actual mode.'}
 $rejected=$false
 try {
  & $runner -ExpectedPluginSha256 ('a'*64) -ExpectedCoreSha256 ('b'*64) -ProductWorktree unused -InputPrefix unused -AllocationName host-free-test
