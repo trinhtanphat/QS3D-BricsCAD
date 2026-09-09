@@ -22,7 +22,7 @@ def method_body(name: str) -> str:
         re.S,
     )
     if not signature:
-        fail(f"cannot locate static method body: {name}")
+        fail(f"cannot locate block-bodied static method: {name}")
 
     open_brace = text.find("{", signature.start())
     depth = 0
@@ -38,11 +38,13 @@ def method_body(name: str) -> str:
     return ""
 
 
-if "ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)" not in text:
-    fail("Auto Host must fence process-global Workspace publication to the exact active source Document")
-
-is_active = method_body("IsActiveDocument")
-if "ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)" not in is_active:
+is_active_pattern = re.compile(
+    r"private\s+static\s+bool\s+IsActiveDocument\s*\(\s*Document\s+document\s*\)\s*"
+    r"(?:=>\s*ReferenceEquals\(document,\s*Application\.DocumentManager\.MdiActiveDocument\)\s*;|"
+    r"\{[^{}]*ReferenceEquals\(document,\s*Application\.DocumentManager\.MdiActiveDocument\)[^{}]*\})",
+    re.S,
+)
+if not is_active_pattern.search(text):
     fail("IsActiveDocument must use exact native Document identity")
 
 refresh = method_body("TryRefreshProject")
