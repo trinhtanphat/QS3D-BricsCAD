@@ -44,26 +44,32 @@ def _historical_reuse_surface(source: str) -> list[str]:
     return sorted(set(findings))
 
 
-def _cross_event_required_status_race_errors(workflow: str) -> list[str]:
-    """Require one PR event domain while preserving fork check-run admission."""
+def _required_check_race_errors(workflow: str) -> list[str]:
+    """Require GitHub-owned stable checks instead of mutable commit-status mirrors."""
     errors: list[str] = []
     if "github.event.action == 'edited' && 'metadata'" in workflow:
         errors.append("metadata edits use a separate PR concurrency domain")
 
     required_needles = {
         "single PR concurrency class": "github.event_name == 'pull_request' && 'pull_request'",
-        "same-repository preflight check-run isolation": (
-            "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'candidate-preflight'"
-        ),
-        "same-repository core check-run isolation": (
-            "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'candidate-core'"
-        ),
-        "fork preflight check-run fallback": "github.event_name == 'pull_request' && 'preflight'",
-        "fork core check-run fallback": "github.event_name == 'pull_request' && 'core'",
+        "stable PR preflight check-run": "github.event_name == 'pull_request' && 'preflight'",
+        "stable PR core check-run": "github.event_name == 'pull_request' && 'core'",
     }
     for label, needle in required_needles.items():
         if needle not in workflow:
             errors.append(f"missing {label}")
+
+    forbidden_needles = {
+        "same-repository candidate preflight check-run": "candidate-preflight",
+        "same-repository candidate core check-run": "candidate-core",
+        "manual required preflight status mirror": "Mirror preflight result into required commit status",
+        "manual required core status mirror": "Mirror core result into required commit status",
+        "manual statuses write permission": "statuses: write",
+        "direct commit-status publication": "/statuses/$env:QS3D_HEAD_SHA",
+    }
+    for label, needle in forbidden_needles.items():
+        if needle in workflow:
+            errors.append(f"forbidden {label}")
 
     return errors
 
@@ -83,9 +89,9 @@ def main() -> int:
         print("ERROR: edited-event workflow bypass contract remains:", ", ".join(contract_errors))
         return 1
 
-    race_errors = _cross_event_required_status_race_errors(workflow)
+    race_errors = _required_check_race_errors(workflow)
     if race_errors:
-        print("ERROR: PR event required-status last-writer race remains:", ", ".join(race_errors))
+        print("ERROR: PR required-check race remains:", ", ".join(race_errors))
         return 1
 
     original_env = os.environ.copy()
@@ -114,7 +120,7 @@ def main() -> int:
         os.environ.clear()
         os.environ.update(original_env)
 
-    print("PASS: PR-edited CI has no mutable historical reuse, workflow skip bypass, or cross-event required-status race")
+    print("PASS: PR-edited CI has no mutable historical reuse, skip bypass, or mutable required-status mirror race")
     return 0
 
 
