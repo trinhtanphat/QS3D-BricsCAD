@@ -261,7 +261,6 @@ try {
     # Real public production mutation command sits between test-only setup and verification.
     Invoke-HostPhase 'run' @(
         'QL005SETUP',
-        'QL005ARMEX',
         'QS3DSLABREBAR3DMULTI',
         'QL005DUMPEX',
         'QL005VERIFY',

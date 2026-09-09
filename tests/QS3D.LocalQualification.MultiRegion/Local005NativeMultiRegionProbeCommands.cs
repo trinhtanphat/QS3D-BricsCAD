@@ -39,18 +39,6 @@ namespace QS3D.LocalQualification.MultiRegion
         private static bool ProductionExceptionDiagnosticArmed;
         private static string? ProductionExceptionDiagnostic;
 
-        [CommandMethod("QL005ARMEX", CommandFlags.Modal)]
-        public void ArmProductionExceptionDiagnostic()
-        {
-            _ = Bind();
-            lock (DiagnosticGate)
-            {
-                if (!ProductionExceptionDiagnosticArmed) AppDomain.CurrentDomain.FirstChanceException += CaptureProductionException;
-                ProductionExceptionDiagnosticArmed = true;
-                ProductionExceptionDiagnostic = string.Empty;
-            }
-        }
-
         [CommandMethod("QL005DUMPEX", CommandFlags.Modal)]
         public void DumpProductionExceptionDiagnostic()
         {
@@ -79,6 +67,17 @@ namespace QS3D.LocalQualification.MultiRegion
 
         [CommandMethod("QL005REOPEN", CommandFlags.Modal)]
         public void Reopen() => Execute("reopen", ReopenPhase);
+
+        private static void ArmProductionExceptionDiagnostic(Context context)
+        {
+            _ = context;
+            lock (DiagnosticGate)
+            {
+                if (!ProductionExceptionDiagnosticArmed) AppDomain.CurrentDomain.FirstChanceException += CaptureProductionException;
+                ProductionExceptionDiagnosticArmed = true;
+                ProductionExceptionDiagnostic = string.Empty;
+            }
+        }
 
         private static void CaptureProductionException(object? sender, FirstChanceExceptionEventArgs args)
         {
@@ -114,6 +113,7 @@ namespace QS3D.LocalQualification.MultiRegion
             element.Properties["RebarSlabXClosestToFace"] = "true";
             project.Elements.Add(element);
             project.Touch();
+            ArmProductionExceptionDiagnostic(context);
             context.Document.Editor.SetImpliedSelection(ids);
 
             return Checks(

@@ -10,7 +10,7 @@ $runnerText = Get-Content -LiteralPath $runner -Raw
 $probeText = Get-Content -LiteralPath $probe -Raw
 $projectText = Get-Content -LiteralPath $project -Raw
 
-$orderedCommands = @('QL005SETUP','QL005ARMEX','QS3DSLABREBAR3DMULTI','QL005DUMPEX','QL005VERIFY','QS3DMULTIREBARHEALTH','QS3DSAVE','_.QSAVE','QL005SAVED')
+$orderedCommands = @('QL005SETUP','QS3DSLABREBAR3DMULTI','QL005DUMPEX','QL005VERIFY','QS3DMULTIREBARHEALTH','QS3DSAVE','_.QSAVE','QL005SAVED')
 $cursor = -1
 foreach ($command in $orderedCommands) {
     $next = $runnerText.IndexOf("'" + $command + "'", $cursor + 1, [StringComparison]::Ordinal)
@@ -62,7 +62,8 @@ foreach ($required in @(
     'cold_reopen_project_bind')) {
     if ($probeText.IndexOf($required, [StringComparison]::Ordinal) -lt 0) { throw ('FAIL: probe contract missing ' + $required) }
 }
-foreach ($diagnosticToken in @('[CommandMethod("QL005ARMEX"','[CommandMethod("QL005DUMPEX"','FirstChanceException','local005-production-exception.private.txt')) {
+if ($runnerText.IndexOf("'QL005ARMEX'", [StringComparison]::Ordinal) -ge 0) { throw 'FAIL: diagnostic arming command must not sit between PICKFIRST setup and production.' }
+foreach ($diagnosticToken in @('ArmProductionExceptionDiagnostic(context);','[CommandMethod("QL005DUMPEX"','FirstChanceException','local005-production-exception.private.txt')) {
     if ($probeText.IndexOf($diagnosticToken, [StringComparison]::Ordinal) -lt 0) { throw ('FAIL: production exception diagnostic contract missing ' + $diagnosticToken) }
 }
 if ($probeText.IndexOf('SlabFoundationMultiRegionMeshSolidBuilder', [StringComparison]::Ordinal) -ge 0) {
