@@ -59,8 +59,8 @@ else:
 
         success_helper = text[finalize:report]
         for token in (
-            "try { PaletteCoordinator.RefreshProject(); }",
-            "try { PaletteCoordinator.SetStatus(summary); }",
+            "try { TryRefreshProject(document); }",
+            "try { TrySetPaletteStatus(document, summary); }",
             "try { document.Editor.WriteMessage(",
         ):
             if token not in success_helper:
@@ -72,7 +72,7 @@ else:
 
         error_helper = text[report:single]
         for token in (
-            "try { PaletteCoordinator.SetStatus(message); }",
+            "try { TrySetPaletteStatus(document, message); }",
             "try { document.Editor.WriteMessage(",
         ):
             if token not in error_helper:
@@ -98,4 +98,4 @@ if errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("PASS: Auto Host keeps matching/rollback/regeneration semantics intact while committed batch results and business failures use non-throwing UI/reporting boundaries across legacy and redacted reporter shapes.")
+print("PASS: Auto Host keeps matching/rollback/regeneration semantics intact while committed batch results and business failures use source-document-affined non-throwing UI/reporting boundaries.")
