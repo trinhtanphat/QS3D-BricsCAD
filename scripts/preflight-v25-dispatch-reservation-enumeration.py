@@ -19,13 +19,30 @@ CAPTURE = re.compile(
     rf'reservation_rows\s*=\s*"\$\(\s*{RESERVATION_API}.*?\)"',
     re.DOTALL,
 )
-STATUS = re.compile(r'reservation_query_status\s*=\s*\$\?')
+STATUS_LINE = re.compile(r'^reservation_query_status\s*=\s*\$\?$')
 FAIL_CHECK = re.compile(r'if\s+\(\(\s*reservation_query_status\s*!=\s*0\s*\)\)\s*;\s*then')
 FAIL_DIAGNOSTIC = re.compile(r'Could not enumerate V25 preview reservation comments')
 FAIL_EXIT = re.compile(r'exit\s+"\$\{reservation_query_status\}"')
 PARSE_CAPTURED = re.compile(r'done\s*<<<\s*"\$\{reservation_rows\}"')
-SET_PLUS_E = re.compile(r'(?m)^\s*set\s+\+e\s*$')
 SET_MINUS_E = re.compile(r'(?m)^\s*set\s+-e\s*$')
+
+
+def _code_lines(fragment: str) -> list[str]:
+    return [
+        line.strip()
+        for line in fragment.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+
+def _last_code_line_before(text: str, offset: int) -> str | None:
+    lines = _code_lines(text[:offset])
+    return lines[-1] if lines else None
+
+
+def _first_code_line_after(text: str, offset: int) -> str | None:
+    lines = _code_lines(text[offset:])
+    return lines[0] if lines else None
 
 
 def _search_after(pattern: re.Pattern[str], text: str, start: int) -> re.Match[str] | None:
@@ -42,16 +59,28 @@ def contract_errors(text: str) -> list[str]:
         errors.append("missing captured paginated reservation comment query")
         return errors
 
-    set_plus_e_matches = [match for match in SET_PLUS_E.finditer(text, 0, capture.start())]
-    if not set_plus_e_matches:
-        errors.append("reservation query capture must be preceded by set +e")
+    if _last_code_line_before(text, capture.start()) != "set +e":
+        errors.append("reservation query capture must immediately follow active set +e")
 
-    status = _search_after(STATUS, text, capture.end())
-    if status is None:
+    next_code_line = _first_code_line_after(text, capture.end())
+    if next_code_line is None or STATUS_LINE.fullmatch(next_code_line) is None:
         errors.append("reservation query exit status must be captured immediately after the API command substitution")
         return errors
 
-    set_minus_e = _search_after(SET_MINUS_E, text, status.end())
+    status = re.search(
+        r'(?m)^\s*reservation_query_status\s*=\s*\$\?\s*$',
+        text[capture.end():],
+    )
+    if status is None:
+        errors.append("reservation query exit status capture could not be located")
+        return errors
+    status_end = capture.end() + status.end()
+
+    if _first_code_line_after(text, status_end) != "set -e":
+        errors.append("reservation query status capture must immediately restore set -e")
+        return errors
+
+    set_minus_e = _search_after(SET_MINUS_E, text, status_end)
     if set_minus_e is None:
         errors.append("reservation query status capture must restore set -e before admission continues")
         return errors
