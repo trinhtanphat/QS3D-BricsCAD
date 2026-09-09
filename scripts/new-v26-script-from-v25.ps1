@@ -361,12 +361,16 @@ try {
     [IO.File]::Move($stagePath, $outputFull)
 }
 finally {
-    if (Test-Path -LiteralPath $stagePath) {
-        Assert-AdmittedOutputParentBinding -Admission $outputParentHandle
-        Assert-OrdinaryPathItem -Path $stagePath -Label 'V26 generated script staging file' -Directory $false | Out-Null
-        Remove-Item -LiteralPath $stagePath -Force
+    try {
+        if (Test-Path -LiteralPath $stagePath) {
+            Assert-AdmittedOutputParentBinding -Admission $outputParentHandle
+            Assert-OrdinaryPathItem -Path $stagePath -Label 'V26 generated script staging file' -Directory $false | Out-Null
+            Remove-Item -LiteralPath $stagePath -Force
+        }
     }
-    $outputParentHandle.Handle.Dispose()
+    finally {
+        $outputParentHandle.Handle.Dispose()
+    }
 }
 Assert-OrdinaryPathItem -Path $outputFull -Label 'V26 generated script output' -Directory $false | Out-Null
 

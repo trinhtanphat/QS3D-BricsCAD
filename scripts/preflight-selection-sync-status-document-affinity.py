@@ -67,9 +67,10 @@ if method_body:
 
 for needle in [
     "private static readonly Dictionary<Document, object> AttachmentTokens",
-    "AttachmentTokens[document] = new object();",
+    "private static readonly Dictionary<Document, EventHandler> AttachmentHandlers",
+    "AttachmentTokens[document] = attachmentToken;",
+    "AttachmentHandlers[document] = attachmentHandler;",
     "AttachmentTokens.Remove(document);",
-    "AttachmentTokens.TryGetValue(document, out var attachmentToken)",
     "IsCurrentAttachment(document, attachmentToken)",
 ]:
     if needle not in selection:
@@ -84,31 +85,34 @@ for needle in [
     if needle not in helper_body:
         errors.append("attachment-generation helper must require exact current token identity: " + needle)
 
-# A selection event can already be queued when Detach unsubscribes. A late callback must not
-# recreate Pending state for a detached Document. Fence both the event callback and the
-# scheduling boundary so alternate/internal callers cannot retain a stale native wrapper.
-event_start = selection.find("private static void OnImpliedSelectionChanged")
+# A selection event can already be queued when Detach unsubscribes. A generation-specific handler
+# must retain its original token, reject stale ownership, and pass that same token into scheduling.
+event_start = selection.find("private static void OnImpliedSelectionChanged(Document document, object attachmentToken)")
 event_end = selection.find("private static void ScheduleRefresh", event_start if event_start >= 0 else 0)
 event_body = selection[event_start:event_end if event_end >= 0 else len(selection)] if event_start >= 0 else ""
-if event_body:
-    attached = event_body.find("Attached.Contains(document)")
-    schedule = event_body.find("ScheduleRefresh(document);")
-    if attached < 0 or schedule < 0 or attached > schedule:
-        errors.append("queued selection event must verify Document is still attached before scheduling refresh")
+if not event_body:
+    errors.append("selection-sync event handler must be generation-specific")
+else:
+    attached = event_body.find("IsCurrentAttachment(document, attachmentToken)")
+    active = event_body.find("ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)")
+    schedule = event_body.find("ScheduleRefresh(document, attachmentToken);")
+    if min(attached, active, schedule) < 0 or not (attached < active < schedule):
+        errors.append("queued selection event must retain exact generation + active-document authority before scheduling refresh")
 
-schedule_start = selection.find("private static void ScheduleRefresh(Document document)")
+schedule_start = selection.find("private static void ScheduleRefresh(Document document, object attachmentToken)")
 schedule_end = selection.find("private static bool IsCurrentAttachment", schedule_start if schedule_start >= 0 else 0)
 schedule_body = selection[schedule_start:schedule_end if schedule_end >= 0 else len(selection)] if schedule_start >= 0 else ""
-if schedule_body:
-    detached_guard = schedule_body.find("!Attached.Contains(document)")
+if not schedule_body:
+    errors.append("ScheduleRefresh must retain the exact attachment generation")
+else:
+    detached_guard = schedule_body.find("IsCurrentAttachment(document, attachmentToken)")
     first_pending_lookup = schedule_body.find("Pending.TryGetValue(document")
     if detached_guard < 0 or first_pending_lookup < 0 or detached_guard > first_pending_lookup:
-        errors.append("ScheduleRefresh must fail closed for detached Documents before creating/reusing Pending timer state")
+        errors.append("ScheduleRefresh must fail closed on exact stale generation before creating/reusing Pending timer state")
 
-# A DispatcherTimer Tick can already be queued when Detach removes/stops its timer. If a late
-# event managed to recreate this timer, its canonical Tick must consume its own Pending entry
-# before checking attachment. That prevents a detached stopped timer from retaining Document
-# affinity indefinitely, while an older non-canonical timer must never remove a newer timer.
+# A DispatcherTimer Tick can already be queued when Detach removes/stops its timer. An older
+# non-canonical timer must never remove a newer timer, and the canonical timer must revalidate the
+# exact token captured by its generation before invoking refresh.
 tick_start = selection.find("timer.Tick +=")
 tick_end = selection.find("};", tick_start if tick_start >= 0 else 0)
 tick_body = selection[tick_start:tick_end if tick_end >= 0 else len(selection)] if tick_start >= 0 else ""
@@ -116,30 +120,53 @@ for needle in [
     "Pending.TryGetValue(document, out var current)",
     "ReferenceEquals(current, timer)",
     "Pending.Remove(document);",
-    "Attached.Contains(document)",
+    "IsCurrentAttachment(document, attachmentToken)",
+    "Refresh(document, attachmentToken);",
 ]:
     if needle not in tick_body:
-        errors.append("selection-sync queued Tick stale-lifetime fence missing token: " + needle)
+        errors.append("selection-sync queued Tick generation/lifetime fence missing token: " + needle)
 if tick_body:
     authority = tick_body.find("Pending.TryGetValue(document, out var current)")
     identity = tick_body.find("ReferenceEquals(current, timer)")
     remove = tick_body.find("Pending.Remove(document);")
-    attached = tick_body.find("Attached.Contains(document)")
-    refresh = tick_body.find("Refresh(document);")
+    attached = tick_body.find("IsCurrentAttachment(document, attachmentToken)")
+    refresh = tick_body.find("Refresh(document, attachmentToken);")
     if min(authority, identity, remove, attached, refresh) < 0 or not (authority < identity < remove < attached < refresh):
-        errors.append("canonical Tick must validate timer identity, consume Pending, then verify attachment before Refresh")
+        errors.append("canonical Tick must validate timer identity, consume Pending, then verify exact generation before Refresh")
 
-refresh_start = selection.find("public static void Refresh(Document? document)")
-refresh_end = selection.find("public static void Stop()", refresh_start if refresh_start >= 0 else 0)
-refresh_body = selection[refresh_start:refresh_end if refresh_start >= 0 and refresh_end >= 0 else len(selection)] if refresh_start >= 0 else ""
-if refresh_body and "AttachmentTokens.TryGetValue(document, out var attachmentToken)" not in refresh_body:
-    errors.append("Refresh must capture exact attachment-generation identity before native/modeless work")
-if refresh_body:
-    snapshot = refresh_body.find("EntitySnapshotReader.ReadImpliedSelection(document)")
-    revalidate = refresh_body.find("IsCurrentAttachment(document, attachmentToken)", snapshot if snapshot >= 0 else 0)
-    publish = refresh_body.find("PaletteCoordinator.SetInspection(snapshots)")
-    if snapshot < 0 or revalidate < 0 or publish < 0 or not (snapshot < revalidate < publish):
-        errors.append("Refresh must revalidate exact attachment generation after native snapshot work before inspection publication")
+# External lifecycle/UI callers may request a refresh without owning a historical token. That
+# boundary may capture the current token exactly once. Generation-bound queued work must call the
+# two-argument overload directly and must never recapture a newer token.
+compat_start = selection.find("public static void Refresh(Document? document)")
+exact_start = selection.find("public static void Refresh(Document? document, object attachmentToken)")
+stop_start = selection.find("public static void Stop()", exact_start if exact_start >= 0 else 0)
+compat_body = selection[compat_start:exact_start] if compat_start >= 0 and exact_start > compat_start else ""
+exact_body = selection[exact_start:stop_start if stop_start >= 0 else len(selection)] if exact_start >= 0 else ""
+if not compat_body:
+    errors.append("SelectionSync must retain the one-argument lifecycle refresh compatibility boundary")
+else:
+    capture = compat_body.find("AttachmentTokens.TryGetValue(document, out var attachmentToken)")
+    delegate = compat_body.find("Refresh(document, attachmentToken);")
+    if capture < 0 or delegate < 0 or capture > delegate:
+        errors.append("one-argument Refresh must capture the current attachment token once before delegating")
+    for forbidden in ["PaletteCoordinator.EnsureCreated", "EntitySnapshotReader.ReadImpliedSelection", "PaletteCoordinator.SetInspection"]:
+        if forbidden in compat_body:
+            errors.append("one-argument Refresh must delegate only and not perform modeless/native work: " + forbidden)
+
+if not exact_body:
+    errors.append("SelectionSync exact-token Refresh overload is missing")
+else:
+    if "AttachmentTokens.TryGetValue(document, out var attachmentToken)" in exact_body:
+        errors.append("exact-token Refresh must never recapture a newer attachment generation")
+    entry = exact_body.find("IsCurrentAttachment(document, attachmentToken)")
+    claim = exact_body.find("Refreshing[document] = attachmentToken;")
+    work = exact_body.find("PaletteCoordinator.EnsureCreated();")
+    snapshot = exact_body.find("EntitySnapshotReader.ReadImpliedSelection(document)")
+    revalidate = exact_body.find("IsCurrentAttachment(document, attachmentToken)", snapshot if snapshot >= 0 else 0)
+    publish = exact_body.find("PaletteCoordinator.SetInspection(snapshots)")
+    release = exact_body.find("ReleaseRefresh(document, attachmentToken);")
+    if min(entry, claim, work, snapshot, revalidate, publish, release) < 0 or not (entry < claim < work < snapshot < revalidate < publish < release):
+        errors.append("exact-token Refresh must validate/claim generation, revalidate after snapshot, publish, then release exact ownership")
 
 print("QS3D selection-sync status document-affinity preflight")
 if errors:
@@ -147,4 +174,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: selection-sync status retains exact document/attachment affinity and detached queued events/timers cannot retain stale Document state.")
+print("PASS: selection-sync status, lifecycle refresh compatibility, queued callbacks and exact attachment generations retain document affinity without stale-generation authority.")
