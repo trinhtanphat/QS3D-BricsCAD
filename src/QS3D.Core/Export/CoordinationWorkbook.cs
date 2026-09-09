@@ -154,7 +154,11 @@ namespace QS3D.Core.Export
         private const int HeaderStyle = 1;
         private const int IntegerStyle = 2;
         private const int WrappedStyle = 3;
-        private const int MaxRows = 1048575;
+        private const int MaxExportDataRowsPerSheet = 10000;
+        private const long MaxExportXmlEntryBytes = 32L * 1024L * 1024L;
+        private const long MaxExportXmlTotalBytes = 64L * 1024L * 1024L;
+        private const long MaxExportWorkbookBytes = 64L * 1024L * 1024L;
+        private static readonly Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private static readonly DateTimeOffset DeterministicZipEntryTimestamp =
             new DateTimeOffset(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
@@ -167,8 +171,6 @@ namespace QS3D.Core.Export
 
             var snapshot = Snapshot(rows, admittedRowCount);
             var traces = new List<CoordinationTraceProjection>(snapshot.Count);
-            var clashXml = BuildClashSheet(snapshot, traces);
-            var traceXml = BuildTraceSheet(traces);
 
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
@@ -176,16 +178,33 @@ namespace QS3D.Core.Export
             var tempPath = AtomicFileCommit.CreateTempPath(fullPath);
             try
             {
+                long totalExportXmlBytes = 0L;
                 using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
-                using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, false, Encoding.UTF8))
+                using (var boundedArchive = new BoundedArchiveWriteStream(stream, MaxExportWorkbookBytes, true))
                 {
-                    WriteEntry(archive, "[Content_Types].xml", ContentTypesXml);
-                    WriteEntry(archive, "_rels/.rels", RootRelationshipsXml);
-                    WriteEntry(archive, "xl/workbook.xml", WorkbookXml);
-                    WriteEntry(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml);
-                    WriteEntry(archive, "xl/styles.xml", StylesXml);
-                    WriteEntry(archive, "xl/worksheets/sheet1.xml", clashXml);
-                    WriteEntry(archive, "xl/worksheets/sheet2.xml", traceXml);
+                    using (var archive = new ZipArchive(boundedArchive, ZipArchiveMode.Create, true, StrictUtf8))
+                    {
+                        WriteEntry(archive, "[Content_Types].xml", ContentTypesXml, ref totalExportXmlBytes);
+                        WriteEntry(archive, "_rels/.rels", RootRelationshipsXml, ref totalExportXmlBytes);
+                        WriteEntry(archive, "xl/workbook.xml", WorkbookXml, ref totalExportXmlBytes);
+                        WriteEntry(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml, ref totalExportXmlBytes);
+                        WriteEntry(archive, "xl/styles.xml", StylesXml, ref totalExportXmlBytes);
+                        WriteSheet(
+                            archive,
+                            "xl/worksheets/sheet1.xml",
+                            writer => WriteClashWorksheet(writer, snapshot, traces),
+                            ref totalExportXmlBytes);
+                        WriteSheet(
+                            archive,
+                            "xl/worksheets/sheet2.xml",
+                            writer => WriteTraceWorksheet(writer, traces),
+                            ref totalExportXmlBytes);
+                    }
+
+                    boundedArchive.Flush();
+                    if (stream.Length <= 0L || stream.Length > MaxExportWorkbookBytes)
+                        throw new InvalidDataException("Coordination workbook export exceeds the supported archive size.");
+                    stream.Flush(true);
                 }
 
                 XlsxPackageValidator.Validate(
@@ -207,7 +226,8 @@ namespace QS3D.Core.Export
         private static void RequireCoordinationRowCountAdmission(int count)
         {
             if (count <= 0) throw new InvalidDataException("Coordination workbook CLASHES requires at least one row.");
-            if (count > MaxRows) throw new InvalidDataException("Coordination workbook exceeds the Excel row limit.");
+            if (count > MaxExportDataRowsPerSheet)
+                throw new InvalidDataException("Coordination workbook exceeds the supported export row limit.");
         }
 
         private static void RequireStableCoordinationRowCount(IReadOnlyList<CoordinationClashExportRow> source, int admittedRowCount)
@@ -240,7 +260,7 @@ namespace QS3D.Core.Export
             return result;
         }
 
-        private static string BuildClashSheet(IReadOnlyList<CoordinationClashExportRow> rows, ICollection<CoordinationTraceProjection> traces)
+        private static void WriteClashWorksheet(TextWriter writer, IReadOnlyList<CoordinationClashExportRow> rows, ICollection<CoordinationTraceProjection> traces)
         {
             var headers = new[]
             {
@@ -250,11 +270,11 @@ namespace QS3D.Core.Export
                 "RULE_ID", "DRAWING_FINGERPRINT", "COMMENT", TraceHeader
             };
             var range = "A1:P" + (rows.Count + 1).ToString(CultureInfo.InvariantCulture);
-            var sb = BeginSheet(range);
-            sb.Append("<cols><col min=\"1\" max=\"1\" width=\"7\" customWidth=\"1\"/><col min=\"2\" max=\"16\" width=\"24\" customWidth=\"1\"/></cols>");
-            sb.Append("<sheetData><row r=\"1\" ht=\"30\" customHeight=\"1\">");
-            for (var column = 0; column < headers.Length; column++) Text(sb, Cell(column, 1), headers[column], HeaderStyle);
-            sb.Append("</row>");
+            WriteSheetStart(writer, range);
+            writer.Write("<cols><col min=\"1\" max=\"1\" width=\"7\" customWidth=\"1\"/><col min=\"2\" max=\"16\" width=\"24\" customWidth=\"1\"/></cols>");
+            writer.Write("<sheetData><row r=\"1\" ht=\"30\" customHeight=\"1\">");
+            for (var column = 0; column < headers.Length; column++) Text(writer, Cell(column, 1), headers[column], HeaderStyle);
+            writer.Write("</row>");
 
             for (var index = 0; index < rows.Count; index++)
             {
@@ -262,79 +282,110 @@ namespace QS3D.Core.Export
                 var excelRow = index + 2;
                 var traceKey = CoordinationWorkbookIdentity.BuildTraceKey(row, ClashSheet);
                 traces.Add(new CoordinationTraceProjection(traceKey, excelRow, row));
-                sb.Append("<row r=\"").Append(excelRow).Append("\">");
-                Number(sb, Cell(0, excelRow), index + 1, IntegerStyle);
-                Text(sb, Cell(1, excelRow), row.ClashId, WrappedStyle);
-                Text(sb, Cell(2, excelRow), row.Type, 0);
-                Text(sb, Cell(3, excelRow), row.Severity, 0);
-                Text(sb, Cell(4, excelRow), row.Status, 0);
-                Text(sb, Cell(5, excelRow), row.Floor, 0);
-                Text(sb, Cell(6, excelRow), row.LeftElementId, WrappedStyle);
-                Text(sb, Cell(7, excelRow), row.LeftHandle, 0);
-                Text(sb, Cell(8, excelRow), row.LeftCategory, 0);
-                Text(sb, Cell(9, excelRow), row.RightElementId, WrappedStyle);
-                Text(sb, Cell(10, excelRow), row.RightHandle, 0);
-                Text(sb, Cell(11, excelRow), row.RightCategory, 0);
-                Text(sb, Cell(12, excelRow), row.RuleId, 0);
-                Text(sb, Cell(13, excelRow), row.DrawingFingerprint, WrappedStyle);
-                Text(sb, Cell(14, excelRow), row.Comment, WrappedStyle);
-                Text(sb, Cell(15, excelRow), traceKey, WrappedStyle);
-                sb.Append("</row>");
+                writer.Write("<row r=\"");
+                writer.Write(excelRow.ToString(CultureInfo.InvariantCulture));
+                writer.Write("\">");
+                Number(writer, Cell(0, excelRow), index + 1, IntegerStyle);
+                Text(writer, Cell(1, excelRow), row.ClashId, WrappedStyle);
+                Text(writer, Cell(2, excelRow), row.Type, 0);
+                Text(writer, Cell(3, excelRow), row.Severity, 0);
+                Text(writer, Cell(4, excelRow), row.Status, 0);
+                Text(writer, Cell(5, excelRow), row.Floor, 0);
+                Text(writer, Cell(6, excelRow), row.LeftElementId, WrappedStyle);
+                Text(writer, Cell(7, excelRow), row.LeftHandle, 0);
+                Text(writer, Cell(8, excelRow), row.LeftCategory, 0);
+                Text(writer, Cell(9, excelRow), row.RightElementId, WrappedStyle);
+                Text(writer, Cell(10, excelRow), row.RightHandle, 0);
+                Text(writer, Cell(11, excelRow), row.RightCategory, 0);
+                Text(writer, Cell(12, excelRow), row.RuleId, 0);
+                Text(writer, Cell(13, excelRow), row.DrawingFingerprint, WrappedStyle);
+                Text(writer, Cell(14, excelRow), row.Comment, WrappedStyle);
+                Text(writer, Cell(15, excelRow), traceKey, WrappedStyle);
+                writer.Write("</row>");
             }
-            sb.Append("</sheetData><autoFilter ref=\"").Append(range).Append("\"/></worksheet>");
-            return sb.ToString();
+            writer.Write("</sheetData><autoFilter ref=\"");
+            writer.Write(range);
+            writer.Write("\"/></worksheet>");
         }
 
-        private static string BuildTraceSheet(IReadOnlyList<CoordinationTraceProjection> traces)
+        private static void WriteTraceWorksheet(TextWriter writer, IReadOnlyList<CoordinationTraceProjection> traces)
         {
             var headers = new[] { TraceHeader, "SHEET", "ROW", "CLASH_ID", "LEFT_HANDLE", "RIGHT_HANDLE", "DRAWING_FINGERPRINT", "RULE_ID" };
             var range = "A1:H" + (traces.Count + 1).ToString(CultureInfo.InvariantCulture);
-            var sb = BeginSheet(range);
-            sb.Append("<cols><col min=\"1\" max=\"1\" width=\"44\" customWidth=\"1\"/><col min=\"2\" max=\"8\" width=\"28\" customWidth=\"1\"/></cols>");
-            sb.Append("<sheetData><row r=\"1\">");
-            for (var column = 0; column < headers.Length; column++) Text(sb, Cell(column, 1), headers[column], HeaderStyle);
-            sb.Append("</row>");
+            WriteSheetStart(writer, range);
+            writer.Write("<cols><col min=\"1\" max=\"1\" width=\"44\" customWidth=\"1\"/><col min=\"2\" max=\"8\" width=\"28\" customWidth=\"1\"/></cols>");
+            writer.Write("<sheetData><row r=\"1\">");
+            for (var column = 0; column < headers.Length; column++) Text(writer, Cell(column, 1), headers[column], HeaderStyle);
+            writer.Write("</row>");
             for (var index = 0; index < traces.Count; index++)
             {
                 var trace = traces[index];
                 var excelRow = index + 2;
-                sb.Append("<row r=\"").Append(excelRow).Append("\">");
-                Text(sb, Cell(0, excelRow), trace.TraceKey, WrappedStyle);
-                Text(sb, Cell(1, excelRow), ClashSheet, 0);
-                Number(sb, Cell(2, excelRow), trace.Row, IntegerStyle);
-                Text(sb, Cell(3, excelRow), trace.Source.ClashId, WrappedStyle);
-                Text(sb, Cell(4, excelRow), trace.Source.LeftHandle, 0);
-                Text(sb, Cell(5, excelRow), trace.Source.RightHandle, 0);
-                Text(sb, Cell(6, excelRow), trace.Source.DrawingFingerprint, WrappedStyle);
-                Text(sb, Cell(7, excelRow), trace.Source.RuleId, 0);
-                sb.Append("</row>");
+                writer.Write("<row r=\"");
+                writer.Write(excelRow.ToString(CultureInfo.InvariantCulture));
+                writer.Write("\">");
+                Text(writer, Cell(0, excelRow), trace.TraceKey, WrappedStyle);
+                Text(writer, Cell(1, excelRow), ClashSheet, 0);
+                Number(writer, Cell(2, excelRow), trace.Row, IntegerStyle);
+                Text(writer, Cell(3, excelRow), trace.Source.ClashId, WrappedStyle);
+                Text(writer, Cell(4, excelRow), trace.Source.LeftHandle, 0);
+                Text(writer, Cell(5, excelRow), trace.Source.RightHandle, 0);
+                Text(writer, Cell(6, excelRow), trace.Source.DrawingFingerprint, WrappedStyle);
+                Text(writer, Cell(7, excelRow), trace.Source.RuleId, 0);
+                writer.Write("</row>");
             }
-            sb.Append("</sheetData><autoFilter ref=\"").Append(range).Append("\"/></worksheet>");
-            return sb.ToString();
+            writer.Write("</sheetData><autoFilter ref=\"");
+            writer.Write(range);
+            writer.Write("\"/></worksheet>");
         }
 
-        private static StringBuilder BeginSheet(string range)
+        private static void WriteSheetStart(TextWriter writer, string range)
         {
-            var sb = new StringBuilder();
-            sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
-            sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><dimension ref=\"").Append(range).Append("\"/>");
-            sb.Append("<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
-            return sb;
+            writer.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+            writer.Write("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><dimension ref=\"");
+            writer.Write(range);
+            writer.Write("\"/>");
+            writer.Write("<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
         }
 
-        private static void Text(StringBuilder sb, string cell, string value, int style)
+        private static void Text(TextWriter writer, string cell, string value, int style)
         {
             var text = value ?? string.Empty;
             if (text.Length > 32767) throw new InvalidDataException("Coordination workbook text cell exceeds the Excel 32,767-character limit: " + cell + ".");
-            sb.Append("<c r=\"").Append(cell).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is>");
-            XlsxXmlText.AppendTextElement(sb, text);
-            sb.Append("</is></c>");
+            writer.Write("<c r=\"");
+            writer.Write(cell);
+            writer.Write("\" t=\"inlineStr\" s=\"");
+            writer.Write(style.ToString(CultureInfo.InvariantCulture));
+            writer.Write("\"><is><t xml:space=\"preserve\">");
+            WriteEscapedXmlText(writer, text);
+            writer.Write("</t></is></c>");
         }
 
-        private static void Number(StringBuilder sb, string cell, int value, int style)
+        private static void WriteEscapedXmlText(TextWriter writer, string value)
         {
-            sb.Append("<c r=\"").Append(cell).Append("\" s=\"").Append(style).Append("\"><v>")
-              .Append(value.ToString(CultureInfo.InvariantCulture)).Append("</v></c>");
+            for (var index = 0; index < value.Length; index++)
+            {
+                switch (value[index])
+                {
+                    case '&': writer.Write("&amp;"); break;
+                    case '<': writer.Write("&lt;"); break;
+                    case '>': writer.Write("&gt;"); break;
+                    case '\"': writer.Write("&quot;"); break;
+                    case '\'': writer.Write("&apos;"); break;
+                    default: writer.Write(value[index]); break;
+                }
+            }
+        }
+
+        private static void Number(TextWriter writer, string cell, int value, int style)
+        {
+            writer.Write("<c r=\"");
+            writer.Write(cell);
+            writer.Write("\" s=\"");
+            writer.Write(style.ToString(CultureInfo.InvariantCulture));
+            writer.Write("\"><v>");
+            writer.Write(value.ToString(CultureInfo.InvariantCulture));
+            writer.Write("</v></c>");
         }
 
         private static string Cell(int column, int row)
@@ -350,11 +401,153 @@ namespace QS3D.Core.Export
             return name + row.ToString(CultureInfo.InvariantCulture);
         }
 
-        private static void WriteEntry(ZipArchive archive, string name, string content)
+        private static void WriteSheet(ZipArchive archive, string name, Action<TextWriter> writeContent, ref long totalExportXmlBytes)
         {
+            using (var buffer = new MemoryStream())
+            {
+                using (var bounded = new BoundedEntryWriteStream(buffer, MaxExportXmlEntryBytes, true))
+                using (var writer = new StreamWriter(bounded, StrictUtf8, 4096, true))
+                {
+                    writeContent(writer);
+                    writer.Flush();
+                }
+
+                ReserveExportXmlBytes(ref totalExportXmlBytes, buffer.Length, name);
+                buffer.Position = 0L;
+                var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
+                entry.LastWriteTime = DeterministicZipEntryTimestamp;
+                using (var output = entry.Open()) buffer.CopyTo(output);
+            }
+        }
+
+        private static void WriteEntry(ZipArchive archive, string name, string content, ref long totalExportXmlBytes)
+        {
+            var bytes = StrictUtf8.GetBytes(content);
+            if (bytes.LongLength > MaxExportXmlEntryBytes)
+                throw new InvalidDataException("Coordination workbook XML part exceeds the export entry limit: " + name + ".");
+            ReserveExportXmlBytes(ref totalExportXmlBytes, bytes.LongLength, name);
             var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
             entry.LastWriteTime = DeterministicZipEntryTimestamp;
-            using (var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false))) writer.Write(content);
+            using (var output = entry.Open()) output.Write(bytes, 0, bytes.Length);
+        }
+
+        private static void ReserveExportXmlBytes(ref long totalExportXmlBytes, long entryBytes, string name)
+        {
+            if (entryBytes < 0L || entryBytes > MaxExportXmlEntryBytes)
+                throw new InvalidDataException("Coordination workbook XML part exceeds the export entry limit: " + name + ".");
+            if (totalExportXmlBytes > MaxExportXmlTotalBytes - entryBytes)
+                throw new InvalidDataException("Coordination workbook exceeds the aggregate uncompressed XML export limit.");
+            totalExportXmlBytes += entryBytes;
+        }
+
+        private sealed class BoundedEntryWriteStream : Stream
+        {
+            private readonly Stream _inner;
+            private readonly long _maxLength;
+            private readonly bool _leaveOpen;
+
+            public BoundedEntryWriteStream(Stream inner, long maxLength, bool leaveOpen)
+            {
+                _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+                if (maxLength <= 0L) throw new ArgumentOutOfRangeException(nameof(maxLength));
+                _maxLength = maxLength;
+                _leaveOpen = leaveOpen;
+            }
+
+            public override bool CanRead => false;
+            public override bool CanSeek => _inner.CanSeek;
+            public override bool CanWrite => _inner.CanWrite;
+            public override long Length => _inner.Length;
+            public override long Position { get => _inner.Position; set { EnsureProjectedLength(value, 0); _inner.Position = value; } }
+            public override void Flush() => _inner.Flush();
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            public override long Seek(long offset, SeekOrigin origin)
+            {
+                var target = origin == SeekOrigin.Begin ? offset : origin == SeekOrigin.Current ? checked(_inner.Position + offset) : checked(_inner.Length + offset);
+                EnsureProjectedLength(target, 0);
+                return _inner.Seek(offset, origin);
+            }
+            public override void SetLength(long value)
+            {
+                EnsureProjectedLength(value, 0);
+                _inner.SetLength(value);
+            }
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+                if (offset < 0 || count < 0 || offset > buffer.Length - count) throw new ArgumentOutOfRangeException();
+                EnsureProjectedLength(_inner.Position, count);
+                _inner.Write(buffer, offset, count);
+            }
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing && !_leaveOpen) _inner.Dispose();
+                base.Dispose(disposing);
+            }
+            private void EnsureProjectedLength(long position, int additionalBytes)
+            {
+                if (position < 0L) throw new IOException("Cannot seek before the start of the bounded Coordination XLSX entry stream.");
+                long projected;
+                try { projected = checked(position + additionalBytes); }
+                catch (OverflowException) { throw new InvalidDataException("Coordination workbook XML part exceeds the export entry limit."); }
+                projected = Math.Max(projected, _inner.Length);
+                if (projected > _maxLength) throw new InvalidDataException("Coordination workbook XML part exceeds the export entry limit.");
+            }
+        }
+
+        private sealed class BoundedArchiveWriteStream : Stream
+        {
+            private readonly Stream _inner;
+            private readonly long _maxLength;
+            private readonly bool _leaveOpen;
+
+            public BoundedArchiveWriteStream(Stream inner, long maxLength, bool leaveOpen)
+            {
+                _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+                if (maxLength <= 0L) throw new ArgumentOutOfRangeException(nameof(maxLength));
+                _maxLength = maxLength;
+                _leaveOpen = leaveOpen;
+            }
+
+            public override bool CanRead => false;
+            public override bool CanSeek => _inner.CanSeek;
+            public override bool CanWrite => _inner.CanWrite;
+            public override long Length => _inner.Length;
+            public override long Position { get => _inner.Position; set { EnsureProjectedLength(value, 0); _inner.Position = value; } }
+            public override void Flush() => _inner.Flush();
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            public override long Seek(long offset, SeekOrigin origin)
+            {
+                var target = origin == SeekOrigin.Begin ? offset : origin == SeekOrigin.Current ? checked(_inner.Position + offset) : checked(_inner.Length + offset);
+                EnsureProjectedLength(target, 0);
+                return _inner.Seek(offset, origin);
+            }
+            public override void SetLength(long value)
+            {
+                EnsureProjectedLength(value, 0);
+                _inner.SetLength(value);
+            }
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+                if (offset < 0 || count < 0 || offset > buffer.Length - count) throw new ArgumentOutOfRangeException();
+                EnsureProjectedLength(_inner.Position, count);
+                _inner.Write(buffer, offset, count);
+            }
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing && !_leaveOpen) _inner.Dispose();
+                base.Dispose(disposing);
+            }
+            private void EnsureProjectedLength(long position, int additionalBytes)
+            {
+                if (position < 0L) throw new IOException("Cannot seek before the start of the bounded Coordination XLSX archive stream.");
+                long projected;
+                try { projected = checked(position + additionalBytes); }
+                catch (OverflowException) { throw new InvalidDataException("Coordination workbook export exceeds the supported archive size."); }
+                projected = Math.Max(projected, _inner.Length);
+                if (projected > _maxLength) throw new InvalidDataException("Coordination workbook export exceeds the supported archive size.");
+            }
         }
 
         private sealed class CoordinationTraceProjection
