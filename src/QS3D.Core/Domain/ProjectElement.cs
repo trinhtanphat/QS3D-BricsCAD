@@ -41,6 +41,7 @@ namespace QS3D.Core.Domain
         public const string GeneratedCurtainFrameStaleSnapshotKey = "QS3D.GeneratedCurtainFrame.StaleSnapshot";
         public const string GeneratedCurtainPanelStaleSnapshotKey = "QS3D.GeneratedCurtainPanel.StaleSnapshot";
 
+        private const int MaxQuantityEntries = 10000;
         private const string StaleValue = "stale";
         private const string GeneratedSolidHandleKey = "GeneratedSolidHandle";
         private const string GeneratedRebarHandlesKey = "GeneratedRebarHandles";
@@ -56,6 +57,7 @@ namespace QS3D.Core.Domain
         private const string GeneratedCurtainPanelBuildCompleteValue = "Complete";
 
         private readonly Dictionary<string, string> _properties;
+        private readonly Dictionary<string, double> _quantityValues;
         private readonly ProjectElementRelationList _sourceHandles;
         private readonly ProjectElementRelationList _dependsOn;
         private ElementCategory _category;
@@ -82,7 +84,8 @@ namespace QS3D.Core.Domain
             DependsOn = _dependsOn;
             _properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             Properties = new ProjectElementPropertyDictionary(this, _properties);
-            Quantities = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            _quantityValues = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            Quantities = new ProjectElementQuantityDictionary(this, _quantityValues);
             Dirty = ElementDirtyFlags.All;
         }
 
@@ -177,14 +180,41 @@ namespace QS3D.Core.Domain
 
         public void SetQuantity(string name, double value)
         {
-            if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Quantity name is required.", nameof(name));
-            if (name.Any(char.IsControl)) throw new ArgumentException("Quantity name cannot contain control characters.", nameof(name));
-            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d) throw new ArgumentOutOfRangeException(nameof(value));
-            value = value == 0d ? 0d : value;
-            var key = name.Trim();
-            key = RequireXmlText(key, nameof(name), "Quantity name");
-            if (Quantities.TryGetValue(key, out var existing) && existing.Equals(value)) return;
-            Quantities[key] = value;
+            var key = RequireQuantityName(name);
+            var normalized = RequireQuantityValue(value);
+            if (_quantityValues.TryGetValue(key, out var existing))
+            {
+                if (existing.Equals(normalized)) return;
+                _quantityValues[key] = normalized;
+                MarkDirtyCore(ElementDirtyFlags.Quantity, false);
+                return;
+            }
+            RequireQuantityCapacity();
+            _quantityValues.Add(key, normalized);
+            MarkDirtyCore(ElementDirtyFlags.Quantity, false);
+        }
+
+        internal void AddQuantity(string name, double value)
+        {
+            var key = RequireQuantityName(name);
+            var normalized = RequireQuantityValue(value);
+            if (!_quantityValues.ContainsKey(key)) RequireQuantityCapacity();
+            _quantityValues.Add(key, normalized);
+            MarkDirtyCore(ElementDirtyFlags.Quantity, false);
+        }
+
+        internal bool RemoveQuantity(string name)
+        {
+            var key = RequireQuantityName(name);
+            if (!_quantityValues.Remove(key)) return false;
+            MarkDirtyCore(ElementDirtyFlags.Quantity, false);
+            return true;
+        }
+
+        internal void ClearQuantities()
+        {
+            if (_quantityValues.Count == 0) return;
+            _quantityValues.Clear();
             MarkDirtyCore(ElementDirtyFlags.Quantity, false);
         }
 
@@ -342,6 +372,24 @@ namespace QS3D.Core.Domain
             if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Property name is required.", nameof(name));
             if (name.Any(char.IsControl)) throw new ArgumentException("Property name cannot contain control characters.", nameof(name));
             return RequireXmlText(name.Trim(), nameof(name), "Property name");
+        }
+
+        private static string RequireQuantityName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Quantity name is required.", nameof(name));
+            if (name.Any(char.IsControl)) throw new ArgumentException("Quantity name cannot contain control characters.", nameof(name));
+            return RequireXmlText(name.Trim(), nameof(name), "Quantity name");
+        }
+
+        private static double RequireQuantityValue(double value)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value) || value < 0d) throw new ArgumentOutOfRangeException(nameof(value));
+            return value == 0d ? 0d : value;
+        }
+
+        private void RequireQuantityCapacity()
+        {
+            if (_quantityValues.Count >= MaxQuantityEntries) throw new InvalidOperationException("Element quantity collection cannot contain more than 10000 entries.");
         }
 
         private static string NormalizeOptionalRelationId(string? value)
