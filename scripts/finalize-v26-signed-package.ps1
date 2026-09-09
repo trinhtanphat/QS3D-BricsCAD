@@ -30,6 +30,8 @@ namespace Qs3d.V26
         private const uint FILE_SHARE_READ = 0x00000001;
         private const uint OPEN_EXISTING = 3;
         private const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
+        private const uint FILE_ATTRIBUTE_REPARSE_POINT = 0x00000400;
+        private const uint FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000;
         private const int ERROR_FILE_NOT_FOUND = 2;
         private const int ERROR_PATH_NOT_FOUND = 3;
         private const int FileDispositionInfo = 4;
@@ -112,7 +114,7 @@ namespace Qs3d.V26
                 FILE_SHARE_READ,
                 IntPtr.Zero,
                 OPEN_EXISTING,
-                FILE_ATTRIBUTE_NORMAL,
+                FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
                 IntPtr.Zero))
             {
                 if (handle.IsInvalid)
@@ -125,6 +127,8 @@ namespace Qs3d.V26
                 BY_HANDLE_FILE_INFORMATION info;
                 if (!GetFileInformationByHandle(handle, out info))
                     throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not identify the cleanup handle for the generated V26 finalizer.");
+                if ((info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+                    throw new InvalidOperationException("Generated V26 finalizer cleanup path became reparse-backed; refusing deletion.");
                 ulong fileIndex = ((ulong)info.FileIndexHigh << 32) | info.FileIndexLow;
                 string actualIdentity = info.VolumeSerialNumber.ToString("X8") + ":" + fileIndex.ToString("X16");
                 if (!String.Equals(actualIdentity, expectedIdentity, StringComparison.Ordinal))
@@ -292,8 +296,9 @@ finally {
             }
             catch {
                 # Preserve the primary transformer/finalizer failure. Exact-generation
-                # cleanup is fail-safe: an identity mismatch or sharing conflict refuses
-                # deletion rather than unlinking a pathname generation we do not own.
+                # cleanup is fail-safe: an identity mismatch, reparse replacement, or
+                # sharing conflict refuses deletion rather than unlinking a generation
+                # we do not own.
             }
         }
     }
