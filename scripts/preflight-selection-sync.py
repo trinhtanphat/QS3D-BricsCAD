@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,7 +74,8 @@ if files["sync"].is_file():
         errors.append("ImpliedSelectionChanged must retain the exact attachment-generation token.")
     else:
         event_body = text[event_start:event_end]
-        if "EntitySnapshotReader.ReadImpliedSelection" in event_body or "Refresh(document" in event_body:
+        direct_refresh = re.search(r"(?<![A-Za-z0-9_])Refresh\s*\(\s*document\b", event_body)
+        if "EntitySnapshotReader.ReadImpliedSelection" in event_body or direct_refresh:
             errors.append("ImpliedSelectionChanged must schedule/coalesce generation-bound work instead of synchronously reading snapshots.")
         generation_guard = event_body.find("IsCurrentAttachment(document, attachmentToken)")
         active_guard = event_body.find("ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)")
