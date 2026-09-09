@@ -198,27 +198,20 @@ def verify_runtime() -> None:
     if expected_pr_number <= 0 or current_run_id <= 0:
         raise RuntimeError("edited-event PR/run identity must be positive")
 
-    # Evidence lookup is only an optimization. Any lookup/shape uncertainty falls back to full
-    # validation rather than reusing evidence from a different head/base transaction.
+    # GitHub's workflow-run REST payload exposes immutable run.head_sha but its
+    # nested pull_requests head/base records track the live PR and can therefore
+    # change after the run completed. Without a separately persisted immutable
+    # run-time base SHA, an older GREEN cannot prove it validated the current
+    # base transaction. Metadata edits are uncommon, so prefer deterministic
+    # full validation over a false exact-base reuse optimization.
     reuse = False
-    try:
-        runs = fetch_prior_runs(repository, token, expected_sha)
-        reuse = prior_green_exists(
-            runs,
-            expected_sha,
-            expected_base_ref,
-            expected_base_sha,
-            expected_pr_number,
-            current_run_id,
-        )
-    except RuntimeError as exc:
-        print(f"NOTICE: {exc}; falling back to full source/build validation.")
+    print(
+        "NOTICE: workflow-run nested PR base metadata is mutable; "
+        "prior GREEN reuse is disabled and full source/build validation is required."
+    )
     emit_reuse_output(reuse)
     identity = f"PR #{expected_pr_number} head={expected_sha} base={expected_base_ref}@{expected_base_sha}"
-    if reuse:
-        print("PASS: prior successful Shared CI evidence exists for exact", identity)
-    else:
-        print("PASS: no reusable exact PR/head/base GREEN proven; full validation remains required", identity)
+    print("PASS: no reusable immutable PR/head/base GREEN proven; full validation remains required", identity)
 
 
 def main(argv: list[str]) -> int:
