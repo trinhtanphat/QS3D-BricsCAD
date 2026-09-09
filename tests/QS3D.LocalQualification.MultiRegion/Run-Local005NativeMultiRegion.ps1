@@ -229,26 +229,42 @@ try {
             $process.Refresh()
             if (-not $process.HasExited) {
                 [void]$process.CloseMainWindow()
-                if (-not $process.WaitForExit(10000)) { Stop-Process -Id $process.Id -Force }
+                if (-not $process.WaitForExit(10000)) {
+                    Stop-Process -Id $process.Id -Force
+                    if (-not $process.WaitForExit(10000)) { throw 'Owned BricsCAD process did not exit.' }
+                }
             }
         } catch { if ($null -eq $cleanupFailure) { $cleanupFailure = 'owned_process_cleanup_failed' } }
     }
+    $zeroHosts = $false
     try {
         $deadline = [DateTime]::UtcNow.AddSeconds(15)
         while ([DateTime]::UtcNow -lt $deadline -and @(Get-Process -Name bricscad -ErrorAction SilentlyContinue).Count -gt 0) { Start-Sleep -Milliseconds 250 }
         Assert-NoBricsCad
+        $zeroHosts = $true
     } catch { if ($null -eq $cleanupFailure) { $cleanupFailure = 'host_zero_cleanup_failed' } }
     if ($null -ne $sandbox) {
-        try { $profileReceipt = Restore-Qs3dV25ProfileSandbox -Sandbox $sandbox }
-        catch { if ($null -eq $cleanupFailure) { $cleanupFailure = 'profile_restore_failed' } }
+        if ($zeroHosts) {
+            try { $profileReceipt = Restore-Qs3dV25ProfileSandbox -Sandbox $sandbox }
+            catch { if ($null -eq $cleanupFailure) { $cleanupFailure = 'profile_restore_failed' } }
+        } elseif ($null -eq $cleanupFailure) {
+            $cleanupFailure = 'profile_restore_skipped_host_active'
+        }
     }
-    foreach ($name in $envNames) { try { [Environment]::SetEnvironmentVariable($name, $envBefore[$name], 'Process') } catch { if ($null -eq $cleanupFailure) { $cleanupFailure = 'environment_restore_failed' } } }
-    try {
-        if ((Get-Hash $fixture) -cne $fixtureHash -or (Get-Hash $productDll) -cne $productHash -or (Get-Hash $coreDll) -cne $coreHash) { throw 'Frozen input changed.' }
-        if (Test-Path -LiteralPath $privateRoot) { Remove-Item -LiteralPath $privateRoot -Recurse -Force }
-        $cleanupOk = -not (Test-Path -LiteralPath $privateRoot)
-        if (-not $cleanupOk) { throw 'Private root still exists.' }
-    } catch { if ($null -eq $cleanupFailure) { $cleanupFailure = 'private_cleanup_failed' } }
+    foreach ($name in $envNames) {
+        try { [Environment]::SetEnvironmentVariable($name, $envBefore[$name], 'Process') }
+        catch { if ($null -eq $cleanupFailure) { $cleanupFailure = 'environment_restore_failed' } }
+    }
+    if ($zeroHosts) {
+        try {
+            if ((Get-Hash $fixture) -cne $fixtureHash -or (Get-Hash $productDll) -cne $productHash -or (Get-Hash $coreDll) -cne $coreHash) { throw 'Frozen input changed.' }
+            if (Test-Path -LiteralPath $privateRoot) { Remove-Item -LiteralPath $privateRoot -Recurse -Force }
+            $cleanupOk = -not (Test-Path -LiteralPath $privateRoot)
+            if (-not $cleanupOk) { throw 'Private root still exists.' }
+        } catch { if ($null -eq $cleanupFailure) { $cleanupFailure = 'private_cleanup_failed' } }
+    } elseif ($null -eq $cleanupFailure) {
+        $cleanupFailure = 'private_cleanup_skipped_host_active'
+    }
 }
 
 $status = if ($null -eq $failure -and $null -eq $cleanupFailure -and $cleanupOk) { 'LOCAL_PASS_BOUNDED' } else { 'FAIL_OR_NO_RESULT' }
