@@ -54,6 +54,9 @@ def _required_check_race_errors(workflow: str) -> list[str]:
         "single PR concurrency class": "github.event_name == 'pull_request' && 'pull_request'",
         "stable PR preflight check-run": "github.event_name == 'pull_request' && 'preflight'",
         "stable PR core check-run": "github.event_name == 'pull_request' && 'core'",
+        "core job survives preflight failure": "if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request') }}",
+        "core fail-closed preflight admission": "name: Require successful preflight admission",
+        "core preflight-result failure condition": "if: ${{ needs.preflight.result != 'success' }}",
     }
     for label, needle in required_needles.items():
         if needle not in workflow:
