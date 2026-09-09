@@ -553,9 +553,17 @@ def _fetch_paged(api_url: str, repository: str, endpoint: str, token: str) -> li
         payload = _request_json(url, token)
         if not isinstance(payload, list):
             raise RuntimeError(f"GitHub {endpoint} response was not a list")
-        page_items = [item for item in payload if isinstance(item, dict)]
-        collected.extend(page_items)
-        if len(page_items) < 100:
+        malformed_index = next(
+            (index for index, item in enumerate(payload) if not isinstance(item, dict)),
+            None,
+        )
+        if malformed_index is not None:
+            raise RuntimeError(
+                f"GitHub {endpoint} response page {page} contained a non-object entry "
+                f"at index {malformed_index}"
+            )
+        collected.extend(payload)
+        if len(payload) < 100:
             return collected
     raise RuntimeError(
         f"GitHub {endpoint} list exceeded {MAX_PAGES * 100} entries; refusing incomplete collision scan"

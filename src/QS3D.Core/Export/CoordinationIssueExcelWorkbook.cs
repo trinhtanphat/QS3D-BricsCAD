@@ -23,7 +23,8 @@ namespace QS3D.Core.Export
         public const string MetaSheet = "META";
         public const string IssuesSheet = "ISSUES";
         public const string SchemaVersion = "QS3D_COORDINATION_ISSUES_V1";
-        private const int MaxRows = 1048576;
+        private const int MaxWorksheetRows = 1048576;
+        private const int MaxExportIssueRows = 10000;
         private const int MaxColumns = 16384;
         private const long MaxWorkbookBytes = 128L * 1024L * 1024L;
         private const long MaxXmlCharacters = 64L * 1024L * 1024L;
@@ -50,10 +51,16 @@ namespace QS3D.Core.Export
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
-            if (snapshot.Issues.Count == 0) throw new InvalidDataException("Coordination issue workbook requires at least one issue.");
-            if (snapshot.Issues.Count >= MaxRows) throw new InvalidDataException("Coordination issue workbook exceeds the Excel row limit.");
+            var admittedIssueCount = snapshot.Issues.Count;
+            if (admittedIssueCount == 0) throw new InvalidDataException("Coordination issue workbook requires at least one issue.");
+            if (admittedIssueCount > MaxExportIssueRows)
+                throw new InvalidDataException("Coordination issue workbook exceeds the bounded export issue limit.");
+            RequireStableExportIssueCount(snapshot, admittedIssueCount);
 
             var rows = CoordinationIssueExcelLifecycle.Project(snapshot);
+            RequireStableExportIssueCount(snapshot, admittedIssueCount);
+            if (rows.Count != admittedIssueCount)
+                throw new InvalidDataException("Coordination issue workbook projected issue Count changed during export.");
             var metaRows = new List<IReadOnlyList<string>>
             {
                 new[] { "SCHEMA", SchemaVersion },
@@ -61,37 +68,6 @@ namespace QS3D.Core.Export
                 new[] { "DRAWING_FINGERPRINT", snapshot.DrawingFingerprint },
                 new[] { "WORKBOOK_REVISION", snapshot.Revision.ToString(CultureInfo.InvariantCulture) }
             };
-            var issueRows = new List<IReadOnlyList<string>>(rows.Count);
-            for (var i = 0; i < rows.Count; i++)
-            {
-                var row = rows[i];
-                issueRows.Add(new[]
-                {
-                    (i + 1).ToString(CultureInfo.InvariantCulture),
-                    row.IssueId,
-                    row.IssueRevision,
-                    row.Kind.ToString(),
-                    row.Status.ToString(),
-                    row.Severity.ToString(),
-                    row.Assignee,
-                    string.Empty,
-                    string.Empty,
-                    row.Title,
-                    row.LeftSemanticId,
-                    DrawingId(row.LeftCadReference),
-                    Handle(row.LeftCadReference),
-                    row.RightSemanticId,
-                    DrawingId(row.RightCadReference),
-                    Handle(row.RightCadReference),
-                    row.DisciplineContext,
-                    row.CategoryContext,
-                    row.SystemContext,
-                    row.RegionContext,
-                    row.SeparationM.ToString("R", CultureInfo.InvariantCulture),
-                    row.UpdatedAtUtc.ToString("O", CultureInfo.InvariantCulture)
-                });
-            }
-
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -109,7 +85,7 @@ namespace QS3D.Core.Export
                         WriteEntry(archive, "xl/workbook.xml", WorkbookXml, ref totalExportXmlBytes);
                         WriteEntry(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml, ref totalExportXmlBytes);
                         WriteSheet(archive, "xl/worksheets/sheet1.xml", new[] { "KEY", "VALUE" }, metaRows, ref totalExportXmlBytes);
-                        WriteSheet(archive, "xl/worksheets/sheet2.xml", IssueHeaders, issueRows, ref totalExportXmlBytes);
+                        WriteIssueSheet(archive, "xl/worksheets/sheet2.xml", rows, admittedIssueCount, ref totalExportXmlBytes);
                     }
                     boundedArchive.Flush();
                     if (stream.Length <= 0L || stream.Length > MaxExportWorkbookBytes)
@@ -171,6 +147,12 @@ namespace QS3D.Core.Export
                     edits,
                     changedAtUtc);
             }
+        }
+
+        private static void RequireStableExportIssueCount(CoordinationIssuePersistenceSnapshot snapshot, int admittedIssueCount)
+        {
+            if (snapshot.Issues.Count != admittedIssueCount)
+                throw new InvalidDataException("Coordination issue workbook source issue Count changed during export.");
         }
 
         private static List<CoordinationIssueExcelEdit> ReadIssueEdits(
@@ -340,7 +322,7 @@ namespace QS3D.Core.Export
                 int expectedRowIndex;
                 if (!int.TryParse(rowReference, NumberStyles.None, CultureInfo.InvariantCulture, out expectedRowIndex)
                     || expectedRowIndex <= 0
-                    || expectedRowIndex > MaxRows
+                    || expectedRowIndex > MaxWorksheetRows
                     || !string.Equals(rowReference, expectedRowIndex.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal))
                     throw new InvalidDataException($"Malformed XLSX row reference '{rowReference ?? "<null>"}'.");
 
@@ -366,7 +348,7 @@ namespace QS3D.Core.Export
                 foreach (var pair in cells) values[pair.Key] = pair.Value;
                 for (var i = 0; i < values.Length; i++) if (values[i] == null) values[i] = string.Empty;
                 result.Add(values);
-                if (result.Count > MaxRows) throw new InvalidDataException("Coordination issue workbook exceeds the supported row count.");
+                if (result.Count > MaxWorksheetRows) throw new InvalidDataException("Coordination issue workbook exceeds the supported row count.");
             }
             return result;
         }
@@ -450,7 +432,7 @@ namespace QS3D.Core.Export
             var rowToken = reference.Substring(index);
             if (!int.TryParse(rowToken, NumberStyles.None, CultureInfo.InvariantCulture, out parsedRowIndex)
                 || parsedRowIndex <= 0
-                || parsedRowIndex > MaxRows
+                || parsedRowIndex > MaxWorksheetRows
                 || !string.Equals(rowToken, parsedRowIndex.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal))
                 return false;
 
@@ -499,6 +481,66 @@ namespace QS3D.Core.Export
                     writer.Write("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>");
                     WriteRow(writer, 1, headers);
                     for (var i = 0; i < rows.Count; i++) WriteRow(writer, i + 2, rows[i]);
+                    writer.Write("</sheetData></worksheet>");
+                    writer.Flush();
+                }
+
+                ReserveExportXmlBytes(ref totalExportXmlBytes, buffer.Length, name);
+                buffer.Position = 0L;
+                var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
+                entry.LastWriteTime = FixedZipTimestamp;
+                using (var output = entry.Open()) buffer.CopyTo(output);
+            }
+        }
+
+        private static void WriteIssueSheet(
+            ZipArchive archive,
+            string name,
+            IReadOnlyList<CoordinationIssueExcelRow> rows,
+            int admittedIssueCount,
+            ref long totalExportXmlBytes)
+        {
+            using (var buffer = new MemoryStream())
+            {
+                using (var bounded = new BoundedEntryWriteStream(buffer, MaxExportXmlEntryBytes, true))
+                using (var writer = new StreamWriter(bounded, StrictUtf8, 4096, true))
+                {
+                    writer.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+                    writer.Write("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>");
+                    WriteRow(writer, 1, IssueHeaders);
+                    for (var i = 0; i < admittedIssueCount; i++)
+                    {
+                        if (rows.Count != admittedIssueCount)
+                            throw new InvalidDataException("Coordination issue workbook projected issue Count changed during worksheet export.");
+                        var row = rows[i];
+                        WriteRow(writer, i + 2, new[]
+                        {
+                            (i + 1).ToString(CultureInfo.InvariantCulture),
+                            row.IssueId,
+                            row.IssueRevision,
+                            row.Kind.ToString(),
+                            row.Status.ToString(),
+                            row.Severity.ToString(),
+                            row.Assignee,
+                            string.Empty,
+                            string.Empty,
+                            row.Title,
+                            row.LeftSemanticId,
+                            DrawingId(row.LeftCadReference),
+                            Handle(row.LeftCadReference),
+                            row.RightSemanticId,
+                            DrawingId(row.RightCadReference),
+                            Handle(row.RightCadReference),
+                            row.DisciplineContext,
+                            row.CategoryContext,
+                            row.SystemContext,
+                            row.RegionContext,
+                            row.SeparationM.ToString("R", CultureInfo.InvariantCulture),
+                            row.UpdatedAtUtc.ToString("O", CultureInfo.InvariantCulture)
+                        });
+                    }
+                    if (rows.Count != admittedIssueCount)
+                        throw new InvalidDataException("Coordination issue workbook projected issue Count changed during worksheet export.");
                     writer.Write("</sheetData></worksheet>");
                     writer.Flush();
                 }

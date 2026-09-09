@@ -147,7 +147,14 @@ namespace QS3D.Core.Persistence
                 {
                     var category = Category(item, "family");
                     var family = new ProjectFamily(Required(item, "id"), Required(item, "name"), category);
-                    ReadStringMap(item.Element("properties"), "p", family.Properties);
+                    try
+                    {
+                        ReadStringMap(item.Element("properties"), "p", family.Properties);
+                    }
+                    catch (ArgumentException ex)
+                    {
+                        throw new InvalidDataException("QSDB family properties exceed or violate the supported persisted property contract: " + family.Id + ".", ex);
+                    }
                     project.Families.Add(family);
                 }
             }
