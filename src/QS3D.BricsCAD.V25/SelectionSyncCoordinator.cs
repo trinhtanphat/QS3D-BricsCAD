@@ -75,6 +75,17 @@ namespace QS3D.BricsCAD.V25
             foreach (var document in Attached.Where(x => string.Equals(x.Name, fileName, StringComparison.OrdinalIgnoreCase)).ToArray()) Detach(document);
         }
 
+        // Explicit lifecycle/UI callers do not own a historical generation token. Capture the current
+        // attachment once at this boundary, then delegate all native/modeless work to the exact-token
+        // overload. Queued callbacks never use this overload and therefore cannot recapture a newer
+        // generation after detach -> reattach of the same native Document wrapper.
+        public static void Refresh(Document? document)
+        {
+            if (document == null ||
+                !AttachmentTokens.TryGetValue(document, out var attachmentToken)) return;
+            Refresh(document, attachmentToken);
+        }
+
         public static void Refresh(Document? document, object attachmentToken)
         {
             if (document == null ||
