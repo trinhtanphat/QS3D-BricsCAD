@@ -240,7 +240,7 @@ namespace QS3D.BricsCAD.V25
                 }
                 else
                 {
-                    upper = CreateTaperedLoft(document, centerX, center.Y, baseZ + h1, l1, w1, baseZ + h1 + h2, l2, w2);
+                    upper = CreateTaperedLoft(document, centerX, centerY, baseZ + h1, l1, w1, baseZ + h1 + h2, l2, w2);
                 }
 
                 using (upper)
