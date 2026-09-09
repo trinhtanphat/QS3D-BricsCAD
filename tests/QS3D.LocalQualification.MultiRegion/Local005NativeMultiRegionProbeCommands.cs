@@ -329,7 +329,7 @@ namespace QS3D.LocalQualification.MultiRegion
         {
             Context? context = null;
             try { context=Bind(); WriteMarker(context,phase,"PASS",phase,"NONE",action(context)); }
-            catch(Exception error)
+            catch(System.Exception error)
             {
                 if(context!=null) try { WriteMarker(context,phase,"FAIL",phase,"ERR_"+Normalize(error is ProbeException?error.Message:error.GetType().Name),new Dictionary<string,bool>()); } catch { }
                 throw;
@@ -364,7 +364,7 @@ namespace QS3D.LocalQualification.MultiRegion
         private static string Identity(string prefix,string value) => prefix+Digest(value.Trim());
         private static string Digest(string value) { using(var sha=SHA256.Create()) return string.Concat(sha.ComputeHash(Encoding.UTF8.GetBytes(value)).Select(x=>x.ToString("x2",CultureInfo.InvariantCulture))); }
         private static string Nonce(string? raw) { var n=(raw??string.Empty).Trim().ToLowerInvariant(); if(n.Length!=32||n.Any(x=>!(x>='0'&&x<='9')&&!(x>='a'&&x<='f'))) throw new ProbeException("run_id_invalid"); return n; }
-        private static string RequiredPath(string? raw,string code) { if(string.IsNullOrWhiteSpace(raw)) throw new ProbeException(code); return Path.GetFullPath(raw.Trim()); }
+        private static string RequiredPath(string? raw,string code) { if(string.IsNullOrWhiteSpace(raw)) throw new ProbeException(code); var value=raw!; return Path.GetFullPath(value.Trim()); }
         private static bool SamePath(string a,string b) => string.Equals(Path.GetFullPath(a),Path.GetFullPath(b),StringComparison.OrdinalIgnoreCase);
         private static bool IsChild(string root,string path) { var r=Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar,Path.AltDirectorySeparatorChar)+Path.DirectorySeparatorChar; return Path.GetFullPath(path).StartsWith(r,StringComparison.OrdinalIgnoreCase); }
         private static string Normalize(string raw) { var b=new StringBuilder(); foreach(var c in (raw??string.Empty).ToUpperInvariant()){ if(b.Length>=64) break; b.Append((c>='A'&&c<='Z')||(c>='0'&&c<='9')?c:'_'); } var n=b.ToString().Trim('_'); return n.Length==0?"UNKNOWN":n; }

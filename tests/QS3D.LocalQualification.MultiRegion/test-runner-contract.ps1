@@ -66,6 +66,13 @@ if ($probeText.IndexOf('SlabFoundationMultiRegionMeshSolidBuilder', [StringCompa
     throw 'FAIL: test probe must not call the internal builder directly.'
 }
 if ($probeText.IndexOf('using System.Diagnostics;', [StringComparison]::Ordinal) -lt 0) { throw 'FAIL: probe host identity dependency is not explicit.' }
+if ($probeText.IndexOf('catch(System.Exception error)', [StringComparison]::Ordinal) -lt 0 -or
+    $probeText.IndexOf('catch(Exception error)', [StringComparison]::Ordinal) -ge 0) {
+    throw 'FAIL: probe exception type must be explicitly System.Exception to avoid Teigha ambiguity.'
+}
+if ($probeText.IndexOf('var value=raw!;', [StringComparison]::Ordinal) -lt 0) {
+    throw 'FAIL: RequiredPath nullable flow must be explicitly narrowed before Trim/GetFullPath.'
+}
 foreach ($reference in @('QS3D.Core','QS3D.BricsCAD.V25','BrxMgd','TD_Mgd')) {
     if ($projectText.IndexOf('<Reference Include="' + $reference + '">', [StringComparison]::Ordinal) -lt 0) { throw ('FAIL: project missing reference ' + $reference) }
 }
