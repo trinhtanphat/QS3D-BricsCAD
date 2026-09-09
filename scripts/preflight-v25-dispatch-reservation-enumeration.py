@@ -38,6 +38,19 @@ def self_test() -> list[str]:
     if not contract_errors(unsafe):
         errors.append("guard failed to reject unchecked process substitution")
 
+    multiline_unsafe = "\n".join(
+        [
+            "while IFS= read -r reservation; do",
+            "  :",
+            "done < <(",
+            "  gh api --paginate \"repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments\" \\",
+            "    --jq '.[] | .body'",
+            ")",
+        ]
+    )
+    if not contract_errors(multiline_unsafe):
+        errors.append("guard failed to reject multiline unchecked process substitution")
+
     safe = "\n".join(
         [
             'set +e',
@@ -55,6 +68,22 @@ def self_test() -> list[str]:
     )
     if contract_errors(safe):
         errors.append("guard rejected the intended status-checked capture contract")
+
+    misordered = "\n".join(
+        [
+            'set +e',
+            'reservation_query_status=$?',
+            'if (( reservation_query_status != 0 )); then',
+            '  echo "Could not enumerate V25 preview reservation comments" >&2',
+            'fi',
+            'while read -r row; do :; done <<< "${reservation_rows}"',
+            'reservation_rows="$(' ,
+            '  gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments"',
+            ')"',
+        ]
+    )
+    if not contract_errors(misordered):
+        errors.append("guard failed to reject misordered status-check contract")
     return errors
 
 
