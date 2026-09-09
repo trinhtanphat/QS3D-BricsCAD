@@ -82,7 +82,8 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("signed-zero", "Signed zero");
             var element = CleanQuantityElement("signed-zero-element", ElementCategory.Slab, "NetVolumeM3", 1d);
             var negativeZero = BitConverter.Int64BitsToDouble(long.MinValue);
-            element.Quantities["NetVolumeM3"] = negativeZero;
+            var sourceQuantities = PersistedQuantityValues(element);
+            sourceQuantities["NetVolumeM3"] = negativeZero;
             project.Elements.Add(element);
 
             var finding = MeasurementWorkItemCoverageEvaluator.Evaluate(project, Catalog()).Single();
@@ -90,7 +91,7 @@ namespace QS3D.Core.SmokeTests
 
             Equal(0d, value, "Coverage negative zero must remain numerically zero.");
             Equal(0L, BitConverter.DoubleToInt64Bits(value), "Coverage must canonicalize negative zero to positive zero bits.");
-            Equal(long.MinValue, BitConverter.DoubleToInt64Bits(element.Quantities["NetVolumeM3"]),
+            Equal(long.MinValue, BitConverter.DoubleToInt64Bits(sourceQuantities["NetVolumeM3"]),
                 "Coverage snapshot must not mutate the source quantity dictionary while canonicalizing its public finding.");
         }
 
@@ -129,19 +130,19 @@ namespace QS3D.Core.SmokeTests
 
             var nonFinite = new ProjectState("nan", "NaN");
             var nan = CleanQuantityElement("NaN", ElementCategory.Slab, "NetVolumeM3", 1d);
-            nan.Quantities["NetVolumeM3"] = double.NaN;
+            PersistedQuantityValues(nan)["NetVolumeM3"] = double.NaN;
             nonFinite.Elements.Add(nan);
             ExpectThrows<InvalidOperationException>(() => MeasurementWorkItemCoverageEvaluator.Evaluate(nonFinite, catalog));
 
             var finiteNegative = new ProjectState("negative", "Negative");
             var negative = CleanQuantityElement("Negative", ElementCategory.Slab, "NetVolumeM3", 1d);
-            negative.Quantities["NetVolumeM3"] = -double.Epsilon;
+            PersistedQuantityValues(negative)["NetVolumeM3"] = -double.Epsilon;
             finiteNegative.Elements.Add(negative);
             ExpectThrows<InvalidOperationException>(() => MeasurementWorkItemCoverageEvaluator.Evaluate(finiteNegative, catalog));
 
             var paddedQuantity = new ProjectState("padded", "Padded");
             var padded = new ProjectElement("Padded", ElementCategory.Slab);
-            padded.Quantities[" NetVolumeM3"] = 1d;
+            PersistedQuantityValues(padded)[" NetVolumeM3"] = 1d;
             padded.MarkClean(ElementDirtyFlags.All);
             paddedQuantity.Elements.Add(padded);
             ExpectThrows<InvalidOperationException>(() => MeasurementWorkItemCoverageEvaluator.Evaluate(paddedQuantity, catalog));
@@ -187,6 +188,25 @@ namespace QS3D.Core.SmokeTests
             foreach (var element in ordered)
                 project.Elements.Add(element);
             return project;
+        }
+
+        private static IDictionary<string, double> PersistedQuantityValues(ProjectElement element)
+        {
+            var field = typeof(ProjectElement).GetField(
+                "_quantityValues",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
+            if (field == null)
+                return element.Quantities;
+
+            var values = field.GetValue(element) as IDictionary<string, double>;
+            if (values == null)
+            {
+                throw new InvalidOperationException(
+                    "ProjectElement._quantityValues must remain available for persisted-state coverage fixtures.");
+            }
+
+            return values;
         }
 
         private static ProjectElement CleanQuantityElement(string id, ElementCategory category, string quantityKey, double value)

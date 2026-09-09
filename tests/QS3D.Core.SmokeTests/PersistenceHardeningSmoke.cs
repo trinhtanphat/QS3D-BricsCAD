@@ -19,6 +19,7 @@ namespace QS3D.Core.SmokeTests
         {
             V1Migration();
             BackupRecovery();
+            FamilyPropertyPrimaryCorruptionUsesBackup();
             RecoverySavePreservesValidatedBackup();
             PublishNewRejectsExistingPair();
             MissingPrimaryBackupRecovery();
@@ -217,6 +218,46 @@ namespace QS3D.Core.SmokeTests
                 Require(recovered.Project.Name == "First", "Backup recovery loaded the wrong project generation.");
                 Require(recovered.SourcePath.EndsWith(".bak", StringComparison.OrdinalIgnoreCase), "Backup recovery source was not reported.");
                 Require(!string.IsNullOrWhiteSpace(recovered.PrimaryFailureMessage), "Primary load failure was not preserved.");
+            }
+            finally { Delete(path); Delete(path + ".bak"); Delete(path + ".tmp"); }
+        }
+
+        private static void FamilyPropertyPrimaryCorruptionUsesBackup()
+        {
+            FamilyPropertyCorruptionUsesBackup("family-property-value", "BoundedKey", new string('V', 1001));
+            FamilyPropertyCorruptionUsesBackup("family-property-key", new string('K', 121), "BoundedValue");
+        }
+
+        private static void FamilyPropertyCorruptionUsesBackup(string prefix, string persistedKey, string persistedValue)
+        {
+            var path = Temp(prefix, ".qsdb");
+            try
+            {
+                var store = new QsdbProjectStore();
+                store.Save(NewProject("p", "Known Good"), path);
+
+                var candidate = NewProject("p", "Corrupt Primary");
+                var family = new ProjectFamily("wall", "Wall", ElementCategory.ArchitecturalWall);
+                family.Properties["BoundedKey"] = "BoundedValue";
+                candidate.Families.Add(family);
+                store.Save(candidate, path);
+
+                var xml = File.ReadAllText(path, Encoding.UTF8);
+                const string validProperty = "name=\"BoundedKey\" value=\"BoundedValue\"";
+                var corruptProperty = "name=\"" + persistedKey + "\" value=\"" + persistedValue + "\"";
+                Require(xml.IndexOf(validProperty, StringComparison.Ordinal) >= 0,
+                    "Family-property corruption regression could not locate the persisted fixture.");
+                File.WriteAllText(path, xml.Replace(validProperty, corruptProperty), Encoding.UTF8);
+
+                var recovered = store.LoadWithBackupFallback(path);
+                Require(recovered.RecoveredFromBackup,
+                    "Over-bound Family property in the primary QSDB did not fall back to the validated backup.");
+                Require(recovered.Project.Name == "Known Good",
+                    "Family-property corruption recovery loaded the wrong project generation.");
+                Require(recovered.SourcePath.EndsWith(".bak", StringComparison.OrdinalIgnoreCase),
+                    "Family-property corruption recovery source was not reported as backup.");
+                Require(!string.IsNullOrWhiteSpace(recovered.PrimaryFailureMessage),
+                    "Family-property corruption recovery did not preserve primary failure evidence.");
             }
             finally { Delete(path); Delete(path + ".bak"); Delete(path + ".tmp"); }
         }
