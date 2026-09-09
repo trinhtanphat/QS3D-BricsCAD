@@ -182,6 +182,9 @@ namespace QS3D.Core.SmokeTests
             catch (InvalidOperationException ex)
             {
                 if (ex.Message.IndexOf("Project changed while regeneration preview scope was being established; recompute preview.", StringComparison.Ordinal) >= 0) return;
+                if (ex.Message.IndexOf("element ownership changed", StringComparison.Ordinal) >= 0)
+                    throw new InvalidOperationException(
+                        "Public element replacement must advance ChangeVersion and fail on project freshness before the structural ownership fallback.", ex);
                 throw new InvalidOperationException("Unexpected regeneration preview project-freshness error.", ex);
             }
 
