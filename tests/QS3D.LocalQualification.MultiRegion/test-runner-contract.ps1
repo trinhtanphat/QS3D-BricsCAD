@@ -24,6 +24,27 @@ if ($runnerText.IndexOf('Remove-Item -LiteralPath $privateRoot -Recurse -Force',
 if ($runnerText.IndexOf("'LOCAL_PASS_BOUNDED'", [StringComparison]::Ordinal) -lt 0 -or
     $runnerText.IndexOf("'PENDING_LOCAL'", [StringComparison]::Ordinal) -ge 0) { throw 'FAIL: runner status contract is ambiguous.' }
 
+# Cleanup is destructive to the nonce profile/private allocation. It must be
+# gated on a process-wide zero-BricsCAD proof, matching the established LOCAL
+# native runner pattern. A timeout/failure must retain private evidence instead
+# of restoring/deleting state while an owned host may still be using it.
+foreach ($requiredCleanupGuard in @(
+    '$zeroHosts = $false',
+    '$zeroHosts = $true',
+    'if ($zeroHosts) {',
+    'profile_restore_skipped_host_active',
+    'private_cleanup_skipped_host_active')) {
+    if ($runnerText.IndexOf($requiredCleanupGuard, [StringComparison]::Ordinal) -lt 0) {
+        throw ('FAIL: LOCAL-005 cleanup is not fail-closed on zero-host proof: ' + $requiredCleanupGuard)
+    }
+}
+$zeroProof = $runnerText.IndexOf('$zeroHosts = $true', [StringComparison]::Ordinal)
+$profileRestore = $runnerText.IndexOf('Restore-Qs3dV25ProfileSandbox', [StringComparison]::Ordinal)
+$privateDelete = $runnerText.IndexOf('Remove-Item -LiteralPath $privateRoot -Recurse -Force', [StringComparison]::Ordinal)
+if ($zeroProof -lt 0 -or $profileRestore -le $zeroProof -or $privateDelete -le $zeroProof) {
+    throw 'FAIL: destructive cleanup appears before zero-host proof.'
+}
+
 foreach ($required in @(
     '[CommandMethod("QL005SETUP"',
     '[CommandMethod("QL005VERIFY"',
