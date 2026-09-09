@@ -17,7 +17,9 @@ else:
     if min(start, finalize, report, single) < 0 or not start < finalize < report < single:
         errors.append("cannot isolate Auto Host command/UI helpers")
     else:
-        command = text[start:finalize]
+        affinity = text.find("private static bool IsActiveDocument", start)
+        command_end = affinity if start < affinity < finalize else finalize
+        command = text[start:command_end]
         for token in (
             "ReadSelectedHandles(document)",
             "ExistingProjectMutationContext.TryGet(document, out var project)",
