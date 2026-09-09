@@ -54,7 +54,7 @@ def _required_check_race_errors(workflow: str) -> list[str]:
         "single PR concurrency class": "github.event_name == 'pull_request' && 'pull_request'",
         "stable PR preflight check-run": "github.event_name == 'pull_request' && 'preflight'",
         "stable PR core check-run": "github.event_name == 'pull_request' && 'core'",
-        "core job survives preflight failure": "if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request') }}",
+        "core job survives preflight failure but not cancellation": "if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request') }}",
         "core fail-closed preflight admission": "name: Require successful preflight admission",
         "core preflight-result failure condition": "if: ${{ needs.preflight.result != 'success' }}",
     }
@@ -69,6 +69,7 @@ def _required_check_race_errors(workflow: str) -> list[str]:
         "manual required core status mirror": "Mirror core result into required commit status",
         "manual statuses write permission": "statuses: write",
         "direct commit-status publication": "/statuses/$env:QS3D_HEAD_SHA",
+        "cancel-insensitive core job": "if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request') }}",
     }
     for label, needle in forbidden_needles.items():
         if needle in workflow:
