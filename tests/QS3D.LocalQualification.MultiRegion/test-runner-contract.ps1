@@ -20,7 +20,7 @@ foreach ($command in $orderedCommands) {
     $cursor = $next
 }
 if ($runnerText.IndexOf("Invoke-HostPhase 'run' @('QL005SETUP') @('setup','run','saved')", [StringComparison]::Ordinal) -lt 0) { throw 'FAIL: run phase must leave production dispatch to the setup-owned queued tail.' }
-foreach ($queueToken in @('QueueProductionTail(context.Document);','SendStringToExecute(','QS3DSLABREBAR3DMULTI\n','QL005DUMPEX\n','QL005VERIFY\n')) {
+foreach ($queueToken in @('QueueProductionTail(context.Document, sourceLayer);','SendStringToExecute(','QS3DSLABREBAR3DMULTI\n','QL005DUMPEX\n','QL005VERIFY\n')) {
     if ($probeText.IndexOf($queueToken, [StringComparison]::Ordinal) -lt 0) { throw ('FAIL: LOCAL-005 queued production tail missing ' + $queueToken) }
 }
 if ($runnerText.IndexOf("Invoke-HostPhase 'reopen'", [StringComparison]::Ordinal) -lt 0 -or
@@ -70,6 +70,9 @@ foreach ($required in @(
 if ($runnerText.IndexOf("'QL005ARMEX'", [StringComparison]::Ordinal) -ge 0) { throw 'FAIL: diagnostic arming command must not sit between PICKFIRST setup and production.' }
 if ($runnerText.IndexOf("'_.SELECT'", [StringComparison]::Ordinal) -ge 0 -or $runnerText.IndexOf("'PICKFIRST'", [StringComparison]::Ordinal) -ge 0) {
     throw 'FAIL: script-level selection commands must not interpose between setup and production.'
+}
+foreach ($preselectToken in @('QS3D_LOCAL005_SOURCE_','sssetfirst nil','ssget \"_X\"','cons 8','polyline.Layer = sourceLayer')) {
+    if ($probeText.IndexOf($preselectToken, [StringComparison]::Ordinal) -lt 0) { throw ('FAIL: LOCAL-005 queued PICKFIRST preselection missing ' + $preselectToken) }
 }
 foreach ($selectionHookToken in @('CommandWillStart','OnProductionCommandWillStart','SetImpliedSelection(ids)','QS3DSLABREBAR3DMULTI')) {
     if ($probeText.IndexOf($selectionHookToken, [StringComparison]::Ordinal) -lt 0) { throw ('FAIL: LOCAL-005 command-start selection hook missing ' + $selectionHookToken) }

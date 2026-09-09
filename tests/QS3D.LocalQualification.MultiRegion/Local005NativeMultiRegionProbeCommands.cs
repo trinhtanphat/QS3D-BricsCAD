@@ -35,6 +35,7 @@ namespace QS3D.LocalQualification.MultiRegion
         private const string NativeRegApp = "QS3D_REBAR";
         private const string RegionRegApp = "QS3D_REBAR_REGION";
         private const double Tolerance = 1e-7d;
+        private const string SourceLayerPrefix = "QS3D_LOCAL005_SOURCE_";
         private static readonly object DiagnosticGate = new object();
         private static bool ProductionExceptionDiagnosticArmed;
         private static string? ProductionExceptionDiagnostic;
@@ -157,9 +158,10 @@ namespace QS3D.LocalQualification.MultiRegion
             catch { }
         }
 
-        private static void QueueProductionTail(Document document)
+        private static void QueueProductionTail(Document document, string sourceLayer)
         {
             document.SendStringToExecute(
+                "(sssetfirst nil (ssget \"_X\" (list (cons 0 \"LWPOLYLINE\") (cons 8 \"" + sourceLayer + "\"))))\n" +
                 "QS3DSLABREBAR3DMULTI\n" +
                 "QL005DUMPEX\n" +
                 "QL005VERIFY\n" +
@@ -177,7 +179,8 @@ namespace QS3D.LocalQualification.MultiRegion
             var project = GetProject(context.Document);
             if (project.Elements.Count != 0) throw new ProbeException("fixture_project_not_empty");
 
-            var ids = CreateLoops(context.Document);
+            var sourceLayer = SourceLayerPrefix + context.RunId;
+            var ids = CreateLoops(context.Document, sourceLayer);
             var element = new ProjectElement(ElementId(context.RunId), ElementCategory.Slab);
             foreach (var id in ids) element.SourceHandles.Add(id.Handle.ToString());
             element.Properties["ThicknessM"] = "0.30";
@@ -191,7 +194,7 @@ namespace QS3D.LocalQualification.MultiRegion
             ArmProductionExceptionDiagnostic(context);
             ArmProductionSelection(context.Document, ids);
             context.Document.Editor.SetImpliedSelection(ids);
-            QueueProductionTail(context.Document);
+            QueueProductionTail(context.Document, sourceLayer);
 
             return Checks(
                 "active_disposable_drawing", true,
@@ -284,26 +287,35 @@ namespace QS3D.LocalQualification.MultiRegion
             return checks;
         }
 
-        private static ObjectId[] CreateLoops(Document document)
+        private static ObjectId[] CreateLoops(Document document, string sourceLayer)
         {
             using (var transaction = document.Database.TransactionManager.StartTransaction())
             {
+                var layers = (LayerTable)transaction.GetObject(document.Database.LayerTableId, OpenMode.ForRead);
+                if (!layers.Has(sourceLayer))
+                {
+                    layers.UpgradeOpen();
+                    var layer = new LayerTableRecord { Name = sourceLayer };
+                    layers.Add(layer);
+                    transaction.AddNewlyCreatedDBObject(layer, true);
+                }
                 var table = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
                 var model = (BlockTableRecord)transaction.GetObject(table[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
                 var ids = new[]
                 {
-                    Rectangle(model, transaction, 0d, 0d, 10d, 8d),
-                    Rectangle(model, transaction, 3d, 2d, 5d, 4d),
-                    Rectangle(model, transaction, 14d, 0d, 22d, 8d)
+                    Rectangle(model, transaction, sourceLayer, 0d, 0d, 10d, 8d),
+                    Rectangle(model, transaction, sourceLayer, 3d, 2d, 5d, 4d),
+                    Rectangle(model, transaction, sourceLayer, 14d, 0d, 22d, 8d)
                 };
                 transaction.Commit();
                 return ids;
             }
         }
 
-        private static ObjectId Rectangle(BlockTableRecord model, Transaction transaction, double minX, double minY, double maxX, double maxY)
+        private static ObjectId Rectangle(BlockTableRecord model, Transaction transaction, string sourceLayer, double minX, double minY, double maxX, double maxY)
         {
             var polyline = new Polyline(4) { Closed = true, Elevation = 0d };
+            polyline.Layer = sourceLayer;
             try
             {
                 polyline.AddVertexAt(0, new Point2d(minX, minY), 0d, 0d, 0d);
