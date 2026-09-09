@@ -278,7 +278,9 @@ function Get-HeldAssemblyVersion {
                 try { $process.Kill() } catch { }
                 throw "$Label metadata probe input streaming exceeded its 30000 ms total budget."
             }
-            $copyTask.GetAwaiter().GetResult()
+            # Some PowerShell 7/.NET combinations expose VoidTaskResult here.
+            # Only the parsed assembly Version belongs on the success stream.
+            $null = $copyTask.GetAwaiter().GetResult()
         }
         catch {
             try { $process.Kill() } catch { }
