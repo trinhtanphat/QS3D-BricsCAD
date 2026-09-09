@@ -7,10 +7,10 @@ import ast
 import importlib.util
 import os
 from pathlib import Path
-import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "scripts" / "preflight-ci-edited-evidence.py"
+WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 
 
 def _load_module():
@@ -25,7 +25,7 @@ def _load_module():
 def _historical_reuse_surface(source: str) -> list[str]:
     tree = ast.parse(source, filename=str(SOURCE))
     findings: list[str] = []
-    forbidden_functions = {"prior_green_exists", "fetch_prior_runs"}
+    forbidden_functions = {"prior_green_exists", "fetch_prior_runs", "emit_reuse_output"}
     forbidden_import_roots = {"urllib", "requests"}
 
     for node in ast.walk(tree):
@@ -47,50 +47,45 @@ def _historical_reuse_surface(source: str) -> list[str]:
 def main() -> int:
     module = _load_module()
     source = SOURCE.read_text(encoding="utf-8")
+    workflow = WORKFLOW.read_text(encoding="utf-8")
 
-    # Historical workflow-run nested PR metadata is mutable. Keep the unsafe
-    # optimization implementation absent, but inspect Python structure instead
-    # of brittle lexical tokens so comments/docstrings cannot create false REDs.
     findings = _historical_reuse_surface(source)
     if findings:
         print("ERROR: mutable historical edited-evidence implementation remains:", ", ".join(findings))
         return 1
 
+    contract_errors = module.workflow_contract_errors(workflow)
+    if contract_errors:
+        print("ERROR: edited-event workflow bypass contract remains:", ", ".join(contract_errors))
+        return 1
+
     original_env = os.environ.copy()
     try:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            output = Path(temp_dir) / "github-output.txt"
-            os.environ.update({
-                "GITHUB_REPOSITORY": "trinhtanphat/QS3D-BricsCAD",
-                "GITHUB_TOKEN": "token",
-                "QS3D_EXPECTED_HEAD_SHA": "a" * 40,
-                "QS3D_EXPECTED_BASE_SHA": "b" * 40,
-                "QS3D_EXPECTED_BASE_REF": "main",
-                "QS3D_EXPECTED_PR_NUMBER": "123",
-                "GITHUB_RUN_ID": "200",
-                "GITHUB_OUTPUT": str(output),
-            })
-            module.verify_runtime()
-            lines = output.read_text(encoding="utf-8").splitlines()
-            if lines != ["reuse_exact_head_green=false"]:
-                print("ERROR: edited-event runtime did not force fail-closed full validation:", lines)
-                return 1
+        os.environ.update({
+            "GITHUB_REPOSITORY": "trinhtanphat/QS3D-BricsCAD",
+            "QS3D_EXPECTED_HEAD_SHA": "a" * 40,
+            "QS3D_EXPECTED_BASE_SHA": "b" * 40,
+            "QS3D_EXPECTED_BASE_REF": "main",
+            "QS3D_EXPECTED_PR_NUMBER": "123",
+            "GITHUB_RUN_ID": "200",
+        })
+        module.verify_runtime()
 
-            os.environ["QS3D_EXPECTED_HEAD_SHA"] = "not-a-sha"
-            try:
-                module.verify_runtime()
-            except RuntimeError as exc:
-                if "40-character hexadecimal" not in str(exc):
-                    print("ERROR: malformed exact-head identity failed with unexpected diagnostic:", exc)
-                    return 1
-            else:
-                print("ERROR: malformed exact-head identity was accepted")
+        os.environ["QS3D_EXPECTED_HEAD_SHA"] = "not-a-sha"
+        try:
+            module.verify_runtime()
+        except RuntimeError as exc:
+            if "40-character hexadecimal" not in str(exc):
+                print("ERROR: malformed exact-head identity failed with unexpected diagnostic:", exc)
                 return 1
+        else:
+            print("ERROR: malformed exact-head identity was accepted")
+            return 1
     finally:
         os.environ.clear()
         os.environ.update(original_env)
 
-    print("PASS: PR-edited evidence has no mutable historical reuse implementation and always requests full validation")
+    print("PASS: PR-edited CI has no mutable historical reuse implementation or workflow skip bypass")
     return 0
 
 
