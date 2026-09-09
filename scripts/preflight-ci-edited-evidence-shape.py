@@ -50,6 +50,13 @@ def _required_check_race_errors(workflow: str) -> list[str]:
     if "github.event.action == 'edited' && 'metadata'" in workflow:
         errors.append("metadata edits use a separate PR concurrency domain")
 
+    concurrency_group = next(
+        (line.strip() for line in workflow.splitlines() if line.strip().startswith("group: qs3d-shared-ci-")),
+        "",
+    )
+    if "github.run_attempt" in concurrency_group or "github.run_id" in concurrency_group:
+        errors.append("PR re-runs split out of the single repository/head cancellation domain")
+
     required_needles = {
         "single PR concurrency class": "github.event_name == 'pull_request' && 'pull_request'",
         "stable PR preflight check-run": "github.event_name == 'pull_request' && 'preflight'",
