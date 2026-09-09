@@ -45,26 +45,25 @@ def _historical_reuse_surface(source: str) -> list[str]:
 
 
 def _cross_event_required_status_race_errors(workflow: str) -> list[str]:
-    """Require one PR cancellation domain and keep check-run names distinct from required statuses."""
+    """Require one PR event domain while preserving fork check-run admission."""
     errors: list[str] = []
     if "github.event.action == 'edited' && 'metadata'" in workflow:
         errors.append("metadata edits use a separate PR concurrency domain")
 
-    required_status_check_run_names = {
-        "preflight": "github.event_name == 'pull_request' && 'preflight'",
-        "core": "github.event_name == 'pull_request' && 'core'",
+    required_needles = {
+        "single PR concurrency class": "github.event_name == 'pull_request' && 'pull_request'",
+        "same-repository preflight check-run isolation": (
+            "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'candidate-preflight'"
+        ),
+        "same-repository core check-run isolation": (
+            "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'candidate-core'"
+        ),
+        "fork preflight check-run fallback": "github.event_name == 'pull_request' && 'preflight'",
+        "fork core check-run fallback": "github.event_name == 'pull_request' && 'core'",
     }
-    for context, needle in required_status_check_run_names.items():
-        if needle in workflow:
-            errors.append(f"pull_request job check-run still shares required status context {context}")
-
-    expected_pr_check_run_names = {
-        "candidate-preflight": "github.event_name == 'pull_request' && 'candidate-preflight'",
-        "candidate-core": "github.event_name == 'pull_request' && 'candidate-core'",
-    }
-    for label, needle in expected_pr_check_run_names.items():
+    for label, needle in required_needles.items():
         if needle not in workflow:
-            errors.append(f"missing non-required PR check-run name {label}")
+            errors.append(f"missing {label}")
 
     return errors
 
