@@ -4,39 +4,55 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "hybrid-pr-coordinator.yml"
 
-UNSAFE_PROCESS_SUBSTITUTION = (
-    "mapfile -t pr_numbers < <(gh api --paginate \"repos/${GITHUB_REPOSITORY}/pulls?state=open&base=main&per_page=100\""
+UNSAFE_PROCESS_SUBSTITUTION_RE = re.compile(
+    r"mapfile\s+-t\s+pr_numbers\s*<\s*<\s*\(",
+    re.MULTILINE,
 )
-REQUIRED = {
-    "captured paginated PR query": "pr_rows=\"$(",
-    "paginated PR API": "gh api --paginate \"repos/${GITHUB_REPOSITORY}/pulls?state=open&base=main&per_page=100\"",
-    "PR query exit capture": "pr_query_status=$?",
-    "PR query failure check": "if (( pr_query_status != 0 )); then",
-    "explicit fail-closed diagnostic": "Could not enumerate open main-targeting PRs",
-    "parse captured PR rows": "done <<< \"${pr_rows}\"",
-}
+REQUIRED_IN_ORDER = (
+    ("disable errexit for status capture", "set +e"),
+    ("captured paginated PR query", 'pr_rows="$('),
+    (
+        "paginated PR API",
+        'gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls?state=open&base=main&per_page=100"',
+    ),
+    ("PR query exit capture", "pr_query_status=$?"),
+    ("restore errexit", "set -e"),
+    ("PR query failure check", "if (( pr_query_status != 0 )); then"),
+    ("explicit fail-closed diagnostic", "Could not enumerate open main-targeting PRs"),
+    ("parse captured PR rows", 'done <<< "${pr_rows}"'),
+)
 
 
 def contract_errors(text: str) -> list[str]:
     errors: list[str] = []
-    if UNSAFE_PROCESS_SUBSTITUTION in text:
+    if UNSAFE_PROCESS_SUBSTITUTION_RE.search(text):
         errors.append("Hybrid PR enumeration still uses unchecked process substitution")
-    for label, token in REQUIRED.items():
-        if token not in text:
-            errors.append(f"missing {label}")
+
+    last_index = -1
+    for label, token in REQUIRED_IN_ORDER:
+        index = text.find(token, last_index + 1)
+        if index < 0:
+            errors.append(f"missing or out-of-order {label}")
+            continue
+        last_index = index
     return errors
 
 
 def self_test() -> list[str]:
     errors: list[str] = []
-    unsafe = UNSAFE_PROCESS_SUBSTITUTION + ")"
-    if not contract_errors(unsafe):
-        errors.append("guard failed to reject unchecked Hybrid PR process substitution")
+    unsafe_variants = (
+        'mapfile -t pr_numbers < <(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls?state=open&base=main&per_page=100")',
+        "mapfile  -t  pr_numbers\n  <  < (\n    gh api --paginate whatever\n  )",
+    )
+    for unsafe in unsafe_variants:
+        if not any("unchecked process substitution" in error for error in contract_errors(unsafe)):
+            errors.append("guard failed to reject whitespace-varied Hybrid PR process substitution")
 
     safe = "\n".join(
         [
@@ -56,6 +72,10 @@ def self_test() -> list[str]:
     )
     if contract_errors(safe):
         errors.append("guard rejected the intended status-checked Hybrid PR enumeration contract")
+
+    reordered = safe.replace("pr_query_status=$?\nset -e", "set -e\npr_query_status=$?")
+    if not contract_errors(reordered):
+        errors.append("guard failed to reject reordered status-capture semantics")
     return errors
 
 
