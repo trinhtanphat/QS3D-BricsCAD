@@ -349,7 +349,7 @@ namespace QS3D.Core.Reporting
                 Name = name;
             }
 
-            internal FloorDefinition SourceInstance { get; }
+            internal ZoneDefinition SourceInstance { get; }
             internal string Id { get; }
             internal string Name { get; }
         }
