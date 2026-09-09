@@ -15,6 +15,7 @@ namespace QS3D.Core.Persistence
     public sealed class ProjectPersistenceCheckpoint
     {
         private const int MaximumElementCount = 10000;
+        private readonly ProjectState _projectOwner;
         private readonly string _projectId;
         private readonly DateTime _projectUpdatedUtc;
         private readonly long _projectChangeVersion;
@@ -22,11 +23,13 @@ namespace QS3D.Core.Persistence
         private readonly IReadOnlyList<string> _elementIds;
 
         private ProjectPersistenceCheckpoint(
+            ProjectState projectOwner,
             string projectId,
             DateTime projectUpdatedUtc,
             long projectChangeVersion,
             Dictionary<string, ElementPersistenceState> elements)
         {
+            _projectOwner = projectOwner ?? throw new ArgumentNullException(nameof(projectOwner));
             _projectId = projectId;
             _projectUpdatedUtc = projectUpdatedUtc;
             _projectChangeVersion = projectChangeVersion;
@@ -105,6 +108,7 @@ namespace QS3D.Core.Persistence
             }
 
             return new ProjectPersistenceCheckpoint(
+                project,
                 projectId,
                 projectUpdatedUtc,
                 projectChangeVersion,
@@ -114,6 +118,8 @@ namespace QS3D.Core.Persistence
         public bool Matches(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
+            if (!ReferenceEquals(project, _projectOwner))
+                return false;
             if (!string.Equals(project.ProjectId, _projectId, StringComparison.Ordinal) ||
                 project.ChangeVersion != _projectChangeVersion ||
                 project.UpdatedUtc != _projectUpdatedUtc)
@@ -132,6 +138,8 @@ namespace QS3D.Core.Persistence
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (!string.Equals(project.ProjectId, _projectId, StringComparison.Ordinal))
                 throw new InvalidOperationException("Cannot restore a persistence checkpoint into a different project id.");
+            if (!ReferenceEquals(project, _projectOwner))
+                throw new InvalidOperationException("Cannot restore a persistence checkpoint into a replacement project generation.");
 
             // Resolve and generation-fence the complete target set before the first mutation.
             // Logical ids are reusable domain identity; an in-memory persistence checkpoint
