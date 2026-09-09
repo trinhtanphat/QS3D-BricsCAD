@@ -47,54 +47,6 @@ function Remove-ImportedCertificates {
     }
 }
 
-function Get-CanonicalFullPath {
-    param([Parameter(Mandatory = $true)][string] $Path, [Parameter(Mandatory = $true)][string] $Label)
-
-    if ([string]::IsNullOrWhiteSpace($Path)) { throw "$Label path is required." }
-    try { return [IO.Path]::GetFullPath($Path) }
-    catch { throw "$Label path is invalid: $($_.Exception.Message)" }
-}
-
-function Assert-SafeTempDirectory {
-    param([Parameter(Mandatory = $true)][string] $Path)
-
-    $fullPath = (Get-CanonicalFullPath -Path $Path -Label 'temporary directory').TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
-    $pathRoot = [IO.Path]::GetPathRoot($fullPath)
-    if ([string]::IsNullOrWhiteSpace($fullPath) -or
-        [string]::Equals($fullPath, $pathRoot.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar), [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Temporary directory must not be a filesystem root: $fullPath"
-    }
-    if (-not (Test-Path -LiteralPath $fullPath -PathType Container)) {
-        throw "Temporary directory was not found: $fullPath"
-    }
-    $item = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop
-    if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-        throw "Temporary directory must be an ordinary non-reparse directory: $fullPath"
-    }
-    return $fullPath
-}
-
-function Assert-SafeTempFile {
-    param(
-        [Parameter(Mandatory = $true)][string] $Path,
-        [Parameter(Mandatory = $true)][string] $TempRoot
-    )
-
-    $fullPath = Get-CanonicalFullPath -Path $Path -Label 'temporary PFX'
-    $parent = [IO.Path]::GetDirectoryName($fullPath)
-    if (-not [string]::Equals($parent, $TempRoot, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Temporary PFX escaped the validated temporary directory: $fullPath"
-    }
-    if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
-        throw "Temporary PFX file was not found after write: $fullPath"
-    }
-    $item = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop
-    if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or -not ($item -is [IO.FileInfo])) {
-        throw "Temporary PFX must be an ordinary non-reparse file: $fullPath"
-    }
-    return $fullPath
-}
-
 $expected = Normalize-Thumbprint $ExpectedThumbprint
 $existing = @(Get-ChildItem -Path Cert:\CurrentUser\My | ForEach-Object {
     if ($_.Thumbprint) { Normalize-Thumbprint $_.Thumbprint }
@@ -117,31 +69,53 @@ if ($bytes.Length -lt 256 -or $bytes.Length -gt $maxPfxDecodedBytes) {
     throw "QS3D signing PFX decoded size is outside the allowed range: $($bytes.Length) bytes."
 }
 
-$tempRootCandidate = if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) { [IO.Path]::GetTempPath() } else { $env:RUNNER_TEMP }
-$tempRoot = Assert-SafeTempDirectory -Path $tempRootCandidate
-$pfxPath = Join-Path $tempRoot ('qs3d-signing-' + [Guid]::NewGuid().ToString('N') + '.pfx')
 $importedNewThumbprints = @()
 $operationError = $null
+$certificate = $null
+$store = $null
 
 try {
-    [IO.File]::WriteAllBytes($pfxPath, $bytes)
-    $pfxPath = Assert-SafeTempFile -Path $pfxPath -TempRoot $tempRoot
-    $imported = @(Import-PfxCertificate `
-        -FilePath $pfxPath `
-        -CertStoreLocation Cert:\CurrentUser\My `
-        -Password $Password `
-        -Exportable:$false `
-        -ErrorAction Stop)
-
-    $importedThumbprints = @($imported | ForEach-Object {
-        if ($_.Thumbprint) { Normalize-Thumbprint $_.Thumbprint }
-    } | Where-Object { $_ } | Sort-Object -Unique)
-    $importedNewThumbprints = @($importedThumbprints | Where-Object { $existing -notcontains $_ })
-    if ($importedNewThumbprints.Count -eq 0) {
-        throw 'PFX import did not add any new certificate to Cert:\CurrentUser\My.'
+    # First validate the bounded bytes without PersistKeySet so a malformed or
+    # unexpected PFX is rejected before a durable private key is created.
+    $probeCertificate = New-Object Security.Cryptography.X509Certificates.X509Certificate2
+    try {
+        $probeCertificate.Import(
+            $bytes,
+            $Password,
+            [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::UserKeySet)
+        $probeThumbprint = if ($probeCertificate.Thumbprint) { Normalize-Thumbprint $probeCertificate.Thumbprint } else { [string]::Empty }
+        if (-not [string]::Equals($probeThumbprint, $expected, [StringComparison]::Ordinal)) {
+            throw "PFX certificate thumbprint does not match expected commercial signing certificate $expected."
+        }
+        if (-not $probeCertificate.HasPrivateKey -or -not (Test-CodeSigningEku $probeCertificate)) {
+            throw "PFX must contain the expected private-key Code Signing certificate $expected."
+        }
+        $probeNow = Get-Date
+        if ($probeCertificate.NotBefore -gt $probeNow -or $probeCertificate.NotAfter -le $probeNow) {
+            throw "PFX code-signing certificate $expected is outside its validity period."
+        }
+    }
+    finally {
+        $probeCertificate.Dispose()
     }
 
-    $candidates = @(Get-ChildItem -Path Cert:\CurrentUser\My | Where-Object {
+    $certificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new()
+    $keyStorageFlags = [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::UserKeySet -bor
+        [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::PersistKeySet
+    $certificate.Import($bytes, $Password, $keyStorageFlags)
+
+    $store = [Security.Cryptography.X509Certificates.X509Store]::new(
+        [Security.Cryptography.X509Certificates.StoreName]::My,
+        [Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+    $store.Open([Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+
+    # The expected thumbprint was proven absent before import and the exact same
+    # bytes were validated in the non-persistent pass above. Arm cleanup before
+    # Store.Add so any partial add is still bounded to this attempt.
+    $importedNewThumbprints = @($expected)
+    $store.Add($certificate)
+
+    $candidates = @($store.Certificates | Where-Object {
         $_.Thumbprint -and
         (Normalize-Thumbprint $_.Thumbprint) -eq $expected -and
         $_.HasPrivateKey -and
@@ -183,25 +157,7 @@ catch {
     throw
 }
 finally {
-    $cleanupError = $null
-    try {
-        if (Test-Path -LiteralPath $pfxPath -ErrorAction Stop) {
-            Remove-Item -LiteralPath $pfxPath -Force -ErrorAction Stop
-            if (Test-Path -LiteralPath $pfxPath -ErrorAction Stop) {
-                throw "Temporary signing PFX still exists after cleanup: $pfxPath"
-            }
-        }
-    }
-    catch {
-        $cleanupError = $_.Exception
-    }
+    if ($null -ne $store) { $store.Close() }
+    if ($null -ne $certificate) { $certificate.Dispose() }
     [Array]::Clear($bytes, 0, $bytes.Length)
-    if ($null -ne $cleanupError) {
-        if ($null -ne $operationError) {
-            throw [AggregateException]::new(
-                'Signing operation failed and temporary PFX cleanup also failed.',
-                [Exception[]]@($operationError, $cleanupError))
-        }
-        throw $cleanupError
-    }
 }
