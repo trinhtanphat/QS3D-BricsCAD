@@ -447,7 +447,19 @@ jobs:
           & git diff --quiet --no-ext-diff $env:SOURCE_SHA $preMutationMain -- $preMutationReleaseRelevantPaths
           $preMutationReleaseDriftStatus = $LASTEXITCODE
           if ($preMutationReleaseDriftStatus -eq 1) {
-            throw "Protected main contains release-relevant changes after SOURCE_SHA; refusing to create a stale V25 draft release. SOURCE_SHA=$env:SOURCE_SHA currentMain=$preMutationMain"
+            $supersededMessage = "Protected main contains release-relevant changes after SOURCE_SHA; the stale V25 source will publish nothing. SOURCE_SHA=$env:SOURCE_SHA currentMain=$preMutationMain"
+            Write-Warning $supersededMessage
+            Write-Host "::notice title=V25 release source superseded::$supersededMessage"
+            Write-Host "V25_RELEASE_SUPERSEDED source_sha=$env:SOURCE_SHA current_main=$preMutationMain"
+            @"
+### V25 release source superseded
+
+- SOURCE_SHA: `$env:SOURCE_SHA`
+- Current protected main: `$preMutationMain`
+- Result: **successful no-op before the first persistent release mutation**
+- Recovery: the canonical dispatcher will re-evaluate protected main from this successful workflow completion; preview ordinal ownership is not reassigned.
+"@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            exit 0
           }
           if ($preMutationReleaseDriftStatus -ne 0) {
             throw "Could not classify SOURCE_SHA..preMutationMain release-relevant drift; refusing draft release mutation. git diff exit=$preMutationReleaseDriftStatus"
