@@ -22,6 +22,7 @@ namespace QS3D.Core.SmokeTests
             RoundTripPreservesCanonicalIssueAndNoOpPlan();
             EditableWorkbookProducesLifecyclePlan();
             ImmutableTraceTamperFailsClosed();
+            RejectsOversizedExportBeforeProjectionMaterialization();
             Console.WriteLine("PASS coordination issue XLSX provenance round-trip");
         }
 
@@ -116,7 +117,30 @@ namespace QS3D.Core.SmokeTests
             }
         }
 
-        private static CoordinationIssuePersistenceSnapshot CreateSnapshot(long revision)
+        private static void RejectsOversizedExportBeforeProjectionMaterialization()
+        {
+            var snapshot = CreateSnapshot(24L, 10001);
+            var root = Path.Combine(Path.GetTempPath(), "qs3d-coordination-issues-bound-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            var path = Path.Combine(root, "issues.xlsx");
+            var sentinel = new byte[] { 0x51, 0x53, 0x33, 0x44, 0x2D, 0x58, 0x4C, 0x53, 0x58 };
+            File.WriteAllBytes(path, sentinel);
+            try
+            {
+                Expect<InvalidDataException>(() => CoordinationIssueExcelWorkbook.Export(path, snapshot));
+                if (!File.ReadAllBytes(path).SequenceEqual(sentinel))
+                    throw new InvalidOperationException("Rejected oversized export changed the pre-existing destination.");
+                var leftovers = Directory.GetFiles(root).Where(candidate => !string.Equals(candidate, path, StringComparison.OrdinalIgnoreCase)).ToArray();
+                if (leftovers.Length != 0)
+                    throw new InvalidOperationException("Rejected oversized export left an owned temp file: " + string.Join(", ", leftovers));
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); } catch { }
+            }
+        }
+
+        private static CoordinationIssuePersistenceSnapshot CreateSnapshot(long revision, int issueCount = 1)
         {
             var project = new ProjectState("project-issue-workbook", "Coordination Issue Workbook Smoke")
             {
@@ -124,23 +148,27 @@ namespace QS3D.Core.SmokeTests
             };
             var drawingId = new DrawingId(Guid.Parse("04a8a08c-2cd7-4c88-b1cf-d7c80c633a9f"));
             var created = new DateTime(2026, 8, 22, 4, 0, 0, DateTimeKind.Utc);
-            var issue = new CoordinationIssue(
-                "issue-workbook-001",
-                CoordinationIssueKind.ClearanceClash,
-                CoordinationIssueSeverity.Medium,
-                "Hard clash workbook",
-                "semantic-workbook-left",
-                "semantic-workbook-right",
-                new CadReference(drawingId, new CadHandle("11AA")),
-                new CadReference(drawingId, new CadHandle("22BB")),
-                "MEP/Structure",
-                "Duct/Beam",
-                "Supply",
-                "Level-02",
-                0.025d,
-                created,
-                "Coordinator");
-            CoordinationIssuePersistence.Save(project, new[] { issue }, revision);
+            var issues = new List<CoordinationIssue>(issueCount);
+            for (var i = 0; i < issueCount; i++)
+            {
+                issues.Add(new CoordinationIssue(
+                    "issue-workbook-" + (i + 1).ToString("D5"),
+                    CoordinationIssueKind.ClearanceClash,
+                    CoordinationIssueSeverity.Medium,
+                    "Hard clash workbook",
+                    "semantic-workbook-left",
+                    "semantic-workbook-right",
+                    new CadReference(drawingId, new CadHandle("11AA")),
+                    new CadReference(drawingId, new CadHandle("22BB")),
+                    "MEP/Structure",
+                    "Duct/Beam",
+                    "Supply",
+                    "Level-02",
+                    0.025d,
+                    created.AddTicks(i),
+                    "Coordinator"));
+            }
+            CoordinationIssuePersistence.Save(project, issues, revision);
             return CoordinationIssuePersistence.Load(project)
                 ?? throw new InvalidOperationException("Coordination workbook snapshot was not restored.");
         }

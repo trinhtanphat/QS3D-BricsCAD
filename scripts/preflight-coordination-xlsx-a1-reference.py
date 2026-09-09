@@ -53,7 +53,7 @@ def main() -> None:
     )
     require(
         text,
-        "parsedRowIndex > MaxRows",
+        "parsedRowIndex > MaxWorksheetRows",
         "Coordination XLSX A1 parsing must reject rows beyond the XLSX 1,048,576 boundary.",
     )
     forbid(
