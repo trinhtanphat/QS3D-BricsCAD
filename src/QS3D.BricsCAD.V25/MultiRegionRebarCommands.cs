@@ -16,7 +16,8 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                if (CadSelectionGuard.AcquireCurrentSelection(document).Length == 0)
+                var selectedIds = CadSelectionGuard.AcquireCurrentSelection(document);
+                if (selectedIds.Length == 0)
                 {
                     Report(document, "Slab Multi-Region Rebar 3D: chọn toàn bộ closed POLYLINE source loops của đúng một Slab (outer loops và hole loops). Lệnh fail-closed nếu topology không được hỗ trợ.");
                     return;
@@ -33,7 +34,7 @@ namespace QS3D.BricsCAD.V25
                 var project = ExistingProjectMutationContext.Require(document, "Slab Multi-Region Rebar 3D");
                 EnsureSameProjectSnapshot(project.ProjectId, project.ChangeVersion, expectedProjectId, expectedChangeVersion, "Slab Multi-Region Rebar 3D");
 
-                var result = SlabFoundationMultiRegionMeshSolidBuilder.BuildSlab(document, project);
+                var result = SlabFoundationMultiRegionMeshSolidBuilder.BuildSlab(document, project, selectedIds);
                 var message = result.Bars == 0
                     ? "Slab Multi-Region Rebar 3D: không có multi-region output được tạo."
                     : "Slab Multi-Region Rebar 3D: đã tạo/cập nhật " + result.Bars + " thanh trên " + result.Regions + " region.";
@@ -52,7 +53,8 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
             try
             {
-                if (CadSelectionGuard.AcquireCurrentSelection(document).Length == 0)
+                var selectedIds = CadSelectionGuard.AcquireCurrentSelection(document);
+                if (selectedIds.Length == 0)
                 {
                     Report(document, "Foundation Multi-Region Rebar 3D: chọn toàn bộ closed POLYLINE source loops của đúng một Foundation (outer loops và hole loops). Lệnh fail-closed nếu topology không được hỗ trợ.");
                     return;
@@ -69,7 +71,7 @@ namespace QS3D.BricsCAD.V25
                 var project = ExistingProjectMutationContext.Require(document, "Foundation Multi-Region Rebar 3D");
                 EnsureSameProjectSnapshot(project.ProjectId, project.ChangeVersion, expectedProjectId, expectedChangeVersion, "Foundation Multi-Region Rebar 3D");
 
-                var result = SlabFoundationMultiRegionMeshSolidBuilder.BuildFoundation(document, project);
+                var result = SlabFoundationMultiRegionMeshSolidBuilder.BuildFoundation(document, project, selectedIds);
                 var message = result.Bars == 0
                     ? "Foundation Multi-Region Rebar 3D: không có multi-region output được tạo."
                     : "Foundation Multi-Region Rebar 3D: đã tạo/cập nhật " + result.Bars + " thanh trên " + result.Regions + " region.";
