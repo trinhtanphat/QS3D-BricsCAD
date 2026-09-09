@@ -82,7 +82,11 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("signed-zero", "Signed zero");
             var element = CleanQuantityElement("signed-zero-element", ElementCategory.Slab, "NetVolumeM3", 1d);
             var negativeZero = BitConverter.Int64BitsToDouble(long.MinValue);
-            element.Quantities["NetVolumeM3"] = negativeZero;
+            var quantityValuesField = typeof(ProjectElement).GetField("_quantityValues", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement quantity backing field changed; update signed-zero regression intentionally.");
+            var sourceQuantities = quantityValuesField.GetValue(element) as IDictionary<string, double>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement quantity backing dictionary.");
+            sourceQuantities["NetVolumeM3"] = negativeZero;
             project.Elements.Add(element);
 
             var finding = MeasurementWorkItemCoverageEvaluator.Evaluate(project, Catalog()).Single();
@@ -90,7 +94,7 @@ namespace QS3D.Core.SmokeTests
 
             Equal(0d, value, "Coverage negative zero must remain numerically zero.");
             Equal(0L, BitConverter.DoubleToInt64Bits(value), "Coverage must canonicalize negative zero to positive zero bits.");
-            Equal(long.MinValue, BitConverter.DoubleToInt64Bits(element.Quantities["NetVolumeM3"]),
+            Equal(long.MinValue, BitConverter.DoubleToInt64Bits(sourceQuantities["NetVolumeM3"]),
                 "Coverage snapshot must not mutate the source quantity dictionary while canonicalizing its public finding.");
         }
 
