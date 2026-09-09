@@ -452,13 +452,13 @@ jobs:
             Write-Host "::notice title=V25 release source superseded::$supersededMessage"
             Write-Host "V25_RELEASE_SUPERSEDED source_sha=$env:SOURCE_SHA current_main=$preMutationMain"
             @"
-### V25 release source superseded
+            ### V25 release source superseded
 
-- SOURCE_SHA: `$env:SOURCE_SHA`
-- Current protected main: `$preMutationMain`
-- Result: **successful no-op before the first persistent release mutation**
-- Recovery: the canonical dispatcher will re-evaluate protected main from this successful workflow completion; preview ordinal ownership is not reassigned.
-"@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            - SOURCE_SHA: `$env:SOURCE_SHA`
+            - Current protected main: `$preMutationMain`
+            - Result: **successful no-op before the first persistent release mutation**
+            - Recovery: the canonical dispatcher will re-evaluate protected main from this successful workflow completion; preview ordinal ownership is not reassigned.
+            "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
             exit 0
           }
           if ($preMutationReleaseDriftStatus -ne 0) {
