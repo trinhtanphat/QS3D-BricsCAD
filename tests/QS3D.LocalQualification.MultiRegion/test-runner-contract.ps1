@@ -65,6 +65,23 @@ foreach ($required in @(
 if ($probeText.IndexOf('SlabFoundationMultiRegionMeshSolidBuilder', [StringComparison]::Ordinal) -ge 0) {
     throw 'FAIL: test probe must not call the internal builder directly.'
 }
+foreach ($demandLoadToken in @(
+    '$demandLoadRegistryPath',
+    '$demandLoadOriginalControls',
+    '$demandLoadIsolatedControls',
+    'Set-Qs3dDemandLoadControls',
+    'Restore-Qs3dDemandLoadControls',
+    'demandload_restore_skipped_host_active')) {
+    if ($runnerText.IndexOf($demandLoadToken, [StringComparison]::Ordinal) -lt 0) {
+        throw ('FAIL: LOCAL-005 startup DemandLoad isolation contract missing ' + $demandLoadToken)
+    }
+}
+$demandLoadSet = $runnerText.IndexOf('Set-Qs3dDemandLoadControls', [StringComparison]::Ordinal)
+$hostStart = $runnerText.IndexOf('Start-Process -FilePath $bricscadExe', [StringComparison]::Ordinal)
+$demandLoadRestore = $runnerText.LastIndexOf('Restore-Qs3dDemandLoadControls', [StringComparison]::Ordinal)
+if ($demandLoadSet -lt 0 -or $hostStart -le $demandLoadSet -or $demandLoadRestore -le $zeroProof) {
+    throw 'FAIL: LOCAL-005 DemandLoad isolation/restore ordering is unsafe.'
+}
 if ($probeText.IndexOf('using System.Diagnostics;', [StringComparison]::Ordinal) -lt 0) { throw 'FAIL: probe host identity dependency is not explicit.' }
 if ($probeText.IndexOf('catch(System.Exception error)', [StringComparison]::Ordinal) -lt 0 -or
     $probeText.IndexOf('catch(Exception error)', [StringComparison]::Ordinal) -ge 0) {

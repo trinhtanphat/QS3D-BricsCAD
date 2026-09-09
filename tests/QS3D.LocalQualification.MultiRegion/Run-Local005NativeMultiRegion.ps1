@@ -48,6 +48,28 @@ function Get-TunnelProcessCount {
 function Assert-NoBricsCad {
     if (@(Get-Process -Name bricscad -ErrorAction SilentlyContinue).Count -ne 0) { throw 'BricsCAD must be closed before LOCAL-005 allocation.' }
 }
+function Set-Qs3dDemandLoadControls {
+    param([string]$RegistryPath,[int]$ExpectedCurrent,[int]$NewValue)
+    $current = [int](Get-ItemPropertyValue -LiteralPath $RegistryPath -Name 'LoadCtrls' -ErrorAction Stop)
+    if ($current -ne $ExpectedCurrent) { throw 'QS3D DemandLoad controls changed concurrently; refusing to overwrite them.' }
+    Set-ItemProperty -LiteralPath $RegistryPath -Name 'LoadCtrls' -Value $NewValue -ErrorAction Stop
+    $readback = [int](Get-ItemPropertyValue -LiteralPath $RegistryPath -Name 'LoadCtrls' -ErrorAction Stop)
+    if ($readback -ne $NewValue) { throw 'QS3D DemandLoad control readback did not match the guarded value.' }
+}
+function Restore-Qs3dDemandLoadControls {
+    param([string]$RegistryPath,[int]$OriginalValue,[int]$IsolatedValue)
+    $current = [int](Get-ItemPropertyValue -LiteralPath $RegistryPath -Name 'LoadCtrls' -ErrorAction Stop)
+    if ($current -eq $OriginalValue) { return }
+    Set-Qs3dDemandLoadControls -RegistryPath $RegistryPath -ExpectedCurrent $IsolatedValue -NewValue $OriginalValue
+}
+function Assert-Qs3dDemandLoadIdentity {
+    param([string]$RegistryPath,[string]$ExpectedLoader,[string]$ExpectedLoaderHash)
+    if (-not (Test-Path -LiteralPath $RegistryPath -PathType Container)) { throw 'QS3D DemandLoad registration disappeared during LOCAL-005 qualification.' }
+    $loader = [string](Get-ItemPropertyValue -LiteralPath $RegistryPath -Name 'Loader' -ErrorAction Stop)
+    if ([string]::IsNullOrWhiteSpace($loader) -or -not (Test-Path -LiteralPath $loader -PathType Leaf)) { throw 'QS3D DemandLoad loader identity is unavailable.' }
+    if (-not [string]::Equals([IO.Path]::GetFullPath($loader),[IO.Path]::GetFullPath($ExpectedLoader),[StringComparison]::OrdinalIgnoreCase)) { throw 'QS3D DemandLoad loader path changed concurrently.' }
+    if ((Get-Hash $loader) -cne $ExpectedLoaderHash) { throw 'QS3D DemandLoad loader bytes changed concurrently.' }
+}
 function Write-Json([string]$Path, $Value) {
     if (Test-Path -LiteralPath $Path) { throw 'Evidence path already exists.' }
     [IO.File]::WriteAllText($Path, ($Value | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
@@ -128,6 +150,28 @@ if ((Get-Hash $drawing) -cne $fixtureHash) { throw 'Disposable DWG copy differs 
 
 Assert-NoBricsCad
 if ((Get-TunnelProcessCount) -ne 0) { throw 'MCP/tunnel processes must remain stopped during LOCAL-005 native qualification.' }
+$demandLoadRegistryPath = 'Registry::HKEY_CURRENT_USER\Software\Bricsys\BricsCAD\V25x64\en_US\Applications\QS3D'
+$isolateDemandLoad = $false
+$script:demandLoadChanged = $false
+$script:demandLoadRestored = $true
+$demandLoadOriginalControls = 0
+$demandLoadIsolatedControls = 0
+$demandLoadLoader = ''
+$demandLoadLoaderHash = ''
+if (Test-Path -LiteralPath $demandLoadRegistryPath -PathType Container) {
+    $demandLoadOriginalControls = [int](Get-ItemPropertyValue -LiteralPath $demandLoadRegistryPath -Name 'LoadCtrls' -ErrorAction Stop)
+    if ($demandLoadOriginalControls -ne 2 -and $demandLoadOriginalControls -ne 4) { throw 'LOCAL-005 only supports canonical QS3D DemandLoad controls 2 or 4.' }
+    $demandLoadLoader = [string](Get-ItemPropertyValue -LiteralPath $demandLoadRegistryPath -Name 'Loader' -ErrorAction Stop)
+    if ([string]::IsNullOrWhiteSpace($demandLoadLoader) -or -not (Test-Path -LiteralPath $demandLoadLoader -PathType Leaf)) { throw 'Installed QS3D DemandLoad loader is missing.' }
+    $demandLoadLoader = [IO.Path]::GetFullPath($demandLoadLoader)
+    $demandLoadLoaderHash = Get-Hash $demandLoadLoader
+    if (($demandLoadOriginalControls -band 2) -ne 0) {
+        $demandLoadIsolatedControls = [int](($demandLoadOriginalControls -band (-bnot 2)) -bor 4)
+        $isolateDemandLoad = $true
+    } else {
+        $demandLoadIsolatedControls = $demandLoadOriginalControls
+    }
+}
 $productHash = Get-Hash $productDll
 $coreHash = Get-Hash $coreDll
 $probeHash = Get-Hash $probeDll
@@ -153,6 +197,12 @@ $cleanupOk = $false
 
 function Invoke-HostPhase([string]$Phase, [string[]]$Commands, [string[]]$ExpectedMarkers) {
     Assert-NoBricsCad
+    if ($isolateDemandLoad) {
+        Assert-Qs3dDemandLoadIdentity -RegistryPath $demandLoadRegistryPath -ExpectedLoader $demandLoadLoader -ExpectedLoaderHash $demandLoadLoaderHash
+        Set-Qs3dDemandLoadControls -RegistryPath $demandLoadRegistryPath -ExpectedCurrent $demandLoadOriginalControls -NewValue $demandLoadIsolatedControls
+        $script:demandLoadChanged = $true
+        $script:demandLoadRestored = $false
+    }
     if ((Get-Hash $productDll) -cne $productHash -or (Get-Hash $coreDll) -cne $coreHash -or
         (Get-Hash $probeDll) -cne $probeHash -or (Get-Hash $PSCommandPath) -cne $runnerHash -or
         (Get-Hash $source) -cne $sourceHash -or (Get-Hash $project) -cne $projectHash) { throw 'Frozen LOCAL-005 inputs changed before process boundary.' }
@@ -190,6 +240,12 @@ function Invoke-HostPhase([string]$Phase, [string[]]$Commands, [string[]]$Expect
     $zeroDeadline = [DateTime]::UtcNow.AddSeconds(15)
     while ([DateTime]::UtcNow -lt $zeroDeadline -and @(Get-Process -Name bricscad -ErrorAction SilentlyContinue).Count -gt 0) { Start-Sleep -Milliseconds 250 }
     Assert-NoBricsCad
+    if ($script:demandLoadChanged) {
+        Restore-Qs3dDemandLoadControls -RegistryPath $demandLoadRegistryPath -OriginalValue $demandLoadOriginalControls -IsolatedValue $demandLoadIsolatedControls
+        Assert-Qs3dDemandLoadIdentity -RegistryPath $demandLoadRegistryPath -ExpectedLoader $demandLoadLoader -ExpectedLoaderHash $demandLoadLoaderHash
+        $script:demandLoadChanged = $false
+        $script:demandLoadRestored = $true
+    }
 }
 
 try {
@@ -198,7 +254,7 @@ try {
         schema='QS3D_LOCAL005_ALLOCATION_V1'; run_id=$runId; product_source_sha=$ProductSourceSha; harness_git_sha=$harnessSha
         product_sha256=$productHash; core_sha256=$coreHash; probe_sha256=$probeHash; runner_sha256=$runnerHash
         synthetic_fixture='two_disjoint_rectangles_plus_one_rectangular_hole'; fixture_seed_sha256=$fixtureHash
-        host_major=25; profile_sandbox='NONCE_COPY'; mcp_test_executed=$false; tunnel_processes=0
+        host_major=25; profile_sandbox='NONCE_COPY'; mcp_test_executed=$false; tunnel_processes=0; startup_demandload_isolated=$isolateDemandLoad
     }
     Write-Json (Join-Path $ArtifactDir 'allocation.json') $allocation
 
@@ -243,6 +299,24 @@ try {
         Assert-NoBricsCad
         $zeroHosts = $true
     } catch { if ($null -eq $cleanupFailure) { $cleanupFailure = 'host_zero_cleanup_failed' } }
+    if ($script:demandLoadChanged) {
+        if ($zeroHosts) {
+            try {
+                Restore-Qs3dDemandLoadControls -RegistryPath $demandLoadRegistryPath -OriginalValue $demandLoadOriginalControls -IsolatedValue $demandLoadIsolatedControls
+                Assert-Qs3dDemandLoadIdentity -RegistryPath $demandLoadRegistryPath -ExpectedLoader $demandLoadLoader -ExpectedLoaderHash $demandLoadLoaderHash
+                $script:demandLoadChanged = $false
+                $script:demandLoadRestored = $true
+            } catch { if ($null -eq $cleanupFailure) { $cleanupFailure = 'demandload_restore_failed' } }
+        } elseif ($null -eq $cleanupFailure) {
+            $cleanupFailure = 'demandload_restore_skipped_host_active'
+        }
+    } elseif ($zeroHosts -and -not [string]::IsNullOrWhiteSpace($demandLoadLoader)) {
+        try {
+            Assert-Qs3dDemandLoadIdentity -RegistryPath $demandLoadRegistryPath -ExpectedLoader $demandLoadLoader -ExpectedLoaderHash $demandLoadLoaderHash
+            $controls = [int](Get-ItemPropertyValue -LiteralPath $demandLoadRegistryPath -Name 'LoadCtrls' -ErrorAction Stop)
+            if ($controls -ne $demandLoadOriginalControls) { throw 'QS3D DemandLoad controls were not restored.' }
+        } catch { if ($null -eq $cleanupFailure) { $cleanupFailure = 'demandload_final_state_changed' } }
+    }
     if ($null -ne $sandbox) {
         if ($zeroHosts) {
             try { $profileReceipt = Restore-Qs3dV25ProfileSandbox -Sandbox $sandbox }
@@ -275,7 +349,7 @@ $receipt = [ordered]@{
     geometry_verified=($status -ceq 'LOCAL_PASS_BOUNDED'); ownership_verified=($status -ceq 'LOCAL_PASS_BOUNDED')
     save_reopen_verified=($status -ceq 'LOCAL_PASS_BOUNDED'); private_cleanup_verified=$cleanupOk
     zero_bricscad_processes=(@(Get-Process -Name bricscad -ErrorAction SilentlyContinue).Count -eq 0)
-    profile_restored=($null -ne $profileReceipt); mcp_test_executed=$false
+    profile_restored=($null -ne $profileReceipt); demandload_isolated=$isolateDemandLoad; demandload_restored=$script:demandLoadRestored; mcp_test_executed=$false
     pending_rows=@('SLAB_BULGE','SLAB_ADD_REMOVE_REGION','SLAB_CORRUPT_OWNERSHIP','SLAB_CAP_FAIL_CLOSED','FOUNDATION_STRAIGHT_DISJOINT_PLUS_HOLE')
     started_utc=$started.ToString('o'); ended_utc=[DateTime]::UtcNow.ToString('o')
 }
