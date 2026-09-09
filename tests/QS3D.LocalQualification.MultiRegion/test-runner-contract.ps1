@@ -10,13 +10,18 @@ $runnerText = Get-Content -LiteralPath $runner -Raw
 $probeText = Get-Content -LiteralPath $probe -Raw
 $projectText = Get-Content -LiteralPath $project -Raw
 
-$orderedCommands = @('QL005SETUP','QS3DSLABREBAR3DMULTI','QL005DUMPEX','QL005VERIFY','QS3DMULTIREBARHEALTH','QS3DSAVE','_.QSAVE','QL005SAVED')
+$orderedCommands = @('QS3DSLABREBAR3DMULTI','QL005DUMPEX','QL005VERIFY','QS3DMULTIREBARHEALTH','QS3DSAVE','_.QSAVE','QL005SAVED')
 $cursor = -1
 foreach ($command in $orderedCommands) {
-    $next = $runnerText.IndexOf("'" + $command + "'", $cursor + 1, [StringComparison]::Ordinal)
-    if ($next -lt 0) { throw ('FAIL: runner missing real command sequence member ' + $command) }
-    if ($next -le $cursor) { throw 'FAIL: LOCAL-005 real command sequence is not ordered.' }
+    $needle = $command + '\n'
+    $next = $probeText.IndexOf($needle, $cursor + 1, [StringComparison]::Ordinal)
+    if ($next -lt 0) { throw ('FAIL: queued production tail missing member ' + $command) }
+    if ($next -le $cursor) { throw 'FAIL: LOCAL-005 queued production tail is not ordered.' }
     $cursor = $next
+}
+if ($runnerText.IndexOf("Invoke-HostPhase 'run' @('QL005SETUP') @('setup','run','saved')", [StringComparison]::Ordinal) -lt 0) { throw 'FAIL: run phase must leave production dispatch to the setup-owned queued tail.' }
+foreach ($queueToken in @('QueueProductionTail(context.Document);','SendStringToExecute(','QS3DSLABREBAR3DMULTI\n','QL005DUMPEX\n','QL005VERIFY\n')) {
+    if ($probeText.IndexOf($queueToken, [StringComparison]::Ordinal) -lt 0) { throw ('FAIL: LOCAL-005 queued production tail missing ' + $queueToken) }
 }
 if ($runnerText.IndexOf("Invoke-HostPhase 'reopen'", [StringComparison]::Ordinal) -lt 0 -or
     $runnerText.IndexOf("'QL005REOPEN'", [StringComparison]::Ordinal) -lt 0) { throw 'FAIL: cold reopen phase missing.' }

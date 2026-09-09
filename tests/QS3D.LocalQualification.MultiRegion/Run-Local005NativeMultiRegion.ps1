@@ -259,17 +259,7 @@ try {
     Write-Json (Join-Path $ArtifactDir 'allocation.json') $allocation
 
     # Real public production mutation command sits between test-only setup and verification.
-    Invoke-HostPhase 'run' @(
-        'QL005SETUP',
-        'QS3DSLABREBAR3DMULTI',
-        'QL005DUMPEX',
-        'QL005VERIFY',
-        'QS3DMULTIREBARHEALTH',
-        'QS3DSAVE',
-        '_.QSAVE',
-        'QL005SAVED',
-        '_.QUIT','_Y'
-    ) @('setup','run','saved')
+    Invoke-HostPhase 'run' @('QL005SETUP') @('setup','run','saved')
     $null = Read-Marker 'setup' $setupChecks
     $null = Read-Marker 'run' $runChecks
     $null = Read-Marker 'saved' $savedChecks

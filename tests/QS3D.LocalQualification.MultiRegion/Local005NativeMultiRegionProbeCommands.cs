@@ -157,6 +157,20 @@ namespace QS3D.LocalQualification.MultiRegion
             catch { }
         }
 
+        private static void QueueProductionTail(Document document)
+        {
+            document.SendStringToExecute(
+                "QS3DSLABREBAR3DMULTI\n" +
+                "QL005DUMPEX\n" +
+                "QL005VERIFY\n" +
+                "QS3DMULTIREBARHEALTH\n" +
+                "QS3DSAVE\n" +
+                "_.QSAVE\n" +
+                "QL005SAVED\n" +
+                "_.QUIT\n_Y\n",
+                true, false, false);
+        }
+
         private static IDictionary<string, bool> SetupPhase(Context context)
         {
             RequireMeters(context.Document);
@@ -177,6 +191,7 @@ namespace QS3D.LocalQualification.MultiRegion
             ArmProductionExceptionDiagnostic(context);
             ArmProductionSelection(context.Document, ids);
             context.Document.Editor.SetImpliedSelection(ids);
+            QueueProductionTail(context.Document);
 
             return Checks(
                 "active_disposable_drawing", true,
