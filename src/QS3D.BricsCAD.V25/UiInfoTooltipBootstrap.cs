@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -9,16 +10,6 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 
-#if !BRICSCAD_V26
-namespace System.Runtime.CompilerServices
-{
-    [AttributeUsage(AttributeTargets.Method, Inherited = false)]
-    internal sealed class ModuleInitializerAttribute : Attribute
-    {
-    }
-}
-#endif
-
 namespace QS3D.BricsCAD.V25
 {
     internal static class UiInfoTooltipBootstrap
@@ -26,6 +17,7 @@ namespace QS3D.BricsCAD.V25
         private const string AgentCenterWindowName = "McpAgentControlCenter";
         private const string UpdateCenterWindowName = "UpdateCenterWindow";
         private const string NextStepMarker = "Tiếp theo: ";
+        private static int _registered;
 
         private static readonly DependencyProperty HookedProperty = DependencyProperty.RegisterAttached(
             "Hooked",
@@ -39,9 +31,11 @@ namespace QS3D.BricsCAD.V25
             typeof(UiInfoTooltipBootstrap),
             new PropertyMetadata(false));
 
-        [System.Runtime.CompilerServices.ModuleInitializer]
-        internal static void Initialize()
+        internal static void EnsureRegistered()
         {
+            if (Interlocked.CompareExchange(ref _registered, 1, 0) != 0)
+                return;
+
             try
             {
                 EventManager.RegisterClassHandler(
@@ -51,7 +45,9 @@ namespace QS3D.BricsCAD.V25
             }
             catch
             {
-                // Presentation-only polish must never prevent the BricsCAD plugin assembly from loading.
+                // Optional presentation polish must not prevent host initialization.
+                // Permit another explicit initialization attempt if WPF was not ready.
+                Interlocked.Exchange(ref _registered, 0);
             }
         }
 
