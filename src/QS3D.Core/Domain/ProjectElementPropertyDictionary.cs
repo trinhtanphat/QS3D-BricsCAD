@@ -21,7 +21,7 @@ namespace QS3D.Core.Domain
 
         public string this[string key]
         {
-            get => _values[key];
+            get => _values[CanonicalizeLookupKey(key)];
             set
             {
                 var canonical = ValidateMutationInput(key, value);
@@ -46,10 +46,14 @@ namespace QS3D.Core.Domain
 
         public void Clear() => _owner.ClearProperties();
 
-        public bool Contains(KeyValuePair<string, string> item) =>
-            ((ICollection<KeyValuePair<string, string>>)_values).Contains(item);
+        public bool Contains(KeyValuePair<string, string> item)
+        {
+            var canonical = CanonicalizeLookupKey(item.Key);
+            return _values.TryGetValue(canonical, out var existing) &&
+                   string.Equals(existing, item.Value, StringComparison.Ordinal);
+        }
 
-        public bool ContainsKey(string key) => _values.ContainsKey(key);
+        public bool ContainsKey(string key) => _values.ContainsKey(CanonicalizeLookupKey(key));
 
         public void CopyTo(KeyValuePair<string, string>[] array, int arrayIndex) =>
             ((ICollection<KeyValuePair<string, string>>)_values).CopyTo(array, arrayIndex);
@@ -71,7 +75,8 @@ namespace QS3D.Core.Domain
             return _owner.RemoveProperty(canonical);
         }
 
-        public bool TryGetValue(string key, out string value) => _values.TryGetValue(key, out value!);
+        public bool TryGetValue(string key, out string value) =>
+            _values.TryGetValue(CanonicalizeLookupKey(key), out value!);
 
         internal void SetPersistenceValue(string key, string value)
         {
@@ -114,6 +119,24 @@ namespace QS3D.Core.Domain
             catch (XmlException ex)
             {
                 throw new ArgumentException("Property name contains characters that are invalid in XML.", "name", ex);
+            }
+
+            return canonical;
+        }
+
+        private static string CanonicalizeLookupKey(string key)
+        {
+            if (key == null || string.IsNullOrWhiteSpace(key)) return key;
+
+            var canonical = key.Trim();
+            if (canonical.Any(char.IsControl)) return key;
+            try
+            {
+                XmlConvert.VerifyXmlChars(canonical);
+            }
+            catch (XmlException)
+            {
+                return key;
             }
 
             return canonical;
