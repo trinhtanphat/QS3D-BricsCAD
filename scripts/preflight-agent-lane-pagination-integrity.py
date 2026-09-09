@@ -7,21 +7,22 @@ import importlib.util
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-TARGET = ROOT / "scripts" / "preflight-agent-lane-collision.py"
+TARGETS = {
+    "lane-collision": ROOT / "scripts" / "preflight-agent-lane-collision.py",
+    "pre-acquisition": ROOT / "scripts" / "agent-reservation-precheck.py",
+}
 
 
-def load_target():
-    spec = importlib.util.spec_from_file_location("qs3d_agent_lane_collision", TARGET)
+def load_target(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(f"qs3d_{name.replace('-', '_')}", path)
     if spec is None or spec.loader is None:
-        raise SystemExit("ERROR: could not load agent lane collision preflight module")
+        raise SystemExit(f"ERROR: could not load {name} Reservation-v2 module")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-def main() -> None:
-    module = load_target()
-
+def exercise_paginator(label: str, module, invoke) -> None:
     # A nominally full API page containing any malformed member must fail closed.
     # Filtering that member first would reduce the page to 99 and silently stop
     # before page 2, which can hide a later reservation or carrier collision.
@@ -38,21 +39,21 @@ def main() -> None:
     module._request_json = malformed_page
     try:
         try:
-            module._fetch_paged("https://api.example.test", "owner/repo", "issues?state=open", "token")
+            invoke(module)
         except RuntimeError as exc:
             if "non-object" not in str(exc).lower() and "malformed" not in str(exc).lower():
-                raise SystemExit(f"ERROR: malformed page failed for the wrong reason: {exc}")
+                raise SystemExit(f"ERROR: {label} malformed page failed for the wrong reason: {exc}")
         else:
             raise SystemExit(
-                "ERROR: paginated reservation scan accepted a malformed 100-entry page; "
-                "later pages can be skipped fail-open"
+                f"ERROR: {label} accepted a malformed 100-entry page; "
+                "later reservations can be skipped fail-open"
             )
     finally:
         module._request_json = original
 
     if len(calls) != 1:
         raise SystemExit(
-            "ERROR: malformed page must fail immediately without querying later pages; "
+            f"ERROR: {label} malformed page must fail immediately without querying later pages; "
             f"observed {len(calls)} request(s)"
         )
 
@@ -67,25 +68,46 @@ def main() -> None:
             return [{"number": index + 1} for index in range(100)]
         if "page=2" in url:
             return [{"number": 101}]
-        raise AssertionError(f"unexpected pagination request: {url}")
+        raise AssertionError(f"unexpected {label} pagination request: {url}")
 
     module._request_json = two_valid_pages
     try:
-        collected = module._fetch_paged(
-            "https://api.example.test", "owner/repo", "pulls?state=open", "token"
-        )
+        collected = invoke(module)
     finally:
         module._request_json = original
 
     if len(collected) != 101 or len(calls) != 2:
         raise SystemExit(
-            "ERROR: valid 100+1 pagination contract regressed: "
+            f"ERROR: {label} valid 100+1 pagination contract regressed: "
             f"items={len(collected)} requests={len(calls)}"
         )
     if collected[-1].get("number") != 101:
-        raise SystemExit("ERROR: second-page reservation entry was not preserved")
+        raise SystemExit(f"ERROR: {label} did not preserve the second-page reservation entry")
 
-    print("PASS: Reservation-v2 pagination rejects malformed page members and preserves complete valid paging.")
+
+def main() -> None:
+    collision = load_target("lane-collision", TARGETS["lane-collision"])
+    precheck = load_target("pre-acquisition", TARGETS["pre-acquisition"])
+
+    exercise_paginator(
+        "lane-collision paginator",
+        collision,
+        lambda module: module._fetch_paged(
+            "https://api.example.test", "owner/repo", "issues?state=open", "token"
+        ),
+    )
+    exercise_paginator(
+        "pre-acquisition paginator",
+        precheck,
+        lambda module: module._fetch_open_issues(
+            "https://api.example.test", "owner/repo", "token"
+        ),
+    )
+
+    print(
+        "PASS: Reservation-v2 collision and pre-acquisition pagination reject malformed "
+        "page members and preserve complete valid paging."
+    )
 
 
 if __name__ == "__main__":
