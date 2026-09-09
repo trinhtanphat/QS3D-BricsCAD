@@ -126,7 +126,8 @@ namespace QS3D.Core.Domain
 
         private static string CanonicalizeLookupKey(string key)
         {
-            if (key == null || string.IsNullOrWhiteSpace(key)) return key;
+            if (key == null) throw new ArgumentNullException(nameof(key));
+            if (string.IsNullOrWhiteSpace(key)) return key;
 
             var canonical = key.Trim();
             if (canonical.Any(char.IsControl)) return key;
