@@ -23,6 +23,24 @@ Expected-Paths: path/file.cs; path/other.py; src/OwnedDirectory/
 
 The Issue remains open while the carrier is active. The branch must contain the same Issue number and match the declared canonical carrier.
 
+## Pre-acquisition — mandatory before mutation
+
+Creating or editing the reservation Issue does not itself acquire ownership. After its semantic `Ownership-Key` and narrow truthful `Expected-Paths` are final, perform a **pre-acquisition** scan against **all open v2 Issues** before the first repository mutation.
+
+In an authenticated repository shell, run:
+
+```text
+python scripts/agent-reservation-precheck.py --issue <N>
+```
+
+The helper reads `GITHUB_TOKEN` or `GH_TOKEN` and `GITHUB_REPOSITORY` (or explicit `--repository`). It applies the same first-valid-reservation-wins ordering to earlier valid Reservation-v2 Issues and fails on either semantic `Ownership-Key` equality or literal/directory `Expected-Paths` overlap.
+
+A blocked result is `DUPLICATE_CARRIER / NO MUTATION`. Continue the earlier canonical carrier if authorized, or explicitly release/reassign/supersede it before creating a mutating replacement. Do not evade the result by inventing a new semantic key for the same work or by omitting a path the implementation will truthfully mutate.
+
+Connector-only sessions that cannot execute the helper must perform the equivalent GitHub metadata scan before mutation: enumerate all open v2 Issues, validate their reservation fields, compare the intended Ownership-Key and every Expected-Paths claim, and honor the earlier valid reservation. Repeat pre-acquisition whenever Expected-Paths expands.
+
+This early check prevents the common failure mode where an agent spends time coding on a second carrier and only discovers the duplicate when `preflight-agent-lane-collision.py` runs after push. The existing CI collision gate remains authoritative and fail-closed; the pre-acquisition helper is an earlier read-only admission check, not merge permission.
+
 ## Identity
 
 Scheduler labels, model names and generic roles such as `worker`, `controller`, `ChatGPT`, `Codex`, `W1` or `C01` are not sufficient repository owner identities by themselves.
