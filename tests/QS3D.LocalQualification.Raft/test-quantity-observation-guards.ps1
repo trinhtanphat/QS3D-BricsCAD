@@ -12,6 +12,15 @@ try {
  $rejected=$true
 }
 if(-not $rejected){throw 'Missing consent reached machine setup.'}
+$inputLoop=@($ast.EndBlock.Statements | Where-Object {
+ $_ -is [Management.Automation.Language.ForEachStatementAst] -and $_.Variable.VariablePath.UserPath -ceq 'p'
+})
+if($inputLoop.Count -ne 1){throw 'Exact fixture input loop required.'}
+& {
+ $prior='fixture'
+ $paths=@(& ([scriptblock]::Create($inputLoop[0].Condition.Extent.Text)))
+ if($paths.Count -ne 2 -or $paths[0] -cne 'fixture.dwg' -or $paths[1] -cne 'fixture.qsdb'){throw 'Fixture paths must remain two separate inputs.'}
+}
 $hostGuard=@($ast.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq 'NoHosts'},$true))
 if($hostGuard.Count -ne 1){throw 'Unique host guard required.'}
 . ([scriptblock]::Create($hostGuard[0].Extent.Text))

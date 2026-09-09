@@ -31,7 +31,7 @@ if(@(git -C $repo status --porcelain).Count){throw 'Harness must be committed an
 $branch=(git -C $repo branch --show-current).Trim()
 $remote=@(git -C $repo ls-remote origin ('refs/heads/'+$branch))
 if($LASTEXITCODE -ne 0 -or $remote.Count -ne 1 -or -not $remote[0].StartsWith($harnessSha+[char]9)){throw 'Exact harness must be pushed.'}
-foreach($p in @($prior+'.dwg',$prior+'.qsdb')){
+foreach($p in @(($prior+'.dwg'),($prior+'.qsdb'))){
  $item=Get-Item -LiteralPath $p
  if($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'Input must be an ordinary disposable fixture file.'}
 }
