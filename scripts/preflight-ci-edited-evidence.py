@@ -1,64 +1,14 @@
 #!/usr/bin/env python3
-"""Guard PR-edited CI from cancelling or fabricating exact-head/base build evidence."""
+"""Guard PR-edited CI from reusing mutable historical workflow evidence."""
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 import sys
-from typing import Iterable
-from urllib.error import HTTPError, URLError
-from urllib.parse import quote
-from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
-WORKFLOW_NAME = "QS3D Shared Branch and Integration CI"
-MAX_PAGES = 10
-PER_PAGE = 100
-
-
-def prior_green_exists(
-    runs: Iterable[dict],
-    expected_sha: str,
-    expected_base_ref: str,
-    expected_base_sha: str,
-    expected_pr_number: int,
-    current_run_id: int,
-) -> bool:
-    """Return true only for successful PR evidence on the exact head and exact base snapshot."""
-    for run in runs:
-        try:
-            run_id = int(run.get("id", 0))
-        except (TypeError, ValueError):
-            continue
-        if run_id == current_run_id:
-            continue
-        if run.get("head_sha") != expected_sha:
-            continue
-        if run.get("status") != "completed" or run.get("conclusion") != "success":
-            continue
-        if run.get("name") != WORKFLOW_NAME or run.get("event") != "pull_request":
-            continue
-        snapshots = run.get("pull_requests")
-        if not isinstance(snapshots, list) or len(snapshots) != 1 or not isinstance(snapshots[0], dict):
-            continue
-        snapshot = snapshots[0]
-        try:
-            pr_number = int(snapshot.get("number", 0))
-        except (TypeError, ValueError):
-            continue
-        head = snapshot.get("head")
-        base = snapshot.get("base")
-        if pr_number != expected_pr_number or not isinstance(head, dict) or not isinstance(base, dict):
-            continue
-        if head.get("sha") != expected_sha:
-            continue
-        if base.get("ref") != expected_base_ref or base.get("sha") != expected_base_sha:
-            continue
-        return True
-    return False
 
 
 def workflow_contract_errors(text: str) -> list[str]:
@@ -77,92 +27,6 @@ def workflow_contract_errors(text: str) -> list[str]:
         "edited evidence-aware scope": "$env:QS3D_REUSE_EXACT_HEAD_GREEN -eq 'true'",
     }
     return [label for label, needle in required_needles.items() if needle not in text]
-
-
-def self_test() -> None:
-    sha = "a" * 40
-    base_sha = "b" * 40
-    base_ref = "main"
-    pr_number = 123
-    current = 200
-    valid = {
-        "id": 100,
-        "head_sha": sha,
-        "status": "completed",
-        "conclusion": "success",
-        "name": WORKFLOW_NAME,
-        "event": "pull_request",
-        "pull_requests": [{
-            "number": pr_number,
-            "head": {"sha": sha},
-            "base": {"ref": base_ref, "sha": base_sha},
-        }],
-    }
-
-    def accepted(candidate: dict) -> bool:
-        return prior_green_exists([candidate], sha, base_ref, base_sha, pr_number, current)
-
-    if not accepted(valid):
-        raise RuntimeError("exact PR/head/base prior GREEN fixture was rejected")
-    mutations = {
-        "current run": {**valid, "id": current},
-        "stale head": {**valid, "head_sha": "c" * 40},
-        "non-terminal": {**valid, "status": "in_progress"},
-        "failed": {**valid, "conclusion": "failure"},
-        "other workflow": {**valid, "name": "other"},
-        "push evidence": {**valid, "event": "push"},
-        "missing PR snapshot": {**valid, "pull_requests": []},
-        "wrong PR": {**valid, "pull_requests": [{"number": 124, "head": {"sha": sha}, "base": {"ref": base_ref, "sha": base_sha}}]},
-        "wrong snapshot head": {**valid, "pull_requests": [{"number": pr_number, "head": {"sha": "c" * 40}, "base": {"ref": base_ref, "sha": base_sha}}]},
-        "wrong base ref": {**valid, "pull_requests": [{"number": pr_number, "head": {"sha": sha}, "base": {"ref": "integration/x", "sha": base_sha}}]},
-        "wrong base SHA": {**valid, "pull_requests": [{"number": pr_number, "head": {"sha": sha}, "base": {"ref": base_ref, "sha": "d" * 40}}]},
-    }
-    for label, candidate in mutations.items():
-        if accepted(candidate):
-            raise RuntimeError(f"{label} incorrectly satisfied prior-evidence gate")
-
-
-def fetch_prior_runs(repository: str, token: str, expected_sha: str) -> list[dict]:
-    encoded_repo = quote(repository, safe="/")
-    encoded_sha = quote(expected_sha, safe="")
-    collected: list[dict] = []
-    for page in range(1, MAX_PAGES + 1):
-        url = (
-            f"https://api.github.com/repos/{encoded_repo}/actions/workflows/ci.yml/runs"
-            f"?head_sha={encoded_sha}&per_page={PER_PAGE}&page={page}"
-        )
-        request = Request(
-            url,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {token}",
-                "X-GitHub-Api-Version": "2022-11-28",
-                "User-Agent": "qs3d-ci-edited-evidence",
-            },
-        )
-        try:
-            with urlopen(request, timeout=20) as response:
-                payload = json.load(response)
-        except HTTPError as exc:
-            raise RuntimeError(f"GitHub Actions evidence query failed with HTTP {exc.code}") from None
-        except (URLError, TimeoutError, json.JSONDecodeError) as exc:
-            raise RuntimeError(f"GitHub Actions evidence query failed: {type(exc).__name__}") from None
-        runs = payload.get("workflow_runs") if isinstance(payload, dict) else None
-        if not isinstance(runs, list):
-            raise RuntimeError("GitHub Actions evidence response omitted workflow_runs")
-        malformed_index = next(
-            (index for index, run in enumerate(runs) if not isinstance(run, dict)),
-            None,
-        )
-        if malformed_index is not None:
-            raise RuntimeError(
-                f"GitHub Actions evidence response page {page} contained a non-object entry "
-                f"at index {malformed_index}"
-            )
-        collected.extend(runs)
-        if len(runs) < PER_PAGE:
-            break
-    return collected
 
 
 def emit_reuse_output(value: bool) -> None:
@@ -198,25 +62,22 @@ def verify_runtime() -> None:
     if expected_pr_number <= 0 or current_run_id <= 0:
         raise RuntimeError("edited-event PR/run identity must be positive")
 
-    # GitHub's workflow-run REST payload exposes immutable run.head_sha but its
-    # nested pull_requests head/base records track the live PR and can therefore
-    # change after the run completed. Without a separately persisted immutable
-    # run-time base SHA, an older GREEN cannot prove it validated the current
-    # base transaction. Metadata edits are uncommon, so prefer deterministic
-    # full validation over a false exact-base reuse optimization.
-    reuse = False
-    print(
-        "NOTICE: workflow-run nested PR base metadata is mutable; "
-        "prior GREEN reuse is disabled and full source/build validation is required."
-    )
-    emit_reuse_output(reuse)
+    # GitHub's workflow-run REST payload has immutable run.head_sha, but nested
+    # pull_requests head/base records reflect live PR state. There is therefore
+    # no immutable historical base-SHA proof that can safely authorize skipping
+    # source/build validation after a metadata edit. Do not query or parse prior
+    # runs here: deterministic full validation is the fail-closed admission path.
+    emit_reuse_output(False)
     identity = f"PR #{expected_pr_number} head={expected_sha} base={expected_base_ref}@{expected_base_sha}"
-    print("PASS: no reusable immutable PR/head/base GREEN proven; full validation remains required", identity)
+    print(
+        "PASS: historical workflow evidence reuse is disabled because immutable base evidence "
+        "is unavailable; full validation remains required",
+        identity,
+    )
 
 
 def main(argv: list[str]) -> int:
     try:
-        self_test()
         if not WORKFLOW.is_file():
             raise RuntimeError("missing .github/workflows/ci.yml")
         errors = workflow_contract_errors(WORKFLOW.read_text(encoding="utf-8"))
@@ -227,7 +88,7 @@ def main(argv: list[str]) -> int:
     except (OSError, RuntimeError) as exc:
         print("ERROR:", exc)
         return 1
-    print("PASS: PR-edited CI preserves exact PR/head/base evidence and fail-closed validation fallback.")
+    print("PASS: PR-edited CI fails closed to full exact-head/base validation.")
     return 0
 
 
