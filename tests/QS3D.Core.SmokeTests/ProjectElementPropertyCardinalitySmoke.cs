@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
         {
             PropertyCapacityMatchesPersistenceBoundary();
             PairRemovalUsesCanonicalIdentityAndLifecycle();
+            ReadLookupsUseCanonicalPropertyIdentity();
         }
 
         private static void PropertyCapacityMatchesPersistenceBoundary()
@@ -92,6 +93,23 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Property pair removal with a mismatched value must report false.");
             Equal(1, element.Properties.Count);
             Equal("0.4", element.Properties["WidthM"]);
+            Equal(ElementDirtyFlags.None, element.Dirty);
+            Equal(before, element.UpdatedUtc);
+        }
+
+        private static void ReadLookupsUseCanonicalPropertyIdentity()
+        {
+            var element = new ProjectElement("E-READ-CANONICAL", ElementCategory.Beam);
+            element.SetProperty("WidthM", "0.4");
+            element.MarkClean(ElementDirtyFlags.All);
+            var before = element.UpdatedUtc;
+
+            if (!element.Properties.ContainsKey(" widthm "))
+                throw new Exception("Property ContainsKey must canonicalize semantic key identity.");
+            if (!element.Properties.TryGetValue(" WIDTHM ", out var value))
+                throw new Exception("Property TryGetValue must canonicalize semantic key identity.");
+            Equal("0.4", value);
+            Equal("0.4", element.Properties[" widthm "]);
             Equal(ElementDirtyFlags.None, element.Dirty);
             Equal(before, element.UpdatedUtc);
         }
