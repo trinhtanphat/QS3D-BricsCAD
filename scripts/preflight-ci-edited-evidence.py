@@ -16,10 +16,8 @@ def workflow_contract_errors(text: str) -> list[str]:
         "pull_request edited trigger": "      - edited\n",
         "single PR concurrency class": "github.event_name == 'pull_request' && 'pull_request'",
         "bounded cancellation inside PR concurrency class": "cancel-in-progress: true",
-        "same-repository preflight check-run isolation": "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'candidate-preflight'",
-        "same-repository core check-run isolation": "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'candidate-core'",
-        "fork preflight check-run fallback": "github.event_name == 'pull_request' && 'preflight'",
-        "fork core check-run fallback": "github.event_name == 'pull_request' && 'core'",
+        "stable PR preflight check-run": "github.event_name == 'pull_request' && 'preflight'",
+        "stable PR core check-run": "github.event_name == 'pull_request' && 'core'",
         "metadata identity validation step": "name: Validate PR metadata-edit identities",
         "runtime identity verifier": "python scripts/preflight-ci-edited-evidence.py --verify-runtime",
         "head binding": "QS3D_EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}",
@@ -29,18 +27,20 @@ def workflow_contract_errors(text: str) -> list[str]:
     }
     errors = [label for label, needle in required_needles.items() if needle not in text]
 
-    mirror_condition = "if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}"
-    if text.count(mirror_condition) != 2:
-        errors.append("preflight/core required-status mirrors must both include metadata-edited same-repository PR runs")
-
     forbidden_needles = {
         "historical GREEN reuse output": "reuse_exact_head_green",
         "historical GREEN reuse environment": "QS3D_REUSE_EXACT_HEAD_GREEN",
         "historical evidence step id": "id: edited_evidence",
         "edited-event required-status exclusion": "github.event.action != 'edited'",
         "edited-event concurrency split": "github.event.action == 'edited' && 'metadata'",
-        "same-repository metadata preflight check-run": "metadata-preflight",
-        "same-repository metadata core check-run": "metadata-core",
+        "metadata preflight check-run": "metadata-preflight",
+        "metadata core check-run": "metadata-core",
+        "candidate preflight check-run": "candidate-preflight",
+        "candidate core check-run": "candidate-core",
+        "manual preflight status mirror": "Mirror preflight result into required commit status",
+        "manual core status mirror": "Mirror core result into required commit status",
+        "manual statuses write permission": "statuses: write",
+        "direct commit-status publication": "/statuses/$env:QS3D_HEAD_SHA",
     }
     errors.extend(
         f"forbidden {label} remains"
@@ -96,7 +96,7 @@ def main(argv: list[str]) -> int:
     except (OSError, RuntimeError) as exc:
         print("ERROR:", exc)
         return 1
-    print("PASS: PR-edited CI has no historical GREEN validation/status bypass or cross-event required-status race.")
+    print("PASS: PR-edited CI has no historical GREEN validation bypass or mutable required-status mirror race.")
     return 0
 
 
