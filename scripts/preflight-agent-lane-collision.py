@@ -616,16 +616,9 @@ def effective_changed_paths(base_sha: str, peer_head_sha: str) -> list[str]:
 
 
 def current_changed_paths(base_ref: str) -> list[str]:
-    raw = _run_git_exact([
-        "diff",
-        "--name-only",
-        "-z",
-        "--no-renames",
-        "--diff-filter=ACDMRTUXB",
-        f"origin/{base_ref}...HEAD",
-        "--",
-    ])
-    return parse_nul_paths(raw, "current branch delta")
+    base_sha = _run_git(["rev-parse", f"origin/{base_ref}^{{commit}}"] ).strip().lower()
+    head_sha = _run_git(["rev-parse", "HEAD^{commit}"]).strip().lower()
+    return effective_changed_paths(base_sha, head_sha)
 
 
 def _event_actor(event: dict) -> str:
