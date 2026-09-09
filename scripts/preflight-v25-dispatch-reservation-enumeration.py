@@ -140,6 +140,22 @@ def self_test() -> list[str]:
     if not contract_errors(misordered):
         errors.append("guard failed to reject misordered status-check contract")
 
+    stale_errexit = safe.replace(
+        "set +e\nreservation_rows=",
+        "set +e\nset -e\nreservation_rows=",
+        1,
+    )
+    if not contract_errors(stale_errexit):
+        errors.append("guard failed to reject capture after errexit was already restored")
+
+    displaced_status = safe.replace(
+        ")\"\nreservation_query_status=$?",
+        ")\"\nprintf 'status clobber' >/dev/null\nreservation_query_status=$?",
+        1,
+    )
+    if not contract_errors(displaced_status):
+        errors.append("guard failed to reject status capture displaced from the API command substitution")
+
     missing_exit = safe.replace('  exit "${reservation_query_status}"\n', "")
     if not contract_errors(missing_exit):
         errors.append("guard failed to reject a failure branch that does not propagate API status")
