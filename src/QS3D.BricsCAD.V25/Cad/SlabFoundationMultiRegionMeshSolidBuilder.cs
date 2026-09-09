@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Bricscad.ApplicationServices;
-using Bricscad.EditorInput;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
@@ -64,32 +63,23 @@ namespace QS3D.BricsCAD.V25.Cad
             public ClosedPolygonSourceLoopReadResult Read { get; set; } = null!;
         }
 
-        public static MultiRegionMeshBuildResult BuildSlab(Document document, ProjectState project) =>
-            BuildSelected(document, project, ElementCategory.Slab, SlabConfiguration());
+        public static MultiRegionMeshBuildResult BuildSlab(Document document, ProjectState project, ObjectId[] selectedIds) =>
+            BuildSelected(document, project, selectedIds, ElementCategory.Slab, SlabConfiguration());
 
-        public static MultiRegionMeshBuildResult BuildFoundation(Document document, ProjectState project) =>
-            BuildSelected(document, project, ElementCategory.Foundation, FoundationConfiguration());
+        public static MultiRegionMeshBuildResult BuildFoundation(Document document, ProjectState project, ObjectId[] selectedIds) =>
+            BuildSelected(document, project, selectedIds, ElementCategory.Foundation, FoundationConfiguration());
 
         private static MultiRegionMeshBuildResult BuildSelected(
             Document document,
             ProjectState project,
+            ObjectId[] selectedIds,
             ElementCategory category,
             BuildConfiguration configuration)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
-
-            var selection = document.Editor.SelectImplied();
-            if (selection.Status != PromptStatus.OK || selection.Value == null)
-            {
-                selection = document.Editor.GetSelection();
-                if (selection.Status != PromptStatus.OK || selection.Value == null)
-                    return new MultiRegionMeshBuildResult();
-                document.Editor.SetImpliedSelection(selection.Value.GetObjectIds());
-            }
-
-            var selectedIds = selection.Value.GetObjectIds();
-            if (selectedIds == null || selectedIds.Length == 0) return new MultiRegionMeshBuildResult();
+            if (selectedIds == null) throw new ArgumentNullException(nameof(selectedIds));
+            if (selectedIds.Length == 0) return new MultiRegionMeshBuildResult();
             var selectedHandles = selectedIds
                 .Select(id => CanonicalHandle(id.Handle.ToString(), "selected multi-region source handle"))
                 .ToList();
