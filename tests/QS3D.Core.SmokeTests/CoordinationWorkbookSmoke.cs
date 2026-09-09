@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.CompilerServices;
 using QS3D.Core.Export;
 
 namespace QS3D.Core.SmokeTests
@@ -8,6 +9,12 @@ namespace QS3D.Core.SmokeTests
     internal static class CoordinationWorkbookSmoke
     {
         private const int BoundedDataRows = 10000;
+
+        [ModuleInitializer]
+        internal static void Initialize()
+        {
+            Run();
+        }
 
         internal static void Run()
         {
