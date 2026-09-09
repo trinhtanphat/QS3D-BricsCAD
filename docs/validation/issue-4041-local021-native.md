@@ -162,3 +162,51 @@ before allocating any host/profile/preferences. Parenthesized path expressions
 and a replay of the exact AST expression fixed that harness-only error; focused
 tests passed before the clean pushed execution above. It was not a product
 failure or a consumed host allocation.
+
+## Consumed quantity-ui-07: startup mode isolated; visual qualification still fails
+
+This fresh allocation changed only native startup window mode from `Hidden` to
+`Maximized`. Product/input hashes, Default-profile clone, startup script and
+runtime checks match allocation06 above. It did not install or patch QS3D,
+change rendering policy or test MCP/tunnels. The published runner keeps Hidden
+as the default, allows only these two explicit modes, and records the choice.
+
+- Clean pushed executed harness: `9daaa032af3ac8eb3cb6f68c734bfb55e897f0eb`.
+- Run ID: `f9721f5cd0ae489e81ce0a3087fc790e`; licensed V25.2.10 x64.
+- Runner SHA-256: `2fcae156452c710664b0b39a9b27349544c5a6ffd45c5d63dcb47633b4bc89ec`.
+- Product source: `af6c585190efb80581e286add7027540e7cc7c52`; same adapter/Core
+  hashes as06, not a published release.
+- Input DWG SHA-256: `8c4f38bc72927527bcd49504300bde31c0c06db44e7c3f5c1a73c153a2bc4ebd`.
+- Input QSDB SHA-256: `d4e719b46bc5c63faa00b10694ff06bd1d8e985215f38d3b2a311c50bf4fa884`.
+- Started `2026-09-09T07:21:42.0145148Z`; ended
+  `2026-09-09T07:26:10.6018902Z` (about four and a half minutes).
+
+The native raft wireframe was visible and the exact runtime baseline passed.
+Quantity Insight stayed grey blank; actual production `QS3DBQ` opened a white
+modeless window. Initial maximized startup alone therefore did not resolve the
+observed blank surfaces. No GPU/driver/capture/source cause is inferred.
+
+Supported Computer Use accessibility exposed the real BQ controls and one
+summary row: count1, gross19.2, deduction0, net19.2m3, formwork16m2. A real
+`Tinh lai` click was followed by fresh row identities and unchanged values.
+A real `Dien giai chi tiet` radio click changed the mode hint and name header
+and yielded one detail row with the same values. These are bounded live
+data/control observations only: the raster remained white. After a row-click
+attempt, selection/explanation postconditions were not confirmed; Locate was
+not invoked. No visible quantity, face/highlight, export, read-only project
+digest, cold BQ, complete formwork matrix or aggregate PASS is claimed.
+
+The BQ was closed, followed by native host close and an observed `No` on the
+test-copy SaveChanges dialog. Terminal receipt is
+`OBSERVATION_FINISHED_NOT_AGGREGATE_PASS`, aggregate false, graceful exit true,
+forced fallback false. Profile inventory/current pointer, nonce removal,
+original autostart bytes/time, protected installed payload/registration and
+original fixture preservation all passed. Independent final host count was0.
+Private copied fixture and raw receipts remain local, not deleted or committed.
+
+Source diagnosis is returned to
+[#6285](https://github.com/trinhtanphat/QS3D-BricsCAD/issues/6285), without a new
+source reservation or an unsupported workaround. Preserve accepted LOCAL02267
+visible warm/cold BQ evidence and the consumed05/06/07 boundaries separately.
+Do not rerun07 unchanged while waiting for a meaningful corrected candidate or
+newly justified diagnostic. #4041 and parent #72/#4034 remain incomplete.
