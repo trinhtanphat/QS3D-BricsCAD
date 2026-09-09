@@ -26,7 +26,6 @@ checks = {
         "MaterialUsageRow", "MaterialUsageScheduleBuilder", "PrimaryQuantity",
         'if (unit == "m") return LengthM', 'if (unit == "m2") return AreaM2',
         'if (unit == "m3") return VolumeM3', 'if (unit == "kg") return MassKg',
-        "ProjectMaterialCatalog.GetAll(project)", "AutoRoomLifecycle.IsExcludedFromQuantity(project, element)",
         'Effective(element, family, "Material")', 'Effective(element, family, "CurtainFrameMaterial")',
         '"CurtainFrame"', '"CurtainNetGlassAreaM2"', '"CurtainFrameLengthM"',
         "element.Properties.TryGetValue(key", "family.Properties.TryGetValue(key", "ElementIds.Add(element.Id)",
@@ -72,6 +71,14 @@ checks = {
 }
 checks[required[1]].append("XlsxPackageValidator.Validate")
 checks[required[8]].extend(("Invalid\\u0001Family", "ORIGINAL"))
+
+schedule_text = (ROOT / required[0]).read_text(encoding="utf-8") if (ROOT / required[0]).is_file() else ""
+for service, candidates in (
+    ("ProjectMaterialCatalog.GetAll", ("ProjectMaterialCatalog.GetAll(project)", "ProjectMaterialCatalog.GetAll(detachedProject)")),
+    ("AutoRoomLifecycle.IsExcludedFromQuantity", ("AutoRoomLifecycle.IsExcludedFromQuantity(project, element)", "AutoRoomLifecycle.IsExcludedFromQuantity(detachedProject, element)")),
+):
+    if schedule_text and not any(token in schedule_text for token in candidates):
+        errors.append(required[0] + " missing authoritative material usage service: " + service)
 
 for relative, needles in checks.items():
     path = ROOT / relative
