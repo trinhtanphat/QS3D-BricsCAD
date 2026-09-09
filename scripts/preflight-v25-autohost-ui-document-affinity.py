@@ -16,14 +16,26 @@ def fail(message: str) -> None:
 
 
 def method_body(name: str) -> str:
-    match = re.search(
-        rf"private\s+static\s+(?:bool|void)\s+{re.escape(name)}\s*\([^)]*\)\s*\{{(.*?)\n\s*\}}\n\n\s*private\s+static",
+    signature = re.search(
+        rf"(?:private|internal)\s+static\s+(?:bool|void|string)\s+{re.escape(name)}\s*\([^)]*\)\s*\{{",
         text,
         re.S,
     )
-    if not match:
-        fail(f"cannot locate private static method body: {name}")
-    return match.group(1)
+    if not signature:
+        fail(f"cannot locate static method body: {name}")
+
+    open_brace = text.find("{", signature.start())
+    depth = 0
+    for index in range(open_brace, len(text)):
+        char = text[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_brace + 1:index]
+    fail(f"unterminated static method body: {name}")
+    return ""
 
 
 if "ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)" not in text:
