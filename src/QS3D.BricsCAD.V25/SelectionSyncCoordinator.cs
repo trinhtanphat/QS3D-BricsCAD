@@ -11,37 +11,39 @@ namespace QS3D.BricsCAD.V25
     {
         private static readonly HashSet<Document> Attached = new HashSet<Document>();
         private static readonly Dictionary<Document, object> AttachmentTokens = new Dictionary<Document, object>();
-        private static readonly HashSet<Document> Refreshing = new HashSet<Document>();
+        private static readonly Dictionary<Document, EventHandler> AttachmentHandlers = new Dictionary<Document, EventHandler>();
+        private static readonly Dictionary<Document, object> Refreshing = new Dictionary<Document, object>();
         private static readonly Dictionary<Document, DispatcherTimer> Pending = new Dictionary<Document, DispatcherTimer>();
         private static readonly TimeSpan RefreshDelay = TimeSpan.FromMilliseconds(80d);
 
         public static void Attach(Document? document)
         {
             if (document == null || Attached.Contains(document)) return;
+            var attachmentToken = new object();
+            EventHandler attachmentHandler = (_, __) => OnImpliedSelectionChanged(document, attachmentToken);
             var subscribed = false;
             try
             {
-                document.ImpliedSelectionChanged += OnImpliedSelectionChanged;
+                if (!Attached.Add(document)) return;
+                AttachmentTokens[document] = attachmentToken;
+                AttachmentHandlers[document] = attachmentHandler;
+
+                // Publish exact generation ownership before entering the native subscription boundary.
+                // The generation-specific delegate captures document + token so stale callbacks cannot
+                // act for a later attachment that happens to reuse the same native Document wrapper.
                 subscribed = true;
-                if (!Attached.Add(document))
+                document.ImpliedSelectionChanged += attachmentHandler;
+                if (!IsCurrentAttachment(document, attachmentToken))
                 {
-                    document.ImpliedSelectionChanged -= OnImpliedSelectionChanged;
+                    try { document.ImpliedSelectionChanged -= attachmentHandler; }
+                    catch { }
                     return;
                 }
-                AttachmentTokens[document] = new object();
-                Refresh(document);
+                Refresh(document, attachmentToken);
             }
             catch
             {
-                if (subscribed)
-                {
-                    try { document.ImpliedSelectionChanged -= OnImpliedSelectionChanged; }
-                    catch { }
-                }
-                RemovePending(document);
-                Refreshing.Remove(document);
-                AttachmentTokens.Remove(document);
-                Attached.Remove(document);
+                RollbackAttachment(document, subscribed, attachmentToken, attachmentHandler);
                 throw;
             }
         }
@@ -49,12 +51,22 @@ namespace QS3D.BricsCAD.V25
         public static void Detach(Document? document)
         {
             if (document == null || !Attached.Contains(document)) return;
-            try { document.ImpliedSelectionChanged -= OnImpliedSelectionChanged; }
-            catch { }
+            AttachmentHandlers.TryGetValue(document, out var attachmentHandler);
+
+            // Unpublish current ownership before crossing the native unsubscribe boundary. A nested
+            // reattach may now publish a new generation, while this teardown retains only its exact
+            // generation-specific handler and therefore cannot unsubscribe the replacement.
             RemovePending(document);
             Refreshing.Remove(document);
+            AttachmentHandlers.Remove(document);
             AttachmentTokens.Remove(document);
             Attached.Remove(document);
+
+            if (attachmentHandler != null)
+            {
+                try { document.ImpliedSelectionChanged -= attachmentHandler; }
+                catch { }
+            }
         }
 
         public static void DetachByName(string? fileName)
@@ -63,15 +75,26 @@ namespace QS3D.BricsCAD.V25
             foreach (var document in Attached.Where(x => string.Equals(x.Name, fileName, StringComparison.OrdinalIgnoreCase)).ToArray()) Detach(document);
         }
 
+        // Explicit lifecycle/UI callers do not own a historical generation token. Capture the current
+        // attachment once at this boundary, then delegate all native/modeless work to the exact-token
+        // overload. Queued callbacks never use this overload and therefore cannot recapture a newer
+        // generation after detach -> reattach of the same native Document wrapper.
         public static void Refresh(Document? document)
         {
             if (document == null ||
-                !Attached.Contains(document) ||
-                !AttachmentTokens.TryGetValue(document, out var attachmentToken) ||
+                !AttachmentTokens.TryGetValue(document, out var attachmentToken)) return;
+            Refresh(document, attachmentToken);
+        }
+
+        public static void Refresh(Document? document, object attachmentToken)
+        {
+            if (document == null ||
+                !IsCurrentAttachment(document, attachmentToken) ||
                 !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;
             if (!PaletteCoordinator.IsWorkspaceVisible) return;
             RemovePending(document);
-            if (!Refreshing.Add(document)) return;
+            if (Refreshing.ContainsKey(document)) return;
+            Refreshing[document] = attachmentToken;
             try
             {
                 // Palette creation and native selection capture may pump modeless/document callbacks.
@@ -90,7 +113,7 @@ namespace QS3D.BricsCAD.V25
                     SelectionSyncStatusPublisher.SetStatusForDocument(document, "Selection sync lỗi. Vui lòng thử lại.");
                 }
             }
-            finally { Refreshing.Remove(document); }
+            finally { ReleaseRefresh(document, attachmentToken); }
         }
 
         public static void Stop()
@@ -99,21 +122,53 @@ namespace QS3D.BricsCAD.V25
             foreach (var timer in Pending.Values.ToArray()) timer.Stop();
             Pending.Clear();
             Refreshing.Clear();
+            AttachmentHandlers.Clear();
             AttachmentTokens.Clear();
         }
 
-        private static void OnImpliedSelectionChanged(object sender, EventArgs e)
+        private static void RollbackAttachment(Document document, bool subscribed, object attachmentToken, EventHandler attachmentHandler)
         {
-            var document = sender as Document ?? Application.DocumentManager.MdiActiveDocument;
-            if (document == null ||
-                !Attached.Contains(document) ||
-                !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;
-            ScheduleRefresh(document);
+            if (AttachmentTokens.TryGetValue(document, out var currentToken) &&
+                !ReferenceEquals(currentToken, attachmentToken))
+            {
+                return;
+            }
+            if (AttachmentHandlers.TryGetValue(document, out var currentHandler) &&
+                !ReferenceEquals(currentHandler, attachmentHandler))
+            {
+                return;
+            }
+
+            RemovePending(document);
+            ReleaseRefresh(document, attachmentToken);
+            AttachmentHandlers.Remove(document);
+            AttachmentTokens.Remove(document);
+            Attached.Remove(document);
+
+            if (subscribed)
+            {
+                try { document.ImpliedSelectionChanged -= attachmentHandler; }
+                catch { }
+            }
         }
 
-        private static void ScheduleRefresh(Document document)
+        private static void ReleaseRefresh(Document document, object attachmentToken)
         {
-            if (!Attached.Contains(document))
+            if (!Refreshing.TryGetValue(document, out var currentToken) ||
+                !ReferenceEquals(currentToken, attachmentToken)) return;
+            Refreshing.Remove(document);
+        }
+
+        private static void OnImpliedSelectionChanged(Document document, object attachmentToken)
+        {
+            if (!IsCurrentAttachment(document, attachmentToken) ||
+                !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return;
+            ScheduleRefresh(document, attachmentToken);
+        }
+
+        private static void ScheduleRefresh(Document document, object attachmentToken)
+        {
+            if (!IsCurrentAttachment(document, attachmentToken))
             {
                 RemovePending(document);
                 return;
@@ -137,8 +192,8 @@ namespace QS3D.BricsCAD.V25
                         return;
                     }
                     Pending.Remove(document);
-                    if (!Attached.Contains(document)) return;
-                    Refresh(document);
+                    if (!IsCurrentAttachment(document, attachmentToken)) return;
+                    Refresh(document, attachmentToken);
                 };
                 Pending[document] = timer;
             }
