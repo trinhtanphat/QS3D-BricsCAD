@@ -125,11 +125,7 @@ namespace QS3D.Core.SmokeTests
             ExpectThrows<InvalidOperationException>(() => MeasurementWorkItemCoverageEvaluator.Evaluate(duplicate, catalog));
 
             var nullElement = new ProjectState("null", "Null");
-            var itemsField = nullElement.Elements.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
-                ?? throw new InvalidOperationException("Unable to seed corrupt measurement coverage project state.");
-            var items = itemsField.GetValue(nullElement.Elements) as List<ProjectElement>
-                ?? throw new InvalidOperationException("Unexpected ProjectState.Elements backing collection.");
-            items.Add(null!);
+            RawSeedProjectElement(nullElement, null);
             ExpectThrows<InvalidOperationException>(() => MeasurementWorkItemCoverageEvaluator.Evaluate(nullElement, catalog));
 
             var nonFinite = new ProjectState("nan", "NaN");
@@ -167,6 +163,21 @@ namespace QS3D.Core.SmokeTests
             categoryField.SetValue(corrupted, (ElementCategory)int.MaxValue);
             undefinedCategory.Elements.Add(corrupted);
             ExpectThrows<InvalidOperationException>(() => MeasurementWorkItemCoverageEvaluator.Evaluate(undefinedCategory, catalog));
+        }
+
+        private static void RawSeedProjectElement(ProjectState project, ProjectElement? element)
+        {
+            if (project.Elements is List<ProjectElement> directItems)
+            {
+                directItems.Add(element!);
+                return;
+            }
+
+            var itemsField = project.Elements.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed corrupt measurement coverage project state.");
+            var items = itemsField.GetValue(project.Elements) as List<ProjectElement>
+                ?? throw new InvalidOperationException("Unexpected ProjectState.Elements backing collection.");
+            items.Add(element!);
         }
 
         private static ProjectState BuildCoverageProject(bool reverse)
