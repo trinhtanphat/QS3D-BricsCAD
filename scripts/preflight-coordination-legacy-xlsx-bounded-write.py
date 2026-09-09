@@ -4,11 +4,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.Core/Export/CoordinationWorkbook.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/CoordinationWorkbookSmoke.cs"
-REGISTRATION = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
 
 text = SOURCE.read_text(encoding="utf-8")
 smoke = SMOKE.read_text(encoding="utf-8") if SMOKE.is_file() else ""
-registration = REGISTRATION.read_text(encoding="utf-8")
 
 required = {
     "writer-side worksheet row bound": "MaxExportDataRowsPerSheet",
@@ -29,16 +27,14 @@ if "new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare
     missing.append("bound physical XLSX archive growth before validation")
 
 for token, label in {
-    "RejectsSourceCardinalityAboveBoundBeforeArchiveCommit": "registered source-cardinality RED regression",
+    "[ModuleInitializer]": "collision-free smoke auto-registration",
+    "RejectsSourceCardinalityAboveBoundBeforeArchiveCommit": "source-cardinality RED regression",
     "RejectsOversizedWorksheetBeforeArchiveCommit": "hostile oversized-worksheet regression",
     "destination sentinel": "destination atomicity assertions",
     "owned temp": "owned-temp cleanup assertions",
 }.items():
     if token not in smoke:
         missing.append(label)
-
-if "CoordinationWorkbookSmoke.Run();" not in registration:
-    missing.append("smoke registration")
 
 if missing:
     raise SystemExit(
