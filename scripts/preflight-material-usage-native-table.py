@@ -55,8 +55,6 @@ if SCHEDULE.is_file():
     text = SCHEDULE.read_text(encoding="utf-8")
     for token in (
         'MaterialUsageScheduleBuilder',
-        'ProjectMaterialCatalog.GetAll(project)',
-        'AutoRoomLifecycle.IsExcludedFromQuantity(project, element)',
         'CurtainFrameMaterial',
         'CurtainFrameLengthM',
         'QuantityReportMath.Add',
@@ -64,6 +62,12 @@ if SCHEDULE.is_file():
     ):
         if token not in text:
             errors.append("MaterialUsageSchedule.cs lost authoritative material schedule token: " + token)
+    for service, candidates in (
+        ('ProjectMaterialCatalog.GetAll', ('ProjectMaterialCatalog.GetAll(project)', 'ProjectMaterialCatalog.GetAll(detachedProject)')),
+        ('AutoRoomLifecycle.IsExcludedFromQuantity', ('AutoRoomLifecycle.IsExcludedFromQuantity(project, element)', 'AutoRoomLifecycle.IsExcludedFromQuantity(detachedProject, element)')),
+    ):
+        if not any(token in text for token in candidates):
+            errors.append("MaterialUsageSchedule.cs lost authoritative material schedule service: " + service)
 
 if SHARED.is_file():
     text = SHARED.read_text(encoding="utf-8")
