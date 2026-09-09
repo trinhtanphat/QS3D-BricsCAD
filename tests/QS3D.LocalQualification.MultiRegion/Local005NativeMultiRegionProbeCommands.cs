@@ -38,6 +38,8 @@ namespace QS3D.LocalQualification.MultiRegion
         private static readonly object DiagnosticGate = new object();
         private static bool ProductionExceptionDiagnosticArmed;
         private static string? ProductionExceptionDiagnostic;
+        private static Document? SelectionArmDocument;
+        private static ObjectId[]? SelectionArmIds;
 
         [CommandMethod("QL005DUMPEX", CommandFlags.Modal)]
         public void DumpProductionExceptionDiagnostic()
@@ -79,6 +81,35 @@ namespace QS3D.LocalQualification.MultiRegion
             }
         }
 
+        private static void ArmProductionSelection(Document document, ObjectId[] ids)
+        {
+            lock (DiagnosticGate)
+            {
+                if (SelectionArmDocument != null) SelectionArmDocument.CommandWillStart -= OnProductionCommandWillStart;
+                SelectionArmDocument = document;
+                SelectionArmIds = ids.ToArray();
+                document.CommandWillStart += OnProductionCommandWillStart;
+            }
+        }
+
+        private static void OnProductionCommandWillStart(object sender, CommandEventArgs args)
+        {
+            var command = (args?.GlobalCommandName ?? string.Empty).Trim().TrimStart('_', '.');
+            if (!string.Equals(command, "QS3DSLABREBAR3DMULTI", StringComparison.OrdinalIgnoreCase)) return;
+            Document? document;
+            ObjectId[] ids;
+            lock (DiagnosticGate)
+            {
+                document = SelectionArmDocument;
+                ids = SelectionArmIds ?? Array.Empty<ObjectId>();
+                if (document != null) document.CommandWillStart -= OnProductionCommandWillStart;
+                SelectionArmDocument = null;
+                SelectionArmIds = null;
+            }
+            if (document == null || ids.Length == 0) return;
+            document.Editor.SetImpliedSelection(ids);
+        }
+
         private static void CaptureProductionException(object? sender, FirstChanceExceptionEventArgs args)
         {
             try
@@ -114,6 +145,7 @@ namespace QS3D.LocalQualification.MultiRegion
             project.Elements.Add(element);
             project.Touch();
             ArmProductionExceptionDiagnostic(context);
+            ArmProductionSelection(context.Document, ids);
             context.Document.Editor.SetImpliedSelection(ids);
 
             return Checks(

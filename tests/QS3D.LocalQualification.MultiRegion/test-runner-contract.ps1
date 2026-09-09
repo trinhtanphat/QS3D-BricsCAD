@@ -63,13 +63,12 @@ foreach ($required in @(
     if ($probeText.IndexOf($required, [StringComparison]::Ordinal) -lt 0) { throw ('FAIL: probe contract missing ' + $required) }
 }
 if ($runnerText.IndexOf("'QL005ARMEX'", [StringComparison]::Ordinal) -ge 0) { throw 'FAIL: diagnostic arming command must not sit between PICKFIRST setup and production.' }
-foreach ($selectionToken in @("'PICKFIRST'","'_.SELECT'","'_W'","'-1,-1'","'23,9'")) {
-    if ($runnerText.IndexOf($selectionToken, [StringComparison]::Ordinal) -lt 0) { throw ('FAIL: LOCAL-005 native PICKFIRST reselection missing ' + $selectionToken) }
+if ($runnerText.IndexOf("'_.SELECT'", [StringComparison]::Ordinal) -ge 0 -or $runnerText.IndexOf("'PICKFIRST'", [StringComparison]::Ordinal) -ge 0) {
+    throw 'FAIL: script-level selection commands must not interpose between setup and production.'
 }
-$setupCommand = $runnerText.IndexOf("'QL005SETUP'", [StringComparison]::Ordinal)
-$nativeSelect = $runnerText.IndexOf("'_.SELECT'", [StringComparison]::Ordinal)
-$productionCommand = $runnerText.IndexOf("'QS3DSLABREBAR3DMULTI'", [StringComparison]::Ordinal)
-if ($setupCommand -lt 0 -or $nativeSelect -le $setupCommand -or $productionCommand -le $nativeSelect) { throw 'FAIL: LOCAL-005 native reselection must sit between setup and production.' }
+foreach ($selectionHookToken in @('CommandWillStart','OnProductionCommandWillStart','SetImpliedSelection(ids)','QS3DSLABREBAR3DMULTI')) {
+    if ($probeText.IndexOf($selectionHookToken, [StringComparison]::Ordinal) -lt 0) { throw ('FAIL: LOCAL-005 command-start selection hook missing ' + $selectionHookToken) }
+}
 foreach ($diagnosticToken in @('ArmProductionExceptionDiagnostic(context);','[CommandMethod("QL005DUMPEX"','FirstChanceException','local005-production-exception.private.txt')) {
     if ($probeText.IndexOf($diagnosticToken, [StringComparison]::Ordinal) -lt 0) { throw ('FAIL: production exception diagnostic contract missing ' + $diagnosticToken) }
 }
