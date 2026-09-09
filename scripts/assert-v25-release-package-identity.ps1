@@ -104,7 +104,14 @@ function Read-HeldStrictUtf8Metadata {
     }
     $Held.Stream.Position = 0
     try {
-        return $script:StrictUtf8.GetString($bytes)
+        # Windows PowerShell UTF-8 writers may include one leading preamble.
+        # Admit only those exact bytes at offset zero, after the complete held
+        # read and its raw byte budget; repeated/misplaced U+FEFF remains JSON.
+        $preambleLength = 0
+        if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xef -and $bytes[1] -eq 0xbb -and $bytes[2] -eq 0xbf) {
+            $preambleLength = 3
+        }
+        return $script:StrictUtf8.GetString($bytes, $preambleLength, $bytes.Length - $preambleLength)
     }
     catch [Text.DecoderFallbackException] {
         throw 'V25 package metadata is not strict UTF-8.'
@@ -182,7 +189,7 @@ function Get-HeldAssemblyIdentity {
     param([pscustomobject]$Held, [string]$Label)
 
     Assert-HeldAssemblyBinding -Held $Held -Label $Label
-    $bytes = Read-HeldAssemblyBytes -Held $Held -Label $Label
+    [byte[]]$bytes = Read-HeldAssemblyBytes -Held $Held -Label $Label
     try {
         # ReflectionOnlyLoad consumes the exact held bytes. CustomAttributesData
         # reads metadata without executing candidate code or reopening the package pathname.
