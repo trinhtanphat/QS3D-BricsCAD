@@ -44,6 +44,31 @@ def _historical_reuse_surface(source: str) -> list[str]:
     return sorted(set(findings))
 
 
+def _cross_event_required_status_race_errors(workflow: str) -> list[str]:
+    """Require one PR cancellation domain and keep check-run names distinct from required statuses."""
+    errors: list[str] = []
+    if "github.event.action == 'edited' && 'metadata'" in workflow:
+        errors.append("metadata edits use a separate PR concurrency domain")
+
+    required_status_check_run_names = {
+        "preflight": "github.event_name == 'pull_request' && 'preflight'",
+        "core": "github.event_name == 'pull_request' && 'core'",
+    }
+    for context, needle in required_status_check_run_names.items():
+        if needle in workflow:
+            errors.append(f"pull_request job check-run still shares required status context {context}")
+
+    expected_pr_check_run_names = {
+        "candidate-preflight": "github.event_name == 'pull_request' && 'candidate-preflight'",
+        "candidate-core": "github.event_name == 'pull_request' && 'candidate-core'",
+    }
+    for label, needle in expected_pr_check_run_names.items():
+        if needle not in workflow:
+            errors.append(f"missing non-required PR check-run name {label}")
+
+    return errors
+
+
 def main() -> int:
     module = _load_module()
     source = SOURCE.read_text(encoding="utf-8")
@@ -57,6 +82,11 @@ def main() -> int:
     contract_errors = module.workflow_contract_errors(workflow)
     if contract_errors:
         print("ERROR: edited-event workflow bypass contract remains:", ", ".join(contract_errors))
+        return 1
+
+    race_errors = _cross_event_required_status_race_errors(workflow)
+    if race_errors:
+        print("ERROR: PR event required-status last-writer race remains:", ", ".join(race_errors))
         return 1
 
     original_env = os.environ.copy()
@@ -85,7 +115,7 @@ def main() -> int:
         os.environ.clear()
         os.environ.update(original_env)
 
-    print("PASS: PR-edited CI has no mutable historical reuse implementation or workflow skip bypass")
+    print("PASS: PR-edited CI has no mutable historical reuse, workflow skip bypass, or cross-event required-status race")
     return 0
 
 
