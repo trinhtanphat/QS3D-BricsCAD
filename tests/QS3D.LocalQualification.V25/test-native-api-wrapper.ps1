@@ -80,11 +80,11 @@ foreach ($HostMajor in @(25,26)) {
                     $UiDriver -cne $mode.UiDriver -or $PauseForOperator -ne $mode.Pause -or -not $ConfirmDisposableCopy) {
                     throw 'FAIL: wrapper changed runner mode or disposable authorization.'
                 }
-                $expectedHash = if ($HostMajor -eq 25) { 'debf58de98658aad8aa078d158a6b2fae6fafdb9241228b0f4e80e8ca7b4dd25' }
-                    else { 'd7f60b9dce98a7e2685e53cadb94d52a98675467d62980f6a1c8d79dce33b1a0' }
+                $expectedHash = if ($HostMajor -eq 25) { '15b86bcdacdd614fb785143f49e4d51e90bc380c2b216c583acebcc35abccdaa' }
+                    else { '30a0a6a99875468ac5063f2397903cc913089f84410bf9d57bc3901ab2d04c1b' }
                 $expectedTimeout = if ($mode.UiDriver -ceq 'OBSERVED_CLICK_V2') { 3600 } else { 600 }
                 $expectedFramework = if ($HostMajor -eq 25) { 'net48' } else { 'net8.0-windows' }
-                if ($PackageSha256 -cne $expectedHash -or $ProductSourceSha -cne 'b816113ea6196ec4ce2dadc763f948f817b334a2' -or
+                if ($PackageSha256 -cne $expectedHash -or $ProductSourceSha -cne 'e768d19f967e010d0343f446b98b561dce7c24bb' -or
                     $ProductDir -cne "C:\host-free-package\QS3D-BricsCAD-V$HostMajor" -or
                     $PackageZip -cne "C:\host-free-package\QS3D-BricsCAD-V$HostMajor.zip" -or
                     $ProbeDll -cne "C:\host-free-harness\tests\QS3D.LocalQualification.V$HostMajor\bin\Release\$expectedFramework\QS3D.LocalQualification.V$HostMajor.dll" -or
@@ -114,7 +114,7 @@ function New-NativePredecessor {
     [pscustomobject]@{
         Receipt = [pscustomobject]@{
             schema='QS3D_LOCAL022_RECEIPT_V1'; run_id=('a' * 32); status='LOCAL_PASS_BOUNDED'
-            product_source_sha='b816113ea6196ec4ce2dadc763f948f817b334a2'; phases_verified=3
+            product_source_sha='e768d19f967e010d0343f446b98b561dce7c24bb'; phases_verified=3
             interactive_ui_executed=$false; ui_driver='NATIVE_V1'; operator_wait_policy='WALL_CLOCK_V1'
             private_cleanup_verified=$true; protected_state_unchanged=$true
             profile_cleanup=[pscustomobject]@{
@@ -124,8 +124,8 @@ function New-NativePredecessor {
         }
         Allocation = [pscustomobject]@{
             schema='QS3D_LOCAL022_ALLOCATION_V1'; run_id=('a' * 32); host_version='25.2.10'
-            product_source_sha='b816113ea6196ec4ce2dadc763f948f817b334a2'
-            package_sha256='debf58de98658aad8aa078d158a6b2fae6fafdb9241228b0f4e80e8ca7b4dd25'
+            product_source_sha='e768d19f967e010d0343f446b98b561dce7c24bb'
+            package_sha256='15b86bcdacdd614fb785143f49e4d51e90bc380c2b216c583acebcc35abccdaa'
             interactive_ui=$false; ui_driver='NATIVE_V1'; operator_wait_policy='WALL_CLOCK_V1'
         }
         Restoration = [pscustomobject]@{ restored=$true }
@@ -134,8 +134,8 @@ function New-NativePredecessor {
 function Invoke-PredecessorGate($Fixture, [bool]$Native=$true) {
     $HostMajor=26; $NativeApi=$Native; $UiDriver='NATIVE_V1'; $operatorWaitPolicy='WALL_CLOCK_V1'; $QuantityUi=$false
     $PrecedingV25Receipt='C:\host-free-receipts\native-v25\receipt.json'; $V26ProvenancePath='C:\host-free-provenance.json'
-    $source='b816113ea6196ec4ce2dadc763f948f817b334a2'
-    $v25PackageSha256='debf58de98658aad8aa078d158a6b2fae6fafdb9241228b0f4e80e8ca7b4dd25'
+    $source='e768d19f967e010d0343f446b98b561dce7c24bb'
+    $v25PackageSha256='15b86bcdacdd614fb785143f49e4d51e90bc380c2b216c583acebcc35abccdaa'
     $script:phaseAdmissionCalled=$false
     function Assert-Local022NativeV25Phases($RunnerPath,$EvidenceRoot,$ExpectedRunId) {
         if ((Split-Path $RunnerPath -Leaf) -cne 'test-bricscad-v25-single-footing.ps1' -or
@@ -166,6 +166,9 @@ $invalid = [ordered]@{
     'null allocation mode' = { param($f) $f.Allocation.interactive_ui=$null }
     'stale 43130 source' = { param($f) $f.Receipt.product_source_sha='43130a49f49676299b865f094a9a6ded482f67ad' }
     'stale allocation source' = { param($f) $f.Allocation.product_source_sha='43130a49f49676299b865f094a9a6ded482f67ad' }
+    'premerge b816 receipt' = { param($f) $f.Receipt.product_source_sha='b816113ea6196ec4ce2dadc763f948f817b334a2' }
+    'premerge b816 allocation' = { param($f) $f.Allocation.product_source_sha='b816113ea6196ec4ce2dadc763f948f817b334a2' }
+    'premerge b816 package' = { param($f) $f.Allocation.package_sha256='debf58de98658aad8aa078d158a6b2fae6fafdb9241228b0f4e80e8ca7b4dd25' }
     'different package' = { param($f) $f.Allocation.package_sha256=('c' * 64) }
     'V26 receipt schema' = { param($f) $f.Receipt.schema='QS3D_LOCAL022_V26_RECEIPT_V1' }
     'wrong allocation schema' = { param($f) $f.Allocation.schema='QS3D_LOCAL022_V26_ALLOCATION_V1' }

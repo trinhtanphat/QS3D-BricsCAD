@@ -2,7 +2,126 @@
 
 ## Verdict
 
-Latest attempt (2026-09-08): V25 `quantity-v25-65` is **FAIL_OR_NO_RESULT**,
+Latest licensed attempt (2026-09-08): V25 `quantity-v25-66` is
+**FAIL_OR_NO_RESULT**, with all three native phases and the first actual BQ
+phase passing, but the required cold BQ phase absent. The strict aggregate
+and V26 predecessor gates correctly reject this incomplete receipt.
+
+- Product source `e768d19f967e010d0343f446b98b561dce7c24bb`, pushed harness
+  `47240b3033d869a2e5b2f3d80a3f454d3c08ab75`, RunId
+  `92bd6fff2bce4e508fe9bb3aa087d5fe`, host25.2.10. Allocation ran
+  `2026-09-08T15:49:30.6030671Z`–`2026-09-08T16:04:00.9430522Z`.
+  V25 package is the15b86bcd hash below; actual loaded probe SHA256
+  `b8176775d4625b68f2347554fd35f7644df91dec369ea07360aa12c5d3e6cd34`.
+- Native run15/save8/cold9 assertions passed. The initial real BQ displayed one
+  grouped row, count2, gross/net25.333m3. Supported Computer Use performed
+  Tinh lai, detail (two rows of12.667m3), summary, row selection, Dinh vi and
+  window close. Actual routed events, fresh recalculation rows, strict76/3
+  totals, both source footprints and reporting nonmutation passed all9 BQ
+  assertions. These are new bounded runtime results, not full qualification.
+- After the BQ observer completed at15:58:22Z, the CAD save-on-exit dialog
+  required a physical No for the already saved disposable fixture. The fresh
+  cold process started at16:00:24Z and passed native reopening. Its actual
+  command history then reported `QS3DBQ error: khong the hoan tat thao tac`
+  (localized Vietnamese). No BQ window appeared. The operator inspected this
+  history and deliberately closed only that owned CAD process; no command
+  replay or synthetic quantityreopen marker was used.
+- Receipt: native phases3, quantity phases1, aggregate false. Private fixture
+  cleanup, protected state, original profile pointer/inventory, nonce removal,
+  zero BricsCAD processes and outer original-autostart restoration passed.
+  Profile inventory before/after SHA256 remains285c6889f88f326f165c9b539d83ed47555c03f8343d2826c7c6638a3462cf0c.
+  An exact generated QSDB copy is retained privately for offline reproduction;
+  it is not a customer DWG or a memory dump and is not committed/uploaded.
+- This allocation is consumed. Do not replay66 or admit V26 from it. The
+  failure has returned to source-side diagnosis; earlier quantity volume
+  correction is now demonstrated warm, but cold reporting is not qualified.
+  MCP/browser/tunnel execution remains paused.
+
+Runner follow-up adds a60-second missing-BQ-window failure bound without
+shortening the existing55-minute physical-gesture allowance or changing any
+quantity/identity/native/cleanup oracle. The actual portable wait method has
+an executable regression (missing-method RED before implementation; opening
+boundary and observed-window cases GREEN after). This is harness evidence,
+not a replacement for the missing licensed cold BQ result.
+Both native runners now read a published quantity marker while the process
+remains alive; a failure or foreign RunId immediately enters existing guarded
+cleanup rather than waiting behind a possible save-on-exit dialog. Actual
+polling-statement regressions failed before this wiring and pass afterward.
+PASS still requires normal owned exit and all native/quantity/cleanup evidence.
+
+Source-side reproduction is owned by #6198: the generated local QSDB, loaded
+through the frozen Core, then detached and regenerated (zero dirty elements),
+reproduces the report generation-drift exception. Persisted property ordering
+causes semantic property setters to mark only the new report snapshot stale.
+The live project did not change. The separate fix must preserve real drift
+rejection and public semantic invalidation; this note does not claim it landed
+or that a new licensed cold BQ pass exists.
+
+Source checkpoint (2026-09-09): #6198 / PR6224 pushed
+`ac3701659d0c9f369c3ab117b7f9c2c56f710762`, reconciled through protected main
+`19e87a624feedccd1d2f49c8d0888d1263e4b93d`. The Core build has zero
+warnings/errors; the complete Core smoke suite and both persisted-copy and
+existing generation-fence preflights pass. The exact privately retained66 QSDB
+now passes offline Load/detached/regenerate0/Group76/3/Detail2x38/3, with its
+disk hash unchanged. Synthetic tests preserve real post-capture mutation
+refusal and source/preview/disk state. Review also caught a capacity guard lost
+by bypassing semantic Add: the public SetProperty10001 regression failed before
+an explicit snapshot bound, then passed with10000 accepted and10001 refused in
+both report modes. Protected current-head CI and actual licensed rerun are
+still required; this is REMOTE_SAFE, not LOCAL_PASS.
+
+The owner's architecture review request was checked against the nearby
+reconstruction boundaries. QSDB deserialization and ProjectStateSnapshot
+already use persistence-only copies and restore metadata; RoomFinishSchedule
+and DoorOpeningSchedule use plain dictionary/DTO snapshots. No second reachable
+equivalent defect was identified in this bounded inspection. The correction
+separates reconstruction from semantic editing without changing the BricsCAD
+hosted-plugin boundary or weakening the public model lifecycle. This is not a
+whole-system architecture certification or grounds for an unrelated rewrite.
+
+Post-merge continuation (2026-09-08): #6189 owns the remaining standalone BQ
+qualification work after the released #5718/#5738 harness carrier. PR5738
+merged as `19a62fa66c05034397039bc32944aeeaee6b6f09`; production quantity
+fix #6145/#6169 merged as `e768d19f967e010d0343f446b98b561dce7c24bb`.
+Their exact candidate trees matched the fetched merges, with protected
+preflight/core SUCCESS (harness PR34243315638 on e217bf2c0; source
+PR34244632340 on e31cba167). Both task reservations are released. Parent
+#4034/#72 and aggregate LOCAL-022 acceptance remain **IN_PROGRESS**.
+
+The next matched local package pair is built from exact merged source
+`e768d19f967e010d0343f446b98b561dce7c24bb`, not from the older unmerged
+b816 candidate. Actual SDK builds: V25 23.57s, V26 18.49s, zero warnings/errors.
+
+- V25 ZIP SHA256 `15b86bcdacdd614fb785143f49e4d51e90bc380c2b216c583acebcc35abccdaa`.
+- V26 ZIP SHA256 `30a0a6a99875468ac5063f2397903cc913089f84410bf9d57bc3901ab2d04c1b`.
+- Both version `0.1.0-preview.10307`, unsigned, 564 commands, locally generated
+  without installed-product changes. `LOCAL_PR_CANDIDATE` remains the existing
+  non-published schema category even though this source is now merged; the
+  local provenance releaseTag is only a version label, not a publication claim.
+- Wrapper/native predecessor checks pin this exact pair; new negative cases
+  reject the old b816 receipt/allocation/archive as V26 admission. The actual
+  wrapper test failed on the old pins before the pin update. Strict76/3 oracle,
+  native phase coverage, physical gestures and full cleanup requirements are
+  unchanged. Source/build evidence is not licensed PASS.
+- Allocation65 below remains consumed and its closure cause is unknown.
+  Its terminal receipt proves full cleanup, independently checked with zero
+  CAD processes. A controlled first attempt on the newly merged e768 candidate
+  may use a fresh allocation after the usual exclusive-host/protected-state/
+  exact-hash admission checks. This does not claim65's cause was identified or
+  fixed. No startup input or replay is permitted; a fresh, uninterrupted V25
+  BQ result and full cleanup are required before V26.
+- Package preparation check: V25 archive integrity passed; both new probe SDK
+  builds and the complete host-free runner suite passed. The extra production
+  V26 release-identity verifier failed with `managed assembly identity mismatch`.
+  Direct inspection found both managed versions and metadata equal0.1.0.0;
+  dot-sourcing the actual verifier confirmed its `Get-HeldAssemblyVersion`
+  returns an Object[] containing `System.Threading.Tasks.VoidTaskResult` and
+  `System.Version`, because its CopyToAsync await result is unsuppressed.
+  This is an observed verifier failure, not successful package admission or a
+  DLL version mismatch. Its separate source fix must preserve held-byte/hash/
+  timeout checks; this harness does not alter or bypass that verifier.
+
+Previous attempt (2026-09-08): V25 `quantity-v25-65` is **FAIL_OR_NO_RESULT**,
 not a BQ verdict. RunId `de6f8cb516864697a3e0d16c25cb998d`, exact pushed
 harness `28df62564ff7277dad6daf2065829b683b3809ae`, product source
 `b816113ea6196ec4ce2dadc763f948f817b334a2`, BricsCAD25.2.10, ran
