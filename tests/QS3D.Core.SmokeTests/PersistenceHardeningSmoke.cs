@@ -19,6 +19,7 @@ namespace QS3D.Core.SmokeTests
         {
             V1Migration();
             BackupRecovery();
+            NonFinitePrimaryQuantityUsesBackup();
             RecoverySavePreservesValidatedBackup();
             PublishNewRejectsExistingPair();
             MissingPrimaryBackupRecovery();
@@ -217,6 +218,40 @@ namespace QS3D.Core.SmokeTests
                 Require(recovered.Project.Name == "First", "Backup recovery loaded the wrong project generation.");
                 Require(recovered.SourcePath.EndsWith(".bak", StringComparison.OrdinalIgnoreCase), "Backup recovery source was not reported.");
                 Require(!string.IsNullOrWhiteSpace(recovered.PrimaryFailureMessage), "Primary load failure was not preserved.");
+            }
+            finally { Delete(path); Delete(path + ".bak"); Delete(path + ".tmp"); }
+        }
+
+        private static void NonFinitePrimaryQuantityUsesBackup()
+        {
+            var path = Temp("nonfinite-recovery", ".qsdb");
+            try
+            {
+                var store = new QsdbProjectStore();
+                store.Save(NewProject("p", "Known Good"), path);
+
+                var corruptPrimary = NewProject("p", "Corrupt Primary");
+                var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall);
+                element.SetQuantity("CorruptQuantity", 7d);
+                corruptPrimary.Elements.Add(element);
+                store.Save(corruptPrimary, path);
+
+                var xml = File.ReadAllText(path, Encoding.UTF8);
+                const string validQuantity = "name=\"CorruptQuantity\" value=\"7\"";
+                const string invalidQuantity = "name=\"CorruptQuantity\" value=\"NaN\"";
+                Require(xml.IndexOf(validQuantity, StringComparison.Ordinal) >= 0,
+                    "Non-finite corruption regression could not locate the persisted quantity fixture.");
+                File.WriteAllText(path, xml.Replace(validQuantity, invalidQuantity), Encoding.UTF8);
+
+                var recovered = store.LoadWithBackupFallback(path);
+                Require(recovered.RecoveredFromBackup,
+                    "Non-finite primary QSDB quantity did not fall back to the validated backup.");
+                Require(recovered.Project.Name == "Known Good",
+                    "Non-finite primary recovery loaded the wrong project generation.");
+                Require(recovered.SourcePath.EndsWith(".bak", StringComparison.OrdinalIgnoreCase),
+                    "Non-finite primary recovery source was not reported as backup.");
+                Require(!string.IsNullOrWhiteSpace(recovered.PrimaryFailureMessage),
+                    "Non-finite primary recovery did not preserve the primary failure evidence.");
             }
             finally { Delete(path); Delete(path + ".bak"); Delete(path + ".tmp"); }
         }
