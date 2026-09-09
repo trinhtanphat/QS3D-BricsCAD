@@ -608,8 +608,14 @@ function New-DeterministicPackageZip {
         }
         finally { $archive.Dispose() }
         $destinationStream.Flush($true)
+        $destinationStream.Position = 0
+        $sha256 = [Security.Cryptography.SHA256]::Create()
+        try { $packageHash = $sha256.ComputeHash($destinationStream) }
+        finally { $sha256.Dispose() }
+        $packageHashHex = ([BitConverter]::ToString($packageHash)).Replace('-', '')
         Set-PackageOutputDeleteDisposition -Stream $destinationStream -Delete $false
         $deleteArmed = $false
+        return $packageHashHex
     }
     finally {
         if ($null -ne $destinationStream) {
@@ -794,9 +800,8 @@ $hashLines | Set-Content -LiteralPath (Join-Path $dist 'SHA256SUMS.txt') -Encodi
 $zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'
 if (Test-Path -LiteralPath $zip) { throw 'V26 package ZIP destination already exists; refusing destructive pathname replacement.' }
 $null = Get-SafePackageFiles -PackageRoot $dist
-New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc
+$zipHash = New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc
 $zip = Assert-SafeOutputFileTarget -Path $zip -RepositoryRoot $root -Label 'package ZIP'
-$zipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToUpperInvariant()
 Write-Host "V26 package ready: $zip"
 Write-Host "Product version: $productVersion"
 Write-Host "Assembly version: $($assemblyVersion.ToString())"
