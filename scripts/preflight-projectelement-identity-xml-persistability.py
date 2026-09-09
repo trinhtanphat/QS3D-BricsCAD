@@ -5,11 +5,13 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.Core/Domain/ProjectElement.cs"
+QUANTITY_DICTIONARY = ROOT / "src/QS3D.Core/Domain/ProjectElementQuantityDictionary.cs"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/ProjectElementIdentityXmlPersistabilitySmoke.cs"
+QUANTITY_SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/ProjectElementQuantityMutationSmoke.cs"
 REGISTRATION = ROOT / "tests/QS3D.Core.SmokeTests/ProjectElementIdentityXmlPersistabilityRegistration.cs"
 errors = []
 
-for path in (SOURCE, SMOKE, REGISTRATION):
+for path in (SOURCE, QUANTITY_DICTIONARY, SMOKE, QUANTITY_SMOKE, REGISTRATION):
     if not path.is_file():
         errors.append("missing ProjectElement identity XML persistability file: " + str(path.relative_to(ROOT)))
 
@@ -79,6 +81,20 @@ if SOURCE.is_file():
         if not method or "var key = RequireQuantityName(name);" not in method.group("body"):
             errors.append(method_name + " must validate quantity names through RequireQuantityName before mutation")
 
+if QUANTITY_DICTIONARY.is_file():
+    text = QUANTITY_DICTIONARY.read_text(encoding="utf-8")
+    required = (
+        "get => _values[CanonicalReadKey(key)];",
+        "ContainsKey(string key) => _values.ContainsKey(CanonicalReadKey(key))",
+        "TryGetValue(string key, out double value) => _values.TryGetValue(CanonicalReadKey(key), out value)",
+        "new KeyValuePair<string, double>(CanonicalReadKey(item.Key), item.Value)",
+        "if (key == null) throw new ArgumentNullException(nameof(key));",
+        "return key.Trim();",
+    )
+    for token in required:
+        if token not in text:
+            errors.append("ProjectElement quantity facade lost canonical read identity contract: " + token)
+
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
     required = (
@@ -95,6 +111,20 @@ if SMOKE.is_file():
         if token not in text:
             errors.append("ProjectElement identity XML smoke missing regression contract: " + token)
 
+if QUANTITY_SMOKE.is_file():
+    text = QUANTITY_SMOKE.read_text(encoding="utf-8")
+    for token in (
+        "ReadApisUseCanonicalIdentity",
+        'element.Quantities[" area "]',
+        'element.Quantities.ContainsKey(" AREA ")',
+        'element.Quantities.TryGetValue(" area ", out var value)',
+        'new KeyValuePair<string, double>(" AREA ", 12.5d)',
+        "Equal(ElementDirtyFlags.None, element.Dirty);",
+        "Equal(before, element.UpdatedUtc);",
+    ):
+        if token not in text:
+            errors.append("ProjectElement quantity canonical-read smoke missing regression contract: " + token)
+
 if REGISTRATION.is_file():
     text = REGISTRATION.read_text(encoding="utf-8")
     for token in ("[ModuleInitializer]", "ProjectElementIdentityXmlPersistabilitySmoke.Run()"):
@@ -108,4 +138,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: ProjectElement Id/relation/fingerprint text remains XML-preflighted and semantic property/quantity mutations validate names through shared XML-safe boundaries.")
+print("PASS: ProjectElement Id/relation/fingerprint text remains XML-preflighted; semantic quantity mutations and reads share canonical identity without read-side lifecycle mutation.")
