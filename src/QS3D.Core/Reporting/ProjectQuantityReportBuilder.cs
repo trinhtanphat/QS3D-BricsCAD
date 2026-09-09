@@ -299,6 +299,8 @@ namespace QS3D.Core.Reporting
                 // when using the non-mutating persistence reconstruction path.
                 if (source.Properties.Count > 10000)
                     throw new InvalidOperationException("Property collection exceeds the maximum supported cardinality of 10000.");
+                if (source.Quantities.Count > 10000)
+                    throw new InvalidOperationException("Quantity collection exceeds the maximum supported cardinality of 10000.");
                 var clone = new ProjectElement(source.Id, source.Category, source.FamilyId, source.FloorId, source.ZoneId)
                 {
                     DrawingFingerprint = source.DrawingFingerprint
@@ -311,8 +313,10 @@ namespace QS3D.Core.Reporting
                 // frozen generation even though the source did not change.
                 var properties = clone.Properties as ProjectElementPropertyDictionary
                     ?? throw new InvalidOperationException("Quantity snapshot requires the canonical element property store.");
+                var quantities = clone.Quantities as ProjectElementQuantityDictionary
+                    ?? throw new InvalidOperationException("Quantity snapshot requires the canonical element quantity store.");
                 foreach (var property in source.Properties) properties.SetPersistenceValue(property.Key, property.Value);
-                foreach (var quantity in source.Quantities) clone.Quantities.Add(quantity.Key, quantity.Value);
+                foreach (var quantity in source.Quantities) quantities.SetPersistenceValue(quantity.Key, quantity.Value);
                 var resolvedSourceHandles = SourceHandleResolver.Resolve(project, new[] { source.Id }).ToList().AsReadOnly();
                 return new ElementSnapshot(
                     source,
@@ -345,7 +349,7 @@ namespace QS3D.Core.Reporting
                 Name = name;
             }
 
-            internal ZoneDefinition SourceInstance { get; }
+            internal FloorDefinition SourceInstance { get; }
             internal string Id { get; }
             internal string Name { get; }
         }
