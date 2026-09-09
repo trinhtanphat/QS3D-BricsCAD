@@ -6,6 +6,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Text;
 using Bricscad.ApplicationServices;
@@ -34,6 +35,38 @@ namespace QS3D.LocalQualification.MultiRegion
         private const string NativeRegApp = "QS3D_REBAR";
         private const string RegionRegApp = "QS3D_REBAR_REGION";
         private const double Tolerance = 1e-7d;
+        private static readonly object DiagnosticGate = new object();
+        private static bool ProductionExceptionDiagnosticArmed;
+        private static string? ProductionExceptionDiagnostic;
+
+        [CommandMethod("QL005ARMEX", CommandFlags.Modal)]
+        public void ArmProductionExceptionDiagnostic()
+        {
+            _ = Bind();
+            lock (DiagnosticGate)
+            {
+                if (!ProductionExceptionDiagnosticArmed) AppDomain.CurrentDomain.FirstChanceException += CaptureProductionException;
+                ProductionExceptionDiagnosticArmed = true;
+                ProductionExceptionDiagnostic = string.Empty;
+            }
+        }
+
+        [CommandMethod("QL005DUMPEX", CommandFlags.Modal)]
+        public void DumpProductionExceptionDiagnostic()
+        {
+            var context = Bind();
+            string diagnostic;
+            lock (DiagnosticGate)
+            {
+                diagnostic = ProductionExceptionDiagnostic ?? string.Empty;
+                if (ProductionExceptionDiagnosticArmed) AppDomain.CurrentDomain.FirstChanceException -= CaptureProductionException;
+                ProductionExceptionDiagnosticArmed = false;
+                ProductionExceptionDiagnostic = null;
+            }
+            var path = Path.GetFullPath(Path.Combine(context.Root, "private", "local005-production-exception.private.txt"));
+            if (!IsChild(context.Root, path) || File.Exists(path)) throw new ProbeException("production_exception_diagnostic_path_invalid");
+            File.WriteAllText(path, diagnostic.Length == 0 ? "NONE\n" : diagnostic, new UTF8Encoding(false));
+        }
 
         [CommandMethod("QL005SETUP", CommandFlags.Modal)]
         public void Setup() => Execute("setup", SetupPhase);
@@ -46,6 +79,23 @@ namespace QS3D.LocalQualification.MultiRegion
 
         [CommandMethod("QL005REOPEN", CommandFlags.Modal)]
         public void Reopen() => Execute("reopen", ReopenPhase);
+
+        private static void CaptureProductionException(object? sender, FirstChanceExceptionEventArgs args)
+        {
+            try
+            {
+                var error = args.Exception;
+                var stack = error.StackTrace ?? string.Empty;
+                if (stack.IndexOf("QS3D.BricsCAD.V25.MultiRegionRebarCommands", StringComparison.Ordinal) < 0) return;
+                lock (DiagnosticGate)
+                {
+                    if (!ProductionExceptionDiagnosticArmed || !string.IsNullOrEmpty(ProductionExceptionDiagnostic)) return;
+                    var message = (error.Message ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ');
+                    ProductionExceptionDiagnostic = (error.GetType().FullName ?? error.GetType().Name) + "\n" + message + "\n" + stack;
+                }
+            }
+            catch { }
+        }
 
         private static IDictionary<string, bool> SetupPhase(Context context)
         {
