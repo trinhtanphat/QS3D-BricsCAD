@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import os
 from pathlib import Path
@@ -21,22 +22,38 @@ def _load_module():
     return module
 
 
+def _historical_reuse_surface(source: str) -> list[str]:
+    tree = ast.parse(source, filename=str(SOURCE))
+    findings: list[str] = []
+    forbidden_functions = {"prior_green_exists", "fetch_prior_runs"}
+    forbidden_import_roots = {"urllib", "requests"}
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in forbidden_functions:
+            findings.append(f"function:{node.name}")
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                root = alias.name.split(".", 1)[0]
+                if root in forbidden_import_roots:
+                    findings.append(f"import:{alias.name}")
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            root = node.module.split(".", 1)[0]
+            if root in forbidden_import_roots:
+                findings.append(f"import:{node.module}")
+
+    return sorted(set(findings))
+
+
 def main() -> int:
     module = _load_module()
     source = SOURCE.read_text(encoding="utf-8")
 
     # Historical workflow-run nested PR metadata is mutable. Keep the unsafe
-    # optimization surface physically absent so a later refactor cannot call a
-    # stale helper and silently restore exact-base reuse from live PR metadata.
-    forbidden = (
-        "prior_green_exists",
-        "fetch_prior_runs",
-        "workflow_runs",
-        "urlopen",
-    )
-    present = [needle for needle in forbidden if needle in source]
-    if present:
-        print("ERROR: mutable historical edited-evidence surface remains:", ", ".join(present))
+    # optimization implementation absent, but inspect Python structure instead
+    # of brittle lexical tokens so comments/docstrings cannot create false REDs.
+    findings = _historical_reuse_surface(source)
+    if findings:
+        print("ERROR: mutable historical edited-evidence implementation remains:", ", ".join(findings))
         return 1
 
     original_env = os.environ.copy()
@@ -73,7 +90,7 @@ def main() -> int:
         os.environ.clear()
         os.environ.update(original_env)
 
-    print("PASS: PR-edited evidence has no mutable historical reuse path and always requests full validation")
+    print("PASS: PR-edited evidence has no mutable historical reuse implementation and always requests full validation")
     return 0
 
 
