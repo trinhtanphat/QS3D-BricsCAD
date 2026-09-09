@@ -1,7 +1,7 @@
 # Material Usage semantic generation fence
 
-Issue: #6023  
-Lane: C02 Quantity / Export  
+Issue: #6023
+Lane: C02 Quantity / Export
 Runtime: REMOTE_SAFE deterministic managed Core/reporting.
 
 ## Reproduced defect
