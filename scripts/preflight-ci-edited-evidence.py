@@ -24,10 +24,16 @@ def workflow_contract_errors(text: str) -> list[str]:
         "base-SHA binding": "QS3D_EXPECTED_BASE_SHA: ${{ github.event.pull_request.base.sha }}",
     }
     errors = [label for label, needle in required_needles.items() if needle not in text]
+
+    mirror_condition = "if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}"
+    if text.count(mirror_condition) != 2:
+        errors.append("preflight/core required-status mirrors must both include metadata-edited PR runs")
+
     forbidden_needles = {
         "historical GREEN reuse output": "reuse_exact_head_green",
         "historical GREEN reuse environment": "QS3D_REUSE_EXACT_HEAD_GREEN",
         "historical evidence step id": "id: edited_evidence",
+        "edited-event required-status exclusion": "github.event.action != 'edited'",
     }
     errors.extend(
         f"forbidden {label} remains"
@@ -83,7 +89,7 @@ def main(argv: list[str]) -> int:
     except (OSError, RuntimeError) as exc:
         print("ERROR:", exc)
         return 1
-    print("PASS: PR-edited CI has no historical GREEN validation bypass.")
+    print("PASS: PR-edited CI has no historical GREEN validation/status bypass.")
     return 0
 
 
