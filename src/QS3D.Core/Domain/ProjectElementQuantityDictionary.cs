@@ -50,6 +50,12 @@ namespace QS3D.Core.Domain
         }
 
         public bool TryGetValue(string key, out double value) => _values.TryGetValue(key, out value);
+
+        internal void SetPersistenceValue(string key, double value)
+        {
+            _values.Add(key, value);
+        }
+
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }
