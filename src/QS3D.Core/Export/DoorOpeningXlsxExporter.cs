@@ -15,6 +15,11 @@ namespace QS3D.Core.Export
     {
         private const int MaxDataRows = 1048575;
         private const int MaxCellTextLength = 32767;
+        private const long MaxWorksheetEntryBytes = 32L * 1024L * 1024L;
+        private const long MaxAggregateUncompressedBytes = 64L * 1024L * 1024L;
+        private const long MaxArchiveBytes = 64L * 1024L * 1024L;
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
+        private static readonly DateTimeOffset FixedZipTimestamp = new DateTimeOffset(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
         public static void Export(string path, IReadOnlyList<DoorOpeningScheduleRow> rows)
         {
@@ -48,16 +53,19 @@ namespace QS3D.Core.Export
             var tempPath = AtomicFileCommit.CreateTempPath(fullPath);
             try
             {
+                long totalUncompressedBytes = 0L;
                 using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
-                using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, false, Encoding.UTF8))
+                using (var boundedArchive = new BoundedArchiveWriteStream(stream, MaxArchiveBytes))
+                using (var archive = new ZipArchive(boundedArchive, ZipArchiveMode.Create, true, StrictUtf8))
                 {
-                    Write(archive, "[Content_Types].xml", ContentTypesXml);
-                    Write(archive, "_rels/.rels", RootRelationshipsXml);
-                    Write(archive, "xl/workbook.xml", WorkbookXml);
-                    Write(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml);
-                    Write(archive, "xl/styles.xml", StylesXml);
-                    Write(archive, "xl/worksheets/sheet1.xml", BuildSheet(snapshot));
+                    WriteEntry(archive, "[Content_Types].xml", ContentTypesXml, ref totalUncompressedBytes);
+                    WriteEntry(archive, "_rels/.rels", RootRelationshipsXml, ref totalUncompressedBytes);
+                    WriteEntry(archive, "xl/workbook.xml", WorkbookXml, ref totalUncompressedBytes);
+                    WriteEntry(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml, ref totalUncompressedBytes);
+                    WriteEntry(archive, "xl/styles.xml", StylesXml, ref totalUncompressedBytes);
+                    WriteWorksheetEntry(archive, snapshot, ref totalUncompressedBytes);
                 }
+                if (new FileInfo(tempPath).Length > MaxArchiveBytes) throw new InvalidDataException("Door/opening XLSX archive exceeds the bounded output contract.");
                 Validate(tempPath);
                 AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);
             }
@@ -344,32 +352,44 @@ namespace QS3D.Core.Export
             }
         }
 
-        private static string BuildSheet(IReadOnlyList<DoorOpeningScheduleRow> rows)
+        private static void WriteWorksheetEntry(ZipArchive archive, IReadOnlyList<DoorOpeningScheduleRow> rows, ref long totalUncompressedBytes)
+        {
+            using (var buffer = new MemoryStream())
+            {
+                using (var boundedEntry = new BoundedEntryWriteStream(buffer, MaxWorksheetEntryBytes))
+                using (var writer = new StreamWriter(boundedEntry, StrictUtf8, 4096, true)) WriteSheet(writer, rows);
+                ReserveUncompressed(buffer.Length, ref totalUncompressedBytes, "xl/worksheets/sheet1.xml");
+                buffer.Position = 0L;
+                var entry = archive.CreateEntry("xl/worksheets/sheet1.xml", CompressionLevel.Optimal);
+                entry.LastWriteTime = FixedZipTimestamp;
+                using (var target = entry.Open()) buffer.CopyTo(target);
+            }
+        }
+
+        private static void WriteSheet(TextWriter writer, IReadOnlyList<DoorOpeningScheduleRow> rows)
         {
             var headers = new[] { "Tầng", "Loại", "Family / Loại", "Vật liệu", "Rộng (m)", "Cao (m)", "Cao bậu (m)", "Dày (m)", "SL", "DT mở (m²)", "SL host", "Element IDs", "Host IDs", "Project ID", "Drawing Fingerprint", "Source Handles" };
             var lastRow = Math.Max(1, rows.Count + 1);
             var range = "A1:P" + lastRow.ToString(CultureInfo.InvariantCulture);
-            var sb = new StringBuilder();
-            sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
-            sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
-            sb.Append("<dimension ref=\"").Append(range).Append("\"/>");
-            sb.Append("<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
-            sb.Append("<cols><col min=\"1\" max=\"4\" width=\"20\" customWidth=\"1\"/><col min=\"5\" max=\"11\" width=\"15\" customWidth=\"1\"/><col min=\"12\" max=\"16\" width=\"36\" customWidth=\"1\"/></cols><sheetData>");
-            sb.Append("<row r=\"1\">");
-            for (var c = 0; c < headers.Length; c++) StringCell(sb, CellRef(c, 1), headers[c], 1);
-            sb.Append("</row>");
+            writer.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+            writer.Write("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
+            writer.Write("<dimension ref=\""); writer.Write(range); writer.Write("\"/>");
+            writer.Write("<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
+            writer.Write("<cols><col min=\"1\" max=\"4\" width=\"20\" customWidth=\"1\"/><col min=\"5\" max=\"11\" width=\"15\" customWidth=\"1\"/><col min=\"12\" max=\"16\" width=\"36\" customWidth=\"1\"/></cols><sheetData>");
+            writer.Write("<row r=\"1\">");
+            for (var c = 0; c < headers.Length; c++) StringCell(writer, CellRef(c, 1), headers[c], 1);
+            writer.Write("</row>");
             for (var index = 0; index < rows.Count; index++)
             {
                 var row = rows[index];
                 var r = index + 2;
-                sb.Append("<row r=\"").Append(r).Append("\">");
-                StringCell(sb, CellRef(0, r), row.Floor, 0); StringCell(sb, CellRef(1, r), row.Category, 0); StringCell(sb, CellRef(2, r), row.FamilyName, 0); StringCell(sb, CellRef(3, r), row.Material, 0);
-                NumberCell(sb, CellRef(4, r), row.WidthM); NumberCell(sb, CellRef(5, r), row.HeightM); NumberCell(sb, CellRef(6, r), row.SillHeightM); NumberCell(sb, CellRef(7, r), row.ThicknessM); NumberCell(sb, CellRef(8, r), row.Count); NumberCell(sb, CellRef(9, r), row.OpeningAreaM2); NumberCell(sb, CellRef(10, r), row.HostCount);
-                StringCell(sb, CellRef(11, r), string.Join(";", row.ElementIds), 0); StringCell(sb, CellRef(12, r), string.Join(";", row.HostIds), 0); StringCell(sb, CellRef(13, r), row.ProjectId, 0); StringCell(sb, CellRef(14, r), row.DrawingFingerprint, 0); StringCell(sb, CellRef(15, r), string.Join(";", row.SourceHandles), 0);
-                sb.Append("</row>");
+                writer.Write("<row r=\""); writer.Write(r.ToString(CultureInfo.InvariantCulture)); writer.Write("\">");
+                StringCell(writer, CellRef(0, r), row.Floor, 0); StringCell(writer, CellRef(1, r), row.Category, 0); StringCell(writer, CellRef(2, r), row.FamilyName, 0); StringCell(writer, CellRef(3, r), row.Material, 0);
+                NumberCell(writer, CellRef(4, r), row.WidthM); NumberCell(writer, CellRef(5, r), row.HeightM); NumberCell(writer, CellRef(6, r), row.SillHeightM); NumberCell(writer, CellRef(7, r), row.ThicknessM); NumberCell(writer, CellRef(8, r), row.Count); NumberCell(writer, CellRef(9, r), row.OpeningAreaM2); NumberCell(writer, CellRef(10, r), row.HostCount);
+                StringCell(writer, CellRef(11, r), string.Join(";", row.ElementIds), 0); StringCell(writer, CellRef(12, r), string.Join(";", row.HostIds), 0); StringCell(writer, CellRef(13, r), row.ProjectId, 0); StringCell(writer, CellRef(14, r), row.DrawingFingerprint, 0); StringCell(writer, CellRef(15, r), string.Join(";", row.SourceHandles), 0);
+                writer.Write("</row>");
             }
-            sb.Append("</sheetData><autoFilter ref=\"").Append(range).Append("\"/></worksheet>");
-            return sb.ToString();
+            writer.Write("</sheetData><autoFilter ref=\""); writer.Write(range); writer.Write("\"/></worksheet>");
         }
 
         private static void Validate(string path)
@@ -377,15 +397,19 @@ namespace QS3D.Core.Export
             XlsxPackageValidator.Validate(path, "[Content_Types].xml", "_rels/.rels", "xl/workbook.xml", "xl/_rels/workbook.xml.rels", "xl/styles.xml", "xl/worksheets/sheet1.xml");
         }
 
-        private static void StringCell(StringBuilder sb, string cellRef, string value, int style)
+        private static void StringCell(TextWriter writer, string cellRef, string value, int style)
         {
-            sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is>"); XlsxXmlText.AppendTextElement(sb, value); sb.Append("</is></c>");
+            writer.Write("<c r=\""); writer.Write(cellRef); writer.Write("\" t=\"inlineStr\" s=\""); writer.Write(style.ToString(CultureInfo.InvariantCulture)); writer.Write("\"><is><t");
+            if (!string.IsNullOrEmpty(value) && (IsXmlWhitespace(value[0]) || IsXmlWhitespace(value[value.Length - 1]))) writer.Write(" xml:space=\"preserve\"");
+            writer.Write(">"); writer.Write(XlsxXmlText.Escape(value)); writer.Write("</t></is></c>");
         }
 
-        private static void NumberCell(StringBuilder sb, string cellRef, double value)
+        private static bool IsXmlWhitespace(char value) => value == ' ' || value == '\t' || value == '\n' || value == '\r';
+
+        private static void NumberCell(TextWriter writer, string cellRef, double value)
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value), "Door/opening XLSX numeric values must be finite.");
-            sb.Append("<c r=\"").Append(cellRef).Append("\" s=\"2\"><v>").Append(value.ToString("R", CultureInfo.InvariantCulture)).Append("</v></c>");
+            writer.Write("<c r=\""); writer.Write(cellRef); writer.Write("\" s=\"2\"><v>"); writer.Write(value.ToString("R", CultureInfo.InvariantCulture)); writer.Write("</v></c>");
         }
 
         private static string CellRef(int columnZeroBased, int row)
@@ -393,9 +417,44 @@ namespace QS3D.Core.Export
             var n = columnZeroBased + 1; var name = string.Empty; while (n > 0) { n--; name = (char)('A' + (n % 26)) + name; n /= 26; } return name + row.ToString(CultureInfo.InvariantCulture);
         }
 
-        private static void Write(ZipArchive archive, string name, string content)
+        private static void WriteEntry(ZipArchive archive, string name, string content, ref long totalUncompressedBytes)
         {
-            var entry = archive.CreateEntry(name, CompressionLevel.Optimal); using (var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false))) writer.Write(content);
+            var bytes = StrictUtf8.GetBytes(content); ReserveUncompressed(bytes.LongLength, ref totalUncompressedBytes, name);
+            var entry = archive.CreateEntry(name, CompressionLevel.Optimal); entry.LastWriteTime = FixedZipTimestamp;
+            using (var target = entry.Open()) target.Write(bytes, 0, bytes.Length);
+        }
+
+        private static void ReserveUncompressed(long entryBytes, ref long totalUncompressedBytes, string name)
+        {
+            if (entryBytes < 0L || entryBytes > MaxWorksheetEntryBytes) throw new InvalidDataException("Door/opening XLSX worksheet exceeds the bounded output contract: " + name + ".");
+            var projected = checked(totalUncompressedBytes + entryBytes);
+            if (projected > MaxAggregateUncompressedBytes) throw new InvalidDataException("Door/opening XLSX aggregate uncompressed XML exceeds the bounded output contract.");
+            totalUncompressedBytes = projected;
+        }
+
+        private sealed class BoundedEntryWriteStream : Stream
+        {
+            private readonly Stream _inner; private readonly long _maxLength;
+            internal BoundedEntryWriteStream(Stream inner, long maxLength) { _inner = inner ?? throw new ArgumentNullException(nameof(inner)); _maxLength = maxLength; }
+            public override bool CanRead => false; public override bool CanSeek => false; public override bool CanWrite => true; public override long Length => _inner.Length;
+            public override long Position { get => _inner.Position; set => throw new NotSupportedException(); }
+            public override void Flush() => _inner.Flush(); public override int Read(byte[] b,int o,int c)=>throw new NotSupportedException(); public override long Seek(long o,SeekOrigin x)=>throw new NotSupportedException(); public override void SetLength(long v)=>throw new NotSupportedException();
+            public override void Write(byte[] b,int o,int c) { if (checked(_inner.Position+c)>_maxLength) throw new InvalidDataException("Door/opening XLSX worksheet exceeds the bounded output contract."); _inner.Write(b,o,c); }
+            public override void WriteByte(byte v) { if (checked(_inner.Position+1L)>_maxLength) throw new InvalidDataException("Door/opening XLSX worksheet exceeds the bounded output contract."); _inner.WriteByte(v); }
+        }
+
+        private sealed class BoundedArchiveWriteStream : Stream
+        {
+            private readonly Stream _inner; private readonly long _maxLength;
+            internal BoundedArchiveWriteStream(Stream inner,long maxLength) { _inner=inner??throw new ArgumentNullException(nameof(inner)); _maxLength=maxLength; }
+            public override bool CanRead=>_inner.CanRead; public override bool CanSeek=>_inner.CanSeek; public override bool CanWrite=>_inner.CanWrite; public override long Length=>_inner.Length;
+            public override long Position { get=>_inner.Position; set { if(value<0L||value>_maxLength) throw Exceeded(); _inner.Position=value; } }
+            public override void Flush()=>_inner.Flush(); public override int Read(byte[] b,int o,int c)=>_inner.Read(b,o,c);
+            public override long Seek(long o,SeekOrigin origin) { long t=origin==SeekOrigin.Begin?o:origin==SeekOrigin.Current?checked(_inner.Position+o):checked(_inner.Length+o); if(t<0L||t>_maxLength) throw Exceeded(); return _inner.Seek(o,origin); }
+            public override void SetLength(long v) { if(v<0L||v>_maxLength) throw Exceeded(); _inner.SetLength(v); }
+            public override void Write(byte[] b,int o,int c) { if(Math.Max(_inner.Length,checked(_inner.Position+c))>_maxLength) throw Exceeded(); _inner.Write(b,o,c); }
+            public override void WriteByte(byte v) { if(Math.Max(_inner.Length,checked(_inner.Position+1L))>_maxLength) throw Exceeded(); _inner.WriteByte(v); }
+            private static InvalidDataException Exceeded()=>new InvalidDataException("Door/opening XLSX archive exceeds the bounded output contract.");
         }
 
         private const string ContentTypesXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/></Types>";
