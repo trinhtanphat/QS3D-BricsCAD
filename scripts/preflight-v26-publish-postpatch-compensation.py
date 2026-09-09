@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed unless V26 post-PATCH safety invalidation is automatically compensated."""
+"""Fail closed unless V26 post-PATCH safety invalidation removes the exact stale release."""
 
 from pathlib import Path
 
@@ -13,26 +13,22 @@ def function_body(source: str, name: str) -> str:
     if start < 0:
         return ""
     next_function = source.find("\nfunction ", start + len(marker))
-    if next_function < 0:
-        return source[start:]
-    return source[start:next_function]
+    return source[start:] if next_function < 0 else source[start:next_function]
 
 
 def validate(source: str) -> list[str]:
     errors: list[str] = []
-    helper_name = "Restore-PublishedReleaseAfterSafetyInvalidation"
+    helper_name = "Remove-PublishedReleaseAfterSafetyInvalidation"
     helper = function_body(source, helper_name)
 
     required = (
-        (f"function {helper_name}", "dedicated compensation helper"),
-        ("Assert-PublishedReleaseMatchesVerifiedTransaction", "pre-compensation exact published identity proof"),
-        ("draft = $true", "preferred re-draft request"),
-        ("Invoke-RestMethod -Method Patch -Uri $ReleaseUri", "exact release re-draft PATCH"),
-        ("Invoke-RestMethod -Method Delete -Uri $ReleaseUri", "exact release deletion fallback"),
-        ("Invoke-RestMethod -Method Get -Uri $ReleaseUri", "authoritative compensation reconciliation GET"),
-        ("Compensated V26 release must be draft after post-PATCH safety invalidation", "draft postcondition"),
-        ("V26 release compensation DELETE is authoritatively committed", "delete-absence postcondition"),
+        (f"function {helper_name}", "dedicated exact-release compensation helper"),
+        ("Assert-PublishedReleaseMatchesVerifiedTransaction", "exact published transaction proof"),
+        ("Invoke-RestMethod -Method Delete -Uri $ReleaseUri", "exact release DELETE"),
+        ("Invoke-RestMethod -Method Get -Uri $ReleaseUri", "authoritative post-DELETE reconciliation GET"),
         ("Test-GitHubNotFound", "authoritative 404 classification"),
+        ("V26 release compensation DELETE is authoritatively committed", "absence postcondition"),
+        ("$releaseId = [long]0", "local release ownership reset after exact deletion"),
     )
     for token, label in required:
         if token not in source:
@@ -48,40 +44,37 @@ def validate(source: str) -> list[str]:
     if catch_index < 0:
         errors.append("missing catch for post-release-publish safety invalidation")
         return errors
-    catch_tail = source[catch_index : catch_index + 6500]
-
+    catch_tail = source[catch_index : catch_index + 5000]
     call_index = catch_tail.find(helper_name)
-    invalid_index = catch_tail.find("$publicationSafetyKnownInvalid = $true")
+    reset_index = catch_tail.find("$releaseId = [long]0")
     throw_index = catch_tail.find(
         "V26 release publication completed, but protected-main safety revalidation failed after publish PATCH"
     )
     if call_index < 0:
-        errors.append("post-PATCH safety catch does not invoke compensation")
+        errors.append("post-PATCH safety catch does not invoke exact-release compensation")
+    if reset_index < 0:
+        errors.append("post-PATCH safety catch does not clear deleted release ownership")
     if throw_index < 0:
         errors.append("post-PATCH safety catch lost the existing fail-closed terminal error")
-    if call_index >= 0 and throw_index >= 0 and call_index > throw_index:
-        errors.append("post-PATCH compensation occurs only after the fail-closed throw")
-    if invalid_index < 0:
+    if call_index >= 0 and reset_index >= 0 and call_index > reset_index:
+        errors.append("release ownership is cleared before exact-release compensation succeeds")
+    if reset_index >= 0 and throw_index >= 0 and reset_index > throw_index:
+        errors.append("release ownership is cleared only after the fail-closed throw")
+    if "$publicationSafetyKnownInvalid = $true" not in catch_tail:
         errors.append("post-PATCH safety catch no longer records known-invalid publication safety")
 
     if helper:
         proof_index = helper.find("Assert-PublishedReleaseMatchesVerifiedTransaction")
-        patch_index = helper.find("Invoke-RestMethod -Method Patch -Uri $ReleaseUri")
         delete_index = helper.find("Invoke-RestMethod -Method Delete -Uri $ReleaseUri")
         get_index = helper.find("Invoke-RestMethod -Method Get -Uri $ReleaseUri")
-        if min(proof_index, patch_index, delete_index, get_index) < 0:
-            errors.append("compensation helper is missing exact proof/re-draft/delete-fallback/reconciliation stages")
-        elif proof_index > patch_index:
-            errors.append("compensation helper mutates the release before proving exact published transaction identity")
-
-        fallback_marker = "catch {"
-        fallback_index = helper.find(fallback_marker, patch_index if patch_index >= 0 else 0)
-        if fallback_index < 0 or delete_index < fallback_index:
-            errors.append("exact release deletion must be a fallback after re-draft/reconciliation failure")
-
-        delete_tail = helper[delete_index:]
-        if "Test-GitHubNotFound" not in delete_tail:
-            errors.append("delete fallback does not reconcile exact release absence through authoritative 404")
+        not_found_index = helper.find("Test-GitHubNotFound")
+        committed_index = helper.find("V26 release compensation DELETE is authoritatively committed")
+        if min(proof_index, delete_index, get_index, not_found_index, committed_index) < 0:
+            errors.append("compensation helper is missing proof/DELETE/GET/404/postcondition stages")
+        elif not (proof_index < delete_index < get_index and delete_index < not_found_index < committed_index):
+            errors.append("compensation helper must prove exact identity before DELETE and require authoritative absence afterward")
+        if "draft = $true" in helper or "-Method Patch" in helper:
+            errors.append("post-PATCH compensation must not depend on a second release-state PATCH")
 
     return errors
 
@@ -93,27 +86,20 @@ def main() -> None:
         raise SystemExit("ERROR: V26 post-PATCH publish compensation guard failed:\n - " + "\n - ".join(errors))
 
     mutations = {
-        "drop compensation helper/call": source.replace(
-            "Restore-PublishedReleaseAfterSafetyInvalidation",
-            "Restore_PublishedReleaseAfterSafetyInvalidation_MUTATED",
+        "drop helper/call": source.replace(
+            "Remove-PublishedReleaseAfterSafetyInvalidation",
+            "Remove_PublishedReleaseAfterSafetyInvalidation_MUTATED",
         ),
-        "drop redraft state": source.replace("draft = $true", "draft = $false"),
-        "drop compensation patch": source.replace(
-            "Invoke-RestMethod -Method Patch -Uri $ReleaseUri",
-            "Invoke-RestMethod -Method Put -Uri $ReleaseUri",
-        ),
-        "drop deletion fallback": source.replace(
+        "drop exact DELETE": source.replace(
             "Invoke-RestMethod -Method Delete -Uri $ReleaseUri",
             "Invoke-RestMethod -Method Head -Uri $ReleaseUri",
         ),
-        "drop authoritative reconciliation": source.replace(
+        "drop authoritative GET": source.replace(
             "Invoke-RestMethod -Method Get -Uri $ReleaseUri",
             "Invoke-RestMethod -Method Options -Uri $ReleaseUri",
         ),
-        "drop absence classification": source.replace(
-            "Test-GitHubNotFound",
-            "Test_GitHubNotFound_MUTATED",
-        ),
+        "drop 404 classifier": source.replace("Test-GitHubNotFound", "Test_GitHubNotFound_MUTATED"),
+        "drop ownership reset": source.replace("$releaseId = [long]0", "$releaseId = [long]-1"),
     }
     for label, mutated in mutations.items():
         if mutated == source:
@@ -121,7 +107,7 @@ def main() -> None:
         if not validate(mutated):
             raise SystemExit(f"ERROR: V26 publish compensation guard survived mutation: {label}")
 
-    print("PASS: V26 post-PATCH safety invalidation has bounded exact-release compensation with delete fallback.")
+    print("PASS: V26 post-PATCH safety invalidation removes and reconciles the exact stale release.")
 
 
 if __name__ == "__main__":
