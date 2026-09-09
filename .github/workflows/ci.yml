@@ -32,7 +32,7 @@ concurrency:
   # PR jobs themselves own the stable protected-branch `preflight` / `core` check-run names;
   # no mutable commit-status mirror can preserve or overwrite stale success on a same-SHA edit.
   # Push and manual-dispatch work remain isolated from PR cancellation domains.
-  group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ github.event_name == 'pull_request' && 'pull_request' || github.event_name == 'push' && 'push' || 'dispatch' }}-${{ github.run_attempt > 1 && github.run_id || 0 }}
+  group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ github.event_name == 'pull_request' && 'pull_request' || github.event_name == 'push' && 'push' || 'dispatch' }}
   cancel-in-progress: true
 
 jobs:
