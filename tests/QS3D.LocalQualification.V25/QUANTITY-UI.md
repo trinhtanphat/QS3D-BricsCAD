@@ -36,9 +36,17 @@ supported computer-use tool for gestures and visual verification. The observer
 contains no button invocation, row selection or mode setter. No PowerShell UI
 driver, proxy-dialog automation or capture is used in this mode.
 
-The 55-minute in-process bound fits within the outer 60-minute process timeout;
-it is a failure ceiling, not an intended run duration. Any wrong value fails
-immediately, preserves the failure marker and exits. A failed earlier native
+The BQ window must appear within 60 seconds; a command that fails before opening
+it must not consume the physical operator's 55-minute gesture allowance. Missing
+window failure is reported as `quantity_product_window_not_opened`, not an
+inferred exception cause. The 55-minute overall in-process bound still fits
+within the outer 60-minute process timeout; both are failure ceilings, not
+intended run durations. Any wrong value fails
+immediately, preserves the failure marker and exits. A published quantity
+marker is also validated while the owned host is still alive, so a
+save-on-exit dialog cannot hide its failure until the outer deadline. A PASS
+marker never replaces the existing clean-exit and protected-state checks.
+A failed earlier native
 phase, early window close, missing quantity marker or failed cleanup prevents
 the final receipt from passing. Earlier accepted authoring allocations remain
 unchanged and need not be replayed for this reporting cell.
