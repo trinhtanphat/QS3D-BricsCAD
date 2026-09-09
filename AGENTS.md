@@ -1,6 +1,6 @@
 # Agent Collaboration Policy
 
-**POLICY_VERSION: 2026-08-30-v2**
+**POLICY_VERSION: 2026-09-09-v3**
 
 This is the everyday operating contract for AI/agent work in `QS3D-BricsCAD`.
 
@@ -90,6 +90,20 @@ Before mutation:
 4. if another active owner owns it, stop overlapping mutation as `DUPLICATE_CARRIER / NO MUTATION`;
 5. if no equivalent carrier exists, register one Issue/reservation and one branch.
 
+### Mandatory Reservation-v2 pre-acquisition
+
+Creating a new Issue is not permission to mutate. After the Reservation-v2 Issue has its final `Ownership-Key` and narrow `Expected-Paths`, but **before repository mutation or the first mutating branch commit**, scan **all open Reservation-v2 Issues** for an earlier semantic/path owner.
+
+When an authenticated repository shell is available, run:
+
+```text
+python scripts/agent-reservation-precheck.py --issue <N>
+```
+
+The helper reads `GITHUB_TOKEN` or `GH_TOKEN` plus `GITHUB_REPOSITORY` (or explicit `--repository`). A non-zero result is `DUPLICATE_CARRIER / NO MUTATION`: reuse the earlier canonical carrier, or explicitly release/reassign/supersede it before continuing. Do not rename the Ownership-Key or narrow a truthful path claim merely to evade the result.
+
+Connector-only agents that cannot execute the helper must perform the same acquisition check through GitHub metadata before mutation: enumerate all open Reservation-v2 Issues, compare the intended semantic `Ownership-Key` and every literal/directory `Expected-Paths` claim, and apply the same first-valid-reservation-wins ordering. Re-run the acquisition check whenever `Expected-Paths` expands.
+
 For Reservation v2 work, use the branch form:
 
 ```text
@@ -108,6 +122,7 @@ The default owner-task lifecycle is:
 owner prompt / bug
   -> refresh current main
   -> find/reuse or register one carrier
+  -> Reservation-v2 pre-acquisition scan
   -> implement/fix
   -> focused local/static tests available to the session
   -> coherent commit(s)
