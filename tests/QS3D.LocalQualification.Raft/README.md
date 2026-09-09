@@ -68,3 +68,29 @@ installer lifecycle, MCP, V26, or the complete LOCAL-021 matrix.
 See `docs/validation/issue-4041-local021-native.md` for observed results and
 remaining failures. Machine-specific PowerShell wrappers and raw fixtures remain
 local; they are not falsely represented as having been published with this probe.
+
+## Bounded Quantity Insight observation runner
+
+`run-quantity-observation.ps1` publishes the reusable V25 launcher for the next
+quantity observation. It requires explicit temporary-autostart consent, a clean
+pushed harness, the exact frozen `af6c585190efb80581e286add7027540e7cc7c52`
+product worktree, caller-supplied adapter/Core hashes, the exact previously
+verified synthetic DWG/QSDB input pair and a fresh allocation name. Supply local
+`ProductWorktree` and `InputPrefix` paths at invocation; never use customer data.
+Installed payload hashes and DemandLoad registration must match the protected
+official preview baseline. No installation or security changes are made.
+
+The runner copies the input, creates a fresh Default-profile clone, loads the
+test package and checks actual V25 runtime identity. It opens Quantity Insight
+on the single 19.2 m3 raft. An operator must use supported Computer Use to inspect
+the live product; the ten-minute observation ceiling is not a target duration.
+Publish `operator-finish.json` in that allocation only after observation, with
+the exact receipt run ID and `action: finish_observation`, plus truthful results.
+This acknowledgement ends observation, never assigns product PASS. Native
+geometry, face actions, full matrix and cold results require their own evidence.
+
+Keep raw receipts and copied fixture local. Cleanup records graceful versus
+forced owned-host closure, restores profile/current pointer, original autostart
+bytes/time and process environment, verifies installed and original fixture
+hashes, and checks zero CAD/tunnel processes. The copied allocation fixture is
+retained as private diagnostic evidence, not a claim of private-file deletion.
