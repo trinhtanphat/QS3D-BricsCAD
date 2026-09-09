@@ -26,6 +26,8 @@ def main() -> None:
         "write/delete sharing closed": "FILE_SHARE_READ",
         "same-handle identity proof": "GetFileInformationByHandle(handle",
         "same-handle delete disposition": "SetFileInformationByHandle(handle",
+        "reparse-open suppression": "FILE_FLAG_OPEN_REPARSE_POINT",
+        "reparse attribute rejection": "FILE_ATTRIBUTE_REPARSE_POINT",
         "exact-generation cleanup call": "Remove-ExactGeneratedScriptGeneration -Path $tempScript -ExpectedIdentity $generatedIdentity",
         "held stream remains read-locked through execution": "[IO.FileShare]::Read",
     }
@@ -53,7 +55,7 @@ def main() -> None:
     if not (capture_at < invoke_at < post_assert_at < dispose_at < cleanup_at):
         fail("generated-script identity must be captured while held and exact-generation cleanup must occur only after post-validation/close")
 
-    print("PASS: V26 generated-finalizer cleanup proves exact generation before same-handle deletion.")
+    print("PASS: V26 generated-finalizer cleanup proves exact non-reparse generation before same-handle deletion.")
 
 
 if __name__ == "__main__":
