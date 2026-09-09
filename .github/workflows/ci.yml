@@ -166,7 +166,7 @@ jobs:
         if: ${{ !cancelled() && steps.scope.outputs.source_validation == 'true' }}
         run: echo "Independent source-validation safety gates completed."
       - name: Mirror preflight result into required commit status
-        if: ${{ always() && github.event_name == 'pull_request' && github.event.action != 'edited' && github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           QS3D_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -300,7 +300,7 @@ jobs:
             -Configuration Release `
             -Platform x64
       - name: Mirror core result into required commit status
-        if: ${{ always() && github.event_name == 'pull_request' && github.event.action != 'edited' && github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           QS3D_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
