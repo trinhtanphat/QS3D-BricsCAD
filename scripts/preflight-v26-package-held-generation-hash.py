@@ -13,8 +13,9 @@ REQUIRED = (
     "$destinationStream.Position = 0",
     "[Security.Cryptography.SHA256]::Create()",
     "$packageHash = $sha256.ComputeHash($destinationStream)",
+    "$packageHashHex = ([BitConverter]::ToString($packageHash)).Replace('-', '')",
     "Set-PackageOutputDeleteDisposition -Stream $destinationStream -Delete $false",
-    "return ([Convert]::ToHexString($packageHash))",
+    "return $packageHashHex",
     "$zipHash = New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc",
 )
 
@@ -32,10 +33,11 @@ def validate(source: str) -> None:
     rewind = source.index("$destinationStream.Position = 0", flush)
     create_hash = source.index("[Security.Cryptography.SHA256]::Create()", rewind)
     compute = source.index("$packageHash = $sha256.ComputeHash($destinationStream)", create_hash)
-    clear_rollback = source.index("Set-PackageOutputDeleteDisposition -Stream $destinationStream -Delete $false", compute)
-    returned = source.index("return ([Convert]::ToHexString($packageHash))", clear_rollback)
+    hexify = source.index("$packageHashHex = ([BitConverter]::ToString($packageHash)).Replace('-', '')", compute)
+    clear_rollback = source.index("Set-PackageOutputDeleteDisposition -Stream $destinationStream -Delete $false", hexify)
+    returned = source.index("return $packageHashHex", clear_rollback)
     dispose = source.index("$destinationStream.Dispose()", returned)
-    if not (flush < rewind < create_hash < compute < clear_rollback < returned < dispose):
+    if not (flush < rewind < create_hash < compute < hexify < clear_rollback < returned < dispose):
         raise AssertionError("held ZIP hash must occur after durable flush and before rollback clear/creator close")
 
     call = source.index("$zipHash = New-DeterministicPackageZip -PackageRoot $dist -DestinationPath $zip -SourceTimestamp $sourceTimestampUtc")
