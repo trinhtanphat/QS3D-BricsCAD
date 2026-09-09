@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGETS = {
@@ -22,6 +23,16 @@ def load_target(name: str, path: Path):
     return module
 
 
+def request_page(url: str) -> int:
+    values = parse_qs(urlsplit(url).query).get("page", [])
+    if len(values) != 1:
+        raise AssertionError(f"expected exactly one page query parameter: {url}")
+    try:
+        return int(values[0])
+    except ValueError as exc:
+        raise AssertionError(f"page query parameter was not an integer: {url}") from exc
+
+
 def exercise_paginator(label: str, module, invoke) -> None:
     # A nominally full API page containing any malformed member must fail closed.
     # Filtering that member first would reduce the page to 99 and silently stop
@@ -31,7 +42,7 @@ def exercise_paginator(label: str, module, invoke) -> None:
     def malformed_page(url: str, token: str):
         del token
         calls.append(url)
-        if "page=1" in url:
+        if request_page(url) == 1:
             return [{"number": index + 1} for index in range(99)] + ["MALFORMED"]
         return [{"number": 1001}]
 
@@ -64,9 +75,10 @@ def exercise_paginator(label: str, module, invoke) -> None:
     def two_valid_pages(url: str, token: str):
         del token
         calls.append(url)
-        if "page=1" in url:
+        page = request_page(url)
+        if page == 1:
             return [{"number": index + 1} for index in range(100)]
-        if "page=2" in url:
+        if page == 2:
             return [{"number": 101}]
         raise AssertionError(f"unexpected {label} pagination request: {url}")
 
