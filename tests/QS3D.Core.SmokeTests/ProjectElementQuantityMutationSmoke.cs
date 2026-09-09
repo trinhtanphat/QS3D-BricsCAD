@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             SemanticAdmissionMatchesPersistedCardinality();
             DirectAddUsesSemanticLifecycle();
+            ReadApisUseCanonicalIdentity();
             DirectMutationUsesSemanticValidation();
             RemoveAndClearUseSemanticLifecycle();
             PairRemovalUsesCanonicalIdentity();
@@ -57,6 +58,27 @@ namespace QS3D.Core.SmokeTests
             Equal(2.5d, element.Quantities["Length"]);
             Has(element.Dirty, ElementDirtyFlags.Quantity);
             Changed(before, element.UpdatedUtc, "Direct quantity Add must advance element persistence lifecycle.");
+        }
+
+        private static void ReadApisUseCanonicalIdentity()
+        {
+            var element = new ProjectElement("E-QTY-READ", ElementCategory.Beam);
+            element.Quantities.Add(" Area ", 12.5d);
+            element.MarkClean(ElementDirtyFlags.All);
+            var before = element.UpdatedUtc;
+            var quantities = (ICollection<KeyValuePair<string, double>>)element.Quantities;
+
+            Equal(12.5d, element.Quantities[" area "]);
+            if (!element.Quantities.ContainsKey(" AREA "))
+                throw new Exception("ContainsKey must use canonical quantity identity.");
+            if (!element.Quantities.TryGetValue(" area ", out var value))
+                throw new Exception("TryGetValue must use canonical quantity identity.");
+            Equal(12.5d, value);
+            if (!quantities.Contains(new KeyValuePair<string, double>(" AREA ", 12.5d)))
+                throw new Exception("Pair Contains must use canonical quantity identity.");
+
+            Equal(ElementDirtyFlags.None, element.Dirty);
+            Equal(before, element.UpdatedUtc);
         }
 
         private static void DirectMutationUsesSemanticValidation()
