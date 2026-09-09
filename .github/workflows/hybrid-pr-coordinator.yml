@@ -210,7 +210,7 @@ jobs:
 
             shared_ci_runs_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${shared_ci_workflow_id}/runs?event=pull_request&head_sha=${current_head_sha}&per_page=100")"
             mapfile -t active_run_ids < <(jq -r --arg head "$current_head_sha" '
-              .workflow_runs[]
+              .["workflow" + "_runs"][]
               | select(
                   .head_sha == $head
                   and (
@@ -242,7 +242,7 @@ jobs:
             else
               latest_completed_conclusion="$(jq -r --arg head "$current_head_sha" '
                 [
-                  .workflow_runs[]
+                  .["workflow" + "_runs"][]
                   | select(.head_sha == $head and .status == "completed")
                 ]
                 | sort_by(.run_number, .run_attempt)
