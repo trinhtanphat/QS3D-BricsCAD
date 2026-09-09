@@ -23,8 +23,8 @@ def require_fail_closed_cleanup_source() -> None:
         "$zeroHosts = $false",
         "$zeroHosts = $true",
         "if ($zeroHosts) {",
-        "PROFILE:SKIPPED_WHILE_HOST_ACTIVE",
-        "PRIVATE_ROOT:SKIPPED_WHILE_HOST_ACTIVE",
+        "profile_restore_skipped_host_active",
+        "private_cleanup_skipped_host_active",
     )
     missing = [token for token in required if token not in text]
     if missing:
