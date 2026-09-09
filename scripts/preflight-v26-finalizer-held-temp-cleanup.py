@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed unless V26 finalizer temp cleanup is bound to the held generation."""
+"""Fail closed unless V26 finalizer temp cleanup is exact-generation owned."""
 
 from pathlib import Path
 import sys
@@ -20,31 +20,40 @@ def main() -> None:
         fail(f"cannot read {TARGET.relative_to(ROOT)}: {exc}")
 
     required = {
-        "delete-on-close option": "[IO.FileOptions]::DeleteOnClose",
-        "held stream remains the cleanup owner": "$generatedStream.Dispose()",
-        "exclusive delete/write sharing remains closed": "[IO.FileShare]::Read",
+        "held generation identity capture": "$generatedIdentity = Get-HeldGeneratedScriptIdentity -Stream $generatedStream",
+        "native delete-handle open": "CreateFileW(",
+        "delete access": "GENERIC_READ | DELETE",
+        "write/delete sharing closed": "FILE_SHARE_READ",
+        "same-handle identity proof": "GetFileInformationByHandle(handle",
+        "same-handle delete disposition": "SetFileInformationByHandle(handle",
+        "exact-generation cleanup call": "Remove-ExactGeneratedScriptGeneration -Path $tempScript -ExpectedIdentity $generatedIdentity",
+        "held stream remains read-locked through execution": "[IO.FileShare]::Read",
     }
     for label, token in required.items():
         if token not in source:
             fail(f"missing {label}: {token}")
 
-    forbidden = (
-        "Remove-Item -LiteralPath $tempScript",
-        "Remove-Item $tempScript",
-    )
-    for token in forbidden:
+    for token in ("Remove-Item -LiteralPath $tempScript", "Remove-Item $tempScript"):
         if token in source:
             fail(f"pathname cleanup can delete a replacement generation after held-handle release: {token}")
 
-    dispose_at = source.find("$generatedStream.Dispose()")
+    capture_at = source.find("$generatedIdentity = Get-HeldGeneratedScriptIdentity -Stream $generatedStream")
     invoke_at = source.find("& $tempScript @forward")
-    post_assert_at = source.find("Assert-HeldGeneratedScript -Stream $generatedStream -Admitted $generatedItem -ExpectedPath $tempScript", invoke_at + 1)
-    if min(dispose_at, invoke_at, post_assert_at) < 0:
-        fail("could not prove execute/post-validate/dispose lifecycle ordering")
-    if not (invoke_at < post_assert_at < dispose_at):
-        fail("held generated-script generation must survive invocation and post-validation until cleanup dispose")
+    post_assert_at = source.find(
+        "Assert-HeldGeneratedScript -Stream $generatedStream -Admitted $generatedItem -ExpectedPath $tempScript",
+        invoke_at + 1,
+    )
+    dispose_at = source.find("$generatedStream.Dispose()", post_assert_at + 1)
+    cleanup_at = source.find(
+        "Remove-ExactGeneratedScriptGeneration -Path $tempScript -ExpectedIdentity $generatedIdentity",
+        dispose_at + 1,
+    )
+    if min(capture_at, invoke_at, post_assert_at, dispose_at, cleanup_at) < 0:
+        fail("could not prove identity-capture/execute/post-validate/dispose/exact-cleanup lifecycle")
+    if not (capture_at < invoke_at < post_assert_at < dispose_at < cleanup_at):
+        fail("generated-script identity must be captured while held and exact-generation cleanup must occur only after post-validation/close")
 
-    print("PASS: V26 generated-finalizer cleanup is owned by the held temp generation.")
+    print("PASS: V26 generated-finalizer cleanup proves exact generation before same-handle deletion.")
 
 
 if __name__ == "__main__":
