@@ -69,7 +69,7 @@ if ($runnerText.IndexOf("'_.SELECT'", [StringComparison]::Ordinal) -ge 0 -or $ru
 foreach ($selectionHookToken in @('CommandWillStart','OnProductionCommandWillStart','SetImpliedSelection(ids)','QS3DSLABREBAR3DMULTI')) {
     if ($probeText.IndexOf($selectionHookToken, [StringComparison]::Ordinal) -lt 0) { throw ('FAIL: LOCAL-005 command-start selection hook missing ' + $selectionHookToken) }
 }
-foreach ($diagnosticToken in @('ArmProductionExceptionDiagnostic(context);','[CommandMethod("QL005DUMPEX"','FirstChanceException','local005-production-exception.private.txt')) {
+foreach ($diagnosticToken in @('ArmProductionExceptionDiagnostic(context);','[CommandMethod("QL005DUMPEX"','FirstChanceException','local005-production-exception.private.txt','selection_hook_observed=','selection_hook_count=','project_readonly_available=','generated_handles_present=')) {
     if ($probeText.IndexOf($diagnosticToken, [StringComparison]::Ordinal) -lt 0) { throw ('FAIL: production exception diagnostic contract missing ' + $diagnosticToken) }
 }
 if ($probeText.IndexOf('SlabFoundationMultiRegionMeshSolidBuilder', [StringComparison]::Ordinal) -ge 0) {

@@ -40,6 +40,8 @@ namespace QS3D.LocalQualification.MultiRegion
         private static string? ProductionExceptionDiagnostic;
         private static Document? SelectionArmDocument;
         private static ObjectId[]? SelectionArmIds;
+        private static bool SelectionHookObserved;
+        private static int SelectionHookCount;
 
         [CommandMethod("QL005DUMPEX", CommandFlags.Modal)]
         public void DumpProductionExceptionDiagnostic()
@@ -53,9 +55,10 @@ namespace QS3D.LocalQualification.MultiRegion
                 ProductionExceptionDiagnosticArmed = false;
                 ProductionExceptionDiagnostic = null;
             }
+            var post = ReadPostProductionDiagnostic(context);
             var path = Path.GetFullPath(Path.Combine(context.Root, "private", "local005-production-exception.private.txt"));
             if (!IsChild(context.Root, path) || File.Exists(path)) throw new ProbeException("production_exception_diagnostic_path_invalid");
-            File.WriteAllText(path, diagnostic.Length == 0 ? "NONE\n" : diagnostic, new UTF8Encoding(false));
+            File.WriteAllText(path, (diagnostic.Length == 0 ? "exception=NONE\n" : "exception=" + diagnostic.Replace("\r", " ").Replace("\n", " | ") + "\n") + post, new UTF8Encoding(false));
         }
 
         [CommandMethod("QL005SETUP", CommandFlags.Modal)]
@@ -108,6 +111,33 @@ namespace QS3D.LocalQualification.MultiRegion
             }
             if (document == null || ids.Length == 0) return;
             document.Editor.SetImpliedSelection(ids);
+            lock (DiagnosticGate) { SelectionHookObserved = true; SelectionHookCount = ids.Length; }
+        }
+
+        private static string ReadPostProductionDiagnostic(Context context)
+        {
+            bool hookObserved;
+            int hookCount;
+            lock (DiagnosticGate) { hookObserved = SelectionHookObserved; hookCount = SelectionHookCount; }
+            var projectAvailable = false;
+            var handlesPresent = false;
+            try
+            {
+                var type = ProductAssembly().GetType("QS3D.BricsCAD.V25.ProjectContextCoordinator", true) ?? throw new ProbeException("project_context_type_missing");
+                var method = type.GetMethod("TryGetReadOnly", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic) ?? throw new ProbeException("project_readonly_member_missing");
+                var values = new object[] { context.Document, null! };
+                projectAvailable = (bool)(method.Invoke(null, values) ?? false);
+                if (projectAvailable && values[1] is ProjectState project)
+                {
+                    var element = project.Elements.SingleOrDefault(x => x != null && string.Equals(x.Id, ElementId(context.RunId), StringComparison.OrdinalIgnoreCase));
+                    handlesPresent = element != null && element.Properties.TryGetValue(OwnerSlot, out var raw) && !string.IsNullOrWhiteSpace(raw);
+                }
+            }
+            catch { }
+            return "selection_hook_observed=" + (hookObserved ? "true" : "false") + "\n" +
+                "selection_hook_count=" + hookCount.ToString(CultureInfo.InvariantCulture) + "\n" +
+                "project_readonly_available=" + (projectAvailable ? "true" : "false") + "\n" +
+                "generated_handles_present=" + (handlesPresent ? "true" : "false") + "\n";
         }
 
         private static void CaptureProductionException(object? sender, FirstChanceExceptionEventArgs args)
