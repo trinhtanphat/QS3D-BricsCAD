@@ -1,7 +1,7 @@
 # Door Opening XLSX bounded publication
 
-Issue: #6309  
-Lane: C02 Quantity / Export  
+Issue: #6309
+Lane: C02 Quantity / Export
 Runtime: REMOTE_SAFE deterministic Core/export.
 
 ## Defect
