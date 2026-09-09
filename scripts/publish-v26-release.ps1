@@ -196,7 +196,6 @@ function Assert-PublishedReleaseMatchesVerifiedTransaction {
 
 function Remove-PublishedReleaseAfterSafetyInvalidation {
   param(
-    [Parameter(Mandatory = $true)]$ReleaseSnapshot,
     [Parameter(Mandatory = $true)][string]$ReleaseUri,
     [Parameter(Mandatory = $true)][long]$ReleaseId,
     [Parameter(Mandatory = $true)][string]$ExpectedReleaseName,
@@ -207,10 +206,13 @@ function Remove-PublishedReleaseAfterSafetyInvalidation {
     [Parameter(Mandatory = $true)][bool]$IsPrerelease
   )
 
-  # Compensation is destructive, so prove that the just-published object is still
-  # the exact verified transaction before deleting anything.
+  # GitHub's release DELETE endpoint exposes no conditional-write precondition.
+  # Refresh authoritative release state as late as possible, prove that fresh
+  # snapshot is still this exact verified transaction, then issue the destructive
+  # request and reconcile authoritative absence immediately afterward.
+  $currentRelease = Invoke-RestMethod -Method Get -Uri $ReleaseUri -Headers $headers
   Assert-PublishedReleaseMatchesVerifiedTransaction `
-    -ReleaseSnapshot $ReleaseSnapshot `
+    -ReleaseSnapshot $currentRelease `
     -ReleaseUri $ReleaseUri `
     -ReleaseId $ReleaseId `
     -ExpectedReleaseName $ExpectedReleaseName `
@@ -489,7 +491,6 @@ try {
     $publicationSafetyInvalidated = $true
     $publicationSafetyKnownInvalid = $true
     Remove-PublishedReleaseAfterSafetyInvalidation `
-      -ReleaseSnapshot $published `
       -ReleaseUri $releaseUri `
       -ReleaseId $releaseId `
       -ExpectedReleaseName $expectedReleaseName `
