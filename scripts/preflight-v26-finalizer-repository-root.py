@@ -21,12 +21,14 @@ wrapper = read(WRAPPER)
 template = read(TEMPLATE)
 generator = read(GENERATOR)
 
+exact_cleanup = "Remove-ExactGeneratedScriptGeneration -Path $tempScript -ExpectedIdentity $generatedIdentity"
 required_wrapper_tokens = (
     "$generator = Join-Path $PSScriptRoot 'new-v26-script-from-v25.ps1'",
     "$tempScript = Join-Path $PSScriptRoot ('.finalize-v26-signed-package.generated.' + [Guid]::NewGuid().ToString('N') + '.ps1')",
     "& $generator -SourceScript 'finalize-v25-signed-package.ps1' -OutputPath $tempScript",
+    "$generatedIdentity = Get-HeldGeneratedScriptIdentity -Stream $generatedStream",
     "& $tempScript @forward",
-    "if (Test-Path -LiteralPath $tempScript) { Remove-Item -LiteralPath $tempScript -Force -ErrorAction SilentlyContinue }",
+    exact_cleanup,
 )
 for token in required_wrapper_tokens:
     if token not in wrapper:
@@ -36,9 +38,11 @@ for forbidden in (
     "[IO.Path]::GetTempPath()",
     "qs3d-v26-finalizer-",
     "$tempRoot",
+    "Remove-Item -LiteralPath $tempScript",
+    "Remove-Item $tempScript",
 ):
     if forbidden in wrapper:
-        errors.append(f"V26 finalizer wrapper must not generate the transformed finalizer under process temp: {forbidden}")
+        errors.append(f"V26 finalizer wrapper violates repository-root/exact-generation cleanup contract: {forbidden}")
 
 required_template_tokens = (
     "$repositoryRoot = Assert-SafeDirectory -Path (Split-Path -Parent $PSScriptRoot) -Label 'repository root'",
@@ -71,24 +75,28 @@ for forbidden in (
     if forbidden in generator:
         errors.append(f"V25→V26 transformer must not use in-place/existing-destination publication: {forbidden}")
 
-# The containment invariant is positional: the generated script must live directly
-# in scripts/, because the inherited template calculates repositoryRoot as the
-# parent of its PSScriptRoot. A nested directory or system temp directory changes
-# that boundary and breaks legitimate repo-local package/ZIP finalization.
+# The generated script must live directly in scripts/, because the inherited
+# template calculates repositoryRoot as the parent of its PSScriptRoot. Cleanup
+# occurs only after execution and uses exact-generation deletion rather than a
+# pathname unlink, so repository-root preservation and cleanup ownership remain
+# independent invariants.
 if wrapper:
     temp_index = wrapper.find("$tempScript = Join-Path $PSScriptRoot")
     generate_index = wrapper.find("& $generator -SourceScript 'finalize-v25-signed-package.ps1' -OutputPath $tempScript")
+    identity_index = wrapper.find("$generatedIdentity = Get-HeldGeneratedScriptIdentity -Stream $generatedStream")
     execute_index = wrapper.find("& $tempScript @forward")
-    cleanup_index = wrapper.find("Remove-Item -LiteralPath $tempScript -Force -ErrorAction SilentlyContinue")
-    if min(temp_index, generate_index, execute_index, cleanup_index) >= 0:
-        if not temp_index < generate_index < execute_index < cleanup_index:
-            errors.append("generated V26 finalizer lifecycle is not create -> generate -> execute -> cleanup")
+    cleanup_index = wrapper.find(exact_cleanup, execute_index + 1 if execute_index >= 0 else 0)
+    if min(temp_index, generate_index, identity_index, execute_index, cleanup_index) >= 0:
+        if not temp_index < generate_index < identity_index < execute_index < cleanup_index:
+            errors.append(
+                "generated V26 finalizer lifecycle is not create -> generate -> capture identity -> execute -> exact-generation cleanup"
+            )
 
 # The transformer publishes only a fresh output generation. It pins the output-parent
 # generation, writes an ordinary sibling stage, revalidates the held parent immediately
 # before publication, proves the destination is still absent, then atomically moves the
 # stage into the selected repository-local finalizer path. Existing-destination replace
-# semantics are intentionally forbidden because they break the #5711 generation boundary.
+# semantics are intentionally forbidden because they break the generation boundary.
 if generator:
     parent_index = generator.find("$parent = Split-Path -Parent $outputFull")
     admission_index = generator.find("$outputParentHandle = Open-AdmittedOutputParent -Path $parent")
