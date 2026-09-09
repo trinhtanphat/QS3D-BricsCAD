@@ -37,8 +37,11 @@ if ($RenderExperiment -and ($NativeApi -or $UiDriver -cne 'OBSERVED_CLICK_V2')) 
 }
 $operatorWaitPolicy = if ($PauseForOperator) { 'PAUSE_FOR_OPERATOR_V1' } else { 'WALL_CLOCK_V1' }
 $taskRepo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$source = 'e768d19f967e010d0343f446b98b561dce7c24bb'
-$v25PackageSha256 = '15b86bcdacdd614fb785143f49e4d51e90bc380c2b216c583acebcc35abccdaa'
+$source = 'af6c585190efb80581e286add7027540e7cc7c52'
+$v25PackageSha256 = '039c0db69bf735ff3811cfbfb8dddfcc67deaaf87fa4c8bf8d29c189bc206b21'
+# V25 can qualify its reporting cell independently. Never admit the historical
+# V26 archive as this source: its actual SDK build currently fails CA2255.
+if (26 -eq $HostMajor) { throw 'Current-source V26 package unavailable: CA2255 in UiInfoTooltipBootstrap. No allocation or mutation.' }
 $base = Join-Path $taskRepo 'artifacts\issue-5718-local022'
 $runRoot = Join-Path $base $AllocationName
 $restoreRoot = Join-Path $base ($AllocationName + '-autostart-recovery')

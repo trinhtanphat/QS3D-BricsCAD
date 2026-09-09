@@ -1249,3 +1249,28 @@ checks for the unexecuted physical cases. Any new licensed UI run requires an
 isolated interactive session agreed with the owner; opening hidden BricsCAD alone
 does not guarantee that license/startup dialogs cannot take foreground focus.
 PR #5738 and aggregate LOCAL-022 remain incomplete; MCP tests remain paused.
+# 2026-09-09 current-main reporting continuation
+
+This is the same #6189 / LOCAL-022 acceptance outcome, after merged PR #6195.
+The sole successor carrier is
+`agent/local022-snapshot-20260909-a7810f3c/issue-6189-bq-runtime`.
+Authenticated all-open metadata pre-acquisition scanned 69 entries with the
+canonical helper's unchanged identity/conflict checks: no earlier conflict.
+
+The next product source is merged main
+`af6c585190efb80581e286add7027540e7cc7c52`, including the persisted report-snapshot
+fix #6198 / PR #6224. It has aligned V25/V26/Core source versions
+`0.1.0-preview.10308`; the earlier b11 diagnostic source did not. V25 SDK build
+passed with zero warnings/errors and the unchanged repository packager produced
+unsigned local ZIP SHA-256
+`039c0db69bf735ff3811cfbfb8dddfcc67deaaf87fa4c8bf8d29c189bc206b21`.
+This is a local candidate, not the official release of that version, and not a
+licensed PASS. Installed release payload remains untouched.
+
+Actual same-source V26 SDK build failed `CA2255` at
+`UiInfoTooltipBootstrap.cs:42` in the generated WPF project. The wrapper refuses
+V26 before any allocation/preference mutation until an exact matching package
+and cleaned V25 quantity predecessor exist. It cannot substitute the older V26
+archive. V25 reporting execution may proceed first; its strict 38/3-per-footing,
+76/3-total, actual recalculate/detail/Locate and fresh-process checks are unchanged.
+Consumed allocations 65/66 remain terminal. Full licensed acceptance is pending.
