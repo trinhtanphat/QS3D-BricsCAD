@@ -40,13 +40,12 @@ def validate(generator: str, wrapper: str) -> list[str]:
         if token not in generator:
             errors.append(f"generator missing safety contract: {token}")
 
-    forbidden = (
+    for token in (
         "[IO.File]::WriteAllText($outputFull",
         "[IO.File]::Replace($stagePath, $outputFull, $null)",
         "New-Item -ItemType Directory -Path $parent -Force",
         "[IO.File]::OpenHandle(",
-    )
-    for token in forbidden:
+    ):
         if token in generator:
             errors.append(f"generator retains unsafe output contract: {token}")
 
@@ -93,36 +92,44 @@ def validate(generator: str, wrapper: str) -> list[str]:
         errors,
     )
 
+    exact_cleanup = "Remove-ExactGeneratedScriptGeneration -Path $tempScript -ExpectedIdentity $generatedIdentity"
+    held_workspace_cleanup = "Remove-HeldManifestWorkspace -Handle $workspaceHandle"
     wrapper_tokens = (
         "Assert-DirectoryAncestorChain -Path $tempParent -Label 'V26 manifest temporary ancestor'",
         "Assert-OrdinaryPathItem -Path $tempParent -Label 'V26 manifest temporary parent' -Directory $true",
         "if (Test-Path -LiteralPath $tempRoot) { throw",
         "New-Item -ItemType Directory -Path $tempRoot",
         "Assert-OrdinaryPathItem -Path $tempRoot -Label 'V26 manifest temporary workspace' -Directory $true",
+        "function Open-HeldManifestWorkspace",
+        "$workspaceHandle = Open-HeldManifestWorkspace -Path $tempRoot",
         "Assert-OrdinaryPathItem -Path $tempScript -Label 'Generated V26 update-manifest script' -Directory $false",
-        "function Remove-V26ManifestTemporaryWorkspaceStrict",
-        "function Remove-V26ManifestTemporaryWorkspaceBestEffort",
-        "Assert-OrdinaryPathItem -Path $ScriptPath -Label 'Generated V26 update-manifest script' -Directory $false",
-        "Assert-OrdinaryPathItem -Path $RootPath -Label 'V26 manifest temporary workspace' -Directory $true",
-        "$residue = @(Get-ChildItem -LiteralPath $RootPath -Force)",
-        "refusing recursive cleanup",
-        "Remove-Item -LiteralPath $ScriptPath -Force",
-        "Remove-Item -LiteralPath $RootPath -Force",
-        "Remove-V26ManifestTemporaryWorkspaceStrict -ScriptPath $tempScript -RootPath $tempRoot",
-        "Remove-V26ManifestTemporaryWorkspaceBestEffort -ScriptPath $tempScript -RootPath $tempRoot",
+        "[IO.File]::Open($generatedItem.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)",
+        "$generatedIdentity = Get-HeldGeneratedScriptIdentity -Stream $generatedStream",
+        exact_cleanup,
+        held_workspace_cleanup,
+        "GENERIC_READ | DELETE",
+        "FILE_SHARE_READ | FILE_SHARE_WRITE",
+        "FILE_FLAG_BACKUP_SEMANTICS",
+        "FILE_FLAG_OPEN_REPARSE_POINT",
+        "FILE_ATTRIBUTE_REPARSE_POINT",
+        "GetFileInformationByHandle(handle",
+        "SetFileInformationByHandle(handle",
     )
     for token in wrapper_tokens:
         if token not in wrapper:
             errors.append(f"wrapper missing workspace safety contract: {token}")
 
     for token in (
-        "Remove-Item -LiteralPath $tempRoot -Recurse",
-        "Remove-Item -LiteralPath $RootPath -Recurse",
-        "Remove-Item -LiteralPath $tempScript -Recurse",
-        "Remove-Item -LiteralPath $ScriptPath -Recurse",
+        "function Remove-V26ManifestTemporaryWorkspaceStrict",
+        "function Remove-V26ManifestTemporaryWorkspaceBestEffort",
+        "Remove-Item -LiteralPath $tempRoot",
+        "Remove-Item -LiteralPath $RootPath",
+        "Remove-Item -LiteralPath $tempScript",
+        "Remove-Item -LiteralPath $ScriptPath",
+        "FILE_SHARE_DELETE",
     ):
         if token in wrapper:
-            errors.append(f"wrapper must not recursively delete temporary content: {token}")
+            errors.append(f"wrapper retains unsafe pathname/generation cleanup contract: {token}")
 
     before(
         wrapper,
@@ -133,32 +140,54 @@ def validate(generator: str, wrapper: str) -> list[str]:
     )
     before(
         wrapper,
-        "Assert-OrdinaryPathItem -Path $ScriptPath -Label 'Generated V26 update-manifest script' -Directory $false",
-        "Remove-Item -LiteralPath $ScriptPath -Force",
-        "strict temporary script validation before cleanup",
+        "Assert-OrdinaryPathItem -Path $tempRoot -Label 'V26 manifest temporary workspace' -Directory $true",
+        "$workspaceHandle = Open-HeldManifestWorkspace -Path $tempRoot",
+        "workspace ordinary-file validation before held admission",
         errors,
     )
     before(
         wrapper,
-        "$residue = @(Get-ChildItem -LiteralPath $RootPath -Force)",
-        "Remove-Item -LiteralPath $RootPath -Force",
-        "strict empty-workspace proof before root cleanup",
+        "$workspaceHandle = Open-HeldManifestWorkspace -Path $tempRoot",
+        "[IO.File]::Open($generatedItem.FullName",
+        "held workspace admission before generated-script hold",
         errors,
     )
     before(
         wrapper,
-        "if ($null -eq $primaryFailure)",
-        "Remove-V26ManifestTemporaryWorkspaceStrict -ScriptPath $tempScript -RootPath $tempRoot",
-        "strict cleanup selected on successful generation",
+        "$generatedIdentity = Get-HeldGeneratedScriptIdentity -Stream $generatedStream",
+        "& $tempScript @forward",
+        "generated-script identity capture before invocation",
         errors,
     )
-    before(
-        wrapper,
-        "Remove-V26ManifestTemporaryWorkspaceStrict -ScriptPath $tempScript -RootPath $tempRoot",
-        "Remove-V26ManifestTemporaryWorkspaceBestEffort -ScriptPath $tempScript -RootPath $tempRoot",
-        "best-effort cleanup reserved for primary-failure branch",
-        errors,
+
+    workspace_open = wrapper.find("$workspaceHandle = Open-HeldManifestWorkspace -Path $tempRoot")
+    generated_open = wrapper.find("[IO.File]::Open($generatedItem.FullName", workspace_open + 1 if workspace_open >= 0 else 0)
+    identity = wrapper.find("$generatedIdentity = Get-HeldGeneratedScriptIdentity -Stream $generatedStream", generated_open + 1 if generated_open >= 0 else 0)
+    invoke = wrapper.find("& $tempScript @forward", identity + 1 if identity >= 0 else 0)
+    post_assert = wrapper.find(
+        "Assert-HeldGeneratedScript -Stream $generatedStream -Admitted $generatedItem -ExpectedPath $tempScript",
+        invoke + 1 if invoke >= 0 else 0,
     )
+    dispose = wrapper.find("$generatedStream.Dispose()", post_assert + 1 if post_assert >= 0 else 0)
+    script_cleanup = wrapper.find(exact_cleanup, dispose + 1 if dispose >= 0 else 0)
+    workspace_cleanup = wrapper.find(held_workspace_cleanup, script_cleanup + 1 if script_cleanup >= 0 else 0)
+    workspace_dispose = wrapper.find("$workspaceHandle.Dispose()", workspace_cleanup + 1 if workspace_cleanup >= 0 else 0)
+    if min(workspace_open, generated_open, identity, invoke, post_assert, dispose, script_cleanup, workspace_cleanup, workspace_dispose) < 0:
+        errors.append("wrapper held-generation lifecycle is incomplete")
+    elif not (
+        workspace_open
+        < generated_open
+        < identity
+        < invoke
+        < post_assert
+        < dispose
+        < script_cleanup
+        < workspace_cleanup
+        < workspace_dispose
+    ):
+        errors.append(
+            "wrapper lifecycle is not workspace hold -> script hold/identity -> invoke/post-validate -> dispose -> exact script cleanup -> held workspace cleanup -> handle dispose"
+        )
 
     return errors
 
@@ -207,29 +236,28 @@ def main() -> int:
                 1,
             ),
         ),
-        "strict temporary script validation": (
+        "held workspace admission": (
             generator,
             wrapper.replace(
-                "Assert-OrdinaryPathItem -Path $ScriptPath -Label 'Generated V26 update-manifest script' -Directory $false | Out-Null\n",
-                "",
+                "$workspaceHandle = Open-HeldManifestWorkspace -Path $tempRoot",
+                "$workspaceHandle = $null",
                 1,
             ),
         ),
-        "non-recursive temporary cleanup": (
+        "exact generated-script cleanup": (
             generator,
             wrapper.replace(
-                "Remove-Item -LiteralPath $RootPath -Force",
-                "Remove-Item -LiteralPath $RootPath -Recurse -Force",
-                1,
+                "Remove-ExactGeneratedScriptGeneration -Path $tempScript -ExpectedIdentity $generatedIdentity",
+                "Remove-Item -LiteralPath $tempScript -Force",
             ),
         ),
-        "strict success cleanup dispatch": (
+        "held workspace cleanup": (
             generator,
-            wrapper.replace(
-                "Remove-V26ManifestTemporaryWorkspaceStrict -ScriptPath $tempScript -RootPath $tempRoot",
-                "Remove-V26ManifestTemporaryWorkspaceBestEffort -ScriptPath $tempScript -RootPath $tempRoot",
-                1,
-            ),
+            wrapper.replace("Remove-HeldManifestWorkspace -Handle $workspaceHandle", "# held workspace cleanup removed"),
+        ),
+        "reparse-open suppression": (
+            generator,
+            wrapper.replace("FILE_FLAG_OPEN_REPARSE_POINT", "0"),
         ),
     }
     for label, (mutated_generator, mutated_wrapper) in mutations.items():

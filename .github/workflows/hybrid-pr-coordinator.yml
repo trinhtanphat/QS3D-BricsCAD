@@ -152,6 +152,12 @@ jobs:
             exit 1
           fi
 
+          shared_ci_workflow_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml" --jq '.id')"
+          if [[ -z "$shared_ci_workflow_id" || "$shared_ci_workflow_id" == "null" ]]; then
+            echo "::error::Could not resolve the Shared CI workflow id for ci.yml."
+            exit 1
+          fi
+
           mapfile -t pr_numbers < <(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls?state=open&base=main&per_page=100" --jq '.[].number')
 
           for number in "${pr_numbers[@]}"; do
@@ -200,6 +206,53 @@ jobs:
             if [[ "$compare_status" == "ahead" || "$compare_status" == "identical" ]]; then
               echo "PR #${number} already contains current main; waiting on protected checks/native auto-merge."
               continue
+            fi
+
+            shared_ci_runs_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${shared_ci_workflow_id}/runs?event=pull_request&head_sha=${current_head_sha}&per_page=100")"
+            mapfile -t active_run_ids < <(jq -r --arg head "$current_head_sha" '
+              .["workflow" + "_runs"][]
+              | select(
+                  .head_sha == $head
+                  and (
+                    .status == "queued"
+                    or .status == "in_progress"
+                    or .status == "waiting"
+                    or .status == "requested"
+                    or .status == "pending"
+                  )
+                )
+              | .id
+            ' <<<"$shared_ci_runs_json")
+
+            if (( ${#active_run_ids[@]} > 0 )); then
+              echo "PR #${number} has active exact-head Shared CI; cancelling stale run(s) before refreshing from main."
+              for run_id in "${active_run_ids[@]}"; do
+                cancel_output=""
+                if cancel_output="$(gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" --silent 2>&1)"; then
+                  echo "Cancelled stale Shared CI run ${run_id} for PR #${number}."
+                  continue
+                fi
+                if grep -Eq 'HTTP (409|422)' <<<"$cancel_output"; then
+                  echo "::notice::Shared CI run ${run_id} left its active state before cancellation completed; refreshing from the main-change snapshot anyway: ${cancel_output}"
+                  continue
+                fi
+                echo "::error::Could not cancel active Shared CI run ${run_id} for PR #${number}: ${cancel_output}"
+                exit 1
+              done
+            else
+              latest_completed_conclusion="$(jq -r --arg head "$current_head_sha" '
+                [
+                  .["workflow" + "_runs"][]
+                  | select(.head_sha == $head and .status == "completed")
+                ]
+                | sort_by(.run_number, .run_attempt)
+                | last
+                | .conclusion // ""
+              ' <<<"$shared_ci_runs_json")"
+              if [[ "$latest_completed_conclusion" =~ ^(failure|timed_out|action_required|startup_failure)$ ]]; then
+                echo "Skipping PR #${number}: exact-head Shared CI completed RED (${latest_completed_conclusion}); wait for a PR code change instead of spending CI on every main advance."
+                continue
+              fi
             fi
 
             rebase_output=""
