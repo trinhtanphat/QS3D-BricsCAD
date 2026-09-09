@@ -194,6 +194,72 @@ function Assert-PublishedReleaseMatchesVerifiedTransaction {
   }
 }
 
+function Remove-PublishedReleaseAfterSafetyInvalidation {
+  param(
+    [Parameter(Mandatory = $true)]$ReleaseSnapshot,
+    [Parameter(Mandatory = $true)][string]$ReleaseUri,
+    [Parameter(Mandatory = $true)][long]$ReleaseId,
+    [Parameter(Mandatory = $true)][string]$ExpectedReleaseName,
+    [Parameter(Mandatory = $true)][string]$ExpectedReleaseBody,
+    [Parameter(Mandatory = $true)][string[]]$ExpectedAssets,
+    [Parameter(Mandatory = $true)][hashtable]$VerifiedAssetIds,
+    [Parameter(Mandatory = $true)][hashtable]$AdmittedAssets,
+    [Parameter(Mandatory = $true)][bool]$IsPrerelease
+  )
+
+  # Compensation is destructive, so prove that the just-published object is still
+  # the exact verified transaction before deleting anything.
+  Assert-PublishedReleaseMatchesVerifiedTransaction `
+    -ReleaseSnapshot $ReleaseSnapshot `
+    -ReleaseUri $ReleaseUri `
+    -ReleaseId $ReleaseId `
+    -ExpectedReleaseName $ExpectedReleaseName `
+    -ExpectedReleaseBody $ExpectedReleaseBody `
+    -ExpectedAssets $ExpectedAssets `
+    -VerifiedAssetIds $VerifiedAssetIds `
+    -AdmittedAssets $AdmittedAssets `
+    -IsPrerelease $IsPrerelease
+
+  $deleteError = $null
+  try {
+    Invoke-RestMethod -Method Delete -Uri $ReleaseUri -Headers $headers | Out-Null
+  }
+  catch {
+    $deleteError = $_
+  }
+
+  try {
+    $remainingRelease = Invoke-RestMethod -Method Get -Uri $ReleaseUri -Headers $headers
+  }
+  catch {
+    if (Test-GitHubNotFound -ErrorRecord $_) {
+      Write-Host "V26 release compensation DELETE is authoritatively committed; the exact stale release is absent and the admitted tag is preserved for retry."
+      return
+    }
+    if ($null -ne $deleteError) {
+      throw "V26 stale-release compensation DELETE acknowledgement could not be reconciled. Delete error: $($deleteError.Exception.Message) Reconciliation error: $($_.Exception.Message)"
+    }
+    throw "V26 stale-release compensation post-DELETE reconciliation failed: $($_.Exception.Message)"
+  }
+
+  # If the object still exists, prove it is still our exact transaction before
+  # reporting the failed compensation. Never treat a mismatched release as ours.
+  Assert-PublishedReleaseMatchesVerifiedTransaction `
+    -ReleaseSnapshot $remainingRelease `
+    -ReleaseUri $ReleaseUri `
+    -ReleaseId $ReleaseId `
+    -ExpectedReleaseName $ExpectedReleaseName `
+    -ExpectedReleaseBody $ExpectedReleaseBody `
+    -ExpectedAssets $ExpectedAssets `
+    -VerifiedAssetIds $VerifiedAssetIds `
+    -AdmittedAssets $AdmittedAssets `
+    -IsPrerelease $IsPrerelease
+  if ($null -ne $deleteError) {
+    throw "Exact stale V26 release still exists after compensation DELETE error: $($deleteError.Exception.Message)"
+  }
+  throw "Exact stale V26 release still exists after successful compensation DELETE acknowledgement; refusing to claim safety restoration."
+}
+
 $isPrerelease = $env:V26_RELEASE_REQUEST_PRERELEASE -eq 'true'
 $signPackage = $env:V26_RELEASE_REQUEST_SIGN_PACKAGE -eq 'true'
 $runtimeState = if ($env:RELEASE_RUN_RUNTIME -eq 'true') {
@@ -422,6 +488,17 @@ try {
   catch {
     $publicationSafetyInvalidated = $true
     $publicationSafetyKnownInvalid = $true
+    Remove-PublishedReleaseAfterSafetyInvalidation `
+      -ReleaseSnapshot $published `
+      -ReleaseUri $releaseUri `
+      -ReleaseId $releaseId `
+      -ExpectedReleaseName $expectedReleaseName `
+      -ExpectedReleaseBody $expectedPublishedBody `
+      -ExpectedAssets $expectedAssets `
+      -VerifiedAssetIds $verifiedAssetIds `
+      -AdmittedAssets $admittedAssets `
+      -IsPrerelease $isPrerelease
+    $releaseId = [long]0
     throw "V26 release publication completed, but protected-main safety revalidation failed after publish PATCH: $($_.Exception.Message)"
   }
   Assert-PublishedReleaseMatchesVerifiedTransaction `
