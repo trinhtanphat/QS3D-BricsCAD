@@ -387,7 +387,10 @@ if ($PSCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')) {
     try {
         [IO.File]::WriteAllText($stagePath, $manifestJson + [Environment]::NewLine, $utf8NoBom)
         $stage = Resolve-OrdinaryNonReparseFile -Path $stagePath -Label 'Update manifest staging file'
-        if ($hadExistingOutput) { [IO.File]::Replace($stage.FullName, $outputFull, $backupPath, $true) }
+        if ($hadExistingOutput) {
+            $null = Assert-StableFileState -Expected $existingOutputState -Label 'Existing update manifest before publication'
+            [IO.File]::Replace($stage.FullName, $outputFull, $backupPath, $true)
+        }
         else { [IO.File]::Move($stage.FullName, $outputFull) }
         $published = Resolve-OrdinaryNonReparseFile -Path $outputFull -Label 'Published update manifest'
         $publishedText = Read-BoundedStrictUtf8File -File $published -Label 'Published update manifest'
