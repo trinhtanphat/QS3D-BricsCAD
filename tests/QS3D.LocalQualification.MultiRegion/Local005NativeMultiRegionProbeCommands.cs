@@ -161,8 +161,7 @@ namespace QS3D.LocalQualification.MultiRegion
         private static void QueueProductionTail(Document document, string sourceLayer)
         {
             document.SendStringToExecute(
-                "(sssetfirst nil (ssget \"_X\" (list (cons 0 \"LWPOLYLINE\") (cons 8 \"" + sourceLayer + "\"))))\n" +
-                "QS3DSLABREBAR3DMULTI\n" +
+                "(progn (sssetfirst nil (ssget \"_X\" (list (cons 0 \"LWPOLYLINE\") (cons 8 \"" + sourceLayer + "\")))) (command \"QS3DSLABREBAR3DMULTI\"))\n" +
                 "QL005DUMPEX\n" +
                 "QL005VERIFY\n" +
                 "QS3DMULTIREBARHEALTH\n" +

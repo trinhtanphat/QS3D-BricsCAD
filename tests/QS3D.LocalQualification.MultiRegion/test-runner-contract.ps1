@@ -10,7 +10,7 @@ $runnerText = Get-Content -LiteralPath $runner -Raw
 $probeText = Get-Content -LiteralPath $probe -Raw
 $projectText = Get-Content -LiteralPath $project -Raw
 
-$orderedCommands = @('QS3DSLABREBAR3DMULTI','QL005DUMPEX','QL005VERIFY','QS3DMULTIREBARHEALTH','QS3DSAVE','_.QSAVE','QL005SAVED')
+$orderedCommands = @('QL005DUMPEX','QL005VERIFY','QS3DMULTIREBARHEALTH','QS3DSAVE','_.QSAVE','QL005SAVED')
 $cursor = -1
 foreach ($command in $orderedCommands) {
     $needle = $command + '\n'
@@ -20,7 +20,9 @@ foreach ($command in $orderedCommands) {
     $cursor = $next
 }
 if ($runnerText.IndexOf("Invoke-HostPhase 'run' @('QL005SETUP') @('setup','run','saved')", [StringComparison]::Ordinal) -lt 0) { throw 'FAIL: run phase must leave production dispatch to the setup-owned queued tail.' }
-foreach ($queueToken in @('QueueProductionTail(context.Document, sourceLayer);','SendStringToExecute(','QS3DSLABREBAR3DMULTI\n','QL005DUMPEX\n','QL005VERIFY\n')) {
+if ($probeText.IndexOf('(command \"QS3DSLABREBAR3DMULTI\")', [StringComparison]::Ordinal) -lt 0) { throw 'FAIL: PICKFIRST setup and real production command must execute in one AutoLISP invocation.' }
+if ($probeText.IndexOf('\"QS3DSLABREBAR3DMULTI\\n\" +', [StringComparison]::Ordinal) -ge 0) { throw 'FAIL: production command must not be queued as a separate command after PICKFIRST setup.' }
+foreach ($queueToken in @('QueueProductionTail(context.Document, sourceLayer);','SendStringToExecute(','QL005DUMPEX\n','QL005VERIFY\n')) {
     if ($probeText.IndexOf($queueToken, [StringComparison]::Ordinal) -lt 0) { throw ('FAIL: LOCAL-005 queued production tail missing ' + $queueToken) }
 }
 if ($runnerText.IndexOf("Invoke-HostPhase 'reopen'", [StringComparison]::Ordinal) -lt 0 -or
