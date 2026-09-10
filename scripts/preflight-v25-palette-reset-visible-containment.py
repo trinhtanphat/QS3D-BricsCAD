@@ -23,10 +23,11 @@ else:
         "var propertiesPalette = _properties;",
         "var rightPalette = _right;",
         "var quantityPalette = _quantityInsight;",
-        "var workspaceVisible = TryReadPaletteVisibility(workspacePalette);",
-        "var propertiesVisible = TryReadPaletteVisibility(propertiesPalette);",
-        "var rightVisible = TryReadPaletteVisibility(rightPalette);",
-        "var quantityVisible = TryReadPaletteVisibility(quantityPalette);",
+        "var workspaceRead = TryReadPaletteVisibility(workspacePalette, out var workspaceVisible);",
+        "var propertiesRead = TryReadPaletteVisibility(propertiesPalette, out var propertiesVisible);",
+        "var rightRead = TryReadPaletteVisibility(rightPalette, out var rightVisible);",
+        "var quantityRead = TryReadPaletteVisibility(quantityPalette, out var quantityVisible);",
+        "workspaceRead && propertiesRead && rightRead && quantityRead &&",
         "Dispose();",
         "EnsureCreated();",
     ]
@@ -44,30 +45,33 @@ else:
             errors.append("reset must not dereference uncontained native visibility property: " + forbidden)
 
     snapshot_pos = reset.find("var workspacePalette = _workspace;")
-    read_pos = reset.find("var workspaceVisible = TryReadPaletteVisibility(workspacePalette);")
+    read_pos = reset.find("var workspaceRead = TryReadPaletteVisibility(workspacePalette, out var workspaceVisible);")
+    bim_pos = reset.find("workspaceRead && propertiesRead && rightRead && quantityRead &&")
     dispose_pos = reset.find("Dispose();")
     create_pos = reset.find("EnsureCreated();")
     restore_pos = reset.find("SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);")
-    if min(snapshot_pos, read_pos, dispose_pos, create_pos, restore_pos) < 0 or not (
-        snapshot_pos < read_pos < dispose_pos < create_pos < restore_pos
+    if min(snapshot_pos, read_pos, bim_pos, dispose_pos, create_pos, restore_pos) < 0 or not (
+        snapshot_pos < read_pos <= bim_pos < dispose_pos < create_pos < restore_pos
     ):
-        errors.append("reset must capture exact palettes, contain visibility reads, dispose, recreate, then restore")
+        errors.append("reset must capture exact palettes, validate visibility reads, dispose, recreate, then restore")
 
-helper_start = source.find("private static bool TryReadPaletteVisibility(PaletteSet? palette)")
+helper_start = source.find("private static bool TryReadPaletteVisibility(PaletteSet? palette, out bool visible)")
 helper_end = source.find("private static void EnsureBimDockContract()", helper_start if helper_start >= 0 else 0)
 helper = source[helper_start:helper_end if helper_end >= 0 else len(source)] if helper_start >= 0 else ""
 if helper_start < 0:
     errors.append("missing TryReadPaletteVisibility helper")
 else:
     for needle in [
+        "visible = false;",
         "if (palette == null) return false;",
         "try",
-        "return palette.Visible;",
+        "visible = palette.Visible;",
+        "return true;",
         "catch",
         "return false;",
     ]:
         if needle not in helper:
-            errors.append("visibility helper must fail hidden when native getter is unavailable: " + needle)
+            errors.append("visibility helper must distinguish a trustworthy native getter from hidden fallback: " + needle)
 
     for forbidden in [
         "MdiActiveDocument",
@@ -85,4 +89,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: reset snapshots exact PaletteSet instances, contains native Visible getter failures per surface, and still disposes/recreates coherently.")
+print("PASS: reset snapshots exact PaletteSet instances, distinguishes failed native Visible reads from valid hidden state, and still disposes/recreates coherently.")
