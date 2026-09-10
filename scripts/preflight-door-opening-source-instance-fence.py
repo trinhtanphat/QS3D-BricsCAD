@@ -18,9 +18,9 @@ for token in [
 
 for token in [
     "[ModuleInitializer]",
-    "EquivalentElementReplacementWithoutTouchFailsClosed",
+    "EquivalentElementReplacementAdvancesProjectVersionAndFailsClosed",
     "project.Elements[0] = replacement",
-    "project.ChangeVersion != version",
+    "project.ChangeVersion != checked(version + 1L)",
     '"CaptureProjectRevision"',
     '"EnsureProjectRevision"',
     "Project changed while the door/opening schedule was being built",

@@ -14,7 +14,7 @@ namespace QS3D.Core.SmokeTests
         {
             StableTargetStillRenumbers();
             SameIdReplacementFailsBeforeMutation();
-            UnrelatedReplacementDoesNotRetargetGrid();
+            UnrelatedReplacementFailsBeforeMutation();
         }
 
         private static void StableTargetStillRenumbers()
@@ -42,16 +42,16 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining<InvalidOperationException>(
                 () => GridNamingService.Renumber(project, ReplaceThenYield(project, replacement, 0)),
-                "Grid renumber target changed while Grid IDs were being enumerated");
+                "Project changed while Grid renumber targets were being enumerated");
 
-            Equal(beforeVersion, project.ChangeVersion);
+            Equal(beforeVersion + 1L, project.ChangeVersion);
             False(original.Properties.ContainsKey(GridNamingService.GridLabelKey));
             False(original.Properties.ContainsKey(GridNamingService.GridSequenceIndexKey));
             False(replacement.Properties.ContainsKey(GridNamingService.GridLabelKey));
             False(replacement.Properties.ContainsKey(GridNamingService.GridSequenceIndexKey));
         }
 
-        private static void UnrelatedReplacementDoesNotRetargetGrid()
+        private static void UnrelatedReplacementFailsBeforeMutation()
         {
             var project = new ProjectState("P-GRID-STRUCT-3", "Unrelated structural change");
             var grid = new ProjectElement("GRID-TARGET", ElementCategory.Grid);
@@ -59,15 +59,19 @@ namespace QS3D.Core.SmokeTests
             var unrelatedReplacement = new ProjectElement(unrelated.Id, ElementCategory.CustomQuantity);
             project.Elements.Add(grid);
             project.Elements.Add(unrelated);
+            var beforeVersion = project.ChangeVersion;
 
-            var assignments = GridNamingService.Renumber(
-                project,
-                ReplaceThenYield(project, unrelatedReplacement, 1, grid.Id));
+            ThrowsContaining<InvalidOperationException>(
+                () => GridNamingService.Renumber(
+                    project,
+                    ReplaceThenYield(project, unrelatedReplacement, 1, grid.Id)),
+                "Project changed while Grid renumber targets were being enumerated");
 
-            Equal(1, assignments.Count);
-            Equal(grid.Id, assignments[0].ElementId);
-            Equal("1", grid.Properties[GridNamingService.GridLabelKey]);
+            Equal(beforeVersion + 1L, project.ChangeVersion);
+            False(grid.Properties.ContainsKey(GridNamingService.GridLabelKey));
+            False(grid.Properties.ContainsKey(GridNamingService.GridSequenceIndexKey));
             False(unrelatedReplacement.Properties.ContainsKey(GridNamingService.GridLabelKey));
+            False(unrelatedReplacement.Properties.ContainsKey(GridNamingService.GridSequenceIndexKey));
         }
 
         private static IEnumerable<string> Yield(string id)

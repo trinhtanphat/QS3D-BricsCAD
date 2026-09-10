@@ -27,7 +27,7 @@ namespace QS3D.Core.SmokeTests
                 project,
                 RemoveAndYield(project, child, root.Id)));
 
-            Equal(beforeVersion, project.ChangeVersion, "remove side-effect version");
+            Equal(checked(beforeVersion + 1L), project.ChangeVersion, "remove side-effect version");
             Equal(1, project.Elements.Count, "remove side-effect element count");
             True(project.Elements.Contains(root), "remove side-effect root ownership");
             False(project.Elements.Contains(child), "remove side-effect child ownership");
@@ -43,7 +43,7 @@ namespace QS3D.Core.SmokeTests
                 project,
                 ReplaceAndYield(project, child, root.Id, value => replacement = value)));
 
-            Equal(beforeVersion, project.ChangeVersion, "replacement side-effect version");
+            Equal(checked(beforeVersion + 2L), project.ChangeVersion, "replacement remove/add side-effect version");
             Equal(2, project.Elements.Count, "replacement side-effect element count");
             False(project.Elements.Contains(child), "replacement original ownership");
             True(replacement != null && project.Elements.Contains(replacement), "replacement new ownership");
@@ -105,7 +105,7 @@ namespace QS3D.Core.SmokeTests
             }
             catch (InvalidOperationException ex)
             {
-                const string expected = "Project element ownership changed while dependency impact was being planned; recompute the impact plan.";
+                const string expected = "Project changed while dependency impact was being planned; recompute the impact plan.";
                 if (string.Equals(ex.Message, expected, StringComparison.Ordinal)) return;
                 throw new InvalidOperationException("Unexpected dependency impact structural freshness error.", ex);
             }

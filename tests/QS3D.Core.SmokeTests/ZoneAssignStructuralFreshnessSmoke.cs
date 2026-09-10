@@ -25,9 +25,9 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining<InvalidOperationException>(
                 () => ProjectZoneService.Assign(project, zone.Id, YieldThenRemoveElement(project, element)),
-                "Element no longer belongs to the project after Zone assignment target enumeration");
+                "Project changed while Zone assignment targets were being enumerated");
 
-            Equal(beforeVersion, project.ChangeVersion, "removed-element project revision");
+            Equal(checked(beforeVersion + 1L), project.ChangeVersion, "removed-element project revision");
             False(project.Elements.Contains(element), "removed-element external removal");
             Equal(string.Empty, element.ZoneId, "removed-element ZoneId");
             Equal(ElementDirtyFlags.None, element.Dirty, "removed-element dirty flags");
@@ -81,9 +81,9 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining<InvalidOperationException>(
                 () => ProjectZoneService.Assign(project, zone.Id, YieldThenDuplicateUnrelatedElement(project, element)),
-                "Project contains duplicate semantic element id: e-other");
+                "Project changed while Zone assignment targets were being enumerated");
 
-            Equal(beforeVersion, project.ChangeVersion, "duplicate-element project revision");
+            Equal(checked(beforeVersion + 1L), project.ChangeVersion, "duplicate-element project revision");
             Equal(3, project.Elements.Count, "duplicate-element deliberate corruption count");
             Equal(string.Empty, element.ZoneId, "duplicate-element target ZoneId");
             Equal(ElementDirtyFlags.None, element.Dirty, "duplicate-element target dirty flags");

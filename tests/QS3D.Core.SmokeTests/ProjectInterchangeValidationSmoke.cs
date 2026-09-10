@@ -155,8 +155,6 @@ namespace QS3D.Core.SmokeTests
             project.Zones.Add(new ZoneDefinition("Z-1", "Zone 1"));
             project.Floors.Add(new FloorDefinition("FL-1", "L01", 0d));
             project.Families.Add(new ProjectFamily("FAM-1", "B300x500", ElementCategory.Beam));
-            project.UpdatedUtc = new DateTime(2026, 8, 10, 11, 0, 0, DateTimeKind.Utc);
-
             var root = new ProjectElement("E-ROOT", ElementCategory.Beam, "FAM-1", "FL-1", "Z-1") { DrawingFingerprint = "DWG-FP" };
             root.SourceHandles.Add("100");
             root.SetProperty("Mark", "B-00");
@@ -169,6 +167,7 @@ namespace QS3D.Core.SmokeTests
             child.SetProperty("Mark", "B-01");
             child.SetQuantity("LengthM", 5d);
             project.Elements.Add(child);
+            project.UpdatedUtc = new DateTime(2026, 8, 10, 11, 0, 0, DateTimeKind.Utc);
             return project;
         }
 

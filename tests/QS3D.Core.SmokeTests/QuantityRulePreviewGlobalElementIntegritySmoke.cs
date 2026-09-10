@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Rules;
@@ -35,15 +37,23 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("QPREVIEW-NULL", "Quantity preview null element");
             var target = new ProjectElement("E1", ElementCategory.Beam);
             project.Elements.Add(target);
-            project.Elements.Add(null!);
+            RawElements(project).Add(null!);
             var service = new QuantityRulePreviewService();
 
             ThrowsNullExact(() => service.PreviewElement(project, target));
             ThrowsNullExact(() => service.PreviewProject(project));
 
             var singleton = new ProjectState("QPREVIEW-NULL-ONLY", "Quantity preview singleton null");
-            singleton.Elements.Add(null!);
+            RawElements(singleton).Add(null!);
             ThrowsNullExact(() => service.PreviewProject(singleton));
+        }
+
+        private static List<ProjectElement> RawElements(ProjectState project)
+        {
+            var itemsField = project.Elements.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed corrupt quantity-rule preview project state.");
+            return itemsField.GetValue(project.Elements) as List<ProjectElement>
+                ?? throw new InvalidOperationException("Unexpected ProjectState.Elements backing collection.");
         }
 
         private static void PreservesCanonicalPreview()

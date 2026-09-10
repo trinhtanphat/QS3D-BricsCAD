@@ -12,7 +12,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             StableScheduleBuildsNormally();
-            EquivalentFinishReplacementWithoutTouchFailsClosed();
+            EquivalentFinishReplacementAdvancesRevisionAndFailsClosed();
             DirectSemanticMutationWithoutTouchFailsClosed();
         }
 
@@ -26,7 +26,7 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("Room finish generation fence smoke changed stable area aggregation.");
         }
 
-        private static void EquivalentFinishReplacementWithoutTouchFailsClosed()
+        private static void EquivalentFinishReplacementAdvancesRevisionAndFailsClosed()
         {
             var project = BuildProject();
             var snapshot = Snapshot(project);
@@ -35,8 +35,8 @@ namespace QS3D.Core.SmokeTests
             var source = project.Elements[1];
             var replacement = CloneElement(source);
             project.Elements[1] = replacement;
-            if (project.ChangeVersion != version)
-                throw new InvalidOperationException("Equivalent Room finish element replacement unexpectedly touched ProjectState.ChangeVersion.");
+            if (project.ChangeVersion != version + 1)
+                throw new InvalidOperationException("Equivalent Room finish element replacement must advance ProjectState.ChangeVersion exactly once.");
             ThrowsInvalidOperation(() => InvokeGuard(project, snapshot), "Project changed while the room finish schedule was being built");
         }
 

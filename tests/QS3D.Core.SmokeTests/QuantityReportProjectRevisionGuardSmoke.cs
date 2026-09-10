@@ -39,7 +39,7 @@ namespace QS3D.Core.SmokeTests
             var snapshot = Snapshot(project);
             var originalVersion = project.ChangeVersion;
             project.Elements[0] = new ProjectElement("E1", ElementCategory.Beam, "family", "floor", "zone");
-            Equal(originalVersion, project.ChangeVersion);
+            Equal(checked(originalVersion + 1L), project.ChangeVersion);
 
             ThrowsInvalidOperation(() => InvokeGuard(project, snapshot), "Project changed while the quantity report was being built");
         }

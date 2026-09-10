@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Export;
@@ -89,7 +91,11 @@ namespace QS3D.Core.SmokeTests
         private static void ValidatorRejectsNullSemanticElementBeforeOrdering()
         {
             var project = BaseProject("P-NULL-ELEMENT");
-            project.Elements.Add(null!);
+            var itemsField = project.Elements.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed corrupt interchange semantic element state.");
+            var items = itemsField.GetValue(project.Elements) as List<ProjectElement>
+                ?? throw new InvalidOperationException("Unexpected ProjectState.Elements backing collection.");
+            items.Add(null!);
 
             Throws<InvalidOperationException>(() => ProjectInterchangeSemanticReferenceValidator.Validate(project));
         }
