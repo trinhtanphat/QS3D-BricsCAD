@@ -66,9 +66,12 @@ public sealed class Qs3dHeldFile : IDisposable
 public static class Qs3dNativeFile
 {
     private const uint GENERIC_READ = 0x80000000;
+    private const uint FILE_READ_ATTRIBUTES = 0x00000080;
     private const uint FILE_SHARE_READ = 0x00000001;
+    private const uint FILE_SHARE_WRITE = 0x00000002;
     private const uint OPEN_EXISTING = 3;
     private const uint FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000;
+    private const uint FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
     private const uint FILE_ATTRIBUTE_DIRECTORY = 0x00000010;
     private const uint FILE_ATTRIBUTE_REPARSE_POINT = 0x00000400;
 
@@ -152,6 +155,60 @@ public static class Qs3dNativeFile
             if (length >= (uint)resolved.Capacity)
             {
                 throw new PathTooLongException("Held updater installer resolved path exceeded the supported Win32 path buffer.");
+            }
+
+            Qs3dHeldFile held = new Qs3dHeldFile(handle, resolved.ToString());
+            handle = null;
+            return held;
+        }
+        finally
+        {
+            if (handle != null) handle.Dispose();
+        }
+    }
+
+    public static Qs3dHeldFile OpenOrdinaryDirectoryHeld(string path)
+    {
+        SafeFileHandle handle = CreateFileW(
+            path,
+            FILE_READ_ATTRIBUTES,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            IntPtr.Zero,
+            OPEN_EXISTING,
+            FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS,
+            IntPtr.Zero);
+        if (handle == null || handle.IsInvalid)
+        {
+            int error = Marshal.GetLastWin32Error();
+            if (handle != null) handle.Dispose();
+            throw new Win32Exception(error, "Could not atomically pin the updater extraction directory without following a reparse point.");
+        }
+
+        try
+        {
+            BY_HANDLE_FILE_INFORMATION information;
+            if (!GetFileInformationByHandle(handle, out information))
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not inspect the held updater extraction directory.");
+            }
+            if ((information.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
+            {
+                throw new IOException("Updater extraction boundary is not a directory.");
+            }
+            if ((information.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+            {
+                throw new IOException("Updater extraction boundary is a reparse point.");
+            }
+
+            StringBuilder resolved = new StringBuilder(32768);
+            uint length = GetFinalPathNameByHandleW(handle, resolved, (uint)resolved.Capacity, 0);
+            if (length == 0)
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not resolve the held updater extraction directory path.");
+            }
+            if (length >= (uint)resolved.Capacity)
+            {
+                throw new PathTooLongException("Held updater extraction directory resolved path exceeded the supported Win32 path buffer.");
             }
 
             Qs3dHeldFile held = new Qs3dHeldFile(handle, resolved.ToString());
@@ -571,6 +628,25 @@ function Convert-FromExtendedWin32Path {
     return $Path
 }
 
+function Open-HeldVerifiedDirectory {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $full = [IO.Path]::GetFullPath($Path).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $held = $null
+    try {
+        $held = [Qs3dNativeFile]::OpenOrdinaryDirectoryHeld($full)
+        $heldFinal = [IO.Path]::GetFullPath((Convert-FromExtendedWin32Path -Path $held.FinalPath)).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+        if (-not [string]::Equals($heldFinal, $full, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Updater extraction boundary resolved path '$heldFinal' does not match admitted path '$full'."
+        }
+        return $held
+    }
+    catch {
+        if ($held) { $held.Dispose() }
+        throw
+    }
+}
+
 function Open-HeldVerifiedInstaller {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -795,9 +871,15 @@ function Expand-VerifiedHeldArchive {
                     continue
                 }
 
-                $parent = [IO.Path]::GetDirectoryName([string]$record.Target)
-                Ensure-SafeExtractionDirectory -Path $parent -BoundaryRoot $destinationFull
-                Assert-ExistingExtractionPathChain -Path $parent -BoundaryRoot $destinationFull
+                $parts = @(([string]$record.Relative).Split('/'))
+                if ($parts.Count -gt 1) {
+                    $parent = [IO.Path]::GetDirectoryName([string]$record.Target)
+                    Ensure-SafeExtractionDirectory -Path $parent -BoundaryRoot $destinationFull
+                    Assert-ExistingExtractionPathChain -Path $parent -BoundaryRoot $destinationFull
+                }
+                else {
+                    $parent = $destinationFull
+                }
 
                 $entryStream = $record.Entry.Open()
                 $output = $null
@@ -892,12 +974,15 @@ try {
     $manifestPath = Join-Path $tempRoot 'manifest.json'
     $zipPath = Join-Path $tempRoot 'package.zip'
     $extractRoot = Join-Path $tempRoot 'package'
+    $heldTempRoot = $null
+    $heldExtractRoot = $null
     $heldInstaller = $null
     $installerStream = $null
     $installerReader = $null
 
     try {
         New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
+        $heldTempRoot = Open-HeldVerifiedDirectory -Path $tempRoot
         Invoke-BoundedHttpsDownload -Address $manifestAddress -DestinationPath $manifestPath -MaxBytes 65536 -TimeoutMilliseconds 30000 -Label 'Update manifest' | Out-Null
         $manifestFile = Get-Item -LiteralPath $manifestPath
         if ($manifestFile.Length -le 0 -or $manifestFile.Length -gt 65536) { throw 'Update manifest must be between 1 byte and 64 KiB.' }
@@ -959,6 +1044,7 @@ try {
             -MaxExpandedBytes $maxExpandedBytes `
             -MaxEntries $MaxArchiveEntries
 
+        $heldExtractRoot = Open-HeldVerifiedDirectory -Path $extractRoot
         $installer = Join-Path $extractRoot 'install-v25-autoload.ps1'
         $heldInstaller = Open-HeldVerifiedInstaller -Path $installer -ExtractionRoot $extractRoot -ExpectedSigner $expectedSigner
         $installerStream = [IO.FileStream]::new($heldInstaller.Handle, [IO.FileAccess]::Read)
@@ -1023,6 +1109,8 @@ try {
         if ($installerReader) { $installerReader.Dispose() }
         if ($installerStream) { $installerStream.Dispose() }
         if ($heldInstaller) { $heldInstaller.Dispose() }
+        if ($heldExtractRoot) { $heldExtractRoot.Dispose() }
+        if ($heldTempRoot) { $heldTempRoot.Dispose() }
         if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue }
     }
 }
