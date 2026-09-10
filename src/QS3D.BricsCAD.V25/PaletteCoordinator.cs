@@ -463,10 +463,16 @@ namespace QS3D.BricsCAD.V25
             var rightPalette = _right;
             var quantityPalette = _quantityInsight;
 
-            bool? workspaceWasVisible = workspacePalette?.Visible;
-            bool? propertiesWereVisible = propertiesPalette?.Visible;
-            bool? rightWasVisible = rightPalette?.Visible;
-            bool? quantityWasVisible = quantityPalette?.Visible;
+            var workspaceRead = TryReadPaletteVisibility(workspacePalette, out var workspaceWasVisible);
+            var propertiesRead = TryReadPaletteVisibility(propertiesPalette, out var propertiesWereVisible);
+            var rightRead = TryReadPaletteVisibility(rightPalette, out var rightWasVisible);
+            var quantityRead = TryReadPaletteVisibility(quantityPalette, out var quantityWasVisible);
+
+            // A rollback transaction is valid only when all four exact native owners supplied a
+            // trustworthy prior value. Fail before the first setter rather than inventing rollback
+            // state from a stale/disposed PaletteSet or restoring across an incoherent snapshot.
+            if (!workspaceRead || !propertiesRead || !rightRead || !quantityRead)
+                throw new InvalidOperationException("Palette visibility snapshot is unavailable for this transition.");
 
             try
             {
