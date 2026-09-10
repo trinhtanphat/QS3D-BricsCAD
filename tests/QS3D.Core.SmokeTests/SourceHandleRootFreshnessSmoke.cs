@@ -61,7 +61,6 @@ namespace QS3D.Core.SmokeTests
             var element = new ProjectElement("E-LATE", ElementCategory.ArchitecturalWall);
             element.SourceHandles.Add("DEF");
             project.Elements.Add(element);
-            project.Touch();
             yield return element.Id;
         }
 
