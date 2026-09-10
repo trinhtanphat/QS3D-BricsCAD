@@ -440,9 +440,9 @@ namespace QS3D.Core.Export
 
         private static void ValidateStandardRowText(QuantityReportRow row, int rowIndex)
         {
-            ValidateCellText(row.Floor, rowIndex, "Floor", "Quantity XLSX");
-            ValidateCellText(row.Zone, rowIndex, "Zone", "Quantity XLSX");
-            ValidateCellText(row.Category, rowIndex, "Category", "Quantity XLSX");
+            ValidateIdentityCellText(row.Floor, rowIndex, "Floor", "Quantity XLSX");
+            ValidateIdentityCellText(row.Zone, rowIndex, "Zone", "Quantity XLSX");
+            ValidateIdentityCellText(row.Category, rowIndex, "Category", "Quantity XLSX");
             ValidateCellText(row.FamilyName, rowIndex, "FamilyName", "Quantity XLSX");
             ValidateJoinedNonBlankCellText(row.ElementIds, rowIndex, "ElementIds", "Quantity XLSX");
             ValidateJoinedNonBlankCellText(row.SourceHandles, rowIndex, "SourceHandles", "Quantity XLSX");
@@ -555,14 +555,14 @@ namespace QS3D.Core.Export
         private static void ValidateEd2RowText(QuantityReportRow row, int rowIndex, string sheetLabel)
         {
             ValidateCellText(string.IsNullOrWhiteSpace(row.ElementName) ? row.FamilyName : row.ElementName, rowIndex, "DisplayName", sheetLabel);
-            ValidateCellText(row.Category, rowIndex, "Category", sheetLabel);
-            ValidateCellText(row.Material, rowIndex, "Material", sheetLabel);
-            ValidateCellText(row.FamilyId, rowIndex, "FamilyId", sheetLabel);
+            ValidateIdentityCellText(row.Category, rowIndex, "Category", sheetLabel);
+            ValidateIdentityCellText(row.Material, rowIndex, "Material", sheetLabel);
+            ValidateIdentityCellText(row.FamilyId, rowIndex, "FamilyId", sheetLabel);
             ValidateFloorZoneCellText(row, rowIndex, sheetLabel);
             ValidateCellText(row.Note, rowIndex, "Note", sheetLabel);
             ValidateJoinedNonBlankCellText(row.ElementIds, rowIndex, "ElementIds", sheetLabel);
             ValidateJoinedNonBlankCellText(row.SourceHandles, rowIndex, "SourceHandles", sheetLabel);
-            ValidateCellText(row.DrawingFingerprint, rowIndex, "DrawingFingerprint", sheetLabel);
+            ValidateIdentityCellText(row.DrawingFingerprint, rowIndex, "DrawingFingerprint", sheetLabel);
         }
 
         private static void ValidateEd2RowNumbers(QuantityReportRow row, int rowIndex, string sheetLabel)
@@ -599,16 +599,9 @@ namespace QS3D.Core.Export
         {
             var floor = row.Floor ?? string.Empty;
             var zone = row.Zone ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(floor))
-            {
-                ValidateCellText(zone, rowIndex, "FloorZone", sheetLabel);
-                return;
-            }
-            if (string.IsNullOrWhiteSpace(zone))
-            {
-                ValidateCellText(floor, rowIndex, "FloorZone", sheetLabel);
-                return;
-            }
+            ValidateIdentityCellText(floor, rowIndex, "Floor", sheetLabel);
+            ValidateIdentityCellText(zone, rowIndex, "Zone", sheetLabel);
+            if (string.IsNullOrWhiteSpace(floor) || string.IsNullOrWhiteSpace(zone)) return;
             if ((long)floor.Length + 3L + zone.Length > MaxCellTextCharacters)
                 ThrowCellTextLimit(rowIndex, "FloorZone", sheetLabel);
         }
@@ -617,6 +610,42 @@ namespace QS3D.Core.Export
         {
             if ((value ?? string.Empty).Length > MaxCellTextCharacters)
                 ThrowCellTextLimit(rowIndex, fieldName, sheetLabel);
+        }
+
+        private static void ValidateIdentityCellText(string? value, int rowIndex, string fieldName, string sheetLabel)
+        {
+            value = value ?? string.Empty;
+            ValidateIdentityText(value, rowIndex, fieldName, sheetLabel);
+            if (value.Length > MaxCellTextCharacters)
+                ThrowCellTextLimit(rowIndex, fieldName, sheetLabel);
+        }
+
+        private static void ValidateIdentityText(string value, int rowIndex, string fieldName, string sheetLabel)
+        {
+            for (var index = 0; index < value.Length; index++)
+            {
+                var current = value[index];
+                if (char.IsHighSurrogate(current))
+                {
+                    if (index + 1 >= value.Length || !char.IsLowSurrogate(value[index + 1]))
+                        throw IdentityTextError(rowIndex, fieldName, sheetLabel, "must contain well-formed UTF-16 identity text");
+                    index++;
+                    continue;
+                }
+                if (char.IsLowSurrogate(current))
+                    throw IdentityTextError(rowIndex, fieldName, sheetLabel, "must contain well-formed UTF-16 identity text");
+                if (current == '\t' || current == '\n' || current == '\r' ||
+                    (current >= '\u0020' && current <= '\uD7FF') ||
+                    (current >= '\uE000' && current <= '\uFFFD'))
+                    continue;
+                throw IdentityTextError(rowIndex, fieldName, sheetLabel, "contains a character not permitted by XML 1.0");
+            }
+        }
+
+        private static InvalidDataException IdentityTextError(int rowIndex, string fieldName, string sheetLabel, string requirement)
+        {
+            return new InvalidDataException(sheetLabel + " row " + (rowIndex + 2).ToString(CultureInfo.InvariantCulture) +
+                " field " + fieldName + " " + requirement + ".");
         }
 
         private static void ValidateJoinedNonBlankCellText(IList<string> values, int rowIndex, string fieldName, string sheetLabel)
