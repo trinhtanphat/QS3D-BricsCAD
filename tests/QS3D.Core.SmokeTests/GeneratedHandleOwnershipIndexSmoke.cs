@@ -78,7 +78,7 @@ namespace QS3D.Core.SmokeTests
         private static void NullElementFailsClosedAtBuild()
         {
             var project = NewProject();
-            project.Elements.Add(null!);
+            CorruptProjectStateSeed.AddNullElement(project);
             ExpectInvalid(() => GeneratedHandleOwnershipIndex.Build(project), "a null semantic element");
         }
 

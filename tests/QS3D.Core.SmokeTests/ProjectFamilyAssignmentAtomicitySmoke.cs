@@ -292,7 +292,7 @@ namespace QS3D.Core.SmokeTests
             var family = new ProjectFamily("F1", "Family", ElementCategory.ArchitecturalWall);
             family.Properties["WidthM"] = "0.2";
             project.Families.Add(family);
-            project.Elements.Add(null!);
+            CorruptProjectStateSeed.AddNullElement(project);
 
             Throws<InvalidOperationException>(() => ProjectFamilyService.SetProperty(project, family.Id, "WidthM", "0.3"));
             Equal("0.2", family.Properties["WidthM"], "Family property mutated before corrupt member list validation completed.");
