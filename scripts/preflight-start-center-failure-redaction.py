@@ -60,7 +60,7 @@ def main() -> int:
 
     # Preserve the native lifecycle safety contract while changing only diagnostics/affinity.
     require(coordinator, "var wasVisible = palette.Visible;", "visibility rollback snapshot")
-    require(coordinator, "var wasSubscribed = _documentActivatedSubscribed;", "subscription rollback snapshot")
+    require(coordinator, "var wasSubscribed = _documentActivatedMayBeSubscribed;", "subscription rollback snapshot")
     require(coordinator, "if (!wasVisible)", "visibility rollback gate")
     require(coordinator, "if (!wasSubscribed)\n                    UnsubscribeFromDocumentActivation();", "subscription rollback")
     require(coordinator, "Application.DocumentManager.DocumentActivated += OnDocumentActivated;", "activation subscribe")
