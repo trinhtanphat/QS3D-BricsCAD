@@ -23,6 +23,7 @@ namespace QS3D.Core.SmokeTests
                 ParityApplicability.NotApplicableByHostBoundary, ParityEvidenceStage.ReferenceCaptured));
 
             ClosureRules();
+            ParserRules();
         }
 
         private static ParityFeatureRecord Record(string id, ParityEvidenceStage stage) =>
@@ -55,6 +56,21 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("Qualified catalog did not close.");
         }
 
+        private static void ParserRules()
+        {
+            Throws<FormatException>(() => ParityManifestParser.Parse(new[] {
+                "FeatureId\tDomain\tReferencePath\tWorkflowKey\tApplicability\tEvidenceStage\tDecisionReference\tDecisionReason",
+                "bim.draw.rectangle\tBIM\treference\tbim.draw.rectangle\tApplicable\tReferenceCaptured\t\t"
+            }));
+
+            var parsed = ParityManifestParser.Parse(new[] {
+                "# catalog-complete=false",
+                "FeatureId\tDomain\tReferencePath\tWorkflowKey\tApplicability\tEvidenceStage\tDecisionReference\tDecisionReason",
+                "bim.draw.rectangle\tBIM\tBLT3D / BIM / Rectangle\tbim.draw.rectangle\tApplicable\tReferenceCaptured\t\t"
+            });
+            if (parsed.CatalogComplete || parsed.Records.Count != 1)
+                throw new InvalidOperationException("Deterministic parser lost manifest metadata or row count.");
+        }
         private static void Equal<T>(T expected, T actual)
         {
             if (!Equals(expected, actual)) throw new InvalidOperationException("Expected " + expected + " but got " + actual + ".");
