@@ -1249,3 +1249,75 @@ checks for the unexecuted physical cases. Any new licensed UI run requires an
 isolated interactive session agreed with the owner; opening hidden BricsCAD alone
 does not guarantee that license/startup dialogs cannot take foreground focus.
 PR #5738 and aggregate LOCAL-022 remain incomplete; MCP tests remain paused.
+# 2026-09-09 current-main reporting continuation
+
+This is the same #6189 / LOCAL-022 acceptance outcome, after merged PR #6195.
+The sole successor carrier is
+`agent/local022-snapshot-20260909-a7810f3c/issue-6189-bq-runtime`.
+Authenticated all-open metadata pre-acquisition scanned 69 entries with the
+canonical helper's unchanged identity/conflict checks: no earlier conflict.
+
+The next product source is merged main
+`af6c585190efb80581e286add7027540e7cc7c52`, including the persisted report-snapshot
+fix #6198 / PR #6224. It has aligned V25/V26/Core source versions
+`0.1.0-preview.10308`; the earlier b11 diagnostic source did not. V25 SDK build
+passed with zero warnings/errors and the unchanged repository packager produced
+unsigned local ZIP SHA-256
+`039c0db69bf735ff3811cfbfb8dddfcc67deaaf87fa4c8bf8d29c189bc206b21`.
+This is a local candidate, not the official release of that version, and not a
+licensed PASS. Installed release payload remains untouched.
+
+Actual same-source V26 SDK build failed `CA2255` at
+`UiInfoTooltipBootstrap.cs:42` in the generated WPF project. The wrapper refuses
+V26 before any allocation/preference mutation until an exact matching package
+and cleaned V25 quantity predecessor exist. It cannot substitute the older V26
+archive. V25 reporting execution may proceed first; its strict 38/3-per-footing,
+76/3-total, actual recalculate/detail/Locate and fresh-process checks are unchanged.
+Consumed allocations 65/66 remain terminal. Full licensed acceptance is pending.
+
+## Actual licensed V25 allocation67 — LOCAL_PASS_BOUNDED
+
+- Exact product source: `af6c585190efb80581e286add7027540e7cc7c52`.
+- Exact pushed harness: `5c6c52f0bdfca6769c16441ad07f9355a749a4ac`.
+- Run ID: `75b4a5ac74a246409a3a3b56bfc46cb8`; V25.2.10 x64.
+- Started `2026-09-09T06:47:00.9903320Z`; ended
+  `2026-09-09T06:52:08.5545219Z` (about five minutes including physical input).
+- Package SHA-256: `039c0db69bf735ff3811cfbfb8dddfcc67deaaf87fa4c8bf8d29c189bc206b21`.
+- Adapter SHA-256: `48f8ceb4c0456451b34c0b798f0ac255d0a9dd944711fc6751235e7f9c440c93`.
+- Core SHA-256: `90e9d9dfc1a2fc80d64400401fdcbf454cecd2d53d71cac96b73a5391411f383`.
+- Probe SHA-256: `d51b338ec8e0d59943ab9f0c1e586e5a4e67b490d39609f7498811a4dca40eb2`.
+- Runner SHA-256: `d3dbb7d1e476757a52b038146a2cb99b89cebb5c0e7944dd03bff9fa7d9f9354`.
+
+The native `run` 15/15, `saved` 8/8 and fresh-process `reopen` 9/9 checks
+passed, including exact loaded product path, semantic/native cardinality,
+replacement ownership, mass/volume/extents, rectangular sections and BREP
+topology. Actual production BQ was visibly rendered in both processes. Its
+grouped summary had one row/count two and gross/net `25.333` m3 displayed;
+the observed underlying value was `25.333333333333336` m3, deduction zero.
+Physical **Tinh lai** produced fresh rows; **Dien giai chi tiet** showed two
+count-one rows displaying `12.667` m3 each; **Khoi luong** restored the grouped
+row. Actual row selection and **Dinh vi** selected exactly the two expected CAD
+source footprints. Closing BQ completed all nine warm reporting assertions.
+
+After the first host exited, a different fresh BricsCAD process reopened the
+saved fixture. All native persistence assertions passed, and the real BQ
+window again showed the same one-row/count-two `25.333` m3 summary without the
+old pre-window exception. Closing it passed all seven cold reporting assertions.
+The observer verified reporting did not mutate the semantic model or saved
+fixture. One native save-on-exit prompt after the warm Locate view was dismissed
+without saving, preserving the already checked fixture for cold reopen.
+
+Runner exit code was zero; three native and two quantity phases were verified.
+Private fixture cleanup, protected machine state, exact profile inventory and
+current-profile restoration, nonce removal and original autostart byte/hash/time
+restoration all passed. An independent final inspection found zero BricsCAD
+processes and unchanged installed official-release adapter/Core hashes.
+
+This closes the bounded **V25 footing BQ warm/cold** gap on this exact candidate.
+It does not promote allocation66 or the older release, qualify V26, arbitrary
+solids/private drawings, formwork/Excel/BBS, full Unicode/DPI, all reporting,
+published-release acceptance or MCP. `aggregate_local022_qualified=false`;
+the existing V25/V26 authoring and older native cells retain their own scope.
+MCP/tunnel tests remain paused. V26 is still blocked before execution by the
+actual current-source CA2255 build error. The dedicated open source handoff is
+#6279; original tooltip issue #6154 is already closed/merged.
