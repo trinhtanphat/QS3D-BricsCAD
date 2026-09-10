@@ -2,6 +2,7 @@
 from pathlib import Path
 import sys
 
+# Reservation-v2 canonical carrier: issue-6321. This remains a RED-first source guard.
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.BricsCAD.V25/DirectDrawRepeatedCommands.cs"
 errors = []
