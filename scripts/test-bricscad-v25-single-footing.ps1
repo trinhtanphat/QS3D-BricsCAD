@@ -52,6 +52,10 @@ $operatorWaitPolicy = Get-Local022OperatorWaitPolicy $PauseForOperator $Interact
 . (Join-Path $PSScriptRoot 'local022-ui-input.ps1')
 
 $candidates = @{
+    'af6c585190efb80581e286add7027540e7cc7c52' = @{
+        PackageSha256 = '039c0db69bf735ff3811cfbfb8dddfcc67deaaf87fa4c8bf8d29c189bc206b21'
+        ProductVersion = '0.1.0-preview.10308'; Kind = 'LOCAL_PR_CANDIDATE'
+    }
     'e768d19f967e010d0343f446b98b561dce7c24bb' = @{
         PackageSha256 = '15b86bcdacdd614fb785143f49e4d51e90bc380c2b216c583acebcc35abccdaa'
         ProductVersion = '0.1.0-preview.10307'; Kind = 'LOCAL_PR_CANDIDATE'

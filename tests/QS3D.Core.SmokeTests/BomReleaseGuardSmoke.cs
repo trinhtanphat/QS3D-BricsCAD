@@ -242,7 +242,7 @@ namespace QS3D.Core.SmokeTests
         private static void NullSemanticEntryBlocksReleaseWithoutCrashing()
         {
             var project = new ProjectState("bom-null", "BOM null guard");
-            project.Elements.Add(null!);
+            CorruptProjectStateSeed.AddNullElement(project);
             var issues = BomReleaseGuardService.Inspect(project);
             Has(issues, "BOM_NULL_ELEMENT");
             Has(issues, "BOM_ROOM_FINISH_HEALTH_FAILED");

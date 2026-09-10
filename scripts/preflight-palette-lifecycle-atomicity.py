@@ -148,11 +148,16 @@ else:
     for token in (
         "PersistPaletteLayout();",
         "ResetPreservingVisibility();",
-        "var workspaceVisible = IsWorkspaceVisible;",
-        "var propertiesVisible = IsPropertiesVisible;",
-        "var rightVisible = IsRightPanelVisible;",
-        "var quantityVisible = IsQuantityInsightVisible;",
-        "var ownerReferenceBimActive = workspaceVisible && rightVisible && !propertiesVisible && !quantityVisible;",
+        "var workspacePalette = _workspace;",
+        "var propertiesPalette = _properties;",
+        "var rightPalette = _right;",
+        "var quantityPalette = _quantityInsight;",
+        "var workspaceRead = TryReadPaletteVisibility(workspacePalette, out var workspaceVisible);",
+        "var propertiesRead = TryReadPaletteVisibility(propertiesPalette, out var propertiesVisible);",
+        "var rightRead = TryReadPaletteVisibility(rightPalette, out var rightVisible);",
+        "var quantityRead = TryReadPaletteVisibility(quantityPalette, out var quantityVisible);",
+        "workspaceRead && propertiesRead && rightRead && quantityRead &&",
+        "workspaceVisible && rightVisible && !propertiesVisible && !quantityVisible;",
         "_workspacePanel?.SetDedicatedPropertiesPaletteActive(propertiesVisible);",
         "SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);",
         "private static void SetVisibility(bool workspace, bool properties, bool right, bool quantityInsight)",
@@ -176,4 +181,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: four native palettes remain locally owned and rollback-disposable through configuration/AddVisual, publish only after success, and retain sibling teardown/layout plus transactional visibility contracts.")
+print("PASS: four native palettes remain locally owned and rollback-disposable through configuration/AddVisual, publish only after success, and retain sibling teardown/layout plus transactional visibility contracts with exact-instance contained reset reads.")
