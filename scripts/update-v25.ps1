@@ -149,7 +149,7 @@ public static class Qs3dNativeFile
             {
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not resolve the held updater installer path.");
             }
-            if (length >= resolved.Capacity)
+            if (length >= (uint)resolved.Capacity)
             {
                 throw new PathTooLongException("Held updater installer resolved path exceeded the supported Win32 path buffer.");
             }
