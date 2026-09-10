@@ -37,7 +37,7 @@ def main() -> int:
         "will not reassign or duplicate-dispatch that ordinal",
         'reservation="${reservation_prefix} ordinal=${committed_preview_ordinal} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"',
         'reservation_rows="$(' ,
-        'gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments?per_page=100"',
+        'gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments"',
         'reservation_query_status=$?',
         'if (( reservation_query_status != 0 )); then',
         'done <<< "${reservation_rows}"',
