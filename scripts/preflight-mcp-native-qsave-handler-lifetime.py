@@ -73,4 +73,15 @@ else:
     if "catch\n                {\n                    if (!DetachInCadContext())" not in attach:
         raise SystemExit("ERROR: partial subscription failure must rollback and fail closed when detach cannot be proven")
 
-    print("PASS: MCP native QSAVE handler lifetime is per-subscription, rollback-safe, and fail-closed")
+    retained_required = [
+        "private static readonly List<NativeSaveOperation> RetainedCleanup",
+        "EnsureRetainedCleanupResolved(audit);",
+        "RetainForCleanup(operation);",
+        "internal bool HasAttachedHandlers",
+        "Previous native QSAVE terminal handler cleanup remains unresolved; new save was not queued.",
+    ]
+    for token in retained_required:
+        if token not in text:
+            raise SystemExit(f"ERROR: native QSAVE must retain unresolved handler cleanup ownership without replay: {token}")
+
+    print("PASS: MCP native QSAVE handler lifetime is per-subscription, rollback-safe, retained for cleanup when unresolved, and fail-closed")

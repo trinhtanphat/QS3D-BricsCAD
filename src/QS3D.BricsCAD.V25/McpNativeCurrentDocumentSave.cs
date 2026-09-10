@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Threading;
@@ -20,6 +21,8 @@ namespace QS3D.BricsCAD.V25
         private const int CommandCompletionTimeoutMilliseconds = 30000;
         private const int DbmodSettleTimeoutMilliseconds = 3000;
         private const int PollMilliseconds = 25;
+        private static readonly object RetainedCleanupGate = new object();
+        private static readonly List<NativeSaveOperation> RetainedCleanup = new List<NativeSaveOperation>();
 
         internal sealed class SaveResult
         {
@@ -37,6 +40,7 @@ namespace QS3D.BricsCAD.V25
         {
             if (ensureRunning == null) throw new ArgumentNullException(nameof(ensureRunning));
             ensureRunning();
+            EnsureRetainedCleanupResolved(audit);
 
             var operation = new NativeSaveOperation(audit);
             var detached = false;
@@ -79,6 +83,37 @@ namespace QS3D.BricsCAD.V25
                     detached = operation.DetachBestEffort();
                 if (detached)
                     operation.Done.Dispose();
+                else if (operation.HasAttachedHandlers)
+                    RetainForCleanup(operation);
+            }
+        }
+
+        private static void EnsureRetainedCleanupResolved(Action<string>? audit)
+        {
+            lock (RetainedCleanupGate)
+            {
+                for (var index = RetainedCleanup.Count - 1; index >= 0; index--)
+                {
+                    var retained = RetainedCleanup[index];
+                    if (!retained.DetachBestEffort()) continue;
+                    RetainedCleanup.RemoveAt(index);
+                    retained.Done.Dispose();
+                    try { audit?.Invoke("native QSAVE retained handler cleanup resolved"); }
+                    catch { }
+                }
+
+                if (RetainedCleanup.Count != 0)
+                    throw new InvalidOperationException(
+                        "Previous native QSAVE terminal handler cleanup remains unresolved; new save was not queued. Do not retry automatically until handler cleanup can be proven.");
+            }
+        }
+
+        private static void RetainForCleanup(NativeSaveOperation operation)
+        {
+            lock (RetainedCleanupGate)
+            {
+                if (!RetainedCleanup.Contains(operation))
+                    RetainedCleanup.Add(operation);
             }
         }
 
@@ -162,6 +197,7 @@ namespace QS3D.BricsCAD.V25
             internal Document? Document { get; private set; }
             internal string FullPath { get; private set; } = string.Empty;
             internal string TerminalError { get; private set; } = string.Empty;
+            internal bool HasAttachedHandlers => _commandEndedAttached || _commandCancelledAttached || _commandFailedAttached;
 
             internal void QueueInCadContext()
             {
