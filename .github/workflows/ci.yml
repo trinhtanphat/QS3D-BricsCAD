@@ -26,27 +26,24 @@ permissions:
   actions: read
   pull-requests: read
   issues: read
-  statuses: write
 
 concurrency:
-  # Keep push, PR code, and PR metadata validation in separate cancellation domains. GitHub
-  # materializes cancelled jobs as check-runs on the candidate SHA, so cross-event cancellation
-  # can block protected-branch required contexts even when the surviving run is GREEN.
-  # Repository identity isolates forks with equal branch names; same-event superseded work still
-  # cancels normally within its own class.
-  group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata' || github.event_name == 'pull_request' && 'pull_request' || github.event_name == 'push' && 'push' || 'dispatch' }}-${{ github.run_attempt > 1 && github.run_id || 0 }}
+  # Serialize every PR action for one repository/head branch in the same cancellation domain.
+  # PR jobs themselves own the stable protected-branch `preflight` / `core` check-run names;
+  # no mutable commit-status mirror can preserve or overwrite stale success on a same-SHA edit.
+  # Push and manual-dispatch work remain isolated from PR cancellation domains.
+  group: qs3d-shared-ci-${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.event.pull_request.head.ref || github.ref_name }}-${{ github.event_name == 'pull_request' && 'pull_request' || github.event_name == 'push' && 'push' || 'dispatch' }}
   cancel-in-progress: true
 
 jobs:
   preflight:
-    name: ${{ github.event_name == 'push' && 'branch-preflight' || github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata-preflight' || github.event_name == 'pull_request' && 'preflight' || 'dispatch-preflight' }}
+    name: ${{ github.event_name == 'push' && 'branch-preflight' || github.event_name == 'pull_request' && 'preflight' || 'dispatch-preflight' }}
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request' }}
     runs-on: windows-latest
     timeout-minutes: 30
     outputs:
       source_validation: ${{ steps.scope.outputs.source_validation }}
       build_validation: ${{ steps.scope.outputs.build_validation }}
-      reuse_exact_head_green: ${{ steps.edited_evidence.outputs.reuse_exact_head_green }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -68,15 +65,13 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
-      - name: Check prior exact-head GREEN for PR metadata edit
-        id: edited_evidence
+      - name: Validate PR metadata-edit identities
         if: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' }}
         env:
           QS3D_EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           QS3D_EXPECTED_PR_NUMBER: ${{ github.event.pull_request.number }}
           QS3D_EXPECTED_BASE_REF: ${{ github.event.pull_request.base.ref }}
           QS3D_EXPECTED_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          GITHUB_TOKEN: ${{ github.token }}
         run: python scripts/preflight-ci-edited-evidence.py --verify-runtime
       - name: CI trigger and publishing policy gate
         run: python scripts/preflight-ci-manual-only.py
@@ -88,23 +83,15 @@ jobs:
         run: python scripts/check-actions-pinned.py
       - name: Classify validation scope
         id: scope
-        env:
-          QS3D_PR_ACTION: ${{ github.event.action }}
-          QS3D_REUSE_EXACT_HEAD_GREEN: ${{ steps.edited_evidence.outputs.reuse_exact_head_green }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $classificationExitCode = 0
           # scripts/ci-validation-scope.py owns the exact path classes: src/, tests/, scripts/,
           # samples/generated/, .github/workflows/, build roots, and watched policy Markdown.
-          # An edited PR may reuse source/build evidence only after the preceding step proves a
-          # successful Shared CI run for this exact SHA. Missing/uncertain evidence falls through
-          # to ordinary path classification and therefore full validation where required.
-          if ($env:GITHUB_EVENT_NAME -eq 'pull_request' -and $env:QS3D_PR_ACTION -eq 'edited' -and $env:QS3D_REUSE_EXACT_HEAD_GREEN -eq 'true') {
-            "source_validation=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-            "build_validation=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          }
-          elseif ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
+          # PR metadata edits never reuse historical workflow evidence. They are classified from
+          # the current exact candidate and current comparison base like every other PR event.
+          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
             & python scripts/ci-validation-scope.py --all --github-output $env:GITHUB_OUTPUT
             $classificationExitCode = $LASTEXITCODE
           }
@@ -176,37 +163,10 @@ jobs:
       - name: Source-validation terminal marker
         if: ${{ !cancelled() && steps.scope.outputs.source_validation == 'true' }}
         run: echo "Independent source-validation safety gates completed."
-      - name: Mirror preflight result into required commit status
-        if: ${{ always() && github.event_name == 'pull_request' && github.event.action != 'edited' && github.event.pull_request.head.repo.full_name == github.repository }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          QS3D_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          QS3D_JOB_STATUS: ${{ job.status }}
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $state = if ($env:QS3D_JOB_STATUS -eq 'success') { 'success' } else { 'failure' }
-          $description = if ($state -eq 'success') { 'Shared CI preflight succeeded' } else { "Shared CI preflight ended $($env:QS3D_JOB_STATUS)" }
-          $payload = @{
-            state = $state
-            context = 'preflight'
-            description = $description
-            target_url = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
-          } | ConvertTo-Json -Compress
-          Invoke-RestMethod `
-            -Method Post `
-            -Uri "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/statuses/$env:QS3D_HEAD_SHA" `
-            -Headers @{
-              Authorization = "Bearer $env:GITHUB_TOKEN"
-              Accept = 'application/vnd.github+json'
-              'X-GitHub-Api-Version' = '2022-11-28'
-            } `
-            -ContentType 'application/json' `
-            -Body $payload | Out-Null
 
   core:
-    name: ${{ github.event_name == 'push' && 'branch-core' || github.event_name == 'pull_request' && github.event.action == 'edited' && 'metadata-core' || github.event_name == 'pull_request' && 'core' || 'dispatch-core' }}
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request' }}
+    name: ${{ github.event_name == 'push' && 'branch-core' || github.event_name == 'pull_request' && 'core' || 'dispatch-core' }}
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request') }}
     needs: preflight
     runs-on: windows-latest
     timeout-minutes: 60
@@ -216,6 +176,10 @@ jobs:
       BRICSCAD_V25_PINNED_MSI_SHA256: F44DF674C0E165D96BF579E243B20A8301E3F395F929779F47BF39A7D9DACDE1
       BRICSCAD_V25_MSI_URL: ${{ secrets.BRICSCAD_V25_MSI_URL }}
     steps:
+      - name: Require successful preflight admission
+        if: ${{ needs.preflight.result != 'success' }}
+        shell: pwsh
+        run: throw "Preflight admission did not succeed (result=${{ needs.preflight.result }}); core fails closed so the stable required check cannot retain stale success."
       - name: Lightweight non-build candidate
         if: ${{ needs.preflight.outputs.build_validation != 'true' }}
         shell: pwsh
@@ -310,30 +274,3 @@ jobs:
             -SnapshotDir (Join-Path $env:RUNNER_TEMP 'qs3d-v25-local-qualification-reference-snapshot') `
             -Configuration Release `
             -Platform x64
-      - name: Mirror core result into required commit status
-        if: ${{ always() && github.event_name == 'pull_request' && github.event.action != 'edited' && github.event.pull_request.head.repo.full_name == github.repository }}
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          QS3D_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          QS3D_JOB_STATUS: ${{ job.status }}
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $state = if ($env:QS3D_JOB_STATUS -eq 'success') { 'success' } else { 'failure' }
-          $description = if ($state -eq 'success') { 'Shared CI core succeeded' } else { "Shared CI core ended $($env:QS3D_JOB_STATUS)" }
-          $payload = @{
-            state = $state
-            context = 'core'
-            description = $description
-            target_url = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
-          } | ConvertTo-Json -Compress
-          Invoke-RestMethod `
-            -Method Post `
-            -Uri "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/statuses/$env:QS3D_HEAD_SHA" `
-            -Headers @{
-              Authorization = "Bearer $env:GITHUB_TOKEN"
-              Accept = 'application/vnd.github+json'
-              'X-GitHub-Api-Version' = '2022-11-28'
-            } `
-            -ContentType 'application/json' `
-            -Body $payload | Out-Null
