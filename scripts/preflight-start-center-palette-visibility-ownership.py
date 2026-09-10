@@ -20,7 +20,7 @@ else:
     refresh_token = "panel.RefreshFromDocument(Application.DocumentManager.MdiActiveDocument);"
     required = (
         "var wasVisible = palette.Visible;",
-        "var wasSubscribed = _documentActivatedSubscribed;",
+        "var wasSubscribed = _documentActivatedMayBeSubscribed;",
         "SubscribeToDocumentActivation();",
         "palette.Visible = true;",
         refresh_token,
@@ -77,7 +77,7 @@ else:
     if "Application.DocumentManager.DocumentActivated -= OnDocumentActivated;" not in body:
         errors.append("DocumentActivated detach is missing")
     detach = body.find("Application.DocumentManager.DocumentActivated -= OnDocumentActivated;")
-    clear = body.find("_documentActivatedSubscribed = false;")
+    clear = body.find("_documentActivatedMayBeSubscribed = false;")
     if clear < 0 or (detach >= 0 and clear < detach):
         errors.append("subscription ownership flag must clear only after native detach succeeds")
     if "catch" not in body:
