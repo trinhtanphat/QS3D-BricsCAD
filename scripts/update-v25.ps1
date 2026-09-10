@@ -871,15 +871,9 @@ function Expand-VerifiedHeldArchive {
                     continue
                 }
 
-                $parts = @(([string]$record.Relative).Split('/'))
-                if ($parts.Count -gt 1) {
-                    $parent = [IO.Path]::GetDirectoryName([string]$record.Target)
-                    Ensure-SafeExtractionDirectory -Path $parent -BoundaryRoot $destinationFull
-                    Assert-ExistingExtractionPathChain -Path $parent -BoundaryRoot $destinationFull
-                }
-                else {
-                    $parent = $destinationFull
-                }
+                $parent = [IO.Path]::GetDirectoryName([string]$record.Target)
+                Ensure-SafeExtractionDirectory -Path $parent -BoundaryRoot $destinationFull
+                Assert-ExistingExtractionPathChain -Path $parent -BoundaryRoot $destinationFull
 
                 $entryStream = $record.Entry.Open()
                 $output = $null
