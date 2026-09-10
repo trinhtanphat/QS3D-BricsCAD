@@ -37,7 +37,8 @@ def main() -> int:
         "static notification text": 'childClass.IndexOf("Static", StringComparison.OrdinalIgnoreCase)',
         "button captions": 'childClass.IndexOf("Button", StringComparison.OrdinalIgnoreCase)',
         "editable controls excluded": 'childClass.IndexOf("Edit", StringComparison.OrdinalIgnoreCase)',
-        "bounded popup event": 'McpDiagnosticHub.Record("bricscad", "warning", "popup-notification"',
+        "bounded popup event": 'McpDiagnosticHub.Record("bricscad", ClassifySeverity(title, message), "popup-notification"',
+        "severity classifier": "private static string ClassifySeverity(string title, string message)",
         "dedupe": "ShouldRecord(hwnd, signature)",
         "hook cleanup": "UnhookWinEvent",
     }
