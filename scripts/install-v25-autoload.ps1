@@ -632,59 +632,60 @@ try {
     $admittedNames = [string[]]@($packageAdmission.Hashes.Keys)
     [Array]::Sort($admittedNames, [StringComparer]::Ordinal)
 
+    $transactionAction = "Install QS3D V25 payload and register DemandLoad ($LoadMode) for $($targets.Count) target(s)"
+    if (-not ($PSCmdlet.ShouldProcess($installFull, $transactionAction))) {
+        return
+    }
+
     try {
-        if ($PSCmdlet.ShouldProcess($installFull, 'Install QS3D V25 payload')) {
-            New-Item -ItemType Directory -Path $parent -Force | Out-Null
-            New-Item -ItemType Directory -Path $stage -Force | Out-Null
-            $stageRoot = [IO.Path]::GetFullPath($stage).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
-            foreach ($relative in $admittedNames) {
-                $source = Join-Path $package ($relative.Replace('/', [IO.Path]::DirectorySeparatorChar))
-                if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing installer payload: $relative" }
-                $destination = Join-Path $stage ($relative.Replace('/', [IO.Path]::DirectorySeparatorChar))
-                $destinationFull = [IO.Path]::GetFullPath($destination)
-                if (-not $destinationFull.StartsWith($stageRoot, [StringComparison]::OrdinalIgnoreCase)) { throw "Unsafe staged payload destination: $relative" }
-                $destinationParent = Split-Path -Parent $destinationFull
-                if (-not (Test-Path -LiteralPath $destinationParent -PathType Container)) {
-                    New-Item -ItemType Directory -Path $destinationParent -Force | Out-Null
-                }
-                Copy-Item -LiteralPath $source -Destination $destination -Force
-                Unblock-File -LiteralPath $destination -ErrorAction Stop
-                Assert-NoZoneIdentifier -Path $destination
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+        New-Item -ItemType Directory -Path $stage -Force | Out-Null
+        $stageRoot = [IO.Path]::GetFullPath($stage).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+        foreach ($relative in $admittedNames) {
+            $source = Join-Path $package ($relative.Replace('/', [IO.Path]::DirectorySeparatorChar))
+            if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing installer payload: $relative" }
+            $destination = Join-Path $stage ($relative.Replace('/', [IO.Path]::DirectorySeparatorChar))
+            $destinationFull = [IO.Path]::GetFullPath($destination)
+            if (-not $destinationFull.StartsWith($stageRoot, [StringComparison]::OrdinalIgnoreCase)) { throw "Unsafe staged payload destination: $relative" }
+            $destinationParent = Split-Path -Parent $destinationFull
+            if (-not (Test-Path -LiteralPath $destinationParent -PathType Container)) {
+                New-Item -ItemType Directory -Path $destinationParent -Force | Out-Null
             }
-
-            Assert-StagedPayloadAdmission -Directory $stage -AdmittedHashes $packageAdmission.Hashes -AdmittedCommands $commands -SignedRequired:$RequireSigned -SignerThumbprint $ExpectedSignerThumbprint
-            Assert-UnblockedAdmittedPayload -Directory $stage -AdmittedHashes $packageAdmission.Hashes
-
-            if (Test-Path -LiteralPath $installFull) {
-                if (-not $Force) { throw "Install directory already exists: $installFull" }
-                Assert-ExistingInstallDirectorySafeToReplace -Directory $installFull
-                $backup = $installFull + '.backup-' + [Guid]::NewGuid().ToString('N')
-                Move-Item -LiteralPath $installFull -Destination $backup
-            }
-            Assert-StagedPayloadAdmission -Directory $stage -AdmittedHashes $packageAdmission.Hashes -AdmittedCommands $commands -SignedRequired:$RequireSigned -SignerThumbprint $ExpectedSignerThumbprint
-            Assert-UnblockedAdmittedPayload -Directory $stage -AdmittedHashes $packageAdmission.Hashes
-            Move-Item -LiteralPath $stage -Destination $installFull
-            $payloadCommitted = $true
-            Assert-StagedPayloadAdmission -Directory $installFull -AdmittedHashes $packageAdmission.Hashes -AdmittedCommands $commands -SignedRequired:$RequireSigned -SignerThumbprint $ExpectedSignerThumbprint
-            Assert-UnblockedAdmittedPayload -Directory $installFull -AdmittedHashes $packageAdmission.Hashes
+            Copy-Item -LiteralPath $source -Destination $destination -Force
+            Unblock-File -LiteralPath $destination -ErrorAction Stop
+            Assert-NoZoneIdentifier -Path $destination
         }
+
+        Assert-StagedPayloadAdmission -Directory $stage -AdmittedHashes $packageAdmission.Hashes -AdmittedCommands $commands -SignedRequired:$RequireSigned -SignerThumbprint $ExpectedSignerThumbprint
+        Assert-UnblockedAdmittedPayload -Directory $stage -AdmittedHashes $packageAdmission.Hashes
+
+        if (Test-Path -LiteralPath $installFull) {
+            if (-not $Force) { throw "Install directory already exists: $installFull" }
+            Assert-ExistingInstallDirectorySafeToReplace -Directory $installFull
+            $backup = $installFull + '.backup-' + [Guid]::NewGuid().ToString('N')
+            Move-Item -LiteralPath $installFull -Destination $backup
+        }
+        Assert-StagedPayloadAdmission -Directory $stage -AdmittedHashes $packageAdmission.Hashes -AdmittedCommands $commands -SignedRequired:$RequireSigned -SignerThumbprint $ExpectedSignerThumbprint
+        Assert-UnblockedAdmittedPayload -Directory $stage -AdmittedHashes $packageAdmission.Hashes
+        Move-Item -LiteralPath $stage -Destination $installFull
+        $payloadCommitted = $true
+        Assert-StagedPayloadAdmission -Directory $installFull -AdmittedHashes $packageAdmission.Hashes -AdmittedCommands $commands -SignedRequired:$RequireSigned -SignerThumbprint $ExpectedSignerThumbprint
+        Assert-UnblockedAdmittedPayload -Directory $installFull -AdmittedHashes $packageAdmission.Hashes
 
         $loader = Join-Path $installFull 'QS3D.BricsCAD.V25.dll'
         $loadCtrls = if ($LoadMode -eq 'OnStartup') { 2 } else { 4 }
         foreach ($target in $targets) {
-            if ($PSCmdlet.ShouldProcess("$($target.Version)/$($target.Language)", "Register QS3D DemandLoad ($LoadMode)")) {
-                New-Item -Path $target.AppKey -Force | Out-Null
-                New-ItemProperty -Path $target.AppKey -Name 'Loader' -Value $loader -PropertyType String -Force | Out-Null
-                New-ItemProperty -Path $target.AppKey -Name 'LoadCtrls' -Value $loadCtrls -PropertyType DWord -Force | Out-Null
-                New-ItemProperty -Path $target.AppKey -Name 'Description' -Value 'QS3D for BricsCAD V25' -PropertyType String -Force | Out-Null
-                $commandsKey = Join-Path $target.AppKey 'Commands'
-                Remove-Item -LiteralPath $commandsKey -Recurse -Force -ErrorAction SilentlyContinue
-                New-Item -Path $commandsKey -Force | Out-Null
-                foreach ($command in $commands) {
-                    New-ItemProperty -Path $commandsKey -Name $command -Value $command -PropertyType String -Force | Out-Null
-                }
-                Assert-DemandLoadRegistration -Target $target -ExpectedLoader $loader -ExpectedLoadCtrls $loadCtrls -ExpectedCommands $commands
+            New-Item -Path $target.AppKey -Force | Out-Null
+            New-ItemProperty -Path $target.AppKey -Name 'Loader' -Value $loader -PropertyType String -Force | Out-Null
+            New-ItemProperty -Path $target.AppKey -Name 'LoadCtrls' -Value $loadCtrls -PropertyType DWord -Force | Out-Null
+            New-ItemProperty -Path $target.AppKey -Name 'Description' -Value 'QS3D for BricsCAD V25' -PropertyType String -Force | Out-Null
+            $commandsKey = Join-Path $target.AppKey 'Commands'
+            Remove-Item -LiteralPath $commandsKey -Recurse -Force -ErrorAction SilentlyContinue
+            New-Item -Path $commandsKey -Force | Out-Null
+            foreach ($command in $commands) {
+                New-ItemProperty -Path $commandsKey -Name $command -Value $command -PropertyType String -Force | Out-Null
             }
+            Assert-DemandLoadRegistration -Target $target -ExpectedLoader $loader -ExpectedLoadCtrls $loadCtrls -ExpectedCommands $commands
         }
 
         if ($backup -and (Test-Path -LiteralPath $backup)) { Remove-Item -LiteralPath $backup -Recurse -Force }
