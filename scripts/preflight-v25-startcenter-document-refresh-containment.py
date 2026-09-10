@@ -13,7 +13,13 @@ else:
     source = SOURCE.read_text(encoding="utf-8")
 
 refresh_start = source.find("private void RefreshHomeShell(bool recordActiveDrawing)")
-refresh_end = source.find("private void RefreshRecentProjects()", refresh_start if refresh_start >= 0 else 0)
+helper_start = source.find(
+    "private static bool TryReadDocumentPath(Bricscad.ApplicationServices.Document document, out string path)",
+    refresh_start if refresh_start >= 0 else 0,
+)
+refresh_end = helper_start if helper_start >= 0 else source.find(
+    "private void RefreshRecentProjects()", refresh_start if refresh_start >= 0 else 0
+)
 refresh = source[refresh_start:refresh_end if refresh_end >= 0 else len(source)] if refresh_start >= 0 else ""
 if refresh_start < 0:
     errors.append("missing RefreshHomeShell")
@@ -46,7 +52,6 @@ else:
     if "document.Name" in refresh:
         errors.append("RefreshHomeShell must not dereference native Document.Name outside containment")
 
-helper_start = source.find("private static bool TryReadDocumentPath(Bricscad.ApplicationServices.Document document, out string path)")
 helper_end = source.find("private void RefreshRecentProjects()", helper_start if helper_start >= 0 else 0)
 helper = source[helper_start:helper_end if helper_end >= 0 else len(source)] if helper_start >= 0 else ""
 if helper_start < 0:
