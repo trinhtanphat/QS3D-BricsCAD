@@ -95,6 +95,25 @@ if QUANTITY_DICTIONARY.is_file():
         if token not in text:
             errors.append("ProjectElement quantity facade lost canonical read identity contract: " + token)
 
+    pair_remove = re.search(
+        r"public bool Remove\(KeyValuePair<string, double> item\)(?P<body>.*?)\n        public bool TryGetValue",
+        text,
+        re.DOTALL,
+    )
+    if not pair_remove:
+        errors.append("missing ProjectElement quantity pair-removal body")
+    else:
+        body = pair_remove.group("body")
+        for token in (
+            "if (!_values.TryGetValue(candidate, out var existing))",
+            "if (!existing.Equals(item.Value)) return false;",
+            "return _owner.RemoveQuantity(key);",
+        ):
+            if token not in body:
+                errors.append("ProjectElement quantity pair removal lost persisted-corruption cleanup contract: " + token)
+        if "_owner.SetQuantity(" in body:
+            errors.append("ProjectElement quantity pair removal must not re-admit persisted values through SetQuantity")
+
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")
     required = (
@@ -119,11 +138,14 @@ if QUANTITY_SMOKE.is_file():
         'element.Quantities.ContainsKey(" AREA ")',
         'element.Quantities.TryGetValue(" area ", out var value)',
         'new KeyValuePair<string, double>(" AREA ", 12.5d)',
+        "PairRemovalCanDeletePersistedCorruptValue",
+        'SeedPersistedQuantity(element, "Area", -1d)',
+        'new KeyValuePair<string, double>(" area ", -1d)',
         "Equal(ElementDirtyFlags.None, element.Dirty);",
         "Equal(before, element.UpdatedUtc);",
     ):
         if token not in text:
-            errors.append("ProjectElement quantity canonical-read smoke missing regression contract: " + token)
+            errors.append("ProjectElement quantity canonical-read/cleanup smoke missing regression contract: " + token)
 
 if REGISTRATION.is_file():
     text = REGISTRATION.read_text(encoding="utf-8")
@@ -138,4 +160,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: ProjectElement Id/relation/fingerprint text remains XML-preflighted; semantic quantity mutations and reads share canonical identity without read-side lifecycle mutation.")
+print("PASS: ProjectElement Id/relation/fingerprint text remains XML-preflighted; semantic quantity mutations and reads share canonical identity, pair removal can clean persisted-corrupt values without re-admission, and reads stay lifecycle-neutral.")
