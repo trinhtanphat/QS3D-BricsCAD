@@ -1,7 +1,6 @@
 using System;
 using System.Globalization;
 using System.IO;
-using System.Linq;
 using System.Text;
 using QS3D.Core.Mapping;
 using QS3D.Core.Persistence;
@@ -79,39 +78,88 @@ namespace QS3D.Core.Export
                 if (cell == null)
                     throw new ArgumentException("Coverage matrix contains a null cell at index " + i + ".", nameof(matrix));
 
-                writer.Write(Q(cell.Category.ToString()));
+                WriteQuotedCsvValue(writer, cell.Category.ToString());
                 writer.Write(',');
-                writer.Write(Q(cell.MeasurementItemId));
+                WriteQuotedCsvValue(writer, cell.MeasurementItemId);
                 writer.Write(',');
-                writer.Write(Q(cell.MappingId));
+                WriteQuotedCsvValue(writer, cell.MappingId);
                 writer.Write(',');
-                writer.Write(Q(cell.ClassificationId));
+                WriteQuotedCsvValue(writer, cell.ClassificationId);
                 writer.Write(',');
-                writer.Write(Q(cell.WorkItemId));
+                WriteQuotedCsvValue(writer, cell.WorkItemId);
                 writer.Write(',');
                 writer.Write(cell.IsReady ? "true" : "false");
                 writer.Write(',');
-                writer.Write(Q(string.Join("|", cell.Issues.Select(x => x.ToString()))));
+                WriteJoinedIssues(writer, cell.Issues);
                 writer.Write(',');
                 writer.Write(cell.FindingCount.ToString(CultureInfo.InvariantCulture));
                 writer.Write(',');
                 writer.Write(cell.AffectedElementCount.ToString(CultureInfo.InvariantCulture));
                 writer.Write(',');
-                writer.Write(Q(string.Join("|", cell.AffectedElementIds)));
+                WriteJoinedValues(writer, cell.AffectedElementIds);
 
                 if (provenance != null)
                 {
                     writer.Write(',');
-                    writer.Write(Q(provenance.ProjectId));
+                    WriteQuotedCsvValue(writer, provenance.ProjectId);
                     writer.Write(',');
-                    writer.Write(Q(provenance.DrawingFingerprint));
+                    WriteQuotedCsvValue(writer, provenance.DrawingFingerprint);
                     writer.Write(',');
                     writer.Write(provenance.ChangeVersion.ToString(CultureInfo.InvariantCulture));
                     writer.Write(',');
-                    writer.Write(Q(provenance.UpdatedUtc.ToString("O", CultureInfo.InvariantCulture)));
+                    WriteQuotedCsvValue(writer, provenance.UpdatedUtc.ToString("O", CultureInfo.InvariantCulture));
                 }
 
                 writer.Write("\r\n");
+            }
+        }
+
+        private static void WriteQuotedCsvValue(TextWriter writer, string? value)
+        {
+            var safe = value ?? string.Empty;
+            writer.Write('"');
+            if (RequiresSpreadsheetFormulaEscape(safe)) writer.Write('\'');
+            WriteEscapedCsvFragment(writer, safe);
+            writer.Write('"');
+        }
+
+        private static void WriteJoinedIssues(TextWriter writer, System.Collections.Generic.IReadOnlyList<MeasurementWorkItemCoverageIssue> issues)
+        {
+            writer.Write('"');
+            for (var i = 0; i < issues.Count; i++)
+            {
+                if (i != 0) writer.Write('|');
+                WriteEscapedCsvFragment(writer, issues[i].ToString());
+            }
+            writer.Write('"');
+        }
+
+        private static void WriteJoinedValues(TextWriter writer, System.Collections.Generic.IReadOnlyList<string> values)
+        {
+            writer.Write('"');
+            for (var i = 0; i < values.Count; i++)
+            {
+                if (i != 0) writer.Write('|');
+                WriteEscapedCsvFragment(writer, values[i] ?? string.Empty);
+            }
+            writer.Write('"');
+        }
+
+        private static void WriteEscapedCsvFragment(TextWriter writer, string value)
+        {
+            var start = 0;
+            while (start < value.Length)
+            {
+                var quote = value.IndexOf('"', start);
+                if (quote < 0)
+                {
+                    writer.Write(start == 0 ? value : value.Substring(start));
+                    return;
+                }
+
+                if (quote > start) writer.Write(value.Substring(start, quote - start));
+                writer.Write("\"\"");
+                start = quote + 1;
             }
         }
 
@@ -150,14 +198,6 @@ namespace QS3D.Core.Export
         {
             var probe = (value ?? string.Empty).TrimStart();
             return probe.Length > 0 && (probe[0] == '=' || probe[0] == '+' || probe[0] == '-' || probe[0] == '@');
-        }
-
-        private static string Q(string? value)
-        {
-            var safe = value ?? string.Empty;
-            if (RequiresSpreadsheetFormulaEscape(safe))
-                safe = "'" + safe;
-            return "\"" + safe.Replace("\"", "\"\"") + "\"";
         }
 
         private sealed class BoundedUtf8TextWriter : TextWriter
