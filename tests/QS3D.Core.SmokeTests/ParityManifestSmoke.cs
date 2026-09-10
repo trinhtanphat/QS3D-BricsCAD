@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using QS3D.Core.Features;
 
 namespace QS3D.Core.SmokeTests
@@ -24,6 +25,7 @@ namespace QS3D.Core.SmokeTests
 
             ClosureRules();
             ParserRules();
+            RepositoryManifestBlocksPrematureClosure();
         }
 
         private static ParityFeatureRecord Record(string id, ParityEvidenceStage stage) =>
@@ -70,6 +72,22 @@ namespace QS3D.Core.SmokeTests
             });
             if (parsed.CatalogComplete || parsed.Records.Count != 1)
                 throw new InvalidOperationException("Deterministic parser lost manifest metadata or row count.");
+
+            var dashed = ParityManifestParser.Parse(new[] {
+                "# catalog-complete=false",
+                "FeatureId\tDomain\tReferencePath\tWorkflowKey\tApplicability\tEvidenceStage\tDecisionReference\tDecisionReason",
+                "bim.draw.rectangle\tBIM\treference\tbim.draw.rectangle\tApplicable\tReferenceCaptured\t-\t-"
+            });
+            if (dashed.Records[0].DecisionReference != null || dashed.Records[0].DecisionReason != null)
+                throw new InvalidOperationException("TSV dash sentinel must normalize optional decision evidence to null.");
+        }
+        private static void RepositoryManifestBlocksPrematureClosure()
+        {
+            var path = Path.Combine("docs", "BLT3D-PARITY-MANIFEST.tsv");
+            if (!File.Exists(path)) throw new InvalidOperationException("Missing parity manifest: " + path);
+            var manifest = ParityManifestParser.Parse(File.ReadAllLines(path));
+            if (manifest.Records.Count < 20) throw new InvalidOperationException("Parity manifest lost approved domain anchors.");
+            if (manifest.GetClosureReport().CanClaimFullParity) throw new InvalidOperationException("Seed manifest must not claim full parity.");
         }
         private static void Equal<T>(T expected, T actual)
         {

@@ -54,7 +54,7 @@ namespace QS3D.Core.Features
                 {
                     records.Add(new ParityFeatureRecord(
                         new FeatureId(fields[0]), fields[1], fields[2], fields[3],
-                        applicability, evidenceStage, fields[6], fields[7]));
+                        applicability, evidenceStage, OptionalField(fields[6]), OptionalField(fields[7])));
                 }
                 catch (ArgumentException ex)
                 {
@@ -68,6 +68,8 @@ namespace QS3D.Core.Features
             catch (InvalidOperationException ex) { throw new FormatException("Parity manifest validation failed: " + ex.Message, ex); }
         }
 
+        private static string? OptionalField(string raw) =>
+            string.Equals(raw, "-", StringComparison.Ordinal) ? null : raw;
         private static T ParseEnum<T>(string raw, int lineNumber, string fieldName) where T : struct
         {
             if (!Enum.TryParse(raw, false, out T value) || !Enum.IsDefined(typeof(T), value) || !string.Equals(raw, value.ToString(), StringComparison.Ordinal))
