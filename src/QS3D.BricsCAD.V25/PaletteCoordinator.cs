@@ -130,9 +130,6 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        // The explicit QS3D command is the owner-facing workspace activation entry point. Keep the
-        // BricsCAD host shell and native modelspace intact; ShowBimWorkspace only coordinates QS3D
-        // palettes around that host-owned center surface.
         public static void Show() => ShowBimWorkspace();
 
         public static void ShowWorkspace()
@@ -150,10 +147,6 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        // Owner-reference BIM layout: one integrated two-column QS3D Workspace on the left,
-        // native BricsCAD modelspace in the center, and Drawing/Layer Management on the right.
-        // The dedicated Properties and Quantity palettes remain available on demand, but do not
-        // auto-open in BIM because the reference keeps Properties embedded below Family.
         public static bool ShowBimWorkspace()
         {
             var preserveInspectionStatus = _preserveInspectionStatusOnNextShow;
@@ -277,11 +270,20 @@ namespace QS3D.BricsCAD.V25
         private static void ResetPreservingVisibility()
         {
             if (_workspace == null && _properties == null && _right == null && _quantityInsight == null) return;
-            var workspaceVisible = IsWorkspaceVisible;
-            var propertiesVisible = IsPropertiesVisible;
-            var rightVisible = IsRightPanelVisible;
-            var quantityVisible = IsQuantityInsightVisible;
-            var ownerReferenceBimActive = workspaceVisible && rightVisible && !propertiesVisible && !quantityVisible;
+
+            var workspacePalette = _workspace;
+            var propertiesPalette = _properties;
+            var rightPalette = _right;
+            var quantityPalette = _quantityInsight;
+
+            var workspaceRead = TryReadPaletteVisibility(workspacePalette, out var workspaceVisible);
+            var propertiesRead = TryReadPaletteVisibility(propertiesPalette, out var propertiesVisible);
+            var rightRead = TryReadPaletteVisibility(rightPalette, out var rightVisible);
+            var quantityRead = TryReadPaletteVisibility(quantityPalette, out var quantityVisible);
+            var ownerReferenceBimActive =
+                workspaceRead && propertiesRead && rightRead && quantityRead &&
+                workspaceVisible && rightVisible && !propertiesVisible && !quantityVisible;
+
             Dispose();
             EnsureCreated();
             _workspacePanel?.SetDedicatedPropertiesPaletteActive(propertiesVisible);
@@ -356,6 +358,22 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        private static bool TryReadPaletteVisibility(PaletteSet? palette, out bool visible)
+        {
+            visible = false;
+            if (palette == null) return false;
+
+            try
+            {
+                visible = palette.Visible;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private static void EnsureBimDockContract()
         {
             if (_workspace != null && _workspace.Dock != DockSides.Left)
@@ -367,9 +385,6 @@ namespace QS3D.BricsCAD.V25
             if (_quantityInsight != null && _quantityInsight.Dock != DockSides.Right)
                 _quantityInsight.Dock = DockSides.Right;
 
-            // BricsCAD can restore stale host-owned palette dimensions after construction. Reapply
-            // the normalized per-user fallback only when the host reports a non-finite or undersized
-            // value; valid user-resized palettes remain untouched during explicit BIM activation.
             var layout = UserUiLayoutStore.Get();
             EnsurePaletteSize(
                 _workspace,
@@ -418,9 +433,6 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        // Legacy three-argument call sites represent integrated/isolated owner surfaces. Keep the
-        // dedicated Properties PaletteSet opt-in only; the default BIM reference embeds Properties
-        // in Workspace and therefore leaves the dedicated palette hidden.
         private static void SetVisibility(bool workspace, bool right, bool quantityInsight)
         {
             SetVisibility(workspace, properties: false, right, quantityInsight);
@@ -445,10 +457,6 @@ namespace QS3D.BricsCAD.V25
                 SetPaletteVisibility(rightPalette, _right, right, "Right");
                 SetPaletteVisibility(quantityPalette, _quantityInsight, quantityInsight, "QuantityInsight");
 
-                // Native PaletteSet.Visible setters can re-enter host UI code. Revalidate all captured
-                // ownership after the last setter so a replacement published during any setter cannot
-                // make a stale transition look successful. The catch below restores every still-current
-                // captured instance and preserves the stale-ownership failure as the transition outcome.
                 EnsurePaletteOwnership(workspacePalette, _workspace, "Workspace");
                 EnsurePaletteOwnership(propertiesPalette, _properties, "Properties");
                 EnsurePaletteOwnership(rightPalette, _right, "Right");
