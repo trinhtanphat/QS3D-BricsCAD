@@ -27,10 +27,11 @@ for token in [
 
 for token in [
     "[ModuleInitializer]",
-    "EquivalentFinishReplacementWithoutTouchFailsClosed",
+    "EquivalentFinishReplacementAdvancesRevisionAndFailsClosed",
     "DirectSemanticMutationWithoutTouchFailsClosed",
     "project.Elements[1] = replacement",
     'project.Elements[1].Quantities["BottomAreaM2"] = 13.5d',
+    "project.ChangeVersion != version + 1",
     "project.ChangeVersion != version",
     '"CaptureProjectRevision"',
     '"EnsureProjectRevision"',
