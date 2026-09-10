@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed unless the V25 updater holds its admitted installer across execution."""
+"""Fail closed unless the V25 updater pins the admitted installer across execution."""
 
 from __future__ import annotations
 
@@ -53,21 +53,40 @@ def function_body(source: str, name: str) -> str:
 def validate(source: str) -> None:
     helper = function_body(source, "Open-HeldVerifiedInstaller")
 
+    # The security boundary must be established by the opened Windows object, not
+    # by a pathname-only Get-Item check that can race with the subsequent open.
     for token, label in (
         ("[IO.Path]::GetFullPath", "canonical path/root normalization"),
         ("[StringComparison]::OrdinalIgnoreCase", "Windows path comparison"),
-        ("Get-Item -LiteralPath", "ordinary-file/reparse inspection"),
-        ("[IO.FileAttributes]::ReparsePoint", "reparse rejection"),
-        ("[IO.File]::Open(", "explicit file hold"),
-        ("[IO.FileMode]::Open", "existing-file-only hold"),
-        ("[IO.FileAccess]::Read", "read-only held access"),
-        ("[IO.FileShare]::Read", "write/delete-denying share mode"),
+        ("OpenOrdinaryReadHeld", "atomic held-file opener"),
+        ("FinalPath", "handle-resolved final path binding"),
         ("Assert-AuthenticodeSigner", "held Authenticode re-admission"),
         ("ExpectedSigner", "expected signer binding"),
         ("ExtractionRoot", "extraction-root input"),
     ):
         if token not in helper:
             raise SystemExit(f"ERROR: V25 updater installer-hold preflight: helper missing {label}: {token}")
+
+    native_requirements = (
+        ("CreateFileW", "Win32 atomic open"),
+        ("FILE_FLAG_OPEN_REPARSE_POINT", "no-follow leaf open"),
+        ("FILE_SHARE_READ", "write/delete-denying share"),
+        ("GENERIC_READ", "read-only desired access"),
+        ("OPEN_EXISTING", "existing-file-only disposition"),
+        ("GetFileInformationByHandle", "handle-bound file attributes"),
+        ("FILE_ATTRIBUTE_REPARSE_POINT", "handle-bound reparse rejection"),
+        ("FILE_ATTRIBUTE_DIRECTORY", "handle-bound directory rejection"),
+        ("GetFinalPathNameByHandleW", "handle-resolved pathname"),
+    )
+    for token, label in native_requirements:
+        require(source, token, label)
+
+    # A pre-open Get-Item is specifically forbidden as the authoritative ordinary
+    # file/reparse admission because it recreates the check->open race.
+    if re.search(r"Get-Item\s+-LiteralPath\s+\$full\b", helper, re.IGNORECASE):
+        raise SystemExit(
+            "ERROR: V25 updater installer-hold preflight: canonical installer must not be admitted by pathname-only Get-Item before atomic no-follow open"
+        )
 
     separator_binding = re.search(
         r"(?:\$rootWithSeparator\s*=\s*\$root\.TrimEnd\([^\n]+\)\s*\+\s*['\"]\\['\"]|\$rootWithSeparator\s*=\s*\$root\s*\+\s*\[IO\.Path\]::DirectorySeparatorChar\b)",
@@ -81,50 +100,38 @@ def validate(source: str) -> None:
     )
     if separator_binding is None or boundary_check is None:
         raise SystemExit(
-            "ERROR: V25 updater installer-hold preflight: canonical containment must use a separator-bounded extraction root"
+            "ERROR: V25 updater installer-hold preflight: lexical containment must use a separator-bounded extraction root"
         )
 
-    reparse_reject = re.search(
-        r"if\s*\(\s*\(\s*\$item\.Attributes\s+-band\s+\[IO\.FileAttributes\]::ReparsePoint\s*\)\s+-ne\s+0\s*\)\s*\{\s*throw\b",
+    atomic_open = require(helper, "OpenOrdinaryReadHeld", "atomic no-follow held open")
+    final_path = require(helper, "FinalPath", "handle-resolved final path", atomic_open)
+    signer = require(helper, "Assert-AuthenticodeSigner", "held signer re-admission", final_path)
+    if not (atomic_open < final_path < signer):
+        raise SystemExit(
+            "ERROR: V25 updater installer-hold preflight: require atomic open < handle final-path binding < signer re-admission"
+        )
+
+    if re.search(
+        r"\[string\]::Equals\(\s*\$heldFinal\s*,\s*\$full\s*,\s*\[StringComparison\]::OrdinalIgnoreCase\s*\)",
         helper,
-        re.IGNORECASE | re.DOTALL,
-    )
-    if reparse_reject is None:
+        re.IGNORECASE,
+    ) is None:
         raise SystemExit(
-            "ERROR: V25 updater installer-hold preflight: ReparsePoint inspection must fail closed with throw"
-        )
-    if re.search(r"Get-Item\s+-LiteralPath\s+\$full\b", helper, re.IGNORECASE) is None:
-        raise SystemExit(
-            "ERROR: V25 updater installer-hold preflight: reparse inspection must target the canonical held-open path"
+            "ERROR: V25 updater installer-hold preflight: handle-resolved final path must equal canonical installer path"
         )
 
-    held_open = require(helper, "[IO.File]::Open(", "held open")
-    open_tail = helper[held_open : held_open + 700]
-    if "[IO.FileShare]::ReadWrite" in open_tail or "[IO.FileShare]::Delete" in open_tail or "[IO.FileShare]::None" in open_tail:
-        raise SystemExit(
-            "ERROR: V25 updater installer-hold preflight: held open must use exact read sharing, not ReadWrite/Delete/None"
-        )
-    exact_share = re.search(
-        r"\[IO\.File\]::Open\(\s*\$full\s*,\s*\[IO\.FileMode\]::Open\s*,\s*\[IO\.FileAccess\]::Read\s*,\s*\[IO\.FileShare\]::Read\s*\)",
-        open_tail,
-        re.IGNORECASE | re.DOTALL,
-    )
-    if not exact_share:
-        raise SystemExit(
-            "ERROR: V25 updater installer-hold preflight: held open must target canonical $full with FileMode.Open/FileAccess.Read/FileShare.Read"
-        )
     if re.search(
         r"Assert-AuthenticodeSigner\s+-Path\s+\$full\s+-ExpectedSigner\s+\$ExpectedSigner\b",
         helper,
         re.IGNORECASE,
     ) is None:
         raise SystemExit(
-            "ERROR: V25 updater installer-hold preflight: signer re-admission must target the canonical held-open path and expected signer"
+            "ERROR: V25 updater installer-hold preflight: signer re-admission must target canonical pinned path and expected signer"
         )
 
     if "catch" not in helper or ".Dispose()" not in helper:
         raise SystemExit(
-            "ERROR: V25 updater installer-hold preflight: helper must dispose the hold if re-admission fails"
+            "ERROR: V25 updater installer-hold preflight: helper must dispose the native hold if re-admission fails"
         )
 
     acquire = require(source, "$heldInstaller = Open-HeldVerifiedInstaller", "held installer acquisition")
@@ -151,11 +158,11 @@ def validate(source: str) -> None:
     held_interval = source[acquire:dispose]
     if held_interval.count("& $installer @arguments") != 1:
         raise SystemExit(
-            "ERROR: V25 updater installer-hold preflight: installer must be invoked exactly once while held"
+            "ERROR: V25 updater installer-hold preflight: installer must be invoked exactly once while pinned"
         )
     if held_interval.count("Assert-PackageRoot -Directory $extractRoot") != 1:
         raise SystemExit(
-            "ERROR: V25 updater installer-hold preflight: final package admission must occur exactly once while held"
+            "ERROR: V25 updater installer-hold preflight: final package admission must occur exactly once while pinned"
         )
     if re.search(r"(?m)^\s*\$installer\s*=", held_interval):
         raise SystemExit(
@@ -185,6 +192,10 @@ def expect_reject(source: str, label: str) -> None:
 
 def common_fences() -> str:
     return """
+# Native helper semantics required by the contract:
+# CreateFileW GENERIC_READ FILE_SHARE_READ OPEN_EXISTING FILE_FLAG_OPEN_REPARSE_POINT
+# GetFileInformationByHandle FILE_ATTRIBUTE_REPARSE_POINT FILE_ATTRIBUTE_DIRECTORY
+# GetFinalPathNameByHandleW
 function Assert-AuthenticodeSigner { }
 function Expand-VerifiedHeldArchive { }
 function Assert-PackageRoot { }
@@ -205,15 +216,15 @@ $full=[IO.Path]::GetFullPath($Path)
 $root=[IO.Path]::GetFullPath($ExtractionRoot)
 $rootWithSeparator=$root.TrimEnd('\\') + '\\'
 if (-not $full.StartsWith($rootWithSeparator, [StringComparison]::OrdinalIgnoreCase)) { throw 'outside root' }
-$item=Get-Item -LiteralPath $full
-if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'reparse' }
-$h=$null
+$held=$null
 try {
-  $h=[IO.File]::Open($full,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+  $held=[Qs3dNativeFile]::OpenOrdinaryReadHeld($full)
+  $heldFinal=[IO.Path]::GetFullPath($held.FinalPath)
+  if (-not [string]::Equals($heldFinal, $full, [StringComparison]::OrdinalIgnoreCase)) { throw 'resolved path mismatch' }
   Assert-AuthenticodeSigner -Path $full -ExpectedSigner $ExpectedSigner -Label installer
-  return $h
+  return $held
 }
-catch { if ($h) { $h.Dispose() }; throw }
+catch { if ($held) { $held.Dispose() }; throw }
 }
 """
 
@@ -238,13 +249,38 @@ def self_test() -> None:
 
     expect_reject(
         common_fences() + """
-$installer = Join-Path $extractRoot 'install-v25-autoload.ps1'
-Assert-PackageRoot -Directory $extractRoot
-& $installer @arguments
+function Open-HeldVerifiedInstaller {
+param($Path,$ExtractionRoot,$ExpectedSigner)
+$full=[IO.Path]::GetFullPath($Path)
+$root=[IO.Path]::GetFullPath($ExtractionRoot)
+$rootWithSeparator=$root + [IO.Path]::DirectorySeparatorChar
+if (-not $full.StartsWith($rootWithSeparator,[StringComparison]::OrdinalIgnoreCase)) { throw 'outside root' }
+$item=Get-Item -LiteralPath $full
+$held=[IO.File]::Open($full,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+Assert-AuthenticodeSigner -Path $full -ExpectedSigner $ExpectedSigner -Label installer
+return $held
+}
+$installer=Join-Path $extractRoot 'install-v25-autoload.ps1'
+$heldInstaller=Open-HeldVerifiedInstaller -Path $installer -ExtractionRoot $extractRoot -ExpectedSigner $expectedSigner
+try { Assert-PackageRoot -Directory $extractRoot; & $installer @arguments }
+finally { $heldInstaller.Dispose() }
 """,
-        "verify-then-path-reopen without a hold",
+        "pathname Get-Item check followed by normal File.Open",
     )
-    expect_reject(valid.replace("[IO.FileShare]::Read)", "[IO.FileShare]::ReadWrite)", 1), "write-share-permitting hold")
+    expect_reject(valid.replace("OpenOrdinaryReadHeld($full)", "OpenReadFollowingReparse($full)", 1), "follow-reparse open")
+    expect_reject(valid.replace("FILE_FLAG_OPEN_REPARSE_POINT", "FILE_FLAG_SEQUENTIAL_SCAN", 1), "native opener without OPEN_REPARSE_POINT")
+    expect_reject(valid.replace("GetFileInformationByHandle", "GetFileAttributesW", 1), "pathname attributes instead of handle attributes")
+    expect_reject(valid.replace("GetFinalPathNameByHandleW", "GetFullPathNameW", 1), "pathname resolution instead of handle final path")
+    expect_reject(valid.replace("$held.FinalPath", "$full", 1), "final-path check not bound to opened handle")
+    expect_reject(
+        valid.replace(
+            "if (-not [string]::Equals($heldFinal, $full, [StringComparison]::OrdinalIgnoreCase)) { throw 'resolved path mismatch' }",
+            "$same = [string]::Equals($heldFinal, $full, [StringComparison]::OrdinalIgnoreCase)",
+            1,
+        ),
+        "resolved-path comparison without fail-closed rejection",
+    )
+    expect_reject(valid.replace("FILE_SHARE_READ", "FILE_SHARE_READ | FILE_SHARE_WRITE", 1), "write-share-permitting native hold")
     expect_reject(
         valid.replace(
             "$heldInstaller = Open-HeldVerifiedInstaller -Path $installer -ExtractionRoot $extractRoot -ExpectedSigner $expectedSigner\ntry {\n  Assert-PackageRoot",
@@ -253,39 +289,9 @@ Assert-PackageRoot -Directory $extractRoot
         ),
         "package admission before hold acquisition",
     )
-    expect_reject(
-        valid.replace("$full.StartsWith($rootWithSeparator,", "$full.StartsWith($root,", 1),
-        "unsafe prefix containment accepting sibling root names",
-    )
-    expect_reject(
-        valid.replace(
-            "if (-not $full.StartsWith($rootWithSeparator, [StringComparison]::OrdinalIgnoreCase)) { throw 'outside root' }",
-            "$unused = $rootWithSeparator",
-            1,
-        ),
-        "extraction-root token without enforced canonical containment",
-    )
-    expect_reject(
-        valid.replace(
-            "if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'reparse' }",
-            "$mentionsReparse = ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)",
-            1,
-        ),
-        "reparse token without fail-closed rejection",
-    )
-    expect_reject(
-        valid.replace("Get-Item -LiteralPath $full", "Get-Item -LiteralPath $Path", 1),
-        "reparse inspection of a different path than canonical held path",
-    )
-    expect_reject(
-        valid.replace("[IO.File]::Open($full,", "[IO.File]::Open($Path,", 1),
-        "held open of a different path than canonical admitted path",
-    )
-    expect_reject(
-        valid.replace("Assert-AuthenticodeSigner -Path $full", "Assert-AuthenticodeSigner -Path $Path", 1),
-        "signer re-admission of a different path than held path",
-    )
-    expect_reject(valid.replace("catch { if ($h) { $h.Dispose() }; throw }", "catch { throw }", 1), "held handle leak when signer re-admission throws")
+    expect_reject(valid.replace("$full.StartsWith($rootWithSeparator,", "$full.StartsWith($root,", 1), "unsafe prefix containment")
+    expect_reject(valid.replace("Assert-AuthenticodeSigner -Path $full", "Assert-AuthenticodeSigner -Path $Path", 1), "signer check on unbound path")
+    expect_reject(valid.replace("catch { if ($held) { $held.Dispose() }; throw }", "catch { throw }", 1), "hold leak on re-admission failure")
     expect_reject(
         valid.replace("  & $installer @arguments\n", "  $installer = Join-Path $extractRoot 'install-v25-autoload.ps1'\n  & $installer @arguments\n", 1),
         "installer pathname reassignment after hold acquisition",
@@ -298,19 +304,13 @@ Assert-PackageRoot -Directory $extractRoot
         ),
         "hold disposed before invocation",
     )
-    expect_reject(
-        valid.replace("}\nfinally {\n  $heldInstaller.Dispose()", "  # finally {\n  $heldInstaller.Dispose()", 1),
-        "comment-only finally token before disposal",
-    )
-    expect_reject(
-        valid.replace("}\nfinally {\n  $heldInstaller.Dispose()", "  Write-Host 'finally {'\n  $heldInstaller.Dispose()", 1),
-        "string-only finally token before disposal",
-    )
+    expect_reject(valid.replace("}\nfinally {\n  $heldInstaller.Dispose()", "  # finally {\n  $heldInstaller.Dispose()", 1), "comment-only finally")
+    expect_reject(valid.replace("}\nfinally {\n  $heldInstaller.Dispose()", "  Write-Host 'finally {'\n  $heldInstaller.Dispose()", 1), "string-only finally")
 
 
 if __name__ == "__main__":
     self_test()
     validate(UPDATER.read_text(encoding="utf-8"))
     print(
-        "PASS: V25 updater canonically binds and re-admits the installer, holds it read-shared/write-delete-denied across final package admission and execution, and disposes safely"
+        "PASS: V25 updater atomically no-follow opens the installer, binds handle attributes/final path, re-admits signer, pins it across final package admission/execution, and disposes safely"
     )
