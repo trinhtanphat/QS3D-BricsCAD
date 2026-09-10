@@ -249,6 +249,17 @@ jobs:
           exact_dispatch_fence_run_id=0
           dispatch_fence_owner_source=""
           dispatch_fence_owner_conflict=0
+          set +e
+          reservation_rows="$(
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments" \
+              --jq '.[] | select(.user.login == "github-actions[bot]") | .body'
+          )"
+          reservation_query_status=$?
+          set -e
+          if (( reservation_query_status != 0 )); then
+            echo "Could not enumerate V25 preview reservation comments; gh api exit ${reservation_query_status}." >&2
+            exit "${reservation_query_status}"
+          fi
           while IFS= read -r reservation; do
             [[ -n "${reservation}" ]] || continue
             if [[ "${reservation}" =~ ${reservation_regex} ]]; then
@@ -279,7 +290,7 @@ jobs:
                 fi
               fi
             fi
-          done < <(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments" --jq '.[] | select(.user.login == "github-actions[bot]") | .body')
+          done <<< "${reservation_rows}"
 
           if (( reservation_owner_conflict != 0 || dispatch_fence_owner_conflict != 0 )); then
             echo "Committed preview ordinal has multiple prior owners/fences: ${committed_preview_ordinal}." >&2
