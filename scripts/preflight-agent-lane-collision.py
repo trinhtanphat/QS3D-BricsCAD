@@ -405,6 +405,30 @@ def validate_v2_issue(
     return lane_key, owner, ownership_key, expected_paths
 
 
+def canonical_peer_reservation(
+    candidate: dict,
+    activation: datetime | None,
+) -> tuple[str, str, str, list[str]] | None:
+    """Return only a complete canonical v2 peer reservation; reporting metadata is not ownership."""
+    if candidate.get("pull_request"):
+        return None
+    try:
+        peer_number = int(candidate.get("number") or 0)
+        if peer_number <= 0 or not reservation_v2_required(candidate, activation):
+            return None
+        body = candidate.get("body") or ""
+        carrier = _single_field(CARRIER_RE, body, "Canonical carrier")
+        if carrier is None or branch_issue_number(carrier) != peer_number:
+            return None
+        branch_token = branch_owner_token(carrier)
+        if branch_token is None:
+            return None
+        validate_owner_token(branch_token)
+        return validate_v2_issue(candidate, peer_number, carrier, branch_token)
+    except (ValueError, TypeError):
+        return None
+
+
 def canonical_ownership_conflict(
     current_issue: dict,
     current_key: str,
@@ -413,15 +437,11 @@ def canonical_ownership_conflict(
 ) -> tuple[int, str] | None:
     contenders: list[dict] = []
     for candidate in open_issues:
-        if candidate.get("pull_request"):
+        peer = canonical_peer_reservation(candidate, activation)
+        if peer is None:
             continue
-        try:
-            if not reservation_v2_required(candidate, activation):
-                continue
-            peer_raw = _single_field(OWNERSHIP_RE, candidate.get("body"), "Ownership-Key")
-            if peer_raw is None or normalize_ownership_key(peer_raw) != current_key:
-                continue
-        except (ValueError, TypeError):
+        _, _, peer_key, _ = peer
+        if peer_key != current_key:
             continue
         contenders.append(candidate)
 
@@ -446,20 +466,13 @@ def canonical_expected_path_conflict(
     conflicts: list[tuple[tuple[datetime, int], int, list[tuple[str, str]]]] = []
 
     for candidate in open_issues:
-        if candidate.get("pull_request"):
-            continue
         peer_number = int(candidate.get("number") or 0)
         if peer_number == current_number:
             continue
-        try:
-            if not reservation_v2_required(candidate, activation):
-                continue
-            raw = _single_field(EXPECTED_PATHS_RE, candidate.get("body"), "Expected-Paths")
-            if raw is None:
-                continue
-            peer_paths = parse_expected_paths(raw)
-        except (ValueError, TypeError):
+        peer = canonical_peer_reservation(candidate, activation)
+        if peer is None:
             continue
+        _, _, _, peer_paths = peer
         overlaps = overlapping_claims(current_paths, peer_paths)
         if not overlaps:
             continue
@@ -540,9 +553,17 @@ def _fetch_paged(api_url: str, repository: str, endpoint: str, token: str) -> li
         payload = _request_json(url, token)
         if not isinstance(payload, list):
             raise RuntimeError(f"GitHub {endpoint} response was not a list")
-        page_items = [item for item in payload if isinstance(item, dict)]
-        collected.extend(page_items)
-        if len(page_items) < 100:
+        malformed_index = next(
+            (index for index, item in enumerate(payload) if not isinstance(item, dict)),
+            None,
+        )
+        if malformed_index is not None:
+            raise RuntimeError(
+                f"GitHub {endpoint} response page {page} contained a non-object entry "
+                f"at index {malformed_index}"
+            )
+        collected.extend(payload)
+        if len(payload) < 100:
             return collected
     raise RuntimeError(
         f"GitHub {endpoint} list exceeded {MAX_PAGES * 100} entries; refusing incomplete collision scan"
@@ -616,16 +637,9 @@ def effective_changed_paths(base_sha: str, peer_head_sha: str) -> list[str]:
 
 
 def current_changed_paths(base_ref: str) -> list[str]:
-    raw = _run_git_exact([
-        "diff",
-        "--name-only",
-        "-z",
-        "--no-renames",
-        "--diff-filter=ACDMRTUXB",
-        f"origin/{base_ref}...HEAD",
-        "--",
-    ])
-    return parse_nul_paths(raw, "current branch delta")
+    base_sha = _run_git(["rev-parse", f"origin/{base_ref}^{{commit}}"] ).strip().lower()
+    head_sha = _run_git(["rev-parse", "HEAD^{commit}"]).strip().lower()
+    return effective_changed_paths(base_sha, head_sha)
 
 
 def _event_actor(event: dict) -> str:

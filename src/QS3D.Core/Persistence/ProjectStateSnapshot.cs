@@ -689,11 +689,11 @@ namespace QS3D.Core.Persistence
             target.ZoneId = source.ZoneId;
             target.DrawingFingerprint = source.DrawingFingerprint;
 
-            target.SourceHandles.Clear();
-            foreach (var handle in source.SourceHandles) target.SourceHandles.Add(handle);
+            target.ClearSourceHandlesPersistence();
+            foreach (var handle in source.SourceHandles) target.AddSourceHandlePersistenceValue(handle);
 
-            target.DependsOn.Clear();
-            foreach (var dependency in source.DependsOn) target.DependsOn.Add(dependency);
+            target.ClearDependenciesPersistence();
+            foreach (var dependency in source.DependsOn) target.AddDependencyPersistenceValue(dependency);
 
             RequireCanonicalElementProperties(source);
             var targetProperties = target.Properties as ProjectElementPropertyDictionary

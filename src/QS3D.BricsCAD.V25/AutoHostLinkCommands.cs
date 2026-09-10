@@ -179,12 +179,27 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+        private static bool IsActiveDocument(Document document) =>
+            ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument);
+
+        private static void TryRefreshProject(Document document)
+        {
+            if (!IsActiveDocument(document)) return;
+            PaletteCoordinator.RefreshProject();
+        }
+
+        private static void TrySetPaletteStatus(Document document, string message)
+        {
+            if (!IsActiveDocument(document)) return;
+            PaletteCoordinator.SetStatus(message);
+        }
+
         private static void FinalizeAutoHostUi(Document document, string summary)
         {
             var warning = false;
-            try { PaletteCoordinator.RefreshProject(); }
+            try { TryRefreshProject(document); }
             catch (System.Exception) { warning = true; }
-            try { PaletteCoordinator.SetStatus(summary); }
+            try { TrySetPaletteStatus(document, summary); }
             catch (System.Exception) { warning = true; }
             try { document.Editor.WriteMessage("\nQS3D " + summary + ". Chạy QS3DCUTOPENINGS khi muốn áp physical boolean."); }
             catch (System.Exception) { warning = true; }
@@ -196,7 +211,7 @@ namespace QS3D.BricsCAD.V25
         private static void ReportAutoHostError(Document document)
         {
             var message = OperationFailure;
-            try { PaletteCoordinator.SetStatus(message); }
+            try { TrySetPaletteStatus(document, message); }
             catch { }
             try { document.Editor.WriteMessage("\n" + message); }
             catch { }

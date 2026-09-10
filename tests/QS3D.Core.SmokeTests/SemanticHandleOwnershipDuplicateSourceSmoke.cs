@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
 
@@ -22,13 +24,13 @@ namespace QS3D.Core.SmokeTests
 
         private static void ExactDuplicateFailsAcrossOwnershipEntryPoints()
         {
-            var project = NewProject("1A", "1A");
+            var project = NewPersistedProject("1A", "1A");
             AssertDuplicateStoredHandlesFail(project, "1A");
         }
 
         private static void CaseOnlyDuplicateFailsAcrossOwnershipEntryPoints()
         {
-            var project = NewProject("1A", "1a");
+            var project = NewPersistedProject("1A", "1a");
             AssertDuplicateStoredHandlesFail(project, "1A");
         }
 
@@ -156,6 +158,19 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("P-DUP-SOURCE", "Duplicate source ownership");
             var element = new ProjectElement("E-1", ElementCategory.Beam);
             foreach (var handle in storedHandles) element.SourceHandles.Add(handle);
+            project.Elements.Add(element);
+            return project;
+        }
+
+        private static ProjectState NewPersistedProject(params string[] storedHandles)
+        {
+            var project = new ProjectState("P-DUP-SOURCE", "Duplicate source ownership");
+            var element = new ProjectElement("E-1", ElementCategory.Beam);
+            var valuesField = element.SourceHandles.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed duplicate persisted SourceHandles state.");
+            var values = valuesField.GetValue(element.SourceHandles) as List<string>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement.SourceHandles backing collection.");
+            foreach (var handle in storedHandles) values.Add(handle);
             project.Elements.Add(element);
             return project;
         }

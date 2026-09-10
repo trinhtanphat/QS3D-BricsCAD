@@ -23,6 +23,10 @@ namespace QS3D.BricsCAD.V25.UI
 
         internal static void EnsureRegistered()
         {
+            // Both host entries call this before starting QS3D UI. Keep tooltip
+            // registration explicit, optional, and independently retryable.
+            UiInfoTooltipBootstrap.EnsureRegistered();
+
             if (Interlocked.CompareExchange(ref _registered, 1, 0) != 0)
             {
                 return;

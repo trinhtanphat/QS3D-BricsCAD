@@ -55,7 +55,7 @@ namespace QS3D.Core.SmokeTests
 
             var elementProject = Project();
             SaveIdentityProbe(elementProject, "S-NULL-ELEMENT");
-            elementProject.Elements.Add(null!);
+            CorruptProjectStateSeed.AddNullElement(elementProject);
             Throws<InvalidOperationException>(() => new SemanticScheduleHealthService().Inspect(elementProject));
             HasProviderFailure(new ComprehensiveModelHealthService().Inspect(elementProject), "SemanticScheduleHealthService");
         }

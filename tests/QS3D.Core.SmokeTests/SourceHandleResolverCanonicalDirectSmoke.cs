@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
@@ -28,7 +30,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void PaddedDirectSourceFailsBeforeGeneratedFallback()
         {
-            var project = NewProject(" SOURCE-A ");
+            var project = NewPersistedProject(" SOURCE-A ");
             var beforeVersion = project.ChangeVersion;
 
             Throws<InvalidOperationException>(() => SourceHandleResolver.Resolve(project, new[] { "E-1" }));
@@ -37,7 +39,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void BlankDirectSourceFailsBeforeGeneratedFallback()
         {
-            var project = NewProject("   ");
+            var project = NewPersistedProject("   ");
             var beforeVersion = project.ChangeVersion;
 
             Throws<InvalidOperationException>(() => SourceHandleResolver.Resolve(project, new[] { "E-1" }));
@@ -49,6 +51,20 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("P-LOCATE-SOURCE", "Locate source canonicality");
             var element = new ProjectElement("E-1", ElementCategory.Room);
             element.SourceHandles.Add(directHandle);
+            element.Properties["GeneratedTieRebarHandles"] = "GENERATED-FALLBACK";
+            project.Elements.Add(element);
+            return project;
+        }
+
+        private static ProjectState NewPersistedProject(string directHandle)
+        {
+            var project = new ProjectState("P-LOCATE-SOURCE", "Locate source canonicality");
+            var element = new ProjectElement("E-1", ElementCategory.Room);
+            var valuesField = element.SourceHandles.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed malformed persisted source-handle state.");
+            var values = valuesField.GetValue(element.SourceHandles) as List<string>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement.SourceHandles backing collection.");
+            values.Add(directHandle);
             element.Properties["GeneratedTieRebarHandles"] = "GENERATED-FALLBACK";
             project.Elements.Add(element);
             return project;

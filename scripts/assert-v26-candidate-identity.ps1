@@ -14,6 +14,24 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
+if (-not ('QS3DV26HeldFileIdentity' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
+
+public static class QS3DV26HeldFileIdentity
+{
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern uint GetFinalPathNameByHandleW(
+        SafeFileHandle hFile,
+        StringBuilder lpszFilePath,
+        uint cchFilePath,
+        uint dwFlags);
+}
+'@
+}
 $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
 $maxTextBytes = 65536
 $maxAdmittedScriptBytes = 262144
@@ -31,13 +49,47 @@ function Resolve-OrdinaryFile([string]$Path, [string]$Label) {
     return $item
 }
 
+function Get-HeldFinalPath {
+    param([Parameter(Mandatory = $true)][IO.FileStream]$Stream)
+    if ($Stream.SafeFileHandle.IsInvalid -or $Stream.SafeFileHandle.IsClosed) {
+        throw 'V26 held candidate stream does not have a live file handle.'
+    }
+
+    $capacity = 512
+    while ($capacity -le 32768) {
+        $builder = [Text.StringBuilder]::new($capacity)
+        $length = [QS3DV26HeldFileIdentity]::GetFinalPathNameByHandleW($Stream.SafeFileHandle, $builder, [uint32]$builder.Capacity, 0)
+        if ($length -eq 0) {
+            $win32 = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+            throw "GetFinalPathNameByHandleW failed for V26 held candidate stream (Win32=$win32)."
+        }
+        if ($length -lt [uint32]$builder.Capacity) {
+            $resolved = $builder.ToString()
+            if ($resolved.StartsWith('\\?\UNC\', [StringComparison]::OrdinalIgnoreCase)) {
+                $resolved = '\\' + $resolved.Substring(8)
+            }
+            elseif ($resolved.StartsWith('\\?\', [StringComparison]::OrdinalIgnoreCase)) {
+                $resolved = $resolved.Substring(4)
+            }
+            return [IO.Path]::GetFullPath($resolved)
+        }
+        $capacity = [int]$length + 1
+    }
+    throw 'V26 held candidate final path exceeded the 32768-character safety bound.'
+}
+
 function Open-Held([string]$Path, [string]$Label) {
     $item = Resolve-OrdinaryFile -Path $Path -Label $Label
-    $stream = [IO.File]::Open($item.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    $canonicalPath = [IO.Path]::GetFullPath($item.FullName)
+    $stream = [IO.File]::Open($canonicalPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
     try {
-        $current = Resolve-OrdinaryFile -Path $item.FullName -Label $Label
+        $openedFinalPath = Get-HeldFinalPath -Stream $stream
+        if (-not [string]::Equals($openedFinalPath, $canonicalPath, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "$Label opened handle resolved to a different final path; refusing candidate admission."
+        }
+        $current = Resolve-OrdinaryFile -Path $canonicalPath -Label $Label
         if ($item.Length -ne $stream.Length -or $item.LastWriteTimeUtc.Ticks -ne $current.LastWriteTimeUtc.Ticks -or $current.Length -ne $stream.Length) { throw "$Label changed while its generation lock was admitted." }
-        return [pscustomobject]@{ Path=$current.FullName; Length=[int64]$stream.Length; LastWriteUtcTicks=[int64]$current.LastWriteTimeUtc.Ticks; Stream=$stream }
+        return [pscustomobject]@{ Path=$canonicalPath; Length=[int64]$stream.Length; LastWriteUtcTicks=[int64]$current.LastWriteTimeUtc.Ticks; Stream=$stream }
     } catch { $stream.Dispose(); throw }
 }
 

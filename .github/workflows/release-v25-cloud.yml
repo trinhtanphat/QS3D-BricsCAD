@@ -447,7 +447,19 @@ jobs:
           & git diff --quiet --no-ext-diff $env:SOURCE_SHA $preMutationMain -- $preMutationReleaseRelevantPaths
           $preMutationReleaseDriftStatus = $LASTEXITCODE
           if ($preMutationReleaseDriftStatus -eq 1) {
-            throw "Protected main contains release-relevant changes after SOURCE_SHA; refusing to create a stale V25 draft release. SOURCE_SHA=$env:SOURCE_SHA currentMain=$preMutationMain"
+            $supersededMessage = "Protected main contains release-relevant changes after SOURCE_SHA; the stale V25 source will publish nothing. SOURCE_SHA=$env:SOURCE_SHA currentMain=$preMutationMain"
+            Write-Warning $supersededMessage
+            Write-Host "::notice title=V25 release source superseded::$supersededMessage"
+            Write-Host "V25_RELEASE_SUPERSEDED source_sha=$env:SOURCE_SHA current_main=$preMutationMain"
+            @"
+          ### V25 release source superseded
+
+          - SOURCE_SHA: `$env:SOURCE_SHA`
+          - Current protected main: `$preMutationMain`
+          - Result: **successful no-op before the first persistent release mutation**
+          - Recovery: the canonical dispatcher will re-evaluate protected main from this successful workflow completion; preview ordinal ownership is not reassigned.
+          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            exit 0
           }
           if ($preMutationReleaseDriftStatus -ne 0) {
             throw "Could not classify SOURCE_SHA..preMutationMain release-relevant drift; refusing draft release mutation. git diff exit=$preMutationReleaseDriftStatus"
@@ -625,29 +637,118 @@ jobs:
           Write-Host "Release SOURCE_SHA remains an ancestor of protected main, no release-relevant drift was found, and protected main remained stable through final publication admission: $finalMain"
 
           $publishBody = @{ draft = $false } | ConvertTo-Json
-          $publishedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body $publishBody
-          if ($publishedRelease.draft -ne $false -or $publishedRelease.prerelease -ne $true) {
-            throw 'GitHub prerelease did not preserve the expected published prerelease state.'
-          }
-          if (-not [string]::Equals(([string]$publishedRelease.tag_name).Trim(), $env:RELEASE_TAG, [StringComparison]::Ordinal) -or
-              -not [string]::Equals(([string]$publishedRelease.target_commitish).Trim(), $env:RELEASE_COMMIT_SHA, [StringComparison]::OrdinalIgnoreCase)) {
-            throw 'Published release tag or target commit changed across final publication; refusing success.'
-          }
-          if (@($publishedRelease.assets).Count -ne $assetSpecs.Count) {
-            throw "Published release asset set changed across final publication. Expected exactly $($assetSpecs.Count) assets, found $(@($publishedRelease.assets).Count)."
-          }
-          $publishedReleaseAssetIds = @()
-          foreach ($spec in $assetSpecs) {
-            $publishedMatches = @($publishedRelease.assets | Where-Object { [string]::Equals([string]$_.name, $spec.Name, [StringComparison]::Ordinal) })
-            if ($publishedMatches.Count -ne 1) {
-              throw "Published release must contain exactly one asset named $($spec.Name), found $($publishedMatches.Count)."
+          try {
+            $publishedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body $publishBody
+            if ($publishedRelease.draft -ne $false -or $publishedRelease.prerelease -ne $true) {
+              throw 'GitHub prerelease did not preserve the expected published prerelease state.'
             }
-            if ([int64]$publishedMatches[0].size -ne $spec.Size) {
-              throw "Published release asset size changed for $($spec.Name). Expected=$($spec.Size), API=$($publishedMatches[0].size)."
+            if (-not [string]::Equals(([string]$publishedRelease.tag_name).Trim(), $env:RELEASE_TAG, [StringComparison]::Ordinal) -or
+                -not [string]::Equals(([string]$publishedRelease.target_commitish).Trim(), $env:RELEASE_COMMIT_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+              throw 'Published release tag or target commit changed across final publication; refusing success.'
             }
-            $publishedReleaseAssetIds += ([string]$publishedMatches[0].id)
+            if (@($publishedRelease.assets).Count -ne $assetSpecs.Count) {
+              throw "Published release asset set changed across final publication. Expected exactly $($assetSpecs.Count) assets, found $(@($publishedRelease.assets).Count)."
+            }
+            $publishedReleaseAssetIds = @()
+            foreach ($spec in $assetSpecs) {
+              $publishedMatches = @($publishedRelease.assets | Where-Object { [string]::Equals([string]$_.name, $spec.Name, [StringComparison]::Ordinal) })
+              if ($publishedMatches.Count -ne 1) {
+                throw "Published release must contain exactly one asset named $($spec.Name), found $($publishedMatches.Count)."
+              }
+              if ([int64]$publishedMatches[0].size -ne $spec.Size) {
+                throw "Published release asset size changed for $($spec.Name). Expected=$($spec.Size), API=$($publishedMatches[0].size)."
+              }
+              $publishedReleaseAssetIds += ([string]$publishedMatches[0].id)
+            }
+            $publishedAssetIdentityDrift = @(Compare-Object -ReferenceObject $verifiedReleaseAssetIds -DifferenceObject $publishedReleaseAssetIds -SyncWindow 0)
+            if ($publishedAssetIdentityDrift.Count -ne 0) {
+              throw 'Published release asset IDs changed after byte verification; refusing success.'
+            }
+
+            $publishMainAfterResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers
+            $publishMainAfter = ([string]$publishMainAfterResponse.sha).Trim().ToLowerInvariant()
+            if ($publishMainAfter -notmatch '^[0-9a-f]{40}$') {
+              throw "Protected main API returned an invalid post-publication SHA: $publishMainAfter"
+            }
+            if ($publishMainAfter -ne $publishMain) {
+              throw "Protected main changed across the V25 public release mutation. admitted=$publishMain current=$publishMainAfter"
+            }
           }
-          $publishedAssetIdentityDrift = @(Compare-Object -ReferenceObject $verifiedReleaseAssetIds -DifferenceObject $publishedReleaseAssetIds -SyncWindow 0)
-          if ($publishedAssetIdentityDrift.Count -ne 0) {
-            throw 'Published release asset IDs changed after byte verification; refusing success.'
+          catch {
+            $publicationError = $_
+            try {
+              $authoritativeReleaseBeforeCompensation = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
+              if ($authoritativeReleaseBeforeCompensation.prerelease -ne $true) {
+                throw 'Pre-compensation V25 release lost prerelease state; refusing to mutate an unproven release.'
+              }
+              if (-not [string]::Equals(([string]$authoritativeReleaseBeforeCompensation.tag_name).Trim(), $env:RELEASE_TAG, [StringComparison]::Ordinal)) {
+                throw 'Pre-compensation V25 release tag identity changed; refusing to mutate an unproven release.'
+              }
+              if (-not [string]::Equals(([string]$authoritativeReleaseBeforeCompensation.target_commitish).Trim(), $env:RELEASE_COMMIT_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+                throw 'Pre-compensation V25 release target identity changed; refusing to mutate an unproven release.'
+              }
+              if (@($authoritativeReleaseBeforeCompensation.assets).Count -ne $assetSpecs.Count) {
+                throw "Pre-compensation V25 release asset set changed. Expected exactly $($assetSpecs.Count) assets, found $(@($authoritativeReleaseBeforeCompensation.assets).Count); refusing mutation."
+              }
+              $releaseBeforeCompensationAssetIds = @()
+              foreach ($spec in $assetSpecs) {
+                $preCompensationMatches = @($authoritativeReleaseBeforeCompensation.assets | Where-Object { [string]::Equals([string]$_.name, $spec.Name, [StringComparison]::Ordinal) })
+                if ($preCompensationMatches.Count -ne 1) {
+                  throw "Pre-compensation V25 release must contain exactly one asset named $($spec.Name), found $($preCompensationMatches.Count); refusing mutation."
+                }
+                if ([int64]$preCompensationMatches[0].size -ne $spec.Size) {
+                  throw "Pre-compensation V25 release asset size changed for $($spec.Name). Expected=$($spec.Size), API=$($preCompensationMatches[0].size); refusing mutation."
+                }
+                $releaseBeforeCompensationAssetIds += ([string]$preCompensationMatches[0].id)
+              }
+              $preCompensationAssetIdentityDrift = @(Compare-Object -ReferenceObject $verifiedReleaseAssetIds -DifferenceObject $releaseBeforeCompensationAssetIds -SyncWindow 0)
+              if ($preCompensationAssetIdentityDrift.Count -ne 0) {
+                throw 'Pre-compensation V25 release asset IDs changed after byte verification; refusing mutation.'
+              }
+
+              if ($authoritativeReleaseBeforeCompensation.draft -eq $true) {
+                Write-Host 'V25 release is already non-public at compensation time; no compensation mutation is required.'
+              }
+              else {
+                $compensationBody = @{ draft = $true; prerelease = $true } | ConvertTo-Json
+                $compensatedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body $compensationBody
+              }
+
+              $authoritativeCompensatedRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
+              if ($authoritativeCompensatedRelease.draft -ne $true) {
+                throw 'Compensated V25 release is still public.'
+              }
+              if ($authoritativeCompensatedRelease.prerelease -ne $true) {
+                throw 'Compensated V25 release lost prerelease state.'
+              }
+              if (-not [string]::Equals(([string]$authoritativeCompensatedRelease.tag_name).Trim(), $env:RELEASE_TAG, [StringComparison]::Ordinal)) {
+                throw 'Compensated V25 release tag identity changed.'
+              }
+              if (-not [string]::Equals(([string]$authoritativeCompensatedRelease.target_commitish).Trim(), $env:RELEASE_COMMIT_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+                throw 'Compensated V25 release target identity changed.'
+              }
+              if (@($authoritativeCompensatedRelease.assets).Count -ne $assetSpecs.Count) {
+                throw "Compensated V25 release asset set changed. Expected exactly $($assetSpecs.Count) assets, found $(@($authoritativeCompensatedRelease.assets).Count)."
+              }
+              $compensatedReleaseAssetIds = @()
+              foreach ($spec in $assetSpecs) {
+                $compensatedMatches = @($authoritativeCompensatedRelease.assets | Where-Object { [string]::Equals([string]$_.name, $spec.Name, [StringComparison]::Ordinal) })
+                if ($compensatedMatches.Count -ne 1) {
+                  throw "Compensated V25 release must contain exactly one asset named $($spec.Name), found $($compensatedMatches.Count)."
+                }
+                if ([int64]$compensatedMatches[0].size -ne $spec.Size) {
+                  throw "Compensated V25 release asset size changed for $($spec.Name). Expected=$($spec.Size), API=$($compensatedMatches[0].size)."
+                }
+                $compensatedReleaseAssetIds += ([string]$compensatedMatches[0].id)
+              }
+              $compensatedAssetIdentityDrift = @(Compare-Object -ReferenceObject $verifiedReleaseAssetIds -DifferenceObject $compensatedReleaseAssetIds -SyncWindow 0)
+              if ($compensatedAssetIdentityDrift.Count -ne 0) {
+                throw 'Compensated V25 release asset IDs changed after byte verification.'
+              }
+            }
+            catch {
+              $compensationError = $_
+              throw "V25 release publication safety validation failed after publish PATCH and compensation could not prove the exact release non-public. publication=$($publicationError.Exception.Message) compensation=$($compensationError.Exception.Message)"
+            }
+            throw "V25 release publication safety validation failed after publish PATCH; exact release was proven before mutation, returned to draft when required, and authoritatively reconciled. publication=$($publicationError.Exception.Message)"
           }

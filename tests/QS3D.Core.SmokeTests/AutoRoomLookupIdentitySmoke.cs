@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.SmokeTests
@@ -19,7 +21,7 @@ namespace QS3D.Core.SmokeTests
             var project = Project();
             var room = AutoRoom("ROOM-A", "A;B");
             project.Elements.Add(room);
-            project.Elements.Add(null!);
+            CorruptProjectStateSeed.AddNullElement(project);
             var version = project.ChangeVersion;
 
             Throws<InvalidOperationException>(() => AutoRoomLifecycle.FindBySourceSignature(project, "B;A", "F", "Z"));
@@ -86,7 +88,7 @@ namespace QS3D.Core.SmokeTests
             var project = Project();
             var room = AutoRoom("ROOM-A", "A;B");
             var finish = Finish("FINISH-DEPENDENCY-PAD");
-            finish.DependsOn.Add("\tROOM-A ");
+            AddPersistedDependency(finish, "\tROOM-A ");
             finish.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(room);
             project.Elements.Add(finish);
@@ -97,6 +99,15 @@ namespace QS3D.Core.SmokeTests
             Equal(version, project.ChangeVersion);
             Equal(ElementDirtyFlags.None, finish.Dirty);
             Equal("\tROOM-A ", finish.DependsOn[0]);
+        }
+
+        private static void AddPersistedDependency(ProjectElement element, string dependency)
+        {
+            var valuesField = element.DependsOn.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed malformed persisted dependency state.");
+            var values = valuesField.GetValue(element.DependsOn) as List<string>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement.DependsOn backing collection.");
+            values.Add(dependency);
         }
 
         private static ProjectState Project()

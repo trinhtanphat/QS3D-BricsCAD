@@ -22,7 +22,7 @@ namespace QS3D.Core.SmokeTests
             var wall = Wall();
             wall.Quantities["Sentinel"] = 17d;
             project.Elements.Add(wall);
-            project.Elements.Add(null!);
+            CorruptProjectStateSeed.AddNullElement(project);
             var quantityCount = wall.Quantities.Count;
 
             try

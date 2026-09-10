@@ -1,0 +1,1251 @@
+# Issue #5718 — LOCAL-022 V25/V26 bounded native qualification
+
+## Verdict
+
+Latest licensed attempt (2026-09-08): V25 `quantity-v25-66` is
+**FAIL_OR_NO_RESULT**, with all three native phases and the first actual BQ
+phase passing, but the required cold BQ phase absent. The strict aggregate
+and V26 predecessor gates correctly reject this incomplete receipt.
+
+- Product source `e768d19f967e010d0343f446b98b561dce7c24bb`, pushed harness
+  `47240b3033d869a2e5b2f3d80a3f454d3c08ab75`, RunId
+  `92bd6fff2bce4e508fe9bb3aa087d5fe`, host25.2.10. Allocation ran
+  `2026-09-08T15:49:30.6030671Z`–`2026-09-08T16:04:00.9430522Z`.
+  V25 package is the15b86bcd hash below; actual loaded probe SHA256
+  `b8176775d4625b68f2347554fd35f7644df91dec369ea07360aa12c5d3e6cd34`.
+- Native run15/save8/cold9 assertions passed. The initial real BQ displayed one
+  grouped row, count2, gross/net25.333m3. Supported Computer Use performed
+  Tinh lai, detail (two rows of12.667m3), summary, row selection, Dinh vi and
+  window close. Actual routed events, fresh recalculation rows, strict76/3
+  totals, both source footprints and reporting nonmutation passed all9 BQ
+  assertions. These are new bounded runtime results, not full qualification.
+- After the BQ observer completed at15:58:22Z, the CAD save-on-exit dialog
+  required a physical No for the already saved disposable fixture. The fresh
+  cold process started at16:00:24Z and passed native reopening. Its actual
+  command history then reported `QS3DBQ error: khong the hoan tat thao tac`
+  (localized Vietnamese). No BQ window appeared. The operator inspected this
+  history and deliberately closed only that owned CAD process; no command
+  replay or synthetic quantityreopen marker was used.
+- Receipt: native phases3, quantity phases1, aggregate false. Private fixture
+  cleanup, protected state, original profile pointer/inventory, nonce removal,
+  zero BricsCAD processes and outer original-autostart restoration passed.
+  Profile inventory before/after SHA256 remains285c6889f88f326f165c9b539d83ed47555c03f8343d2826c7c6638a3462cf0c.
+  An exact generated QSDB copy is retained privately for offline reproduction;
+  it is not a customer DWG or a memory dump and is not committed/uploaded.
+- This allocation is consumed. Do not replay66 or admit V26 from it. The
+  failure has returned to source-side diagnosis; earlier quantity volume
+  correction is now demonstrated warm, but cold reporting is not qualified.
+  MCP/browser/tunnel execution remains paused.
+
+Runner follow-up adds a60-second missing-BQ-window failure bound without
+shortening the existing55-minute physical-gesture allowance or changing any
+quantity/identity/native/cleanup oracle. The actual portable wait method has
+an executable regression (missing-method RED before implementation; opening
+boundary and observed-window cases GREEN after). This is harness evidence,
+not a replacement for the missing licensed cold BQ result.
+Both native runners now read a published quantity marker while the process
+remains alive; a failure or foreign RunId immediately enters existing guarded
+cleanup rather than waiting behind a possible save-on-exit dialog. Actual
+polling-statement regressions failed before this wiring and pass afterward.
+PASS still requires normal owned exit and all native/quantity/cleanup evidence.
+
+Source-side reproduction is owned by #6198: the generated local QSDB, loaded
+through the frozen Core, then detached and regenerated (zero dirty elements),
+reproduces the report generation-drift exception. Persisted property ordering
+causes semantic property setters to mark only the new report snapshot stale.
+The live project did not change. The separate fix must preserve real drift
+rejection and public semantic invalidation; this note does not claim it landed
+or that a new licensed cold BQ pass exists.
+
+Source checkpoint (2026-09-09): #6198 / PR6224 pushed
+`ac3701659d0c9f369c3ab117b7f9c2c56f710762`, reconciled through protected main
+`19e87a624feedccd1d2f49c8d0888d1263e4b93d`. The Core build has zero
+warnings/errors; the complete Core smoke suite and both persisted-copy and
+existing generation-fence preflights pass. The exact privately retained66 QSDB
+now passes offline Load/detached/regenerate0/Group76/3/Detail2x38/3, with its
+disk hash unchanged. Synthetic tests preserve real post-capture mutation
+refusal and source/preview/disk state. Review also caught a capacity guard lost
+by bypassing semantic Add: the public SetProperty10001 regression failed before
+an explicit snapshot bound, then passed with10000 accepted and10001 refused in
+both report modes. Protected current-head CI and actual licensed rerun are
+still required; this is REMOTE_SAFE, not LOCAL_PASS.
+
+The owner's architecture review request was checked against the nearby
+reconstruction boundaries. QSDB deserialization and ProjectStateSnapshot
+already use persistence-only copies and restore metadata; RoomFinishSchedule
+and DoorOpeningSchedule use plain dictionary/DTO snapshots. No second reachable
+equivalent defect was identified in this bounded inspection. The correction
+separates reconstruction from semantic editing without changing the BricsCAD
+hosted-plugin boundary or weakening the public model lifecycle. This is not a
+whole-system architecture certification or grounds for an unrelated rewrite.
+
+Post-merge continuation (2026-09-08): #6189 owns the remaining standalone BQ
+qualification work after the released #5718/#5738 harness carrier. PR5738
+merged as `19a62fa66c05034397039bc32944aeeaee6b6f09`; production quantity
+fix #6145/#6169 merged as `e768d19f967e010d0343f446b98b561dce7c24bb`.
+Their exact candidate trees matched the fetched merges, with protected
+preflight/core SUCCESS (harness PR34243315638 on e217bf2c0; source
+PR34244632340 on e31cba167). Both task reservations are released. Parent
+#4034/#72 and aggregate LOCAL-022 acceptance remain **IN_PROGRESS**.
+
+The next matched local package pair is built from exact merged source
+`e768d19f967e010d0343f446b98b561dce7c24bb`, not from the older unmerged
+b816 candidate. Actual SDK builds: V25 23.57s, V26 18.49s, zero warnings/errors.
+
+- V25 ZIP SHA256 `15b86bcdacdd614fb785143f49e4d51e90bc380c2b216c583acebcc35abccdaa`.
+- V26 ZIP SHA256 `30a0a6a99875468ac5063f2397903cc913089f84410bf9d57bc3901ab2d04c1b`.
+- Both version `0.1.0-preview.10307`, unsigned, 564 commands, locally generated
+  without installed-product changes. `LOCAL_PR_CANDIDATE` remains the existing
+  non-published schema category even though this source is now merged; the
+  local provenance releaseTag is only a version label, not a publication claim.
+- Wrapper/native predecessor checks pin this exact pair; new negative cases
+  reject the old b816 receipt/allocation/archive as V26 admission. The actual
+  wrapper test failed on the old pins before the pin update. Strict76/3 oracle,
+  native phase coverage, physical gestures and full cleanup requirements are
+  unchanged. Source/build evidence is not licensed PASS.
+- Allocation65 below remains consumed and its closure cause is unknown.
+  Its terminal receipt proves full cleanup, independently checked with zero
+  CAD processes. A controlled first attempt on the newly merged e768 candidate
+  may use a fresh allocation after the usual exclusive-host/protected-state/
+  exact-hash admission checks. This does not claim65's cause was identified or
+  fixed. No startup input or replay is permitted; a fresh, uninterrupted V25
+  BQ result and full cleanup are required before V26.
+- Package preparation check: V25 archive integrity passed; both new probe SDK
+  builds and the complete host-free runner suite passed. The extra production
+  V26 release-identity verifier failed with `managed assembly identity mismatch`.
+  Direct inspection found both managed versions and metadata equal0.1.0.0;
+  dot-sourcing the actual verifier confirmed its `Get-HeldAssemblyVersion`
+  returns an Object[] containing `System.Threading.Tasks.VoidTaskResult` and
+  `System.Version`, because its CopyToAsync await result is unsuppressed.
+  This is an observed verifier failure, not successful package admission or a
+  DLL version mismatch. Its separate source fix must preserve held-byte/hash/
+  timeout checks; this harness does not alter or bypass that verifier.
+
+Previous attempt (2026-09-08): V25 `quantity-v25-65` is **FAIL_OR_NO_RESULT**,
+not a BQ verdict. RunId `de6f8cb516864697a3e0d16c25cb998d`, exact pushed
+harness `28df62564ff7277dad6daf2065829b683b3809ae`, product source
+`b816113ea6196ec4ce2dadc763f948f817b334a2`, BricsCAD25.2.10, ran
+`2026-09-08T14:48:51.8449838Z`–`2026-09-08T14:56:59.9751950Z`.
+The owned native launcher exited0 without a phase marker or exact child;
+native/quantity phases verified0. Last module inspection before exit had not
+observed QS3D or the probe. Whether the launcher was closed externally is not
+established; no crash, licensing diagnosis or product regression is inferred.
+Supported Computer Use returned a launcher window but no usable CAD workspace;
+no test gesture or command was sent. Exact V25 package hash is listed below;
+allocation probe SHA256 is
+`6903a3b88a2c178e3072bd08d1a98127ffaab079d9bcdfcbf106f3c4321fded3`.
+Full private/protected/profile cleanup and original autostart restoration passed,
+with before/after profile inventory
+`285c6889f88f326f165c9b539d83ed47555c03f8343d2826c7c6638a3462cf0c`
+and independently verified zero BricsCAD processes. Only disposable private
+allocation files were removed. This allocation is consumed: do not replay it or
+admit V26 from it. BQ recalculate/detail/Locate/cold remain untested on this new
+source, and the strict76/3 oracle remains unchanged. MCP remains paused.
+
+New local candidate admitted for the next reporting allocation: pushed product
+source `b816113ea6196ec4ce2dadc763f948f817b334a2` (#6145 / PR#6169), containing
+the protected #6168 / PR#6171 fix merged on main at
+`74fdde09c2de1d3583f006d57912474133c9e552` (issue6168 closed; remote branch removed).
+Both exact-source SDK builds passed (V25 30.15s, V26 32.15s, zero warnings/errors),
+and separate local unsigned packages were produced without installed-product changes:
+
+- V25 ZIP SHA256 `debf58de98658aad8aa078d158a6b2fae6fafdb9241228b0f4e80e8ca7b4dd25`.
+- V26 ZIP SHA256 `d7f60b9dce98a7e2685e53cadb94d52a98675467d62980f6a1c8d79dce33b1a0`.
+- Both ProductVersion `0.1.0-preview.10307`; source pin is a local PR candidate,
+  **not** an official release despite the version-label field in local provenance.
+- Exact b816 branch run34234095151 and PR run34234100717 passed preflight/core.
+  Later main freshness is a separate merge gate; no runtime verdict yet.
+
+Source remediation checkpoint (2026-09-08, **not new licensed evidence**):
+
+- Quantity source carrier #6145 / PR#6169, pushed head
+  `0493ee9f6955a818952d0a5da2b16886891b7f8f` (main through
+  `698c6cd3765279215cb514fa174c496d0685feda`). The actual Core regression
+  reproduced the stale prism result before implementation; canonical six-dimension
+  projection now runs at native creation/edit and Core dirty regeneration. Stale
+  concrete aliases/deductions are removed so later user rules remain authoritative;
+  incompatible measured evidence fails closed and unqualified old prism formwork
+  totals are removed. No BQ display or strict runtime oracle change.
+- Full Core smoke suite passed before the latest main reconciliation, including
+  clean-state reporting, custom rules, box/taper/legacy/invalid/overflow/atomicity
+  and ordinary Foundation cases. V25 SDK build passed with zero warnings/errors.
+  Branch run34232269662 on initial sourcea53 failed the existing extracted scope
+  test because it omitted the new policy dependency. This was fixed on the same
+  carrier by compiling the actual policy/math and checking actual element-contract
+  quantity refresh; that executable regression passes. The complete Core suite
+  was then rerun on049 after reconciliation and finished **ALL PASS**. Fresh
+  protected CI remains required; this is still source-only evidence.
+- Separate source build carrier #6168 / PR#6171, pushed head
+  `1fb659c7503f73a7ea8a3089a024dc689e294a69`, repairs independently reproduced
+  V26 CS0103 updater-receipt references and targeted SYSLIB0014 compatibility.
+  Both actual SDK builds passed on that exact head: V26 26.51s, V25 36.46s,
+  zero warnings/errors. V26 never reads/deletes V25 receipt state; version
+  normalization is unchanged. No MCP traffic or transport behavior was tested.
+- The complete existing LOCAL-022 host-free runner suite passed after main698
+  reconciliation, including strict quantity oracle, write-open hashing, exact
+  phase/predecessor/status refusal and all prior input/native guards. It executed
+  no CAD, native input or tunnel request.
+- Do not run frozen87aff again for this known BQ failure. After the source fixes
+  are combined through their protected carriers, pin matched fresh package hashes,
+  push the clean harness, then execute a new V25 quantity allocation before V26.
+  Allocation64 remains FAIL; no new quantity/native/physical PASS is claimed.
+
+Latest reporting result (2026-09-08): **`FAIL_OR_NO_RESULT /
+QUANTITY_GROSS_VOLUME`**, V25 allocation64. The real production `QS3DBQ`
+window's visible DataGrid contained one grouped row, count 2, gross/net **16 m³**.
+The independent analytic/native fixture requires **76/3 = 25.3333333333333 m³**
+(38/3 per regenerated footing). This is a reproduced product reporting defect,
+not missing UI input, a CI failure or a reason to weaken the quantity oracle.
+
+- Allocation `quantity-v25-64`, RunId `2dfbe5c93d524ffcb158c09e2576a889`,
+  exact pushed harness `6db117b4b082487c2923a95667d7d4259e376596`,
+  unchanged frozen source `87aff7fec452f9a8dd9f641ef84d143edc73514d`,
+  BricsCAD25.2.10; `2026-09-08T10:53:37.3233213Z`–
+  `2026-09-08T10:54:23.0001410Z` (approximately46 seconds).
+- Package SHA256 `6da38fcb3bc5fdb1989e9397fad45da712bf4af6b7690298a2fe83657bcb10ac`;
+  probe SHA256 `3d76e0e688868741f3673840512e24842f87eea93d9797d9783dd78e43ab8afa`.
+- Native fixture preparation run15/15 and save8/8 passed, including exact
+  regenerated dimensions4/2/2/1/1/1 metres, native topology/sections/ownership.
+  At `10:54:14.0069203Z` the separate in-process observer read actual BQ
+  `_rows` and DataGrid identity/cardinality, recorded gross/net16, then failed
+  `quantity_open / QUANTITY_GROSS_VOLUME`. No substitute report was constructed.
+  This is actual bound WPF data evidence, **not a screenshot or physical gesture
+  PASS**: no external input/capture was used and recalculate/detail/Locate/cold
+  BQ were not reached. Quantity markers verified0; no V26 reporting run admitted.
+- Root-cause evidence in unchanged frozen/current reporting path: ordinary
+  Foundation capture initializes box4 and tapered-prism12 quantity dictionaries;
+  native creation/Family regeneration update correct dimension/volume properties
+  but mark semantic state clean without refreshing those quantities. BQ's
+  detached dirty-only regeneration skips them and reports stale dictionaries.
+  A source fix must synchronize creation/edit/Core regeneration, not adjust BQ
+  expectations to16 or32. Production corrections use a separate safe carrier;
+  this issue continues to own the strict local runner and exact evidence.
+- Full private/profile/protected-state cleanup succeeded. Profile inventory
+  before/after `285c6889f88f326f165c9b539d83ed47555c03f8343d2826c7c6638a3462cf0c`;
+  original OpenAI autostart hash/timestamp restored exactly, Cloudflare unchanged,
+  independent zero-BricsCAD check. Only disposable allocation files removed;
+  sanitized markers remain local. No installed-product/private-DWG/MCP mutation.
+
+Preceding consumed allocation63 (`quantity-v25-63`, RunId
+`5f0e42e839bd4451a5a2420aa10e17a7`, harness
+`d31ae8fd7ab8c9a7d655d63cd5f7d982bfa55697`) ran
+`2026-09-08T10:50:59.6258176Z`–`2026-09-08T10:51:41.6403749Z` and remains
+`FAIL_OR_NO_RESULT / quantity_bind / UNEXPECTED_IOEXCEPTION` with native
+run/save only, zero quantity phases and full cleanup/restoration. Exact private
+stack/HRESULT80070020 identified test-only `HashFile` opening a CAD-held DWG with
+incompatible sharing. Commit6db fixes read-only hashing with FileShare.ReadWrite;
+the actual method passes a regression using an independently held write handle.
+Allocation64 is a fresh identity after that runner fix, not a replay of63.
+
+The separate QuantityUi runner, strict oracle/markers/predecessor/status tests
+and both V25/V26 SDK builds pass locally; these do not qualify reporting runtime.
+Existing accepted physical/native cells below retain their original scope.
+MCP stays paused; Quantity/Unicode/DPI/private-DWG and applicable published-source
+acceptance remain incomplete. PR5738 remains the canonical draft local carrier.
+
+Latest physical UI result (2026-09-08): V26 allocation62 is
+**`LOCAL_PASS_BOUNDED`**, with all three phases verified: UI19/19,
+saved8/8 and fresh-process reopen9/9. This closes the bounded V26 physical
+placement/edit/save/cold-reopen gap; it does not qualify the remaining
+Quantity/Unicode/DPI/private-DWG or applicable published-source matrix.
+
+- Allocation `ui-control-free-v26-62`, RunId
+  `98e70b530daf469c90ebd622fd6a8521`, ran
+  `2026-09-08T09:48:08.6304693Z`–`2026-09-08T10:10:03.5531987Z` on exact
+  pushed harness `c7bc19b93198678878f2a228e7294d62fed2feab`, BricsCAD26.2.07,
+  unchanged frozen product `87aff7fec452f9a8dd9f641ef84d143edc73514d`,
+  `OBSERVED_CLICK_V2 / PAUSE_FOR_OPERATOR_V1`, `render_experiment=false`.
+  V26 ZIP SHA-256:
+  `59498948341f36d408f8bf838e177170c19d99ffc64acaa2070b0524e6b99a81`;
+  probe SHA-256:
+  `62bee80c05cd772dfbaac1b2ea338e3adaf8279ce7460596ffe4391342eef0e3`.
+  ProductVersion remains0.1.0-preview.10307, an unsigned local PR candidate,
+  not the official release. The admitted predecessor is accepted V25 UI48.
+- After the owner rebooted Windows (boot07:48:50.500Z), the earlier61 reached
+  QS3D but was closed by the owner. The owner explicitly confirmed that closure
+  before this fresh62. This permits a new uninterrupted attempt; it is not
+  evidence that the native startup/UIA wait was fixed or its cause identified.
+  The new62 reached LocateWorkspace at09:49:13.9214401Z and SelectTree at
+  09:49:13.9278258Z, roughly65 seconds after runner start. This is one startup
+  observation, not a latency benchmark or general stability claim.
+- All21 acceptance actions were actually performed through supported Computer
+  Use and acknowledged only after refreshed observation: tree selection,
+  Add/Esc cancellation, Add/six dimension inputs/OK, first draw/two centre
+  clicks/Enter, Family scope/H2 edit, second draw/third centre/Esc.
+  The actual UI used top view. Visible caret/selection and resulting text
+  confirmed numeric focus; accessibility reported the same generic edit index
+  for different dialog fields and was unavailable in the hosted property pane,
+  so its index alone was not used as proof. Real tree-scrollbar and Properties
+  splitter/scrollbar gestures exposed the requested rows without helper-side
+  WPF mutation. The three independently witnessed native points matched the
+  pre-click expected points; generated geometry did not define those targets.
+- H2=0 produced two real solids; physical Family H2=1000 regenerated both old
+  outputs, with former handles erased, and a third physical click created the
+  tapered case. The unchanged UI validator passed cancellation nonmutation,
+  six-field layout/input, ownership/extents, exact cardinality, repeated picks,
+  Family regeneration and Enter/Esc termination. Production QS3DSAVE and native
+  QSAVE passed the saved-state checks. Fresh-process reopen passed exact digest,
+  project/Family/semantic identity, cardinality and live solid dimensions,
+  volume and extents. No input or Computer Use query was sent during cold startup.
+- Runner exit0; all private/protected-state/profile cleanup checks passed,
+  including original current pointer, nonce removal and matching profile
+  inventory hash
+  `7ce59ffcc79f4bc2734e4469f0d42af164704ca8b81174a23c49e7a14e2d5eee`.
+  Original OpenAI autostart hash
+  `6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b`
+  and timestamp `2026-09-07T02:55:30.6894998Z` were restored. Independent final
+  process inspection found zero BricsCAD/tunnel processes. Installed product,
+  licensing and Windows graphics settings were unchanged; MCP remained paused.
+  Raw screenshots, action files, drawings and dump data are not published.
+
+The receipt intentionally retains `aggregate_local022_qualified=false`.
+V25 UI48 and native56/57 retain their exact bounded passes; no newer source,
+arbitrary private solid, all-range geometry or released package is implicitly
+qualified. After62 cleanup, main `937e2485c25fb2d833bf8a9a4cfe7ac6f202e1f0`
+was merged into the same task branch without touching the frozen product.
+The runtime harness remains c7bc19b93, not that later integration head.
+
+### Consumed V26 allocation61 — owner-closed interruption
+
+`ui-reboot-v26-61`, RunId `31f1a2eab5434d8ea6646773be08345e`, ran
+`2026-09-08T07:53:15.5212762Z`–`2026-09-08T08:04:02.1992677Z` on the same
+c7bc19b93 harness, product/package/probe and control-free mode as62. It reached
+QS3D after reboot and recorded five actual SENT ACKs through InputL1=2000.
+Request6 InputW1=2000 was only clicked and its existing1600 selected with Ctrl+A;
+no replacement text or ACK6 was sent. The trace entered InputW1 at
+07:58:30.6452212Z and never advanced. The owner explicitly confirmed closing
+the test window around15:04 local. Diagnostics record exit_code=0 without a
+phase marker; this is an owner-closed interruption, not a demonstrated crash,
+product defect or UI timeout. The immutable receipt stays `FAIL_OR_NO_RESULT`,
+zero verified phases and aggregate false. All private/protected-state/profile
+cleanup and original autostart hash/timestamp restoration passed; cleanup_failure
+is null. Preserve consumed61 and do not replay its outstanding action.
+
+Exact c7bc19b93 CI also passed independently: PR34200192746
+(`preflight`101976976207, `core`101977964259), push34200185059
+(`branch-preflight`101976950432, `branch-core`101977923172), metadata34200236593
+(`metadata-preflight`101977109833, `metadata-core`101978109391). These are source
+checks, not the basis of the runtime verdict or evidence for a later head.
+
+### Historical controlled comparison59/60
+
+Latest controlled comparison (2026-09-08): allocation59 completed
+`DIAGNOSTIC_ONLY`; the subsequent control-free allocation60 is
+`FAIL_OR_NO_RESULT / PRE_QS3D_NATIVE_STARTUP_WAIT`. Neither qualifies V26 UI.
+Both used exact pushed harness `8aa17bfe9f73cfd0c1d74927bb2b9de4a7f4f5dc`,
+main through `c1de4bf46ab10b46698312b35f1202e14113f8e7`, unchanged frozen
+product87aff/packages below, BricsCAD26.2.07 and the accepted cleaned V25 UI48
+predecessor. Probe SHA-256 for both:
+`115d8cb6718a6001878cc17b46d4ab3025cb5e769daa82f6ebd19928ee425e6d`.
+
+- `ui-render-controls-v26-59`, RunId `35b06991e19e48989d2ae9c35ff9f9b7`,
+  `07:19:53.1087279Z`–`07:25:31.7446866Z`: no agent input, activation,
+  float/re-dock or resize was performed. The runner launched maximized; supported
+  captures showed the independent native AddVisual palette and owned opaque WPF
+  window at their initial positions. Both visibly changed sequence/background:
+  Default011/012 then022–024; SoftwareOnly065/066 then085/086; restored
+  Default120–122 then132/133. QS3D Workspace and Drawing/Layer content was visible
+  throughout these observations, unlike58. The owner answered **yes** to seeing
+  the two colored controls change numbers directly on the monitor; that reply
+  is not phase-specific and does not retroactively establish what was on-screen
+  during58. Native title/interior values occasionally differ by one or two ticks
+  across sequential captures, not a same-instant rendering assertion.
+- The private trace records baseline at `07:20:27.5335445Z`, SoftwareOnly at
+  `07:22:24.4376780Z`, restored Default at `07:24:24.8424661Z` and complete at
+  `07:25:24.8924171Z`. Both controls report loaded/visible with HwndSource;
+  reported tier2 remains a capability value. The unchanged strict validator
+  rejects the diagnostic marker with empty checks; expected wrapper exit1,
+  zero acceptance phases/actions/ACKs. Default now displaying pixels contradicts
+  a blanket "V26 requires SoftwareOnly" conclusion, but the additional native/WPF
+  surfaces and periodic invalidations may themselves affect shared presentation.
+  No product fix or driver defect is inferred.
+- `ui-control-free-v26-60`, RunId `929012c48e1e4184a882348664baace5`,
+  `07:26:17.7044629Z`–`07:34:05.3999517Z`: explicitly `render_experiment=false`,
+  no witness surfaces and no Computer Use query/input during startup. This fresh
+  control-free comparison followed newly observed Default repaint, not a replay
+  or relabelling of53. Owned PID15072 remained windowless, with no QS3D or
+  coreclr module, no baseline and zero action/ACK/phase files. Resetting the
+  prior JavaScript session did not release it.
+- With the owner's explicit allocation60 local-only memory-dump consent, the
+  guarded capture and pinned offline reader executed against the exact
+  allocation/hash/PID/parent/start time. Thread0 waits in
+  `UIAutomationCore!OverlappedIOManager::AddChannel_AnyThread`, reached through
+  `HandleHookMessage`/`HookMessageWndProc` while native `lispex` initializes under
+  `LdrpCallInitRoutine` / `cadapp!CaApp::loadLispex`. Dump threads40/41 wait in
+  `ntdll!LdrpDrainWorkQueue` / `LdrpInitializeThread`. This reproduces the native
+  startup/UIA-loader interaction class seen in41, before QS3D can execute; it
+  does not identify the initiating accessibility client. Eight-thread WCT found
+  no cycle in its bounded sample; one separate thread waited toward dwm.exe,
+  not proof that DWM caused the main-thread wait. One offline batch requested
+  nonexistent dump thread42 and failed; a new40/41-only log completed. No such
+  partial reader result is called PASS. Raw dumps/logs remain private and ignored.
+- At `07:34:04.6824107Z`, after exact guard revalidation and confirmation that
+  startup still had not reached QS3D, the operator intentionally stopped only
+  PID15072. The live runner completed its own finally and exited1. This is not a
+  spontaneous crash, expired phase timeout, functional assertion failure or
+  evidence about control-free QS3D rendering:60 never reached that comparison.
+
+Both receipts verify full private/protected-state/profile cleanup, matching
+inventory hash `7ce59ffcc79f4bc2734e4469f0d42af164704ca8b81174a23c49e7a14e2d5eee`,
+original pointer and nonce removal. Exact OpenAI autostart byte1/hash and
+`2026-09-07T02:55:30.6894998Z` timestamp were restored. Final independent inspection
+found zero BricsCAD/tunnel processes. Installed product, licensing, Windows
+settings and MCP were untouched. Preserve consumed59/60; do not retry60 unchanged
+or add a permanent rendering workaround. The next UI execution needs a native
+startup environment that is not already stalled in this UIA/loader interaction.
+
+Exact8aa automatic CI completed SUCCESS: PR run34198752530
+(`preflight`101972439237, `core`101973549736), push34198747081
+(`branch-preflight`101972420248, `branch-core`101973413920), and metadata34198828569
+(`metadata-preflight`101972678093, `metadata-core`101973520515). The complete
+host-free suite and both SDK builds passed before this runtime; current V26
+launch builds also passed0 warnings/errors. This CI is not runtime acceptance
+and does not qualify a later documentation head. V25 UI48 and native56/57 retain
+their bounded passes; V26 physical UI, Quantity/Unicode/DPI/private-DWG and
+published-source acceptance remain incomplete. PR5738 stays draft.
+
+Reference for interpreting, not proving, the observed native loader wait:
+[Microsoft DLL initialization restrictions](https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-best-practices).
+
+Owner reply (2026-09-08): the owner did not watch allocation58. Therefore there
+is still no direct-monitor confirmation for58; do not reinterpret that reply as either
+"monitor blank" or "capture-only". The next bounded diagnostic adds two simple
+independent repaint witnesses (native AddVisual palette and opaque WPF window)
+with changing sequence numbers, fixed initial positions and separate supported
+captures. This is a new hosting/repaint isolation scenario, not an unchanged58
+retry or a software-rendering acceptance workaround. No production fix is yet
+inferred. The same branch incorporates main through
+`c1de4bf46ab10b46698312b35f1202e14113f8e7`; the frozen product remains87aff.
+The exact new pushed harness and actual allocation verdict must be recorded
+separately after execution. MCP stays paused and all older verdicts stay intact.
+
+Latest rendering isolation (2026-09-08): V26 allocation58 is **`DIAGNOSTIC_ONLY`**,
+not qualification. It produced an observed Default/SoftwareOnly/Default
+difference on the same frozen product, without authoring requests or changing a
+production/default Windows setting. Exact harness
+`c41f2f5c48c6f320a579b333a344de0fc23fc995`, product
+`87aff7fec452f9a8dd9f641ef84d143edc73514d`, V26.2.07;
+RunId `7c2d14f4de90418c827ede08302f3090`;
+`2026-09-08T05:55:30.2177293Z`–`2026-09-08T06:01:07.4930069Z`;
+probe SHA-256 `15ae39cc9911bf1d20a7e554d963495b066459c26665948755db515691dd31ed`;
+V26 ZIP SHA-256 `59498948341f36d408f8bf838e177170c19d99ffc64acaa2070b0524e6b99a81`.
+The fresh disposable Default clone followed the accepted same-product V25 UI48;
+this diagnostic-only mode does not replace a V25-first qualification sequence.
+
+Observed with supported Computer Use, no accessibility query:
+
+- Baseline trace at05:56:03.8365554Z confirmed process mode Default, WPF tier2.
+  Both QS3D interiors appeared blank before and after physical maximize; native
+  ribbon/CAD viewport were visible. No authoring controller/actions were started.
+- SoftwareOnly was confirmed at05:58:03.2314869Z. Initial capture and a physical
+  palette-area scroll still showed blank interiors. Physically floating the
+  Workspace then revealed its actual Unicode controls/tree and the right panel.
+  Re-docking retained visible contents. The double-click also opened the native
+  Filter panel after re-docking; this incidental nonce-profile layout change is
+  recorded, not described as an identical-layout comparison.
+- Default was restored at06:00:02.7418648Z. Existing contents initially remained
+  visible; a tree-area scroll did not visibly update them. Physically floating
+  Workspace again made both QS3D interiors blank, while native CAD/Filter stayed
+  visible. Thus "contents remained visible immediately after restoring Default"
+  is not evidence of continued WPF repainting.
+- Completion at06:01:02.5794405Z confirmed Default. The UI marker explicitly has
+  `status=DIAGNOSTIC_ONLY`, `error_code=NOT_QUALIFICATION`, empty checks. The
+  unchanged phase validator refused it; final receipt also says DIAGNOSTIC_ONLY,
+  zero phases. Exit1 is the expected non-qualification path, not cleanup failure.
+
+This narrows the investigation to accelerated WPF presentation/capture behavior;
+it does not distinguish a real on-monitor defect from capture interoperability,
+prove an Intel-driver defect, or authorize a production-wide software-rendering
+default. Default is the requested process policy and tier2 is a capability report,
+not a measurement of the backend used by each individual render target.
+Direct owner observation of the blank state remains needed for that
+distinction. Read-only machine facts: Windows11 Pro build26200, Intel UHD620,
+driver27.20.100.9664 dated2021-06-01, display1366×768. No System/Application
+warning/error/critical events were returned for the prior53 diagnostic interval;
+absence of those events is not proof of a healthy rendering pipeline.
+
+Private fixture removal, original profile inventory/current pointer restoration,
+nonce removal, protected state and exact original autostart byte/hash/timestamp
+all verified; zero hosts, no MCP requests, no installed package/license/driver or
+Windows setting changes. Computer Use was reset after cleanup. Allocation58 is
+consumed; do not replay it unchanged or call its software-rendered view UI PASS.
+The diagnostic helper, mode/restore failure tests, actual runner verdict gates,
+full focused suite and both SDK builds passed before execution. Prior exact7e80
+PR34191257939 (`preflight`101949648023/`core`101950321061) and push34191254528
+passed; that green evidence does not qualify newer harness commits or runtime UI.
+Exact c41f2f5 code PR34192478507 (`preflight`101953187462/`core`101953932034)
+and push34192473602 (`branch-preflight`101953171376/`branch-core`101953890470)
+subsequently passed too. Newer documentation/main-sync heads require fresh CI.
+Native56/57 and physical V25 UI48 retain their accepted bounded scopes below.
+
+Latest licensed topology pair (2026-09-08): **V25 allocation56 and V26 allocation57
+are `LOCAL_PASS_BOUNDED`, all three V3 native phases**, on exact pushed harness
+`1cf3fa8baa43298e1c0b05bc5eeecd319d40bc36` and unchanged frozen product
+`87aff7fec452f9a8dd9f641ef84d143edc73514d`. Main through
+`911b1b0ab92ae6a647ff29d8fd474c3d02430810` is synchronized in the harness, not
+relabelled as tested product. Both use non-interactive `NATIVE_V1 / WALL_CLOCK_V1`
+and fresh disposable `Default` clones.
+
+- V25.2.10: RunId `272a0d94c8ea47b3ba12239cf2a2a708`,
+  `2026-09-08T05:31:33.8583029Z`–`2026-09-08T05:32:29.8281267Z`;
+  probe SHA-256 `5fd5f4b39d188eb62530262cd2337c8fa101c47b8bcf8603cfdfd07b06b085bc`;
+  ZIP SHA-256 `6da38fcb3bc5fdb1989e9397fad45da712bf4af6b7690298a2fe83657bcb10ac`.
+- V26.2.07: RunId `ff8777acbb414c96b373d4db9f4ca35d`,
+  `2026-09-08T05:33:33.5717688Z`–`2026-09-08T05:34:22.4119594Z`;
+  probe SHA-256 `9f72a6d7f1f64125d10f4d2426c6c433cfc9107b25ac75c60b5d68280cf4503e`;
+  ZIP SHA-256 `59498948341f36d408f8bf838e177170c19d99ffc64acaa2070b0524e6b99a81`.
+
+Each host passed run15/15, saved8/8, cold9/9, all strict Boolean assertions and
+matching RunIds. Complete expected fixture BREP vertex/edge/face inventories,
+one exterior shell, straight edge curves/endpoints, outward planar face position
+and area, exterior four-edge loops, two-face incidence and Euler2 passed for every
+initial/regenerated/saved/cold solid. All V2 quarter-section checks and prior
+ownership/volume/cardinality/generic Foundation/save/cold checks remain intact.
+This closes the explicit box/two-axis-taper fixture topology and sampled-section
+gap; it is not arbitrary/private-solid or all-dimensional-range qualification.
+
+Both runners exited0, removed their private fixture copies, restored exact
+original profile inventory/current pointers, removed only owned nonces, verified
+protected state unchanged and left zero hosts. Autostart original byte1/hash and
+timestamp `2026-09-07T02:55:30.6894998Z` were restored after each run. No desktop
+input/capture, MCP request, installed-package or licensing change occurred.
+The product remains unsigned `LOCAL_PR_CANDIDATE`, version0.1.0-preview.10307.
+V26 physical UI53 remains failed. Quantity/Unicode/DPI/private-DWG and applicable
+published-source qualification remain open; #5718/#4034/#72 are not complete.
+Historical limitations below are superseded only for the explicit56/57 fixtures.
+
+Native topology successor (2026-09-08): marker V3 adds the complete expected
+fixture vertex/edge/face inventories, one exterior shell, planar outward faces,
+exterior four-edge loops/areas and closed edge-incidence/Euler checks. Prior
+V2 section54/55 results do not qualify these new assertions. The host-free oracle
+rejects malformed independent fixtures; SDK builds pass. Fresh licensed V25-first/
+V26 V3 execution passed in56/57 above. See
+`tests/QS3D.LocalQualification.V25/NATIVE-TOPOLOGY.md` for scope and limits;
+physical UI, private-DWG/DPI/Quantity and release qualification remain separate.
+
+Latest licensed section pair (2026-09-08): **V25 allocation54 and V26 allocation55
+are `LOCAL_PASS_BOUNDED`, all three V2 native phases** on exact pushed harness
+`8a0650fcb9416497410c7ce4c1572dce72f6bf7d` and unchanged frozen product source
+`87aff7fec452f9a8dd9f641ef84d143edc73514d`. Both are explicit non-interactive
+`NATIVE_V1 / WALL_CLOCK_V1` runs in fresh disposable `Default` clones.
+
+- V25.2.10: RunId `dc72e1fc540e48f5af1d54e21e5b568c`,
+  `2026-09-08T05:15:43.9188592Z`–`2026-09-08T05:16:37.1379336Z`;
+  probe SHA-256 `6e20d760efa71b7cbaa70ebf70714c20627261e999f8b8e3221fd592c00402db`;
+  ZIP SHA-256 `6da38fcb3bc5fdb1989e9397fad45da712bf4af6b7690298a2fe83657bcb10ac`.
+- V26.2.07: RunId `35424516bc7045c58ca6e631ee449081`,
+  `2026-09-08T05:17:21.5120887Z`–`2026-09-08T05:18:07.0999233Z`;
+  probe SHA-256 `bdc4afb419756d0bfba42a66c5a78d789eb943b92b73b3893c37685352810abf`;
+  ZIP SHA-256 `59498948341f36d408f8bf838e177170c19d99ffc64acaa2070b0524e6b99a81`.
+
+Each host passed run14/14, saved7/7, cold8/8 with exact matching RunIds and strict
+Boolean assertions. Actual native section area/perimeter/WCS bounds and four
+unique straight rectangle edges passed at25/50/75% of each applicable stage,
+before/after Family regeneration and after production save/native QSAVE/fresh
+process reopen. Existing volume/extents/ownership/cardinality/generic Foundation
+refusal checks remain intact. These samples extend geometric evidence; they do
+not prove complete BREP topology, every possible height or physical UI behavior.
+
+Both runners exited0. Private fixtures were removed; exact original profile
+inventory/current pointer restored, nonce removed, protected state unchanged,
+zero residual hosts. Original autostart byte1/hash and timestamp
+`2026-09-07T02:55:30.6894998Z` were restored. No mouse/key/capture, MCP request or
+installed-package change occurred during either native allocation. Candidate kind
+remains unsigned `LOCAL_PR_CANDIDATE`, not published-source qualification. V26 UI53
+below remains failed; Quantity/Unicode/DPI/private-DWG/full topology and applicable
+release evidence remain open. No aggregate #5718/#4034/#72 or MCP PASS.
+
+Native section successor (2026-09-08): native marker V2 now requires actual
+horizontal region intersections at three interior heights per lower/upper stage,
+with independent area/perimeter/bounds and four-edge rectangular-boundary checks.
+It covers initial placement, regeneration, save and cold reopen without changing
+physical-UI assertions. V1 native51/52 remain their original bounded PASS, not
+section evidence. Host-free adapter/validator tests and both SDK builds pass;
+fresh V25-first/V26 V2 licensed evidence is recorded in54/55 above. This is finite sampled-section
+coverage, not complete BREP topology. Procedure and limits:
+`tests/QS3D.LocalQualification.V25/NATIVE-SECTIONS.md`.
+
+Latest V26 UI allocation53 (2026-09-08) is **`FAIL_OR_NO_RESULT /
+UI_TIMEOUT_SELECTTREE`**, zero acceptance requests/ACKs and zero verified phases.
+Exact pushed harness `9b9820b9f33694a8afd3f384be25f7bdb5e8aac7`, unchanged frozen
+product `87aff7fec452f9a8dd9f641ef84d143edc73514d`, V26.2.07, disposable `Default`
+clone, `OBSERVED_CLICK_V2 / PAUSE_FOR_OPERATOR_V1`;
+RunId `78193408bb554370a71ae6f77b4e05a7`;
+`2026-09-08T04:52:07.5939454Z`–`2026-09-08T05:03:23.2470235Z`;
+probe SHA-256 `0b3edf2cdb40de1365e0cd035da9e79878659e8bcbc5ebee47f58e723ffd9df3`;
+V26 ZIP SHA-256 `59498948341f36d408f8bf838e177170c19d99ffc64acaa2070b0524e6b99a81`.
+
+The first state request returned occluding browser pixels; no browser input was
+sent. Selecting/activating the exact test window then showed native CAD and static
+QS3D contents. Physical maximize, tree-area scrolling and floating the palette
+did not expose a usable tree; both QS3D interiors ultimately appeared blank.
+Explicit accessibility observation returned null. No guessed tree click, direct
+WPF mutation, render setting change, memory dump or invented ACK was used.
+The unchanged600-second preparation deadline emitted the actual failure marker.
+
+New passive traces repeatedly recorded `command_active=0`, controller and
+Workspace managed thread1, and `same_dispatcher=true`. Render notification totals
+advanced after physical layout operations (for example35/36/0 posted/completed/
+aborted at04:53:27Z,76/68/13 at04:54:58Z). These are notification totals, not a
+matched pending-operation count. They narrow a continuously active script or
+completely unresponsive UI-dispatcher hypothesis, but do not establish displayed
+pixels or distinguish product/host rendering from capture failure. Direct owner
+pixel confirmation was requested and had not arrived at this checkpoint.
+
+The runner exited1 with its expected nonqualification error. All cleanup checks
+passed: owned private fixture removed, zero hosts, original current-profile
+pointer/inventory restored, nonce removed and protected state unchanged. The
+wrapper restored autostart byte1/hash and timestamp
+`2026-09-07T02:55:30.6894998Z`. MCP remained paused and untested. Allocation53 is
+consumed; do not replay unchanged. V25 UI48 and native51/52 remain accepted only
+for their separately documented bounded coverage. No aggregate PASS or merge.
+
+Exact9b982 PR34188484540 preflight101941514717/core101942131358 and
+push34188481793 branch-preflight101941505767/branch-core101942184104 all succeeded.
+Those greens do not qualify runtime or a later documentation head.
+
+Presentation diagnostic successor (2026-09-08): the observed UI runner now
+records passive Render-priority hook totals, raw CMDACTIVE and controller/Workspace
+dispatcher identity at most once per ten seconds. It adds no queue operations,
+forced layout, graphics setting, physical input or acceptance check. Completion
+and failure detach the observer; query/log failures remain diagnostic-only.
+Host-free event/integration tests and the full runner suite pass; both frozen
+product/SDK probe builds report zero warnings/errors. This is new diagnostic
+instrumentation, not a UI fix or PASS. Allocation53 above executed this exact
+diagnostic successor while retaining accepted V25 UI48 and native51/52.
+
+Exact documentation head `72d9a3a05846206bcd28671e68e644e8af51cf64` passed
+PR34187600716 preflight101938985471/core101939570240 and push34187597498
+branch-preflight101938975411/branch-core101939629868. Those checks do not
+qualify the later diagnostic head or complete licensed acceptance.
+
+Latest licensed native API pair (2026-09-08): **V25 allocation51 and V26
+allocation52 are `LOCAL_PASS_BOUNDED`, three phases each**, on exact pushed
+harness `764c7252312dd41cc0deddc0add3808c8637a8d9` and unchanged frozen source
+`87aff7fec452f9a8dd9f641ef84d143edc73514d`. This harness includes main through
+`f6ae8d38be09dceba556380157f1abdf56a8a21a`; main synchronization does not change
+the tested product. Both use `NATIVE_V1 / WALL_CLOCK_V1`, explicit non-interactive
+mode and disposable `Default` clones, not physical-UI proof.
+
+- V25.2.10, RunId `3d28f3d0b6d04e37ad51c6092bb9a2db`,
+  `2026-09-08T04:32:19.3455660Z`–`2026-09-08T04:33:16.9779888Z`;
+  probe SHA-256 `6dae0825a3b17dc62865ef6d31b77ef6ba53eeff904e17e07e8273c11e34de1b`;
+  ZIP SHA-256 `6da38fcb3bc5fdb1989e9397fad45da712bf4af6b7690298a2fe83657bcb10ac`.
+- V26.2.07, RunId `682ae380b1e74ed081ca1db0489a2dd8`,
+  `2026-09-08T04:33:56.6895476Z`–`2026-09-08T04:34:59.0143887Z`;
+  probe SHA-256 `85307881eabb44293d2d508ebf7e970c6a1e458cf8eeca6a078a25cfe0c6430d`;
+  ZIP SHA-256 `59498948341f36d408f8bf838e177170c19d99ffc64acaa2070b0524e6b99a81`.
+
+Each host passed all thirteen `run`, six `saved` and seven fresh-process `reopen`
+checks, including H2=0/H2>0 repeated native placement, mass/volume/extents and
+ownership, Family regeneration/former-output erasure, generic Foundation
+rejection before mutation, production QS3DSAVE/native QSAVE and cold semantic
+identity/cardinality/dimensions. Both runners exited0, removed only their private
+fixture copies and nonce profiles, restored the exact original inventory/current
+pointer, and verified unchanged protected state with zero residual hosts. Both
+wrappers restored original autostart byte1/hash and timestamp
+`2026-09-07T02:55:30.6894998Z`; Cloudflare stayed paused. No MCP request or desktop
+input/capture was issued for this API pair. Package kind remains unsigned
+`LOCAL_PR_CANDIDATE`, version0.1.0-preview.10307, not official release evidence.
+
+This closes the current87aff native generic-Foundation evidence gap only. V26
+physical UI/save/cold still needs qualification after the consumed50 failure;
+topology/taper sections, Quantity/Unicode/DPI/private-DWG and applicable published
+source evidence remain open. No aggregate #5718/#4034/#72 or MCP PASS is claimed.
+Earlier dated checkpoints below remain historical and must not override this pair.
+
+Runner checkpoint (2026-09-08): the wrapper now has an explicit `-NativeApi`
+route for the unchanged native run/save/cold tests on frozen source87aff.
+V26 admission requires same-source/package V25 native evidence, explicit mode,
+all three actual strict phase validators and complete cleanup; UI defaults and
+physical acceptance remain unchanged. The full focused runner suite and both
+explicit frozen-product/host-SDK probe builds passed (zero build warnings/errors).
+No new licensed PASS is inferred from that verification. Reusable allocation-bound
+private diagnostic sources and their guard/compile tests are now included;
+their live native capture/reader functions are not yet qualified. A reproduced
+CIM/native creation-time precision mismatch was corrected with a microsecond-exact
+handle guard; a negative test first rejected unrestricted dump-DLL lookup, then
+passed with System32-only resolution. Raw dumps and proprietary DLLs remain ignored.
+
+Latest V26 allocation50 is **`FAIL_OR_NO_RESULT / UI_TIMEOUT_EDITH2`**. It ran on exact pushed harness `fc7a571978499c4e956a3c102d6892ab23dc63a3`, unchanged frozen product `87aff7fec452f9a8dd9f641ef84d143edc73514d`, V26.2.07, and `OBSERVED_CLICK_V2 / PAUSE_FOR_OPERATOR_V1` with a disposable `Default` clone. RunId `d32ec95c722a4e09acc1b91271e0aed1`; interval `2026-09-06T15:50:20.9876766Z`–`2026-09-06T16:26:50.5640563Z`; probe SHA-256 `ee52a6203b3625a9b2b4e54be676dbe6a736d208ce61531a98ae75a73fca401d`; V26 ZIP SHA-256 `59498948341f36d408f8bf838e177170c19d99ffc64acaa2070b0524e6b99a81`. All17 published actions were physically performed, refreshed and ACKed: tree selection, Add/Cancel, six fields/OK, two centres, Enter and Family-scope selection. Native `VPOINT 1,-1,1` was prepared before centre-target capture. The independent first/second point events at16:14:04Z/16:14:47Z matched their frozen targets; both solids were visibly created. These partial observations are not a complete UI phase PASS.
+
+At16:16:36Z the controller reached EditH2, but no request18 was published: the H2 editor remained outside its hit-testable viewport. Supported screenshots showed largely initial/static QS3D contents despite responsive native CAD and updated WPF layout in the trace. Physical property scrolling and splitter resizing changed the recorded layout; the screenshots did not show corresponding property contents. Restore/maximize, a fresh Computer Use connection and minimize/restore did not recover a usable property view; the last observation showed blank QS3D panes while the native viewport still displayed both solids. No blind property click, direct WPF mutation, replay or invented ACK was used. The unchanged preparation deadline emitted `FAIL / ui_edith2 / UI_TIMEOUT_EDITH2` at `2026-09-06T16:26:36Z`. This establishes the failed observable UI route, not whether its root cause is product rendering, host integration or capture. Read-only wait-chain sampling of eight owned threads reported no cycle in that sample; it is not a global deadlock verdict. No memory dump was collected for50.
+
+Allocation50 verified zero complete phases, aggregate false, private drawing cleanup, exact original profile inventory/current pointer, nonce removal and unchanged protected state. The wrapper restored OpenAI autostart byte1/hash and its allocation baseline timestamp `2026-09-06T15:11:20.1855105Z`; Cloudflare stayed paused and no MCP request was issued. Resumption at `2026-09-07T00:31Z` found the host and wrapper absent with these terminal receipts, so no restart/replay occurred. Consumed50 is not a new V26 PASS. Raw action/trace receipts remain ignored; only this sanitized account is published.
+
+Exact fc7a push run34043506785 and PR run34043544626 passed preflight/core. Their tested head is fc7a, not the later main-sync/documentation head. Main `845916f4963a25d3c5fd2d86f03f9906c217205c` was subsequently merged into this same carrier; it does not relabel the frozen product or runtime evidence. V26 presentation diagnosis and all remaining acceptance below stay open.
+
+The following V25 success and V26 allocation49 account remain unchanged historical evidence.
+
+Latest verified runtime (2026-09-06): **V25 allocation48 is `LOCAL_PASS_BOUNDED`** on pushed harness `92ac8299da3f52c05da7fa3a7ebe32f5f58cfe4e` and unchanged local product `87aff7fec452f9a8dd9f641ef84d143edc73514d`. RunId `be7c11f360144056a4dab352c325a26d`, V25.2.10, `2026-09-06T10:52:13.8700257Z`–`2026-09-06T11:43:50.7703136Z`, probe SHA-256 `92efc826560c2e75555cea211bf0b0e43643c28c1a504c777809b85e9c2ee2b7`. All 21 physical actions/ACKs completed; UI19/19, save8/8 and fresh-process reopen9/9 passed. The runner exited0 and verified complete private/profile/protected-state cleanup and original autostart byte/timestamp restoration. It used `OBSERVED_CLICK_V2 / PAUSE_FOR_OPERATOR_V1` and a disposable clone of `Default`.
+
+Allocation48 additionally exercises the corrected ray/plane mapper in a real oblique view: native `VPOINT 1,-1,1` was entered before the first centre request/target capture, and all three frozen pre-click targets matched independent `Editor.PromptedForPoint` results. Window/tree/property preparation used observed physical inputs. An unexpected restore after the first target was frozen was corrected back to the same maximized geometry before clicking; no target was remapped or accepted from generated geometry. Earlier native view/menu preparation was not an acceptance action. The operator kernel was reset after the final verified Escape/ACK and no UI query was made during cold startup. This successful cold run does not establish the cause or a general fix for the historical V26 UIAutomationCore stall.
+
+Latest V26 allocation49 is **`ABORTED_NO_RESULT`**, not a completed runner verdict. It used the same harness/product, V26.2.07, RunId `f35cec17ef6c4968b74411339f269b7d`, started `2026-09-06T11:45:04.3345736Z`, probe SHA-256 `f52ab2b64ae4757c1f93d5fb7cd82216aa6db28c9adf923e3f8dbcdda8bbf215`, and the same driver/wait policy with a `Default` clone. Twelve actions were physically performed, refreshed and ACKed. The first centre (action13) was physically clicked at `2026-09-06T12:07:12.0107208Z` in native `VPOINT 1,-1,1`; the independent point matched the frozen target, but ACK13 was not sent before interruption. At `2026-09-06T12:11:20.1342509Z`, the trace latched `ProbeException:ui_pick_result_without_request`. Its initiating input and the host/runner termination cause are unproven. On resumption at15:42UTC, both exact host and runner were absent and the tool session was missing; there was no phase or terminal receipt. No input was replayed and no ACK/PASS was fabricated.
+
+Allocation49 recovery independently verified the allocation-bound recovery hash, exact prior47-name inventory plus its sole owned nonce, original `Default` pointer and zero host/tunnel/runner processes. The frozen runner's allowlisted profile-restore functions removed only that nonce and verified the exact original inventory/pointer. Private drawing/action/recovery evidence remains ignored and retained. Autostart was already byte`1` but had external timestamp `2026-09-06T15:11:20.1855105Z`, different from its original `2026-09-06T07:40:20.4023627Z`; it was left untouched. The original wrapper restoration receipt remains `restored=false`. No full historical protected-state or private-cleanup claim is made for49.
+
+Preceding V25 allocation47 on the same92ac harness used visible `Default` UI, but ended `ui_selecttree/UI_MODEL_TREE_MISSING`, zero acceptance actions/ACKs/phases, `2026-09-06T10:48:12.4206384Z`–`2026-09-06T10:50:12.3952170Z`, RunId `905302ff687a49919b2076f3d878c086`. Computer Use rejected an attempted maximize because user input was detected; subsequent trace showed Zone/Floor/Project Browser inputs not performed by this operator, then the tree was unavailable. No causal attribution to the owner or product is established. Full runner cleanup and exact autostart restoration passed. Allocations47/49 are consumed and never replayable.
+
+Exact92ac PR runs34028355378/34028406547 and push34028353382 each passed protected preflight/core. CI is not runtime evidence and does not qualify the later documentation head. Remaining acceptance includes a complete V26 physical UI/save/cold run; same-source native generic-Foundation refusal (the earlier API pair uses43130, not87aff); Quantity/Unicode/cross-DPI/private-DWG cells; complete topology/taper-section checks; and applicable published-source qualification. UI persisted-state checks already cover exact element/native-handle identity continuity, but that does not prove complete BREP topology. #5718/#4034/#72 and aggregate LOCAL-022 remain incomplete. Earlier dated checkpoints below are history, not current run authorization or replacement evidence.
+
+Current owner authorization (2026-09-06, afternoon): the owner explicitly said
+"continue all" and allowed direct mouse/keyboard operation on this machine.
+This supersedes the earlier background-only restriction below. Resume fresh
+V25-first/V26 physical UI qualification through supported Computer Use, using
+the frozen product, unique disposable allocation and exact pushed harness.
+Preserve all consumed failures; do not infer that license stability or duplicate
+Ui() entry is fixed. MCP testing stays paused. No aggregate PASS or merge is
+authorized by this permission alone; actual acceptance is still required.
+
+Historical owner boundary (superseded by the afternoon permission above): background-only work had stopped shared-desktop input and screenshots. It is retained as history, not a restriction on the newly authorized direct UI runs.
+
+Latest V25 allocation46 on pushed harness `eba58eeac57341ba41f77f63716dd630f3d525cc` failed `ui_selecttree / UI_TIMEOUT_SELECTTREE`, with zero acceptance actions/ACKs and zero verified phases. The native window remained responsive but supported screenshots showed blank QS3D interiors; explicit accessibility requests returned null. Ordinary window restore/maximize, floating the model palette and the normal `QS3D` show command did not reveal the tree. One preparation drag entered native selection and was immediately cancelled with Escape; it was not an acceptance action. No reset/re-entry command, guessed tree click or fabricated ACK was used. Full cleanup and original autostart restoration passed. Allocation46 is consumed.
+
+Allocation46 ran `2026-09-06T09:27:34.0825919Z`–`2026-09-06T09:38:37.1329529Z`, RunId `dea12fcf95d647609218c815f7be6786`, V25.2.10, probe SHA-256 `c481aaf2d8a043a1f2a2fdf11dac0be77773c5328eac50c64f30bf534948a996`, source profile `QS3D-V25-TEST`, unchanged frozen product `87aff7fec452f9a8dd9f641ef84d143edc73514d`. A fresh private managed-heap snapshot was collected from the ownership-verified test process before timeout; collection can briefly pause the host and is diagnostic evidence only. It contained exactly one UiController (SelectTree, sequence0, no request) and one WorkspacePanel, bound to that same instance. Workspace/adapter size was448×480; the tree ScrollViewer had extent811, viewport178 and offset0. This narrows readiness to an unreached visible/hit-testable tree row but does not establish why the screenshot interiors were blank or prove a graphics/capture defect. The dump remains ignored and is not uploaded.
+
+Exact executed harness `eba58ee...` passed focused runner guards and both explicit product/host-reference probe rebuilds (zero warnings/errors); PR run34024651557 and push run34024649655 each passed preflight/core. Those greens do not qualify runtime or a later documentation head. The next safe experiment uses a fresh disposable clone of the existing V25 `Default` profile to isolate profile-dependent presentation, preserving the original profile and all acceptance checks. V26 remains gated on a fresh same-driver V25 UI/save/cold pass; aggregate #5718/#4034/#72 remains incomplete.
+
+Latest V25 allocation45 on pushed harness `53d1173b3ac251af8e47cf1558c86511467213f0` reached SelectTree, then failed `ui_bind / UI_STATE_PREEXISTS` before any acceptance input. This shows the one-shot UI entry point was invoked while its state already existed; the initiating cause is not established. No license notice was observed in this allocation and the earlier license failure is not relabelled as resolved. Zero phases qualified; full cleanup and original autostart restoration passed. Do not replay45 or weaken the duplicate-state guard.
+
+Earlier blocker: on exact pushed harness `ebc1ceaa3cce5cd878270cae1b2a1753e4223761`, V25 allocation44 completed only SelectTree before BricsCAD displayed "License is no longer valid. The application will quit now." The owned host exited after the notice was dismissed; zero phases qualified and all cleanup/autostart restoration passed. Allocation43 on the same harness had already timed out before any acceptance input during an operator interruption. Both are consumed `FAIL_OR_NO_RESULT`; neither qualifies the new ray/plane mapper. A valid licensed host is still required; do not replay43/44 or modify license enforcement.
+
+Earlier bounded UI evidence remains unchanged: V25 allocation37 is `LOCAL_PASS_BOUNDED` on exact harness `b5fcbfb673810e22b3ac5792a579284c20a75a56` and frozen product `87aff7fec452f9a8dd9f641ef84d143edc73514d`, including UI/save/cold-reopen. On harness `2cd842653d0d080171e01693f7dc1cc1f09061e9`, V26 allocation41 passed UI19/19 and save8/8, but its cold host stalled before QS3D and was intentionally stopped after native diagnosis. Fresh42 reached real placement/Family regeneration, then failed the pre-geometry witness after the view changed to oblique3D. A pre-click ray/plane projection correction passes deterministic regression and both SDK builds, but still needs fresh licensed qualification. No aggregate PASS is claimed.
+
+`LOCAL_PASS_BOUNDED` for the automated BricsCAD V25 and V26 portions on the same frozen product source `43130a49f49676299b865f094a9a6ded482f67ad`. Each host passed run, saved and fresh-process reopen. Aggregate LOCAL-022 remains open for interactive/UI and the additional coverage limits recorded below.
+
+## Earlier official V25 release result
+
+- Product: official `v0.1.0-preview.10308`
+- Product source: `988998bd26c9d0da5915670d9b5adca14b93ecca`
+- Published V25 ZIP SHA-256: `8618feb76d523337d9a9ff5900520683a5807050dcd158e27f9b8b3c4bef3771`
+- Qualification harness: `6484b2ad7b6cba5d2c58517637f6bb5228b3beaf`
+- Runner SHA-256: `b9bc068edf61eaad3145cfe81402a821bc4d74388494bccd0f4673150fdd29c3`
+- Probe DLL SHA-256: `80f21352f7a62a216099b147673a1e66ab31e888cd30a3c912f013eb751e6b99`
+- Host: BricsCAD V25.2.10, Windows x64, licensed interactive runtime
+- Runtime interval: 2026-09-04 18:09:05Z through 18:09:50Z
+
+The runner verified all 17 files named by the package manifest against the immutable published ZIP before launch. It rebuilt the net48 probe with .NET SDK 8.0.424 and reported zero warnings and zero errors.
+
+## Qualified cells
+
+The fresh allocation produced three independent PASS markers:
+
+1. `run`
+   - exact disposable drawing and exact published product location;
+   - V25 host and metre drawing units;
+   - `H2=0` box placement;
+   - `H2>0` tapered placement at repeated centres;
+   - live `Solid3d` mass properties, volume and extents;
+   - source footprint and QS3D ownership marker;
+   - Family edit/regeneration from the original two instances to the expected replacement cardinality;
+   - every former generated handle erased;
+   - generic `Foundation` control rejected before mutation;
+   - exact semantic/native cardinality.
+2. `saved`
+   - production `QS3DSAVE` sidecar persistence;
+   - native `QSAVE` with the database still open;
+   - exact saved semantic/native state and cardinality.
+3. `reopen`
+   - a separate fresh BricsCAD process;
+   - cold canonical project binding;
+   - semantic identity continuity;
+   - live reopened generated solids;
+   - exact dimensions, volumes, extents and cardinality.
+
+Cleanup also passed: zero BricsCAD/tunnel processes, the nonce profile was removed, the original profile inventory and current-profile pointer were restored, the private disposable root was removed, the repository fixture retained SHA-256 `cec1350fb2207542aeecd96a790a198a6c9cc9e99a9f875871f367554b3d967e`, and the checked DemandLoad fields (`LOADER`, loader-file hash and `LOADCTRLS`) and tunnel-autostart bytes were unchanged. The V25 snapshot did not cover every registry value in the DemandLoad key; no full-key preservation claim is made for those historical V25 allocations.
+
+## Consumed non-result retained
+
+The earlier `.10304` allocation remains `FAIL_OR_NO_RESULT`. Its native `run` and `saved` markers passed, but a short BricsCAD process-exit race caused the runner to throw before returning those phases; the cold-reopen phase did not run. That allocation was not reused or relabelled.
+
+After the host naturally reached zero, recovery removed only its runner nonce and private disposable data, restored the known source profile `QS3D-V25-TEST`, preserved the sanitized markers, and reverified the unchanged repository fixture and stopped tunnel processes. The runner was then hardened with a bounded host-exit wait and durable, atomic, hash-validated profile recovery evidence before the successful fresh `.10308` allocation.
+
+## Explicitly not qualified
+
+This result does not close aggregate LOCAL-022:
+
+- the earlier V25 harness does not itself qualify V26; the separate same-source V26 result is recorded below;
+- visible Workspace `Móng → Móng đơn → Add`, physical mouse picks, Enter/Esc, dialog cancel and visual six-field layout are not exercised;
+- Quantity UI, Unicode/DPI appearance and unrelated Foundation families are not exercised;
+- no customer/private DWG is used;
+- no MCP request or MCP tool test is issued. The frozen product starts its embedded loopback server as part of `NETLOAD`; the probe immediately pauses and verifies the MCP CAD-mutation and desktop-control boundaries, while both external tunnels remain stopped.
+
+Issue #4034 and LOCAL-022 remain open for the interactive/UI cells and the additional coverage limits below; the same-source V26 automated cells now have independent evidence.
+
+## Same-source V25/V26 successor candidate
+
+The V26 build at official `.10308` source `988998bd26c9d0da5915670d9b5adca14b93ecca` failed with `CS0246` because the shared Update Center exposed the V25-only `UpdateDownloadProgress` type. The submodule had first been restored to its exact gitlink `fcf24893aac7fabe11017bbd5ed0072f5becd87d`; this was then a product-source compile failure, before any V26 launch.
+
+Issue #5740 / PR #5770 carries the separate source correction at pushed candidate `43130a49f49676299b865f094a9a6ded482f67ad`. It also resolves the exposed V26 `CS0649` download-state warning and two scoped `SYSLIB0014` compatibility warnings. V25 and V26 Release builds passed with zero warnings/errors. The V26 build additionally passed the held-host-reference-generation wrapper.
+
+The LOCAL-022 pair uses packages generated from that same candidate, with V25 first and full cleanup before V26. Their committed product version is `0.1.0-preview.10307`; they are explicitly `LOCAL_PR_CANDIDATE`, not the official release of that version. The V25 candidate ZIP hash is `4d9869e38682674772196a3e238f115624ff357a276bb0b976000b63c9a833b5`. The prior official `.10308` runtime evidence remains unchanged above. The successor results are recorded below.
+
+The V26 candidate ZIP hash is `7dbf9216e873f2e20c2fae5011785148e9feded944a7b43233b4710b331fd2c5`. A separate provenance file binds this archive to source `43130a49f49676299b865f094a9a6ded482f67ad`. The V26 runner checks that provenance, every extracted ZIP member, the installed .NET 8 Windows Desktop runtime, the V26 host identity, and the four-file probe output. It uses a separate V26 nonce profile and marker schema, preserves an absent or OnCommand-only registration, and restores exact profile state after both native processes.
+
+The frozen source passed Core smoke (`ALL PASS`) and all 1611 discovered feature preflights. The V26 probe rebuild also passed with zero warnings/errors. These are source/build results, not V26 runtime qualification. PR #5770 has since merged as `3fb8cf086` and its issue is closed; the locally packaged source and hashes above remain unchanged and must not be relabelled as a newer main build.
+
+## Same-source native execution, 2026-09-05
+
+Harness `e32fba7b808bbe2a286c5c8b625e061de48d8ea0` ran the frozen same-source pair after the owner explicitly approved temporarily pausing OpenAI tunnel autostart. V25 ran first and cleaned up before V26 started.
+
+- V25: `LOCAL_PASS_BOUNDED`, three verified phases, 01:03:59Z–01:05:16Z. Profile/current pointer, reference fixture and protected settings were preserved; the disposable root was removed.
+- V26: `FAIL_OR_NO_RESULT`, zero verified phases, 01:05:28Z–01:06:17Z. Both native `run` and `saved` markers reported an unexpected exception; cold reopen did not run. The diagnostic token was lowercase while the validator requires uppercase, which obscured the original exception as a sanitization failure. This is not a PASS and the allocation is consumed.
+- V26 cleanup passed: zero hosts, exact profile inventory/current pointer restored, nonce/private drawing removed, protected settings unchanged. The outer pair runner restored the exact original OpenAI autostart byte and timestamp; Cloudflare autostart remained unchanged.
+
+The successor harness classifies unexpected exception types, distinguishes context binding from phase execution, and retains bounded V26 exception type/HResult/method metadata without messages, arguments or paths. No production source was changed to diagnose the native failure.
+
+The existing geometry cells prove volume and bounds, not complete BREP topology or every taper section. Cold semantic identity is bounded to project/family/dimensions/centres and counts, not a frozen element-ID/native-handle inventory. These limitations must not be represented as full LOCAL-022 acceptance.
+
+## V26 diagnosis and successful fresh allocation
+
+Harness `c91fa60b2655ac9279d0348acf264ad4f2716ca4` produced a fresh consumed V26 `FAIL_OR_NO_RESULT`: context binding passed, but `RunPhase` raised `FileNotFoundException` / HResult `80070002` before executing the matrix. The sanitized stage was `run_execute`. Cleanup and exact autostart restoration passed. This failed allocation was not reused.
+
+The V26 probe was corrected to share only the exact already-loaded, path-verified Core/product assemblies with its own .NET 8 `AssemblyLoadContext`, before phase JIT. The resolver checks the requesting context and complete assembly identity; it does not search disk, reload assemblies, copy dependencies or alter the product package. This resolved the separate-probe assembly-loading failure.
+
+A fresh allocation on harness `628a920b5b943ea1273d3b7132eb758e6f38b709` then returned `LOCAL_PASS_BOUNDED` on licensed BricsCAD V26.2.07, 2026-09-05 01:13:58Z–01:14:42Z. All three exact-schema phase markers passed with every required Boolean check true. V25 and V26 therefore independently qualify the same bounded matrix on product source `43130a49f49676299b865f094a9a6ded482f67ad`.
+
+| Host | Successful harness SHA | Runner SHA-256 | Probe DLL SHA-256 |
+| --- | --- | --- | --- |
+| V25.2.10 | `e32fba7b808bbe2a286c5c8b625e061de48d8ea0` | `e3e4b77ae6d239fb2cfbfddff4f85d5c57d4b12c13124bcc3464c3be36492d58` | `f5111a773159e4dab4f88f68d8652c3d56f9c29b6e23a858701ed2bc3a6eff01` |
+| V26.2.07 | `628a920b5b943ea1273d3b7132eb758e6f38b709` | `11016af66fbc7b9ee0dd3fae2266ff6d3688cfabd9786b8842ca9ee865212adc` | `ce82d507e36ce96b6c98e59982e01d737996ee1cf5d4e271ec63eb66f0855741` |
+
+Final cleanup verification found zero BricsCAD/tunnel processes, both successful private drawing roots and profile recovery files removed, exact per-host profile inventories/current pointers restored, and unchanged reference fixture/product payloads. V25 DemandLoad preservation is limited to the checked fields listed above; V26 additionally fingerprints all value names, kinds and values in its registration key. OpenAI autostart returned to its original byte `1` and original timestamp after each allocation; Cloudflare remained `0`. No MCP request or tunnel functional test was performed. The installed user plugin was not replaced by these local candidate packages.
+
+## Owner-approved interactive extension
+
+The owner approved real UI expansion on 2026-09-05. The existing host runners now have an opt-in `-InteractiveUi` path, separate from the already consumed native-API allocations. The intended matrix is the visible Móng đơn tree/Add route, Cancel/no mutation, six numeric dialog fields, physical viewport centre picks, Enter/Esc termination, UI Family edit/regeneration, save and fresh-process reopen. The probe must assert product state after each action; sending an input event is not a PASS.
+
+`scripts/local022-ui-input.ps1` accepts only nonce/sequence/PID-bound hover/move, click, numeric text and Enter/Esc requests. It checks the exact owned executable, foreground PID and point ownership before native input. Screenshots use only the owned HWND via `PrintWindow`, never the desktop. The capture helper has its own terminating error policy and rechecks captured HWND ownership, independent of the caller's error preference. Action/ack files, images and raw diagnostics are private ignored artifacts, not public evidence.
+
+`scripts/run-local022-ui-qualification.ps1` is the reusable orchestration entry point for the frozen `43130a49...` package pair described above. It requires a clean, pushed `-HarnessSha`, a fresh `-AllocationName`, the local `-PackageRoot`, `-HostMajor 25` or `26`, and explicit `-ConfirmTemporaryAutostartPause`. V26 additionally requires `-V26ProvenancePath` and `-PrecedingV25Receipt` from a same-source UI PASS with verified cleanup/restoration. Each invocation restores the original OpenAI autostart byte/timestamp; it does not test either tunnel.
+
+Guard regression command: `pwsh -File scripts/test-local022-ui-input.ps1`. These deterministic guard tests are not licensed qualification. Interactive runtime results must be recorded separately against the exact successful harness/product identities; none is inferred from adding or compiling this extension. Historical native PASS and consumed failures above remain unchanged.
+
+First UI allocation on harness `b5947224c` (V25, 02:41:55Z–02:42:32Z) is consumed `FAIL_OR_NO_RESULT`, zero verified phases. The physical-input boundary refused its first point as outside/occluded from the owned HWND, before acknowledging input. Code review found the consumer restored the measured window immediately before input, potentially invalidating coordinates from a maximized window; the successor removes that resize and retains exact-HWND diagnostics on rejection. This is a harness-coordinate non-result, not a product UI PASS or feature failure. Host/profile/private-drawing cleanup and exact autostart restoration passed.
+
+## Physical UI result: existing source defect #4586 reproduced
+
+The owner-approved V25 UI extension has **not passed**. Final diagnostic allocation `ui-window-owner-v25-14`, harness `91b7810168d65bcf57ad29cf8248deac4e5d84dc`, ran on licensed BricsCAD `25.2.10` from `2026-09-05T03:10:16.2672506Z` to `2026-09-05T03:11:25.0833995Z`. Product source remains the frozen `43130a49f49676299b865f094a9a6ded482f67ad` local package pair and hashes above; the installed user release was not replaced.
+
+Observed production behavior after acknowledged physical input:
+
+- The real tree selected `Móng đơn`, tag `Foundation.SingleFooting`; `_categoryFilter` was `Foundation` before and after the test baseline bind.
+- The actual Family toolbar Add button had two Click handlers, in order: `OnGridAwareFamilyAddModeClick`, then `OnBlt3dRoomAwareAddClick`.
+- Mouse-down and routed Click reached that button. The Click was handled, a visible WPF popup contained `Tham số` / `Solid3D`, no `SingleFootingDimensionsDialog` appeared, and the family inventory was unchanged.
+- The phase timed out with `UI_TIMEOUT_OPENCANCELDIALOG`; receipt remains `FAIL_OR_NO_RESULT`, **0 verified phases**. This is positive evidence of wrong production Add routing, not a dialog/Cancel/placement PASS.
+- Profile inventory/current pointer/nonce/private-drawing cleanup, protected installed-loader/settings checks and exact original OpenAI autostart byte/timestamp restoration passed. No owned BricsCAD process or tunnel remained; no MCP request was issued.
+
+Source inspection and independent read-only review identify the stale Grid handler as the cause. Both final BLT/Room rewires omit removing it, allowing its generic chooser to consume the Click before the SingleFooting route. Those routing files are unchanged between the tested source and refreshed `origin/main@8dc5cc21769385509cf565b907095b9c93971303`.
+
+This is the exact defect already reserved by open issue **#4586**, canonical branch `agent/trinhtanphat-01a046ab/issue-4586-single-footing-add-routing`, another session's active ownership. Its PR #4594 is closed without merge; that does not release the open reservation. No source fix, replacement carrier, PR reopening or takeover was performed by #5718. The next source action requires that carrier's owner or explicit reassignment. Merely deleting the Grid handler is insufficient: the final dispatcher must retain direct Grid creation and Room routing.
+
+Do not run the remaining UI matrix again on this unchanged defective product source. After an authorized exact source correction, prepare a new frozen matching package pair and run a fresh V25 allocation first, then V26 only after V25 UI PASS and full cleanup. V26 physical UI remains **NOT RUN**. Existing V25/V26 native-API bounded PASS receipts are preserved, not promoted or invalidated by this distinct UI routing failure.
+
+### Consumed UI allocations
+
+All allocations below used the same frozen product source, ended `FAIL_OR_NO_RESULT` with zero verified phases, and completed receipt-verified host/profile/private-drawing cleanup. None may be reused or presented as UI PASS.
+
+| Allocation suffix / harness | Observed stop |
+| --- | --- |
+| `01 / b5947224c` | Input point rejected; superseded capture/resize implementation |
+| `02 / 50637424b` | Input point rejected; target outside displayed window |
+| `03 / a79ee4a09` | Tree selection timeout |
+| `04 / 99e8bd21b` | Foreground ownership rejected |
+| `05 / ce17e234a` | Tree selection timeout |
+| `06 / bcd60a9b5` | Tree selection timeout; private WPF hit diagnostics added |
+| `07 / 2fe9e9c08` | Tree selection timeout; measured target shifted 15 pixels |
+| `08 / 5a258d954` | Tree selected; Add selector ambiguous |
+| `09 / 01f32e66d` | Add clicked; hosted WPF Application.Current absent |
+| `10 / 8784a05d8` | Add dialog timeout |
+| `11 / 14f5487b6` | Add dialog timeout; actual button Click observed |
+| `12 / 347bbf335` | Tree target moved repeatedly; wrong row hit; no Add-route result |
+| `13 / 347bbf335` | Fresh allocation after unstable UI; Add dialog timeout; category preserved |
+| `14 / 91b781016` | Exact duplicate-handler / generic-popup source failure above |
+
+The runner corrections preserve physical input and post-action product assertions: maximize before measuring; bring the tree into view; hover then remeasure; select visible row text; bind Add to the Family toolbar; locate hosted WPF window ownership without manufacturing Application.Current. Private diagnostic observers do not invoke the production Add handler or alter its routing. A separate late diagnostic capture from allocation 13 was excluded and deleted without inspection after its foreground check failed under a permissive caller; the successor helper now fails closed regardless of caller error policy, covered by a deterministic refusal test.
+
+Aggregate LOCAL-022 / #4034 remains `IN_PROGRESS / SOURCE_FIX_4586_REQUIRED`. Six-field input, Cancel, physical placement/edit/save/reopen, DPI/Quantity and extended topology acceptance remain unproved by these UI attempts.
+
+### Post-run harness safety regressions
+
+Independent review found two test-harness boundary defects; neither was used to claim UI PASS. Both were reproduced by deterministic tests before correction:
+
+- UI cleanup previously fell back to the active drawing when context binding failed. Replaying the actual cleanup method against in-memory host doubles reproduced an unauthorized `QUIT` attempt. Cleanup now requires a validated unchanged disposable context, exactly one document, an allocation-child drawing and the paused mutation boundary before closing a dialog or queuing application-wide QUIT. Null context, document drift/rename, foreign allocation, extra drawing and unpaused boundary all refuse cleanup; qualified owned cleanup is preserved. The replay loads no CAD assembly and sends no desktop input.
+- The raw request-key regex did not detect a JSON-escaped duplicate coordinate. The actual decoder now validates parsed types/values and reconstructs the exact compact, ordered, eight-field ASCII object produced by the probe, rejecting any raw mismatch. Six valid forms pass; fifteen malformed/ambiguous forms, including escaped/plain duplicate keys, fail. Retained actual C# requests still decode without replaying them.
+- Follow-up review reproduced culture-sensitive PowerShell equality accepting an added U+00AD in an action schema. Action and phase-marker identities now require printable ASCII and ordinal equality; regular expressions use absolute end anchors. Additional regressions reject literal/escaped soft hyphens, NUL, newline and hidden characters in check names. Canonical requests emitted by the probe remain accepted without input replay.
+
+Both regressions run through `scripts/test-local022-ui-input.ps1`; the cleanup test lives in `tests/QS3D.LocalQualification.V25/test-ui-quit-boundary.ps1`. V25/V26 probe builds remain zero-warning/zero-error. These post-run safety checks are static/in-memory evidence only; the failed licensed UI allocation above is still bound to its original harness SHA. No unchanged-source UI rerun was performed after discovering #4586.
+
+## Authorized Add-route successor, 2026-09-05
+
+The owner authorized takeover/fix of existing source carrier #4586; PR #4594 is reopened, not replaced. Exact pushed product source is `0db6e659510809a6781221204a32409605c851ba`. It includes the original Grid detach correction plus deterministic real-WPF regressions/fixes for Grid before the deferred Room overlay and Family/finish control isolation. WPF tests execute extracted production routing methods with mutation endpoints doubled; they are not native placement evidence.
+
+Matching frozen local qualification packages from that source both build with zero warnings/errors:
+
+- V25 ZIP SHA-256 `6b6d00de4d391e772b58780be96afab9e4b31c0d8e0246dee3d7b79a8c1c5f70`.
+- V26 ZIP SHA-256 `4259a2c9850e2e18dd82a8496a8b70c4c68d80abe290c51fb660e1e9d12e946d`.
+- Version `0.1.0-preview.10307`, explicitly `LOCAL_PR_CANDIDATE`; the installed official `.10309` package is not replaced.
+
+The orchestrator now pins this successor pair. Old source receipts/failed UI allocations remain unchanged. Require a fresh V25 UI allocation and successful full cleanup before a fresh V26 UI allocation. At this registration, licensed UI acceptance remains pending; MCP is paused and no user-owned BricsCAD session may be closed or driven.
+
+Successor allocation `ui-add-route-v25-15`, harness `e6d3d49f11493782993a808fea35d65710dafd8f`, RunId `6adb65c532234af5a29e767588c60baf`, ran 05:24:52–05:28:04 UTC. Physical Add now opened the six-field dialog; Cancel passed the unchanged-project/native assertions, then the next dialog accepted all six physical numeric inputs and OK. The probe stopped at `ui_acceptcreatedialog / FAMILY_DIMENSION_MISSING`; no placement/save/reopen phase qualified. Final Add routing trace contained only `OnBlt3dRoomAwareAddClick`. Receipt proves full private/profile cleanup, zero BricsCAD processes, protected state unchanged and exact autostart restoration. This is progress past the original route defect, not UI PASS. A fresh diagnostic allocation will record only synthetic Family property keys and six dimension values before the unchanged assertion to distinguish product-state failure from probe-reader mismatch.
+
+Diagnostic allocation `ui-add-route-v25-16`, harness `df0092129d49b3b7bf81b8accda8f812706ab138`, RunId `35cf960c1b974eeeaa1872a2b7bd8231`, ran 05:30:10–05:40:23 UTC, same source and failed assertion. The synthetic Family had L1/W1=`2`, L2/W2/H1=`true`, H2=`false`. Generic Workspace property initialization had coerced numeric 0/1 to boolean strings. Full cleanup/restoration is verified; no qualified phase.
+
+Source #4586 corrected that numeric-key classification at exact pushed `0fc1ced48a089267246e78fe4ceeadc36cd5a2e7`; production normalization regression and prior WPF routing matrix pass. Both matching host builds are zero-warning/zero-error. Fresh frozen hashes: V25 `0d2032d4be962ab3b321abf1292bd9fd67e59ae09172cef674421bed430c2f05`; V26 `5fa8eeb26ead7719b2f27f363f22ea4ae85af91addd1c6d7500d8b8e5887c05d`. Same local-candidate version boundary applies. The preceding package pair was moved intact to the source worktree's ignored `artifacts/packages-0db6e6595`; no package evidence was overwritten. The runner now pins the corrected pair for fresh V25-first execution.
+
+Allocation `ui-numeric-v25-17`, harness `cabd6b521a8958052217d856ef0ee751123790d9`, RunId `f69bbb35e4e64c29a9e537dc1ee39fd9`, confirmed the corrected product retains all six numeric values `2,2,1,1,1,0` after actual Add/Cancel/input/OK and passes Family cardinality, active identity and dimensions. Physical Draw and the first viewport click were sent, but the probe timed out at `ui_firstcentre / UI_TIMEOUT_FIRSTCENTRE`; no complete phase qualified. The next diagnostic harness records only synthetic placement counts/expected-versus-actual centres before the unchanged geometry assertion. Both native loops now validate an atomically published UI marker before sending further input, routing FAIL immediately to the existing owned-process cleanup instead of waiting for the overall timeout. Deterministic replay proves failure stops before input and PASS preserves the host-exit wait; no assertion is relaxed. Final receipt now verifies private/profile cleanup, protected state unchanged, zero BricsCAD processes and exact autostart restoration.
+
+Allocations `ui-centre-diag-v25-18` and `ui-centre-diag-v25-19`, both harness `54f29086a6ec64a9ec632c81c5cc5c1a4f2a4cc6`, remain consumed `FAIL_OR_NO_RESULT`, zero verified phases. Allocation 18 (RunId `7dc85606a65c448c9a51d3eba7247ade`, 05:59:25–06:00:03 UTC) refused the second tree action outside the owned host following a layout change, before clicking. Allocation 19 (RunId `8e5b0d428cb54ded90892f673ddcd5e8`, 06:01:00–06:02:17 UTC) passed Add/Cancel/numeric Family checks and created one actual footing after physical click. Its count changed 0→1, but the runner mapped desktop pixels directly through the drawing-view conversion: expected centre `(90.4172388153421,-6.81323209341629,0)`, actual centre `(11.8147736224404,19.5094539246717,0)`. Later view changes moved the recomputed expected point while the actual centre stayed fixed. This is runner-coordinate evidence, not a product placement failure or a UI PASS. Both receipts verify full cleanup/restoration and no MCP execution.
+
+The successor latches the independently mapped target immediately before publishing the click, after hover acknowledgement. Extracted-method regression proves capture timing, no recomputation after view drift, missing-target refusal and reset for the next placement. Geometry identity/volume/extents tolerances are unchanged. Native coordinate-frame qualification remains required before claiming physical placement PASS.
+
+Coordinate conversion now uses `bricscadapi.dll::sds_getviewhwnd`, declared as `HWND sds_getviewhwnd(void)` in both installed V25/V26 `API/bricscad/sds_protos.h:83`. Independent binary review confirms each host's `adsw_acadDocWnd` delegates to this same API; `acedGetAcadDwgView` instead returns a CView pointer and `Document.Window` is a parent frame. The helper requires the active exact document, current-process HWND ownership, a valid client rectangle, successful ScreenToClient, inside-client coordinates and the existing pixel/world round trip. Extracted-method tests cover nonzero desktop origin, document/PID/HWND/API failures and all four out-of-view edges. These mocked API tests do not substitute for actual host placement agreement.
+
+GitHub readback on 2026-09-05 confirms source PR #4594 was merged by `trinhtanphat` at 06:01:34 UTC, merge commit `c41837ccca9594ffffe4991999912f235a9e1cd3`, and issue #4586 is closed. Refreshed `origin/main@256452879` contains tested source `0fc1ced48a089267246e78fe4ceeadc36cd5a2e7`. This supersedes the historical ownership/source blocker above; it does not convert the pending physical UI matrix into PASS. #5718 continues only its existing standalone qualification harness/evidence carrier.
+
+Allocation `ui-client-centre-v25-20`, harness `5a57aa456bbcb0478c89bd18e4beca1ea74bef8b`, on the same source now independently matched both physical centres exactly: `(11.8147736224404,19.5094539246717,0)` and `(30.2162809776779,19.5094539246717,0)`. Both native solid checks passed and Enter ended the draw command. The next stage failed `ui_edith2 / UI_PROPERTY_EDITOR_IDENTITY`: the visible panel was showing the last-created element's Instance properties, not the specialized H2/mm Family form. Receipt remains `FAIL_OR_NO_RESULT`, zero complete phases; full cleanup and exact autostart restoration passed.
+
+The next UI flow explicitly clicks the Family/Type scope and reselects Foundation→Móng đơn in the real tree to enter the specialized Family form, then scrolls the exact editable H2/mm row into view before physical input. No selector, model setter or production handler is invoked to manufacture selection/edit. This qualifies only the explicit tree-route Family edit; it does **not** establish that switching the generic scope combo alone preserves specialized dimension editors/regeneration. That separate source-path concern remains under investigation. Per-row name/unit/editability and all prior state/geometry assertions remain required.
+
+Allocation `ui-family-edit-v25-21`, harness `60a531f80`, RunId `5d2d0ff143ab4e409b9a462830db0b30`, ran 06:26:34–06:28:14 UTC and repeated both verified centres/Enter. The actual scope ComboBox opened; then the physical-hover consumer unnecessarily reactivated the already-foreground host, dismissing its WPF popup before the click could be published. It failed closed at `ui_selectfamilyscope / UI_ELEMENT_NOT_CLICKABLE`, zero complete phases. Cleanup/restoration passed. The input consumer now preserves existing same-process foreground and only activates when needed; it still requires foreground and point ownership at every input boundary. Actual activation-branch replay confirms zero reactivation for owned focus, guarded activation for foreign focus and refusal when activation fails. No popup/selection is changed programmatically.
+
+The separately identified generic Family-scope source gap is registered as #5829, source-only carrier `agent/local022-01a06ce3-20260905/issue-5829-footing-scope-regeneration`. #5718 retains only test/evidence ownership. A later scope-only UI path must qualify the exact fixed source before broad scope-switching completion is claimed.
+
+Allocation `ui-family-focus-v25-22`, harness `2453bd7bfd3945f7b2234c55a23c0ee2c860d4ac`, RunId `00d24ff8e8dc46409362a530faeceb6a`, ran 06:31:06–06:32:20 UTC. Popup-preserving input now physically selected Family/Type. The following parent-tree workaround selector failed with `ui_selectfoundationparent / UNEXPECTED_INVALIDOPERATIONEXCEPTION`; complete phase count remains zero, cleanup/restoration passed. A later owned frame still showed Instance scope, so stable scope is not yet established. The successor removes the workaround stages entirely: it requires consecutive observed Family scope, exact active Family, direct H2/mm editor and native regeneration after only the scope-combo choice. Scope/row diagnostics are private synthetic data. This stronger direct-path acceptance must fail on missing/reverted specialized state, not silently re-enter another route.
+
+Allocation `ui-scope-direct-v25-23`, harness `de9009870c32fb38f9b2bec7e38d13fa43605649`, RunId `3118efc5e766487cba9148e129d9fc1b`, ran 06:35:28–06:36:19 UTC. A deferred workspace layout moved the initial tree label from screen Y=605 to Y=822 after hover; the unchanged physical-input boundary refused the outside-host click. No scope-path evidence was produced; cleanup/restoration passed. The probe now detects an out-of-workspace tree label before publishing a click, finishes any pending hover acknowledgement, and repeats only reveal/hover preparation within the existing stage deadline. It never clicks a stale out-of-view row or changes tree selection directly.
+
+Allocation `ui-scope-direct-v25-24`, harness `3bbe00fbdca926367955e1b247c7b4cea6c68cc4`, RunId `39f0b257efe94b708b772ef0c116e821`, started 06:38:48 UTC and failed `ui_selecttree / UI_TIMEOUT_SELECTTREE`, zero qualified phases. Its owned-window frame showed a restored small host after the launcher requested Maximized; tree hit/layout had changed. Cleanup and autostart restoration passed. The successor explicitly prepares the exact owned main HWND once before sequence 1, verifies maximized state and a settling interval, and checks WPF nearest-row hit identity before publishing tree clicks. It never resizes after input begins. Extracted-method regressions cover one-shot sequencing, HWND/PID identity, settling, and clipped/overlapping/wrong tree-row hits.
+
+### Frozen scope-regeneration successor
+
+Source #5829 / PR #5834 is pushed at `f0146aacef0b398bc71e8e278e6f7675432c1f17`. The Family presenter now retains six validated mm editors/native regeneration when switching scope and after ViewModel replacement. Its executable regression was RED on the preceding generic route and GREEN after correction, including malformed/stale/duplicate/suppressed-context refusal. Both exact-source host builds completed with zero warnings/errors; this is not licensed PASS.
+
+Fresh matching packages: V25 ZIP SHA-256 `ee1f820baaa93d1b5e636432e317ca76c632b856480450467449af249c2636c0`; V26 `4410e6b00caf15c99f7a974254debaffa255987e566f4ca54d1717e5355291a8`. ProductVersion remains committed `0.1.0-preview.10307`, explicitly LOCAL_PR_CANDIDATE, not official release. Prior frozen packages remain intact in their prior worktrees. The runner pins this new pair for direct-scope UI V25-first qualification, then V26 only after the same-source V25 UI result and cleanup pass. Installed `.10309` and the MCP pause remain unchanged.
+
+First successor allocation `ui-scope-fixed-v25-25`, harness `29721efc5`, RunId `d844597c8ff7455c9074e05cd9bb8caf`, selected the actual Móng đơn tree row in the maximized owned host, but Add did not open the dialog (`ui_opencanceldialog / UI_TIMEOUT_OPENCANCELDIALOG`). Workspace Zone/Floor controls were blank, although the probe obtained the disposable fixture project; only the Room-aware Add handler was observed. Zero complete phases; final private/profile/protected-state cleanup and exact autostart restoration passed. The next diagnostic records synthetic Workspace status/loading/subtype and whether the actual handler target is the observed panel. This failure is not yet attributed to the source fix, and no new source change is made without its cause.
+
+Allocation `ui-scope-status-v25-26`, harness `ca60bea94454547f52750845f0f2b75c29346020`, RunId `3e8ebd56ed9b40ad8cb557f757c3985a`, ran 07:05:48–07:07:34 UTC on the same `f0146aace` packages. Add/Cancel, six numeric fields, both independently verified physical centres/native solids and Enter passed again. Actual Family/Type selection remained selected through consecutive observations and displayed the specialized six mm rows directly, without tree reselection. It then failed `ui_edith2 / UI_TIMEOUT_EDITH2`: the requested H2 editor centre at screen `(377,666)` was below the visible property pane. The owned screenshot showed H1 above the clipped lower edge; H2 input did not reach the intended editor. Zero complete phases; all receipt cleanup/protected-state checks and exact autostart restoration passed. The same unchanged source opening both dialogs in this allocation disproves a deterministic Add-route regression inferred only from allocation 25; its intermittent initial state remains unqualified.
+
+The successor scrolls the property list to its final rows after locating H2, then requires WPF hit ancestry to identify that exact TextBox before publishing physical hover/text input. No model state, selection, production handler or geometry assertion is changed. A RED→GREEN extracted-method regression rejects clipped/missing/different editor hits and accepts only the exact editor; existing input/cleanup/native-boundary regressions pass. This is runner safety evidence, not licensed H2 edit PASS.
+
+GitHub readback confirms #5834 was merged externally by `longnguyentuan2107-maker` at 07:13:39 UTC, merge `39d8167a4531e0b0ec704cfca2b413c3676acf4a`, and #5829 is closed. Protected preflight/core succeeded on merged PR head `94ec7f7bba49131fd961d2d15232230c13009ec5`. The frozen local runtime candidate remains exact `f0146aacef0b398bc71e8e278e6f7675432c1f17`; this merge does not establish remaining edit/save/cold-reopen UI acceptance.
+
+Allocation `ui-h2-visible-v25-27`, harness `77ff2b240`, RunId `f32389a020ab43e59a4cdb5709a8f7d0`, ran 07:16:33–07:18:10 UTC. Earlier UI/geometry/scope assertions repeated successfully, but H2 remained non-hit-testable after ScrollToBottom. The new guard withheld all editor input (last sequence 32), then the unchanged stage deadline produced `UI_TIMEOUT_EDITH2`. Zero complete phases; receipt and autostart restoration verify full cleanup. The next diagnostic records read-only editor/ancestor bounds and scroll viewport/extent/offset on changes, distinguishing clipped layout from failed scroll alignment before further behavior changes.
+
+Allocation `ui-h2-layout-v25-28`, harness `c6805259b`, RunId `ecb6f288a139471b843959bc586e228c`, ran 07:49:29–07:51:38 UTC on unchanged `f0146aace`. It confirmed the product's embedded list is 120px high while its parent DockPanel is179px and top controls consume100px, leaving79px. Its internal scroll viewport is118px, extending beyond the allocated visible remainder. The attempted runner ScrollToBottom also overshoots H2 above that viewport (editor top514, scroll top571, offset/max478). The exact-editor guard withheld input, preserving FAIL/zero complete phases; cleanup and exact autostart restoration passed. Source correction is registered as #5840, distinct from merged scope-presenter #5829. The runner removes ScrollToBottom and retains normal H2 ScrollIntoView plus exact hit identity for the corrected UI. No property-search workaround or weakened geometry assertion is introduced.
+
+### Frozen embedded-viewport successor
+
+Source #5840 / PR #5841 is pushed at `87aff7fec452f9a8dd9f641ef84d143edc73514d`. The final embedded layout releases only the inner PropertyList minimum; the whole pane120px minimum,56*/44* proportions and host clipping remain. A real STA WPF fixture executing the full extracted production layout was RED at list120/available79.6, then GREEN for short/tall/resize/repair/dedicated restoration and H2/final/first editor bounds. Focused source guards and preceding Family-scope regression pass. Both locked-reference host builds before and after commit completed with zero warnings/errors.
+
+Matching frozen local packages: V25 ZIP SHA-256 `6da38fcb3bc5fdb1989e9397fad45da712bf4af6b7690298a2fe83657bcb10ac`; V26 `59498948341f36d408f8bf838e177170c19d99ffc64acaa2070b0524e6b99a81`. Version remains `0.1.0-preview.10307`, explicitly unsigned LOCAL_PR_CANDIDATE, not official release. Prior packages/receipts remain intact; installed `.10309` is unchanged. The runner pins this successor for fresh V25-first physical qualification and requires successful V25 UI/cleanup before V26. Licensed H2/edit/save/cold acceptance is not yet claimed.
+
+### First complete V25 physical UI pass
+
+Allocation `ui-property-fit-v25-29`, harness `6976ea8f599d5a3147123ac874b873116a0de8f0`, RunId `53fafd79a2b5456fb9226a43405aa47b`, ran 08:08:58–08:10:55 UTC on exact source `87aff7fec452f9a8dd9f641ef84d143edc73514d`, BricsCAD25.2.10. Final receipt is `LOCAL_PASS_BOUNDED`, all three `ui`/`uisaved`/`uireopen` phases verified. Physical Add/Cancel/six inputs/two independently mapped centres/Enter/direct Family scope/H2=1000mm/native regeneration/former generated handles erased/third physical centre/Esc passed. QS3DSAVE/QSAVE and fresh-process reopen preserve exact Family/element/native-handle identities, dimensions, volume/extents, ownership, cardinality and artifact digest. Actual list79px/viewport77px fit the remaining pane, and H2's physical hit was the exact editor. All39 physical requests have matching receipts. Full private/profile/protected-state cleanup, zero hosts and exact autostart restoration passed. This does not cover the broader topology/DPI/Quantity/private-DWG matrix.
+
+Matching V26 allocation `ui-property-fit-v26-30`, same source/harness, RunId `3b1c2bd4098e4684ab12f0b03091868c`, ran08:11:40–08:13:03 UTC and passed physical Add/Cancel/six dimension input/Family checks. It failed before placement at `ui_acceptcreatedialog / UI_VIEWPORT_MAPPING_UNAVAILABLE`, zero complete phases. The owned V26 screenshot shows native Tips and Properties panels consuming the available drawing area, unlike V25. Full cleanup/protected-state/autostart restoration passed. The successor uses Bricsys-documented `-TOOLPANEL` Tips Hide and `PROPERTIESCLOSE` only in the disposable V26 profile before the UI probe; QS3D panes and viewport ownership/roundtrip checks remain unchanged. Actual startup-array replay was RED before adding the commands and GREEN afterward; it launches no CAD. Reference: https://help.bricsys.com/en-us/document/command-reference/t/-toolpanel-command?version=V26 . A fresh V26 allocation must still independently qualify native centres/edit/save/cold-reopen.
+
+Exact source `87aff7fec` passed all1652 discovered feature preflights locally. Protected branch33954182384 and PR33954225983 both completed preflight/core SUCCESS. These source gates do not convert V26's consumed failure into PASS.
+
+### V26 native-panel allocation and source merge readback
+
+Allocation `ui-native-panels-v26-31`, harness `8242ccbd307393c38abecd585bea411fa0b8737a`, RunId `ea4d2ef85fae4f9abe7cee19c1b1d3f0`, ran 08:16:39–08:18:14 UTC on the unchanged frozen `87aff7fec` V26 package and BricsCAD26.2.07. The owned frame confirms the native Tips/Properties panels were hidden and drawing space became visible. The initial requested tree-label centre was `(94,471)`, but the actual mouse event identified the nearby hint text, not a TreeViewItem. Its workspace-relative event position `(89,237)` differs from the label's reported `(94,263.5)`. This establishes a physical targeting mismatch, not its root cause; self-consistent WPF PointToScreen/PointFromScreen hit checks did not establish the real input hit. No guessed fixed coordinate offset or new product defect is inferred from it.
+
+The unchanged stage deadline ended `ui_selecttree / UI_TIMEOUT_SELECTTREE`, final receipt `FAIL_OR_NO_RESULT`, zero complete phases and only two action/ACK pairs. Full private cleanup, protected-state equality, current profile and complete profile inventory restoration, nonce removal, zero BricsCAD processes and exact original autostart restoration passed. V26 physical UI remains unqualified. MCP execution and runner-issued MCP requests remain false. The V25 allocation29 PASS is unchanged and is not promoted to V26 evidence.
+
+GitHub readback verifies #5841 merged at 08:25:16 UTC, exact PR head `1002e18b6f25e348aa8c097eeed4ed4869aecaab`, merge `34e2609a0fd125fd1bf020c1d4e4787dd75134a7`. Fresh PR run `33954888075` and push run `33954886020` both passed protected preflight/core on that head; the reservation/collision gate passed and #5840 closed. Then-current main `8f86ff3676c0c6cff2697795f444d88836918d5d` contains the merge. The licensed product tested above remains exact `87aff7fec452f9a8dd9f641ef84d143edc73514d`, not this newer source integration. Frozen archives and private raw evidence were not changed or uploaded.
+
+The current Windows automation environment requires the supported Computer Use JavaScript API instead of direct PowerShell UI input. No allocation32 was launched after allocation31; a subsequent UI execution must use a compliant input path while retaining independent product/native assertions and truthful physical receipts. The existing runner's hover requests cannot be acknowledged as performed by a driver that did not actually perform them. This is an execution-path limitation, not a licensed PASS or a request to weaken the harness.
+
+### Observed-click protocol successor, pending licensed qualification
+
+The runner now explicitly selects `NATIVE_V1` or `OBSERVED_CLICK_V2`. V1 retains real hover and V1 receipts. V2 has no hover request/ACK, publishes stage-bound V2 requests and requires explicit supported Computer Use observation/action/refresh by the operator. Its shell loop cannot enter the existing PowerShell physical-input or proxy-dialog paths; the input mode and exact JavaScript receipt-helper hash are frozen in the allocation and mode is recorded in the final receipt. The original native stage deadline is retained; the asynchronous V2 operator has a separate bounded180-second stage/3600-second phase deadline. V2 does not call programmatic maximize/tree/editor scrolling from the probe.
+
+Both modes additionally arm a host-independent `PhysicalPickWitness` with the independently mapped world target before publishing each CAD click. The real Editor `PromptedForPoint` callback must observe that same finite point, exact sequence/document/World UCS/draw state, matching cursor and unchanged pre-placement semantic count. Generated geometry is never used as the expected input. Missing/stale/duplicate/mismatched/post-placement observations fail; event errors are latched outside the production command. Event registration is removed at completion/failure. SDK signatures compile against both actual installed V25/V26 reference sets with zero warnings/errors. Actual runtime callback ordering remains to be qualified, not assumed from compilation.
+
+New host-free tests were RED for missing witness/protocol/driver, then GREEN for actual witness correlation, explicit V1/V2 policy, shell input isolation, strict canonical JSON/stage/value binding and actual filesystem receipt refusal/exclusive publication. Existing cleanup/input/geometry-target guard replays still pass. Temporary receipt fixtures are explicitly nonlicensed and removed by the test. No existing receipt, frozen package or installed plugin was changed. See `tests/QS3D.LocalQualification.V25/OBSERVED-UI-DRIVER.md` for the operator procedure. A new V25-first allocation is required before V26; this implementation is not a new licensed PASS.
+
+### Observed V25 allocation32 — consumed protocol failure, not PASS
+
+Exact pushed harness `c9f3a81e848e6a70d9f1fff78ecfb2ebdd01dd29`, unchanged product `87aff7fec452f9a8dd9f641ef84d143edc73514d`, RunId `23811dd678564bd1b9095d7c5010211f`, host25.2.10, allocation `ui-observed-v25-32` started11:14:41UTC. Supported Computer Use performed real maximize/tree scroll/selection, Add, Cancel/Esc and Add again, with four matching V2 action/ACK pairs. Request5 correctly emitted InputL1=`2000`mm, but the JavaScript allowlist incorrectly expected semantic metres (`2`). The decoder refused; no input or ACK for request5, no complete UI phase, no new native PASS. The earlier manually enumerated serializer matrix also copied the wrong units and was insufficient evidence.
+
+The operator stopped only the exact owned host. A second runner defect then left the exited/no-child/no-marker loop waiting for its full phase deadline; interrupting the shell terminated it without completing finally. Verified recovery used the allocation-bound profile receipt (hash checked) and the existing sandbox restore helper: original pointer/inventory restored, exact owned nonce removed, zero hosts. Original OpenAI autostart bytes/hash and timestamp were restored from the hash-verified backup; Cloudflare stayed paused. Private test fixtures and raw evidence are retained, and a separate operator recovery record explicitly says `ABORTED_NO_RESULT`; the original incomplete runner restoration receipt is not relabelled. No full private cleanup or new licensed PASS is claimed for this interrupted allocation.
+
+The successor decoder now expects actual dialog millimetres `2000,2000,1000,1000,1000,0`. Regression test extracts the actual `FieldOrder`/`FieldText` definitions and verifies their use by InputField before sending actual C# serialized requests through the JS decoder (RED→GREEN); semantic-unit substitutions are rejected. Both host runners now throw into owned cleanup when the owned host has exited with no marker and no exact child, with actual branch replay coverage. Fresh allocation required; do not resume/relabel allocation32.
+
+### Observed V25 allocation33 — operator timeout, cleaned
+
+Exact harness `870a6e9b06dc6bf4e9020b22d36dcb45065d915a`, frozen product `87aff7fec452f9a8dd9f641ef84d143edc73514d`, RunId `f9e2d4f677da488bb1bb89c0a0e19bfe`, host25.2.10, allocation `ui-observed-mm-v25-33`,11:26:51.9515484–11:33:33.4605037UTC: `FAIL_OR_NO_RESULT / UI_TIMEOUT_INPUTW1`, zero complete phases. Actual Select/Add/Esc/Add and L1=2000mm completed with five V2 ACKs; W1 was clicked but not typed/ACKed before the180-second operator deadline. No licensed geometry PASS. Automatic private/profile/protected cleanup and original autostart hash/timestamp restoration all verified, zero hosts. Fresh CI for870a6e9b0: push33963339784 and PR33963342538/33963390866 preflight/coreSUCCESS.
+
+Owner subsequently explicitly approved600-second observed-operator stages after this interrupted multi-call input scenario. The new deadline test executes the actual selected timeout and expiration branch at181/599/600/601seconds (RED at180, then GREEN at600); legacy native25/26-second behavior stays unchanged. Total observed phase remains3600seconds. This changes operator scheduling allowance only, not product performance acceptance, native assertions, input protocol or prior failed receipts. New allocation34 is required before any new PASS claim or V26 run.
+
+### Observed allocations34/35 — incomplete, cleanly restored
+
+Both used exact pushed harness `9f6024674d8fc26b7f8a347fc6a08410e62d2f85`, unchanged frozen product `87aff7fec452f9a8dd9f641ef84d143edc73514d`, V25.2.10 and the approved600-second stage deadline. Allocation34 `ui-observed-tenmin-v25-34`, RunId `685fa29a61f748f1a6fb375e663b8d3c`,12:15:16.7417606–12:37:52.0220457UTC, failed `UI_TIMEOUT_INPUTH2`: nine acknowledged physical steps; H2 was typed but the operator continuation was interrupted before its ACK. The decoder refused further ACKs after the terminal marker. Zero complete phases; no placement evidence for34.
+
+Fresh allocation35 `ui-observed-continuous-v25-35`, RunId `69f6cf214d284c87a72e14cdd09f6196`,12:49:27.3317932–13:05:02.3999192UTC, completed15 physical action/ACK pairs through Enter. Both actual `PromptedForPoint` callbacks matched the independently frozen world targets, cursor positions, request sequences and pre-placement semantic counts; native placement checks advanced. This is the first licensed evidence of the new event witness ordering, not a complete UI PASS. At `OpenFamilyScope` the host exited without a phase marker or exact child. The owner subsequently confirmed closing the test window. No timeout/crash/product defect is inferred from this interrupted allocation, and no ACK16 exists.
+
+Both final receipts remain `FAIL_OR_NO_RESULT`, zero complete phases, with full private/profile/protected-state cleanup, nonce removal, zero hosts and exact original autostart restoration verified. MCP execution remains false. No consumed allocation is replayed or relabelled. Protected exact-head push33965498982 and PR33965500955 succeeded on9f6024674; CI does not qualify remaining runtime acceptance. The successor preserves native exit code and phase in private diagnostics before owned cleanup; an extracted-branch regression was RED without these fields, then GREEN for normal and abnormal exit codes on both hosts. Deadlines, assertions, product packages and installed `.10309` are unchanged. A fresh V25 pass/cleanup is still required before V26.
+
+### Observed allocation36 — creation observed, operator ACK expired
+
+Allocation `ui-observed-owned-v25-36`, RunId `9fff12215de642bd8e69fca65c156912`, exact harness `7134270ddbdfec3aa6c5deac9bfae0012d22f230`, unchanged frozen87aff7fec product, V25.2.10,13:20:23.4039983–13:41:18.8268449UTC: `FAIL_OR_NO_RESULT / UI_TIMEOUT_ACCEPTCREATEDIALOG`, zero complete phases. Ten physical action/ACK pairs covered selection, Add/Cancel and all six numeric inputs. The real OK click closed the dialog and displayed the new Foundation Family at13:31:18UTC, but the operator continuation did not publish ACK11 before the600-second stage deadline. Terminal-marker refusal prevented a late ACK. This does not establish a product creation failure, nor any placement/save/cold PASS for36.
+
+The final receipt and restoration record independently verify all private/protected/profile cleanup, nonce removal, zero hosts and original autostart restoration; cleanup_failure is null and MCP execution is false. Exact7134270dd push33968563514 and PR33968566293 passed preflight/core. Unchanged observed allocations were paused after repeated inter-turn operator scheduling failures. The owner subsequently approved the explicit pause/resume contract below. Existing native/product assertions and consumed receipts remain unchanged; no host was left running while approval was pending.
+
+### Approved operator-pause successor — host-free verification
+
+The explicit `-PauseForOperator` switch is restricted to observed interactive UI and frozen as `PAUSE_FOR_OPERATOR_V1` in allocation/receipt. Actual UI tick replays prove that an unacknowledged action can wait beyond 3600 seconds without advancing the product stage; every tick still validates the drawing/MCP boundary and latched point-witness errors. Exact ACK resumes the remaining 600-second active budget once. Invalid ACK, changed context, witness failure and backward pause clock fail closed. Unpublished preparation and non-paused/native deadlines remain bounded as before. Both outer runners cap operator UI at four hours, shorten save/exit to the original phase timeout once UI PASS is verified, and preserve cold-reopen timing.
+
+Receipt-I/O resume is explicit and requires that frozen policy. Actual filesystem tests reject gaps, future requests, orphan/malformed ACKs, wrong nonce/PID/helper hash, changed acknowledged history and terminal markers. It skips only the exact acknowledged prefix, never injects input or creates an ACK on resume. Unknown completion cannot be inferred from a screenshot. The full procedure is in `tests/QS3D.LocalQualification.V25/OBSERVED-UI-DRIVER.md`.
+
+The new clock/runner/resume regressions were observed RED before implementation and GREEN afterward. `scripts/test-local022-ui-input.ps1` passes, including all 21 actual C# serializer/JS decoder combinations and the existing physical/native guards. V25/net48 and V26/net8.0-windows probe builds both pass with zero warnings/errors against the same frozen product packages. These are host-free results, not a new licensed PASS. A fresh V25 allocation and full cleanup must qualify the new driver/policy before V26. Exact b5a928d0f CI push33972752843 and PR33972756191 preflight/core succeeded before this successor; they do not qualify its new head.
+
+### Observed paused V25 allocation37 — UI/save/cold-reopen PASS
+
+Allocation `ui-paused-v25-37`, RunId `c3f0e68e554147478bf50a3692565f2f`, exact pushed harness `b5fcbfb673810e22b3ac5792a579284c20a75a56`, frozen product `87aff7fec452f9a8dd9f641ef84d143edc73514d`, BricsCAD25.2.10, `2026-09-05T16:12:23.2012590Z`–`2026-09-05T16:40:50.1076013Z`: `LOCAL_PASS_BOUNDED`, three phases verified. Driver `OBSERVED_CLICK_V2`, wait policy `PAUSE_FOR_OPERATOR_V1`, helper SHA256 `2786aad5a0127a13c5ea92f7eb13d56ffb23afdb6e479bf9acf1821b7b5d0358`.
+
+All21 actual action/ACK pairs completed using supported Computer Use: Móng đơn selection, Add/Cancel/Esc with nonmutation, six mm fields, OK, two independently witnessed physical centres, Enter, direct Family / Type selection, physical H2=1000mm edit, native regeneration of both earlier elements with former handles erased, a third independently witnessed centre and final Esc. The operator was interrupted after actual L2 input and resumed only after confirming the exact still-live host and fresh unchanged dialog; no repeated gesture or manufactured ACK was used.
+
+Every check in `ui` (19), `uisaved` (8) and separate-process `uireopen` (9) is true. Saved/cold checks include exact artifact digest/cardinality, live generated solids, semantic/Family identity, dimensions/volume/extents and the paused MCP boundary. Private disposable data cleanup, protected-state equality, current profile and complete profile-inventory restoration, nonce removal and zero hosts all verified. The original OpenAI autostart hash and timestamp were restored exactly; Cloudflare stayed paused. MCP execution is false. Exact harness push33977036851 and PR33977040307/33977113009 completed SUCCESS; PR33977113009 independently read back preflight/coreSUCCESS.
+
+This qualifies the bounded observed V25 driver/policy, not V26, all DPI/Quantity/private-DWG cells, full topology or a customer release. Existing native/legacy/failed receipts remain unchanged.
+
+### Matching V26 allocation38 — pre-QS3D startup no-result, cleaned
+
+Allocation `ui-paused-v26-38`, RunId `5b9b7824175545a69cc8dc07134bd502`, same exact harness/product/driver/policy, BricsCAD26.2.07, `2026-09-05T16:41:57.7564775Z`–`2026-09-05T16:52:24.9873503Z`: `FAIL_OR_NO_RESULT`, zero phases and zero action/ACK files. The owned process was started only after V25's full cleanup. Repeated current process/window checks showed no main window (handle0), no targetable V26 window, no loaded QS3D/probe/managed adapter and no baseline marker. The native process stayed alive with all sampled threads waiting; its application log was stale, and no current Application Error/.NET Runtime/Hang event identified a cause. These facts do not establish a licensing failure, crash or QS3D source defect.
+
+After more than ten minutes before QS3D baseline, the operator verified exact executable, parent, disposable DWG, nonce profile, process age, no main window, no loaded QS3D and no action/phase files, then stopped only that owned test process. The live runner was not interrupted: it reported exit_code=-1/phase=ui and completed finally. Final receipt verifies private/protected/profile cleanup, nonce removal, zero hosts, cleanup_failure=null and exact original autostart restoration. The diagnostic exit code reflects operator termination, not a spontaneous host crash. No consumed allocation may be retried or relabelled as PASS.
+
+The startup command used the existing `/L /P <nonce> /B <script>` form, not `/Automation`; `/L` only suppresses the splash screen according to [Bricsys startup options](https://help.bricsys.com/en-us/document/bricscad/customization/startup-options). Further V26 execution requires resolving the native pre-plugin startup condition. No product source, licensing configuration, installed release or tunnel endpoint was changed. #5718/#4034 and aggregate #72 remain open.
+
+### V26 manual startup and allocation39 — source-profile diagnostic
+
+On 2026-09-06 the owner opened V26 normally (no runner arguments). The native
+Start window appeared, followed by its Analytics privacy prompt. The operator
+only read that prompt, did not choose a privacy option, and subsequently observed
+it disappear. The owner then confirmed closing the manual host for exclusive
+test execution. Manual startup is not a QS3D qualification result.
+
+Fresh allocation `ui-paused-v26-39`, RunId `40e423036acc4ebea157ed6992134e66`,
+used harness `f27c8d4d407ded1b3cc5e57d8313f850f96774ce` and the same frozen
+`87aff7fec452f9a8dd9f641ef84d143edc73514d` product. It ran
+`2026-09-05T17:28:54.0687885Z`–`2026-09-05T17:32:41.3000362Z` and again
+produced no window, QS3D module, action request or phase. The operator stopped
+only its verified owned process to investigate the profile difference; this is
+`FAIL_OR_NO_RESULT`, not an observed crash or automatic timeout. All private,
+protected-state, current-profile, profile-inventory and nonce cleanup checks
+passed, as did exact original autostart restoration. Allocation39 is consumed.
+
+Read-only registry inspection found that the runner's source `QS3D-V26-TEST`
+contained only `Drawing Recovery`, whereas the manually successful `Default`
+contained the normal Config/Startup/UI branches. This is a diagnostic difference,
+not yet proof of the stall's root cause. The wrapper now exposes optional
+`-SourceProfile` to pass an explicitly selected existing profile to the unchanged
+native sandbox clone. The original profile is not used as the live test profile;
+all nonce isolation, hash binding, product assertions and cleanup remain required.
+Actual selector/forwarding regression was RED before implementation and GREEN
+afterward. A fresh V26 allocation from `Default` remains required; V25's accepted
+allocation37 and all previous consumed receipts are unchanged.
+
+### V26 allocation40 — native startup recovered, Workspace still unqualified
+
+`ui-default-v26-40`, RunId `8289ed9cf1c6402c9f2c2e46df59f89c`, ran
+`2026-09-05T17:39:28.1856731Z`–`2026-09-05T17:50:20.6905381Z` on exact
+harness `a281679b40e74895b4ce33d423f19a94927fb037`, unchanged product
+`87aff7fec452f9a8dd9f641ef84d143edc73514d`, observed driver and paused-operator
+policy. The only newly selected native input was `-SourceProfile Default`, cloned
+into the usual unique nonce. Source-profile recovery identity remains hashed by
+the allocation. Both protected PR checks passed for this harness in run
+`33981623498`; this is not licensed qualification.
+
+The exact disposable drawing window appeared and native module inspection showed
+both QS3D and the V26 probe loaded. Physical F2/Prompt History observation showed
+the startup script reached `QL22UI`, not a pending NETLOAD/tool-panel question.
+However, both visible QS3D pane interiors remained blank. A physical restore and
+maximize cycle did not resolve that state. No acceptance click was sent and no
+action/ACK file exists. The actual timer ultimately published `phase-ui.json`:
+`FAIL / ui_selecttree / UI_TIMEOUT_SELECTTREE`; final receipt is
+`FAIL_OR_NO_RESULT`, `phases_verified=0`. This is the unchanged active-stage
+timeout, not another pre-QS3D startup stall or an operator-timeout extension.
+
+A local managed heap diagnostic captured before the timeout confirms one live
+UiController at `SelectTree`, sequence0/requestWritten=false, with its timer
+enabled and a bound production WorkspacePanel sized628×484. This narrows the
+pending condition to the existing tree-label containment/hit checks rather than
+an unstarted controller. It does not by itself prove why rendering/hit testing
+failed. The dump is private, ignored and retained locally outside the disposable
+fixture subtree for further diagnosis; it must not be uploaded or committed.
+Diagnostic tools were installed only beneath ignored task artifacts. References:
+[Microsoft dotnet-stack](https://learn.microsoft.com/en-us/dotnet/core/diagnostics/dotnet-stack)
+and [dotnet-dump](https://learn.microsoft.com/en-us/dotnet/core/diagnostics/dotnet-dump).
+
+Runner cleanup verified the private drawing subtree removed, protected state
+unchanged, original current-profile pointer and inventory restored, nonce removed
+and zero BricsCAD processes. The original OpenAI autostart byte/hash/timestamp was
+restored exactly; no MCP request was issued. V25 allocation37 remains accepted on
+its own candidate. Do not repeat40 unchanged or claim that the remaining V26 UI,
+save/cold-reopen, cross-DPI/Quantity/private-DWG/topology matrix has passed.
+
+### V26 allocations41/42 — physical progress and separate remaining failures
+
+Both used harness `2cd842653d0d080171e01693f7dc1cc1f09061e9`, the unchanged
+`87aff7fec452f9a8dd9f641ef84d143edc73514d` product, a `Default` nonce clone,
+`OBSERVED_CLICK_V2 / PAUSE_FOR_OPERATOR_V1`, and V26 probe SHA-256
+`760043ed228c006de0be8f3a62353dea40fa4dde6f57afc2c0082d9f999e4cbd`.
+
+Allocation40's private heap showed the intended Foundation tree row outside the
+scroll viewport. In41, a real scrollbar-thumb drag brought Móng đơn into view and
+the unchanged containment/hit guard immediately published request1. The panes
+were visible; no programmatic BringIntoView or product change was used. Real
+scrolling also exposed the Family H2 editor. This resolves the clipped-target
+condition, not the cause of40's previously observed blank pixels.
+
+- `ui-scroll-v26-41`, RunId `298828e1e39c4bbab7ac07de33f9c81d`, ran
+  `2026-09-05T23:30:56.8804764Z`–`2026-09-06T00:28:48.0005117Z`.
+  All21 physical actions/ACKs completed, and actual `ui`19/19 and `uisaved`8/8
+  markers passed. All three independent points were latched before clicking and
+  matched native Editor results before geometry. Family H2 changed0→1000mm,
+  existing solids regenerated and former generated handles were erased.
+  `phases_verified=2`; no cold marker exists.
+- Its fresh cold process started `2026-09-06T00:03:45.395189Z`. Native stack
+  snapshots at00:20:41Z and00:27:57Z show the same main-thread wait in
+  `UIAutomationCore!OverlappedIOManager::AddChannel_AnyThread`, through
+  `AddWorkQueueChannel / SetupConnectionEvents / HandleHookMessage`, nested
+  inside `lispex` initialization / `cadapp!CaApp::loadLispex`. New threads wait in
+  `ntdll!LdrpInitializeThread / LdrpDrainWorkQueue`; QS3D/coreclr are absent.
+  This supports a native startup/UIA loader interaction, but does not identify
+  the initiating accessibility client or prove a QS3D defect. Resetting the
+  session's JS kernel did not release the wait. At00:28:47Z the operator
+  intentionally stopped only the exact identity-checked owned cold PID. This is
+  **not** a spontaneous crash or an expired3600-second timeout.
+- `ui-quiet-start-v26-42`, RunId `07861e74c2ab430fa39b47ced36dd21c`, ran
+  `2026-09-06T00:29:57.6920349Z`–`2026-09-06T01:21:02.3516372Z`. No Computer Use
+  query was made during startup; by the first module inspection it had loaded
+  QS3D/probe and shown the drawing window. This single success does not prove
+  that UIA observation caused41's stall. Real Add/Cancel/six numeric inputs/two
+  centres/Enter/Family H2 edit and regeneration completed through ACK19. During
+  an inter-turn gap the view changed from top to oblique3D without an agent
+  view-change action. The third click was physically sent at the requested
+  screen coordinate, but the independent witness rejected `pick_target_mismatch`:
+  expected `(6.536382877543484,0.1535076787139963,0)`, Editor result
+  `(2.8217524589707095,3.8681380972867703,0)`. The actual marker is
+  `FAIL / ui_repeatcentre / UI_PICK_OBSERVATION_FAILED`. No ACK20 was written,
+  no Escape21 was sent after failure, and no phase/save/cold PASS is claimed.
+
+For both41/42 the finally blocks verified zero BricsCAD processes, removed the
+owned disposable subtree/nonce, restored the exact original profile inventory
+and current pointer, preserved protected state, and restored the original
+OpenAI autostart byte/hash/timestamp. Cloudflare stayed paused; no MCP request
+was issued. Native diagnostic dumps/tools remain private and ignored; only this
+sanitized account is published.
+
+The shared runner had flattened `PointToWorld` by replacing Z with0. In an
+oblique orthographic view this changes the click ray instead of intersecting it
+with the fixture's WCS XY plane. A host-free regression executes the actual
+mapper and fails the old implementation, then passes the corrected ray/plane
+intersection. It covers top/oblique/scaled/reversed view directions, plane drift,
+perspective/parallel rejection, nonfinite inputs and screen roundtrip failure.
+The correction preserves pre-click latching and the unchanged strict independent
+Editor witness; it never derives an expected point from created geometry or a
+post-click result. Actual V25/V26 SDK builds and the full focused runner suite
+pass. These are not licensed PASS; fresh V25-first/V26 allocations are required.
+Reference: [BricsCAD view properties](https://developer.bricsys.com/bricscad/help/en_US/CurVer/DevRef/source/html/c45a56d0-f28d-2723-590d-f1810f4f48c0.htm).
+
+### V25 allocations43/44 — interrupted preparation, then explicit license exit
+
+Both allocations used exact pushed harness
+`ebc1ceaa3cce5cd878270cae1b2a1753e4223761`, containing projection fix
+`5cce733ab` and merged main `ce210cf8f318782ce36da10e43372dc1319ee1c8`.
+The frozen product remains `87aff7fec452f9a8dd9f641ef84d143edc73514d`;
+V25 ZIP SHA-256 is
+`6da38fcb3bc5fdb1989e9397fad45da712bf4af6b7690298a2fe83657bcb10ac`, and
+probe DLL SHA-256 is
+`952e72c9f18ab4405cd9369231d54bb13ba1716c61bf725fb5fe59a178afe385`.
+Host is V25.2.10, with `OBSERVED_CLICK_V2 / PAUSE_FOR_OPERATOR_V1`.
+The full focused runner suite passed after the main merge; exact-head push
+run `34003962447` and PR run `34003963366` passed preflight/core. These checks
+do not establish licensed runtime qualification.
+
+- `ui-ray-v25-43`, RunId `ccbf64ae399448cc9aac6c782d2564de`, ran
+  `2026-09-06T01:30:23.8666118Z`–`2026-09-06T01:41:39.7490682Z`.
+  The controller reached SelectTree, but operator work was interrupted before
+  any acceptance action. The unchanged active-stage deadline produced
+  `FAIL / ui_selecttree / UI_TIMEOUT_SELECTTREE`, with zero actions/ACKs and
+  zero verified phases. This is not a projection failure or native crash.
+- `ui-ray-v25-44`, RunId `61b998fbbda74ff295b9cc290ed08425`, ran
+  `2026-09-06T01:42:58.6515748Z`–`2026-09-06T01:50:37.1740124Z`.
+  Real maximize/scrollbar operations exposed Móng đơn. A physical click selected
+  it and ACK1 was written after refreshed visual confirmation. Request2
+  (OpenCancelDialog) was published, but no Add click or ACK2 was sent: the next
+  screenshot showed the Bricsys License Manager's invalid-license/quit notice.
+  The notice was dismissed through its real OK button and the owned host exited
+  with code0, without a phase marker. Runner diagnostics retain that natural
+  exit separately from the visually observed license notice; no product
+  geometry failure is inferred and the ray/plane correction was not exercised.
+
+Both receipts are terminal `FAIL_OR_NO_RESULT`, `phases_verified=0`,
+`aggregate_local022_qualified=false`. The runner verified the owned private
+drawing subtree removed, zero BricsCAD processes, original current-profile
+pointer/inventory restored, nonce removed and protected state unchanged.
+The outer wrapper restored OpenAI autostart to its original byte1 and SHA-256
+`6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b`.
+No MCP request was sent and no license configuration/service was changed.
+Private traces and raw receipts remain ignored; only sanitized evidence is
+published. PR #5738 remains draft because current licensed acceptance is unmet.
+
+Next prerequisite is owner restoration of a valid licensed V25 host. After that,
+use a fresh allocation on a pinned pushed harness, complete V25 UI/save/cold
+reopen and cleanup, then qualify the matching V26 package. Do not rerun consumed
+allocations43/44, reuse allocation37 as evidence for the changed mapper, or
+bypass the V25-first gate. Broader Quantity/DPI/private-DWG/topology limits remain
+open; MCP testing remains paused.
+
+### V25 allocation45 and superseding background-only owner instruction
+
+Before45, read-only process inspection showed the existing RLM service process
+had been replaced at `2026-09-06T02:02:59Z` and its console title no longer had
+the `Select` prefix. No agent action changed RLM or its license configuration.
+This was a material external-state change permitting a fresh check, not proof
+that licensing had recovered. Main `7e332961b49842e8c9da9659dd3d40cc2dea3305`
+was merged into the owned task branch and pushed as
+`53d1173b3ac251af8e47cf1558c86511467213f0`. Focused runner tests and both
+explicit-reference probe rebuilds passed with zero warnings/errors. An initial
+standalone V26 build invocation omitted required ProductDir/BricsCadDir and
+failed validation; the corrected invocation used the frozen product and host
+references, without source changes or relaxed guards.
+
+`ui-ray-v25-45`, RunId `37a3387b53bd49b486f800d3f5430919`, ran
+`2026-09-06T02:08:48.7507511Z`–`2026-09-06T02:10:36.1850189Z` on that exact
+harness and unchanged product `87aff7fec452f9a8dd9f641ef84d143edc73514d`.
+Its V25 probe SHA-256 was
+`9c64f42c44c812895ebf7097f700803da8ac070f8b3f4a9a8b4cfefc7adc060f`.
+The trace reached SelectTree at02:09:41Z; window discovery found the disposable
+drawing. Activation then failed and fresh discovery found no BricsCAD window.
+The actual phase marker was `FAIL / ui_bind / UI_STATE_PREEXISTS`; the runner
+consumed it and cleaned up. No click, key or text acceptance action/ACK exists.
+The source has one matching guard: a second Ui() entry sees an existing
+controller/run state. The startup command list includes QL22UI only once.
+Whether the second invocation came from an operator, command repeat, or another
+source is unproven; no speculative NoHistory/guard change was implemented.
+
+Receipt status is `FAIL_OR_NO_RESULT`, zero verified phases, aggregate false.
+Private drawing removal, zero BricsCAD processes, current-profile/inventory
+restoration, nonce removal, protected state and original autostart hash all
+passed. Exact-head PR run34005511169 and push run34005509287 both passed
+preflight/core. This is not physical UI or license-stability qualification.
+
+The owner then explicitly prohibited use of their mouse, keyboard and screen,
+including foreground activation and screenshots, and requested background-only
+work. This supersedes earlier permission for physical UI on the shared desktop.
+The agent stopped UI automation and reset its Computer Use session; no new host
+was launched. Source/build/CI/evidence work may continue without desktop input.
+Do not substitute programmatic WPF invocation, simulated ACKs or native API-only
+checks for the unexecuted physical cases. Any new licensed UI run requires an
+isolated interactive session agreed with the owner; opening hidden BricsCAD alone
+does not guarantee that license/startup dialogs cannot take foreground focus.
+PR #5738 and aggregate LOCAL-022 remain incomplete; MCP tests remain paused.

@@ -141,9 +141,18 @@ for token in required_verification:
         errors.append(f"verify-v25-signatures.ps1 missing fail-closed token: {token}")
 
 required_import = (
-    "Import-PfxCertificate",
-    "-Exportable:$false",
-    "Cert:\\CurrentUser\\My",
+    "[Security.SecureString] $Password",
+    "$maxPfxDecodedBytes = 1048576",
+    "$maxPfxBase64Chars = 1398104",
+    "[Convert]::FromBase64String($encodedPfx)",
+    "$probeCertificate.Import(",
+    "[Security.Cryptography.X509Certificates.X509KeyStorageFlags]::UserKeySet",
+    "$certificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new()",
+    "[Security.Cryptography.X509Certificates.X509KeyStorageFlags]::PersistKeySet",
+    "$certificate.Import($bytes, $Password, $keyStorageFlags)",
+    "[Security.Cryptography.X509Certificates.X509Store]::new(",
+    "[Security.Cryptography.X509Certificates.StoreName]::My",
+    "[Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser",
     "already exists in Cert:\\CurrentUser\\My",
     "HasPrivateKey",
     "1.3.6.1.5.5.7.3.3",
@@ -155,7 +164,18 @@ required_import = (
 )
 for token in required_import:
     if token not in certificate_import:
-        errors.append(f"import-v25-signing-certificate.ps1 missing secret-lifecycle token: {token}")
+        errors.append(f"import-v25-signing-certificate.ps1 missing in-memory secret-lifecycle token: {token}")
+
+for forbidden in (
+    "Import-PfxCertificate",
+    "[IO.File]::WriteAllBytes(",
+    "$pfxPath",
+    "GetTempPath()",
+    "RUNNER_TEMP",
+    "[Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable",
+):
+    if forbidden in certificate_import:
+        errors.append(f"import-v25-signing-certificate.ps1 regressed to forbidden PFX pathname/exportable-key primitive: {forbidden}")
 
 for token in (
     "QS3D_SIGNING_CERT_PFX_BASE64",
@@ -178,4 +198,4 @@ if errors:
     print(f"FAILED with {len(errors)} commercial release signing hardening error(s).")
     sys.exit(1)
 
-print("PASS: commercial V25 release remains signed-only, exact-version/source bound, RFC3161 PE timestamped, ephemeral-key cleaned, least-privilege published, exact-tag owned, held-generation draft-byte verified, exact publish response transaction-verified, and restart-safe under bounded rollback.")
+print("PASS: commercial V25 release remains signed-only, exact-version/source bound, RFC3161 PE timestamped, bounded in-memory PFX imported with no pathname materialization, ephemeral-key cleaned, least-privilege published, exact-tag owned, held-generation draft-byte verified, exact publish response transaction-verified, and restart-safe under bounded rollback.")

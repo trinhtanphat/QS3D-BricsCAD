@@ -18,54 +18,69 @@ def forbid(source: str, token: str, label: str) -> None:
 def main() -> None:
     source = TARGET.read_text(encoding="utf-8")
 
-    # The generated finalizer must be admitted as one ordinary generation and
-    # held against write/delete replacement while validation and execution use
-    # its pathname to preserve the canonical scripts-directory $PSScriptRoot.
+    # The generated finalizer is admitted as one ordinary generation and held
+    # against write/delete replacement while validation and execution use its
+    # canonical scripts-directory pathname to preserve inherited $PSScriptRoot.
     require(source, "function Resolve-OrdinaryNonReparseFile", "ordinary generated-script admission")
     require(source, "function Assert-NoReparseDirectoryChain", "ancestor reparse rejection")
     require(source, "$generatedItem = Resolve-OrdinaryNonReparseFile -Path $tempScript", "post-generation leaf admission")
     require(source, "[IO.File]::Open($generatedItem.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)", "held generated-script open")
-    require(source, "$generatedStream", "held generated-script stream")
-    require(source, "Read-HeldStrictUtf8", "bounded strict UTF-8 held read")
     require(source, "$maxGeneratedScriptBytes = 1MB", "generated-script byte bound")
     require(source, "[Text.UTF8Encoding]::new($false, $true)", "strict generated-script UTF-8 decoder")
     require(source, "$generated = Read-HeldStrictUtf8 -Stream $generatedStream", "validation from held generation")
+    require(source, "$generatedIdentity = Get-HeldGeneratedScriptIdentity -Stream $generatedStream", "held generation identity capture")
     forbid(source, "Get-Content -LiteralPath $tempScript -Raw", "pathname validation reopen")
 
-    # The same handle must remain alive across invocation, and path metadata is
-    # checked on both sides so an unexpected name/generation change fails closed.
+    # Execution and post-validation stay on the held generation. Cleanup then
+    # reopens the name without following a reparse point, proves the same native
+    # file identity, and marks exactly that generation for deletion by handle.
     require(source, "Assert-HeldGeneratedScript -Stream $generatedStream", "held generation revalidation")
     require(source, "& $tempScript @forward", "canonical-path invocation")
     require(source, "$generatedStream.Dispose()", "held stream disposal")
-    open_index = source.index("[IO.File]::Open($generatedItem.FullName")
-    read_index = source.index("$generated = Read-HeldStrictUtf8 -Stream $generatedStream")
-    invoke_index = source.index("& $tempScript @forward")
-    dispose_index = source.index("$generatedStream.Dispose()", invoke_index)
-    if not open_index < read_index < invoke_index < dispose_index:
-        raise SystemExit("ERROR: V26 finalizer held generation ordering is not open -> held read -> invoke -> dispose")
+    require(source, "function Remove-ExactGeneratedScriptGeneration", "exact-generation cleanup helper")
+    require(source, "DeleteIfSameGeneration", "native exact-generation cleanup")
+    require(source, "GENERIC_READ | DELETE", "delete-capable cleanup handle")
+    require(source, "FILE_SHARE_READ", "write/delete sharing remains closed")
+    require(source, "FILE_FLAG_OPEN_REPARSE_POINT", "cleanup reparse-open suppression")
+    require(source, "FILE_ATTRIBUTE_REPARSE_POINT", "cleanup reparse rejection")
+    require(source, "GetFileInformationByHandle(handle", "same-handle identity proof")
+    require(source, "SetFileInformationByHandle(handle", "same-handle delete disposition")
+    cleanup = "Remove-ExactGeneratedScriptGeneration -Path $tempScript -ExpectedIdentity $generatedIdentity"
+    require(source, cleanup, "exact-generation cleanup call")
+    forbid(source, "Remove-Item -LiteralPath $tempScript", "pathname temp-script cleanup")
+    forbid(source, "Remove-Item $tempScript", "unqualified pathname temp-script cleanup")
 
-    # Cleanup has two simultaneous invariants. On success, re-admit the transient
-    # leaf, perform the repository-root-compatible unlink, and prove absence so
-    # SilentlyContinue cannot hide a release-safety failure. On an already-failed
-    # operation, cleanup is secondary and must not replace the primary evidence.
+    open_index = source.index("[IO.File]::Open($generatedItem.FullName")
+    capture_index = source.index("$generatedIdentity = Get-HeldGeneratedScriptIdentity -Stream $generatedStream", open_index)
+    read_index = source.index("$generated = Read-HeldStrictUtf8 -Stream $generatedStream", capture_index)
+    invoke_index = source.index("& $tempScript @forward", read_index)
+    post_assert_index = source.index(
+        "Assert-HeldGeneratedScript -Stream $generatedStream -Admitted $generatedItem -ExpectedPath $tempScript",
+        invoke_index + 1,
+    )
+    dispose_index = source.index("$generatedStream.Dispose()", post_assert_index)
+    cleanup_index = source.index(cleanup, dispose_index)
+    if not open_index < capture_index < read_index < invoke_index < post_assert_index < dispose_index < cleanup_index:
+        raise SystemExit(
+            "ERROR: V26 finalizer held generation ordering must be open -> identity -> held read -> invoke -> post-validate -> dispose -> exact cleanup"
+        )
+
+    # Success cleanup remains fail-closed. When a transformer/finalizer failure
+    # is already propagating, cleanup is secondary and must never replace it.
     require(source, "$primaryFailure = $null", "primary failure sentinel")
     require(source, "$primaryFailure = $_", "primary failure capture")
-    success_cleanup = "if ($null -eq $primaryFailure) {"
-    require(source, success_cleanup, "successful-path cleanup branch")
-    require(source, "Resolve-OrdinaryNonReparseFile -Path $tempScript -Label 'Generated V26 finalizer cleanup script'", "successful-path cleanup leaf revalidation")
-    cleanup = "if (Test-Path -LiteralPath $tempScript) { Remove-Item -LiteralPath $tempScript -Force -ErrorAction SilentlyContinue }"
-    require(source, cleanup, "repository-root-compatible temp-script cleanup")
-    require(source, "if (Test-Path -LiteralPath $tempScript) { throw 'Generated V26 finalizer cleanup did not remove the admitted transient script.' }", "successful-path cleanup absence proof")
-    require(source, "else {", "primary-failure cleanup branch")
+    success_branch = "if ($null -eq $primaryFailure) {"
+    require(source, success_branch, "successful-path cleanup branch")
     require(source, "Preserve the primary transformer/finalizer failure", "primary failure preservation rationale")
-    forbid(source, "Remove-Item -LiteralPath $tempScript -Force -ErrorAction Stop", "primary-error-masking temp-script cleanup")
 
-    success_index = source.index(success_cleanup, dispose_index)
-    admission_index = source.index("Resolve-OrdinaryNonReparseFile -Path $tempScript -Label 'Generated V26 finalizer cleanup script'", success_index)
-    cleanup_index = source.index(cleanup, admission_index)
-    absence_index = source.index("Generated V26 finalizer cleanup did not remove the admitted transient script.", cleanup_index)
-    if not invoke_index < dispose_index < success_index < admission_index < cleanup_index < absence_index:
-        raise SystemExit("ERROR: V26 success cleanup must be invoke -> dispose -> strict admission -> unlink -> absence proof")
+    success_index = source.index(success_branch, dispose_index)
+    success_cleanup_index = source.index(cleanup, success_index)
+    primary_else_index = source.index("else {", success_cleanup_index)
+    secondary_cleanup_index = source.index(cleanup, primary_else_index)
+    if not dispose_index < success_index < success_cleanup_index < primary_else_index < secondary_cleanup_index:
+        raise SystemExit(
+            "ERROR: V26 exact-generation cleanup must be strict on success and secondary after a primary failure"
+        )
 
     print("PASS V26 generated finalizer held-generation guard")
 

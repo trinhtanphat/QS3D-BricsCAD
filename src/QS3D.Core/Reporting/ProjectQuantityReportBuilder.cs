@@ -295,13 +295,23 @@ namespace QS3D.Core.Reporting
             internal static ElementSnapshot Capture(ProjectState project, ProjectElement source)
             {
                 if (source == null) throw new InvalidOperationException("Project contains a null semantic element entry.");
+                // Preserve the dictionary facade's report-copy capacity guard
+                // when using the non-mutating persistence reconstruction path.
+                if (source.Properties.Count > 10000)
+                    throw new InvalidOperationException("Property collection exceeds the maximum supported cardinality of 10000.");
                 var clone = new ProjectElement(source.Id, source.Category, source.FamilyId, source.FloorId, source.ZoneId)
                 {
                     DrawingFingerprint = source.DrawingFingerprint
                 };
                 foreach (var handle in source.SourceHandles) clone.SourceHandles.Add(handle);
                 foreach (var dependency in source.DependsOn) clone.DependsOn.Add(dependency);
-                foreach (var property in source.Properties) clone.Properties.Add(property.Key, property.Value);
+                // Snapshot reconstruction is not a semantic edit. Public Add can
+                // mark a copied generated output stale when persisted ordering
+                // puts its handle before a geometry property, corrupting this
+                // frozen generation even though the source did not change.
+                var properties = clone.Properties as ProjectElementPropertyDictionary
+                    ?? throw new InvalidOperationException("Quantity snapshot requires the canonical element property store.");
+                foreach (var property in source.Properties) properties.SetPersistenceValue(property.Key, property.Value);
                 foreach (var quantity in source.Quantities) clone.Quantities.Add(quantity.Key, quantity.Value);
                 var resolvedSourceHandles = SourceHandleResolver.Resolve(project, new[] { source.Id }).ToList().AsReadOnly();
                 return new ElementSnapshot(

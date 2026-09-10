@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
@@ -51,8 +52,21 @@ namespace QS3D.Core.SmokeTests
         private static ProjectElement MalformedElement()
         {
             var element = new ProjectElement("BROKEN", ElementCategory.Beam);
-            element.DependsOn.Add(" ");
+            AddPersistedDependency(element, " ");
             return element;
+        }
+
+        private static void AddPersistedDependency(ProjectElement element, string dependency)
+        {
+            var relationField = typeof(ProjectElement).GetField("_dependsOn", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement persisted dependency backing relation field is unavailable.");
+            var relation = relationField.GetValue(element)
+                ?? throw new InvalidOperationException("ProjectElement persisted dependency backing relation is unavailable.");
+            var valuesField = relation.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement persisted dependency backing values field is unavailable.");
+            var values = valuesField.GetValue(relation) as List<string>
+                ?? throw new InvalidOperationException("ProjectElement persisted dependency backing values are unavailable.");
+            values.Add(dependency);
         }
 
         private static void ThrowsContaining(Action action, string token)

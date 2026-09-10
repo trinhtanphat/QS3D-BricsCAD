@@ -316,28 +316,69 @@ namespace QS3D.BricsCAD.V25
         {
             private readonly Document _document;
             private readonly DocumentCollection _documents;
-            private bool _disposed;
+            private bool _subscribed;
+            private bool _disposeRequested;
+            private bool _detachInProgress;
             private bool _wasDeactivated;
 
             public RepeatedDocumentLifecycleGuard(Document document)
             {
                 _document = document ?? throw new ArgumentNullException(nameof(document));
                 _documents = Application.DocumentManager;
-                _documents.DocumentToBeDeactivated += OnDocumentToBeDeactivated;
+
+                // Treat the add accessor as potentially partially successful. If it throws after
+                // registering the handler, the compensating remove gets one immediate chance and
+                // any retained callback can keep retrying without consulting the stale document.
+                _subscribed = true;
+                try
+                {
+                    _documents.DocumentToBeDeactivated += OnDocumentToBeDeactivated;
+                }
+                catch
+                {
+                    _disposeRequested = true;
+                    TryDetach();
+                    throw;
+                }
             }
 
             public bool WasDeactivated => _wasDeactivated;
 
             public void Dispose()
             {
-                if (_disposed) return;
-                _disposed = true;
-                try { _documents.DocumentToBeDeactivated -= OnDocumentToBeDeactivated; }
-                catch { }
+                _disposeRequested = true;
+                TryDetach();
+            }
+
+            private void TryDetach()
+            {
+                if (!_subscribed || _detachInProgress) return;
+
+                _detachInProgress = true;
+                try
+                {
+                    _documents.DocumentToBeDeactivated -= OnDocumentToBeDeactivated;
+                    _subscribed = false;
+                }
+                catch
+                {
+                    // Native teardown can reject remove temporarily. Keep ownership published so a
+                    // retained callback can retry; never turn this into a command failure.
+                }
+                finally
+                {
+                    _detachInProgress = false;
+                }
             }
 
             private void OnDocumentToBeDeactivated(object sender, DocumentCollectionEventArgs args)
             {
+                if (_disposeRequested)
+                {
+                    TryDetach();
+                    return;
+                }
+
                 if (args != null && EqualityComparer<Document>.Default.Equals(args.Document, _document))
                     _wasDeactivated = true;
             }
@@ -408,8 +449,7 @@ namespace QS3D.BricsCAD.V25
 
         private static void Report(Document document, string message)
         {
-            try { document.Editor.WriteMessage("\nQS3D " + message); } catch { }
-            try { PaletteCoordinator.SetStatus(message); } catch { }
+            DirectDrawUiFailureReporter.ReportMessage(document, message);
         }
 
         private sealed class RepeatedDefaults

@@ -16,8 +16,13 @@ namespace QS3D.Core.Export
         internal const int IntegerStyle = 2;
         internal const int DecimalStyle = 3;
         internal const int WrappedStyle = 4;
+        private const long MaxWorksheetEntryBytes = 32L * 1024 * 1024;
+        private const long MaxTotalUncompressedBytes = 64L * 1024 * 1024;
+        private const long MaxArchiveBytes = 64L * 1024 * 1024;
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
+        private static readonly DateTimeOffset FixedTimestamp = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-        internal static void WritePackage(string path, params string[] sheets)
+        internal static void WritePackage(string path, params Action<TextWriter>[] sheets)
         {
             if (sheets == null || sheets.Length != 6) throw new InvalidDataException("QS3D Review workbook requires exactly six worksheets.");
             var fullPath = Path.GetFullPath(path);
@@ -26,15 +31,17 @@ namespace QS3D.Core.Export
             var tempPath = AtomicFileCommit.CreateTempPath(fullPath);
             try
             {
-                using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
+                using (var fileStream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
+                using (var stream = new BoundedArchiveWriteStream(fileStream, MaxArchiveBytes))
                 using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, false, Encoding.UTF8))
                 {
-                    Entry(archive, "[Content_Types].xml", ContentTypes);
-                    Entry(archive, "_rels/.rels", RootRels);
-                    Entry(archive, "xl/workbook.xml", Workbook);
-                    Entry(archive, "xl/_rels/workbook.xml.rels", WorkbookRels);
-                    Entry(archive, "xl/styles.xml", Styles);
-                    for (var i = 0; i < sheets.Length; i++) Entry(archive, "xl/worksheets/sheet" + (i + 1).ToString(CultureInfo.InvariantCulture) + ".xml", sheets[i]);
+                    var budget = new UncompressedBudget(MaxTotalUncompressedBytes);
+                    Entry(archive, "[Content_Types].xml", ContentTypes, budget);
+                    Entry(archive, "_rels/.rels", RootRels, budget);
+                    Entry(archive, "xl/workbook.xml", Workbook, budget);
+                    Entry(archive, "xl/_rels/workbook.xml.rels", WorkbookRels, budget);
+                    Entry(archive, "xl/styles.xml", Styles, budget);
+                    for (var i = 0; i < sheets.Length; i++) WriteSheet(archive, "xl/worksheets/sheet" + (i + 1).ToString(CultureInfo.InvariantCulture) + ".xml", sheets[i], budget);
                 }
                 XlsxPackageValidator.Validate(tempPath,
                     "[Content_Types].xml", "xl/workbook.xml", "xl/_rels/workbook.xml.rels", "xl/styles.xml",
@@ -45,9 +52,9 @@ namespace QS3D.Core.Export
             finally { AtomicFileCommit.TryDelete(tempPath); }
         }
 
-        internal static StringBuilder Begin(string dimension, string columnsXml = "")
+        internal static WorksheetWriter Begin(TextWriter output, string dimension, string columnsXml = "")
         {
-            var sb = new StringBuilder(4096);
+            var sb = new WorksheetWriter(output);
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><dimension ref=\"")
               .Append(Escape(dimension)).Append("\"/><sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight=\"15\"/>");
             if (!string.IsNullOrEmpty(columnsXml)) sb.Append(columnsXml);
@@ -55,23 +62,23 @@ namespace QS3D.Core.Export
             return sb;
         }
 
-        internal static string End(StringBuilder sb, string filter)
+        internal static void End(WorksheetWriter sb, string filter)
         {
             sb.Append("</sheetData>");
             if (!string.IsNullOrWhiteSpace(filter)) sb.Append("<autoFilter ref=\"").Append(Escape(filter)).Append("\"/>");
-            return sb.Append("</worksheet>").ToString();
+            sb.Append("</worksheet>");
         }
 
-        internal static void Header(StringBuilder sb, int row, params string[] values) => TextRow(sb, row, true, values);
-        internal static void TextRow(StringBuilder sb, int row, bool header, params string[] values)
+        internal static void Header(WorksheetWriter sb, int row, params string[] values) => TextRow(sb, row, true, values);
+        internal static void TextRow(WorksheetWriter sb, int row, bool header, params string[] values)
         {
             StartRow(sb, row);
             for (var i = 0; i < values.Length; i++) Text(sb, Cell(i, row), values[i], header ? HeaderStyle : 0);
             EndRow(sb);
         }
-        internal static void StartRow(StringBuilder sb, int row) => sb.Append("<row r=\"").Append(row.ToString(CultureInfo.InvariantCulture)).Append("\">");
-        internal static void EndRow(StringBuilder sb) => sb.Append("</row>");
-        internal static void Text(StringBuilder sb, string cell, string value, int style = 0)
+        internal static void StartRow(WorksheetWriter sb, int row) => sb.Append("<row r=\"").Append(row.ToString(CultureInfo.InvariantCulture)).Append("\">");
+        internal static void EndRow(WorksheetWriter sb) => sb.Append("</row>");
+        internal static void Text(WorksheetWriter sb, string cell, string value, int style = 0)
         {
             var text = value ?? string.Empty;
             Qs3dReviewModelInfo.VerifyXml(text, cell);
@@ -79,16 +86,16 @@ namespace QS3D.Core.Export
             if (style > 0) sb.Append(" s=\"").Append(style.ToString(CultureInfo.InvariantCulture)).Append("\"");
             sb.Append("><is><t xml:space=\"preserve\">").Append(Escape(text)).Append("</t></is></c>");
         }
-        internal static void Number(StringBuilder sb, string cell, double value, int style = DecimalStyle)
+        internal static void Number(WorksheetWriter sb, string cell, double value, int style = DecimalStyle)
         {
             if (!Finite(value)) throw new InvalidDataException("Cannot write a non-finite XLSX numeric value.");
             sb.Append("<c r=\"").Append(cell).Append("\"");
             if (style > 0) sb.Append(" s=\"").Append(style.ToString(CultureInfo.InvariantCulture)).Append("\"");
             sb.Append("><v>").Append(value.ToString("R", CultureInfo.InvariantCulture)).Append("</v></c>");
         }
-        internal static void Integer(StringBuilder sb, string cell, int value) => Number(sb, cell, value, IntegerStyle);
-        internal static void OptionalNumber(StringBuilder sb, string cell, double? value) { if (value.HasValue) Number(sb, cell, value.Value); }
-        internal static void Evidence(StringBuilder sb, string cell, double value, bool hasEvidence) { if (hasEvidence) Number(sb, cell, value); }
+        internal static void Integer(WorksheetWriter sb, string cell, int value) => Number(sb, cell, value, IntegerStyle);
+        internal static void OptionalNumber(WorksheetWriter sb, string cell, double? value) { if (value.HasValue) Number(sb, cell, value.Value); }
+        internal static void Evidence(WorksheetWriter sb, string cell, double value, bool hasEvidence) { if (hasEvidence) Number(sb, cell, value); }
         internal static string Cell(int column, int row) => Column(column) + row.ToString(CultureInfo.InvariantCulture);
 
         internal static string TraceKey(string kind, params string[] values)
@@ -114,10 +121,146 @@ namespace QS3D.Core.Export
             while (value > 0) { value--; sb.Insert(0, (char)('A' + value % 26)); value /= 26; }
             return sb.ToString();
         }
-        private static void Entry(ZipArchive archive, string path, string content)
+        private static void Entry(ZipArchive archive, string path, string content, UncompressedBudget budget)
         {
+            var bytes = StrictUtf8.GetBytes(content);
+            if (bytes.LongLength > MaxWorksheetEntryBytes) throw new InvalidDataException(path + " exceeds the XLSX entry byte budget.");
+            budget.Reserve(bytes.LongLength, path);
             var entry = archive.CreateEntry(path, CompressionLevel.Optimal);
-            using (var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false))) writer.Write(content);
+            entry.LastWriteTime = FixedTimestamp;
+            using (var stream = entry.Open())
+            using (var bounded = new BoundedEntryWriteStream(stream, MaxWorksheetEntryBytes))
+                bounded.Write(bytes, 0, bytes.Length);
+        }
+
+        private static void WriteSheet(ZipArchive archive, string path, Action<TextWriter> write, UncompressedBudget budget)
+        {
+            if (write == null) throw new InvalidDataException("QS3D Review worksheet writer is required.");
+            var entry = archive.CreateEntry(path, CompressionLevel.Optimal);
+            entry.LastWriteTime = FixedTimestamp;
+            using (var stream = entry.Open())
+            using (var bounded = new BoundedEntryWriteStream(stream, MaxWorksheetEntryBytes))
+            using (var counting = new CountingWriteStream(bounded, budget, path))
+            using (var writer = new StreamWriter(counting, StrictUtf8, 4096, true))
+            {
+                write(writer);
+                writer.Flush();
+            }
+        }
+
+        internal sealed class WorksheetWriter
+        {
+            private readonly TextWriter _writer;
+            internal WorksheetWriter(TextWriter writer) { _writer = writer ?? throw new ArgumentNullException(nameof(writer)); }
+            internal WorksheetWriter Append(string value) { _writer.Write(value); return this; }
+            internal WorksheetWriter Append(char value) { _writer.Write(value); return this; }
+        }
+
+        private sealed class UncompressedBudget
+        {
+            private readonly long _limit;
+            private long _used;
+            internal UncompressedBudget(long limit) { _limit = limit; }
+            internal void Reserve(long count, string path)
+            {
+                if (count < 0L) throw new ArgumentOutOfRangeException(nameof(count));
+                var projected = checked(_used + count);
+                if (projected > _limit) throw new InvalidDataException("QS3D Review XLSX aggregate uncompressed budget exceeded while writing " + path + ".");
+                _used = projected;
+            }
+        }
+
+        private sealed class CountingWriteStream : Stream
+        {
+            private readonly Stream _inner;
+            private readonly UncompressedBudget _budget;
+            private readonly string _path;
+            internal CountingWriteStream(Stream inner, UncompressedBudget budget, string path) { _inner = inner; _budget = budget; _path = path; }
+            public override bool CanRead => false;
+            public override bool CanSeek => false;
+            public override bool CanWrite => true;
+            public override long Length => _inner.Length;
+            public override long Position { get => _inner.Position; set => throw new NotSupportedException(); }
+            public override void Flush() => _inner.Flush();
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void Write(byte[] buffer, int offset, int count) { _budget.Reserve(count, _path); _inner.Write(buffer, offset, count); }
+            public override void WriteByte(byte value) { _budget.Reserve(1L, _path); _inner.WriteByte(value); }
+        }
+
+        private sealed class BoundedEntryWriteStream : Stream
+        {
+            private readonly Stream _inner;
+            private readonly long _maxLength;
+            private long _bytesWritten;
+            internal BoundedEntryWriteStream(Stream inner, long maxLength) { _inner = inner; _maxLength = maxLength; }
+            public override bool CanRead => false;
+            public override bool CanSeek => false;
+            public override bool CanWrite => true;
+            public override long Length => _bytesWritten;
+            public override long Position { get => _bytesWritten; set => throw new NotSupportedException(); }
+            public override void Flush() => _inner.Flush();
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                var projected = checked(_bytesWritten + count);
+                if (projected > _maxLength) throw new InvalidDataException("QS3D Review XLSX worksheet exceeds the bounded entry contract.");
+                _inner.Write(buffer, offset, count); _bytesWritten = projected;
+            }
+            public override void WriteByte(byte value)
+            {
+                var projected = checked(_bytesWritten + 1L);
+                if (projected > _maxLength) throw new InvalidDataException("QS3D Review XLSX worksheet exceeds the bounded entry contract.");
+                _inner.WriteByte(value); _bytesWritten = projected;
+            }
+        }
+
+        private sealed class BoundedArchiveWriteStream : Stream
+        {
+            private readonly Stream _inner;
+            private readonly long _maxLength;
+            internal BoundedArchiveWriteStream(Stream inner, long maxLength) { _inner = inner; _maxLength = maxLength; }
+            public override bool CanRead => _inner.CanRead;
+            public override bool CanSeek => _inner.CanSeek;
+            public override bool CanWrite => _inner.CanWrite;
+            public override long Length => _inner.Length;
+            public override long Position
+            {
+                get => _inner.Position;
+                set { if (value < 0L || value > _maxLength) throw ArchiveSizeExceeded(); _inner.Position = value; }
+            }
+            public override void Flush() => _inner.Flush();
+            public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+            public override long Seek(long offset, SeekOrigin origin)
+            {
+                long target;
+                switch (origin)
+                {
+                    case SeekOrigin.Begin: target = offset; break;
+                    case SeekOrigin.Current: target = checked(_inner.Position + offset); break;
+                    case SeekOrigin.End: target = checked(_inner.Length + offset); break;
+                    default: throw new ArgumentOutOfRangeException(nameof(origin));
+                }
+                if (target < 0L || target > _maxLength) throw ArchiveSizeExceeded();
+                return _inner.Seek(offset, origin);
+            }
+            public override void SetLength(long value) { if (value < 0L || value > _maxLength) throw ArchiveSizeExceeded(); _inner.SetLength(value); }
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                var projected = Math.Max(_inner.Length, checked(_inner.Position + count));
+                if (projected > _maxLength) throw ArchiveSizeExceeded();
+                _inner.Write(buffer, offset, count);
+            }
+            public override void WriteByte(byte value)
+            {
+                var projected = Math.Max(_inner.Length, checked(_inner.Position + 1L));
+                if (projected > _maxLength) throw ArchiveSizeExceeded();
+                _inner.WriteByte(value);
+            }
+            private static InvalidDataException ArchiveSizeExceeded() => new InvalidDataException("QS3D Review XLSX archive exceeds the bounded output contract.");
         }
 
         private static readonly string Workbook =

@@ -38,8 +38,11 @@ if not (admission < admission_guard < snapshot_call):
 if "rows.Count == 0" in export or "rows.Count > MaxRows" in export:
     raise SystemExit("Coordination workbook Export must not reread live Count outside the admitted Count contract.")
 
-build_start = source.index("private static string BuildClashSheet", snapshot_start)
-snapshot = source[snapshot_start:build_start]
+# Bound the Snapshot method by its own return rather than by the declaration of the
+# following worksheet builder. This keeps the Count-stability guard independent of
+# whether worksheet production is string-materialized or streamed.
+snapshot_return = source.index("return result;", snapshot_start)
+snapshot = source[snapshot_start:snapshot_return + len("return result;")]
 loop = snapshot.index("for (var index = 0; index < admittedRowCount; index++)")
 pre_index = snapshot.index("RequireStableCoordinationRowCount(source, admittedRowCount);", loop)
 current = snapshot.index("var row = source[index];", pre_index)

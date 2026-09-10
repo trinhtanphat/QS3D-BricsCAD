@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Services;
@@ -61,7 +63,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = NewProject(out var wall, out var opening);
             opening.Properties["HostWallId"] = "W1";
-            opening.DependsOn.Add(" W1 ");
+            AddPersistedDependency(opening, " W1 ");
             var beforeVersion = project.ChangeVersion;
             var beforeDirty = opening.Dirty;
 
@@ -106,6 +108,19 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(wall);
             project.Elements.Add(opening);
             return project;
+        }
+
+        private static void AddPersistedDependency(ProjectElement element, string dependency)
+        {
+            var relationField = typeof(ProjectElement).GetField("_dependsOn", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("ProjectElement persisted dependency backing relation field is unavailable.");
+            var relation = relationField.GetValue(element)
+                ?? throw new Exception("ProjectElement persisted dependency backing relation is unavailable.");
+            var valuesField = relation.GetType().GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("ProjectElement persisted dependency backing values field is unavailable.");
+            var values = valuesField.GetValue(relation) as List<string>
+                ?? throw new Exception("ProjectElement persisted dependency backing values are unavailable.");
+            values.Add(dependency);
         }
 
         private static void SequenceEqual(string[] expected, System.Collections.Generic.IEnumerable<string> actual, string label)
