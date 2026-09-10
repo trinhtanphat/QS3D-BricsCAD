@@ -47,11 +47,11 @@ namespace QS3D.Core.Domain
             var candidate = key.Trim();
             if (!_values.TryGetValue(candidate, out var existing))
                 return _owner.RemoveQuantity(key);
-
-            // Reuse the owner boundary to validate/canonicalize the caller-supplied key without
-            // mutating state: assigning the already-stored value is an intentional semantic no-op.
-            _owner.SetQuantity(key, existing);
             if (!existing.Equals(item.Value)) return false;
+
+            // Removal validates/canonicalizes the caller-supplied key at the owner boundary, but it
+            // must not re-admit the already-persisted value. Otherwise corrupt legacy values such as
+            // NaN/negative quantities cannot be removed through ICollection<KeyValuePair<,>>.
             return _owner.RemoveQuantity(key);
         }
 
