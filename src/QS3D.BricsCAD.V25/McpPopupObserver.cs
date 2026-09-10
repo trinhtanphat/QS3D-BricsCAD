@@ -190,7 +190,24 @@ namespace QS3D.BricsCAD.V25
                          + "; buttons=" + buttonText;
             Document? document = null;
             try { document = Application.DocumentManager.MdiActiveDocument; } catch { }
-            McpDiagnosticHub.Record("bricscad", "warning", "popup-notification", detail, document);
+            McpDiagnosticHub.Record("bricscad", ClassifySeverity(title, message), "popup-notification", detail, document);
+        }
+
+        private static string ClassifySeverity(string title, string message)
+        {
+            var text = ((title ?? string.Empty) + "\n" + (message ?? string.Empty)).ToLowerInvariant();
+            if (ContainsAny(text, "fatal", "exception", "error", "failed", "failure", "cannot", "unable")) return "error";
+            if (ContainsAny(text, "warning", "caution", "attention")) return "warning";
+            return "info";
+        }
+
+        private static bool ContainsAny(string text, params string[] tokens)
+        {
+            foreach (var token in tokens)
+            {
+                if (text.IndexOf(token, StringComparison.Ordinal) >= 0) return true;
+            }
+            return false;
         }
 
         private static void CaptureAutomationText(
