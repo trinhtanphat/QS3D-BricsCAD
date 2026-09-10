@@ -68,7 +68,7 @@ else:
         'reservation_owner_source="${reserved_source}"',
         "reservation_owner_conflict=1",
         'reservation_rows="$(' ,
-        'gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments?per_page=100"',
+        'gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments"',
         'reservation_query_status=$?',
         'if (( reservation_query_status != 0 )); then',
         'done <<< "${reservation_rows}"',
