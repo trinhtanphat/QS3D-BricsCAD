@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
         {
             RejectsMalformedBusinessTextBeforeFilesystemMutation();
             RejectsXmlIllegalBusinessTextBeforeFilesystemMutation();
+            RejectsEd2IdentityTextBeforeFilesystemMutation();
             PreservesSupplementaryUnicodeBusinessText();
         }
 
@@ -33,9 +34,22 @@ namespace QS3D.Core.SmokeTests
             WithAbsentDestination((root, path) =>
             {
                 var row = ValidRow();
-                row.FamilyName = "Family-\u0001-bad";
-                ExpectInvalidData(() => XlsxQuantityExporter.Export(path, new[] { row }), "FamilyName", "XML 1.0");
+                row.Category = "Category-\u0001-bad";
+                ExpectInvalidData(() => XlsxQuantityExporter.Export(path, new[] { row }), "Category", "XML 1.0");
                 AssertNoFilesystemState(root, "XML-illegal business text");
+            });
+        }
+
+        private static void RejectsEd2IdentityTextBeforeFilesystemMutation()
+        {
+            WithAbsentDestination((root, path) =>
+            {
+                var detail = ValidEd2Row();
+                var summary = ValidEd2Row();
+                detail.FamilyId = "FAM-\uD800-bad";
+                summary.FamilyId = detail.FamilyId;
+                ExpectInvalidData(() => XlsxQuantityExporter.ExportEd2(path, new[] { detail }, new[] { summary }), "FamilyId", "well-formed UTF-16");
+                AssertNoFilesystemState(root, "malformed ED2 identity text");
             });
         }
 
@@ -75,6 +89,15 @@ namespace QS3D.Core.SmokeTests
             };
             row.ElementIds.Add("ELEMENT-001");
             row.SourceHandles.Add("1A2B");
+            return row;
+        }
+
+        private static QuantityReportRow ValidEd2Row()
+        {
+            var row = ValidRow();
+            row.FamilyId = "FAM-1";
+            row.ElementName = "Beam 01";
+            row.Material = "Concrete";
             return row;
         }
 
