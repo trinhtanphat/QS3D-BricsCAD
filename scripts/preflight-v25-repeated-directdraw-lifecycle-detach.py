@@ -22,14 +22,17 @@ else:
     required = [
         "private bool _subscribed;",
         "private bool _disposeRequested;",
+        "private bool _detachInProgress;",
         "_documents.DocumentToBeDeactivated += OnDocumentToBeDeactivated;",
         "_subscribed = true;",
         "_disposeRequested = true;",
         "TryDetach();",
         "private void TryDetach()",
-        "if (!_subscribed) return;",
+        "if (!_subscribed || _detachInProgress) return;",
+        "_detachInProgress = true;",
         "_documents.DocumentToBeDeactivated -= OnDocumentToBeDeactivated;",
         "_subscribed = false;",
+        "_detachInProgress = false;",
         "if (_disposeRequested)",
     ]
     for needle in required:
@@ -49,16 +52,26 @@ else:
         if needle not in dispose:
             errors.append("Dispose must request and attempt retryable detach: " + needle)
 
+    detach_guard = detach.find("if (!_subscribed || _detachInProgress) return;")
+    detach_enter = detach.find("_detachInProgress = true;")
     detach_remove = detach.find("_documents.DocumentToBeDeactivated -= OnDocumentToBeDeactivated;")
     detach_clear = detach.find("_subscribed = false;")
     detach_catch = detach.find("catch")
-    if min(detach_remove, detach_clear, detach_catch) < 0 or not (detach_remove < detach_clear < detach_catch):
-        errors.append("subscription ownership must clear only after successful native event removal")
+    detach_finally = detach.find("finally")
+    detach_exit = detach.find("_detachInProgress = false;", detach_finally if detach_finally >= 0 else 0)
+    if min(detach_guard, detach_enter, detach_remove, detach_clear, detach_catch, detach_finally, detach_exit) < 0 or not (
+        detach_guard < detach_enter < detach_remove < detach_clear < detach_catch < detach_finally < detach_exit
+    ):
+        errors.append("detach must fence reentrancy, clear ownership only after successful native remove, and release the fence in finally")
 
     callback_retry = callback.find("if (_disposeRequested)")
+    callback_detach = callback.find("TryDetach();", callback_retry if callback_retry >= 0 else 0)
+    callback_return = callback.find("return;", callback_detach if callback_detach >= 0 else 0)
     callback_flag = callback.find("_wasDeactivated = true;")
-    if min(callback_retry, callback_flag) < 0 or callback_retry > callback_flag:
-        errors.append("retained callback must retry detach before touching exact-document deactivation state")
+    if min(callback_retry, callback_detach, callback_return, callback_flag) < 0 or not (
+        callback_retry < callback_detach < callback_return < callback_flag
+    ):
+        errors.append("retained callback must retry detach and return before touching exact-document deactivation state")
 
     if "Application.DocumentManager.MdiActiveDocument" in body:
         errors.append("lifecycle guard must remain exact-start-document scoped; no active-document fallback")
@@ -72,4 +85,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: repeated Direct Draw lifecycle subscription detaches transactionally and remains retry-safe after native remove failure.")
+print("PASS: repeated Direct Draw lifecycle subscription detaches transactionally, fences remove reentrancy, and remains retry-safe after native remove failure.")
