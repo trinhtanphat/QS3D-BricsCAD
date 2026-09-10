@@ -23,10 +23,11 @@ else:
         "var propertiesPalette = _properties;",
         "var rightPalette = _right;",
         "var quantityPalette = _quantityInsight;",
-        "bool? workspaceWasVisible = workspacePalette?.Visible;",
-        "bool? propertiesWereVisible = propertiesPalette?.Visible;",
-        "bool? rightWasVisible = rightPalette?.Visible;",
-        "bool? quantityWasVisible = quantityPalette?.Visible;",
+        "var workspaceRead = TryReadPaletteVisibility(workspacePalette, out var workspaceWasVisible);",
+        "var propertiesRead = TryReadPaletteVisibility(propertiesPalette, out var propertiesWereVisible);",
+        "var rightRead = TryReadPaletteVisibility(rightPalette, out var rightWasVisible);",
+        "var quantityRead = TryReadPaletteVisibility(quantityPalette, out var quantityWasVisible);",
+        "if (!workspaceRead || !propertiesRead || !rightRead || !quantityRead)",
         "SetPaletteVisibility(workspacePalette, _workspace, workspace, \"Workspace\");",
         "SetPaletteVisibility(propertiesPalette, _properties, properties, \"Properties\");",
         "SetPaletteVisibility(rightPalette, _right, right, \"Right\");",
@@ -49,18 +50,19 @@ else:
     last_apply = body.find("SetPaletteVisibility(quantityPalette")
     final_ownership = body.find("EnsurePaletteOwnership(workspacePalette", last_apply if last_apply >= 0 else 0)
     last_snapshot = max(
-        body.find("bool? workspaceWasVisible"),
-        body.find("bool? propertiesWereVisible"),
-        body.find("bool? rightWasVisible"),
-        body.find("bool? quantityWasVisible"),
+        body.find("var workspaceRead = TryReadPaletteVisibility"),
+        body.find("var propertiesRead = TryReadPaletteVisibility"),
+        body.find("var rightRead = TryReadPaletteVisibility"),
+        body.find("var quantityRead = TryReadPaletteVisibility"),
     )
+    admission = body.find("if (!workspaceRead || !propertiesRead || !rightRead || !quantityRead)")
     # Search for the real failure-path catch only after the final ownership fence. This avoids
     # false negatives if explanatory comments before the fence happen to contain the word "catch".
     catch_pos = body.find("catch", final_ownership if final_ownership >= 0 else 0)
     rollback_pos = body.find("TryRestorePaletteVisibility(quantityPalette", catch_pos if catch_pos >= 0 else 0)
     rethrow_pos = body.find("throw;", rollback_pos if rollback_pos >= 0 else 0)
-    if min(first_apply, last_apply, final_ownership, last_snapshot, catch_pos, rollback_pos, rethrow_pos) < 0 or not (
-        last_snapshot < first_apply <= last_apply < final_ownership < catch_pos < rollback_pos < rethrow_pos
+    if min(first_apply, last_apply, final_ownership, last_snapshot, admission, catch_pos, rollback_pos, rethrow_pos) < 0 or not (
+        last_snapshot < admission < first_apply <= last_apply < final_ownership < catch_pos < rollback_pos < rethrow_pos
     ):
         errors.append("SetVisibility must snapshot before mutation, revalidate ownership after native setters, then rollback/rethrow only from the failure path")
 
