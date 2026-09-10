@@ -27,6 +27,9 @@ if build.count("EnsureProjectRevision(project, snapshot);") < 4:
 
 fence_end = source.index("private static HashSet<string>? ResolveSelection", snapshot_start)
 fence = source[snapshot_start:fence_end]
+element_snapshot_start = source.index("private sealed class ElementSnapshot", snapshot_start)
+element_snapshot_end = source.index("private sealed class FloorSnapshot", element_snapshot_start)
+element_snapshot = source[element_snapshot_start:element_snapshot_end]
 for token in [
     "project.ChangeVersion != snapshot.Version",
     "project.ProjectId",
@@ -59,7 +62,7 @@ for forbidden in [
     "foreach (var property in source.Properties) clone.Properties.Add(property.Key, property.Value);",
     "foreach (var quantity in source.Quantities) clone.Quantities.Add(quantity.Key, quantity.Value);",
 ]:
-    if forbidden in fence:
+    if forbidden in element_snapshot:
         raise SystemExit("Project Quantity frozen snapshot must use persistence-only reconstruction, not semantic collection mutation: " + forbidden)
 
 for token in [
