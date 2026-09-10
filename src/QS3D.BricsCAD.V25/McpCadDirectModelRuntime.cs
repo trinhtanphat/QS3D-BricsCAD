@@ -501,9 +501,11 @@ namespace QS3D.BricsCAD.V25
             var document = RequireDocument();
             RequireIdle();
             EnsureAutomationRunning();
+            string currentLayout;
             using (document.LockDocument())
             {
                 EnsureAutomationRunning();
+                EnsureSameActiveDocument(document, "cad_layout");
                 if (string.Equals(action, "NEW", StringComparison.Ordinal))
                 {
                     if (LayoutExists(document.Database, layoutName))
@@ -530,8 +532,9 @@ namespace QS3D.BricsCAD.V25
                 {
                     throw new InvalidOperationException("Unsupported direct layout action.");
                 }
+                EnsureSameActiveDocument(document, "cad_layout_result");
+                currentLayout = LayoutManager.Current.CurrentLayout ?? string.Empty;
             }
-            var currentLayout = LayoutManager.Current.CurrentLayout ?? string.Empty;
             RecordMutation(document, "cad-layout", "completed=true; command=" + command + "; action=" + action + "; layout=" + layoutName + "; route=LayoutManager-direct");
             return "{\"accepted\":true,\"completed\":true,\"command\":\"" + Escape(command)
                    + "\",\"action\":\"" + Escape(action) + "\",\"layout\":\"" + Escape(layoutName)
