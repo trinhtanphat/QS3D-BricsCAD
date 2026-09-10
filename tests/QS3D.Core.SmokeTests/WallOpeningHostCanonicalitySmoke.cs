@@ -58,7 +58,7 @@ namespace QS3D.Core.SmokeTests
             var wall = CreateWall("WALL-1");
             wall.SetQuantity("NetWallAreaM2", 321d);
             project.Elements.Add(wall);
-            project.Elements.Add(null!);
+            CorruptProjectStateSeed.AddNullElement(project);
 
             Throws<InvalidOperationException>(() => new WallRegenerator().Regenerate(project, wall));
 
