@@ -17,6 +17,7 @@ def contract_errors(source: str) -> list[str]:
     reconciliation_marker = "if ($reconciledRelease.draft -eq $false)"
     exact_uri = '$releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$releaseId"'
     pre_get = "$authoritativeCommercialReleaseBeforeCompensation = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers"
+    unambiguous_state = "$authoritativeCommercialReleaseBeforeCompensation.draft -ne $true -and $authoritativeCommercialReleaseBeforeCompensation.draft -ne $false"
     already_draft = "$authoritativeCommercialReleaseBeforeCompensation.draft -eq $true"
     compensation_body = "$commercialCompensationBody = @{ draft = $true; prerelease = $true } | ConvertTo-Json"
     compensation_patch = "$commercialCompensatedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri"
@@ -36,6 +37,7 @@ def contract_errors(source: str) -> list[str]:
         ("$authoritativeCommercialReleaseBeforeCompensation.target_commitish", "pre-compensation target proof"),
         ("$authoritativeCommercialReleaseBeforeCompensation.assets", "pre-compensation asset proof"),
         ("$verifiedAssetIds", "verified asset-ID baseline"),
+        (unambiguous_state, "explicit ambiguous draft-state rejection"),
         (already_draft, "already-draft no-mutation branch"),
         (compensation_body, "safe-state compensation payload"),
         (compensation_patch, "exact-release compensation PATCH"),
@@ -50,9 +52,22 @@ def contract_errors(source: str) -> list[str]:
         if token not in source if token == exact_uri else token not in region:
             errors.append(f"missing {label}: {token}")
 
-    indexes = [region.find(token) for token in (pre_get, already_draft, compensation_body, compensation_patch, post_get, terminal)]
+    indexes = [
+        region.find(token)
+        for token in (
+            pre_get,
+            unambiguous_state,
+            already_draft,
+            compensation_body,
+            compensation_patch,
+            post_get,
+            terminal,
+        )
+    ]
     if min(indexes) >= 0 and indexes != sorted(indexes):
-        errors.append("commercial compensation must GET/prove, branch on already-draft, PATCH only then, GET/reconcile, then fail terminally")
+        errors.append(
+            "commercial compensation must GET/prove, reject ambiguous draft state, branch on already-draft, PATCH only then, GET/reconcile, then fail terminally"
+        )
 
     conditional_patch = re.compile(
         r"if\s*\(\s*\$authoritativeCommercialReleaseBeforeCompensation\.draft\s*-eq\s*\$true\s*\)\s*\{"
@@ -62,7 +77,14 @@ def contract_errors(source: str) -> list[str]:
         re.DOTALL,
     )
     if not conditional_patch.search(region):
-        errors.append("commercial compensation PATCH must be confined to the else branch of the authoritative already-draft check")
+        errors.append(
+            "commercial compensation PATCH must be confined to the false branch of the authoritative already-draft check"
+        )
+
+    ambiguous_index = region.find(unambiguous_state)
+    branch_index = region.find(already_draft)
+    if ambiguous_index >= 0 and branch_index >= 0 and ambiguous_index > branch_index:
+        errors.append("ambiguous draft-state rejection must occur before the already-draft/PATCH branch")
 
     if "Invoke-RestMethod -Method Delete -Uri $releaseUri" in region:
         errors.append("commercial safety compensation must be reversible re-draft, never destructive release deletion")
@@ -78,6 +100,7 @@ def contract_errors(source: str) -> list[str]:
             ("$env:GITHUB_SHA", "expected target"),
             ("$authoritativeCommercialReleaseBeforeCompensation.assets", "assets"),
             ("$verifiedAssetIds", "verified asset IDs"),
+            (unambiguous_state, "unambiguous draft state"),
         ):
             if token not in before_patch:
                 errors.append(f"pre-compensation {label} proof must precede mutation")
@@ -86,6 +109,7 @@ def contract_errors(source: str) -> list[str]:
 
 def self_test() -> list[str]:
     exact_uri = '$releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$releaseId"'
+    unambiguous_state = "$authoritativeCommercialReleaseBeforeCompensation.draft -ne $true -and $authoritativeCommercialReleaseBeforeCompensation.draft -ne $false"
     safe = "\n".join([
         exact_uri,
         "$publicationSafetyKnownInvalid = $true",
@@ -95,6 +119,7 @@ def self_test() -> list[str]:
         "  if (-not [string]::Equals([string]$authoritativeCommercialReleaseBeforeCompensation.target_commitish, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) { throw 'target' }",
         "  $preAssets = @($authoritativeCommercialReleaseBeforeCompensation.assets)",
         "  if ($preAssets.Count -ne $verifiedAssetIds.Count) { throw 'assets' }",
+        f"  if ({unambiguous_state}) {{ throw 'state' }}",
         "  if ($authoritativeCommercialReleaseBeforeCompensation.draft -eq $true) {",
         "    Write-Host 'already safe'",
         "  } else {",
@@ -112,11 +137,12 @@ def self_test() -> list[str]:
     ])
     errors: list[str] = []
     if contract_errors(safe):
-        errors.append("guard rejected intended exact pre-proof/conditional-redraft/post-proof contract")
+        errors.append("guard rejected intended exact pre-proof/ambiguous-state/conditional-redraft/post-proof contract")
     mutations = {
         "unconditional patch": safe.replace("  } else {\n    $commercialCompensationBody", "  }\n  $commercialCompensationBody", 1),
         "drop pre GET": safe.replace("$authoritativeCommercialReleaseBeforeCompensation = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers", "$authoritativeCommercialReleaseBeforeCompensation = $reconciledRelease", 1),
         "drop post GET": safe.replace("$authoritativeCommercialReleaseAfterCompensation = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers", "$authoritativeCommercialReleaseAfterCompensation = $commercialCompensatedRelease", 1),
+        "drop ambiguous state rejection": safe.replace(f"  if ({unambiguous_state}) {{ throw 'state' }}\n", "", 1),
         "delete instead": safe.replace("$commercialCompensatedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri", "$commercialCompensatedRelease = Invoke-RestMethod -Method Delete -Uri $releaseUri", 1),
     }
     for label, mutated in mutations.items():
@@ -138,7 +164,7 @@ def main() -> int:
         for error in errors:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
-    print("PASS: manual V25 post-publish safety invalidation is compensated to an exact non-public release before terminal failure.")
+    print("PASS: manual V25 post-publish safety invalidation is exact-ID bound, ambiguity-safe, conditionally re-drafted, and authoritatively proved non-public before terminal failure.")
     return 0
 
 
