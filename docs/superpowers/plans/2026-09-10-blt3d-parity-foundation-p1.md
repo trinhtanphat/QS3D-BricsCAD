@@ -2,51 +2,50 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a host-neutral, auditable BLT3D parity manifest/closure model and workflow binding registry that reuses QS3D's existing `FeatureId`, fails closed on incomplete evidence, and gives later UI/MCP/launcher carriers one canonical feature/workflow identity contract.
+**Goal:** Add a host-neutral, auditable parity manifest/closure model and workflow-binding registry that reuses QS3D's existing `FeatureId`, blocks premature 100% claims, and gives later UI/MCP/launcher carriers one canonical feature/workflow contract.
 
-**Architecture:** Extend the existing `QS3D.Core.Features` model rather than creating a second feature identity system. A deterministic TSV manifest records parity inventory and evidence; `ParityManifest` validates uniqueness/applicability and computes closure; `ParityWorkflowRegistry` binds the same `FeatureId` values to stable workflow keys, invocation surfaces, and safety requirements without referencing BricsCAD types. P1 deliberately does not implement UI buttons or host mutations.
+**Architecture:** Extend `QS3D.Core.Features`; do not create a second feature identity system. A deterministic TSV manifest records inventory/evidence, `ParityManifest` validates it and computes closure, and `ParityWorkflowRegistry` binds `FeatureId` values to stable workflow keys, surfaces, and safety requirements without BricsCAD references. P1 adds no UI and performs no CAD mutation.
 
-**Tech Stack:** C# / `netstandard2.0`, existing `QS3D.Core.Features.FeatureId` and `FeatureRegistry`, `QS3D.Core.SmokeTests`, deterministic UTF-8 TSV parsing, V25 `net48`, V26 `net8.0-windows` compile verification.
+**Tech Stack:** C# `netstandard2.0`, existing `QS3D.Core.Features.FeatureId`, `QS3D.Core.SmokeTests`, UTF-8 TSV, V25 `net48`, V26 `net8.0-windows` compile verification.
 
 **Spec:** `docs/superpowers/specs/2026-09-10-blt3d-full-parity-design.md`
 
 ## Global Constraints
 
-- `QS3D-BricsCAD` remains a Windows x64 BricsCAD-hosted plugin; P1 introduces no standalone CAD executable.
-- Reuse `QS3D.Core.Features.FeatureId`; do not define another feature-ID value type.
-- Core remains host-neutral and must not reference BricsCAD/Teigha/AutoCAD runtime types.
-- BLT3D is reference evidence only; P1 stores no BLT3D binaries, secrets, license material, signing material, or runtime dependency.
-- `100%` is claimable only when the catalog is explicitly complete and every applicable feature reaches `V25V26ParityPass`.
-- `NotApplicableByHostBoundary` is valid only with a nonblank product-decision reference and reason.
-- UI-only/stub/not-wired states cannot be represented as full parity.
-- Workflow keys and feature IDs are stable, unique, case-normalized contracts.
-- A semantic mutation workflow must declare active-document, project, atomic-mutation, and audit requirements so later UI/MCP callers cannot register an unsafe bypass.
-- P1 changes only host-neutral contracts, manifest evidence, and smoke tests; BricsCAD runtime wiring belongs to later carriers.
+- `QS3D-BricsCAD` remains a Windows x64 BricsCAD-hosted plugin.
+- Reuse `QS3D.Core.Features.FeatureId` from `FeatureInteractionContracts.cs`.
+- Core must remain host-neutral: no BricsCAD/Teigha/AutoCAD runtime types in P1 contracts.
+- BLT3D is reference evidence only; no BLT3D binary, key, credential, signing material, license algorithm, or runtime dependency is added.
+- Full parity is claimable only when `CatalogComplete == true` and every applicable feature is `V25V26ParityPass`.
+- `NotApplicableByHostBoundary` requires a nonblank product-decision reference and reason.
+- Semantic mutation workflow bindings must require active document, project, atomic mutation, and audit.
+- P1 production code must travel through its own Reservation-v2 implementation carrier; this document is only the plan.
 
 ## File Structure
 
-- Create `src/QS3D.Core/Features/ParityEvidenceContracts.cs` — evidence/applicability value contracts and one feature record.
-- Create `src/QS3D.Core/Features/ParityManifest.cs` — validated manifest snapshot and closure report.
-- Create `src/QS3D.Core/Features/ParityManifestParser.cs` — deterministic TSV parser with explicit catalog-complete metadata.
-- Create `src/QS3D.Core/Features/ParityWorkflowRegistry.cs` — feature-to-workflow bindings and safety invariants.
-- Create `docs/BLT3D-PARITY-MANIFEST.tsv` — initial owner-approved inventory anchors, all honestly incomplete.
-- Create `tests/QS3D.Core.SmokeTests/ParityManifestSmoke.cs` — contract/closure/parser smoke coverage.
-- Create `tests/QS3D.Core.SmokeTests/ParityWorkflowRegistrySmoke.cs` — registry uniqueness/safety coverage.
-- Modify `tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs` — register the two new smoke classes.
+- Create `src/QS3D.Core/Features/ParityEvidenceContracts.cs` — evidence/applicability records.
+- Create `src/QS3D.Core/Features/ParityManifest.cs` — validated snapshot and closure report.
+- Create `src/QS3D.Core/Features/ParityManifestParser.cs` — deterministic TSV parser.
+- Create `src/QS3D.Core/Features/ParityWorkflowRegistry.cs` — workflow binding/safety contracts.
+- Create `docs/BLT3D-PARITY-MANIFEST.tsv` — initial incomplete inventory anchors.
+- Create `tests/QS3D.Core.SmokeTests/ParityManifestSmoke.cs` — evidence/parser/closure tests.
+- Create `tests/QS3D.Core.SmokeTests/ParityWorkflowRegistrySmoke.cs` — registry/safety tests.
+- Modify `tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs` — register both smoke classes.
 
 ---
 
-### Task 1: Define parity evidence contracts on top of existing FeatureId
+### Task 1: Add parity evidence contracts
 
 **Files:**
 - Create: `src/QS3D.Core/Features/ParityEvidenceContracts.cs`
-- Test: `tests/QS3D.Core.SmokeTests/ParityManifestSmoke.cs`
+- Create: `tests/QS3D.Core.SmokeTests/ParityManifestSmoke.cs`
+- Modify: `tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs`
 
 **Interfaces:**
-- Consumes: `QS3D.Core.Features.FeatureId` from `FeatureInteractionContracts.cs`.
-- Produces: `ParityEvidenceStage`, `ParityApplicability`, and `ParityFeatureRecord`.
+- Consumes: `FeatureId`.
+- Produces: `ParityEvidenceStage`, `ParityApplicability`, `ParityFeatureRecord`.
 
-- [ ] **Step 1: Write the failing contract smoke**
+- [ ] **Step 1: Write the failing smoke**
 
 ```csharp
 using System;
@@ -58,60 +57,44 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
-            EvidenceRecordNormalizesRequiredText();
-            HostBoundaryRequiresDecisionEvidence();
-        }
-
-        private static void EvidenceRecordNormalizesRequiredText()
-        {
             var record = new ParityFeatureRecord(
-                new FeatureId("BIM.Draw.Rectangle"),
-                " BIM Authoring ",
-                " BLT3D / MÔ HÌNH BIM / Chữ nhật ",
-                " bim.draw.rectangle ",
-                ParityApplicability.Applicable,
-                ParityEvidenceStage.ReferenceCaptured);
+                new FeatureId("BIM.Draw.Rectangle"), " BIM ",
+                " BLT3D / MÔ HÌNH BIM / Chữ nhật ", " BIM.Draw.Rectangle ",
+                ParityApplicability.Applicable, ParityEvidenceStage.ReferenceCaptured);
+            Equal("bim.draw.rectangle", record.FeatureId.ToString());
+            Equal("BIM", record.Domain);
+            Equal("bim.draw.rectangle", record.WorkflowKey);
 
-            AssertEqual("bim.draw.rectangle", record.FeatureId.ToString());
-            AssertEqual("BIM Authoring", record.Domain);
-            AssertEqual("BLT3D / MÔ HÌNH BIM / Chữ nhật", record.ReferencePath);
-            AssertEqual("bim.draw.rectangle", record.WorkflowKey);
-        }
-
-        private static void HostBoundaryRequiresDecisionEvidence()
-        {
-            AssertThrows<ArgumentException>(() => new ParityFeatureRecord(
+            Throws<ArgumentException>(() => new ParityFeatureRecord(
                 new FeatureId("host.unsupported"), "Host", "reference", "host.unsupported",
-                ParityApplicability.NotApplicableByHostBoundary,
-                ParityEvidenceStage.ReferenceCaptured));
+                ParityApplicability.NotApplicableByHostBoundary, ParityEvidenceStage.ReferenceCaptured));
         }
 
-        private static void AssertEqual<T>(T expected, T actual)
+        private static void Equal<T>(T expected, T actual)
         {
             if (!Equals(expected, actual)) throw new InvalidOperationException("Expected " + expected + " but got " + actual + ".");
         }
 
-        private static void AssertThrows<T>(Action action) where T : Exception
+        private static void Throws<T>(Action action) where T : Exception
         {
-            try { action(); }
-            catch (T) { return; }
+            try { action(); } catch (T) { return; }
             throw new InvalidOperationException("Expected " + typeof(T).Name + ".");
         }
     }
 }
 ```
 
-- [ ] **Step 2: Run the smoke project and verify it fails to compile**
+Add `ParityManifestSmoke.Run();` near the existing feature/workspace smoke registrations.
 
-Run:
+- [ ] **Step 2: Run to prove RED**
 
 ```powershell
 dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
 ```
 
-Expected: compile errors for the undefined parity contract types.
+Expected: compile failure because parity contract types do not exist.
 
-- [ ] **Step 3: Add the minimal evidence contracts**
+- [ ] **Step 3: Implement minimal contracts**
 
 ```csharp
 using System;
@@ -120,31 +103,17 @@ namespace QS3D.Core.Features
 {
     public enum ParityEvidenceStage
     {
-        ReferenceCaptured = 0,
-        UiPresent = 1,
-        CommandWired = 2,
-        SemanticBehaviorPass = 3,
-        SaveReopenPass = 4,
-        V25V26ParityPass = 5
+        ReferenceCaptured = 0, UiPresent = 1, CommandWired = 2,
+        SemanticBehaviorPass = 3, SaveReopenPass = 4, V25V26ParityPass = 5
     }
 
-    public enum ParityApplicability
-    {
-        Applicable = 0,
-        NotApplicableByHostBoundary = 1
-    }
+    public enum ParityApplicability { Applicable = 0, NotApplicableByHostBoundary = 1 }
 
     public sealed class ParityFeatureRecord
     {
-        public ParityFeatureRecord(
-            FeatureId featureId,
-            string domain,
-            string referencePath,
-            string workflowKey,
-            ParityApplicability applicability,
-            ParityEvidenceStage evidenceStage,
-            string decisionReference = null,
-            string decisionReason = null)
+        public ParityFeatureRecord(FeatureId featureId, string domain, string referencePath,
+            string workflowKey, ParityApplicability applicability, ParityEvidenceStage evidenceStage,
+            string decisionReference = null, string decisionReason = null)
         {
             FeatureId = featureId;
             Domain = Required(domain, nameof(domain));
@@ -168,24 +137,22 @@ namespace QS3D.Core.Features
         public string DecisionReference { get; }
         public string DecisionReason { get; }
         public bool IsApplicable => Applicability == ParityApplicability.Applicable;
-        public bool IsFullPass => !IsApplicable || EvidenceStage == ParityEvidenceStage.V25V26ParityPass;
 
         private static string Required(string value, string name)
         {
             if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException(name + " cannot be blank.", name);
             return value.Trim();
         }
-
         private static string Optional(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 }
 ```
 
-- [ ] **Step 4: Temporarily invoke `ParityManifestSmoke.Run()` from `SmokeTestRegistration.RunAll()` and run the smoke project**
+- [ ] **Step 4: Run to prove GREEN**
 
-Expected: the two new contract checks pass. The permanent registration remains in Task 5; keeping the call now is acceptable and will be finalized there.
+Same smoke command. Expected: new smoke and existing suite pass.
 
-- [ ] **Step 5: Commit the contract slice**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add src/QS3D.Core/Features/ParityEvidenceContracts.cs tests/QS3D.Core.SmokeTests/ParityManifestSmoke.cs tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs
@@ -194,57 +161,58 @@ git commit -m "feat(parity): add evidence contracts"
 
 ---
 
-### Task 2: Implement fail-closed manifest validation and closure reporting
+### Task 2: Add fail-closed manifest and closure report
 
 **Files:**
 - Create: `src/QS3D.Core/Features/ParityManifest.cs`
 - Modify: `tests/QS3D.Core.SmokeTests/ParityManifestSmoke.cs`
 
 **Interfaces:**
-- Consumes: `IEnumerable<ParityFeatureRecord>` and `bool catalogComplete`.
-- Produces: `ParityManifest.Records`, `ParityManifest.GetRequired(FeatureId)`, and `ParityManifest.GetClosureReport()` returning `ParityClosureReport`.
+- Produces: `ParityManifest(IEnumerable<ParityFeatureRecord>, bool)`, `GetRequired(FeatureId)`, `GetClosureReport()`.
 
-- [ ] **Step 1: Add failing smoke cases**
-
-Add calls from `Run()` and methods equivalent to:
+- [ ] **Step 1: Add failing closure tests**
 
 ```csharp
-private static void DuplicateFeatureIdsFailClosed()
-{
-    var a = Record("bim.draw.rectangle", ParityEvidenceStage.ReferenceCaptured);
-    var b = Record("BIM.DRAW.RECTANGLE", ParityEvidenceStage.UiPresent);
-    AssertThrows<InvalidOperationException>(() => new ParityManifest(new[] { a, b }, false));
-}
-
-private static void IncompleteCatalogCannotClaimFullParity()
-{
-    var manifest = new ParityManifest(new[] { Record("bim.draw.rectangle", ParityEvidenceStage.V25V26ParityPass) }, false);
-    if (manifest.GetClosureReport().CanClaimFullParity) throw new InvalidOperationException("Incomplete catalog claimed full parity.");
-}
-
-private static void UiOnlyCannotClaimFullParity()
-{
-    var manifest = new ParityManifest(new[] { Record("bim.draw.rectangle", ParityEvidenceStage.UiPresent) }, true);
-    if (manifest.GetClosureReport().CanClaimFullParity) throw new InvalidOperationException("UI-only item claimed full parity.");
-}
-
-private static void CompleteCatalogAtFinalStageCanClose()
-{
-    var manifest = new ParityManifest(new[] { Record("bim.draw.rectangle", ParityEvidenceStage.V25V26ParityPass) }, true);
-    if (!manifest.GetClosureReport().CanClaimFullParity) throw new InvalidOperationException("Fully qualified catalog did not close.");
-}
-
 private static ParityFeatureRecord Record(string id, ParityEvidenceStage stage) =>
-    new ParityFeatureRecord(new FeatureId(id), "BIM", "BLT3D reference", id, ParityApplicability.Applicable, stage);
+    new ParityFeatureRecord(new FeatureId(id), "BIM", "BLT3D reference", id,
+        ParityApplicability.Applicable, stage);
+
+private static void ClosureRules()
+{
+    Throws<InvalidOperationException>(() => new ParityManifest(new[] {
+        Record("bim.draw.rectangle", ParityEvidenceStage.ReferenceCaptured),
+        Record("BIM.DRAW.RECTANGLE", ParityEvidenceStage.UiPresent)
+    }, false));
+
+    var incompleteCatalog = new ParityManifest(new[] {
+        Record("bim.draw.rectangle", ParityEvidenceStage.V25V26ParityPass)
+    }, false);
+    if (incompleteCatalog.GetClosureReport().CanClaimFullParity)
+        throw new InvalidOperationException("Incomplete catalog claimed full parity.");
+
+    var uiOnly = new ParityManifest(new[] {
+        Record("bim.draw.rectangle", ParityEvidenceStage.UiPresent)
+    }, true);
+    if (uiOnly.GetClosureReport().CanClaimFullParity)
+        throw new InvalidOperationException("UI-only feature claimed full parity.");
+
+    var complete = new ParityManifest(new[] {
+        Record("bim.draw.rectangle", ParityEvidenceStage.V25V26ParityPass)
+    }, true);
+    if (!complete.GetClosureReport().CanClaimFullParity)
+        throw new InvalidOperationException("Qualified catalog did not close.");
+}
 ```
 
-- [ ] **Step 2: Run and verify failure**
+Invoke `ClosureRules()` from `Run()`.
 
-Run the smoke project. Expected: compile failure for `ParityManifest`/`ParityClosureReport`.
+- [ ] **Step 2: Run to prove RED**
 
-- [ ] **Step 3: Implement validated manifest and closure report**
+Expected: compile failure for `ParityManifest`.
 
-Required public shape:
+- [ ] **Step 3: Implement manifest validation and report**
+
+Required API:
 
 ```csharp
 public sealed class ParityManifest
@@ -258,16 +226,15 @@ public sealed class ParityManifest
 
 public sealed class ParityClosureReport
 {
-    public ParityClosureReport(bool catalogComplete, int applicableCount, int fullPassCount, int hostBoundaryCount);
     public bool CatalogComplete { get; }
     public int ApplicableCount { get; }
     public int FullPassCount { get; }
     public int HostBoundaryCount { get; }
-    public bool CanClaimFullParity { get; }
+    public bool CanClaimFullParity => CatalogComplete && ApplicableCount > 0 && FullPassCount == ApplicableCount;
 }
 ```
 
-Implementation rules:
+Constructor rules:
 
 ```csharp
 if (materialized.Length == 0)
@@ -278,81 +245,71 @@ if (materialized.GroupBy(x => x.WorkflowKey, StringComparer.OrdinalIgnoreCase).A
     throw new InvalidOperationException("Parity manifest contains duplicate workflow keys.");
 ```
 
-`CanClaimFullParity` is exactly:
+`FullPassCount` counts only applicable rows at `V25V26ParityPass`; host-boundary rows are counted separately.
 
-```csharp
-CatalogComplete && ApplicableCount > 0 && FullPassCount == ApplicableCount
-```
+- [ ] **Step 4: Run to prove GREEN**
 
-Host-boundary N/A records are reported separately and excluded from `ApplicableCount` only because their constructor already requires explicit decision evidence.
-
-- [ ] **Step 4: Run smoke project and verify PASS**
-
-Expected: all existing smoke tests plus the new manifest cases pass.
+Expected: all Core smoke tests pass.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add src/QS3D.Core/Features/ParityManifest.cs tests/QS3D.Core.SmokeTests/ParityManifestSmoke.cs
-git commit -m "feat(parity): add fail-closed closure model"
+git commit -m "feat(parity): add closure model"
 ```
 
 ---
 
-### Task 3: Add deterministic TSV manifest parsing
+### Task 3: Add deterministic TSV parser
 
 **Files:**
 - Create: `src/QS3D.Core/Features/ParityManifestParser.cs`
 - Modify: `tests/QS3D.Core.SmokeTests/ParityManifestSmoke.cs`
 
 **Interfaces:**
-- Consumes: UTF-8 text lines in the documented TSV format.
-- Produces: `ParityManifest ParityManifestParser.Parse(IEnumerable<string> lines)`.
+- Produces: `static ParityManifest Parse(IEnumerable<string> lines)`.
 
 - [ ] **Step 1: Add failing parser tests**
 
 ```csharp
-private static void ParserRequiresCatalogMetadata()
+private static void ParserRules()
 {
-    AssertThrows<FormatException>(() => ParityManifestParser.Parse(new[] {
+    Throws<FormatException>(() => ParityManifestParser.Parse(new[] {
         "FeatureId\tDomain\tReferencePath\tWorkflowKey\tApplicability\tEvidenceStage\tDecisionReference\tDecisionReason",
-        "bim.draw.rectangle\tBIM\tBLT3D / MÔ HÌNH BIM / Chữ nhật\tbim.draw.rectangle\tApplicable\tReferenceCaptured\t\t"
+        "bim.draw.rectangle\tBIM\treference\tbim.draw.rectangle\tApplicable\tReferenceCaptured\t\t"
     }));
-}
 
-private static void ParserReadsDeterministicManifest()
-{
-    var manifest = ParityManifestParser.Parse(new[] {
+    var parsed = ParityManifestParser.Parse(new[] {
         "# catalog-complete=false",
         "FeatureId\tDomain\tReferencePath\tWorkflowKey\tApplicability\tEvidenceStage\tDecisionReference\tDecisionReason",
         "bim.draw.rectangle\tBIM\tBLT3D / MÔ HÌNH BIM / Chữ nhật\tbim.draw.rectangle\tApplicable\tReferenceCaptured\t\t"
     });
-    if (manifest.CatalogComplete) throw new InvalidOperationException("Parser lost catalog-complete=false.");
-    AssertEqual(1, manifest.Records.Count);
+    if (parsed.CatalogComplete || parsed.Records.Count != 1)
+        throw new InvalidOperationException("Deterministic parser lost manifest metadata or row count.");
 }
 ```
 
-- [ ] **Step 2: Run and verify compile failure**
+Invoke `ParserRules()` from `Run()`.
+
+- [ ] **Step 2: Run to prove RED**
 
 Expected: undefined `ParityManifestParser`.
 
-- [ ] **Step 3: Implement parser with exact format rules**
-
-Parser rules:
+- [ ] **Step 3: Implement exact parsing rules**
 
 ```text
 line 1: # catalog-complete=true|false
 line 2: FeatureId<TAB>Domain<TAB>ReferencePath<TAB>WorkflowKey<TAB>Applicability<TAB>EvidenceStage<TAB>DecisionReference<TAB>DecisionReason
-line 3+: exactly eight TSV fields
+remaining data rows: exactly eight fields
 blank lines: ignored
-other comment lines beginning with #: ignored after metadata
+additional comment lines beginning with #: ignored only after catalog metadata
 ```
 
-Use `Enum.TryParse(value, ignoreCase: false, out ...)`; misspelled enum names fail with `FormatException`. Reject tabs/newlines inside values by format rather than implementing escaping in P1. Instantiate `FeatureId` for canonical ID validation and let `ParityManifest` perform duplicate checks.
+Use case-sensitive `Enum.TryParse(..., false, out ...)`; malformed enum names and wrong field counts throw `FormatException`. Construct `FeatureId` for its existing canonical validation and pass records to `ParityManifest` for duplicate validation.
 
-- [ ] **Step 4: Run smoke project and verify PASS**
+- [ ] **Step 4: Run to prove GREEN**
 
-Expected: parser tests and prior tests pass.
+Expected: parser and prior tests pass.
 
 - [ ] **Step 5: Commit**
 
@@ -363,17 +320,17 @@ git commit -m "feat(parity): parse deterministic manifest"
 
 ---
 
-### Task 4: Add the host-neutral workflow binding registry
+### Task 4: Add workflow binding/safety registry
 
 **Files:**
 - Create: `src/QS3D.Core/Features/ParityWorkflowRegistry.cs`
 - Create: `tests/QS3D.Core.SmokeTests/ParityWorkflowRegistrySmoke.cs`
+- Modify: `tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs`
 
 **Interfaces:**
-- Consumes: existing `FeatureId` plus a sequence of `ParityWorkflowBinding`.
-- Produces: `ParityWorkflowRegistry.GetRequired(FeatureId)` and `TryGet` for later Ribbon/palette/MCP/launcher adapters.
+- Produces: `ParityWorkflowBinding`, `ParityWorkflowRegistry`, surface/kind/requirement enums.
 
-- [ ] **Step 1: Write failing workflow registry smoke**
+- [ ] **Step 1: Write failing registry smoke**
 
 ```csharp
 using System;
@@ -385,84 +342,57 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
-            DuplicateFeatureFailsClosed();
-            DuplicateWorkflowKeyFailsClosed();
-            SemanticMutationRequiresSafetyContract();
-            ValidSemanticMutationCanBeResolved();
-        }
-
-        private static void DuplicateFeatureFailsClosed()
-        {
-            var feature = new FeatureId("bim.draw.rectangle");
-            AssertThrows<InvalidOperationException>(() => new ParityWorkflowRegistry(new[] {
-                ReadOnly(feature, "bim.draw.rectangle"),
-                ReadOnly(feature, "bim.draw.other")
-            }));
-        }
-
-        private static void DuplicateWorkflowKeyFailsClosed()
-        {
-            AssertThrows<InvalidOperationException>(() => new ParityWorkflowRegistry(new[] {
-                ReadOnly(new FeatureId("view.a"), "view.same"),
-                ReadOnly(new FeatureId("view.b"), "VIEW.SAME")
-            }));
-        }
-
-        private static void SemanticMutationRequiresSafetyContract()
-        {
-            AssertThrows<ArgumentException>(() => new ParityWorkflowBinding(
+            Throws<ArgumentException>(() => new ParityWorkflowBinding(
                 new FeatureId("bim.draw.rectangle"), "bim.draw.rectangle",
                 ParityWorkflowKind.SemanticMutation,
                 ParityWorkflowSurface.Ui | ParityWorkflowSurface.Mcp,
                 ParityWorkflowRequirement.ActiveDocument | ParityWorkflowRequirement.Project));
-        }
 
-        private static void ValidSemanticMutationCanBeResolved()
-        {
-            var id = new FeatureId("bim.draw.rectangle");
-            var binding = new ParityWorkflowBinding(id, "bim.draw.rectangle",
+            var id=new FeatureId("bim.draw.rectangle");
+            var safe=new ParityWorkflowBinding(id,"bim.draw.rectangle",
                 ParityWorkflowKind.SemanticMutation,
                 ParityWorkflowSurface.Ui | ParityWorkflowSurface.Mcp,
                 ParityWorkflowRequirement.ActiveDocument | ParityWorkflowRequirement.Project |
                 ParityWorkflowRequirement.AtomicMutation | ParityWorkflowRequirement.Audit);
-            var registry = new ParityWorkflowRegistry(new[] { binding });
-            if (registry.GetRequired(id) != binding) throw new InvalidOperationException("Registry returned wrong binding.");
+            var registry=new ParityWorkflowRegistry(new[]{safe});
+            if(!ReferenceEquals(safe,registry.GetRequired(id)))
+                throw new InvalidOperationException("Registry returned the wrong binding.");
+
+            Throws<InvalidOperationException>(() => new ParityWorkflowRegistry(new[]{safe,safe}));
         }
 
-        private static ParityWorkflowBinding ReadOnly(FeatureId id, string key) =>
-            new ParityWorkflowBinding(id, key, ParityWorkflowKind.ReadOnly, ParityWorkflowSurface.Ui, ParityWorkflowRequirement.None);
-
-        private static void AssertThrows<T>(Action action) where T : Exception
+        private static void Throws<T>(Action action) where T:Exception
         {
-            try { action(); }
-            catch (T) { return; }
+            try { action(); } catch(T) { return; }
             throw new InvalidOperationException("Expected " + typeof(T).Name + ".");
         }
     }
 }
 ```
 
-- [ ] **Step 2: Run and verify compile failure**
+Add `ParityWorkflowRegistrySmoke.Run();` near `ParityManifestSmoke.Run()`.
 
-Expected: undefined workflow types.
+- [ ] **Step 2: Run to prove RED**
 
-- [ ] **Step 3: Implement the workflow binding contracts and registry**
+Expected: compile failure for undefined workflow types.
 
-Required contract shape:
+- [ ] **Step 3: Implement registry contracts**
 
 ```csharp
 [Flags]
 public enum ParityWorkflowSurface { None=0, Ui=1, Mcp=2, Launcher=4 }
-
 public enum ParityWorkflowKind { ReadOnly=0, SemanticMutation=1, Infrastructure=2 }
-
 [Flags]
 public enum ParityWorkflowRequirement
 {
     None=0, ActiveDocument=1, Project=2, Zone=4, Floor=8, Family=16,
     Selection=32, AtomicMutation=64, Audit=128
 }
+```
 
+Required binding/registry API:
+
+```csharp
 public sealed class ParityWorkflowBinding
 {
     public ParityWorkflowBinding(FeatureId featureId, string workflowKey,
@@ -484,46 +414,43 @@ public sealed class ParityWorkflowRegistry
 }
 ```
 
-For `SemanticMutation`, validate all four flags:
+For `SemanticMutation`, require exactly this minimum safety set:
 
 ```csharp
-var required = ParityWorkflowRequirement.ActiveDocument |
-               ParityWorkflowRequirement.Project |
-               ParityWorkflowRequirement.AtomicMutation |
-               ParityWorkflowRequirement.Audit;
-if ((requirements & required) != required)
+var minimum = ParityWorkflowRequirement.ActiveDocument |
+              ParityWorkflowRequirement.Project |
+              ParityWorkflowRequirement.AtomicMutation |
+              ParityWorkflowRequirement.Audit;
+if ((requirements & minimum) != minimum)
     throw new ArgumentException("Semantic mutation workflows require ActiveDocument, Project, AtomicMutation and Audit.", nameof(requirements));
 ```
 
-Also reject `ParityWorkflowSurface.None`, blank workflow keys, duplicate feature IDs and duplicate workflow keys case-insensitively.
+Also reject blank keys, `ParityWorkflowSurface.None`, duplicate `FeatureId`, and duplicate workflow keys case-insensitively.
 
-- [ ] **Step 4: Run smoke project and verify PASS**
+- [ ] **Step 4: Run to prove GREEN**
 
-Expected: registry tests pass without host libraries.
+Expected: full Core smoke suite passes.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/QS3D.Core/Features/ParityWorkflowRegistry.cs tests/QS3D.Core.SmokeTests/ParityWorkflowRegistrySmoke.cs
-git commit -m "feat(parity): add workflow binding registry"
+git add src/QS3D.Core/Features/ParityWorkflowRegistry.cs tests/QS3D.Core.SmokeTests/ParityWorkflowRegistrySmoke.cs tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs
+git commit -m "feat(parity): add workflow registry"
 ```
 
 ---
 
-### Task 5: Seed the auditable manifest and register permanent smoke coverage
+### Task 5: Seed the checked-in manifest and prove it blocks premature closure
 
 **Files:**
 - Create: `docs/BLT3D-PARITY-MANIFEST.tsv`
 - Modify: `tests/QS3D.Core.SmokeTests/ParityManifestSmoke.cs`
-- Modify: `tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs`
 
 **Interfaces:**
-- Consumes: parser/manifest contracts from Tasks 1-3.
-- Produces: a checked-in manifest whose initial state truthfully blocks a 100% parity claim.
+- Consumes: TSV parser.
+- Produces: auditable initial catalog anchors with `catalog-complete=false`.
 
-- [ ] **Step 1: Create the initial TSV inventory anchors**
-
-Use exactly this header and initial records:
+- [ ] **Step 1: Create the initial manifest**
 
 ```text
 # catalog-complete=false
@@ -550,35 +477,24 @@ updater	Infrastructure	BLT3D updater UX reference; QS3D-owned implementation	upd
 installer	Infrastructure	BLT3D install/repair workflow reference	installer	Applicable	ReferenceCaptured		
 ```
 
-The file intentionally says `catalog-complete=false`; P2+ carriers expand the anchors into individual feature rows before any closure claim.
+- [ ] **Step 2: Add repository-file smoke**
 
-- [ ] **Step 2: Add a smoke that reads the checked-in file and proves closure is blocked**
+Add `using System.IO;` and:
 
 ```csharp
-private static void RepositoryManifestParsesAndBlocksPrematureClosure()
+private static void RepositoryManifestBlocksPrematureClosure()
 {
-    var path = Path.Combine("docs", "BLT3D-PARITY-MANIFEST.tsv");
-    if (!File.Exists(path)) throw new InvalidOperationException("Missing parity manifest: " + path);
-    var manifest = ParityManifestParser.Parse(File.ReadAllLines(path));
-    if (manifest.Records.Count < 20) throw new InvalidOperationException("Parity manifest lost approved domain anchors.");
-    if (manifest.GetClosureReport().CanClaimFullParity) throw new InvalidOperationException("Seed manifest must not claim full parity.");
+    var path=Path.Combine("docs","BLT3D-PARITY-MANIFEST.tsv");
+    if(!File.Exists(path)) throw new InvalidOperationException("Missing parity manifest: " + path);
+    var manifest=ParityManifestParser.Parse(File.ReadAllLines(path));
+    if(manifest.Records.Count < 20) throw new InvalidOperationException("Parity manifest lost approved domain anchors.");
+    if(manifest.GetClosureReport().CanClaimFullParity) throw new InvalidOperationException("Seed manifest must not claim full parity.");
 }
 ```
 
-Add `using System.IO;` and invoke this method from `ParityManifestSmoke.Run()`.
+Invoke it from `ParityManifestSmoke.Run()`.
 
-- [ ] **Step 3: Permanently register both smoke classes**
-
-Append these calls in `SmokeTestRegistration.RunAll()` near the existing feature/workspace contract tests:
-
-```csharp
-ParityManifestSmoke.Run();
-ParityWorkflowRegistrySmoke.Run();
-```
-
-Do not leave duplicate temporary registration from Task 1.
-
-- [ ] **Step 4: Run the full Core smoke suite**
+- [ ] **Step 3: Run Core smoke**
 
 ```powershell
 dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
@@ -586,25 +502,24 @@ dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c R
 
 Expected: exit 0 and final `ALL PASS`.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add docs/BLT3D-PARITY-MANIFEST.tsv tests/QS3D.Core.SmokeTests/ParityManifestSmoke.cs tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs
+git add docs/BLT3D-PARITY-MANIFEST.tsv tests/QS3D.Core.SmokeTests/ParityManifestSmoke.cs
 git commit -m "test(parity): seed manifest closure guard"
 ```
 
 ---
 
-### Task 6: Verify host-neutrality and V25/V26 compile compatibility
+### Task 6: Exact-head verification before P1 PR merge
 
 **Files:**
-- No new files unless a compile error exposes a P1-owned contract defect.
+- No new files unless a defect is found in one of the P1-owned paths listed in this plan.
 
 **Interfaces:**
-- Consumes: completed P1 branch.
-- Produces: exact-head build/smoke evidence suitable for the P1 PR.
+- Produces: truthful exact-head Core/V25/V26/preflight evidence.
 
-- [ ] **Step 1: Build Core directly**
+- [ ] **Step 1: Build Core**
 
 ```powershell
 dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
@@ -612,62 +527,50 @@ dotnet build src/QS3D.Core/QS3D.Core.csproj -c Release
 
 Expected: exit 0.
 
-- [ ] **Step 2: Run the full Core smoke suite again on the exact head**
+- [ ] **Step 2: Run all Core smoke tests**
 
 ```powershell
 dotnet run --project tests/QS3D.Core.SmokeTests/QS3D.Core.SmokeTests.csproj -c Release
 ```
 
-Expected: exit 0, `ALL PASS`.
+Expected: exit 0 and `ALL PASS`.
 
-- [ ] **Step 3: Build V25 host project**
+- [ ] **Step 3: Build V25**
 
 ```powershell
 dotnet build src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj -c Release
 ```
 
-Expected: exit 0 when the licensed/reference dependency environment required by the repository is available. If the repository classifies this environment as LOCAL_ONLY, record it as LOCAL_ONLY rather than fabricating PASS.
+Expected: PASS when required local references are present; otherwise record the repository-defined LOCAL_ONLY state rather than claiming PASS.
 
-- [ ] **Step 4: Build V26 host project**
+- [ ] **Step 4: Build V26**
 
 ```powershell
 dotnet build src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj -c Release
 ```
 
-Expected: exit 0 when the V26 dependency environment is available; otherwise use the repository's documented LOCAL_ONLY handoff classification.
+Expected: PASS when required V26 references are present; otherwise record LOCAL_ONLY truthfully.
 
-- [ ] **Step 5: Run repository preflight for the P1 carrier before opening/merging its PR**
+- [ ] **Step 5: Run ownership/collision preflights on the dedicated P1 carrier**
 
 ```powershell
 python scripts/preflight-agent-reservation-v2.py
 python scripts/preflight-agent-lane-collision.py
 ```
 
-Expected: both exit 0 for the dedicated P1 Reservation-v2 carrier. If either fails because another carrier owns one of the planned files, stop and reconcile ownership; do not bypass or weaken the guard.
+Expected: both exit 0. If either reports overlapping ownership, reconcile the carrier instead of bypassing the guard.
 
-- [ ] **Step 6: Final commit only if verification required a P1-owned correction**
+- [ ] **Step 6: If verification exposed a P1-owned defect, fix it with a new RED→GREEN cycle and stage only the known P1 paths**
 
 ```bash
 git status --short
-git add <only-the-P1-owned-corrected-paths>
+git add src/QS3D.Core/Features/ParityEvidenceContracts.cs src/QS3D.Core/Features/ParityManifest.cs src/QS3D.Core/Features/ParityManifestParser.cs src/QS3D.Core/Features/ParityWorkflowRegistry.cs docs/BLT3D-PARITY-MANIFEST.tsv tests/QS3D.Core.SmokeTests/ParityManifestSmoke.cs tests/QS3D.Core.SmokeTests/ParityWorkflowRegistrySmoke.cs tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs
+git diff --cached --check
 git commit -m "fix(parity): close P1 verification gap"
 ```
 
-If `git status --short` is empty, do not create an empty commit.
-
----
+If `git status --short` is empty, skip this step and do not create an empty commit.
 
 ## P1 Completion Gate
 
-P1 is complete only when all of the following are true:
-
-1. There is exactly one canonical `FeatureId` type and parity reuses it.
-2. Duplicate FeatureId/workflow keys fail closed.
-3. `catalog-complete=false` blocks the 100% claim even if every current row is at final evidence stage.
-4. An applicable feature below `V25V26ParityPass` blocks the 100% claim.
-5. Host-boundary N/A requires explicit product-decision evidence.
-6. Semantic mutation workflow registration requires ActiveDocument + Project + AtomicMutation + Audit.
-7. `docs/BLT3D-PARITY-MANIFEST.tsv` parses deterministically and starts incomplete.
-8. Core smoke is green on exact head.
-9. V25/V26 compile evidence is recorded truthfully as PASS or documented LOCAL_ONLY according to actual environment.
-10. The implementation travels through its own Reservation-v2 Issue/branch/PR; no production P1 code is committed to the design carrier.
+P1 is complete only when there is one canonical `FeatureId`; duplicate feature/workflow identities fail closed; incomplete catalog and any applicable row below `V25V26ParityPass` block full parity; host-boundary N/A requires explicit decision evidence; semantic mutations require ActiveDocument + Project + AtomicMutation + Audit; the checked-in TSV parses and remains honestly incomplete; Core smoke is green; V25/V26 evidence is truthful; and all production changes are merged through a dedicated Reservation-v2 Issue/branch/PR.
