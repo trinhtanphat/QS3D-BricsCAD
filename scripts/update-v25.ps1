@@ -425,6 +425,38 @@ function Assert-AuthenticodeSigner {
     }
 }
 
+function Open-HeldVerifiedInstaller {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$ExtractionRoot,
+        [Parameter(Mandatory = $true)][string]$ExpectedSigner
+    )
+
+    $full = [IO.Path]::GetFullPath($Path)
+    $root = [IO.Path]::GetFullPath($ExtractionRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $rootWithSeparator = $root + [IO.Path]::DirectorySeparatorChar
+    if (-not $full.StartsWith($rootWithSeparator, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Updater installer path escaped the extraction root: $full"
+    }
+
+    $item = Get-Item -LiteralPath $full -Force -ErrorAction Stop
+    if ($item.PSIsContainer) { throw "Updater installer path is not an ordinary file: $full" }
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Updater installer path is a reparse point: $full"
+    }
+
+    $held = $null
+    try {
+        $held = [IO.File]::Open($full, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+        Assert-AuthenticodeSigner -Path $full -ExpectedSigner $ExpectedSigner -Label 'Downloaded QS3D installer'
+        return $held
+    }
+    catch {
+        if ($held) { $held.Dispose() }
+        throw
+    }
+}
+
 function Expand-VerifiedHeldArchive {
     param(
         [Parameter(Mandatory = $true)][string]$ZipPath,
@@ -715,6 +747,7 @@ try {
     $manifestPath = Join-Path $tempRoot 'manifest.json'
     $zipPath = Join-Path $tempRoot 'package.zip'
     $extractRoot = Join-Path $tempRoot 'package'
+    $heldInstaller = $null
 
     try {
         New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
@@ -778,6 +811,9 @@ try {
             -MaxPackageBytes $maxBytes `
             -MaxExpandedBytes $maxExpandedBytes `
             -MaxEntries $MaxArchiveEntries
+
+        $installer = Join-Path $extractRoot 'install-v25-autoload.ps1'
+        $heldInstaller = Open-HeldVerifiedInstaller -Path $installer -ExtractionRoot $extractRoot -ExpectedSigner $expectedSigner
         Assert-PackageRoot -Directory $extractRoot -ExpectedSigner $expectedSigner
 
         $downloadedPluginPath = Join-Path $extractRoot 'QS3D.BricsCAD.V25.dll'
@@ -816,7 +852,6 @@ try {
             throw "Installed QS3D productVersion changed during update preparation ($($installedProductVersion.Text) -> $($currentInstalledProductVersion.Text)). Refusing concurrent/stale install."
         }
 
-        $installer = Join-Path $extractRoot 'install-v25-autoload.ps1'
         $arguments = @{
             PackageDirectory = $extractRoot
             InstallDirectory = $InstallDirectory
@@ -832,6 +867,7 @@ try {
         Write-Host "QS3D updated securely to product $($targetProductVersion.Text) (assembly $targetVersion)."
     }
     finally {
+        if ($heldInstaller) { $heldInstaller.Dispose() }
         if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue }
     }
 }
