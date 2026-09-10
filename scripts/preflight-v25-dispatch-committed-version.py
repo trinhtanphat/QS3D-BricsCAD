@@ -36,6 +36,11 @@ def main() -> int:
         "already belongs to earlier protected-main source ${reservation_owner_source}",
         "will not reassign or duplicate-dispatch that ordinal",
         'reservation="${reservation_prefix} ordinal=${committed_preview_ordinal} source_sha=${source_sha} run_id=${GITHUB_RUN_ID}"',
+        'reservation_rows="$(' ,
+        'gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${reservation_issue}/comments?per_page=100"',
+        'reservation_query_status=$?',
+        'if (( reservation_query_status != 0 )); then',
+        'done <<< "${reservation_rows}"',
     )
     missing = [token for token in required if token not in source]
     if missing:
@@ -52,17 +57,21 @@ def main() -> int:
         '-f release_tag="${series_prefix}${preview}"',
         '-f release_tag="${preview}"',
         "Next free preview candidate (diagnostic only)",
+        "done < <(gh api --paginate",
     ):
         if forbidden in source:
             failures.append(
-                "dispatcher must not derive a next-free preview identity outside committed protected-main ProductVersion: "
+                "dispatcher must not derive or read reservation identity through a stale/fail-open contract: "
                 + forbidden
             )
 
     committed_index = source.find("committed_product_version=")
     baseline_guard = source.find("if (( committed_preview_ordinal <= published_preview_ordinal )); then", committed_index)
-    reservation_loop = source.find("while IFS= read -r reservation; do", baseline_guard)
-    reservation_loop_end = source.find("done < <(gh api --paginate", reservation_loop)
+    reservation_capture = source.find('reservation_rows="$(', baseline_guard)
+    reservation_status = source.find("reservation_query_status=$?", reservation_capture)
+    reservation_failure = source.find("if (( reservation_query_status != 0 )); then", reservation_status)
+    reservation_loop = source.find("while IFS= read -r reservation; do", reservation_failure)
+    reservation_loop_end = source.find('done <<< "${reservation_rows}"', reservation_loop)
     multi_owner_guard = source.find(
         "if (( reservation_owner_conflict != 0 || dispatch_fence_owner_conflict != 0 )); then",
         reservation_loop_end,
@@ -76,6 +85,9 @@ def main() -> int:
     indexes = (
         committed_index,
         baseline_guard,
+        reservation_capture,
+        reservation_status,
+        reservation_failure,
         reservation_loop,
         reservation_loop_end,
         multi_owner_guard,
@@ -83,18 +95,9 @@ def main() -> int:
         reservation_write,
         dispatch_index,
     )
-    if min(indexes) < 0 or not (
-        committed_index
-        < baseline_guard
-        < reservation_loop
-        < reservation_loop_end
-        < multi_owner_guard
-        < prior_owner_guard
-        < reservation_write
-        < dispatch_index
-    ):
+    if min(indexes) < 0 or list(indexes) != sorted(indexes):
         failures.append(
-            "dispatcher must validate committed ProductVersion, scan the complete ledger, reject ambiguous ownership, reconcile a legitimate prior owner before side effects, then reserve and dispatch"
+            "dispatcher must validate committed ProductVersion, fail closed while materializing the complete ledger, reject ambiguous ownership, reconcile a legitimate prior owner before side effects, then reserve and dispatch"
         )
 
     prior_owner_end = source.find("if (( exact_dispatch_fence_run_id > 0 )); then", prior_owner_guard)
@@ -121,7 +124,7 @@ def main() -> int:
         return 1
 
     print(
-        "PASS: automatic V25 dispatch is bound to committed protected-main ProductVersion, preserves immutable prior ownership, and reserves only the exact current source"
+        "PASS: automatic V25 dispatch is bound to committed protected-main ProductVersion, fail-closed ledger enumeration, immutable prior ownership, and reserves only the exact current source"
     )
     return 0
 

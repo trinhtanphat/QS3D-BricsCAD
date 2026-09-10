@@ -19,6 +19,10 @@ def main() -> int:
         'dispatch_fence_owner_source=""',
         'reservation_owner_conflict=0',
         'dispatch_fence_owner_conflict=0',
+        'reservation_rows="$(' ,
+        'reservation_query_status=$?',
+        'if (( reservation_query_status != 0 )); then',
+        'done <<< "${reservation_rows}"',
         'if [[ -n "${reservation_owner_source}" || -n "${dispatch_fence_owner_source}" ]]; then',
         '[[ -z "${reservation_owner_source}" || -z "${dispatch_fence_owner_source}" || "${reservation_owner_source}" != "${dispatch_fence_owner_source}" ]]',
         'git merge-base --is-ancestor "${reservation_owner_source}" "${source_sha}"',
@@ -29,6 +33,9 @@ def main() -> int:
     for token in required:
         if token not in source:
             failures.append(f"prior-owner reservation contract missing token: {token}")
+
+    if "done < <(gh api --paginate" in source:
+        failures.append("reservation ledger enumeration must not hide gh-api failure in process substitution")
 
     owner_block_start = source.find(
         'if [[ -n "${reservation_owner_source}" || -n "${dispatch_fence_owner_source}" ]]; then'
@@ -49,10 +56,15 @@ def main() -> int:
         if 'gh api --method POST' in owner_block or 'gh workflow run' in owner_block:
             failures.append("prior-owner reconciliation must not mutate the ledger or dispatch a duplicate release")
 
-    scan_start = source.find('while IFS= read -r reservation; do')
-    scan_end = source.find('done < <(gh api --paginate', scan_start)
-    if scan_start < 0 or scan_end < 0:
-        failures.append("could not bound reservation ledger scan")
+    capture_start = source.find('reservation_rows="$(')
+    capture_status = source.find('reservation_query_status=$?', capture_start)
+    failure_check = source.find('if (( reservation_query_status != 0 )); then', capture_status)
+    scan_start = source.find('while IFS= read -r reservation; do', failure_check)
+    scan_end = source.find('done <<< "${reservation_rows}"', scan_start)
+    if min(capture_start, capture_status, failure_check, scan_start, scan_end) < 0 or not (
+        capture_start < capture_status < failure_check < scan_start < scan_end
+    ):
+        failures.append("could not bound fail-closed reservation ledger capture before prior-owner scan")
     else:
         scan = source[scan_start:scan_end]
         for token in (
@@ -76,7 +88,7 @@ def main() -> int:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
 
-    print("PASS: V25 dispatcher preserves a prior preview owner, fails closed on ambiguous ownership, and leaves newer main neutral until ProductVersion advances")
+    print("PASS: V25 dispatcher fail-closes ledger enumeration, preserves a prior preview owner, rejects ambiguous ownership, and leaves newer main neutral until ProductVersion advances")
     return 0
 
 
