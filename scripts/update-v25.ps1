@@ -893,6 +893,8 @@ try {
     $zipPath = Join-Path $tempRoot 'package.zip'
     $extractRoot = Join-Path $tempRoot 'package'
     $heldInstaller = $null
+    $installerStream = $null
+    $installerReader = $null
 
     try {
         New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
@@ -959,6 +961,12 @@ try {
 
         $installer = Join-Path $extractRoot 'install-v25-autoload.ps1'
         $heldInstaller = Open-HeldVerifiedInstaller -Path $installer -ExtractionRoot $extractRoot -ExpectedSigner $expectedSigner
+        $installerStream = [IO.FileStream]::new($heldInstaller.Handle, [IO.FileAccess]::Read)
+        $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
+        $installerReader = [IO.StreamReader]::new($installerStream, $strictUtf8, $false, 4096, $true)
+        $installerText = $installerReader.ReadToEnd()
+        if ([string]::IsNullOrWhiteSpace($installerText)) { throw 'Downloaded QS3D installer is empty.' }
+        $installerScript = [ScriptBlock]::Create($installerText)
         Assert-PackageRoot -Directory $extractRoot -ExpectedSigner $expectedSigner
 
         $downloadedPluginPath = Join-Path $extractRoot 'QS3D.BricsCAD.V25.dll'
@@ -1007,11 +1015,13 @@ try {
         }
         if ($VersionKeys) { $arguments.VersionKeys = $VersionKeys }
         if ($LanguageKeys) { $arguments.LanguageKeys = $LanguageKeys }
-        & $installer @arguments
+        & $installerScript @arguments
 
         Write-Host "QS3D updated securely to product $($targetProductVersion.Text) (assembly $targetVersion)."
     }
     finally {
+        if ($installerReader) { $installerReader.Dispose() }
+        if ($installerStream) { $installerStream.Dispose() }
         if ($heldInstaller) { $heldInstaller.Dispose() }
         if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue }
     }
