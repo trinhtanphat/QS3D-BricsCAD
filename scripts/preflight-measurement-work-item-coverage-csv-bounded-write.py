@@ -11,6 +11,10 @@ required_source = [
     "StrictUtf8WithBom",
     "BoundedUtf8TextWriter",
     "WriteCsv(",
+    "WriteQuotedCsvValue(",
+    "WriteJoinedIssues(",
+    "WriteJoinedValues(",
+    "WriteEscapedCsvFragment(",
     "checked",
     "AtomicFileCommit.ReplaceWithoutBackup",
     "RequiresSpreadsheetFormulaEscape",
@@ -20,6 +24,9 @@ forbidden_source = [
     "var content = ToCsv(matrix);",
     "writer.Write(content);",
     "var sb = new StringBuilder();",
+    "string.Join(\"|\", cell.Issues",
+    "string.Join(\"|\", cell.AffectedElementIds",
+    "private static string Q(string? value)",
 ]
 required_smoke = [
     "ExistingCoverageCsvSurvivesBudgetFailure",
