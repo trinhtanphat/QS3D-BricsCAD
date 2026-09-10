@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fail closed unless V25 publication ambiguity proves exact identity before compensation."""
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -10,12 +11,14 @@ TARGET = ROOT / ".github" / "workflows" / "release-v25-cloud.yml"
 def validate(source: str) -> list[str]:
     errors: list[str] = []
 
+    release_uri = '$releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$($release.id)"'
     publish_body = "$publishBody = @{ draft = $false } | ConvertTo-Json"
     publish = "$publishedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri"
+    release_uri_index = source.find(release_uri)
     publish_body_index = source.find(publish_body)
     publish_index = source.find(publish)
-    if publish_body_index < 0 or publish_index < 0 or publish_body_index >= publish_index:
-        return ["missing ordered V25 public release PATCH"]
+    if min(release_uri_index, publish_body_index, publish_index) < 0 or not (release_uri_index < publish_body_index < publish_index):
+        return ["missing exact created-release URI binding before ordered V25 public release PATCH"]
 
     publication_prefix = source[publish_body_index:publish_index]
     try_index_absolute = source.find("try {", publish_body_index, publish_index)
@@ -99,9 +102,6 @@ def validate(source: str) -> list[str]:
             "recognize already-draft state, PATCH only then, reconcile, and fail closed"
         )
 
-    # The pre-compensation proof must be complete before the first safe-state mutation. Merely
-    # checking identity after PATCH is too late: release identity can drift between publication
-    # failure and compensation, and mutating an unproven resource is a TOCTOU safety violation.
     if compensate_index >= 0:
         before_patch = transaction[catch_index:compensate_index]
         for token, label in (
@@ -116,6 +116,19 @@ def validate(source: str) -> list[str]:
         ):
             if token not in before_patch:
                 errors.append(f"pre-compensation {label} proof must precede compensation PATCH")
+
+    # Already-draft state must be the no-mutation branch and compensation PATCH must be confined
+    # to the matching else block. Merely mentioning an already-draft check before an unconditional
+    # PATCH would still mutate a resource that is already in the desired safe state.
+    conditional_patch = re.compile(
+        r"if\s*\(\s*\$authoritativeReleaseBeforeCompensation\.draft\s*-eq\s*\$true\s*\)\s*\{"
+        r"(?:(?!\n\s*\}\s*else\s*\{).)*\n\s*\}\s*else\s*\{\s*"
+        r"\$compensationBody\s*=\s*@\{\s*draft\s*=\s*\$true\s*;\s*prerelease\s*=\s*\$true\s*\}\s*\|\s*ConvertTo-Json\s*"
+        r"\$compensatedRelease\s*=\s*Invoke-RestMethod\s+-Method\s+Patch\s+-Uri\s+\$releaseUri",
+        re.DOTALL,
+    )
+    if not conditional_patch.search(catch_tail):
+        errors.append("compensation PATCH must be confined to the else branch of an authoritative already-draft check")
 
     post_identity_tokens = (
         "$authoritativeCompensatedRelease.tag_name",
@@ -148,6 +161,10 @@ def main() -> None:
             "try {\n            $publishedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri",
             "$publishedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri\n          try {",
         ),
+        "drop exact release URI binding": source.replace(
+            '$releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$($release.id)"',
+            '$releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/latest"',
+        ),
         "drop pre-compensation GET": source.replace(
             "$authoritativeReleaseBeforeCompensation = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers",
             "$authoritativeReleaseBeforeCompensation = $publishedRelease",
@@ -155,6 +172,11 @@ def main() -> None:
         "move compensation before proof": source.replace(
             "$authoritativeReleaseBeforeCompensation = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers",
             "$compensationBody = @{ draft = $true; prerelease = $true } | ConvertTo-Json\n              $compensatedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body $compensationBody\n              $authoritativeReleaseBeforeCompensation = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers",
+            1,
+        ),
+        "make compensation unconditional": source.replace(
+            "              else {\n                $compensationBody",
+            "              }\n              $compensationBody",
             1,
         ),
         "drop pre-compensation asset IDs": source.replace(
@@ -184,7 +206,7 @@ def main() -> None:
         if not validate(mutated):
             raise SystemExit(f"ERROR: V25 publish compensation guard survived mutation: {label}")
 
-    print("PASS: V25 publication ambiguity proves exact release identity before mutation, re-drafts safely, reconciles authority, and fails closed.")
+    print("PASS: V25 publication ambiguity proves exact created-release identity before mutation, re-drafts only when required, reconciles authority, and fails closed.")
 
 
 if __name__ == "__main__":
