@@ -97,6 +97,14 @@ namespace QS3D.Core.Export
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
 
+            var metaRows = MetaRows(snapshot);
+            var variationRows = VariationRows(snapshot.Variations);
+            var ipcRows = IpcRows(snapshot.Ipc);
+            var finalAccountRows = FinalAccountRows(snapshot.FinalAccount);
+            var tenderRows = TenderRows(snapshot);
+            var cvrRows = CvrRows(snapshot.Cvr);
+            ValidateWorkbookPayload(metaRows, variationRows, ipcRows, finalAccountRows, tenderRows, cvrRows);
+
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -112,36 +120,36 @@ namespace QS3D.Core.Export
                     WriteEntry(archive, "_rels/.rels", RootRelationshipsXml, ref totalUncompressedBytes);
                     WriteEntry(archive, "xl/workbook.xml", WorkbookXml, ref totalUncompressedBytes);
                     WriteEntry(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml, ref totalUncompressedBytes);
-                    WriteSheetEntry(archive, "xl/worksheets/sheet1.xml", new[] { "KEY", "VALUE" }, MetaRows(snapshot), ref totalUncompressedBytes);
+                    WriteSheetEntry(archive, "xl/worksheets/sheet1.xml", new[] { "KEY", "VALUE" }, metaRows, ref totalUncompressedBytes);
                     WriteSheetEntry(
                         archive,
                         "xl/worksheets/sheet2.xml",
                         new[] { "VARIATION_ID", "DESCRIPTION", "STATUS", "PROPOSED", "APPROVED", "CURRENCY", "REVISION" },
-                        VariationRows(snapshot.Variations),
+                        variationRows,
                         ref totalUncompressedBytes);
                     WriteSheetEntry(
                         archive,
                         "xl/worksheets/sheet3.xml",
                         new[] { "CERTIFICATE_ID", "GROSS_THIS_PERIOD", "RETENTION_THIS_PERIOD", "NET_THIS_PERIOD", "CUMULATIVE_NET", "CURRENCY" },
-                        IpcRows(snapshot.Ipc),
+                        ipcRows,
                         ref totalUncompressedBytes);
                     WriteSheetEntry(
                         archive,
                         "xl/worksheets/sheet4.xml",
                         new[] { "FINAL_ACCOUNT_ID", "FINAL_CONTRACT_VALUE", "AMOUNT_DUE", "RECOVERY_DUE", "UNRELEASED_RETENTION", "CURRENCY" },
-                        FinalAccountRows(snapshot.FinalAccount),
+                        finalAccountRows,
                         ref totalUncompressedBytes);
                     WriteSheetEntry(
                         archive,
                         "xl/worksheets/sheet5.xml",
                         new[] { "RECORD", "PACKAGE_ID", "DESCRIPTION", "STATUS", "PACKAGE_REVISION", "RECOMMENDED_BID", "AWARD_ID", "AWARDED_BID", "BIDDER", "EVALUATED_TOTAL", "CURRENCY", "AWARD_REVISION", "BID_ID", "COMMERCIAL_RANK", "MANDATORY_COMPLIANCE" },
-                        TenderRows(snapshot),
+                        tenderRows,
                         ref totalUncompressedBytes);
                     WriteSheetEntry(
                         archive,
                         "xl/worksheets/sheet6.xml",
                         new[] { "PERIOD_ID", "STATUS", "REVISION", "REVISED_BUDGET", "COST_TO_DATE", "COMMITTED_EXPOSURE", "FORECAST_TO_COMPLETE", "FORECAST_FINAL_COST", "FORECAST_VARIANCE", "EARNED_VALUE", "CVR_MARGIN", "CURRENCY" },
-                        CvrRows(snapshot.Cvr),
+                        cvrRows,
                         ref totalUncompressedBytes);
                 }
 
@@ -335,6 +343,47 @@ namespace QS3D.Core.Export
                 cvr.Currency
             });
             return rows;
+        }
+
+        private static void ValidateWorkbookPayload(
+            IReadOnlyList<IReadOnlyList<string>> metaRows,
+            IReadOnlyList<IReadOnlyList<string>> variationRows,
+            IReadOnlyList<IReadOnlyList<string>> ipcRows,
+            IReadOnlyList<IReadOnlyList<string>> finalAccountRows,
+            IReadOnlyList<IReadOnlyList<string>> tenderRows,
+            IReadOnlyList<IReadOnlyList<string>> cvrRows)
+        {
+            ValidateWorkbookRows(metaRows, MetaSheetName);
+            ValidateWorkbookRows(variationRows, VariationsSheetName);
+            ValidateWorkbookRows(ipcRows, IpcSheetName);
+            ValidateWorkbookRows(finalAccountRows, FinalAccountSheetName);
+            ValidateWorkbookRows(tenderRows, TenderSheetName);
+            ValidateWorkbookRows(cvrRows, CvrSheetName);
+        }
+
+        private static void ValidateWorkbookRows(IReadOnlyList<IReadOnlyList<string>> rows, string sheetName)
+        {
+            if (rows == null)
+                throw new InvalidDataException("Commercial workbook worksheet rows are missing: " + sheetName + ".");
+            if (rows.Count > MaxWorksheetRows)
+                throw new InvalidDataException("Commercial workbook worksheet exceeds the bounded row contract: " + sheetName + ".");
+
+            for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+            {
+                var row = rows[rowIndex];
+                if (row == null)
+                    throw new InvalidDataException("Commercial workbook worksheet contains a null row: " + sheetName + ".");
+                for (var columnIndex = 0; columnIndex < row.Count; columnIndex++)
+                    ValidateStrictUtf8Cell(row[columnIndex]);
+            }
+        }
+
+        private static void ValidateStrictUtf8Cell(string value)
+        {
+            value = value ?? string.Empty;
+            if (value.Length > MaxCellCharacters)
+                throw new InvalidDataException("Commercial workbook cell exceeds the Excel text limit.");
+            _ = StrictUtf8.GetByteCount(value);
         }
 
         private static void WriteSheetEntry(
