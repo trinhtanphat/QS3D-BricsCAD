@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 
@@ -16,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             DirectMutationUsesSemanticValidation();
             RemoveAndClearUseSemanticLifecycle();
             PairRemovalUsesCanonicalIdentity();
+            PairRemovalCanDeletePersistedCorruptValue();
             NoOpMutationsStayStable();
         }
 
@@ -148,6 +150,22 @@ namespace QS3D.Core.SmokeTests
             Equal(before, element.UpdatedUtc);
         }
 
+        private static void PairRemovalCanDeletePersistedCorruptValue()
+        {
+            var element = new ProjectElement("E-QTY-PAIR-CORRUPT", ElementCategory.Slab);
+            SeedPersistedQuantity(element, "Area", -1d);
+            element.MarkClean(ElementDirtyFlags.All);
+            var before = element.UpdatedUtc;
+            var quantities = (ICollection<KeyValuePair<string, double>>)element.Quantities;
+
+            if (!quantities.Remove(new KeyValuePair<string, double>(" area ", -1d)))
+                throw new Exception("Exact pair removal must allow cleanup of persisted-corrupt quantity values.");
+
+            Equal(0, element.Quantities.Count);
+            Has(element.Dirty, ElementDirtyFlags.Quantity);
+            Changed(before, element.UpdatedUtc, "Removing persisted-corrupt quantity state must advance element persistence lifecycle.");
+        }
+
         private static void NoOpMutationsStayStable()
         {
             var element = new ProjectElement("E-QTY-NOOP", ElementCategory.FloorFinish);
@@ -171,6 +189,15 @@ namespace QS3D.Core.SmokeTests
             element.Quantities.Clear();
             Equal(ElementDirtyFlags.None, element.Dirty);
             Equal(before, element.UpdatedUtc);
+        }
+
+        private static void SeedPersistedQuantity(ProjectElement element, string name, double value)
+        {
+            var field = typeof(ProjectElement).GetField("_quantityValues", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement quantity backing field changed; update persisted-corruption regression intentionally.");
+            var quantities = field.GetValue(element) as IDictionary<string, double>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement quantity backing collection.");
+            quantities[name] = value;
         }
 
         private static void Has(ElementDirtyFlags actual, ElementDirtyFlags expected)
