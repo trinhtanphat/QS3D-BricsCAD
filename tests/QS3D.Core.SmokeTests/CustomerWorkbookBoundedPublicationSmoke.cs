@@ -24,10 +24,10 @@ namespace QS3D.Core.SmokeTests
             try
             {
                 var details = new List<QuantityReportRow>();
-                var summary = BaseRow("SUMMARY", "ABC", 600);
+                var summary = BaseRow("SUMMARY", "ABC", 1200);
                 summary.ElementIds.Clear();
                 summary.SourceHandles.Clear();
-                for (var index = 1; index <= 600; index++)
+                for (var index = 1; index <= 1200; index++)
                 {
                     var id = "E" + index.ToString("D4");
                     var handle = index.ToString("X");
