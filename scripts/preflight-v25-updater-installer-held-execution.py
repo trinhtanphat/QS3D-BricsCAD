@@ -73,7 +73,7 @@ def strip_csharp_comments(text: str) -> str:
                 out.append(ch)
             else:
                 out.append(" ")
-        else:  # block comment
+        else:
             if ch == "*" and nxt == "/":
                 out.extend("  ")
                 i += 1
@@ -151,11 +151,7 @@ def validate_native(source: str) -> None:
     require_re(native, r"extern\s+uint\s+GetFinalPathNameByHandleW\s*\(", "GetFinalPathNameByHandleW declaration")
 
     opener = function_body(native, "public static Qs3dHeldFile OpenOrdinaryReadHeld")
-    require_re(
-        opener,
-        r"SafeFileHandle\s+handle\s*=\s*CreateFileW\s*\(\s*path\s*,\s*GENERIC_READ\s*,\s*FILE_SHARE_READ\s*,\s*IntPtr\.Zero\s*,\s*OPEN_EXISTING\s*,\s*FILE_FLAG_OPEN_REPARSE_POINT\s*,\s*IntPtr\.Zero\s*\)\s*;",
-        "atomic no-follow read-only CreateFileW call",
-    )
+    require_re(opener, r"SafeFileHandle\s+handle\s*=\s*CreateFileW\s*\(\s*path\s*,\s*GENERIC_READ\s*,\s*FILE_SHARE_READ\s*,\s*IntPtr\.Zero\s*,\s*OPEN_EXISTING\s*,\s*FILE_FLAG_OPEN_REPARSE_POINT\s*,\s*IntPtr\.Zero\s*\)\s*;", "atomic no-follow read-only CreateFileW call")
     require_if_throw(opener, r"handle\s*==\s*null\s*\|\|\s*handle\.IsInvalid", "invalid native handle rejection")
     require_if_throw(opener, r"!GetFileInformationByHandle\s*\(\s*handle\s*,\s*out\s+information\s*\)", "handle attribute query failure rejection")
     require_if_throw(opener, r"\(\s*information\.FileAttributes\s*&\s*FILE_ATTRIBUTE_DIRECTORY\s*\)\s*!=\s*0", "directory rejection")
@@ -189,12 +185,12 @@ def validate(source: str) -> None:
     if first_admission < acquire:
         fail("package admission occurs before installer hold")
     admission = require(source, "Assert-PackageRoot -Directory $extractRoot", "held package admission", acquire)
-    invoke = require(source, "& $installer @arguments", "installer invocation", admission)
+    invoke = require(source, "& $installerScript @arguments", "in-memory installer invocation", admission)
     dispose = require(source, "$heldInstaller.Dispose()", "held installer disposal", invoke)
     if not (acquire < admission < invoke < dispose):
-        fail("require acquire < final package admission < invoke < dispose")
-    if source[acquire:dispose].count("& $installer @arguments") != 1:
-        fail("installer must be invoked exactly once while held")
+        fail("require acquire < final package admission < in-memory invoke < dispose")
+    if source[acquire:dispose].count("& $installerScript @arguments") != 1:
+        fail("held installer ScriptBlock must be invoked exactly once while held")
     if source[acquire:dispose].count("Assert-PackageRoot -Directory $extractRoot") != 1:
         fail("package admission must occur exactly once while held")
     if re.search(r"(?m)^\s*\$installer\s*=", source[acquire:dispose]):
@@ -283,7 +279,7 @@ $installer=Join-Path $extractRoot 'install-v25-autoload.ps1'
 $heldInstaller = Open-HeldVerifiedInstaller -Path $installer -ExtractionRoot $extractRoot -ExpectedSigner $expectedSigner
 try {
  Assert-PackageRoot -Directory $extractRoot
- & $installer @arguments
+ & $installerScript @arguments
 }
 finally { $heldInstaller.Dispose() }
 '''
@@ -301,10 +297,10 @@ def self_test() -> None:
     expect_reject(good.replace("$held.FinalPath", "$full", 1), "path identity not derived from held handle")
     expect_reject(good.replace("Assert-AuthenticodeSigner -Path $full", "Assert-AuthenticodeSigner -Path $Path", 1), "signer on unbound path")
     expect_reject(good.replace("catch { if ($held) { $held.Dispose() }; throw }", "catch { throw }", 1), "leaked hold on signer failure")
-    expect_reject(good.replace(" Assert-PackageRoot -Directory $extractRoot\n & $installer", " $heldInstaller.Dispose()\n Assert-PackageRoot -Directory $extractRoot\n & $installer", 1), "early hold disposal")
+    expect_reject(good.replace(" Assert-PackageRoot -Directory $extractRoot\n & $installerScript", " $heldInstaller.Dispose()\n Assert-PackageRoot -Directory $extractRoot\n & $installerScript", 1), "early hold disposal")
 
 
 if __name__ == "__main__":
     self_test()
     validate(UPDATER.read_text(encoding="utf-8"))
-    print("PASS: V25 updater atomically no-follow opens the installer, binds attributes/final path to that handle, re-admits signer, holds through final admission/execution, and disposes safely")
+    print("PASS: V25 updater atomically no-follow opens the installer, binds attributes/final path to that handle, re-admits signer, holds through final admission/in-memory execution, and disposes safely")
