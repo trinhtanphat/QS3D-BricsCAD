@@ -598,7 +598,8 @@ jobs:
               throw 'Newly-created/reconciled V25 release identity, draft state, or transaction marker mismatch.'
             }
             $releaseId = [long]$release.id
-            $releaseUri = $expectedReleaseUri
+            $releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$releaseId"
+            if (-not [string]::Equals($releaseUri, $expectedReleaseUri, [StringComparison]::Ordinal)) { throw 'V25 immutable release-ID URI binding mismatch.' }
             Assert-RemoteReleaseTagTargetsWorkflowSha
 
             $admittedAssets = @(& .\scripts\invoke-v25-held-release-upload.ps1 `
@@ -742,7 +743,7 @@ jobs:
             $published = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body (@{ draft = $false } | ConvertTo-Json)
             try {
               Assert-V25ProtectedMainStillAdmitted -ExpectedMain $finalMain -Phase 'post-release-publish'
-          $publicationSafetyInvalidated = $false
+              $publicationSafetyInvalidated = $false
             }
             catch {
               $publicationSafetyInvalidated = $true
@@ -764,34 +765,108 @@ jobs:
             $publicationError = $_
             if (-not $tagReadyForRelease) { throw }
 
+            $commercialSafetyCompensated = $false
             if ($releaseId -gt 0) {
               try {
                 $reconciledRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
                 if ($reconciledRelease.draft -eq $false) {
                   if (-not $publishPatchAttempted) { throw 'V25 release became published before this workflow attempted the final publish PATCH.' }
-                  if ($publicationSafetyKnownInvalid) { throw 'V25 release is published, but post-PATCH protected-main safety was already observed invalid; refusing acknowledgement recovery. Manual release review is required.' }
-                  Assert-V25ProtectedMainStillAdmitted -ExpectedMain $finalMain -Phase 'publish-acknowledgement-reconciliation'
-              $publicationSafetyInvalidated = $false
-                  Assert-PublishedReleaseMatchesVerifiedTransaction `
-                    -ReleaseSnapshot $reconciledRelease `
-                    -ReleaseUri $releaseUri `
-                    -ReleaseId $releaseId `
-                    -ExpectedReleaseName $expectedReleaseName `
-                    -ExpectedAssets $assetNames `
-                    -VerifiedAssetIds $verifiedAssetIds `
-                    -LocalAssets $localAssets `
-                    -IsPrerelease:($env:RELEASE_PRERELEASE -eq 'true') `
-                    -TransactionMarker $draftTransactionMarker
-                  Write-Host 'V25 publish acknowledgement was ambiguous, but authoritative release state confirms the exact qualified release is already published; treating publication as committed.'
-                  return
+                  if ($publicationSafetyKnownInvalid) {
+                    $releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$releaseId"
+                    $authoritativeCommercialReleaseBeforeCompensation = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
+                    if ($null -eq $authoritativeCommercialReleaseBeforeCompensation -or
+                        [long]$authoritativeCommercialReleaseBeforeCompensation.id -ne $releaseId -or
+                        -not [string]::Equals([string]$authoritativeCommercialReleaseBeforeCompensation.url, $releaseUri, [StringComparison]::Ordinal) -or
+                        -not [string]::Equals([string]$authoritativeCommercialReleaseBeforeCompensation.tag_name, $env:RELEASE_TAG, [StringComparison]::Ordinal) -or
+                        -not [string]::Equals([string]$authoritativeCommercialReleaseBeforeCompensation.target_commitish, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase) -or
+                        -not [string]::Equals([string]$authoritativeCommercialReleaseBeforeCompensation.name, $expectedReleaseName, [StringComparison]::Ordinal) -or
+                        ([string]$authoritativeCommercialReleaseBeforeCompensation.body).IndexOf($draftTransactionMarker, [StringComparison]::Ordinal) -lt 0) {
+                      throw 'V25 commercial compensation preflight found a release identity mismatch; refusing mutation.'
+                    }
+                    $preCompensationAssets = @($authoritativeCommercialReleaseBeforeCompensation.assets)
+                    if ($preCompensationAssets.Count -ne $assetNames.Count -or $verifiedAssetIds.Count -ne $assetNames.Count) {
+                      throw 'V25 commercial compensation preflight found an incomplete asset identity set; refusing mutation.'
+                    }
+                    foreach ($expectedAsset in $assetNames) {
+                      $preMatches = @($authoritativeCommercialReleaseBeforeCompensation.assets | Where-Object { [string]$_.name -ceq $expectedAsset })
+                      if ($preMatches.Count -ne 1 -or -not $verifiedAssetIds.ContainsKey($expectedAsset) -or -not $localAssets.ContainsKey($expectedAsset)) {
+                        throw "V25 commercial compensation preflight found ambiguous or unverified asset identity for $expectedAsset."
+                      }
+                      $expectedAssetId = [long]$verifiedAssetIds[$expectedAsset]
+                      if ($expectedAssetId -le 0 -or [long]$preMatches[0].id -ne $expectedAssetId -or [int64]$preMatches[0].size -ne [int64]$localAssets[$expectedAsset].Length) {
+                        throw "V25 commercial compensation preflight found asset identity/size drift for $expectedAsset."
+                      }
+                    }
+                    Assert-RemoteReleaseTagTargetsWorkflowSha
+                    if ($authoritativeCommercialReleaseBeforeCompensation.draft -eq $true) {
+                      Write-Host 'V25 commercial release was already restored to draft before compensation; no mutation required.'
+                    }
+                    else {
+                      if ($authoritativeCommercialReleaseBeforeCompensation.draft -ne $false) {
+                        throw 'V25 commercial compensation preflight found an ambiguous draft state; refusing mutation.'
+                      }
+                      $commercialCompensationBody = @{ draft = $true; prerelease = $true } | ConvertTo-Json
+                      $commercialCompensatedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body $commercialCompensationBody
+                    }
+                    $authoritativeCommercialReleaseAfterCompensation = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
+                    if ($null -eq $authoritativeCommercialReleaseAfterCompensation -or
+                        [long]$authoritativeCommercialReleaseAfterCompensation.id -ne $releaseId -or
+                        -not [string]::Equals([string]$authoritativeCommercialReleaseAfterCompensation.url, $releaseUri, [StringComparison]::Ordinal) -or
+                        $authoritativeCommercialReleaseAfterCompensation.draft -ne $true -or
+                        -not [string]::Equals([string]$authoritativeCommercialReleaseAfterCompensation.tag_name, $env:RELEASE_TAG, [StringComparison]::Ordinal) -or
+                        -not [string]::Equals([string]$authoritativeCommercialReleaseAfterCompensation.target_commitish, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase) -or
+                        -not [string]::Equals([string]$authoritativeCommercialReleaseAfterCompensation.name, $expectedReleaseName, [StringComparison]::Ordinal) -or
+                        [bool]$authoritativeCommercialReleaseAfterCompensation.prerelease -ne $true -or
+                        ([string]$authoritativeCommercialReleaseAfterCompensation.body).IndexOf($draftTransactionMarker, [StringComparison]::Ordinal) -lt 0) {
+                      throw 'V25 commercial compensation postflight did not prove the exact release is safely non-public.'
+                    }
+                    $postCompensationAssets = @($authoritativeCommercialReleaseAfterCompensation.assets)
+                    if ($postCompensationAssets.Count -ne $assetNames.Count -or $verifiedAssetIds.Count -ne $assetNames.Count) {
+                      throw 'V25 commercial compensation postflight found an incomplete asset identity set.'
+                    }
+                    foreach ($expectedAsset in $assetNames) {
+                      $postMatches = @($authoritativeCommercialReleaseAfterCompensation.assets | Where-Object { [string]$_.name -ceq $expectedAsset })
+                      if ($postMatches.Count -ne 1 -or -not $verifiedAssetIds.ContainsKey($expectedAsset) -or -not $localAssets.ContainsKey($expectedAsset)) {
+                        throw "V25 commercial compensation postflight found ambiguous or unverified asset identity for $expectedAsset."
+                      }
+                      $expectedAssetId = [long]$verifiedAssetIds[$expectedAsset]
+                      if ($expectedAssetId -le 0 -or [long]$postMatches[0].id -ne $expectedAssetId -or [int64]$postMatches[0].size -ne [int64]$localAssets[$expectedAsset].Length) {
+                        throw "V25 commercial compensation postflight found asset identity/size drift for $expectedAsset."
+                      }
+                    }
+                    Assert-RemoteReleaseTagTargetsWorkflowSha
+                    $publicationSafetyInvalidated = $false
+                    $commercialSafetyCompensated = $true
+                  }
+                  else {
+                    Assert-V25ProtectedMainStillAdmitted -ExpectedMain $finalMain -Phase 'publish-acknowledgement-reconciliation'
+                    $publicationSafetyInvalidated = $false
+                    Assert-PublishedReleaseMatchesVerifiedTransaction `
+                      -ReleaseSnapshot $reconciledRelease `
+                      -ReleaseUri $releaseUri `
+                      -ReleaseId $releaseId `
+                      -ExpectedReleaseName $expectedReleaseName `
+                      -ExpectedAssets $assetNames `
+                      -VerifiedAssetIds $verifiedAssetIds `
+                      -LocalAssets $localAssets `
+                      -IsPrerelease:($env:RELEASE_PRERELEASE -eq 'true') `
+                      -TransactionMarker $draftTransactionMarker
+                    Write-Host 'V25 publish acknowledgement was ambiguous, but authoritative release state confirms the exact qualified release is already published; treating publication as committed.'
+                    return
+                  }
                 }
-                if ($reconciledRelease.draft -ne $true) { throw 'V25 release draft state is ambiguous during acknowledgement reconciliation.'
+                elseif ($reconciledRelease.draft -ne $true) {
+                  throw 'V25 release draft state is ambiguous during acknowledgement reconciliation.'
                 }
               }
               catch {
                 $reconciliationError = $_
                 throw "V25 publication acknowledgement reconciliation failed. Original publication error: $($publicationError.Exception.Message) Reconciliation error: $($reconciliationError.Exception.Message) Manual cleanup is required before retry."
               }
+            }
+
+            if ($commercialSafetyCompensated) {
+              throw "V25 commercial publication safety invalidation was compensated to a non-public exact release. Original publication error: $($publicationError.Exception.Message)"
             }
 
             try {
