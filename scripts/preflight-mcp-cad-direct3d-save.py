@@ -75,45 +75,45 @@ def main():
 
     require(errors, extrude_block, (
         'source.Closed', 'source.IsPlanar', 'source.Area',
-        'source.Clone() as Curve',
-        'Region.CreateFromCurves(new DBObjectCollection { profileClone })',
-        'solid.CreateExtrudedSolid(region, new Vector3d(0d, 0d, height), options);',
-        'cad_extrude validation failed',
-        'source curve was preserved',
-        'kernelSource=transient-region',
-        'region?.Dispose();', 'profileClone?.Dispose();',
-    ), "V25 detached Region direct curve extrusion")
-    forbid(errors, extrude_block, (
         'Region.CreateFromCurves(new DBObjectCollection { source })',
         'model.AppendEntity(region);',
         'transaction.AddNewlyCreatedDBObject(region, true);',
         'solid.Extrude(region, height, 0d);',
+        'cad_extrude validation failed',
+        'source curve was preserved',
         'kernelSource=database-resident-region',
-    ), "direct extrusion database-resident temporary regression")
+        'if (!region.IsErased) region.Erase();',
+    ), "V25 validated database-resident Region direct curve extrusion")
+    forbid(errors, extrude_block, (
+        'source.Clone() as Curve',
+        'Region.CreateFromCurves(new DBObjectCollection { profileClone })',
+        'solid.CreateExtrudedSolid(',
+        'kernelSource=transient-region',
+        'kernelSource=database-resident-profile-clone',
+    ), "direct extrusion detached/transient kernel regression")
 
     require(errors, boolean_block, (
+        'ExtentsOverlap(targetExtents, operandExtents)',
+        '\"reason\\\":\\\"no-intersection',
+        'target.BooleanOperation(operation, operand);',
+        'if (!operand.IsErased) operand.Erase();',
+        'transaction rollback preserves both sources',
+        'kernelTarget=database-resident; kernelOperand=database-resident',
+    ), "V25 direct boolean validated resident target/tool kernel")
+    forbid(errors, boolean_block, (
         'target.Clone() as Solid3d',
         'operand.Clone() as Solid3d',
         'targetWorking.BooleanOperation(operation, operandWorking);',
-        'ExtentsOverlap(targetExtents, operandExtents)',
-        '\"reason\\\":\\\"no-intersection',
         'target.CopyFrom(targetWorking);',
-        'if (!operand.IsErased) operand.Erase();',
-        'sources were preserved',
         'kernelInputs=detached-clones',
-    ), "V25 direct boolean detached-kernel atomicity")
-    forbid(errors, boolean_block, (
-        'target.BooleanOperation(operation, operand);',
-        'kernelTarget=database-resident; kernelOperand=database-resident',
-    ), "direct boolean live-database kernel regression")
+    ), "direct boolean detached-clone regression")
     require(errors, open_entity_block, (
         'entity.Database == null', '!ReferenceEquals(entity.Database, database)',
         'different drawing database'), "direct entity database ownership")
-    copy_at = boolean_block.find('target.CopyFrom(targetWorking);')
-    kernel_at = boolean_block.find('targetWorking.BooleanOperation(operation, operandWorking);')
+    kernel_at = boolean_block.find('target.BooleanOperation(operation, operand);')
     erase_at = boolean_block.find('if (!operand.IsErased) operand.Erase();')
-    if kernel_at < 0 or copy_at < 0 or erase_at < 0 or not (kernel_at < copy_at < erase_at):
-        errors.append("direct boolean ordering must be detached kernel success -> target CopyFrom -> tool erase")
+    if kernel_at < 0 or erase_at < 0 or kernel_at > erase_at:
+        errors.append("direct boolean ordering must be resident target/tool kernel success -> tool erase")
 
     require(errors, direct_save_block, ('McpNativeCurrentDocumentSave.SaveCurrentDocument(', 'dbmodAfterSave', 'route\\\":\\\"native-QSAVE-current-document'), "current-document save regression guard")
     forbid(errors, direct_save_block, ('document.Database.Save();', 'document.Database.SaveAs('), "current-document save")
@@ -145,7 +145,7 @@ def main():
         print("ERROR: MCP CAD direct 3D/save preflight failed:")
         for error in errors: print(" -", error)
         return 1
-    print("PASS: MCP direct 3D/save uses validated detached geometry kernels and event-owned native QSAVE terminal completion.")
+    print("PASS: MCP direct 3D/save uses validated database-resident V25 geometry kernels and event-owned native QSAVE terminal completion.")
     return 0
 
 
