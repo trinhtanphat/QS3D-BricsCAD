@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using System.Text;
 using QS3D.Core.Export;
@@ -11,7 +12,29 @@ namespace QS3D.Core.SmokeTests
     internal static class RoomFinishXlsxBoundedWriteSmoke
     {
         [ModuleInitializer]
-        internal static void Initialize() => CumulativeWorksheetBudgetFailsBeforeDestinationReplacement();
+        internal static void Initialize()
+        {
+            VietnameseHeaderRoundTripIsPreserved();
+            CumulativeWorksheetBudgetFailsBeforeDestinationReplacement();
+        }
+
+        private static void VietnameseHeaderRoundTripIsPreserved()
+        {
+            var path = Path.Combine(Path.GetTempPath(), "room-finish-xlsx-header-" + Guid.NewGuid().ToString("N") + ".xlsx");
+            try
+            {
+                RoomFinishXlsxExporter.Export(path, new[] { new RoomFinishScheduleRow { Floor = "Tầng 1", Room = "Phòng 101", Category = "Sơn", FamilyName = "Tường", Material = "Sơn nước", UnitHint = "m²", Count = 1, PrimaryQuantity = 1d, LengthM = 1d, AreaM2 = 1d, ProjectId = "P", DrawingFingerprint = "F" } });
+                using var archive = ZipFile.OpenRead(path);
+                var entry = archive.GetEntry("xl/worksheets/sheet1.xml") ?? throw new InvalidOperationException("Room-finish XLSX header smoke: worksheet entry is missing.");
+                using var reader = new StreamReader(entry.Open(), new UTF8Encoding(false, true), true);
+                var xml = reader.ReadToEnd();
+                var headers = new[] { "Tầng", "Phòng", "Loại hoàn thiện", "Family / Loại", "Vật liệu", "Đơn vị", "SL", "KL chính", "Dài (m)", "Diện tích (m²)", "Element IDs", "Room IDs", "Project ID", "Drawing fingerprint", "Source Handles" };
+                foreach (var header in headers)
+                    if (!xml.Contains(">" + header + "</t>", StringComparison.Ordinal))
+                        throw new InvalidOperationException("Room-finish XLSX header smoke: UTF-8 header fidelity drifted: " + header);
+            }
+            finally { TryDelete(path); }
+        }
 
         private static void CumulativeWorksheetBudgetFailsBeforeDestinationReplacement()
         {
