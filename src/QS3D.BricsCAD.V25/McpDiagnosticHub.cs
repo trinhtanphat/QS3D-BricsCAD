@@ -49,13 +49,20 @@ namespace QS3D.BricsCAD.V25
 
         private sealed class DocumentSubscription
         {
+            private bool _willStartMayBeSubscribed;
+            private bool _endedMayBeSubscribed;
+            private bool _cancelledMayBeSubscribed;
+            private bool _failedMayBeSubscribed;
+            private int _acceptCallbacks;
+            private readonly object _handlerGate = new object();
+
             public DocumentSubscription(Document document)
             {
                 Document = document;
-                WillStart = (sender, args) => OnCommand(document, "start", args, false);
-                Ended = (sender, args) => OnCommand(document, "end", args, false);
-                Cancelled = (sender, args) => OnCommand(document, "cancelled", args, true);
-                Failed = (sender, args) => OnCommand(document, "failed", args, true);
+                WillStart = (sender, args) => OnCommand(this, "start", args, false);
+                Ended = (sender, args) => OnCommand(this, "end", args, false);
+                Cancelled = (sender, args) => OnCommand(this, "cancelled", args, true);
+                Failed = (sender, args) => OnCommand(this, "failed", args, true);
             }
 
             public Document Document { get; private set; }
@@ -63,21 +70,70 @@ namespace QS3D.BricsCAD.V25
             public CommandEventHandler Ended { get; private set; }
             public CommandEventHandler Cancelled { get; private set; }
             public CommandEventHandler Failed { get; private set; }
+            public bool AcceptCallbacks => Volatile.Read(ref _acceptCallbacks) != 0;
+            public bool HasMayBeSubscribedHandlers
+            {
+                get
+                {
+                    lock (_handlerGate)
+                        return _willStartMayBeSubscribed || _endedMayBeSubscribed || _cancelledMayBeSubscribed || _failedMayBeSubscribed;
+                }
+            }
 
             public void Subscribe()
             {
-                Document.CommandWillStart += WillStart;
-                Document.CommandEnded += Ended;
-                Document.CommandCancelled += Cancelled;
-                Document.CommandFailed += Failed;
+                lock (_handlerGate)
+                {
+                    if (_willStartMayBeSubscribed || _endedMayBeSubscribed || _cancelledMayBeSubscribed || _failedMayBeSubscribed)
+                        throw new InvalidOperationException("Diagnostic command subscription still owns unresolved native handlers; attach was not repeated.");
+                    try
+                    {
+                        _willStartMayBeSubscribed = true;
+                        Document.CommandWillStart += WillStart;
+                        _endedMayBeSubscribed = true;
+                        Document.CommandEnded += Ended;
+                        _cancelledMayBeSubscribed = true;
+                        Document.CommandCancelled += Cancelled;
+                        _failedMayBeSubscribed = true;
+                        Document.CommandFailed += Failed;
+                        Volatile.Write(ref _acceptCallbacks, 1);
+                    }
+                    catch
+                    {
+                        Volatile.Write(ref _acceptCallbacks, 0);
+                        throw;
+                    }
+                }
             }
 
-            public void Unsubscribe()
+            public bool DetachBestEffort()
             {
-                try { Document.CommandWillStart -= WillStart; } catch { }
-                try { Document.CommandEnded -= Ended; } catch { }
-                try { Document.CommandCancelled -= Cancelled; } catch { }
-                try { Document.CommandFailed -= Failed; } catch { }
+                Volatile.Write(ref _acceptCallbacks, 0);
+                lock (_handlerGate)
+                {
+                    var detached = true;
+                    if (_willStartMayBeSubscribed)
+                    {
+                        try { Document.CommandWillStart -= WillStart; _willStartMayBeSubscribed = false; }
+                        catch { detached = false; }
+                    }
+                    if (_endedMayBeSubscribed)
+                    {
+                        try { Document.CommandEnded -= Ended; _endedMayBeSubscribed = false; }
+                        catch { detached = false; }
+                    }
+                    if (_cancelledMayBeSubscribed)
+                    {
+                        try { Document.CommandCancelled -= Cancelled; _cancelledMayBeSubscribed = false; }
+                        catch { detached = false; }
+                    }
+                    if (_failedMayBeSubscribed)
+                    {
+                        try { Document.CommandFailed -= Failed; _failedMayBeSubscribed = false; }
+                        catch { detached = false; }
+                    }
+                    return detached && !(_willStartMayBeSubscribed || _endedMayBeSubscribed || _cancelledMayBeSubscribed || _failedMayBeSubscribed);
+                }
             }
         }
 
@@ -116,16 +172,27 @@ namespace QS3D.BricsCAD.V25
             DocumentSubscription[] subscriptions;
             lock (Gate)
             {
-                if (!_started) return;
+                if (!_started && Subscriptions.Count == 0) return;
                 _started = false;
                 timer = _pollTimer;
                 _pollTimer = null;
                 subscriptions = new List<DocumentSubscription>(Subscriptions.Values).ToArray();
-                Subscriptions.Clear();
             }
 
             try { if (timer != null) timer.Dispose(); } catch { }
-            foreach (var subscription in subscriptions) subscription.Unsubscribe();
+            foreach (var subscription in subscriptions)
+            {
+                var detached = subscription.DetachBestEffort();
+                lock (Gate)
+                {
+                    DocumentSubscription? current;
+                    if (detached && Subscriptions.TryGetValue(subscription.Document, out current)
+                        && ReferenceEquals(current, subscription))
+                        Subscriptions.Remove(subscription.Document);
+                }
+                if (!detached)
+                    Record("bricscad", "warning", "command-monitor-detach-pending", "Native command monitor detach remains unresolved; ownership was retained for retry.", subscription.Document);
+            }
             try { Application.DocumentManager.DocumentBecameCurrent -= OnDocumentBecameCurrent; } catch { }
             try { AppDomain.CurrentDomain.UnhandledException -= OnUnhandledException; } catch { }
             try { TaskScheduler.UnobservedTaskException -= OnUnobservedTaskException; } catch { }
@@ -321,18 +388,48 @@ namespace QS3D.BricsCAD.V25
         private static void Attach(Document? document)
         {
             if (document == null) return;
+            DocumentSubscription subscription;
             lock (Gate)
             {
-                if (!_started || Subscriptions.ContainsKey(document)) return;
-                var subscription = new DocumentSubscription(document);
-                subscription.Subscribe();
+                if (!_started) return;
+                DocumentSubscription? existing;
+                if (Subscriptions.TryGetValue(document, out existing))
+                {
+                    if (existing.AcceptCallbacks) return;
+                    if (!existing.DetachBestEffort())
+                        throw new InvalidOperationException("Previous diagnostic command subscription cleanup remains unresolved; attach was not repeated.");
+                    Subscriptions.Remove(document);
+                }
+
+                subscription = new DocumentSubscription(document);
                 Subscriptions.Add(document, subscription);
+                try
+                {
+                    subscription.Subscribe();
+                }
+                catch
+                {
+                    if (subscription.DetachBestEffort())
+                    {
+                        DocumentSubscription? current;
+                        if (Subscriptions.TryGetValue(document, out current) && ReferenceEquals(current, subscription))
+                            Subscriptions.Remove(document);
+                    }
+                    throw;
+                }
             }
             Record("bricscad", "info", "command-monitor-attached", "Command lifecycle monitor attached.", document);
         }
 
-        private static void OnCommand(Document document, string phase, CommandEventArgs? args, bool important)
+        private static void OnCommand(DocumentSubscription subscription, string phase, CommandEventArgs? args, bool important)
         {
+            if (!subscription.AcceptCallbacks) return;
+            var document = subscription.Document;
+            lock (Gate)
+            {
+                DocumentSubscription? current;
+                if (!_started || !Subscriptions.TryGetValue(document, out current) || !ReferenceEquals(current, subscription)) return;
+            }
             var command = (args == null ? string.Empty : args.GlobalCommandName) ?? string.Empty;
             command = command.Trim();
             var isQs3d = command.StartsWith("QS3D", StringComparison.OrdinalIgnoreCase);
