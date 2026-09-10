@@ -26,6 +26,7 @@ namespace QS3D.Core.SmokeTests
             CustomerTraceReaderRejectsTamperedTraceIdentity();
             CustomerWorkbookRejectsMalformedProvenance();
             CustomerWorkbookRejectsOversizedTraceCell();
+            CustomerWorkbookBoundedPublicationSmoke.Run();
         }
 
         private static void CustomerWorkbookRoundTripsDetailAndAggregateTrace()
