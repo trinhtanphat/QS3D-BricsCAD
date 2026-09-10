@@ -597,7 +597,11 @@ namespace QS3D.BricsCAD.V25
                         if (written++ > 0) builder.Append(',');
                         builder.Append(DescribeEntity(entity, false, false));
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        Audit("cad_selection", "entity-read-failed; type=" + ex.GetType().Name);
+                        throw new InvalidOperationException("CAD selection could not be read consistently.", ex);
+                    }
                 }
             }
             return builder.Append(']').ToString();
@@ -618,7 +622,11 @@ namespace QS3D.BricsCAD.V25
                     if (id.IsNull) continue;
                     Entity? entity;
                     try { entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity; }
-                    catch { continue; }
+                    catch (Exception ex)
+                    {
+                        Audit("cad_database_snapshot", "entity-read-failed; type=" + ex.GetType().Name);
+                        throw new InvalidOperationException("CAD database snapshot could not be read consistently.", ex);
+                    }
                     if (entity == null) continue;
                     if (count >= limit) { more = true; break; }
                     if (count++ > 0) builder.Append(',');
@@ -778,10 +786,10 @@ namespace QS3D.BricsCAD.V25
             {
                 if (TrySendEscapeFallback())
                 {
-                    Audit("cad_agent_stop", "foreground ESC fallback after cad-context failure");
-                    return "{\"stopped\":true,\"escapeCount\":2,\"delivery\":\"foreground-fallback\",\"cadContextError\":\"" + Escape(ex.Message) + "\"}";
+                    Audit("cad_agent_stop", "foreground ESC fallback after cad-context failure; type=" + ex.GetType().Name);
+                    return "{\"stopped\":true,\"escapeCount\":2,\"delivery\":\"foreground-fallback\",\"cadContextError\":\"cad-context-unavailable\"}";
                 }
-                throw new InvalidOperationException("Automation stopped, but ESC delivery failed: " + ex.Message, ex);
+                throw new InvalidOperationException("Automation stopped, but ESC delivery could not be confirmed.", ex);
             }
         }
 
@@ -810,10 +818,10 @@ namespace QS3D.BricsCAD.V25
             {
                 if (TrySendEscapeFallback())
                 {
-                    Audit("cad_cancel_command", "escapeCount=2; delivery=foreground-fallback");
-                    return "{\"accepted\":true,\"escapeCount\":2,\"delivery\":\"foreground-fallback\",\"cadContextError\":\"" + Escape(ex.Message) + "\"}";
+                    Audit("cad_cancel_command", "escapeCount=2; delivery=foreground-fallback; type=" + ex.GetType().Name);
+                    return "{\"accepted\":true,\"escapeCount\":2,\"delivery\":\"foreground-fallback\",\"cadContextError\":\"cad-context-unavailable\"}";
                 }
-                throw;
+                throw new InvalidOperationException("CAD command cancellation could not be delivered.", ex);
             }
         }
 

@@ -13,7 +13,7 @@ function Read-UiMethod([string]$Name) {
 $quitMethod = Read-UiMethod 'QueueOwnedQuit'
 $contextMethod = Read-UiMethod 'RequireUiContextStable'
 $cleanupMethod = Read-UiMethod 'RequireUiCleanupContext'
-$pathMethods = [regex]::Matches($baseSource, '(?m)^        private static bool (?:SamePath|IsChildPath)\([^\r\n]+$')
+$pathMethods = [regex]::Matches($baseSource, '(?m)^        private static bool (?:SamePath|IsChildPath)\([^\r\n]+\r?$')
 if ($pathMethods.Count -ne 2) { throw 'Missing exact path guard helpers.' }
 $pathSource = ($pathMethods | ForEach-Object Value) -join "`n"
 $typeName = 'Local022QuitReplay_' + [Guid]::NewGuid().ToString('N')

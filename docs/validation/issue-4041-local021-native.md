@@ -111,3 +111,102 @@ top-level geometry, exact formwork/aggregate-detail parity, highlight, export an
 full save/reopen acceptance under #4041. Keep #4041 open and its evidence PR draft
 while this acceptance remains incomplete. Do not close parent #72/#4034 or infer
 MCP completion from these results.
+# 2026-09-09 continued Quantity Insight observation
+
+The earlier evidence PR #6238 merged at
+`51f5b60e85cd6c422660f94b665648f518518abb`; its implementation reservation was
+released, not the incomplete licensed acceptance. Historical keep-draft wording
+below describes that earlier checkpoint, not the current PR state. The sole
+continued carrier is #4041 / PR #6280,
+`agent/local021-review-20260909-a7810f3c/issue-4041-raft-quantity`.
+It publishes `run-quantity-observation.ps1` and its host-free guard tests without
+machine-specific paths or private fixture payloads.
+
+## Consumed quantity-ui-06: NOT QUALIFIED, blank presentation
+
+- Exact product source: `af6c585190efb80581e286add7027540e7cc7c52`, local unsigned
+  post-merge package, **not published-release qualification**.
+- Executed clean pushed harness: `7480328802a458e70f1842cb9cf48a5518daea56`.
+- Run ID: `b9056b5190ee4a07b7adf2f4eac9b8f5`; V25.2.10 x64; fresh Default clone.
+- Adapter SHA-256: `48f8ceb4c0456451b34c0b798f0ac255d0a9dd944711fc6751235e7f9c440c93`.
+- Core SHA-256: `90e9d9dfc1a2fc80d64400401fdcbf454cecd2d53d71cac96b73a5391411f383`.
+- Runner SHA-256: `20f31fc2c90711cbdfd22053384278d1d77b0d0fe3d87a175b8101f6ea960958`.
+- Started `2026-09-09T07:04:57.6749653Z`; ended
+  `2026-09-09T07:09:44.3898553Z` (under five minutes).
+
+Actual runtime identity/baseline was verified and the native raft wireframe
+was visible. Quantity Insight opened but its body remained blank after ordinary
+maximize and float actions. The host responded to Escape and native commands.
+Calling production `QS3D` displayed blank Workspace/Right interiors as well.
+Production `QS3DBQ` opened its actual modeless window, but its raster stayed
+white and supported accessibility returned null. No quantities, exact faces,
+highlight, schema, top-level placement or export were qualified in this run.
+
+There is a useful but non-isolating control: LOCAL022 allocation67 used the same
+frozen product and Default-profile clone and visibly rendered BQ, including its
+fresh-process cold result. It differed in drawing, loaded test observer and
+startup sequence. This does **not** identify a source/GPU/driver/capture cause.
+Do not rerun consumed06 unchanged or convert the other fixture's BQ PASS into
+raft/Quantity Insight evidence.
+
+The operator ended observation early. Final receipt is
+`OBSERVATION_FINISHED_NOT_AGGREGATE_PASS`, with aggregate false and process exit
+code zero for the observation runner, **not product PASS**. Owned-host forced
+close fallback was required; graceful exit is false. Profile inventory/current
+pointer, nonce removal, original autostart, installed payload/registration and
+original fixture preservation were verified. Independent final process inspection
+found zero BricsCAD hosts. Private copied fixture/receipts remain local.
+
+Before this allocation, the new wrapper rejected concatenated fixture-path input
+before allocating any host/profile/preferences. Parenthesized path expressions
+and a replay of the exact AST expression fixed that harness-only error; focused
+tests passed before the clean pushed execution above. It was not a product
+failure or a consumed host allocation.
+
+## Consumed quantity-ui-07: startup mode isolated; visual qualification still fails
+
+This fresh allocation changed only native startup window mode from `Hidden` to
+`Maximized`. Product/input hashes, Default-profile clone, startup script and
+runtime checks match allocation06 above. It did not install or patch QS3D,
+change rendering policy or test MCP/tunnels. The published runner keeps Hidden
+as the default, allows only these two explicit modes, and records the choice.
+
+- Clean pushed executed harness: `9daaa032af3ac8eb3cb6f68c734bfb55e897f0eb`.
+- Run ID: `f9721f5cd0ae489e81ce0a3087fc790e`; licensed V25.2.10 x64.
+- Runner SHA-256: `2fcae156452c710664b0b39a9b27349544c5a6ffd45c5d63dcb47633b4bc89ec`.
+- Product source: `af6c585190efb80581e286add7027540e7cc7c52`; same adapter/Core
+  hashes as06, not a published release.
+- Input DWG SHA-256: `8c4f38bc72927527bcd49504300bde31c0c06db44e7c3f5c1a73c153a2bc4ebd`.
+- Input QSDB SHA-256: `d4e719b46bc5c63faa00b10694ff06bd1d8e985215f38d3b2a311c50bf4fa884`.
+- Started `2026-09-09T07:21:42.0145148Z`; ended
+  `2026-09-09T07:26:10.6018902Z` (about four and a half minutes).
+
+The native raft wireframe was visible and the exact runtime baseline passed.
+Quantity Insight stayed grey blank; actual production `QS3DBQ` opened a white
+modeless window. Initial maximized startup alone therefore did not resolve the
+observed blank surfaces. No GPU/driver/capture/source cause is inferred.
+
+Supported Computer Use accessibility exposed the real BQ controls and one
+summary row: count1, gross19.2, deduction0, net19.2m3, formwork16m2. A real
+`Tinh lai` click was followed by fresh row identities and unchanged values.
+A real `Dien giai chi tiet` radio click changed the mode hint and name header
+and yielded one detail row with the same values. These are bounded live
+data/control observations only: the raster remained white. After a row-click
+attempt, selection/explanation postconditions were not confirmed; Locate was
+not invoked. No visible quantity, face/highlight, export, read-only project
+digest, cold BQ, complete formwork matrix or aggregate PASS is claimed.
+
+The BQ was closed, followed by native host close and an observed `No` on the
+test-copy SaveChanges dialog. Terminal receipt is
+`OBSERVATION_FINISHED_NOT_AGGREGATE_PASS`, aggregate false, graceful exit true,
+forced fallback false. Profile inventory/current pointer, nonce removal,
+original autostart bytes/time, protected installed payload/registration and
+original fixture preservation all passed. Independent final host count was0.
+Private copied fixture and raw receipts remain local, not deleted or committed.
+
+Source diagnosis is returned to
+[#6285](https://github.com/trinhtanphat/QS3D-BricsCAD/issues/6285), without a new
+source reservation or an unsupported workaround. Preserve accepted LOCAL02267
+visible warm/cold BQ evidence and the consumed05/06/07 boundaries separately.
+Do not rerun07 unchanged while waiting for a meaningful corrected candidate or
+newly justified diagnostic. #4041 and parent #72/#4034 remain incomplete.

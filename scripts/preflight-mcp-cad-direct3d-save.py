@@ -51,6 +51,7 @@ def main():
     direct_qsave_block = method_block(direct, "private static string SaveCadCommandSequence")
     extrude_block = method_block(direct, "private static string Extrude")
     boolean_block = method_block(direct, "private static string Boolean")
+    open_entity_block = method_block(direct, "private static Entity OpenEntity")
     direct_save_block = method_block(direct, "private static string Save()")
     direct_save_as_block = method_block(direct, "private static string SaveAs")
     queue_start = native_save.find("internal void QueueInCadContext()")
@@ -73,36 +74,42 @@ def main():
     require(errors, qsave_json, ('Save();', '"completed":true', '"saved":true', '"command":"QSAVE"'), "bounded QSAVE wrapper")
 
     require(errors, extrude_block, (
-        'OpenEntity(transaction, document.Database, handle, OpenMode.ForRead) as Curve',
+        'source.Closed', 'source.IsPlanar', 'source.Area',
         'Region.CreateFromCurves(new DBObjectCollection { source })',
         'model.AppendEntity(region);',
         'transaction.AddNewlyCreatedDBObject(region, true);',
         'solid.Extrude(region, height, 0d);',
-        'if (!region.IsErased) region.Erase();',
+        'cad_extrude validation failed',
+        'source curve was preserved',
         'kernelSource=database-resident-region',
-    ), "V25 database-resident Region direct curve extrusion")
+        'if (!region.IsErased) region.Erase();',
+    ), "V25 validated database-resident Region direct curve extrusion")
     forbid(errors, extrude_block, (
-        'var profileClone = source.Clone() as Curve;',
+        'source.Clone() as Curve',
         'Region.CreateFromCurves(new DBObjectCollection { profileClone })',
-        'solid.CreateExtrudedSolid(profileClone',
+        'solid.CreateExtrudedSolid(',
         'kernelSource=transient-region',
         'kernelSource=database-resident-profile-clone',
-    ), "direct extrusion live regression")
+    ), "direct extrusion detached/transient kernel regression")
 
     require(errors, boolean_block, (
+        'ExtentsOverlap(targetExtents, operandExtents)',
+        '\"reason\\\":\\\"no-intersection',
         'target.BooleanOperation(operation, operand);',
         'if (!operand.IsErased) operand.Erase();',
+        'transaction rollback preserves both sources',
         'kernelTarget=database-resident; kernelOperand=database-resident',
-    ), "V25 direct boolean resident target/resident operand")
+    ), "V25 direct boolean validated resident target/tool kernel")
     forbid(errors, boolean_block, (
-        'var operandClone = operand.Clone() as Solid3d;',
-        'target.BooleanOperation(operation, operandClone);',
-        'model.AppendEntity(targetWorking);',
-        'model.AppendEntity(operandWorking);',
-        'target.HandOverTo(resultClone',
-        'kernelOperand=transient-clone',
-        'kernelInputs=database-resident-working-clones',
-    ), "direct boolean live regression")
+        'target.Clone() as Solid3d',
+        'operand.Clone() as Solid3d',
+        'targetWorking.BooleanOperation(operation, operandWorking);',
+        'target.CopyFrom(targetWorking);',
+        'kernelInputs=detached-clones',
+    ), "direct boolean detached-clone regression")
+    require(errors, open_entity_block, (
+        'entity.Database == null', '!ReferenceEquals(entity.Database, database)',
+        'different drawing database'), "direct entity database ownership")
     kernel_at = boolean_block.find('target.BooleanOperation(operation, operand);')
     erase_at = boolean_block.find('if (!operand.IsErased) operand.Erase();')
     if kernel_at < 0 or erase_at < 0 or kernel_at > erase_at:
@@ -138,7 +145,7 @@ def main():
         print("ERROR: MCP CAD direct 3D/save preflight failed:")
         for error in errors: print(" -", error)
         return 1
-    print("PASS: MCP direct 3D/save uses database-resident V25 kernel inputs and event-owned native QSAVE terminal completion.")
+    print("PASS: MCP direct 3D/save uses validated database-resident V25 geometry kernels and event-owned native QSAVE terminal completion.")
     return 0
 
 

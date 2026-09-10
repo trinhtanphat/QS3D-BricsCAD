@@ -34,7 +34,7 @@ namespace QS3D.Core.SmokeTests
             }
 
             ThrowsInvalidOperation(() => new BulkEditService().SetProperty(project, Targets(), "Note", "edited"));
-            Equal(beforeVersion, project.ChangeVersion, "rejected ID property edit revision");
+            Equal(checked(beforeVersion + 1L), project.ChangeVersion, "rejected ID property edit revision");
             Equal("replacement", project.FindElement("B1")!.Properties["Note"], "replacement property after rejection");
             Equal("original", original.Properties["Note"], "detached original property after rejection");
         }
@@ -52,7 +52,7 @@ namespace QS3D.Core.SmokeTests
             }
 
             ThrowsInvalidOperation(() => new BulkEditService().AssignFamily(project, Targets(), "F2"));
-            Equal(beforeVersion, project.ChangeVersion, "rejected ID Family assignment revision");
+            Equal(checked(beforeVersion + 1L), project.ChangeVersion, "rejected ID Family assignment revision");
             Equal("F1", project.FindElement("B1")!.FamilyId, "replacement Family after rejection");
             Equal("F1", original.FamilyId, "detached original Family after rejection");
         }

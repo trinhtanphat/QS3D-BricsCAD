@@ -97,7 +97,7 @@ namespace QS3D.Core.SmokeTests
             }
             catch (InvalidOperationException ex)
             {
-                const string expected = "Project element ownership changed while materializing Locate root element ids. Retry Locate against the current project state.";
+                const string expected = "Project state changed while materializing Locate root element ids. Retry Locate against the current project state.";
                 if (!string.Equals(ex.Message, expected, StringComparison.Ordinal))
                     throw new InvalidOperationException("Unexpected Locate structural freshness error.", ex);
                 return;

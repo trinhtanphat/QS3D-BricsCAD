@@ -51,10 +51,10 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining<InvalidOperationException>(
                 () => PhysicalOpeningCutTargetStateCodec.Resolve(project, host, YieldThenRemoveHost(project, host, opening.Id)),
-                "Project element structure changed while physical opening target ids were being enumerated; recompute the target set against the current project state.",
+                "Project changed while physical opening target ids were being enumerated; recompute the target set against the current project state.",
                 "host structural freshness");
 
-            Equal(beforeVersion, project.ChangeVersion, "host structural freshness project revision");
+            Equal(beforeVersion + 1L, project.ChangeVersion, "host structural freshness project revision");
             if (project.Elements.Contains(host))
                 throw new Exception("PhysicalOpeningGlobalElementIntegritySmoke expected the deliberate external host removal to remain visible.");
             Equal(beforeLinkedHost, opening.Properties["HostWallId"], "host structural freshness HostWallId");

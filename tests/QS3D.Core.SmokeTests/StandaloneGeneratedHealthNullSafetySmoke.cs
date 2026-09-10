@@ -11,7 +11,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             var project = new ProjectState("P-null-health", "Fail-visible standalone health");
-            project.Elements.Add(null!);
+            CorruptProjectStateSeed.AddNullElement(project);
 
             RequireFailVisible(() => new GeneratedFoundationMeshHealthService().Inspect(project), "foundation mesh health");
             RequireFailVisible(() => new GeneratedCurtainFrameHealthService().Inspect(project), "curtain frame health");

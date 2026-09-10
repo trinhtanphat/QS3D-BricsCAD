@@ -67,7 +67,16 @@ else:
             errors.append("palette dock capability missing: " + token)
 
     for token in (
-        "var ownerReferenceBimActive = workspaceVisible && rightVisible && !propertiesVisible && !quantityVisible;",
+        "var workspacePalette = _workspace;",
+        "var propertiesPalette = _properties;",
+        "var rightPalette = _right;",
+        "var quantityPalette = _quantityInsight;",
+        "var workspaceRead = TryReadPaletteVisibility(workspacePalette, out var workspaceVisible);",
+        "var propertiesRead = TryReadPaletteVisibility(propertiesPalette, out var propertiesVisible);",
+        "var rightRead = TryReadPaletteVisibility(rightPalette, out var rightVisible);",
+        "var quantityRead = TryReadPaletteVisibility(quantityPalette, out var quantityVisible);",
+        "workspaceRead && propertiesRead && rightRead && quantityRead &&",
+        "workspaceVisible && rightVisible && !propertiesVisible && !quantityVisible;",
         "_workspacePanel?.SetDedicatedPropertiesPaletteActive(propertiesVisible);",
         "if (ownerReferenceBimActive)",
         "EnsureBimDockContract();",
@@ -88,4 +97,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: default BIM shows the integrated two-column QS3D Workspace plus Drawing/Layer Management around native BricsCAD modelspace; dedicated Properties and Quantity remain optional isolated palettes, and visibility/docking restores deterministically.")
+print("PASS: default BIM shows the integrated two-column QS3D Workspace plus Drawing/Layer Management around native BricsCAD modelspace; dedicated Properties and Quantity remain optional isolated palettes, and visibility/docking restores deterministically through contained exact-instance visibility reads.")

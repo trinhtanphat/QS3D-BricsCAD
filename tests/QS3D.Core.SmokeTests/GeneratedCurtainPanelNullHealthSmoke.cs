@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 
@@ -54,8 +56,17 @@ namespace QS3D.Core.SmokeTests
         private static ProjectState ProjectWithNullElement(string suffix)
         {
             var project = new ProjectState("P-CURTAIN-PANEL-NULL-" + suffix, "Curtain panel null health");
-            project.Elements.Add(null!);
+            SeedCorruptNullElement(project);
             return project;
+        }
+
+        private static void SeedCorruptNullElement(ProjectState project)
+        {
+            var itemsField = project.Elements.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed corrupt Curtain Panel health project state.");
+            var items = itemsField.GetValue(project.Elements) as List<ProjectElement>
+                ?? throw new InvalidOperationException("Unexpected ProjectState.Elements backing collection.");
+            items.Add(null!);
         }
     }
 }
