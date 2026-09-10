@@ -44,8 +44,8 @@ def validate(source: str) -> None:
     )
     approval_index = should_process[0].start()
 
-    # The negative branch is deliberately simple and must terminate before *any* main-path
-    # payload or DemandLoad mutation. This keeps -WhatIf/-Confirm from falling through.
+    # The negative branch must be a direct terminal return; accepting a nested/unreachable
+    # return would let -WhatIf/-Confirm fall through to mutations.
     decline = re.search(
         r"if\s*\(\s*-not\s*\(\s*\$PSCmdlet\s*\.\s*ShouldProcess\s*\([^)]*\)\s*\)\s*\)\s*\{(?P<body>.*?)\}",
         transaction,
@@ -53,9 +53,18 @@ def validate(source: str) -> None:
     )
     require(decline is not None, "transaction approval must use an explicit negative/decline branch")
     require(
-        re.search(r"\breturn\b", decline.group("body"), flags=re.IGNORECASE) is not None,
-        "declined transaction must return before any installer mutation",
+        re.fullmatch(r"\s*return\s*", decline.group("body"), flags=re.IGNORECASE) is not None,
+        "declined transaction must directly return before any installer mutation",
     )
+
+    # Fail closed on any filesystem/registry mutation before the single admission decision,
+    # not just on the currently expected first mutation. This guards future refactors too.
+    preapproval = transaction[:approval_index]
+    premature_mutation = re.search(
+        r"(?im)^\s*(?:New-Item(?:Property)?|Set-ItemProperty|Remove-Item(?:Property)?|Move-Item|Copy-Item|Unblock-File)\b",
+        preapproval,
+    )
+    require(premature_mutation is None, "filesystem/registry mutation appears before transaction approval")
 
     mutation_patterns = (
         (r"New-Item\s+-ItemType\s+Directory\s+-Path\s+\$parent\b", "install-parent creation"),
@@ -138,6 +147,11 @@ unsafe_decline_block = approval_block.replace(decline_body, unsafe_decline_body,
 expect_rejected(
     "decline fall-through",
     source[:approval_abs_start] + unsafe_decline_block + source[approval_abs_end:],
+)
+
+expect_rejected(
+    "mutation before transaction approval",
+    source[:approval_abs_start] + "New-Item -Path 'unsafe' -Force\n" + source[approval_abs_start:],
 )
 
 without_approval = source[:approval_abs_start] + source[approval_abs_end:]
