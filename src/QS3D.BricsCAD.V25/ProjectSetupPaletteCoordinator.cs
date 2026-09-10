@@ -165,14 +165,27 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
+            bool isVisible;
             try
             {
-                if (!palette.Visible)
-                {
-                    RetryDocumentActivatedDetach();
-                    return;
-                }
+                // Native PaletteSet wrappers can become invalid before a retained callback is
+                // finally removed. A failed visibility read means cleanup-only, not UI mutation.
+                isVisible = palette.Visible;
+            }
+            catch (Exception)
+            {
+                RetryDocumentActivatedDetach();
+                return;
+            }
 
+            if (!isVisible)
+            {
+                RetryDocumentActivatedDetach();
+                return;
+            }
+
+            try
+            {
                 panel.RefreshFromDocument(e.Document ?? Application.DocumentManager.MdiActiveDocument);
             }
             catch (Exception)
