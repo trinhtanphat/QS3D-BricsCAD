@@ -201,20 +201,28 @@ try {
 
     $registryPlan = @()
     foreach ($target in @(Get-DemandLoadTargets -RequestedVersions $VersionKeys -RequestedLanguages $LanguageKeys)) {
-        if ($PSCmdlet.ShouldProcess("$($target.Version)/$($target.Language)", 'Remove QS3D DemandLoad registration')) {
-            $snapshot = Get-RegistryTreeSnapshot -Path $target.AppKey
-            if ($null -ne $snapshot) {
-                $registryPlan += [pscustomobject]@{
-                    Target = $target
-                    Snapshot = $snapshot
-                }
+        $snapshot = Get-RegistryTreeSnapshot -Path $target.AppKey
+        if ($null -ne $snapshot) {
+            $registryPlan += [pscustomobject]@{
+                Target = $target
+                Snapshot = $snapshot
             }
         }
     }
 
-    $stageFiles = $false
-    if (-not $KeepFiles -and -not [string]::IsNullOrWhiteSpace($installFull) -and (Test-Path -LiteralPath $installFull -PathType Container)) {
-        $stageFiles = $PSCmdlet.ShouldProcess($installFull, 'Remove QS3D installed files')
+    $stageFiles = (-not $KeepFiles -and
+        -not [string]::IsNullOrWhiteSpace($installFull) -and
+        (Test-Path -LiteralPath $installFull -PathType Container))
+
+    if ($registryPlan.Count -eq 0 -and -not $stageFiles) {
+        Write-Host 'No selected QS3D V25 DemandLoad registrations or installed payload require removal.'
+        return
+    }
+
+    $transactionTarget = if ($stageFiles) { $installFull } else { 'selected BricsCAD V25 DemandLoad registrations' }
+    $transactionAction = "Remove QS3D V25 transaction: DemandLoad targets=$($registryPlan.Count); remove installed files=$stageFiles"
+    if (-not ($PSCmdlet.ShouldProcess($transactionTarget, $transactionAction))) {
+        return
     }
 
     $quarantine = $null
