@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
@@ -37,7 +39,7 @@ namespace QS3D.Core.SmokeTests
             var element = new ProjectElement("E1", ElementCategory.Beam);
             element.Properties["GeneratedSolidHandle"] = "AA11";
             project.Elements.Add(element);
-            project.Elements.Add(null!);
+            SeedCorruptNullElement(project);
 
             Throws<InvalidOperationException>(() => GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project));
             Throws<InvalidOperationException>(() => GeneratedHandleOwnershipPolicy.TryFindOwner(project, "UNOWNED", out _, out _));
@@ -55,6 +57,15 @@ namespace QS3D.Core.SmokeTests
 
             Throws<InvalidOperationException>(() => GeneratedHandleOwnershipPolicy.CollectOwnerHandles(project));
             Throws<InvalidOperationException>(() => GeneratedHandleOwnershipPolicy.TryFindOwner(project, "UNOWNED", out _, out _));
+        }
+
+        private static void SeedCorruptNullElement(ProjectState project)
+        {
+            var itemsField = project.Elements.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed corrupt generated-handle ownership project state.");
+            var items = itemsField.GetValue(project.Elements) as List<ProjectElement>
+                ?? throw new InvalidOperationException("Unexpected ProjectState.Elements backing collection.");
+            items.Add(null!);
         }
 
         private static void Equal<T>(T expected, T actual)

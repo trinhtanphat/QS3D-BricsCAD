@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
@@ -18,7 +20,7 @@ namespace QS3D.Core.SmokeTests
         private static void NullElementFailsVisible()
         {
             var project = new ProjectState("health-rebar-mode-null", "Rebar mode null health");
-            project.Elements.Add(null!);
+            SeedCorruptNullElement(project);
 
             try
             {
@@ -51,6 +53,15 @@ namespace QS3D.Core.SmokeTests
                 issue.Severity == HealthSeverity.Warning &&
                 string.Equals(issue.ElementId, element.Id, StringComparison.Ordinal)))
                 throw new InvalidOperationException("Valid GeneratedRebarMode missing-mode warning behavior regressed.");
+        }
+
+        private static void SeedCorruptNullElement(ProjectState project)
+        {
+            var itemsField = project.Elements.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed corrupt generated-rebar-mode health project state.");
+            var items = itemsField.GetValue(project.Elements) as List<ProjectElement>
+                ?? throw new InvalidOperationException("Unexpected ProjectState.Elements backing collection.");
+            items.Add(null!);
         }
     }
 }

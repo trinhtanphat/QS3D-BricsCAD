@@ -33,7 +33,7 @@ namespace QS3D.Core.SmokeTests
             var replacement = EquivalentReplacement(original);
             project.Elements[0] = replacement;
 
-            Equal(originalVersion, project.ChangeVersion);
+            Equal(checked(originalVersion + 1L), project.ChangeVersion);
             if (ReferenceEquals(original, replacement)) throw new Exception("Expected a distinct replacement instance.");
             ThrowsInvalidOperation(
                 () => InvokeGuard(project, snapshot),

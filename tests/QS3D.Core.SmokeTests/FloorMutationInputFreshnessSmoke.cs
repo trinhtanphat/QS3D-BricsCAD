@@ -79,9 +79,9 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining<InvalidOperationException>(
                 () => ProjectFloorService.AssignBottomLevel(project, floor.Id, YieldThenRemoveElement(project, element)),
-                "Element no longer belongs to the project after Floor mutation target enumeration");
+                "Project changed while Floor mutation targets were being enumerated");
 
-            Equal(beforeVersion, project.ChangeVersion);
+            Equal(beforeVersion + 1L, project.ChangeVersion);
             False(project.Elements.Contains(element));
             False(element.Properties.ContainsKey(ProjectFloorService.BottomLevelIdKey));
             False(element.Properties.ContainsKey(ProjectFloorService.BottomLevelOffsetKey));
