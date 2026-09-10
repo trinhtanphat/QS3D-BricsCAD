@@ -17,11 +17,15 @@ def contract_errors(source: str) -> list[str]:
     reconciliation_marker = "if ($reconciledRelease.draft -eq $false)"
     exact_uri = '$releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$releaseId"'
     pre_get = "$authoritativeCommercialReleaseBeforeCompensation = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers"
+    pre_release_id_proof = "[long]$authoritativeCommercialReleaseBeforeCompensation.id -ne $releaseId"
+    pre_asset_id_proof = "[long]$preMatches[0].id -ne $expectedAssetId"
     unambiguous_state = "$authoritativeCommercialReleaseBeforeCompensation.draft -ne $true -and $authoritativeCommercialReleaseBeforeCompensation.draft -ne $false"
     already_draft = "$authoritativeCommercialReleaseBeforeCompensation.draft -eq $true"
     compensation_body = "$commercialCompensationBody = @{ draft = $true; prerelease = $true } | ConvertTo-Json"
     compensation_patch = "$commercialCompensatedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri"
     post_get = "$authoritativeCommercialReleaseAfterCompensation = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers"
+    post_release_id_proof = "[long]$authoritativeCommercialReleaseAfterCompensation.id -ne $releaseId"
+    post_asset_id_proof = "[long]$postMatches[0].id -ne $expectedAssetId"
     terminal = "V25 commercial publication safety invalidation was compensated to a non-public exact release"
 
     safety = source.find(safety_marker)
@@ -33,19 +37,23 @@ def contract_errors(source: str) -> list[str]:
     required = (
         (exact_uri, "immutable release-ID URI binding"),
         (pre_get, "authoritative pre-compensation GET"),
+        (pre_release_id_proof, "pre-compensation immutable release-ID proof"),
         ("$authoritativeCommercialReleaseBeforeCompensation.tag_name", "pre-compensation tag proof"),
         ("$authoritativeCommercialReleaseBeforeCompensation.target_commitish", "pre-compensation target proof"),
         ("$authoritativeCommercialReleaseBeforeCompensation.assets", "pre-compensation asset proof"),
         ("$verifiedAssetIds", "verified asset-ID baseline"),
+        (pre_asset_id_proof, "pre-compensation exact asset-ID proof"),
         (unambiguous_state, "explicit ambiguous draft-state rejection"),
         (already_draft, "already-draft no-mutation branch"),
         (compensation_body, "safe-state compensation payload"),
         (compensation_patch, "exact-release compensation PATCH"),
         (post_get, "authoritative post-compensation GET"),
+        (post_release_id_proof, "post-compensation immutable release-ID proof"),
         ("$authoritativeCommercialReleaseAfterCompensation.draft -ne $true", "non-public postcondition"),
         ("$authoritativeCommercialReleaseAfterCompensation.tag_name", "post-compensation tag proof"),
         ("$authoritativeCommercialReleaseAfterCompensation.target_commitish", "post-compensation target proof"),
         ("$authoritativeCommercialReleaseAfterCompensation.assets", "post-compensation asset proof"),
+        (post_asset_id_proof, "post-compensation exact asset-ID proof"),
         (terminal, "terminal compensated-safety failure"),
     )
     for token, label in required:
@@ -56,17 +64,21 @@ def contract_errors(source: str) -> list[str]:
         region.find(token)
         for token in (
             pre_get,
+            pre_release_id_proof,
+            pre_asset_id_proof,
             unambiguous_state,
             already_draft,
             compensation_body,
             compensation_patch,
             post_get,
+            post_release_id_proof,
+            post_asset_id_proof,
             terminal,
         )
     ]
     if min(indexes) >= 0 and indexes != sorted(indexes):
         errors.append(
-            "commercial compensation must GET/prove, reject ambiguous draft state, branch on already-draft, PATCH only then, GET/reconcile, then fail terminally"
+            "commercial compensation must GET/prove exact release+asset IDs, reject ambiguous draft state, branch on already-draft, PATCH only then, GET/reconcile exact IDs, then fail terminally"
         )
 
     conditional_patch = re.compile(
@@ -94,31 +106,52 @@ def contract_errors(source: str) -> list[str]:
     if pre >= 0 and patch >= 0:
         before_patch = region[pre:patch]
         for token, label in (
+            (pre_release_id_proof, "immutable release ID"),
             ("$authoritativeCommercialReleaseBeforeCompensation.tag_name", "tag"),
             ("$env:RELEASE_TAG", "expected tag"),
             ("$authoritativeCommercialReleaseBeforeCompensation.target_commitish", "target"),
             ("$env:GITHUB_SHA", "expected target"),
             ("$authoritativeCommercialReleaseBeforeCompensation.assets", "assets"),
             ("$verifiedAssetIds", "verified asset IDs"),
+            (pre_asset_id_proof, "exact remote asset IDs"),
             (unambiguous_state, "unambiguous draft state"),
         ):
             if token not in before_patch:
                 errors.append(f"pre-compensation {label} proof must precede mutation")
+
+    post = region.find(post_get)
+    terminal_index = region.find(terminal)
+    if post >= 0 and terminal_index >= 0:
+        after_patch = region[post:terminal_index]
+        for token, label in (
+            (post_release_id_proof, "immutable release ID"),
+            ("$authoritativeCommercialReleaseAfterCompensation.assets", "assets"),
+            ("$verifiedAssetIds", "verified asset IDs"),
+            (post_asset_id_proof, "exact remote asset IDs"),
+        ):
+            if token not in after_patch:
+                errors.append(f"post-compensation {label} proof must precede terminal failure")
     return errors
 
 
 def self_test() -> list[str]:
     exact_uri = '$releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$releaseId"'
+    pre_release_id_proof = "[long]$authoritativeCommercialReleaseBeforeCompensation.id -ne $releaseId"
+    pre_asset_id_proof = "[long]$preMatches[0].id -ne $expectedAssetId"
+    post_release_id_proof = "[long]$authoritativeCommercialReleaseAfterCompensation.id -ne $releaseId"
+    post_asset_id_proof = "[long]$postMatches[0].id -ne $expectedAssetId"
     unambiguous_state = "$authoritativeCommercialReleaseBeforeCompensation.draft -ne $true -and $authoritativeCommercialReleaseBeforeCompensation.draft -ne $false"
     safe = "\n".join([
         exact_uri,
         "$publicationSafetyKnownInvalid = $true",
         "if ($reconciledRelease.draft -eq $false) {",
         "  $authoritativeCommercialReleaseBeforeCompensation = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers",
+        f"  if ({pre_release_id_proof}) {{ throw 'release-id' }}",
         "  if (-not [string]::Equals([string]$authoritativeCommercialReleaseBeforeCompensation.tag_name, $env:RELEASE_TAG, [StringComparison]::Ordinal)) { throw 'tag' }",
         "  if (-not [string]::Equals([string]$authoritativeCommercialReleaseBeforeCompensation.target_commitish, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase)) { throw 'target' }",
         "  $preAssets = @($authoritativeCommercialReleaseBeforeCompensation.assets)",
         "  if ($preAssets.Count -ne $verifiedAssetIds.Count) { throw 'assets' }",
+        f"  if ({pre_asset_id_proof}) {{ throw 'asset-id' }}",
         f"  if ({unambiguous_state}) {{ throw 'state' }}",
         "  if ($authoritativeCommercialReleaseBeforeCompensation.draft -eq $true) {",
         "    Write-Host 'already safe'",
@@ -127,11 +160,13 @@ def self_test() -> list[str]:
         "    $commercialCompensatedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -Body $commercialCompensationBody",
         "  }",
         "  $authoritativeCommercialReleaseAfterCompensation = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers",
+        f"  if ({post_release_id_proof}) {{ throw 'release-id2' }}",
         "  if ($authoritativeCommercialReleaseAfterCompensation.draft -ne $true) { throw 'public' }",
         "  if ($authoritativeCommercialReleaseAfterCompensation.tag_name -ne $env:RELEASE_TAG) { throw 'tag2' }",
         "  if ($authoritativeCommercialReleaseAfterCompensation.target_commitish -ne $env:GITHUB_SHA) { throw 'target2' }",
         "  $postAssets = @($authoritativeCommercialReleaseAfterCompensation.assets)",
         "  if ($postAssets.Count -ne $verifiedAssetIds.Count) { throw 'assets2' }",
+        f"  if ({post_asset_id_proof}) {{ throw 'asset-id2' }}",
         "  throw 'V25 commercial publication safety invalidation was compensated to a non-public exact release'",
         "}",
     ])
@@ -141,7 +176,11 @@ def self_test() -> list[str]:
     mutations = {
         "unconditional patch": safe.replace("  } else {\n    $commercialCompensationBody", "  }\n  $commercialCompensationBody", 1),
         "drop pre GET": safe.replace("$authoritativeCommercialReleaseBeforeCompensation = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers", "$authoritativeCommercialReleaseBeforeCompensation = $reconciledRelease", 1),
+        "drop pre release ID proof": safe.replace(f"  if ({pre_release_id_proof}) {{ throw 'release-id' }}\n", "", 1),
+        "drop pre asset ID proof": safe.replace(f"  if ({pre_asset_id_proof}) {{ throw 'asset-id' }}\n", "", 1),
         "drop post GET": safe.replace("$authoritativeCommercialReleaseAfterCompensation = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers", "$authoritativeCommercialReleaseAfterCompensation = $commercialCompensatedRelease", 1),
+        "drop post release ID proof": safe.replace(f"  if ({post_release_id_proof}) {{ throw 'release-id2' }}\n", "", 1),
+        "drop post asset ID proof": safe.replace(f"  if ({post_asset_id_proof}) {{ throw 'asset-id2' }}\n", "", 1),
         "drop ambiguous state rejection": safe.replace(f"  if ({unambiguous_state}) {{ throw 'state' }}\n", "", 1),
         "delete instead": safe.replace("$commercialCompensatedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri", "$commercialCompensatedRelease = Invoke-RestMethod -Method Delete -Uri $releaseUri", 1),
     }
