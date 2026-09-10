@@ -60,14 +60,25 @@ if direct:
         if "WaitForSavedContentDbmod();" in save_as:
             errors.append("synchronous SaveAs must not treat a blind DBMOD poll as terminal completion")
     else:
+        save_as_start = direct.find("private static string SaveAs")
+        save_as_end = direct.find("private static bool TryParseDirectLayoutCommand", save_as_start)
+        save_as = direct[save_as_start:save_as_end] if save_as_start >= 0 and save_as_end > save_as_start else ""
+        for token in (
+            "McpNativeCurrentDocumentSave.SaveCurrentDocument(",
+            "dbmodAfterSave",
+            "document,",
+            "fullPath,",
+        ):
+            require(save_as, token, "event-owned SaveAs completion bound to captured document/path")
         for token in (
             "private const int DbmodPersistentContentMask = 1 | 4 | 32;",
-            "private static int WaitForSavedContentDbmod()",
+            "WaitForCleanDbmod",
             "(dbmod & DbmodPersistentContentMask) == 0",
-            "window/view DBMOD bits may remain after save",
+            "EnsureSameActiveDocumentAndPath",
+            'Application.GetSystemVariable("DBMOD")',
         ):
-            require(direct, token, "legacy content-aware SaveAs DBMOD confirmation")
-        if "dbmod == 0" in direct:
+            require(native_save, token, "event-owned SaveAs persistent DBMOD confirmation")
+        if "dbmod == 0" in native_save:
             errors.append("save completion must not require the entire DBMOD bitmask to become zero")
 
     for token in (

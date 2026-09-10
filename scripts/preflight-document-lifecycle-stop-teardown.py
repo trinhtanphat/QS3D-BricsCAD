@@ -14,7 +14,9 @@ else:
     end = text.find("private static void OnDocumentCreated", start + 1)
     stop = text[start:end] if start >= 0 and end > start else ""
     required = (
-        "if (!_started) return;",
+        "if (!_started)",
+        "RetryPendingProjectPersistenceDetaches();",
+        "return;",
         "_started = false;",
         "var docs = Application.DocumentManager;",
         "try { docs.DocumentCreated -= OnDocumentCreated; } catch { }",
@@ -22,7 +24,8 @@ else:
         "try { docs.DocumentToBeDestroyed -= OnDocumentToBeDestroyed; } catch { }",
         "try { docs.DocumentDestroyed -= OnDocumentDestroyed; } catch { }",
         "StopPendingLifecycleWork();",
-        "DetachProjectPersistence(document);",
+        "foreach (var document in ProjectPersistenceAttachmentTokens.Keys.ToArray()) DetachProjectPersistence(document);",
+        "RetryPendingProjectPersistenceDetaches();",
         "try { SourceReconcileUndoCoordinator.Stop(); }",
         "try { CurtainWallUndoCoordinator.Stop(); }",
         "try { SelectionSyncCoordinator.Stop(); }",

@@ -19,6 +19,16 @@ def function_block(text: str, name: str) -> str:
     return text[start:next_function]
 
 
+def mutate_function_marker(text: str, name: str, marker: str) -> str:
+    """Replace one marker only inside the named function, never an earlier duplicate elsewhere."""
+    block = function_block(text, name)
+    require(marker in block, f"Mutation probe could not find required marker in {name}: {marker}")
+    start = text.find(block)
+    require(start >= 0, f"Mutation probe could not locate lexical block for {name}.")
+    mutated_block = block.replace(marker, "__QS3D_MUTATION_REMOVED__", 1)
+    return text[:start] + mutated_block + text[start + len(block):]
+
+
 def validate(text: str) -> None:
     block = function_block(text, "Expand-VerifiedHeldArchive")
     require("[IO.File]::Open($ZipPath" in block, "Held archive extraction must open the admitted ZIP explicitly.")
@@ -103,6 +113,25 @@ def validate(text: str) -> None:
 text = UPDATER.read_text(encoding="utf-8")
 validate(text)
 
+# Regression for #6368: an unrelated earlier function may legitimately use the same
+# primitive. Mutation probes must still remove the marker from the archive function.
+duplicate_probe = "function EarlierUnrelatedHold {\n    $probe = '[IO.FileShare]::Read'\n}\n\n" + text
+scoped_probe = mutate_function_marker(
+    duplicate_probe,
+    "Expand-VerifiedHeldArchive",
+    "[IO.FileShare]::Read",
+)
+require(
+    "[IO.FileShare]::Read" in function_block(scoped_probe, "EarlierUnrelatedHold"),
+    "Function-scoped mutation must preserve an earlier unrelated duplicate marker.",
+)
+try:
+    validate(scoped_probe)
+except SystemExit:
+    pass
+else:
+    raise SystemExit("Function-scoped mutation regression probe failed to remove the target archive marker.")
+
 for marker in (
     "ComputeHash($zipStream)",
     "[IO.Compression.ZipArchive]::new($zipStream",
@@ -120,14 +149,13 @@ for marker in (
     "Ensure-SafeExtractionDirectory -Path $parent -BoundaryRoot $destinationFull",
     "Assert-ExistingExtractionPathChain -Path $parent -BoundaryRoot $destinationFull",
 ):
-    require(marker in text, f"Mutation probe could not find required marker: {marker}")
-    mutated = text.replace(marker, "__QS3D_MUTATION_REMOVED__", 1)
+    mutated = mutate_function_marker(text, "Expand-VerifiedHeldArchive", marker)
     try:
         validate(mutated)
     except (SystemExit, ValueError):
         pass
     else:
-        raise SystemExit(f"Mutation probe unexpectedly passed after removing: {marker}")
+        raise SystemExit(f"Mutation probe unexpectedly passed after removing from Expand-VerifiedHeldArchive: {marker}")
 
 for injected in (
     "\nExpand-Archive -LiteralPath $zipPath -DestinationPath $extractRoot -Force\n",
