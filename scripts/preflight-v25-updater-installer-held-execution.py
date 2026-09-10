@@ -108,15 +108,17 @@ def validate(source: str) -> None:
         )
     invoke = require(source, "& $installer @arguments", "installer invocation", package_admission)
     dispose = require(source, "$heldInstaller.Dispose()", "held installer disposal", invoke)
-    finally_index = source.rfind("finally", invoke, dispose + 1)
 
     if not (acquire < package_admission < invoke < dispose):
         raise SystemExit(
             "ERROR: V25 updater installer-hold preflight: require acquire < final package admission < invoke < dispose"
         )
-    if finally_index < invoke:
+
+    after_invoke = source[invoke:dispose]
+    finally_match = re.search(r"(?mi)^\s*finally\s*\{", after_invoke)
+    if finally_match is None:
         raise SystemExit(
-            "ERROR: V25 updater installer-hold preflight: held installer disposal must occur in a finally region after invocation"
+            "ERROR: V25 updater installer-hold preflight: held installer disposal must be inside an actual finally block after invocation"
         )
 
     held_interval = source[acquire:dispose]
@@ -254,6 +256,22 @@ Assert-PackageRoot -Directory $extractRoot
             1,
         ),
         "hold disposed before invocation",
+    )
+    expect_reject(
+        valid.replace(
+            "}\nfinally {\n  $heldInstaller.Dispose()",
+            "  # finally {\n  $heldInstaller.Dispose()",
+            1,
+        ),
+        "comment-only finally token before disposal",
+    )
+    expect_reject(
+        valid.replace(
+            "}\nfinally {\n  $heldInstaller.Dispose()",
+            "  Write-Host 'finally {'\n  $heldInstaller.Dispose()",
+            1,
+        ),
+        "string-only finally token before disposal",
     )
 
 
