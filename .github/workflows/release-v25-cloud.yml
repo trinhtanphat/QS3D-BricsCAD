@@ -677,8 +677,43 @@ jobs:
           catch {
             $publicationError = $_
             try {
-              $compensationBody = @{ draft = $true; prerelease = $true } | ConvertTo-Json
-              $compensatedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body $compensationBody
+              $authoritativeReleaseBeforeCompensation = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
+              if ($authoritativeReleaseBeforeCompensation.prerelease -ne $true) {
+                throw 'Pre-compensation V25 release lost prerelease state; refusing to mutate an unproven release.'
+              }
+              if (-not [string]::Equals(([string]$authoritativeReleaseBeforeCompensation.tag_name).Trim(), $env:RELEASE_TAG, [StringComparison]::Ordinal)) {
+                throw 'Pre-compensation V25 release tag identity changed; refusing to mutate an unproven release.'
+              }
+              if (-not [string]::Equals(([string]$authoritativeReleaseBeforeCompensation.target_commitish).Trim(), $env:RELEASE_COMMIT_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+                throw 'Pre-compensation V25 release target identity changed; refusing to mutate an unproven release.'
+              }
+              if (@($authoritativeReleaseBeforeCompensation.assets).Count -ne $assetSpecs.Count) {
+                throw "Pre-compensation V25 release asset set changed. Expected exactly $($assetSpecs.Count) assets, found $(@($authoritativeReleaseBeforeCompensation.assets).Count); refusing mutation."
+              }
+              $releaseBeforeCompensationAssetIds = @()
+              foreach ($spec in $assetSpecs) {
+                $preCompensationMatches = @($authoritativeReleaseBeforeCompensation.assets | Where-Object { [string]::Equals([string]$_.name, $spec.Name, [StringComparison]::Ordinal) })
+                if ($preCompensationMatches.Count -ne 1) {
+                  throw "Pre-compensation V25 release must contain exactly one asset named $($spec.Name), found $($preCompensationMatches.Count); refusing mutation."
+                }
+                if ([int64]$preCompensationMatches[0].size -ne $spec.Size) {
+                  throw "Pre-compensation V25 release asset size changed for $($spec.Name). Expected=$($spec.Size), API=$($preCompensationMatches[0].size); refusing mutation."
+                }
+                $releaseBeforeCompensationAssetIds += ([string]$preCompensationMatches[0].id)
+              }
+              $preCompensationAssetIdentityDrift = @(Compare-Object -ReferenceObject $verifiedReleaseAssetIds -DifferenceObject $releaseBeforeCompensationAssetIds -SyncWindow 0)
+              if ($preCompensationAssetIdentityDrift.Count -ne 0) {
+                throw 'Pre-compensation V25 release asset IDs changed after byte verification; refusing mutation.'
+              }
+
+              if ($authoritativeReleaseBeforeCompensation.draft -eq $true) {
+                Write-Host 'V25 release is already non-public at compensation time; no compensation mutation is required.'
+              }
+              else {
+                $compensationBody = @{ draft = $true; prerelease = $true } | ConvertTo-Json
+                $compensatedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body $compensationBody
+              }
+
               $authoritativeCompensatedRelease = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
               if ($authoritativeCompensatedRelease.draft -ne $true) {
                 throw 'Compensated V25 release is still public.'
@@ -715,5 +750,5 @@ jobs:
               $compensationError = $_
               throw "V25 release publication safety validation failed after publish PATCH and compensation could not prove the exact release non-public. publication=$($publicationError.Exception.Message) compensation=$($compensationError.Exception.Message)"
             }
-            throw "V25 release publication safety validation failed after publish PATCH; exact release was returned to draft and authoritatively reconciled. publication=$($publicationError.Exception.Message)"
+            throw "V25 release publication safety validation failed after publish PATCH; exact release was proven before mutation, returned to draft when required, and authoritatively reconciled. publication=$($publicationError.Exception.Message)"
           }
