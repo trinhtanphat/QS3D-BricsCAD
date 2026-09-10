@@ -12,7 +12,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             StableScheduleBuildsNormally();
-            EquivalentElementReplacementWithoutTouchFailsClosed();
+            EquivalentElementReplacementAdvancesProjectVersionAndFailsClosed();
         }
 
         private static void StableScheduleBuildsNormally()
@@ -23,7 +23,7 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("Door/opening source-instance fence smoke changed stable schedule output.");
         }
 
-        private static void EquivalentElementReplacementWithoutTouchFailsClosed()
+        private static void EquivalentElementReplacementAdvancesProjectVersionAndFailsClosed()
         {
             var project = BuildProject();
             var snapshot = Snapshot(project);
@@ -41,8 +41,8 @@ namespace QS3D.Core.SmokeTests
             typeof(ProjectElement).GetProperty("UpdatedUtc", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!
                 .SetValue(replacement, source.UpdatedUtc);
             project.Elements[0] = replacement;
-            if (project.ChangeVersion != version)
-                throw new InvalidOperationException("Equivalent Door/opening element replacement unexpectedly touched ProjectState.ChangeVersion.");
+            if (project.ChangeVersion != checked(version + 1L))
+                throw new InvalidOperationException("Equivalent Door/opening element replacement did not advance ProjectState.ChangeVersion exactly once.");
             ThrowsInvalidOperation(() => InvokeGuard(project, snapshot), "Project changed while the door/opening schedule was being built");
         }
 

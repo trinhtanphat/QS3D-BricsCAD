@@ -31,7 +31,7 @@ namespace QS3D.Core.SmokeTests
                     return false;
                 }));
 
-            Equal(beforeVersion, project.ChangeVersion, "removed-target false-predicate revision");
+            Equal(checked(beforeVersion + 1L), project.ChangeVersion, "removed-target false-predicate revision");
             Equal(1, project.Elements.Count, "removed-target false-predicate caller-side effect count");
             False(project.Elements.Contains(target), "removed-target false-predicate original target ownership");
         }
@@ -54,7 +54,7 @@ namespace QS3D.Core.SmokeTests
                     return true;
                 }));
 
-            Equal(beforeVersion, project.ChangeVersion, "replaced-target true-predicate revision");
+            Equal(checked(beforeVersion + 2L), project.ChangeVersion, "replaced-target true-predicate revision");
             Equal(2, project.Elements.Count, "replaced-target true-predicate caller-side effect count");
             False(project.Elements.Contains(target), "replaced-target true-predicate original target ownership");
             True(replacement != null && project.Elements.Contains(replacement), "replaced-target true-predicate replacement ownership");
@@ -74,7 +74,7 @@ namespace QS3D.Core.SmokeTests
                     return true;
                 }));
 
-            Equal(beforeVersion, project.ChangeVersion, "removed-unrelated revision");
+            Equal(checked(beforeVersion + 1L), project.ChangeVersion, "removed-unrelated revision");
             True(project.Elements.Contains(target), "removed-unrelated target ownership");
             False(project.Elements.Contains(unrelated), "removed-unrelated caller-side effect");
         }
@@ -99,7 +99,7 @@ namespace QS3D.Core.SmokeTests
             }
             catch (InvalidOperationException ex)
             {
-                const string expected = "Project element ownership changed while evaluating semantic untrack predicate. Retry against the current project state.";
+                const string expected = "Project state changed while evaluating semantic untrack predicate. Retry against the current project state.";
                 if (string.Equals(ex.Message, expected, StringComparison.Ordinal)) return;
                 throw new InvalidOperationException("Unexpected semantic untrack structural freshness error.", ex);
             }

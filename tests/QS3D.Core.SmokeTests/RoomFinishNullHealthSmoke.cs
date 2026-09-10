@@ -18,7 +18,7 @@ namespace QS3D.Core.SmokeTests
         private static void NullElementFailsVisible()
         {
             var project = new ProjectState("health-room-finish-null", "Room finish null health");
-            project.Elements.Add(null!);
+            CorruptProjectStateSeed.AddNullElement(project);
 
             try
             {

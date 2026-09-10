@@ -46,7 +46,8 @@ for token in [
 for token in [
     "[ModuleInitializer]",
     "StableGenerationRemainsAccepted",
-    "DirectElementReplacementIsRejectedWithoutProjectVersionHelp",
+    "DirectElementReplacementAdvancesProjectVersionAndIsRejected",
+    "Require(project.ChangeVersion == checked(version + 1L)",
     "InPlaceCurtainQuantityMutationIsRejected",
     "InPlaceFloorNameMutationIsRejected",
     "InPlaceFamilyNameMutationIsRejected",
