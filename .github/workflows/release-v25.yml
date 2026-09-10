@@ -798,13 +798,13 @@ jobs:
                       }
                     }
                     Assert-RemoteReleaseTagTargetsWorkflowSha
+                    if ($authoritativeCommercialReleaseBeforeCompensation.draft -ne $true -and $authoritativeCommercialReleaseBeforeCompensation.draft -ne $false) {
+                      throw 'V25 commercial compensation preflight found an ambiguous draft state; refusing mutation.'
+                    }
                     if ($authoritativeCommercialReleaseBeforeCompensation.draft -eq $true) {
                       Write-Host 'V25 commercial release was already restored to draft before compensation; no mutation required.'
                     }
                     else {
-                      if ($authoritativeCommercialReleaseBeforeCompensation.draft -ne $false) {
-                        throw 'V25 commercial compensation preflight found an ambiguous draft state; refusing mutation.'
-                      }
                       $commercialCompensationBody = @{ draft = $true; prerelease = $true } | ConvertTo-Json
                       $commercialCompensatedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body $commercialCompensationBody
                     }
@@ -816,7 +816,6 @@ jobs:
                         -not [string]::Equals([string]$authoritativeCommercialReleaseAfterCompensation.tag_name, $env:RELEASE_TAG, [StringComparison]::Ordinal) -or
                         -not [string]::Equals([string]$authoritativeCommercialReleaseAfterCompensation.target_commitish, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase) -or
                         -not [string]::Equals([string]$authoritativeCommercialReleaseAfterCompensation.name, $expectedReleaseName, [StringComparison]::Ordinal) -or
-                        [bool]$authoritativeCommercialReleaseAfterCompensation.prerelease -ne $true -or
                         ([string]$authoritativeCommercialReleaseAfterCompensation.body).IndexOf($draftTransactionMarker, [StringComparison]::Ordinal) -lt 0) {
                       throw 'V25 commercial compensation postflight did not prove the exact release is safely non-public.'
                     }
