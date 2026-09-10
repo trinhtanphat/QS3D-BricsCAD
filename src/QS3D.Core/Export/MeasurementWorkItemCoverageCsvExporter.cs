@@ -19,6 +19,7 @@ namespace QS3D.Core.Export
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Path is required.", nameof(path));
             if (matrix == null) throw new ArgumentNullException(nameof(matrix));
             ValidateSemanticIdentities(matrix);
+            ValidateStrictUtf8Payload(matrix);
 
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
@@ -185,6 +186,35 @@ namespace QS3D.Core.Export
                 for (var elementIndex = 0; elementIndex < cell.AffectedElementIds.Count; elementIndex++)
                     RequireLiteralCsvIdentity(cell.AffectedElementIds[elementIndex], "affected element id");
             }
+        }
+
+        private static void ValidateStrictUtf8Payload(MeasurementWorkItemCoverageMatrix matrix)
+        {
+            var provenance = matrix.Provenance;
+            if (provenance != null)
+            {
+                ValidateStrictUtf8(provenance.ProjectId);
+                ValidateStrictUtf8(provenance.DrawingFingerprint);
+            }
+
+            for (var i = 0; i < matrix.Cells.Count; i++)
+            {
+                var cell = matrix.Cells[i];
+                if (cell == null)
+                    throw new ArgumentException("Coverage matrix contains a null cell at index " + i + ".", nameof(matrix));
+
+                ValidateStrictUtf8(cell.MeasurementItemId);
+                ValidateStrictUtf8(cell.MappingId);
+                ValidateStrictUtf8(cell.ClassificationId);
+                ValidateStrictUtf8(cell.WorkItemId);
+                for (var elementIndex = 0; elementIndex < cell.AffectedElementIds.Count; elementIndex++)
+                    ValidateStrictUtf8(cell.AffectedElementIds[elementIndex]);
+            }
+        }
+
+        private static void ValidateStrictUtf8(string? value)
+        {
+            StrictUtf8WithBom.GetByteCount(value ?? string.Empty);
         }
 
         private static void RequireLiteralCsvIdentity(string? value, string label)
