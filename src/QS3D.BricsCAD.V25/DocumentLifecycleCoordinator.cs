@@ -13,9 +13,33 @@ namespace QS3D.BricsCAD.V25
 {
     internal static class DocumentLifecycleCoordinator
     {
+        private sealed class ProjectPersistenceSubscription
+        {
+            internal ProjectPersistenceSubscription(
+                Document document,
+                object token,
+                DatabaseIOEventHandler saveCompleteHandler,
+                DocumentBeginCloseEventHandler beginCloseHandler)
+            {
+                Document = document;
+                Token = token;
+                SaveCompleteHandler = saveCompleteHandler;
+                BeginCloseHandler = beginCloseHandler;
+            }
+
+            internal readonly Document Document;
+            internal readonly object Token;
+            internal readonly DatabaseIOEventHandler SaveCompleteHandler;
+            internal readonly DocumentBeginCloseEventHandler BeginCloseHandler;
+            internal bool MayHaveSaveComplete;
+            internal bool MayHaveBeginClose;
+            internal bool DetachRequested;
+            internal bool DetachInProgress;
+        }
+
         private static bool _started;
-        private static readonly Dictionary<Document, DatabaseIOEventHandler> SaveCompleteHandlers = new Dictionary<Document, DatabaseIOEventHandler>();
-        private static readonly Dictionary<Document, DocumentBeginCloseEventHandler> BeginCloseHandlers = new Dictionary<Document, DocumentBeginCloseEventHandler>();
+        private static readonly Dictionary<Document, object> ProjectPersistenceAttachmentTokens = new Dictionary<Document, object>();
+        private static readonly Dictionary<object, ProjectPersistenceSubscription> ProjectPersistenceSubscriptions = new Dictionary<object, ProjectPersistenceSubscription>();
         private static readonly Dictionary<Document, bool> PendingReconciliation = new Dictionary<Document, bool>();
         private static readonly Dictionary<Document, FailedProjectReconcile> FailedProjectReconciliations = new Dictionary<Document, FailedProjectReconcile>();
         private static DispatcherOperation? _lifecycleIdleOperation;
@@ -48,7 +72,8 @@ namespace QS3D.BricsCAD.V25
                 try { docs.DocumentToBeDestroyed -= OnDocumentToBeDestroyed; } catch { }
                 try { docs.DocumentDestroyed -= OnDocumentDestroyed; } catch { }
                 StopPendingLifecycleWork();
-                foreach (var document in SaveCompleteHandlers.Keys.ToArray()) DetachProjectPersistence(document);
+                foreach (var document in ProjectPersistenceAttachmentTokens.Keys.ToArray()) DetachProjectPersistence(document);
+                RetryPendingProjectPersistenceDetaches();
                 SourceReconcileUndoCoordinator.Stop();
                 CurtainWallUndoCoordinator.Stop();
                 SelectionSyncCoordinator.Stop();
@@ -59,7 +84,12 @@ namespace QS3D.BricsCAD.V25
 
         public static void Stop()
         {
-            if (!_started) return;
+            if (!_started)
+            {
+                RetryPendingProjectPersistenceDetaches();
+                return;
+            }
+
             _started = false;
             var docs = Application.DocumentManager;
             try { docs.DocumentCreated -= OnDocumentCreated; } catch { }
@@ -69,7 +99,8 @@ namespace QS3D.BricsCAD.V25
             StopPendingLifecycleWork();
             try
             {
-                foreach (var document in SaveCompleteHandlers.Keys.ToArray()) DetachProjectPersistence(document);
+                foreach (var document in ProjectPersistenceAttachmentTokens.Keys.ToArray()) DetachProjectPersistence(document);
+                RetryPendingProjectPersistenceDetaches();
             }
             catch
             {
@@ -139,6 +170,7 @@ namespace QS3D.BricsCAD.V25
 
         private static void OnDocumentDestroyed(object sender, DocumentDestroyedEventArgs e)
         {
+            RetryPendingProjectPersistenceDetaches();
             var docs = Application.DocumentManager;
             if (docs.Count == 0)
             {
@@ -217,6 +249,7 @@ namespace QS3D.BricsCAD.V25
             _lifecycleIdleOperation = null;
             if (!_started) return;
 
+            RetryPendingProjectPersistenceDetaches();
             var pending = PendingReconciliation.ToArray();
             PendingReconciliation.Clear();
             var resetForNoDocument = _pendingNoDocumentReset;
@@ -267,37 +300,134 @@ namespace QS3D.BricsCAD.V25
 
         private static void AttachProjectPersistence(Document? document)
         {
-            if (document == null || SaveCompleteHandlers.ContainsKey(document)) return;
-            DatabaseIOEventHandler saveComplete = (sender, args) => OnDrawingSaveComplete(document, args);
-            DocumentBeginCloseEventHandler beginClose = (sender, args) => OnBeginDocumentClose(document, args);
-            document.Database.SaveComplete += saveComplete;
-            try { document.BeginDocumentClose += beginClose; }
+            RetryPendingProjectPersistenceDetaches();
+            if (document == null || ProjectPersistenceAttachmentTokens.ContainsKey(document)) return;
+
+            var attachmentToken = new object();
+            DatabaseIOEventHandler saveComplete = (sender, args) => OnDrawingSaveComplete(document, attachmentToken, args);
+            DocumentBeginCloseEventHandler beginClose = (sender, args) => OnBeginDocumentClose(document, attachmentToken, args);
+            var subscription = new ProjectPersistenceSubscription(document, attachmentToken, saveComplete, beginClose);
+
+            try
+            {
+                ProjectPersistenceAttachmentTokens[document] = attachmentToken;
+                ProjectPersistenceSubscriptions[attachmentToken] = subscription;
+
+                // Native event add accessors may throw after partially registering the delegate.
+                // Publish conservative ownership first so rollback never forgets an exact generation.
+                subscription.MayHaveSaveComplete = true;
+                document.Database.SaveComplete += saveComplete;
+                subscription.MayHaveBeginClose = true;
+                document.BeginDocumentClose += beginClose;
+            }
             catch
             {
-                try { document.Database.SaveComplete -= saveComplete; }
-                catch { }
+                RevokeProjectPersistenceAttachment(document, attachmentToken);
+                RequestProjectPersistenceDetach(subscription);
                 throw;
             }
-            SaveCompleteHandlers[document] = saveComplete;
-            BeginCloseHandlers[document] = beginClose;
         }
 
         private static void DetachProjectPersistence(Document? document)
         {
-            if (document == null || !SaveCompleteHandlers.TryGetValue(document, out var saveComplete)) return;
-            try { document.Database.SaveComplete -= saveComplete; }
-            catch { }
-            if (BeginCloseHandlers.TryGetValue(document, out var beginClose))
-            {
-                try { document.BeginDocumentClose -= beginClose; }
-                catch { }
-            }
-            SaveCompleteHandlers.Remove(document);
-            BeginCloseHandlers.Remove(document);
+            RetryPendingProjectPersistenceDetaches();
+            if (document == null ||
+                !ProjectPersistenceAttachmentTokens.TryGetValue(document, out var attachmentToken)) return;
+
+            ProjectPersistenceSubscriptions.TryGetValue(attachmentToken, out var subscription);
+
+            // Revoke active sidecar/prompt authority before crossing either fallible native remove.
+            // The generation-keyed native record survives independently until both removals succeed.
+            RevokeProjectPersistenceAttachment(document, attachmentToken);
+            if (subscription != null)
+                RequestProjectPersistenceDetach(subscription);
         }
 
-        private static void OnDrawingSaveComplete(Document document, DatabaseIOEventArgs args)
+        private static void RevokeProjectPersistenceAttachment(Document document, object attachmentToken)
         {
+            if (!ProjectPersistenceAttachmentTokens.TryGetValue(document, out var currentToken) ||
+                !ReferenceEquals(currentToken, attachmentToken)) return;
+            ProjectPersistenceAttachmentTokens.Remove(document);
+        }
+
+        private static void RequestProjectPersistenceDetach(ProjectPersistenceSubscription subscription)
+        {
+            subscription.DetachRequested = true;
+            TryDetachProjectPersistenceSubscription(subscription);
+        }
+
+        private static void TryDetachProjectPersistenceSubscription(ProjectPersistenceSubscription subscription)
+        {
+            if (subscription.DetachInProgress) return;
+
+            subscription.DetachInProgress = true;
+            try
+            {
+                if (subscription.MayHaveSaveComplete)
+                {
+                    try
+                    {
+                        subscription.Document.Database.SaveComplete -= subscription.SaveCompleteHandler;
+                        subscription.MayHaveSaveComplete = false;
+                    }
+                    catch
+                    {
+                        // Native teardown can reject removal transiently. Retain exact ownership.
+                    }
+                }
+
+                if (subscription.MayHaveBeginClose)
+                {
+                    try
+                    {
+                        subscription.Document.BeginDocumentClose -= subscription.BeginCloseHandler;
+                        subscription.MayHaveBeginClose = false;
+                    }
+                    catch
+                    {
+                        // Keep this generation retryable independently from SaveComplete removal.
+                    }
+                }
+
+                if (!subscription.MayHaveSaveComplete && !subscription.MayHaveBeginClose &&
+                    ProjectPersistenceSubscriptions.TryGetValue(subscription.Token, out var current) &&
+                    ReferenceEquals(current, subscription))
+                {
+                    ProjectPersistenceSubscriptions.Remove(subscription.Token);
+                }
+            }
+            finally
+            {
+                subscription.DetachInProgress = false;
+            }
+        }
+
+        private static void RetryPendingProjectPersistenceDetaches()
+        {
+            foreach (var subscription in ProjectPersistenceSubscriptions.Values.Where(x => x.DetachRequested).ToArray())
+                TryDetachProjectPersistenceSubscription(subscription);
+        }
+
+        private static bool IsCurrentProjectPersistenceAttachment(Document document, object attachmentToken)
+        {
+            return ProjectPersistenceAttachmentTokens.TryGetValue(document, out var currentToken) &&
+                   ReferenceEquals(currentToken, attachmentToken);
+        }
+
+        private static void OnDrawingSaveComplete(Document document, object attachmentToken, DatabaseIOEventArgs args)
+        {
+            if (!ProjectPersistenceSubscriptions.TryGetValue(attachmentToken, out var subscription)) return;
+            if (subscription.DetachRequested)
+            {
+                TryDetachProjectPersistenceSubscription(subscription);
+                return;
+            }
+            if (!IsCurrentProjectPersistenceAttachment(document, attachmentToken))
+            {
+                RequestProjectPersistenceDetach(subscription);
+                return;
+            }
+
             try
             {
                 if (!IsNamedDrawing(document))
@@ -317,8 +447,20 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void OnBeginDocumentClose(Document document, DocumentBeginCloseEventArgs e)
+        private static void OnBeginDocumentClose(Document document, object attachmentToken, DocumentBeginCloseEventArgs e)
         {
+            if (!ProjectPersistenceSubscriptions.TryGetValue(attachmentToken, out var subscription)) return;
+            if (subscription.DetachRequested)
+            {
+                TryDetachProjectPersistenceSubscription(subscription);
+                return;
+            }
+            if (!IsCurrentProjectPersistenceAttachment(document, attachmentToken))
+            {
+                RequestProjectPersistenceDetach(subscription);
+                return;
+            }
+
             try
             {
                 if (!ProjectContextCoordinator.HasPendingChanges(document)) return;
