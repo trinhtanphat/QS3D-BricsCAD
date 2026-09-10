@@ -96,7 +96,7 @@ def main():
         'operand.Clone() as Solid3d',
         'targetWorking.BooleanOperation(operation, operandWorking);',
         'ExtentsOverlap(targetExtents, operandExtents)',
-        '"reason\\\":\\\"no-intersection"',
+        '\"reason\\\":\\\"no-intersection',
         'target.CopyFrom(targetWorking);',
         'if (!operand.IsErased) operand.Erase();',
         'sources were preserved',
