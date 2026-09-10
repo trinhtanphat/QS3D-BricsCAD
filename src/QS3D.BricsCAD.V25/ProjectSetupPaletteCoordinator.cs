@@ -19,7 +19,8 @@ namespace QS3D.BricsCAD.V25
 
         private static PaletteSet? _palette;
         private static BltProjectSetupPanel? _panel;
-        private static bool _documentActivatedSubscribed;
+        private static bool _documentActivatedMayBeSubscribed;
+        private static bool _documentActivatedDetachInProgress;
 
         public static bool IsVisible => _palette != null && _palette.Visible;
 
@@ -37,7 +38,7 @@ namespace QS3D.BricsCAD.V25
             if (palette == null || panel == null) return;
 
             var wasVisible = palette.Visible;
-            var wasSubscribed = _documentActivatedSubscribed;
+            var wasSubscribed = _documentActivatedMayBeSubscribed;
             try
             {
                 SubscribeToDocumentActivation();
@@ -113,32 +114,65 @@ namespace QS3D.BricsCAD.V25
 
         private static void SubscribeToDocumentActivation()
         {
-            if (_documentActivatedSubscribed) return;
-            Application.DocumentManager.DocumentActivated += OnDocumentActivated;
-            _documentActivatedSubscribed = true;
+            if (_documentActivatedMayBeSubscribed) return;
+
+            // Publish conservative ownership before the fallible native add. The accessor may
+            // register the delegate and still throw during host teardown or document churn.
+            _documentActivatedMayBeSubscribed = true;
+            try
+            {
+                Application.DocumentManager.DocumentActivated += OnDocumentActivated;
+            }
+            catch
+            {
+                RetryDocumentActivatedDetach();
+                throw;
+            }
         }
 
         private static void UnsubscribeFromDocumentActivation()
         {
-            if (!_documentActivatedSubscribed) return;
+            RetryDocumentActivatedDetach();
+        }
+
+        private static void RetryDocumentActivatedDetach()
+        {
+            if (!_documentActivatedMayBeSubscribed || _documentActivatedDetachInProgress) return;
+
+            _documentActivatedDetachInProgress = true;
             try
             {
                 Application.DocumentManager.DocumentActivated -= OnDocumentActivated;
-                _documentActivatedSubscribed = false;
+                _documentActivatedMayBeSubscribed = false;
             }
             catch
             {
-                // Keep the flag true so a later Hide/Dispose can retry without stacking a second hook.
+                // Retain ownership so a later Hide/Dispose or stale callback can retry.
+            }
+            finally
+            {
+                _documentActivatedDetachInProgress = false;
             }
         }
 
         private static void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)
         {
+            var palette = _palette;
             var panel = _panel;
-            if (_palette == null || !_palette.Visible || panel == null) return;
+            if (palette == null || panel == null)
+            {
+                RetryDocumentActivatedDetach();
+                return;
+            }
 
             try
             {
+                if (!palette.Visible)
+                {
+                    RetryDocumentActivatedDetach();
+                    return;
+                }
+
                 panel.RefreshFromDocument(e.Document ?? Application.DocumentManager.MdiActiveDocument);
             }
             catch (Exception)
