@@ -69,13 +69,33 @@ def validate(source: str) -> None:
         if token not in helper:
             raise SystemExit(f"ERROR: V25 updater installer-hold preflight: helper missing {label}: {token}")
 
-    path_binding_patterns = (
-        r"\.StartsWith\([^)]*(?:root|ExtractionRoot)[^)]*,\s*\[StringComparison\]::OrdinalIgnoreCase\)",
-        r"\[string\]::Equals\([^,]*(?:full|Path)[^,]*,\s*[^,]*(?:root|ExtractionRoot)[^,]*,\s*\[StringComparison\]::OrdinalIgnoreCase\)",
+    separator_binding = re.search(
+        r"\$rootWithSeparator\s*=\s*\$root\.TrimEnd\([^\n]+\)\s*\+\s*['\"]\\['\"]",
+        helper,
+        re.IGNORECASE,
     )
-    if not any(re.search(pattern, helper, re.IGNORECASE | re.DOTALL) for pattern in path_binding_patterns):
+    boundary_check = re.search(
+        r"\$full\.StartsWith\(\s*\$rootWithSeparator\s*,\s*\[StringComparison\]::OrdinalIgnoreCase\s*\)",
+        helper,
+        re.IGNORECASE,
+    )
+    if separator_binding is None or boundary_check is None:
         raise SystemExit(
-            "ERROR: V25 updater installer-hold preflight: helper mentions extraction root but does not enforce canonical path containment/equality"
+            "ERROR: V25 updater installer-hold preflight: canonical containment must use a separator-bounded extraction root"
+        )
+
+    reparse_reject = re.search(
+        r"if\s*\(\s*\(\s*\$item\.Attributes\s+-band\s+\[IO\.FileAttributes\]::ReparsePoint\s*\)\s+-ne\s+0\s*\)\s*\{\s*throw\b",
+        helper,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if reparse_reject is None:
+        raise SystemExit(
+            "ERROR: V25 updater installer-hold preflight: ReparsePoint inspection must fail closed with throw"
+        )
+    if re.search(r"Get-Item\s+-LiteralPath\s+\$full\b", helper, re.IGNORECASE) is None:
+        raise SystemExit(
+            "ERROR: V25 updater installer-hold preflight: reparse inspection must target the canonical held-open path"
         )
 
     held_open = require(helper, "[IO.File]::Open(", "held open")
@@ -85,13 +105,21 @@ def validate(source: str) -> None:
             "ERROR: V25 updater installer-hold preflight: held open must use exact read sharing, not ReadWrite/Delete/None"
         )
     exact_share = re.search(
-        r"\[IO\.File\]::Open\([^;]*?\[IO\.FileMode\]::Open\s*,\s*\[IO\.FileAccess\]::Read\s*,\s*\[IO\.FileShare\]::Read\s*\)",
+        r"\[IO\.File\]::Open\(\s*\$full\s*,\s*\[IO\.FileMode\]::Open\s*,\s*\[IO\.FileAccess\]::Read\s*,\s*\[IO\.FileShare\]::Read\s*\)",
         open_tail,
         re.IGNORECASE | re.DOTALL,
     )
     if not exact_share:
         raise SystemExit(
-            "ERROR: V25 updater installer-hold preflight: held open is not explicitly FileMode.Open/FileAccess.Read/FileShare.Read"
+            "ERROR: V25 updater installer-hold preflight: held open must target canonical $full with FileMode.Open/FileAccess.Read/FileShare.Read"
+        )
+    if re.search(
+        r"Assert-AuthenticodeSigner\s+-Path\s+\$full\s+-ExpectedSigner\s+\$ExpectedSigner\b",
+        helper,
+        re.IGNORECASE,
+    ) is None:
+        raise SystemExit(
+            "ERROR: V25 updater installer-hold preflight: signer re-admission must target the canonical held-open path and expected signer"
         )
 
     if "catch" not in helper or ".Dispose()" not in helper:
@@ -115,8 +143,7 @@ def validate(source: str) -> None:
         )
 
     after_invoke = source[invoke:dispose]
-    finally_match = re.search(r"(?mi)^\s*finally\s*\{", after_invoke)
-    if finally_match is None:
+    if re.search(r"(?mi)^\s*finally\s*\{", after_invoke) is None:
         raise SystemExit(
             "ERROR: V25 updater installer-hold preflight: held installer disposal must be inside an actual finally block after invocation"
         )
@@ -217,10 +244,7 @@ Assert-PackageRoot -Directory $extractRoot
 """,
         "verify-then-path-reopen without a hold",
     )
-    expect_reject(
-        valid.replace("[IO.FileShare]::Read)", "[IO.FileShare]::ReadWrite)", 1),
-        "write-share-permitting hold",
-    )
+    expect_reject(valid.replace("[IO.FileShare]::Read)", "[IO.FileShare]::ReadWrite)", 1), "write-share-permitting hold")
     expect_reject(
         valid.replace(
             "$heldInstaller = Open-HeldVerifiedInstaller -Path $installer -ExtractionRoot $extractRoot -ExpectedSigner $expectedSigner\ntry {\n  Assert-PackageRoot",
@@ -228,6 +252,10 @@ Assert-PackageRoot -Directory $extractRoot
             1,
         ),
         "package admission before hold acquisition",
+    )
+    expect_reject(
+        valid.replace("$full.StartsWith($rootWithSeparator,", "$full.StartsWith($root,", 1),
+        "unsafe prefix containment accepting sibling root names",
     )
     expect_reject(
         valid.replace(
@@ -238,15 +266,28 @@ Assert-PackageRoot -Directory $extractRoot
         "extraction-root token without enforced canonical containment",
     )
     expect_reject(
-        valid.replace("catch { if ($h) { $h.Dispose() }; throw }", "catch { throw }", 1),
-        "held handle leak when signer re-admission throws",
-    )
-    expect_reject(
         valid.replace(
-            "  & $installer @arguments\n",
-            "  $installer = Join-Path $extractRoot 'install-v25-autoload.ps1'\n  & $installer @arguments\n",
+            "if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'reparse' }",
+            "$mentionsReparse = ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)",
             1,
         ),
+        "reparse token without fail-closed rejection",
+    )
+    expect_reject(
+        valid.replace("Get-Item -LiteralPath $full", "Get-Item -LiteralPath $Path", 1),
+        "reparse inspection of a different path than canonical held path",
+    )
+    expect_reject(
+        valid.replace("[IO.File]::Open($full,", "[IO.File]::Open($Path,", 1),
+        "held open of a different path than canonical admitted path",
+    )
+    expect_reject(
+        valid.replace("Assert-AuthenticodeSigner -Path $full", "Assert-AuthenticodeSigner -Path $Path", 1),
+        "signer re-admission of a different path than held path",
+    )
+    expect_reject(valid.replace("catch { if ($h) { $h.Dispose() }; throw }", "catch { throw }", 1), "held handle leak when signer re-admission throws")
+    expect_reject(
+        valid.replace("  & $installer @arguments\n", "  $installer = Join-Path $extractRoot 'install-v25-autoload.ps1'\n  & $installer @arguments\n", 1),
         "installer pathname reassignment after hold acquisition",
     )
     expect_reject(
@@ -258,19 +299,11 @@ Assert-PackageRoot -Directory $extractRoot
         "hold disposed before invocation",
     )
     expect_reject(
-        valid.replace(
-            "}\nfinally {\n  $heldInstaller.Dispose()",
-            "  # finally {\n  $heldInstaller.Dispose()",
-            1,
-        ),
+        valid.replace("}\nfinally {\n  $heldInstaller.Dispose()", "  # finally {\n  $heldInstaller.Dispose()", 1),
         "comment-only finally token before disposal",
     )
     expect_reject(
-        valid.replace(
-            "}\nfinally {\n  $heldInstaller.Dispose()",
-            "  Write-Host 'finally {'\n  $heldInstaller.Dispose()",
-            1,
-        ),
+        valid.replace("}\nfinally {\n  $heldInstaller.Dispose()", "  Write-Host 'finally {'\n  $heldInstaller.Dispose()", 1),
         "string-only finally token before disposal",
     )
 
