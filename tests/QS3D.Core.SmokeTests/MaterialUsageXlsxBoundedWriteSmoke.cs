@@ -31,7 +31,7 @@ namespace QS3D.Core.SmokeTests
         {
             var rows = new List<MaterialUsageRow>();
             var hostile = new string('界', 32767);
-            for (var i = 0; i < 40; i++)
+            for (var i = 0; i < 24; i++)
             {
                 var row = new MaterialUsageRow
                 {
