@@ -87,6 +87,10 @@ for token in (
     "$updateMutex = Enter-Qs3dUpdateMutex",
     "Exit-Qs3dUpdateMutex -Mutex $updateMutex",
     "Remove-Item -LiteralPath $tempRoot",
+    "Open-HeldVerifiedInstaller -Path $installer",
+    "$installerReader.ReadToEnd()",
+    "$installerScript = [ScriptBlock]::Create($installerText)",
+    "& $installerScript @arguments",
 ):
     require(updater, token, "scripts/update-v25.ps1")
 
@@ -202,20 +206,25 @@ installed_state = updater.find("$installedVersion = Read-InstalledVersion -Direc
 product_state = updater.find("$installedProductVersion = Read-InstalledProductVersion -Directory $InstallDirectory")
 should_process = updater.find("$PSCmdlet.ShouldProcess($InstallDirectory")
 held_archive_call = updater.find("Expand-VerifiedHeldArchive -ZipPath $zipPath")
-package_check = updater.find("Assert-PackageRoot -Directory $extractRoot")
-signed_version = updater.find("$signedPluginVersion = Read-SignedPluginVersion")
-metadata_check = updater.find("$packageVersion -ne $signedPluginVersion")
-installer_execute = updater.find("& $installer @arguments")
+held_installer = updater.find("$heldInstaller = Open-HeldVerifiedInstaller -Path $installer", held_archive_call)
+installer_read = updater.find("$installerReader.ReadToEnd()", held_installer)
+installer_script = updater.find("$installerScript = [ScriptBlock]::Create($installerText)", installer_read)
+package_check = updater.find("Assert-PackageRoot -Directory $extractRoot", installer_script)
+signed_version = updater.find("$signedPluginVersion = Read-SignedPluginVersion", package_check)
+metadata_check = updater.find("$packageVersion -ne $signedPluginVersion", signed_version)
+installer_execute = updater.find("& $installerScript @arguments", metadata_check)
 if min(installed_state, product_state, should_process) < 0 or not (installed_state < product_state < should_process):
     errors.append("updater must reconcile installed assembly/product identities before mutation approval")
 if held_archive_call < 0:
     errors.append("updater must consume the admitted held ZIP generation through Expand-VerifiedHeldArchive")
 if "Expand-Archive -LiteralPath $zipPath" in updater or "Get-FileHash -LiteralPath $zipPath" in updater:
     errors.append("updater must not reopen the downloaded ZIP pathname after held-generation admission")
-if min(held_archive_call, package_check, signed_version, metadata_check, installer_execute) < 0 or not (
-    held_archive_call < package_check < signed_version < metadata_check < installer_execute
+if "& $installer @arguments" in updater:
+    errors.append("updater must not reopen the admitted installer pathname for execution")
+if min(held_archive_call, held_installer, installer_read, installer_script, package_check, signed_version, metadata_check, installer_execute) < 0 or not (
+    held_archive_call < held_installer < installer_read < installer_script < package_check < signed_version < metadata_check < installer_execute
 ):
-    errors.append("updater must consume the held archive generation before package/signature/metadata verification and installer execution")
+    errors.append("updater must bind installer bytes to a held generation, materialize one in-memory ScriptBlock, then complete package/signature/metadata verification before execution")
 
 manifest_package_guard = manifest.find("$package = Resolve-OrdinaryNonReparseDirectory -Path $PackageDirectory")
 manifest_zip_guard = manifest.find("$zip = Resolve-OrdinaryNonReparseFile -Path $PackageZip")
@@ -303,4 +312,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: secure V25 update uses bounded HTTPS, bounded/reparse-safe generation-stable manifest inputs with atomic publication, schema-2 dual managed identity binding, signed/hash-verified packages, shared update serialization, transactional install rollback and quarantine-safe uninstall rollback.")
+print("PASS: secure V25 update uses bounded HTTPS, held-generation in-memory installer execution, bounded/reparse-safe generation-stable manifest inputs with atomic publication, schema-2 dual managed identity binding, signed/hash-verified packages, shared update serialization, transactional install rollback and quarantine-safe uninstall rollback.")
