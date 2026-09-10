@@ -15,8 +15,8 @@ else:
 required = [
     "private sealed class NativeSelectionSubscription",
     "private static readonly Dictionary<object, NativeSelectionSubscription> NativeSubscriptions",
-    "private bool DetachRequested",
-    "private bool DetachInProgress",
+    "internal bool DetachRequested",
+    "internal bool DetachInProgress",
     "NativeSubscriptions[attachmentToken] = subscription;",
     "subscription.MayBeSubscribed = true;",
     "RequestDetach(subscription);",

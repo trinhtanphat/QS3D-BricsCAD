@@ -22,8 +22,8 @@ namespace QS3D.BricsCAD.V25
             internal readonly object Token;
             internal readonly EventHandler Handler;
             internal bool MayBeSubscribed;
-            private bool DetachRequested;
-            private bool DetachInProgress;
+            internal bool DetachRequested;
+            internal bool DetachInProgress;
         }
 
         private static readonly HashSet<Document> Attached = new HashSet<Document>();
