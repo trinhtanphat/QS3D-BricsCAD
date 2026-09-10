@@ -86,6 +86,25 @@ for forbidden in ("document.Editor.SelectImplied()", "document.Editor.GetSelecti
     if forbidden in beam_builder:
         errors.append("Beam Rebar builder must consume the admitted command snapshot without editor re-selection: " + forbidden)
 
+multi_commands = read(ADAPTER / "MultiRegionRebarCommands.cs")
+for label, method, build in (
+    ("Slab Multi-Region Rebar", "public void BuildSlabMultiRegionRebar3D()", "SlabFoundationMultiRegionMeshSolidBuilder.BuildSlab(document, project, selectedIds)"),
+    ("Foundation Multi-Region Rebar", "public void BuildFoundationMultiRegionRebar3D()", "SlabFoundationMultiRegionMeshSolidBuilder.BuildFoundation(document, project, selectedIds)"),
+):
+    body = region(multi_commands, method, "[CommandMethod(\"QS3D", label)
+    acquire = body.find("var selectedIds = CadSelectionGuard.AcquireCurrentSelection(document);")
+    build_at = body.find(build)
+    if acquire < 0 or build_at <= acquire:
+        errors.append(label + " must carry the admitted selection snapshot into native generation")
+
+multi_builder = read(ADAPTER / "Cad" / "SlabFoundationMultiRegionMeshSolidBuilder.cs")
+for required in ("BuildSlab(Document document, ProjectState project, ObjectId[] selectedIds)", "BuildFoundation(Document document, ProjectState project, ObjectId[] selectedIds)"):
+    if required not in multi_builder:
+        errors.append("Multi-region builder missing admitted-selection signature: " + required)
+for forbidden in ("document.Editor.SelectImplied()", "document.Editor.GetSelection()", "PromptStatus"):
+    if forbidden in multi_builder:
+        errors.append("Multi-region builder must consume the admitted command snapshot without editor re-selection: " + forbidden)
+
 if errors:
     for error in errors:
         print("ERROR:", error)

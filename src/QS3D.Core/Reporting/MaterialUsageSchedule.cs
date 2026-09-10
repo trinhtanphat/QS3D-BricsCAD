@@ -51,26 +51,34 @@ namespace QS3D.Core.Reporting
         public static IReadOnlyList<MaterialUsageRow> Build(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            ReportingProjectIdentityGuard.RequireUniqueElementIds(project, "Material usage schedule");
-            RoomFinishIdentityService.ValidateProject(project);
-            var floors = project.Floors.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
-            var families = project.Families.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
-            var units = ProjectMaterialCatalog.GetAll(project)
+            var generation = MaterialUsageGenerationSnapshot.CaptureStable(project);
+            var result = BuildDetached(generation.DetachedProject);
+            generation.Revalidate(project);
+            return result;
+        }
+
+        private static IReadOnlyList<MaterialUsageRow> BuildDetached(ProjectState detachedProject)
+        {
+            ReportingProjectIdentityGuard.RequireUniqueElementIds(detachedProject, "Material usage schedule");
+            RoomFinishIdentityService.ValidateProject(detachedProject);
+            var floors = detachedProject.Floors.ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
+            var families = detachedProject.Families.ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
+            var units = ProjectMaterialCatalog.GetAll(detachedProject)
                 .GroupBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(x => x.Key, x => x.First().Unit, StringComparer.OrdinalIgnoreCase);
-            var rows = new Dictionary<string, MaterialUsageRow>(StringComparer.OrdinalIgnoreCase);
+            var rows = new Dictionary<string, UsageGroup>(StringComparer.OrdinalIgnoreCase);
             var order = new List<string>();
 
-            foreach (var element in project.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
+            foreach (var element in detachedProject.Elements.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
-                if (AutoRoomLifecycle.IsExcludedFromQuantity(project, element)) continue;
+                if (AutoRoomLifecycle.IsExcludedFromQuantity(detachedProject, element)) continue;
                 var familyId = ReportingProjectIdentityGuard.NormalizeReferenceId(element.FamilyId);
                 families.TryGetValue(familyId, out var family);
                 if (family != null && family.Category != element.Category)
                     throw new InvalidOperationException("Material usage element " + element.Id + " category " + element.Category + " does not match Family " + family.Id + " category " + family.Category + ". Repair the Family relation before reporting.");
                 var material = Effective(element, family, "Material");
                 if (material.Length > 0)
-                    Add(project, element, family, floors, units, rows, order, material, "Material", MetricsForMainMaterial(element, family));
+                    Add(detachedProject, element, family, floors, units, rows, order, material, "Material", MetricsForMainMaterial(element, family));
 
                 if (element.Category == ElementCategory.GlassWall)
                 {
@@ -82,11 +90,130 @@ namespace QS3D.Core.Reporting
                             LengthM = Q(element, "CurtainFrameLengthM"),
                             AreaM2 = Q(element, "CurtainFrameFaceAreaM2")
                         };
-                        Add(project, element, family, floors, units, rows, order, frameMaterial, "CurtainFrame", frame);
+                        Add(detachedProject, element, family, floors, units, rows, order, frameMaterial, "CurtainFrame", frame);
                     }
                 }
             }
-            return order.Select(x => rows[x]).ToList().AsReadOnly();
+
+            foreach (var key in order) rows[key].FinalizeQuantities();
+            return order.Select(x => rows[x].Row).ToList().AsReadOnly();
+        }
+
+        private sealed class MaterialUsageGenerationSnapshot
+        {
+            private MaterialUsageGenerationSnapshot(ProjectState detachedProject, string semanticSignature)
+            {
+                DetachedProject = detachedProject;
+                _semanticSignature = semanticSignature;
+            }
+
+            private readonly string _semanticSignature;
+            internal ProjectState DetachedProject { get; }
+
+            internal static MaterialUsageGenerationSnapshot CaptureStable(ProjectState project)
+            {
+                ReportingProjectIdentityGuard.RequireUniqueElementIds(project, "Material usage schedule");
+                RoomFinishIdentityService.ValidateProject(project);
+                var before = SemanticSignature(project);
+                var detached = CloneProject(project);
+                var after = SemanticSignature(project);
+                if (!string.Equals(before, after, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Material usage source generation changed during snapshot capture.");
+                return new MaterialUsageGenerationSnapshot(detached, after);
+            }
+
+            internal void Revalidate(ProjectState project)
+            {
+                if (!string.Equals(_semanticSignature, SemanticSignature(project), StringComparison.Ordinal))
+                    throw new InvalidOperationException("Material usage source generation changed during aggregation.");
+            }
+
+            private static ProjectState CloneProject(ProjectState source)
+            {
+                var clone = new ProjectState(source.ProjectId, source.Name)
+                {
+                    DrawingPath = source.DrawingPath,
+                    DrawingFingerprint = source.DrawingFingerprint
+                };
+                foreach (var pair in source.Metadata) clone.Metadata[pair.Key] = pair.Value;
+                foreach (var zone in source.Zones) clone.Zones.Add(new ZoneDefinition(zone.Id, zone.Name));
+                foreach (var floor in source.Floors) clone.Floors.Add(new FloorDefinition(floor.Id, floor.Name, floor.ElevationM));
+                foreach (var family in source.Families)
+                {
+                    var copy = new ProjectFamily(family.Id, family.Name, family.Category);
+                    foreach (var pair in family.Properties) copy.Properties[pair.Key] = pair.Value;
+                    clone.Families.Add(copy);
+                }
+                foreach (var element in source.Elements)
+                {
+                    if (element == null) throw new InvalidOperationException("Material usage source contains a null element.");
+                    var copy = new ProjectElement(element.Id, element.Category, element.FamilyId, element.FloorId, element.ZoneId)
+                    {
+                        DrawingFingerprint = element.DrawingFingerprint
+                    };
+                    foreach (var pair in element.Properties) copy.Properties[pair.Key] = pair.Value;
+                    foreach (var pair in element.Quantities) copy.Quantities[pair.Key] = pair.Value;
+                    foreach (var handle in element.SourceHandles) copy.AddSourceHandlePersistenceValue(handle);
+                    foreach (var dependency in element.DependsOn) copy.AddDependencyPersistenceValue(dependency);
+                    clone.Elements.Add(copy);
+                }
+                if (source.ActiveZoneId.Length > 0) clone.ActiveZoneId = source.ActiveZoneId;
+                if (source.ActiveFloorId.Length > 0) clone.ActiveFloorId = source.ActiveFloorId;
+                return clone;
+            }
+
+            private static string SemanticSignature(ProjectState project)
+            {
+                var b = new StringBuilder();
+                Token(b, project.ProjectId); Token(b, project.Name); Token(b, project.DrawingFingerprint);
+                Token(b, project.ActiveZoneId); Token(b, project.ActiveFloorId); Pairs(b, project.Metadata);
+                var zones = project.Zones.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id, StringComparer.Ordinal).ToList();
+                Token(b, zones.Count.ToString(CultureInfo.InvariantCulture));
+                foreach (var x in zones) { Token(b, x.Id); Token(b, x.Name); }
+                var floors = project.Floors.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id, StringComparer.Ordinal).ToList();
+                Token(b, floors.Count.ToString(CultureInfo.InvariantCulture));
+                foreach (var x in floors) { Token(b, x.Id); Token(b, x.Name); Token(b, x.ElevationM.ToString("R", CultureInfo.InvariantCulture)); }
+                var families = project.Families.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id, StringComparer.Ordinal).ToList();
+                Token(b, families.Count.ToString(CultureInfo.InvariantCulture));
+                foreach (var x in families) { Token(b, x.Id); Token(b, x.Name); Token(b, ((int)x.Category).ToString(CultureInfo.InvariantCulture)); Pairs(b, x.Properties); }
+                var elements = project.Elements.ToList();
+                Token(b, elements.Count.ToString(CultureInfo.InvariantCulture));
+                foreach (var x in elements.OrderBy(x => x == null ? string.Empty : x.Id, StringComparer.OrdinalIgnoreCase).ThenBy(x => x == null ? string.Empty : x.Id, StringComparer.Ordinal))
+                {
+                    if (x == null) { Token(b, "<null>"); continue; }
+                    Token(b, x.Id); Token(b, ((int)x.Category).ToString(CultureInfo.InvariantCulture));
+                    Token(b, x.FamilyId); Token(b, x.FloorId); Token(b, x.ZoneId); Token(b, x.DrawingFingerprint);
+                    Pairs(b, x.Properties); Quantities(b, x.Quantities); Strings(b, x.SourceHandles); Strings(b, x.DependsOn);
+                }
+                return b.ToString();
+            }
+
+            private static void Pairs(StringBuilder b, IEnumerable<KeyValuePair<string, string>> source)
+            {
+                var values = source.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Key, StringComparer.Ordinal).ToList();
+                Token(b, values.Count.ToString(CultureInfo.InvariantCulture));
+                foreach (var x in values) { Token(b, x.Key); Token(b, x.Value); }
+            }
+
+            private static void Quantities(StringBuilder b, IEnumerable<KeyValuePair<string, double>> source)
+            {
+                var values = source.OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Key, StringComparer.Ordinal).ToList();
+                Token(b, values.Count.ToString(CultureInfo.InvariantCulture));
+                foreach (var x in values) { Token(b, x.Key); Token(b, BitConverter.DoubleToInt64Bits(x.Value).ToString("X16", CultureInfo.InvariantCulture)); }
+            }
+
+            private static void Strings(StringBuilder b, IEnumerable<string> source)
+            {
+                var values = source.ToList();
+                Token(b, values.Count.ToString(CultureInfo.InvariantCulture));
+                foreach (var x in values) Token(b, x);
+            }
+
+            private static void Token(StringBuilder b, string value)
+            {
+                var text = value ?? string.Empty;
+                b.Append(text.Length.ToString(CultureInfo.InvariantCulture)).Append(':').Append(text).Append(';');
+            }
         }
 
         private sealed class UsageMetrics
@@ -95,6 +222,93 @@ namespace QS3D.Core.Reporting
             public double AreaM2 { get; set; }
             public double VolumeM3 { get; set; }
             public double MassKg { get; set; }
+        }
+
+        private sealed class UsageGroup
+        {
+            private readonly StableAccumulator _length = new StableAccumulator();
+            private readonly StableAccumulator _area = new StableAccumulator();
+            private readonly StableAccumulator _volume = new StableAccumulator();
+            private readonly StableAccumulator _mass = new StableAccumulator();
+
+            public UsageGroup(MaterialUsageRow row)
+            {
+                Row = row ?? throw new ArgumentNullException(nameof(row));
+            }
+
+            public MaterialUsageRow Row { get; }
+
+            public void Add(UsageMetrics metrics, string label)
+            {
+                if (metrics == null) throw new ArgumentNullException(nameof(metrics));
+                _length.Add(metrics.LengthM, label + "/material length");
+                _area.Add(metrics.AreaM2, label + "/material area");
+                _volume.Add(metrics.VolumeM3, label + "/material volume");
+                _mass.Add(metrics.MassKg, label + "/material mass");
+            }
+
+            public void FinalizeQuantities()
+            {
+                Row.LengthM = _length.Value("material length");
+                Row.AreaM2 = _area.Value("material area");
+                Row.VolumeM3 = _volume.Value("material volume");
+                Row.MassKg = _mass.Value("material mass");
+            }
+        }
+
+        private sealed class StableAccumulator
+        {
+            private double _sum;
+            private double _compensation;
+            private bool _sawSwallowedContribution;
+
+            public void Add(double value, string label)
+            {
+                var incoming = QuantityReportMath.NonNegative(value, label);
+                QuantityReportMath.Finite(_sum, label + "/sum");
+                QuantityReportMath.Finite(_compensation, label + "/compensation");
+
+                var result = _sum + incoming;
+                if (double.IsNaN(result) || double.IsInfinity(result))
+                    throw new OverflowException("Material usage aggregate overflow: " + label + ".");
+
+                if ((incoming != 0d && result == _sum) || (_sum != 0d && result == incoming))
+                    _sawSwallowedContribution = true;
+
+                var correction = Math.Abs(_sum) >= Math.Abs(incoming)
+                    ? (_sum - result) + incoming
+                    : (incoming - result) + _sum;
+                var nextCompensation = _compensation + correction;
+                if (double.IsNaN(nextCompensation) || double.IsInfinity(nextCompensation))
+                    throw new OverflowException("Material usage aggregate compensation overflow: " + label + ".");
+
+                _sum = result == 0d ? 0d : result;
+                _compensation = nextCompensation == 0d ? 0d : nextCompensation;
+            }
+
+            public double Value(string label)
+            {
+                QuantityReportMath.Finite(_sum, label + "/sum");
+                QuantityReportMath.Finite(_compensation, label + "/compensation");
+                var result = _sum + _compensation;
+                if (double.IsNaN(result) || double.IsInfinity(result))
+                    throw new OverflowException("Material usage aggregate overflow: " + label + ".");
+                if (_sawSwallowedContribution && _compensation != 0d && result == _sum && !IsStrictlyBelowHalfUlp(_sum, _compensation))
+                    throw new OverflowException("Material usage aggregate lost a non-zero swallowed contribution at floating-point precision: " + label + ".");
+                if (_sum != 0d && result == _compensation)
+                    throw new OverflowException("Material usage aggregate lost a non-zero accumulated value at floating-point precision: " + label + ".");
+                return result == 0d ? 0d : result;
+            }
+
+            private static bool IsStrictlyBelowHalfUlp(double current, double compensation)
+            {
+                if (current <= 0d || compensation == 0d) return false;
+                var currentBits = BitConverter.DoubleToInt64Bits(current);
+                var adjacentBits = compensation > 0d ? currentBits + 1L : currentBits - 1L;
+                var adjacent = BitConverter.Int64BitsToDouble(adjacentBits);
+                var spacing = Math.Abs(adjacent - current);
+                return Math.Abs(compensation) < spacing / 2d;
+            }
         }
 
         private static UsageMetrics MetricsForMainMaterial(ProjectElement element, ProjectFamily? family)
@@ -207,7 +421,7 @@ namespace QS3D.Core.Reporting
             ProjectFamily? family,
             IDictionary<string, string> floors,
             IDictionary<string, string> units,
-            IDictionary<string, MaterialUsageRow> rows,
+            IDictionary<string, UsageGroup> rows,
             IList<string> order,
             string material,
             string component,
@@ -219,9 +433,9 @@ namespace QS3D.Core.Reporting
             var familyName = family?.Name ?? familyId;
             var category = element.Category.ToString();
             var key = GroupKey(floorId, material, component, category, familyId);
-            if (!rows.TryGetValue(key, out var row))
+            if (!rows.TryGetValue(key, out var group))
             {
-                row = new MaterialUsageRow
+                var row = new MaterialUsageRow
                 {
                     ProjectId = project.ProjectId,
                     DrawingFingerprint = project.DrawingFingerprint,
@@ -232,16 +446,14 @@ namespace QS3D.Core.Reporting
                     Category = category,
                     FamilyName = familyName
                 };
-                rows[key] = row;
+                group = new UsageGroup(row);
+                rows[key] = group;
                 order.Add(key);
             }
-            row.ElementCount = QuantityReportMath.AddCount(row.ElementCount, 1);
-            row.LengthM = QuantityReportMath.Add(row.LengthM, metrics.LengthM, element.Id + "/material length");
-            row.AreaM2 = QuantityReportMath.Add(row.AreaM2, metrics.AreaM2, element.Id + "/material area");
-            row.VolumeM3 = QuantityReportMath.Add(row.VolumeM3, metrics.VolumeM3, element.Id + "/material volume");
-            row.MassKg = QuantityReportMath.Add(row.MassKg, metrics.MassKg, element.Id + "/material mass");
-            row.ElementIds.Add(element.Id);
-            ReportingRowProvenance.AppendSourceHandles(row.SourceHandles, element.SourceHandles);
+            group.Row.ElementCount = QuantityReportMath.AddCount(group.Row.ElementCount, 1);
+            group.Add(metrics, element.Id);
+            group.Row.ElementIds.Add(element.Id);
+            ReportingRowProvenance.AppendSourceHandles(group.Row.SourceHandles, element.SourceHandles);
         }
 
         private static string GroupKey(params string[] tokens)

@@ -21,7 +21,7 @@ namespace QS3D.Core.SmokeTests
             var project = Project();
             var room = AutoRoom("ROOM-A", "A;B");
             project.Elements.Add(room);
-            project.Elements.Add(null!);
+            CorruptProjectStateSeed.AddNullElement(project);
             var version = project.ChangeVersion;
 
             Throws<InvalidOperationException>(() => AutoRoomLifecycle.FindBySourceSignature(project, "B;A", "F", "Z"));

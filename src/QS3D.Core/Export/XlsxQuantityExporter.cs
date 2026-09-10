@@ -19,6 +19,11 @@ namespace QS3D.Core.Export
         private const int Decimal3Style = 5;
         private const int MaxDataRows = 1048575;
         private const int MaxCellTextCharacters = 32767;
+        private const long MaxWorksheetEntryBytes = 32L * 1024L * 1024L;
+        private const long MaxAggregateUncompressedBytes = 64L * 1024L * 1024L;
+        private const long MaxArchiveBytes = 64L * 1024L * 1024L;
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
+        private static readonly DateTimeOffset FixedZipTimestamp = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
         public static void Export(string path, IReadOnlyList<QuantityReportRow> rows)
         {
@@ -645,28 +650,28 @@ namespace QS3D.Core.Export
             var tempPath = AtomicFileCommit.CreateTempPath(fullPath);
             try
             {
+                long totalUncompressedBytes = 0L;
                 using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
-                using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, false, Encoding.UTF8))
+                using (var boundedArchive = new BoundedArchiveWriteStream(stream, MaxArchiveBytes))
+                using (var archive = new ZipArchive(boundedArchive, ZipArchiveMode.Create, true, StrictUtf8))
                 {
                     var isEd2 = summaryRows != null;
-                    WriteEntry(archive, "[Content_Types].xml", isEd2 ? Ed2ContentTypesXml : ContentTypesXml);
-                    WriteEntry(archive, "_rels/.rels", RootRelationshipsXml);
-                    WriteEntry(archive, "xl/workbook.xml", isEd2 ? Ed2WorkbookXml : WorkbookXml);
-                    WriteEntry(archive, "xl/_rels/workbook.xml.rels", isEd2 ? Ed2WorkbookRelationshipsXml : WorkbookRelationshipsXml);
-                    WriteEntry(archive, "xl/styles.xml", StylesXml);
-                    WriteEntry(archive, "xl/worksheets/sheet1.xml", isEd2 ? BuildEd2Sheet(rows) : BuildSheet(rows));
-                    if (summaryRows != null) WriteEntry(archive, "xl/worksheets/sheet2.xml", BuildEd2Sheet(summaryRows));
+                    WriteEntry(archive, "[Content_Types].xml", isEd2 ? Ed2ContentTypesXml : ContentTypesXml, ref totalUncompressedBytes);
+                    WriteEntry(archive, "_rels/.rels", RootRelationshipsXml, ref totalUncompressedBytes);
+                    WriteEntry(archive, "xl/workbook.xml", isEd2 ? Ed2WorkbookXml : WorkbookXml, ref totalUncompressedBytes);
+                    WriteEntry(archive, "xl/_rels/workbook.xml.rels", isEd2 ? Ed2WorkbookRelationshipsXml : WorkbookRelationshipsXml, ref totalUncompressedBytes);
+                    WriteEntry(archive, "xl/styles.xml", StylesXml, ref totalUncompressedBytes);
+                    WriteWorksheetEntry(archive, "xl/worksheets/sheet1.xml", rows, isEd2, ref totalUncompressedBytes);
+                    if (summaryRows != null) WriteWorksheetEntry(archive, "xl/worksheets/sheet2.xml", summaryRows, true, ref totalUncompressedBytes);
                 }
+                if (new FileInfo(tempPath).Length > MaxArchiveBytes) throw new InvalidDataException("Quantity XLSX archive exceeds the bounded output contract.");
                 ValidatePackage(tempPath, summaryRows != null);
                 AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);
             }
-            finally
-            {
-                AtomicFileCommit.TryDelete(tempPath);
-            }
+            finally { AtomicFileCommit.TryDelete(tempPath); }
         }
 
-        private static string BuildSheet(IReadOnlyList<QuantityReportRow> rows)
+        private static void WriteSheet(TextWriter writer, IReadOnlyList<QuantityReportRow> rows)
         {
             var headers = new[]
             {
@@ -678,7 +683,7 @@ namespace QS3D.Core.Export
 
             var lastRow = Math.Max(1, rows.Count + 1);
             var range = "A1:T" + lastRow.ToString(CultureInfo.InvariantCulture);
-            var sb = new StringBuilder();
+            var sb = new StreamingXmlBuilder(writer);
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
             sb.Append("<dimension ref=\"").Append(range).Append("\"/>");
@@ -717,10 +722,9 @@ namespace QS3D.Core.Export
             }
 
             sb.Append("</sheetData><autoFilter ref=\"").Append(range).Append("\"/></worksheet>");
-            return sb.ToString();
         }
 
-        private static string BuildEd2Sheet(IReadOnlyList<QuantityReportRow> rows)
+        private static void WriteEd2Sheet(TextWriter writer, IReadOnlyList<QuantityReportRow> rows)
         {
             var headers = new[]
             {
@@ -733,7 +737,7 @@ namespace QS3D.Core.Export
 
             var lastRow = Math.Max(1, rows.Count + 1);
             var range = "A1:Y" + lastRow.ToString(CultureInfo.InvariantCulture);
-            var sb = new StringBuilder();
+            var sb = new StreamingXmlBuilder(writer);
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">");
             sb.Append("<dimension ref=\"").Append(range).Append("\"/>");
@@ -781,7 +785,6 @@ namespace QS3D.Core.Export
             }
 
             sb.Append("</sheetData><autoFilter ref=\"").Append(range).Append("\"/></worksheet>");
-            return sb.ToString();
         }
 
         private static void ValidatePackage(string path, bool isEd2)
@@ -792,26 +795,26 @@ namespace QS3D.Core.Export
                 XlsxPackageValidator.Validate(path, "[Content_Types].xml", "xl/workbook.xml", "xl/styles.xml", "xl/worksheets/sheet1.xml");
         }
 
-        private static void AppendInlineStringCell(StringBuilder sb, string cellRef, string value, int style)
+        private static void AppendInlineStringCell(StreamingXmlBuilder sb, string cellRef, string value, int style)
         {
             sb.Append("<c r=\"").Append(cellRef).Append("\" t=\"inlineStr\" s=\"").Append(style).Append("\"><is><t>")
                 .Append(XlsxXmlText.Escape(value)).Append("</t></is></c>");
         }
 
-        private static void AppendNumberCell(StringBuilder sb, string cellRef, double value, int style = Decimal2Style)
+        private static void AppendNumberCell(StreamingXmlBuilder sb, string cellRef, double value, int style = Decimal2Style)
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(nameof(value), "XLSX numeric values must be finite.");
             sb.Append("<c r=\"").Append(cellRef).Append("\" s=\"").Append(style).Append("\"><v>")
                 .Append(value.ToString("R", CultureInfo.InvariantCulture)).Append("</v></c>");
         }
 
-        private static void AppendEvidenceNumberCell(StringBuilder sb, string cellRef, double value, bool hasEvidence, int style = Decimal2Style)
+        private static void AppendEvidenceNumberCell(StreamingXmlBuilder sb, string cellRef, double value, bool hasEvidence, int style = Decimal2Style)
         {
             if (!hasEvidence) return;
             AppendNumberCell(sb, cellRef, value, style);
         }
 
-        private static void AppendNullableNumberCell(StringBuilder sb, string cellRef, double? value, int style = Decimal2Style)
+        private static void AppendNullableNumberCell(StreamingXmlBuilder sb, string cellRef, double? value, int style = Decimal2Style)
         {
             if (!value.HasValue) return;
             AppendNumberCell(sb, cellRef, value.Value, style);
@@ -830,10 +833,74 @@ namespace QS3D.Core.Export
             return name + row.ToString(CultureInfo.InvariantCulture);
         }
 
-        private static void WriteEntry(ZipArchive archive, string name, string content)
+        private static void WriteWorksheetEntry(ZipArchive archive, string name, IReadOnlyList<QuantityReportRow> rows, bool ed2, ref long totalUncompressedBytes)
         {
+            using (var buffer = new MemoryStream())
+            {
+                using (var boundedEntry = new BoundedEntryWriteStream(buffer, MaxWorksheetEntryBytes))
+                using (var writer = new StreamWriter(boundedEntry, StrictUtf8, 4096, true))
+                {
+                    if (ed2) WriteEd2Sheet(writer, rows); else WriteSheet(writer, rows);
+                }
+                ReserveUncompressed(buffer.Length, ref totalUncompressedBytes, name);
+                buffer.Position = 0L;
+                var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
+                entry.LastWriteTime = FixedZipTimestamp;
+                using (var target = entry.Open()) buffer.CopyTo(target);
+            }
+        }
+
+        private static void WriteEntry(ZipArchive archive, string name, string content, ref long totalUncompressedBytes)
+        {
+            var bytes = StrictUtf8.GetBytes(content);
+            ReserveUncompressed(bytes.LongLength, ref totalUncompressedBytes, name);
             var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
-            using (var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false))) writer.Write(content);
+            entry.LastWriteTime = FixedZipTimestamp;
+            using (var target = entry.Open()) target.Write(bytes, 0, bytes.Length);
+        }
+
+        private static void ReserveUncompressed(long entryBytes, ref long totalUncompressedBytes, string name)
+        {
+            if (entryBytes < 0L || entryBytes > MaxWorksheetEntryBytes)
+                throw new InvalidDataException("Quantity XLSX worksheet exceeds the bounded output contract: " + name + ".");
+            var projected = checked(totalUncompressedBytes + entryBytes);
+            if (projected > MaxAggregateUncompressedBytes)
+                throw new InvalidDataException("Quantity XLSX aggregate uncompressed XML exceeds the bounded output contract.");
+            totalUncompressedBytes = projected;
+        }
+
+        private sealed class StreamingXmlBuilder
+        {
+            private readonly TextWriter _writer;
+            internal StreamingXmlBuilder(TextWriter writer) { _writer = writer ?? throw new ArgumentNullException(nameof(writer)); }
+            internal StreamingXmlBuilder Append(string value) { _writer.Write(value); return this; }
+            internal StreamingXmlBuilder Append(int value) { _writer.Write(value.ToString(CultureInfo.InvariantCulture)); return this; }
+        }
+
+        private sealed class BoundedEntryWriteStream : Stream
+        {
+            private readonly Stream _inner; private readonly long _maxLength;
+            internal BoundedEntryWriteStream(Stream inner, long maxLength) { _inner = inner ?? throw new ArgumentNullException(nameof(inner)); _maxLength = maxLength; }
+            public override bool CanRead => false; public override bool CanSeek => false; public override bool CanWrite => true; public override long Length => _inner.Length;
+            public override long Position { get => _inner.Position; set => throw new NotSupportedException(); }
+            public override void Flush() => _inner.Flush(); public override int Read(byte[] b,int o,int c)=>throw new NotSupportedException(); public override long Seek(long o,SeekOrigin x)=>throw new NotSupportedException(); public override void SetLength(long v)=>throw new NotSupportedException();
+            public override void Write(byte[] b,int o,int c) { if (checked(_inner.Position+c)>_maxLength) throw Exceeded(); _inner.Write(b,o,c); }
+            public override void WriteByte(byte v) { if (checked(_inner.Position+1L)>_maxLength) throw Exceeded(); _inner.WriteByte(v); }
+            private static InvalidDataException Exceeded()=>new InvalidDataException("Quantity XLSX worksheet exceeds the bounded output contract.");
+        }
+
+        private sealed class BoundedArchiveWriteStream : Stream
+        {
+            private readonly Stream _inner; private readonly long _maxLength;
+            internal BoundedArchiveWriteStream(Stream inner,long maxLength) { _inner=inner??throw new ArgumentNullException(nameof(inner)); _maxLength=maxLength; }
+            public override bool CanRead=>_inner.CanRead; public override bool CanSeek=>_inner.CanSeek; public override bool CanWrite=>_inner.CanWrite; public override long Length=>_inner.Length;
+            public override long Position { get=>_inner.Position; set { if(value<0L||value>_maxLength) throw Exceeded(); _inner.Position=value; } }
+            public override void Flush()=>_inner.Flush(); public override int Read(byte[] b,int o,int c)=>_inner.Read(b,o,c);
+            public override long Seek(long o,SeekOrigin origin) { long t=origin==SeekOrigin.Begin?o:origin==SeekOrigin.Current?checked(_inner.Position+o):checked(_inner.Length+o); if(t<0L||t>_maxLength) throw Exceeded(); return _inner.Seek(o,origin); }
+            public override void SetLength(long v) { if(v<0L||v>_maxLength) throw Exceeded(); _inner.SetLength(v); }
+            public override void Write(byte[] b,int o,int c) { if(Math.Max(_inner.Length,checked(_inner.Position+c))>_maxLength) throw Exceeded(); _inner.Write(b,o,c); }
+            public override void WriteByte(byte v) { if(Math.Max(_inner.Length,checked(_inner.Position+1L))>_maxLength) throw Exceeded(); _inner.WriteByte(v); }
+            private static InvalidDataException Exceeded()=>new InvalidDataException("Quantity XLSX archive exceeds the bounded output contract.");
         }
 
         private const string ContentTypesXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/></Types>";

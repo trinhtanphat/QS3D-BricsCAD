@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,7 +17,9 @@ def main() -> int:
 
     text = SOURCE.read_text(encoding="utf-8")
     required = [
-        "ModuleInitializer",
+        "internal static void EnsureRegistered()",
+        "Interlocked.CompareExchange(ref _registered, 1, 0)",
+        "Interlocked.Exchange(ref _registered, 0)",
         "EventManager.RegisterClassHandler",
         "typeof(Window)",
         '"McpAgentControlCenter"',
@@ -53,6 +56,7 @@ def main() -> int:
         return fail("missing production tokens: " + ", ".join(missing))
 
     forbidden = [
+        "ModuleInitializer",
         "McpTransportCoordinator.Select",
         "UpdateCoordinator.Instance.RefreshAsync",
         "Process.Start",
@@ -62,7 +66,27 @@ def main() -> int:
     if present:
         return fail("UI-only helper contains forbidden behavior tokens: " + ", ".join(present))
 
-    print("PASS: Agent Center and Update Center verbose explanatory copy is compacted behind keyboard-focusable hover info tooltips without transport/update mutations.")
+    polish = (SOURCE.parent / "UI" / "ProductionUiPolish.cs").read_text(encoding="utf-8")
+    hook = polish.find("UiInfoTooltipBootstrap.EnsureRegistered();")
+    latch = polish.find("Interlocked.CompareExchange(ref _registered, 1, 0)")
+    if hook < 0 or latch < 0 or hook > latch:
+        return fail("tooltip registration must precede the independent UI-polish latch")
+    for host in ("QS3D.BricsCAD.V25", "QS3D.BricsCAD.V26"):
+        entry = (ROOT / "src" / host / "PluginEntry.cs").read_text(encoding="utf-8")
+        register = entry.find("ProductionUiPolish.EnsureRegistered();")
+        start_ui = entry.find("RibbonInitializationCoordinator.Start();")
+        if register < 0 or start_ui < 0 or register > start_ui:
+            return fail(f"{host} must register tooltip polish before starting host UI")
+
+    if sys.platform == "win32":
+        probe = ROOT / "tests" / "test_ui_info_tooltip_bootstrap.py"
+        result = subprocess.run([sys.executable, "-B", str(probe)], cwd=ROOT, timeout=150)
+        if result.returncode:
+            return fail("explicit WPF bootstrap behavior regression")
+    else:
+        print("SKIP: WPF bootstrap execution requires Windows; source checks only.")
+
+    print("PASS: Agent Center and Update Center tooltip source contracts; no licensed-host runtime claim.")
     return 0
 
 
