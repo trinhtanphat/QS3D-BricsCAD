@@ -32,7 +32,7 @@ checks = {
     ],
     required[1]: [
         "RoomFinishXlsxExporter", "AtomicFileCommit.CreateTempPath", "AtomicFileCommit.ReplaceWithoutBackup", "ZipArchive",
-        "HT Phòng", "Loại hoàn thiện", "KL chính", "Element IDs", "Room IDs", "<autoFilter ref=", "Validate(tempPath)",
+        "Tầng", "Loại hoàn thiện", "KL chính", "Element IDs", "Room IDs", "<autoFilter ref=", "Validate(tempPath)",
     ],
     required[2]: [
         'CommandMethod("QS3DFINISHXLSX"', "RegenerationEngine", "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
