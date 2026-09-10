@@ -25,6 +25,11 @@ namespace QS3D.Core.Export
         private const int DecimalStyle = 3;
         private const int WrappedStyle = 4;
         private const int MaxRows = 1048575;
+        private const long MaxWorksheetEntryBytes = 32L * 1024L * 1024L;
+        private const long MaxAggregateUncompressedBytes = 64L * 1024L * 1024L;
+        private const long MaxArchiveBytes = 64L * 1024L * 1024L;
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
+        private static readonly DateTimeOffset FixedZipTimestamp = new DateTimeOffset(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
         public static void Export(
             string path,
@@ -45,11 +50,7 @@ namespace QS3D.Core.Export
             if ((long)details.Count + summaries.Count + formwork.Count > MaxRows)
                 throw new InvalidDataException("Customer workbook TRACE_MODEL exceeds the Excel row limit.");
 
-            var traces = new List<TraceProjection>();
-            var dgklXml = BuildDgklSheet(summaries, traces);
-            var formworkXml = BuildFormworkSheet(formwork, traces);
-            var detailXml = BuildDetailSheet(details, traces);
-            var traceXml = BuildTraceSheet(traces);
+            var traces = ValidateWorkbookPayload(details, summaries, formwork);
 
             detailCount.Revalidate(detailRows, "before filesystem publication");
             summaryCount.Revalidate(summaryRows, "before filesystem publication");
@@ -59,19 +60,23 @@ namespace QS3D.Core.Export
             var tempPath = AtomicFileCommit.CreateTempPath(fullPath);
             try
             {
+                long totalUncompressedBytes = 0L;
                 using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
-                using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, false, Encoding.UTF8))
+                using (var boundedArchive = new BoundedArchiveWriteStream(stream, MaxArchiveBytes))
+                using (var archive = new ZipArchive(boundedArchive, ZipArchiveMode.Create, true, StrictUtf8))
                 {
-                    WriteEntry(archive, "[Content_Types].xml", ContentTypesXml);
-                    WriteEntry(archive, "_rels/.rels", RootRelationshipsXml);
-                    WriteEntry(archive, "xl/workbook.xml", WorkbookXml);
-                    WriteEntry(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml);
-                    WriteEntry(archive, "xl/styles.xml", StylesXml);
-                    WriteEntry(archive, "xl/worksheets/sheet1.xml", dgklXml);
-                    WriteEntry(archive, "xl/worksheets/sheet2.xml", formworkXml);
-                    WriteEntry(archive, "xl/worksheets/sheet3.xml", detailXml);
-                    WriteEntry(archive, "xl/worksheets/sheet4.xml", traceXml);
+                    WriteEntry(archive, "[Content_Types].xml", ContentTypesXml, ref totalUncompressedBytes);
+                    WriteEntry(archive, "_rels/.rels", RootRelationshipsXml, ref totalUncompressedBytes);
+                    WriteEntry(archive, "xl/workbook.xml", WorkbookXml, ref totalUncompressedBytes);
+                    WriteEntry(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml, ref totalUncompressedBytes);
+                    WriteEntry(archive, "xl/styles.xml", StylesXml, ref totalUncompressedBytes);
+                    WriteEntry(archive, "xl/worksheets/sheet1.xml", BuildDgklSheet(summaries, null), ref totalUncompressedBytes);
+                    WriteEntry(archive, "xl/worksheets/sheet2.xml", BuildFormworkSheet(formwork, null), ref totalUncompressedBytes);
+                    WriteEntry(archive, "xl/worksheets/sheet3.xml", BuildDetailSheet(details, null), ref totalUncompressedBytes);
+                    WriteEntry(archive, "xl/worksheets/sheet4.xml", BuildTraceSheet(traces), ref totalUncompressedBytes);
                 }
+                if (new FileInfo(tempPath).Length > MaxArchiveBytes)
+                    throw new InvalidDataException("Customer workbook archive exceeds the bounded output contract.");
 
                 XlsxPackageValidator.Validate(
                     tempPath,
@@ -322,7 +327,7 @@ namespace QS3D.Core.Export
             }
         }
 
-        private static string BuildDgklSheet(IReadOnlyList<QuantityReportRow> rows, ICollection<TraceProjection> traces)
+        private static string BuildDgklSheet(IReadOnlyList<QuantityReportRow> rows, ICollection<TraceProjection>? traces)
         {
             var headers = new[] { "STT", "Tầng", "Loại", "Tên cấu kiện", "SL", "Mác BT", "BT gộp (m³)", "Trừ giao (m³)", "BT còn (m³)", "Dài (m)", "Chu vi ngoài (m)", "Chu vi trong (m)", TraceHeader };
             return BuildBusinessSheet(DgklSheet, headers, 12, rows, traces, (sb, row, excelRow, index, traceKey) =>
@@ -343,7 +348,7 @@ namespace QS3D.Core.Export
             });
         }
 
-        private static string BuildFormworkSheet(IReadOnlyList<QuantityReportRow> rows, ICollection<TraceProjection> traces)
+        private static string BuildFormworkSheet(IReadOnlyList<QuantityReportRow> rows, ICollection<TraceProjection>? traces)
         {
             var headers = new[] { "STT", "Tầng", "Loại", "Tên cấu kiện", "SL", "CP gộp (m²)", "Trừ giao (m²)", "CP còn (m²)", TraceHeader };
             return BuildBusinessSheet(FormworkSheet, headers, 8, rows, traces, (sb, row, excelRow, index, traceKey) =>
@@ -360,7 +365,7 @@ namespace QS3D.Core.Export
             });
         }
 
-        private static string BuildDetailSheet(IReadOnlyList<QuantityReportRow> rows, ICollection<TraceProjection> traces)
+        private static string BuildDetailSheet(IReadOnlyList<QuantityReportRow> rows, ICollection<TraceProjection>? traces)
         {
             var headers = new[] { "STT", "Nhóm", "Cấu kiện", "Tầng", "Dài", "Rộng", "Cao", "BT gộp", "Trừ giao", "BT còn", "VK", TraceHeader };
             return BuildBusinessSheet(DetailSheet, headers, 11, rows, traces, (sb, row, excelRow, index, traceKey) =>
@@ -387,7 +392,7 @@ namespace QS3D.Core.Export
             string[] headers,
             int visibleColumnCount,
             IReadOnlyList<QuantityReportRow> rows,
-            ICollection<TraceProjection> traces,
+            ICollection<TraceProjection>? traces,
             BusinessRowWriter writeRow)
         {
             if (headers.Length != visibleColumnCount + 1 || !string.Equals(headers[headers.Length - 1], TraceHeader, StringComparison.Ordinal))
@@ -408,7 +413,7 @@ namespace QS3D.Core.Export
                 var row = rows[index];
                 var excelRow = index + 2;
                 var traceKey = BuildTraceKey(sheetName, row);
-                traces.Add(new TraceProjection(traceKey, sheetName, excelRow, row.ElementIds, row.SourceHandles, row.DrawingFingerprint));
+                traces?.Add(new TraceProjection(traceKey, sheetName, excelRow, row.ElementIds, row.SourceHandles, row.DrawingFingerprint));
                 sb.Append("<row r=\"").Append(excelRow).Append("\">");
                 writeRow(sb, row, excelRow, index, traceKey);
                 sb.Append("</row>");
@@ -576,10 +581,56 @@ namespace QS3D.Core.Export
             return result;
         }
 
-        private static void WriteEntry(ZipArchive archive, string name, string content)
+        private static List<TraceProjection> ValidateWorkbookPayload(
+            IReadOnlyList<QuantityReportRow> details,
+            IReadOnlyList<QuantityReportRow> summaries,
+            IReadOnlyList<QuantityReportRow> formwork)
         {
+            long totalUncompressedBytes = 0L;
+            ReserveUncompressed(StrictUtf8.GetByteCount(ContentTypesXml), ref totalUncompressedBytes, "[Content_Types].xml");
+            ReserveUncompressed(StrictUtf8.GetByteCount(RootRelationshipsXml), ref totalUncompressedBytes, "_rels/.rels");
+            ReserveUncompressed(StrictUtf8.GetByteCount(WorkbookXml), ref totalUncompressedBytes, "xl/workbook.xml");
+            ReserveUncompressed(StrictUtf8.GetByteCount(WorkbookRelationshipsXml), ref totalUncompressedBytes, "xl/_rels/workbook.xml.rels");
+            ReserveUncompressed(StrictUtf8.GetByteCount(StylesXml), ref totalUncompressedBytes, "xl/styles.xml");
+
+            var traces = new List<TraceProjection>();
+            ReserveUncompressed(StrictUtf8.GetByteCount(BuildDgklSheet(summaries, traces)), ref totalUncompressedBytes, "xl/worksheets/sheet1.xml");
+            ReserveUncompressed(StrictUtf8.GetByteCount(BuildFormworkSheet(formwork, traces)), ref totalUncompressedBytes, "xl/worksheets/sheet2.xml");
+            ReserveUncompressed(StrictUtf8.GetByteCount(BuildDetailSheet(details, traces)), ref totalUncompressedBytes, "xl/worksheets/sheet3.xml");
+            ReserveUncompressed(StrictUtf8.GetByteCount(BuildTraceSheet(traces)), ref totalUncompressedBytes, "xl/worksheets/sheet4.xml");
+            return traces;
+        }
+
+        private static void WriteEntry(ZipArchive archive, string name, string content, ref long totalUncompressedBytes)
+        {
+            var bytes = StrictUtf8.GetByteCount(content);
+            ReserveUncompressed(bytes, ref totalUncompressedBytes, name);
             var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
-            using (var writer = new StreamWriter(entry.Open(), new UTF8Encoding(false))) writer.Write(content);
+            entry.LastWriteTime = FixedZipTimestamp;
+            using (var writer = new StreamWriter(entry.Open(), StrictUtf8, 4096, false)) writer.Write(content);
+        }
+
+        private static void ReserveUncompressed(long entryBytes, ref long totalUncompressedBytes, string name)
+        {
+            if (entryBytes < 0L || entryBytes > MaxWorksheetEntryBytes)
+                throw new InvalidDataException("Customer workbook entry exceeds the bounded output contract: " + name + ".");
+            var projected = checked(totalUncompressedBytes + entryBytes);
+            if (projected > MaxAggregateUncompressedBytes)
+                throw new InvalidDataException("Customer workbook aggregate uncompressed XML exceeds the bounded output contract.");
+            totalUncompressedBytes = projected;
+        }
+
+        private sealed class BoundedArchiveWriteStream : Stream
+        {
+            private readonly Stream _inner;
+            private readonly long _maxLength;
+            internal BoundedArchiveWriteStream(Stream inner, long maxLength) { _inner = inner ?? throw new ArgumentNullException(nameof(inner)); _maxLength = maxLength; }
+            public override bool CanRead => _inner.CanRead; public override bool CanSeek => _inner.CanSeek; public override bool CanWrite => _inner.CanWrite; public override long Length => _inner.Length;
+            public override long Position { get => _inner.Position; set => _inner.Position = value; }
+            public override void Flush() => _inner.Flush(); public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count); public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
+            public override void SetLength(long value) { if (value > _maxLength) throw new InvalidDataException("Customer workbook archive exceeds the bounded output contract."); _inner.SetLength(value); }
+            public override void Write(byte[] buffer, int offset, int count) { var projected = checked(_inner.Position + count); if (projected > _maxLength) throw new InvalidDataException("Customer workbook archive exceeds the bounded output contract."); _inner.Write(buffer, offset, count); }
+            public override void WriteByte(byte value) { if (checked(_inner.Position + 1L) > _maxLength) throw new InvalidDataException("Customer workbook archive exceeds the bounded output contract."); _inner.WriteByte(value); }
         }
 
         private sealed class TraceProjection
