@@ -70,7 +70,7 @@ def validate(source: str) -> None:
             raise SystemExit(f"ERROR: V25 updater installer-hold preflight: helper missing {label}: {token}")
 
     separator_binding = re.search(
-        r"\$rootWithSeparator\s*=\s*\$root\.TrimEnd\([^\n]+\)\s*\+\s*['\"]\\['\"]",
+        r"(?:\$rootWithSeparator\s*=\s*\$root\.TrimEnd\([^\n]+\)\s*\+\s*['\"]\\['\"]|\$rootWithSeparator\s*=\s*\$root\s*\+\s*\[IO\.Path\]::DirectorySeparatorChar\b)",
         helper,
         re.IGNORECASE,
     )
