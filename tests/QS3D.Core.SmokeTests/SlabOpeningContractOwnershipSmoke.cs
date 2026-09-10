@@ -57,7 +57,7 @@ namespace QS3D.Core.SmokeTests
             var nullFixture = CreateFixture("null-entry");
             PrepareOpeningForAtomicityCheck(nullFixture.Opening);
             var nullSnapshot = Snapshot(nullFixture.Project, nullFixture.Opening);
-            nullFixture.Project.Elements.Add(null!);
+            CorruptProjectStateSeed.AddNullElement(nullFixture.Project);
 
             Throws<InvalidOperationException>(() => SlabOpeningContract.Bind(nullFixture.Project, nullFixture.Opening, nullFixture.Host));
             RequireUnchanged(nullFixture.Project, nullFixture.Opening, nullSnapshot, "null project element entry");
