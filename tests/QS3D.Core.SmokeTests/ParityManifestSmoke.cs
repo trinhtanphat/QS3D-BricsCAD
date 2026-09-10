@@ -12,7 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             var record = new ParityFeatureRecord(
                 new FeatureId("BIM.Draw.Rectangle"), " BIM ",
-                " BLT3D / MÔ HÌNH BIM / Chữ nhật ", " BIM.Draw.Rectangle ",
+                "BLT3D / BIM / Rectangle", " BIM.Draw.Rectangle ",
                 ParityApplicability.Applicable, ParityEvidenceStage.ReferenceCaptured);
             Equal("bim.draw.rectangle", record.FeatureId.ToString());
             Equal("BIM", record.Domain);
@@ -21,6 +21,38 @@ namespace QS3D.Core.SmokeTests
             Throws<ArgumentException>(() => new ParityFeatureRecord(
                 new FeatureId("host.unsupported"), "Host", "reference", "host.unsupported",
                 ParityApplicability.NotApplicableByHostBoundary, ParityEvidenceStage.ReferenceCaptured));
+
+            ClosureRules();
+        }
+
+        private static ParityFeatureRecord Record(string id, ParityEvidenceStage stage) =>
+            new ParityFeatureRecord(new FeatureId(id), "BIM", "BLT3D reference", id,
+                ParityApplicability.Applicable, stage);
+
+        private static void ClosureRules()
+        {
+            Throws<InvalidOperationException>(() => new ParityManifest(new[] {
+                Record("bim.draw.rectangle", ParityEvidenceStage.ReferenceCaptured),
+                Record("BIM.DRAW.RECTANGLE", ParityEvidenceStage.UiPresent)
+            }, false));
+
+            var incompleteCatalog = new ParityManifest(new[] {
+                Record("bim.draw.rectangle", ParityEvidenceStage.V25V26ParityPass)
+            }, false);
+            if (incompleteCatalog.GetClosureReport().CanClaimFullParity)
+                throw new InvalidOperationException("Incomplete catalog claimed full parity.");
+
+            var uiOnly = new ParityManifest(new[] {
+                Record("bim.draw.rectangle", ParityEvidenceStage.UiPresent)
+            }, true);
+            if (uiOnly.GetClosureReport().CanClaimFullParity)
+                throw new InvalidOperationException("UI-only feature claimed full parity.");
+
+            var complete = new ParityManifest(new[] {
+                Record("bim.draw.rectangle", ParityEvidenceStage.V25V26ParityPass)
+            }, true);
+            if (!complete.GetClosureReport().CanClaimFullParity)
+                throw new InvalidOperationException("Qualified catalog did not close.");
         }
 
         private static void Equal<T>(T expected, T actual)
