@@ -147,7 +147,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             // Synchronous by design: queuing behind lifecycle ApplicationIdle would recreate the
             // exact A-state/B-document action window this fence owns.
-            InvalidateWorkspaceDocumentState();
+            TryInvalidateWorkspaceDocumentStateFromNativeCallback();
         }
 
         private void OnWorkspaceDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
@@ -158,8 +158,33 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
             }
 
-            if (ReferenceEquals(Application.DocumentManager.MdiActiveDocument, e.Document))
+            try
+            {
+                if (ReferenceEquals(Application.DocumentManager.MdiActiveDocument, e.Document))
+                    TryInvalidateWorkspaceDocumentStateFromNativeCallback();
+            }
+            catch (Exception)
+            {
+                // Native document wrappers can become unavailable during teardown. Fail closed by
+                // clearing document-bound Workspace presentation; never let a host callback escape.
+                TryInvalidateWorkspaceDocumentStateFromNativeCallback();
+            }
+        }
+
+        private void TryInvalidateWorkspaceDocumentStateFromNativeCallback()
+        {
+            try
+            {
                 InvalidateWorkspaceDocumentState();
+            }
+            catch (Exception)
+            {
+                // A callback racing Unloaded/disposal is cleanup-only. Retain normal subscriptions
+                // for a still-loaded Workspace so an isolated presentation error does not silently
+                // disable future document-affinity fencing.
+                if (!IsLoaded)
+                    RetryWorkspaceDocumentAffinityDetach();
+            }
         }
 
         private void InvalidateWorkspaceDocumentState()
