@@ -277,17 +277,47 @@ namespace QS3D.BricsCAD.V25
         private static void ResetPreservingVisibility()
         {
             if (_workspace == null && _properties == null && _right == null && _quantityInsight == null) return;
-            var workspaceVisible = IsWorkspaceVisible;
-            var propertiesVisible = IsPropertiesVisible;
-            var rightVisible = IsRightPanelVisible;
-            var quantityVisible = IsQuantityInsightVisible;
-            var ownerReferenceBimActive = workspaceVisible && rightVisible && !propertiesVisible && !quantityVisible;
+
+            // Snapshot exact native owners before crossing any Visible getter. A PaletteSet can already
+            // be stale during document/workspace teardown; one failed getter must not prevent disposal
+            // of that exact instance or reconstruction of the remaining modeless UI surfaces.
+            var workspacePalette = _workspace;
+            var propertiesPalette = _properties;
+            var rightPalette = _right;
+            var quantityPalette = _quantityInsight;
+            var workspaceRead = TryReadPaletteVisibility(workspacePalette, out var workspaceVisible);
+            var propertiesRead = TryReadPaletteVisibility(propertiesPalette, out var propertiesVisible);
+            var rightRead = TryReadPaletteVisibility(rightPalette, out var rightVisible);
+            var quantityRead = TryReadPaletteVisibility(quantityPalette, out var quantityVisible);
+            var ownerReferenceBimActive =
+                workspaceRead && propertiesRead && rightRead && quantityRead &&
+                workspaceVisible && rightVisible && !propertiesVisible && !quantityVisible;
+
             Dispose();
             EnsureCreated();
             _workspacePanel?.SetDedicatedPropertiesPaletteActive(propertiesVisible);
             if (ownerReferenceBimActive)
                 EnsureBimDockContract();
             SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);
+        }
+
+        private static bool TryReadPaletteVisibility(PaletteSet? palette, out bool visible)
+        {
+            visible = false;
+            if (palette == null) return false;
+            try
+            {
+                visible = palette.Visible;
+                return true;
+            }
+            catch
+            {
+                // Native teardown can invalidate an exact PaletteSet before managed ownership is
+                // cleared. Hidden is the conservative per-surface fallback; reset must continue so
+                // every stale exact owner still reaches the authoritative dispose/recreate boundary.
+                visible = false;
+                return false;
+            }
         }
 
         public static void Dispose()
