@@ -65,7 +65,7 @@ namespace QS3D.Core.Features
 
         private static string? Optional(string? value)
         {
-            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            return value == null || string.IsNullOrWhiteSpace(value) ? null : value.Trim();
         }
     }
 }
