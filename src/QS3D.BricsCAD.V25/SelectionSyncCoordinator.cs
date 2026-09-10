@@ -74,7 +74,6 @@ namespace QS3D.BricsCAD.V25
             if (document == null || !Attached.Contains(document)) return;
 
             AttachmentTokens.TryGetValue(document, out var attachmentToken);
-            AttachmentHandlers.TryGetValue(document, out var attachmentHandler);
             NativeSelectionSubscription? subscription = null;
             if (attachmentToken != null)
                 NativeSubscriptions.TryGetValue(attachmentToken, out subscription);
@@ -90,13 +89,6 @@ namespace QS3D.BricsCAD.V25
 
             if (subscription != null)
                 RequestDetach(subscription);
-            else if (attachmentHandler != null)
-            {
-                // Legacy/inconsistent ownership is best-effort only. Normal generations always have
-                // a NativeSelectionSubscription before native add is attempted.
-                try { document.ImpliedSelectionChanged -= attachmentHandler; }
-                catch { }
-            }
         }
 
         public static void DetachByName(string? fileName)
