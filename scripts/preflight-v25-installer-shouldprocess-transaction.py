@@ -107,34 +107,50 @@ except ContractError as exc:
     raise SystemExit(f"ERROR: V25 installer ShouldProcess transaction preflight failed: {exc}")
 
 # Adversarial self-tests make sure the guard detects the regression classes it claims to own.
-transaction_marker = "$registrySnapshots ="
-marker_index = source.find(transaction_marker)
-require(marker_index >= 0, "preflight self-test could not locate transaction marker")
+transaction_match = re.search(r"^\s*\$registrySnapshots\s*=.*$", source, flags=re.IGNORECASE | re.MULTILINE)
+require(transaction_match is not None, "preflight self-test could not locate transaction marker")
+transaction_insert = transaction_match.end()
 expect_rejected(
     "independent registry approval",
-    source[:marker_index] + "$PSCmdlet.ShouldProcess('extra', 'unsafe')\n" + source[marker_index:],
+    source[:transaction_insert] + "\n$PSCmdlet.ShouldProcess('extra', 'unsafe')" + source[transaction_insert:],
 )
-expect_rejected(
-    "decline fall-through",
-    re.sub(r"\breturn\b", "Write-Verbose 'unsafe fall-through'", source, count=1),
-)
+
 approval_match = re.search(
-    r"if\s*\(\s*-not\s*\(\s*\$PSCmdlet\s*\.\s*ShouldProcess\s*\([^)]*\)\s*\)\s*\)\s*\{.*?\}",
-    source[marker_index:],
+    r"if\s*\(\s*-not\s*\(\s*\$PSCmdlet\s*\.\s*ShouldProcess\s*\([^)]*\)\s*\)\s*\)\s*\{(?P<body>.*?)\}",
+    source[transaction_match.start():],
     flags=re.IGNORECASE | re.MULTILINE | re.DOTALL,
 )
 require(approval_match is not None, "preflight self-test could not locate transaction approval block")
-approval_abs_start = marker_index + approval_match.start()
-approval_abs_end = marker_index + approval_match.end()
+approval_abs_start = transaction_match.start() + approval_match.start()
+approval_abs_end = transaction_match.start() + approval_match.end()
 approval_block = source[approval_abs_start:approval_abs_end]
+decline_body = approval_match.group("body")
+require(re.search(r"\breturn\b", decline_body, flags=re.IGNORECASE) is not None,
+        "preflight self-test could not locate decline return")
+unsafe_decline_body = re.sub(
+    r"\breturn\b",
+    "Write-Verbose 'unsafe fall-through'",
+    decline_body,
+    count=1,
+    flags=re.IGNORECASE,
+)
+unsafe_decline_block = approval_block.replace(decline_body, unsafe_decline_body, 1)
+expect_rejected(
+    "decline fall-through",
+    source[:approval_abs_start] + unsafe_decline_block + source[approval_abs_end:],
+)
+
 without_approval = source[:approval_abs_start] + source[approval_abs_end:]
+new_transaction_match = re.search(r"^\s*\$registrySnapshots\s*=.*$", without_approval,
+                                  flags=re.IGNORECASE | re.MULTILINE)
+require(new_transaction_match is not None, "preflight self-test lost transaction marker")
 late_mutation = re.search(
     r"New-Item\s+-ItemType\s+Directory\s+-Path\s+\$parent\b[^\n]*\n",
-    without_approval[marker_index:],
+    without_approval[new_transaction_match.start():],
     flags=re.IGNORECASE,
 )
 require(late_mutation is not None, "preflight self-test could not locate first main-path mutation")
-late_abs_end = marker_index + late_mutation.end()
+late_abs_end = new_transaction_match.start() + late_mutation.end()
 expect_rejected(
     "approval after first mutation",
     without_approval[:late_abs_end] + approval_block + "\n" + without_approval[late_abs_end:],
