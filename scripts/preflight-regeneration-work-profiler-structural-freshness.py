@@ -47,7 +47,7 @@ for token in (
     "RemoveThenEmpty",
     "project.Elements[index] = new ProjectElement(original.Id, original.Category);",
     "project.Elements.Remove(original)",
-    "project.ChangeVersion != version",
+    "project.ChangeVersion != checked(version + 1L)",
 ):
     assert token in smoke, f"missing regeneration profiler structural smoke coverage: {token}"
 

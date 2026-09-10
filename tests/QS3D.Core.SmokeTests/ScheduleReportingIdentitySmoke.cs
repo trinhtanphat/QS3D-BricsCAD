@@ -34,7 +34,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("schedule-null-element", "Schedule null element");
             project.Elements.Add(new ProjectElement("E1", ElementCategory.Slab, "family", "floor", "zone"));
-            project.Elements.Add(null!);
+            CorruptProjectStateSeed.AddNullElement(project);
 
             AssertAllProjectReportBuildersReject(project, "element index 1");
         }

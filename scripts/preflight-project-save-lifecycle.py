@@ -26,15 +26,17 @@ smoke = read(TESTS / "ProjectPersistenceLifecycleSmoke.cs")
 registration = read(TESTS / "SmokeTestRegistration.cs")
 
 for token in (
+    "subscription.MayHaveSaveComplete = true",
     "document.Database.SaveComplete += saveComplete",
+    "subscription.MayHaveBeginClose = true",
     "document.BeginDocumentClose += beginClose",
-    "document.Database.SaveComplete -= saveComplete",
+    "subscription.Document.Database.SaveComplete -= subscription.SaveCompleteHandler",
     "ProjectContextCoordinator.TrySavePending(document, out var path)",
     "MessageBoxButton.YesNoCancel",
     "e.Veto()",
     "ProjectContextCoordinator.SaveRecoveryCopy(document, saveError)",
-    "document.Database.SaveComplete -= saveComplete",
-    "document.BeginDocumentClose -= beginClose",
+    "subscription.Document.BeginDocumentClose -= subscription.BeginCloseHandler",
+    "RequestProjectPersistenceDetach(subscription);",
 ):
     if token not in lifecycle:
         errors.append("document save/close lifecycle contract missing: " + token)

@@ -120,7 +120,7 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(firstHost);
             project.Elements.Add(secondHost);
             project.Elements.Add(door);
-            project.Elements.Add(null!);
+            CorruptProjectStateSeed.AddNullElement(project);
             return project;
         }
 

@@ -47,8 +47,10 @@ if "StartLifecycleIdleTimer" in lifecycle or "new DispatcherTimer(" in lifecycle
 
 require(palette, "public static void ResetForNoDocument()", "no-document palette reset API")
 require(palette, "private static void ResetPreservingVisibility()", "no-document palette teardown implementation")
-require(palette, "var workspaceVisible = IsWorkspaceVisible;", "workspace visibility preservation")
-require(palette, "var rightVisible = IsRightPanelVisible;", "right visibility preservation")
+require(palette, "var workspacePalette = _workspace;", "workspace exact-owner visibility snapshot")
+require(palette, "var workspaceRead = TryReadPaletteVisibility(workspacePalette, out var workspaceVisible);", "workspace contained visibility preservation")
+require(palette, "var rightPalette = _right;", "right exact-owner visibility snapshot")
+require(palette, "var rightRead = TryReadPaletteVisibility(rightPalette, out var rightVisible);", "right contained visibility preservation")
 require(palette, "Dispose();", "no-document stale palette teardown")
 require(palette, "EnsureCreated();", "palette creation guard")
 require(palette, "public static void ResetForUnavailableProject(string status)", "unavailable-project reset API")
@@ -76,4 +78,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: destroyed or unavailable projects cannot leave stale Workspace semantic callbacks; no-document visibility is preserved, direct refresh fails closed with redacted diagnostics, and remaining drawings rebind through the one-shot ApplicationIdle reconcile boundary.")
+print("PASS: destroyed or unavailable projects cannot leave stale Workspace semantic callbacks; no-document visibility is preserved through exact-instance contained native reads, direct refresh fails closed with redacted diagnostics, and remaining drawings rebind through the one-shot ApplicationIdle reconcile boundary.")

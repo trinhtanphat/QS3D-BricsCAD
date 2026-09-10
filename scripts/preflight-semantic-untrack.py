@@ -24,7 +24,6 @@ checks = {
         "if (targetIds.Contains(dependentId)) continue",
         "Cannot untrack semantic element(s) while dependents remain",
         "project.Elements.Remove(target)",
-        "project.Touch()",
     ],
     "resolver": [
         "element.SourceHandles",
@@ -60,6 +59,11 @@ for key, needles in checks.items():
     for needle in needles:
         if needle not in text:
             errors.append(str(path.relative_to(ROOT)) + " missing semantic-untrack token: " + needle)
+
+if files["service"].is_file():
+    service_text = files["service"].read_text(encoding="utf-8")
+    if "project.Touch()" in service_text:
+        errors.append("SemanticUntrackService must not manually Touch after structural element removal; ProjectState.Elements owns the revision increment.")
 
 if files["command"].is_file():
     text = files["command"].read_text(encoding="utf-8")

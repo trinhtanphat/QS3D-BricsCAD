@@ -59,7 +59,8 @@ for token in (
         errors.append("single-editor optional reparenting contract missing: " + token)
 
 for token in (
-    "var propertiesVisible = IsPropertiesVisible;",
+    "var propertiesPalette = _properties;",
+    "var propertiesRead = TryReadPaletteVisibility(propertiesPalette, out var propertiesVisible);",
     "_workspacePanel?.SetDedicatedPropertiesPaletteActive(propertiesVisible);",
     "SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);",
 ):
@@ -86,4 +87,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: one authoritative editable QS3D Properties editor remains; default BIM keeps it embedded under Family, while the existing dedicated palette can reparent that same visual only when explicitly visible.")
+print("PASS: one authoritative editable QS3D Properties editor remains; default BIM keeps it embedded under Family, while the existing dedicated palette can reparent that same visual only when explicitly visible and reset derives host state from the contained exact-instance snapshot.")

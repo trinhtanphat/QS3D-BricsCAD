@@ -23,9 +23,9 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining<InvalidOperationException>(
                 () => SemanticHandleOwnershipResolver.Resolve(project, RemoveThenYieldNothing(project, owner)),
-                "Project element ownership changed while materializing semantic handle selection");
+                "Project state changed while materializing semantic handle selection");
 
-            Equal(beforeVersion, project.ChangeVersion, "removed-owner project revision");
+            Equal(checked(beforeVersion + 1L), project.ChangeVersion, "removed-owner project revision");
             False(project.Elements.Contains(owner), "removed-owner caller side effect");
         }
 
@@ -38,9 +38,9 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining<InvalidOperationException>(
                 () => SemanticHandleOwnershipResolver.Resolve(project, YieldThenReplace(project, owner, replacement, "A1")),
-                "Project element ownership changed while materializing semantic handle selection");
+                "Project state changed while materializing semantic handle selection");
 
-            Equal(beforeVersion, project.ChangeVersion, "replaced-owner project revision");
+            Equal(checked(beforeVersion + 2L), project.ChangeVersion, "replaced-owner project revision");
             False(project.Elements.Contains(owner), "replaced-owner original instance");
             True(project.Elements.Contains(replacement), "replaced-owner replacement instance");
         }

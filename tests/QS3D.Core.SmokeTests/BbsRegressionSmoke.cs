@@ -137,7 +137,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("bbs-null", "BBS Null");
             project.Elements.Add(ScheduledElement("B1"));
-            project.Elements.Add(null!);
+            CorruptProjectStateSeed.AddNullElement(project);
             Throws<InvalidOperationException>(() => ProjectRebarScheduleBuilder.Build(project));
         }
 

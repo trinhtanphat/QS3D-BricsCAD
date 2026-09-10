@@ -223,7 +223,7 @@ namespace QS3D.Core.SmokeTests
         private static void NullProjectElementsFailClosed()
         {
             var project = Project();
-            project.Elements.Add(null!);
+            CorruptProjectStateSeed.AddNullElement(project);
             var definition = Definition("S-NULL", "Null guard", "NULL GUARD", "", "", Array.Empty<string>(), Array.Empty<string>());
             Throws<InvalidOperationException>(() => SemanticScheduleCatalog.Build(project, definition));
         }
