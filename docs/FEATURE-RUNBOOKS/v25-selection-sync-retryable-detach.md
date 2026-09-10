@@ -1,6 +1,6 @@
 # BricsCAD V25 SelectionSync retryable native detach
 
-Lane: C03 — BricsCAD V25 UI / Workspace / Modeless / Authoring  
+Lane: C03 — BricsCAD V25 UI / Workspace / Modeless / Authoring
 Lane-Key: `issue-6331`
 
 ## Defect
