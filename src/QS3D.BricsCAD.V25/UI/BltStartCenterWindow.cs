@@ -619,30 +619,32 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void RefreshHomeShell(bool recordActiveDrawing)
         {
-            var document = Application.DocumentManager.MdiActiveDocument;
-            if (document != null)
-            {
-                var path = document.Name ?? string.Empty;
-                if (recordActiveDrawing && StartCenterUserStateStore.TryNormalizeDwgPath(path, out var normalized))
-                    StartCenterUserStateStore.RecordProject(normalized);
+            // Establish a document-neutral shell before touching host/native state. A deferred refresh can
+            // run while BricsCAD invalidates the previously active Document wrapper; stale native getters
+            // must never leave the previous drawing's title/floor/elevation visible in this modeless window.
+            Title = "QS3D — Khởi đầu";
+            _floorText.Text = "Tầng —";
+            _elevationText.Text = "•  Cao độ 0.000 m";
 
+            var document = Application.DocumentManager.MdiActiveDocument;
+            var hasDocumentPath = TryReadDocumentPath(document, out var path);
+            if (hasDocumentPath && !string.IsNullOrWhiteSpace(path))
+            {
                 try
                 {
                     var display = Path.GetFileNameWithoutExtension(path);
-                    Title = string.IsNullOrWhiteSpace(display) ? "QS3D — Khởi đầu" : "QS3D — " + display;
+                    if (!string.IsNullOrWhiteSpace(display))
+                        Title = "QS3D — " + display;
                 }
                 catch
                 {
-                    Title = "QS3D — Khởi đầu";
+                    // Keep the already-published neutral title when the path cannot be formatted.
                 }
             }
-            else
-            {
-                Title = "QS3D — Khởi đầu";
-            }
 
-            _floorText.Text = "Tầng —";
-            _elevationText.Text = "•  Cao độ 0.000 m";
+            if (hasDocumentPath && recordActiveDrawing && StartCenterUserStateStore.TryNormalizeDwgPath(path, out var normalized))
+                StartCenterUserStateStore.RecordProject(normalized);
+
             if (document != null)
             {
                 try
@@ -665,6 +667,23 @@ namespace QS3D.BricsCAD.V25.UI
             }
 
             RefreshRecentProjects();
+        }
+
+        private static bool TryReadDocumentPath(Bricscad.ApplicationServices.Document document, out string path)
+        {
+            path = string.Empty;
+            if (document == null) return false;
+
+            try
+            {
+                path = document.Name ?? string.Empty;
+                return true;
+            }
+            catch
+            {
+                path = string.Empty;
+                return false;
+            }
         }
 
         private void RefreshRecentProjects()
