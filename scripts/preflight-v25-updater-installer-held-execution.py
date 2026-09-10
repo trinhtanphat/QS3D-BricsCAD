@@ -186,6 +186,8 @@ def validate(source: str) -> None:
         fail("package admission occurs before installer hold")
     admission = require(source, "Assert-PackageRoot -Directory $extractRoot", "held package admission", acquire)
     invoke = require(source, "& $installerScript @arguments", "in-memory installer invocation", admission)
+    if re.search(r"\$heldInstaller\.Dispose\(\)", source[acquire:invoke], re.IGNORECASE):
+        fail("held installer is disposed before in-memory invocation")
     dispose = require(source, "$heldInstaller.Dispose()", "held installer disposal", invoke)
     if not (acquire < admission < invoke < dispose):
         fail("require acquire < final package admission < in-memory invoke < dispose")

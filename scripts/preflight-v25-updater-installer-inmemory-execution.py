@@ -55,6 +55,8 @@ def validate(source: str) -> None:
     read = require(source, "$installerReader.ReadToEnd()", "held installer read", installer_text)
     script = require(source, "[ScriptBlock]::Create($installerText)", "in-memory installer ScriptBlock", read)
     invoke = require(source, "& $installerScript @arguments", "in-memory installer invocation", admission)
+    if re.search(r"\$heldInstaller\.Dispose\(\)", source[acquire:invoke], re.IGNORECASE):
+        fail("held installer is disposed before in-memory invocation")
     installer_dispose = require(source, "$heldInstaller.Dispose()", "held installer disposal", invoke)
     extract_dispose = require(source, "$heldExtractRoot.Dispose()", "extraction-root hold disposal", installer_dispose)
     temp_dispose = require(source, "$heldTempRoot.Dispose()", "temporary-root hold disposal", extract_dispose)
