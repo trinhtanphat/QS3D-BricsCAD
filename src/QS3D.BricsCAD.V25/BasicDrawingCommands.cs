@@ -173,6 +173,7 @@ namespace QS3D.BricsCAD.V25
                 operation + ": Family active không có identity canonical hợp lệ.");
 
             return new BasicDrawingContext(
+                project,
                 projectId,
                 project.ChangeVersion,
                 familyId,
@@ -213,6 +214,8 @@ namespace QS3D.BricsCAD.V25
 
             if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
                 throw new InvalidOperationException(operation + ": QS3D project không còn khả dụng trước khi commit CAD.");
+            if (!ReferenceEquals(project, expected.Project))
+                throw new InvalidOperationException(operation + ": QS3D project đã được reload/thay generation trong lúc vẽ. Hãy chạy lại để dùng ngữ cảnh mới.");
             if (!string.Equals(project.ProjectId, expected.ProjectId, StringComparison.OrdinalIgnoreCase) ||
                 project.ChangeVersion != expected.ChangeVersion)
                 throw new InvalidOperationException(operation + ": QS3D project/Floor/Zone/thuộc tính đã thay đổi trong lúc vẽ. Hãy chạy lại để dùng ngữ cảnh mới.");
@@ -385,6 +388,7 @@ namespace QS3D.BricsCAD.V25
         private sealed class BasicDrawingContext
         {
             public BasicDrawingContext(
+                ProjectState project,
                 string projectId,
                 long changeVersion,
                 string familyId,
@@ -393,6 +397,7 @@ namespace QS3D.BricsCAD.V25
                 string floorId,
                 string zoneId)
             {
+                Project = project ?? throw new ArgumentNullException(nameof(project));
                 ProjectId = projectId ?? string.Empty;
                 ChangeVersion = changeVersion;
                 FamilyId = familyId ?? string.Empty;
@@ -402,6 +407,7 @@ namespace QS3D.BricsCAD.V25
                 ZoneId = zoneId ?? string.Empty;
             }
 
+            public ProjectState Project { get; }
             public string ProjectId { get; }
             public long ChangeVersion { get; }
             public string FamilyId { get; }
