@@ -196,8 +196,12 @@ namespace QS3D.Core.Export
 
         private static bool RequiresSpreadsheetFormulaEscape(string? value)
         {
-            var probe = (value ?? string.Empty).TrimStart();
-            return probe.Length > 0 && (probe[0] == '=' || probe[0] == '+' || probe[0] == '-' || probe[0] == '@');
+            if (string.IsNullOrEmpty(value)) return false;
+            var index = 0;
+            while (index < value.Length && char.IsWhiteSpace(value[index])) index++;
+            if (index >= value.Length) return false;
+            var first = value[index];
+            return first == '=' || first == '+' || first == '-' || first == '@';
         }
 
         private sealed class BoundedUtf8TextWriter : TextWriter
