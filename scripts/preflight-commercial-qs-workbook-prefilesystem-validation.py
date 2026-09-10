@@ -6,8 +6,8 @@ SOURCE = ROOT / "src/QS3D.Core/Export/CommercialQsWorkbook.cs"
 TEXT = SOURCE.read_text(encoding="utf-8")
 
 required_existing = [
-    "MaxWorksheetEntryBytes",
-    "MaxAggregateXmlBytes",
+    "MaxEntryBytes",
+    "MaxTotalUncompressedBytes",
     "MaxArchiveBytes",
     "StrictUtf8",
     "Directory.CreateDirectory(directory)",
