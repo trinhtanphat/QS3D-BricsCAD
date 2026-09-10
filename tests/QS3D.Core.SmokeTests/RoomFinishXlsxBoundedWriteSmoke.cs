@@ -32,6 +32,12 @@ namespace QS3D.Core.SmokeTests
                 foreach (var header in headers)
                     if (!xml.Contains(">" + header + "</t>", StringComparison.Ordinal))
                         throw new InvalidOperationException("Room-finish XLSX header smoke: UTF-8 header fidelity drifted: " + header);
+
+                var workbookEntry = archive.GetEntry("xl/workbook.xml") ?? throw new InvalidOperationException("Room-finish XLSX header smoke: workbook entry is missing.");
+                using var workbookReader = new StreamReader(workbookEntry.Open(), new UTF8Encoding(false, true), true);
+                var workbookXml = workbookReader.ReadToEnd();
+                if (!workbookXml.Contains("name=\"HT Phòng\"", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Room-finish XLSX header smoke: workbook sheet-name UTF-8 fidelity drifted.");
             }
             finally { TryDelete(path); }
         }
