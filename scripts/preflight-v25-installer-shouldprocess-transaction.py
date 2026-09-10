@@ -24,14 +24,15 @@ def first_index(source: str, pattern: str, label: str) -> int:
 
 
 def validate(source: str) -> None:
-    # Restrict confirmation semantics to the executable transaction body. Helper functions
-    # legitimately contain registry/file mutations for rollback and admission checks.
-    transaction_start = first_index(
+    # All helper definitions precede this marker. Starting at the executable body means a
+    # future payload/registry mutation cannot escape the guard merely by moving before the
+    # current registry-snapshot statement.
+    execution_start = first_index(
         source,
-        r"^\s*\$registrySnapshots\s*=",
-        "installer transaction start",
+        r"^\s*\$runningBricsCAD\s*=",
+        "installer executable-body start",
     )
-    transaction = source[transaction_start:]
+    transaction = source[execution_start:]
 
     # One user decision must admit or decline the whole mutating transaction. Independent
     # per-target confirmations can otherwise register a Loader whose payload was declined.
@@ -57,8 +58,8 @@ def validate(source: str) -> None:
         "declined transaction must directly return before any installer mutation",
     )
 
-    # Fail closed on any filesystem/registry mutation before the single admission decision,
-    # not just on the currently expected first mutation. This guards future refactors too.
+    # Fail closed on any explicit filesystem/registry mutation in the whole executable body
+    # before the single admission decision, not just on today's first expected mutation.
     preapproval = transaction[:approval_index]
     premature_mutation = re.search(
         r"(?im)^\s*(?:New-Item(?:Property)?|Set-ItemProperty|Remove-Item(?:Property)?|Move-Item|Copy-Item|Unblock-File)\b",
@@ -116,22 +117,22 @@ except ContractError as exc:
     raise SystemExit(f"ERROR: V25 installer ShouldProcess transaction preflight failed: {exc}")
 
 # Adversarial self-tests make sure the guard detects the regression classes it claims to own.
-transaction_match = re.search(r"^\s*\$registrySnapshots\s*=.*$", source, flags=re.IGNORECASE | re.MULTILINE)
-require(transaction_match is not None, "preflight self-test could not locate transaction marker")
-transaction_insert = transaction_match.end()
+execution_match = re.search(r"^\s*\$runningBricsCAD\s*=.*$", source, flags=re.IGNORECASE | re.MULTILINE)
+require(execution_match is not None, "preflight self-test could not locate executable-body marker")
+execution_insert = execution_match.end()
 expect_rejected(
     "independent registry approval",
-    source[:transaction_insert] + "\n$PSCmdlet.ShouldProcess('extra', 'unsafe')" + source[transaction_insert:],
+    source[:execution_insert] + "\n$PSCmdlet.ShouldProcess('extra', 'unsafe')" + source[execution_insert:],
 )
 
 approval_match = re.search(
     r"if\s*\(\s*-not\s*\(\s*\$PSCmdlet\s*\.\s*ShouldProcess\s*\([^)]*\)\s*\)\s*\)\s*\{(?P<body>.*?)\}",
-    source[transaction_match.start():],
+    source[execution_match.start():],
     flags=re.IGNORECASE | re.MULTILINE | re.DOTALL,
 )
 require(approval_match is not None, "preflight self-test could not locate transaction approval block")
-approval_abs_start = transaction_match.start() + approval_match.start()
-approval_abs_end = transaction_match.start() + approval_match.end()
+approval_abs_start = execution_match.start() + approval_match.start()
+approval_abs_end = execution_match.start() + approval_match.end()
 approval_block = source[approval_abs_start:approval_abs_end]
 decline_body = approval_match.group("body")
 require(re.search(r"\breturn\b", decline_body, flags=re.IGNORECASE) is not None,
@@ -153,18 +154,22 @@ expect_rejected(
     "mutation before transaction approval",
     source[:approval_abs_start] + "New-Item -Path 'unsafe' -Force\n" + source[approval_abs_start:],
 )
+expect_rejected(
+    "early executable-body mutation before snapshots",
+    source[:execution_insert] + "\nNew-ItemProperty -Path 'HKCU:\\unsafe' -Name Loader -Value bad -Force" + source[execution_insert:],
+)
 
 without_approval = source[:approval_abs_start] + source[approval_abs_end:]
-new_transaction_match = re.search(r"^\s*\$registrySnapshots\s*=.*$", without_approval,
-                                  flags=re.IGNORECASE | re.MULTILINE)
-require(new_transaction_match is not None, "preflight self-test lost transaction marker")
+new_execution_match = re.search(r"^\s*\$runningBricsCAD\s*=.*$", without_approval,
+                                flags=re.IGNORECASE | re.MULTILINE)
+require(new_execution_match is not None, "preflight self-test lost executable-body marker")
 late_mutation = re.search(
     r"New-Item\s+-ItemType\s+Directory\s+-Path\s+\$parent\b[^\n]*\n",
-    without_approval[new_transaction_match.start():],
+    without_approval[new_execution_match.start():],
     flags=re.IGNORECASE,
 )
 require(late_mutation is not None, "preflight self-test could not locate first main-path mutation")
-late_abs_end = new_transaction_match.start() + late_mutation.end()
+late_abs_end = new_execution_match.start() + late_mutation.end()
 expect_rejected(
     "approval after first mutation",
     without_approval[:late_abs_end] + approval_block + "\n" + without_approval[late_abs_end:],
