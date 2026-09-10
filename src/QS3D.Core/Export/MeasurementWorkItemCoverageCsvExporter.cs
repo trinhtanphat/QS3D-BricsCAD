@@ -226,7 +226,7 @@ namespace QS3D.Core.Export
 
         private static bool RequiresSpreadsheetFormulaEscape(string? value)
         {
-            if (string.IsNullOrEmpty(value)) return false;
+            if (value == null || value.Length == 0) return false;
             var index = 0;
             while (index < value.Length && char.IsWhiteSpace(value[index])) index++;
             if (index >= value.Length) return false;
