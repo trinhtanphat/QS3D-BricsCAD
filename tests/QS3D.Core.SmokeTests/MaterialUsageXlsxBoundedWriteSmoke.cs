@@ -30,7 +30,7 @@ namespace QS3D.Core.SmokeTests
         private static void ExistingMaterialUsageWorkbookSurvivesBudgetFailure(string path, string sentinel)
         {
             var rows = new List<MaterialUsageRow>();
-            var hostile = new string('界', 32767);
+            var hostile = new string('ç•Œ', 32767);
             for (var i = 0; i < 24; i++)
             {
                 var row = new MaterialUsageRow
@@ -77,3 +77,4 @@ namespace QS3D.Core.SmokeTests
         }
     }
 }
+
