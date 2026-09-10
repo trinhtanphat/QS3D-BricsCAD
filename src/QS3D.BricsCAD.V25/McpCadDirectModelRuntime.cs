@@ -296,19 +296,17 @@ namespace QS3D.BricsCAD.V25
                 if (double.IsNaN(sourceArea) || double.IsInfinity(sourceArea) || sourceArea <= GeometryTolerance)
                     throw new InvalidOperationException("cad_extrude validation failed: source curve has zero or non-finite enclosed area.");
 
-                Curve? profileClone = null;
+                EnsureSameActiveDocument(document, "cad_extrude");
+                EnsureAutomationRunning();
                 Region? region = null;
+                var regionAppended = false;
                 var solid = new Solid3d();
                 try
                 {
-                    profileClone = source.Clone() as Curve;
-                    if (profileClone == null)
-                        throw new InvalidOperationException("cad_extrude validation failed: source curve could not be cloned safely.");
-
                     DBObjectCollection regions;
                     try
                     {
-                        regions = Region.CreateFromCurves(new DBObjectCollection { profileClone });
+                        regions = Region.CreateFromCurves(new DBObjectCollection { source });
                     }
                     catch (Exception ex)
                     {
@@ -323,27 +321,29 @@ namespace QS3D.BricsCAD.V25
                             "cad_extrude validation failed: source curve must form exactly one non-self-intersecting closed planar region.");
                     }
                     region = generatedRegion;
+                    var model = ModelSpace(transaction, document.Database, OpenMode.ForWrite);
+                    model.AppendEntity(region);
+                    regionAppended = true;
+                    transaction.AddNewlyCreatedDBObject(region, true);
                     solid.SetDatabaseDefaults(document.Database);
                     try
                     {
-                        using (var options = new SweepOptions())
-                            solid.CreateExtrudedSolid(region, new Vector3d(0d, 0d, height), options);
+                        solid.Extrude(region, height, 0d);
                     }
                     catch (Exception ex)
                     {
                         throw new InvalidOperationException(
                             "cad_extrude native solid creation failed after validation; source curve was preserved.", ex);
                     }
-
                     EnsureSameActiveDocument(document, "cad_extrude");
                     EnsureAutomationRunning();
                     ApplyLayer(transaction, document.Database, solid, string.IsNullOrWhiteSpace(requestedLayer) ? source.Layer : requestedLayer);
-                    var model = ModelSpace(transaction, document.Database, OpenMode.ForWrite);
                     var id = model.AppendEntity(solid);
                     transaction.AddNewlyCreatedDBObject(solid, true);
+                    if (!region.IsErased) region.Erase();
                     transaction.Commit();
                     var resultHandle = id.Handle.ToString();
-                    RecordMutation(document, "cad-extrude", "handle=" + resultHandle + "; sourceHandle=" + handle + "; kernelSource=transient-region");
+                    RecordMutation(document, "cad-extrude", "handle=" + resultHandle + "; sourceHandle=" + handle + "; kernelSource=database-resident-region");
                     return "{\"created\":true,\"handle\":\"" + Escape(resultHandle) + "\",\"type\":\"Solid3d\",\"sourceHandle\":\"" + Escape(handle) + "\"}";
                 }
                 catch
@@ -353,8 +353,7 @@ namespace QS3D.BricsCAD.V25
                 }
                 finally
                 {
-                    region?.Dispose();
-                    profileClone?.Dispose();
+                    if (!regionAppended) region?.Dispose();
                 }
             }
         }
@@ -370,8 +369,8 @@ namespace QS3D.BricsCAD.V25
             using (document.LockDocument())
             using (var transaction = document.Database.TransactionManager.StartTransaction())
             {
-                var target = OpenEntity(transaction, document.Database, targetHandle, OpenMode.ForRead) as Solid3d;
-                var operand = OpenEntity(transaction, document.Database, toolHandle, OpenMode.ForRead) as Solid3d;
+                var target = OpenEntity(transaction, document.Database, targetHandle, OpenMode.ForWrite) as Solid3d;
+                var operand = OpenEntity(transaction, document.Database, toolHandle, OpenMode.ForWrite) as Solid3d;
                 if (target == null || operand == null)
                     throw new InvalidOperationException("cad_boolean_" + operationName + " requires two live Solid3d entity handles in the active drawing.");
 
@@ -393,41 +392,23 @@ namespace QS3D.BricsCAD.V25
                            + "\",\"toolHandle\":\"" + Escape(toolHandle) + "\"}";
                 }
 
-                Solid3d? targetWorking = null;
-                Solid3d? operandWorking = null;
+                EnsureSameActiveDocument(document, "cad_boolean_" + operationName);
+                EnsureAutomationRunning();
                 try
                 {
-                    targetWorking = target.Clone() as Solid3d;
-                    operandWorking = operand.Clone() as Solid3d;
-                    if (targetWorking == null || operandWorking == null)
-                        throw new InvalidOperationException("cad_boolean_" + operationName + " could not clone the validated Solid3d operands.");
-                    try
-                    {
-                        targetWorking.BooleanOperation(operation, operandWorking);
-                    }
-                    catch (Exception ex)
-                    {
-                        throw new InvalidOperationException(
-                            "cad_boolean_" + operationName + " native solid kernel failed after validation; sources were preserved.", ex);
-                    }
-
-                    EnsureSameActiveDocument(document, "cad_boolean_" + operationName);
-                    EnsureAutomationRunning();
-                    target.UpgradeOpen();
-                    operand.UpgradeOpen();
-                    target.CopyFrom(targetWorking);
-                    if (!operand.IsErased) operand.Erase();
-                    transaction.Commit();
-                    RecordMutation(document, "cad-boolean", "targetHandle=" + targetHandle + "; consumedHandle=" + toolHandle
-                        + "; operation=" + operationName + "; kernelInputs=detached-clones");
-                    return "{\"updated\":true,\"resultHandle\":\"" + Escape(targetHandle) + "\",\"consumedHandle\":\""
-                           + Escape(toolHandle) + "\",\"operation\":\"" + Escape(operationName) + "\"}";
+                    target.BooleanOperation(operation, operand);
                 }
-                finally
+                catch (Exception ex)
                 {
-                    targetWorking?.Dispose();
-                    operandWorking?.Dispose();
+                    throw new InvalidOperationException(
+                        "cad_boolean_" + operationName + " native solid kernel failed after validation; transaction rollback preserves both sources.", ex);
                 }
+                if (!operand.IsErased) operand.Erase();
+                transaction.Commit();
+                RecordMutation(document, "cad-boolean", "targetHandle=" + targetHandle + "; consumedHandle=" + toolHandle
+                    + "; operation=" + operationName + "; kernelTarget=database-resident; kernelOperand=database-resident");
+                return "{\"updated\":true,\"resultHandle\":\"" + Escape(targetHandle) + "\",\"consumedHandle\":\""
+                       + Escape(toolHandle) + "\",\"operation\":\"" + Escape(operationName) + "\"}";
             }
         }
 
@@ -470,7 +451,11 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("BricsCAD SaveAs returned but the active database path did not match the requested target.");
                 return string.Empty;
             });
+            if (document == null)
+                throw new InvalidOperationException("cad_save_as lost its captured BricsCAD document before completion verification.");
             var saveResult = McpNativeCurrentDocumentSave.SaveCurrentDocument(
+                document,
+                fullPath,
                 EnsureAutomationRunning,
                 detail => McpCadAgentRuntime.AuditDomainMutation("cad_save_as", detail));
             var leaf = SafeLeaf(fullPath);

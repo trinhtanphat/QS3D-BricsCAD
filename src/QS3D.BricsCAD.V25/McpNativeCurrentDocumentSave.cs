@@ -38,11 +38,16 @@ namespace QS3D.BricsCAD.V25
 
         internal static SaveResult SaveCurrentDocument(Action ensureRunning, Action<string>? audit)
         {
+            return SaveCurrentDocument(null, null, ensureRunning, audit);
+        }
+
+        internal static SaveResult SaveCurrentDocument(Document? expectedDocument, string? expectedFullPath, Action ensureRunning, Action<string>? audit)
+        {
             if (ensureRunning == null) throw new ArgumentNullException(nameof(ensureRunning));
             ensureRunning();
             EnsureRetainedCleanupResolved(audit);
 
-            var operation = new NativeSaveOperation(audit);
+            var operation = new NativeSaveOperation(expectedDocument, expectedFullPath, audit);
             var detached = false;
             try
             {
@@ -188,8 +193,13 @@ namespace QS3D.BricsCAD.V25
             private bool _commandCancelledAttached;
             private bool _commandFailedAttached;
 
-            internal NativeSaveOperation(Action<string>? audit)
+            private readonly Document? _expectedDocument;
+            private readonly string _expectedFullPath;
+
+            internal NativeSaveOperation(Document? expectedDocument, string? expectedFullPath, Action<string>? audit)
             {
+                _expectedDocument = expectedDocument;
+                _expectedFullPath = string.IsNullOrWhiteSpace(expectedFullPath) ? string.Empty : Path.GetFullPath(expectedFullPath);
                 _audit = audit;
             }
 
@@ -204,10 +214,15 @@ namespace QS3D.BricsCAD.V25
                 EnsureCommandContextAutomationNotStopped();
                 var document = Application.DocumentManager.MdiActiveDocument;
                 if (document == null) throw new InvalidOperationException("No active BricsCAD document.");
+                if (_expectedDocument != null && !ReferenceEquals(document, _expectedDocument))
+                    throw new InvalidOperationException("The active BricsCAD document changed before native QSAVE could be queued; save completion was not attempted.");
 
                 var filename = document.Database.Filename ?? string.Empty;
                 if (!Path.IsPathRooted(filename))
                     throw new InvalidOperationException("Active drawing has no existing local path. Use cad_save_as first.");
+                var rootedFilename = Path.GetFullPath(filename);
+                if (_expectedFullPath.Length != 0 && !SamePath(rootedFilename, _expectedFullPath))
+                    throw new InvalidOperationException("The active BricsCAD document path changed before native QSAVE could be queued; save completion was not attempted.");
                 if (document.IsReadOnly)
                     throw new InvalidOperationException(
                         "Active drawing is read-only. Native QSAVE was not queued; use an explicit writable Save As target instead.");
@@ -227,7 +242,7 @@ namespace QS3D.BricsCAD.V25
                         "Cannot save while a BricsCAD command is active. Wait for idle or cancel the active command before retrying.");
 
                 Document = document;
-                FullPath = Path.GetFullPath(filename);
+                FullPath = rootedFilename;
                 AttachHandlers(document);
                 try
                 {

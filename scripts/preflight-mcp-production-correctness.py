@@ -51,21 +51,19 @@ def main() -> int:
     open_entity = block(src["direct"], "private static Entity OpenEntity")
     require(errors, extrude, (
         "source.Closed", "source.IsPlanar", "source.Area",
-        "source.Clone() as Curve", "Region.CreateFromCurves(new DBObjectCollection { profileClone })",
-        "kernelSource=transient-region", "cad_extrude validation failed",
+        "Region.CreateFromCurves(new DBObjectCollection { source })", "model.AppendEntity(region);",
+        "solid.Extrude(region, height, 0d);", "kernelSource=database-resident-region", "cad_extrude validation failed",
     ), "cad_extrude production validation")
     forbid(errors, extrude, (
-        "model.AppendEntity(region);", "kernelSource=database-resident-region",
+        "source.Clone() as Curve", "kernelSource=transient-region",
     ), "cad_extrude temporary database residency")
 
     require(errors, boolean, (
-        "target.Clone() as Solid3d", "operand.Clone() as Solid3d",
-        "ExtentsOverlap", "target.CopyFrom(targetWorking)",
-        "sources were preserved", "kernelInputs=detached-clones",
+        "ExtentsOverlap", "target.BooleanOperation(operation, operand);",
+        "transaction rollback preserves both sources", "kernelTarget=database-resident; kernelOperand=database-resident",
     ), "CAD Boolean atomic detached-kernel boundary")
     forbid(errors, boolean, (
-        "target.BooleanOperation(operation, operand);",
-        "kernelTarget=database-resident; kernelOperand=database-resident",
+        "target.Clone() as Solid3d", "operand.Clone() as Solid3d", "targetWorking.BooleanOperation", "kernelInputs=detached-clones",
     ), "CAD Boolean live-database kernel mutation")
     require(errors, open_entity, (
         "entity.Database", "ReferenceEquals(entity.Database, database)",
@@ -105,6 +103,12 @@ def main() -> int:
     require(errors, src["popup"], (
         "ClassifySeverity", 'return "error"', 'return "warning"', 'return "info"',
     ), "popup severity classification")
+
+    # SaveAs completion must remain bound to the exact document/path captured by Database.SaveAs;
+    # reacquiring MdiActiveDocument for the follow-up QSAVE can otherwise save a different DWG.
+    save_as = block(src["direct"], "private static string SaveAs")
+    require(errors, save_as, ("McpNativeCurrentDocumentSave.SaveCurrentDocument(", "document,", "fullPath,"), "cad_save_as captured document/path completion binding")
+    require(errors, src["save"], ("Document? expectedDocument", "string? expectedFullPath", "!ReferenceEquals(document, _expectedDocument)", "!SamePath(rootedFilename, _expectedFullPath)"), "native QSAVE SaveAs ABA/document-path fence")
 
     if errors:
         print("ERROR: MCP production-correctness preflight failed:")
