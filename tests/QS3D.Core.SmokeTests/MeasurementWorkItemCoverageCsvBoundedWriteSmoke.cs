@@ -1,9 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Linq;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 using QS3D.Core.Domain;
@@ -28,12 +25,25 @@ namespace QS3D.Core.SmokeTests
             var path = Path.Combine(Path.GetTempPath(), "measurement-coverage-valid-" + Guid.NewGuid().ToString("N") + ".csv");
             try
             {
-                var matrix = CreateMatrix(
-                    new[] { CreateCell("QTY-界", "MAP-界", "CLASS-界", "WORK-界", "ELEMENT-界") },
-                    CreateProvenance("Dự-án-界", "FP-界", 37L, new DateTime(2026, 9, 10, 8, 0, 0, DateTimeKind.Utc)));
+                var matrix = BuildSingleMatrix(
+                    "Dự-án-界",
+                    "FP-界",
+                    "ELEMENT-界",
+                    "QTY-界",
+                    "MAP-界",
+                    "CLASS-界",
+                    "WORK-界");
+                var provenance = matrix.Provenance
+                    ?? throw new InvalidOperationException("Measurement coverage bounded smoke: provenance was not captured.");
                 MeasurementWorkItemCoverageCsvExporter.Export(path, matrix);
                 var csv = File.ReadAllText(path, new UTF8Encoding(false, true));
-                foreach (var token in new[] { "QTY-界", "MAP-界", "WORK-界", "ELEMENT-界", "Dự-án-界", "FP-界", "37", "2026-09-10T08:00:00.0000000Z" })
+                foreach (var token in new[]
+                {
+                    "QTY-界", "MAP-界", "CLASS-界", "WORK-界", "ELEMENT-界",
+                    "Dự-án-界", "FP-界",
+                    provenance.ChangeVersion.ToString(CultureInfo.InvariantCulture),
+                    provenance.UpdatedUtc.ToString("O", CultureInfo.InvariantCulture)
+                })
                 {
                     if (!csv.Contains(token, StringComparison.Ordinal))
                         throw new InvalidOperationException("Measurement coverage CSV strict UTF-8/provenance round-trip lost token: " + token);
@@ -46,9 +56,14 @@ namespace QS3D.Core.SmokeTests
 
         private static void FormulaPrefixesRemainFailClosed()
         {
-            var matrix = CreateMatrix(
-                new[] { CreateCell("=SUM(A1:A2)", "MAP", "CLASS", "WORK", "ELEMENT") },
-                null);
+            var matrix = BuildSingleMatrix(
+                "=project-formula",
+                "FP",
+                "ELEMENT",
+                "NetVolumeM3",
+                "MAP",
+                "CLASS",
+                "WORK");
             try
             {
                 MeasurementWorkItemCoverageCsvExporter.ToCsv(matrix);
@@ -103,62 +118,60 @@ namespace QS3D.Core.SmokeTests
 
         private static MeasurementWorkItemCoverageMatrix CreateHostileMultibyteMatrix()
         {
-            const int cellCount = 150;
-            var prefix = new string('界', 32750);
-            var cells = new List<MeasurementWorkItemCoverageMatrixCell>(cellCount);
-            for (var i = 0; i < cellCount; i++)
+            const int elementCount = 700;
+            const string quantityKey = "NetVolumeM3";
+            var hostileSuffix = new string('界', 32750);
+            var project = new ProjectState("coverage-bounded", "Coverage bounded hostile matrix");
+            for (var i = 0; i < elementCount; i++)
             {
-                var token = prefix + i.ToString("D3", CultureInfo.InvariantCulture);
-                cells.Add(CreateCell(token, token, token, token, token));
+                var elementId = "E-" + i.ToString("D4", CultureInfo.InvariantCulture) + "-" + hostileSuffix;
+                var element = new ProjectElement(elementId, ElementCategory.Slab);
+                element.SetQuantity(quantityKey, 1d);
+                element.MarkClean(ElementDirtyFlags.All);
+                project.Elements.Add(element);
             }
-            return CreateMatrix(cells, null);
+
+            var report = MeasurementWorkItemCoverageReport.Create(
+                MeasurementWorkItemCoverageEvaluator.Evaluate(project, Catalog(quantityKey, "MAP", "CLASS", "WORK")));
+            return MeasurementWorkItemCoverageMatrix.Create(report);
         }
 
-        private static MeasurementWorkItemCoverageMatrixCell CreateCell(
-            string measurementItemId,
-            string mappingId,
-            string classificationId,
-            string workItemId,
-            string elementId)
-        {
-            var ctor = typeof(MeasurementWorkItemCoverageMatrixCell).GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic).Single();
-            return (MeasurementWorkItemCoverageMatrixCell)ctor.Invoke(new object[]
-            {
-                default(ElementCategory),
-                measurementItemId,
-                mappingId,
-                classificationId,
-                workItemId,
-                true,
-                Array.Empty<MeasurementWorkItemCoverageIssue>(),
-                1,
-                new[] { elementId }
-            });
-        }
-
-        private static MeasurementWorkItemCoverageProvenance CreateProvenance(
+        private static MeasurementWorkItemCoverageMatrix BuildSingleMatrix(
             string projectId,
             string fingerprint,
-            long changeVersion,
-            DateTime updatedUtc)
+            string elementId,
+            string quantityKey,
+            string mappingId,
+            string classificationId,
+            string workItemId)
         {
-            var ctor = typeof(MeasurementWorkItemCoverageProvenance).GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic).Single();
-            return (MeasurementWorkItemCoverageProvenance)ctor.Invoke(new object[] { projectId, fingerprint, changeVersion, updatedUtc });
+            var project = new ProjectState(projectId, "Coverage bounded smoke");
+            project.DrawingFingerprint = fingerprint;
+            var element = new ProjectElement(elementId, ElementCategory.Slab);
+            element.SetQuantity(quantityKey, 1d);
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+            var report = MeasurementWorkItemCoverageReport.Create(
+                MeasurementWorkItemCoverageEvaluator.Evaluate(
+                    project,
+                    Catalog(quantityKey, mappingId, classificationId, workItemId)));
+            return MeasurementWorkItemCoverageMatrix.Create(project, report);
         }
 
-        private static MeasurementWorkItemCoverageMatrix CreateMatrix(
-            IEnumerable<MeasurementWorkItemCoverageMatrixCell> cells,
-            MeasurementWorkItemCoverageProvenance? provenance)
-        {
-            var cellList = cells.ToList().AsReadOnly();
-            var reportCtor = typeof(MeasurementWorkItemCoverageReport).GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic).Single();
-            var report = (MeasurementWorkItemCoverageReport)reportCtor.Invoke(new object[]
+        private static MeasurementWorkItemMappingCatalog Catalog(
+            string quantityKey,
+            string mappingId,
+            string classificationId,
+            string workItemId) =>
+            new MeasurementWorkItemMappingCatalog(new[]
             {
-                Array.Empty<MeasurementWorkItemCoverageReportRow>(), 0, 0, 0, 0
+                new MeasurementWorkItemMapping(
+                    mappingId,
+                    ElementCategory.Slab,
+                    quantityKey,
+                    classificationId,
+                    workItemId)
             });
-            var matrixCtor = typeof(MeasurementWorkItemCoverageMatrix).GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic).Single();
-            return (MeasurementWorkItemCoverageMatrix)matrixCtor.Invoke(new object?[] { cellList, report, provenance });
-        }
 
         private static void TryDelete(string path)
         {
