@@ -82,6 +82,14 @@ def validate(text: str) -> None:
             "V25 acknowledgement safety proof must execute before reconciled release identity acceptance.")
 
 
+def remove_first_after(source: str, marker: str, target: str, label: str) -> str:
+    marker_index = source.find(marker)
+    require(marker_index >= 0, f"Mutation probe could not find marker for {label}: {marker}")
+    target_index = source.find(target, marker_index + len(marker))
+    require(target_index >= 0, f"Mutation probe could not find target for {label}: {target}")
+    return source[:target_index] + "__QS3D_MUTATION_REMOVED__" + source[target_index + len(target):]
+
+
 text = WORKFLOW.read_text(encoding="utf-8")
 validate(text)
 
@@ -92,13 +100,13 @@ mutation_snippets = (
     HELPER_EXACT,
     KNOWN_INVALID_INIT,
     SAFETY_UNPROVEN,
-    POST_VALIDATE + "\n" + " " * 10 + SAFETY_CLEAR,
+    POST_VALIDATE,
     KNOWN_INVALID_SET,
     KNOWN_INVALID_GUARD,
-    RECONCILE_VALIDATE + "\n" + " " * 14 + SAFETY_CLEAR,
+    RECONCILE_VALIDATE,
 )
 for snippet in mutation_snippets:
-    require(snippet in text, f"Mutation probe could not find required sequence: {snippet}")
+    require(snippet in text, f"Mutation probe could not find required marker: {snippet}")
     mutated = text.replace(snippet, "__QS3D_MUTATION_REMOVED__", 1)
     try:
         validate(mutated)
@@ -106,5 +114,17 @@ for snippet in mutation_snippets:
         pass
     else:
         raise SystemExit(f"Mutation probe unexpectedly passed after removing: {snippet}")
+
+for label, marker in (
+    ("post-PATCH safety clear", POST_VALIDATE),
+    ("acknowledgement-reconciliation safety clear", RECONCILE_VALIDATE),
+):
+    mutated = remove_first_after(text, marker, SAFETY_CLEAR, label)
+    try:
+        validate(mutated)
+    except SystemExit:
+        pass
+    else:
+        raise SystemExit(f"Mutation probe unexpectedly passed after removing {label}")
 
 print("PASS V25 final-publish protected-main stability fence")
