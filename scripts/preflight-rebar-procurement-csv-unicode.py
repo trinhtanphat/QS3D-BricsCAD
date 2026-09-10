@@ -15,18 +15,20 @@ if SOURCE.is_file():
     text = SOURCE.read_text(encoding="utf-8")
     required = (
         "private const int MaxRowCount = 10000;",
+        "private const long MaxCsvBytes = 16L * 1024L * 1024L;",
         "private static readonly UTF8Encoding StrictUtf8WithBom = new UTF8Encoding(true, true);",
-        "var content = ToCsv(rows);",
+        "var snapshots = SnapshotRows(rows);",
+        "ValidateCsvByteCount(snapshots);",
         "var fullPath = Path.GetFullPath(path);",
         "using (var writer = new StreamWriter(stream, StrictUtf8WithBom))",
-        "var content = sb.ToString();",
-        "StrictUtf8WithBom.GetByteCount(content);",
+        "WriteCsv(writer, snapshots);",
+        "StrictUtf8WithBom.GetByteCount(value)",
         "AtomicFileCommit.CreateTempPath(fullPath)",
         "AtomicFileCommit.ReplaceWithoutBackup(tempPath, fullPath);",
         "AtomicFileCommit.TryDelete(tempPath);",
         "if (rowCount >= MaxRowCount)",
         "var probe = safe.TrimStart();",
-        "probe[0] == '=' || probe[0] == '+' || probe[0] == '-' || probe[0] == '@'",
+        "IsFormulaPrefix(probe[0])",
     )
     for token in required:
         if token not in text:
@@ -34,19 +36,32 @@ if SOURCE.is_file():
 
     if "new UTF8Encoding(true)" in text:
         errors.append("Procurement CSV exporter must not use replacement-fallback UTF-8.")
+    if "var content = ToCsv(rows);" in text or "writer.Write(content);" in text:
+        errors.append("Procurement CSV Export must not regress to eager whole-file publication.")
 
-    validation = text.find("StrictUtf8WithBom.GetByteCount(content);")
-    projection_return = text.find("return content;", validation)
-    export_projection = text.find("var content = ToCsv(rows);")
-    path_resolution = text.find("var fullPath = Path.GetFullPath(path);")
-    directory_creation = text.find("Directory.CreateDirectory(directory)")
-    temp_creation = text.find("AtomicFileCommit.CreateTempPath(fullPath)")
-    if min(validation, projection_return) < 0 or validation > projection_return:
-        errors.append("Procurement CSV projection must validate strict UTF-8 before returning content.")
-    if min(export_projection, path_resolution, directory_creation, temp_creation) < 0 or not (
-        export_projection < path_resolution < directory_creation < temp_creation
+    export_start = text.find("public static void Export(")
+    export_end = text.find("public static string ToCsv(", export_start)
+    export_method = text[export_start:export_end]
+    snapshot = export_method.find("var snapshots = SnapshotRows(rows);")
+    validation = export_method.find("ValidateCsvByteCount(snapshots);", snapshot)
+    path_resolution = export_method.find("var fullPath = Path.GetFullPath(path);", validation)
+    directory_creation = export_method.find("Directory.CreateDirectory(directory)", path_resolution)
+    temp_creation = export_method.find("AtomicFileCommit.CreateTempPath(fullPath)", directory_creation)
+    if min(snapshot, validation, path_resolution, directory_creation, temp_creation) < 0 or not (
+        snapshot < validation < path_resolution < directory_creation < temp_creation
     ):
-        errors.append("Procurement CSV Export must validate/project before path, directory, and temp-file work.")
+        errors.append("Procurement CSV Export must snapshot and strict-UTF8 validate before path, directory, and temp-file work.")
+
+    to_csv_start = text.find("public static string ToCsv(")
+    snapshot_rows_start = text.find("private static List<RebarProcurementSummary> SnapshotRows", to_csv_start)
+    to_csv_method = text[to_csv_start:snapshot_rows_start]
+    to_csv_snapshot = to_csv_method.find("var snapshots = SnapshotRows(rows);")
+    to_csv_validation = to_csv_method.find("ValidateCsvByteCount(snapshots);", to_csv_snapshot)
+    to_csv_projection = to_csv_method.find("WriteCsv(writer, snapshots);", to_csv_validation)
+    if min(to_csv_snapshot, to_csv_validation, to_csv_projection) < 0 or not (
+        to_csv_snapshot < to_csv_validation < to_csv_projection
+    ):
+        errors.append("Procurement CSV ToCsv must validate strict UTF-8 and the byte ceiling before string projection.")
 
 if SMOKE.is_file():
     text = SMOKE.read_text(encoding="utf-8")

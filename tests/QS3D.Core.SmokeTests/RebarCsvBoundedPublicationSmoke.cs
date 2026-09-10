@@ -16,6 +16,8 @@ namespace QS3D.Core.SmokeTests
         {
             OversizedPayloadFailsClosed();
             OversizedExportPreservesDestination();
+            OversizedProcurementPayloadFailsClosed();
+            OversizedProcurementExportPreservesDestination();
         }
 
         private static void OversizedPayloadFailsClosed()
@@ -41,6 +43,44 @@ namespace QS3D.Core.SmokeTests
             {
                 Directory.Delete(directory, true);
             }
+        }
+
+        private static void OversizedProcurementPayloadFailsClosed()
+        {
+            var row = ProcurementRow(new string('x', MaxCsvBytes));
+            Throws<InvalidDataException>(() => RebarProcurementCsvExporter.ToCsv(new[] { row }));
+        }
+
+        private static void OversizedProcurementExportPreservesDestination()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "qs3d-rebar-procurement-csv-bound-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "procurement.csv");
+            File.WriteAllText(path, "SENTINEL");
+            try
+            {
+                var row = ProcurementRow(new string('x', MaxCsvBytes));
+                Throws<InvalidDataException>(() => RebarProcurementCsvExporter.Export(path, new[] { row }));
+                Equal("SENTINEL", File.ReadAllText(path));
+                Equal(1, Directory.GetFiles(directory).Length);
+            }
+            finally
+            {
+                Directory.Delete(directory, true);
+            }
+        }
+
+        private static RebarProcurementSummary ProcurementRow(string grade)
+        {
+            var demand = new RebarStockDemand(
+                "GROUP-1",
+                grade,
+                16d,
+                12d,
+                new[] { new RebarCutRequirement("CUT-1", 6d, 1) },
+                new RebarCutAllowancePolicy(0.01d, 0d));
+            var result = RebarCuttingOptimizer.Plan(demand);
+            return RebarProcurementReportBuilder.Build(new[] { result })[0];
         }
 
         private static RebarScheduleRow CanonicalRow(string barMark)
