@@ -77,9 +77,11 @@ def main() -> int:
         "ProjectContextCoordinator.Reload(document)",
     ), "QS3D persisted project bind/restore")
     require(errors, src["agent"], (
-        'case "qs3d_project_bind"', 'case "qs3d_project_reload"',
-        "McpQs3dDomainRuntime.Call(tool, args)",
-    ), "QS3D project tool dispatch")
+        "McpCadDirectModelRuntime.IsTool(tool)", "McpCadDirectModelRuntime.Call(tool, args)",
+    ), "QS3D project tool outer dispatch")
+    require(errors, src["direct"], (
+        "McpQs3dDomainRuntime.IsTool(tool)", "McpQs3dDomainRuntime.Call(tool, body)",
+    ), "QS3D project tool domain dispatch")
 
     selection = block(src["agent"], "private static string BuildSelectionJson")
     snapshot = block(src["agent"], "private static string BuildDatabaseSnapshotJson")
@@ -100,8 +102,8 @@ def main() -> int:
         "TransportErrorKind", "SetLastTransportError", "request:error",
         "structuredContent", "_meta", "OAuth",
     ), "transport structured diagnostics/protocol surface")
-    require(errors, src["popup"] + src["classifier"], (
-        "warning", "error", "info",
+    require(errors, src["popup"], (
+        "ClassifySeverity", 'return "error"', 'return "warning"', 'return "info"',
     ), "popup severity classification")
 
     if errors:
