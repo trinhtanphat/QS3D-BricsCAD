@@ -19,7 +19,7 @@ namespace QS3D.Core.SmokeTests
         {
             StrictUtf8RoundTripPreservesProvenance();
             FormulaPrefixesRemainFailClosed();
-            ExistingCoverageCsvSurvivesBudgetFailure();
+            HostileMultibyteCoverageFailsClosed();
             ToCsvHonorsTheSameByteCeiling();
         }
 
@@ -55,6 +55,11 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("Measurement coverage CSV semantic formula prefix unexpectedly exported.");
             }
             catch (InvalidDataException error) when (error.Message.Contains("spreadsheet formula prefix", StringComparison.Ordinal)) { }
+        }
+
+        private static void HostileMultibyteCoverageFailsClosed()
+        {
+            ExistingCoverageCsvSurvivesBudgetFailure();
         }
 
         private static void ExistingCoverageCsvSurvivesBudgetFailure()
