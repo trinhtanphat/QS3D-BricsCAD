@@ -41,7 +41,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = NewProject("FAB-INVALID");
             project.Metadata[RebarFabricationQualificationHealthService.RequireQualificationMetadataKey] = "maybe";
-            project.Elements.Add(null!);
+            CorruptProjectStateSeed.AddNullElement(project);
             var issues = Inspect(project);
             HasCode(issues, "REBAR_FAB_REQUIREMENT_INVALID");
             HasCode(issues, "REBAR_FAB_STANDARD_MISSING");
