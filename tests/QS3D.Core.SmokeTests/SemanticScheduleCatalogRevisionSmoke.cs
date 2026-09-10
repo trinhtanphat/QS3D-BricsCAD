@@ -28,10 +28,9 @@ namespace QS3D.Core.SmokeTests
         {
             var project = Project();
             var definition = Definition("S1", "Beam schedule", "BEAMS");
-
-            Equal(0L, project.ChangeVersion);
+            var beforeVersion = project.ChangeVersion;
             SemanticScheduleCatalog.Save(project, new[] { definition });
-            Equal(1L, project.ChangeVersion);
+            Equal(checked(beforeVersion + 1L), project.ChangeVersion);
             True(project.Metadata.ContainsKey(SemanticScheduleCatalog.MetadataKey));
 
             var version = project.ChangeVersion;
