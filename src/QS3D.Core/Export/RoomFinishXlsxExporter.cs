@@ -263,7 +263,7 @@ namespace QS3D.Core.Export
         {
             var headers = new[]
             {
-                "T?ng", "Ph?ng", "Lo?i ho?n thi?n", "Family / Lo?i", "V?t li?u", "??n v?", "SL", "KL ch?nh", "D?i (m)", "Di?n t?ch (m?)",
+                "Tầng", "Phòng", "Loại hoàn thiện", "Family / Loại", "Vật liệu", "Đơn vị", "SL", "KL chính", "Dài (m)", "Diện tích (m²)",
                 "Element IDs", "Room IDs", "Project ID", "Drawing fingerprint", "Source Handles"
             };
             var lastRow = Math.Max(1, rows.Count + 1);
