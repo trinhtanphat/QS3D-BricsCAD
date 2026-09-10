@@ -39,13 +39,22 @@ def validate(source: str) -> None:
 
     strict_utf8 = require(source, "[Text.UTF8Encoding]::new($false, $true)", "strict UTF-8 decoder", stream)
     reader = require(source, "$installerReader", "held installer reader", strict_utf8)
+    reader_ctor = re.search(
+        r"\$installerReader\s*=\s*\[IO\.StreamReader\]::new\(\s*\$installerStream\s*,\s*\$strictUtf8\s*,\s*\$false\s*,\s*4096\s*,\s*\$true\s*\)",
+        source[strict_utf8:admission],
+        re.IGNORECASE,
+    )
+    if reader_ctor is None:
+        fail("installer reader must disable BOM auto-detection and leave the held stream open")
+
     installer_text = require(source, "$installerText", "held installer text", reader)
-    script = require(source, "[ScriptBlock]::Create($installerText)", "in-memory installer ScriptBlock", installer_text)
+    read = require(source, "$installerReader.ReadToEnd()", "held installer read", installer_text)
+    script = require(source, "[ScriptBlock]::Create($installerText)", "in-memory installer ScriptBlock", read)
     invoke = require(source, "& $installerScript @arguments", "in-memory installer invocation", admission)
     dispose = require(source, "$heldInstaller.Dispose()", "held installer disposal", invoke)
 
-    if not (acquire < stream < strict_utf8 < reader < installer_text < script < admission < invoke < dispose):
-        fail("require hold < stream/read/script < final admission < in-memory invoke < disposal")
+    if not (acquire < stream < strict_utf8 < reader < installer_text < read < script < admission < invoke < dispose):
+        fail("require hold < stream/strict-read/script < final admission < in-memory invoke < disposal")
 
     unsafe_patterns = (
         (r"(?m)^\s*&\s*\$installer\s+@arguments\b", "pathname installer invocation"),
@@ -93,12 +102,10 @@ RequireSigned = $true
 ExpectedSignerThumbprint = $expectedSigner
 $installer = Join-Path $extractRoot 'install-v25-autoload.ps1'
 $heldInstaller = Open-HeldVerifiedInstaller -Path $installer -ExtractionRoot $extractRoot -ExpectedSigner $expectedSigner
-$installerStream = $null
-$installerReader = $null
 try {
  $installerStream = [IO.FileStream]::new($heldInstaller.Handle, [IO.FileAccess]::Read)
  $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
- $installerReader = [IO.StreamReader]::new($installerStream, $strictUtf8, $true, 4096, $true)
+ $installerReader = [IO.StreamReader]::new($installerStream, $strictUtf8, $false, 4096, $true)
  $installerText = $installerReader.ReadToEnd()
  $installerScript = [ScriptBlock]::Create($installerText)
  Assert-PackageRoot -Directory $extractRoot
@@ -118,6 +125,7 @@ def self_test() -> None:
     expect_reject(good.replace("& $installerScript @arguments", "& $installer @arguments", 1), "pathname execution")
     expect_reject(good.replace("$heldInstaller.Handle", "$other.Handle", 1), "source read from another handle")
     expect_reject(good.replace("[Text.UTF8Encoding]::new($false, $true)", "[Text.UTF8Encoding]::new($false, $false)", 1), "permissive UTF-8")
+    expect_reject(good.replace("$strictUtf8, $false, 4096, $true", "$strictUtf8, $true, 4096, $true", 1), "BOM auto-detection")
     expect_reject(good.replace(" Assert-PackageRoot -Directory $extractRoot", " $heldInstaller.Dispose()\n Assert-PackageRoot -Directory $extractRoot", 1), "early hold disposal")
     expect_reject(good.replace("$installerReader.ReadToEnd()", "Get-Content -LiteralPath $installer -Raw", 1), "pathname source read")
 
@@ -125,4 +133,4 @@ def self_test() -> None:
 if __name__ == "__main__":
     self_test()
     validate(UPDATER.read_text(encoding="utf-8"))
-    print("PASS: V25 updater reads strict UTF-8 installer source from the held object and executes only that in-memory ScriptBlock while the hold remains active")
+    print("PASS: V25 updater reads strict UTF-8 installer source from the held object without BOM decoder switching and executes only that in-memory ScriptBlock while the hold remains active")
