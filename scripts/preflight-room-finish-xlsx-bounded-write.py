@@ -15,6 +15,7 @@ required_source = [
     "BoundedEntryWriteStream",
     '"Tầng", "Phòng", "Loại hoàn thiện", "Family / Loại", "Vật liệu", "Đơn vị", "SL", "KL chính", "Dài (m)", "Diện tích (m²)"',
     '"Element IDs", "Room IDs", "Project ID", "Drawing fingerprint", "Source Handles"',
+    'name=\\"HT Phòng\\"',
 ]
 forbidden_source = [
     "private static string BuildSheet(IReadOnlyList<RoomFinishScheduleRow> rows)",
@@ -23,6 +24,8 @@ forbidden_source = [
 required_smoke = [
     "VietnameseHeaderRoundTripIsPreserved",
     "xl/worksheets/sheet1.xml",
+    "xl/workbook.xml",
+    'name=\\\"HT Phòng\\\"',
     "new UTF8Encoding(false, true)",
     "CumulativeWorksheetBudgetFailsBeforeDestinationReplacement",
     "ExistingRoomFinishWorkbookSurvivesBudgetFailure",
@@ -40,4 +43,4 @@ if missing or forbidden:
         detail.append("forbidden: " + ", ".join(forbidden))
     raise SystemExit("Room Finish XLSX bounded-write preflight failed; " + "; ".join(detail))
 
-print("PASS Room Finish XLSX bounded worksheet/archive write and UTF-8 header-fidelity guard")
+print("PASS Room Finish XLSX bounded worksheet/archive write and UTF-8 workbook/header-fidelity guard")
