@@ -173,17 +173,28 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
+            bool isVisible;
             try
             {
-                // PaletteSet visibility is a native-host boundary and can fail during teardown.
-                // Keep that read inside the fail-soft callback boundary and use the captured palette
-                // so concurrent coordinator cleanup cannot swap the reference mid-check.
-                if (!palette.Visible)
-                {
-                    RetryDocumentActivatedDetach();
-                    return;
-                }
+                // A disposed PaletteSet can remain reachable while a native event generation is
+                // still rooted. Treat a failed native visibility read as a stale callback and
+                // retry exact-handler cleanup instead of misclassifying it as a refresh failure.
+                isVisible = palette.Visible;
+            }
+            catch (Exception)
+            {
+                RetryDocumentActivatedDetach();
+                return;
+            }
 
+            if (!isVisible)
+            {
+                RetryDocumentActivatedDetach();
+                return;
+            }
+
+            try
+            {
                 // Bind display state to the document carried by this activation event. Re-querying
                 // MdiActiveDocument here can observe a later host transition and render the wrong DWG.
                 panel.RefreshFromDocument(e.Document ?? Application.DocumentManager.MdiActiveDocument);
