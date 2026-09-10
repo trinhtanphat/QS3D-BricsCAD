@@ -81,6 +81,14 @@ def main() -> int:
         "McpQs3dDomainRuntime.Call(tool, args)",
     ), "QS3D project tool dispatch")
 
+    selection = block(src["agent"], "private static string BuildSelectionJson")
+    snapshot = block(src["agent"], "private static string BuildDatabaseSnapshotJson")
+    stop = block(src["agent"], "private static string EmergencyStop")
+    cancel = block(src["agent"], "private static string CancelCurrentCommand")
+    forbid(errors, selection, ("catch { }",), "CAD selection silent native-read loss")
+    forbid(errors, snapshot, ("catch { continue; }",), "CAD snapshot silent native-read loss")
+    forbid(errors, stop, ("ex.Message",), "emergency-stop public exception leakage")
+    forbid(errors, cancel, ("ex.Message",), "cancel-command public exception leakage")
     require(errors, src["save"], (
         "CommandCompletionTimeoutMilliseconds", "CommandEnded += OnCommandEnded",
         "CommandCancelled += OnCommandCancelled", "CommandFailed += OnCommandFailed",
