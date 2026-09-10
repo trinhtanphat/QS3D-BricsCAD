@@ -6,10 +6,7 @@ namespace QS3D.Core.SmokeTests
 {
     internal static class ParityManifestSmoke
     {
-        // Intentionally not named Run while #5981 owns SmokeTestRegistration.cs.
-        // The project still compiles this contract test, and an external runner may invoke it
-        // until the canonical smoke registration path is released and re-acquired.
-        internal static void VerifyUnregisteredContract()
+        internal static void Run()
         {
             var record = new ParityFeatureRecord(
                 new FeatureId("BIM.Draw.Rectangle"), " BIM ",

@@ -5,8 +5,7 @@ namespace QS3D.Core.SmokeTests
 {
     internal static class ParityWorkflowRegistrySmoke
     {
-        // Intentionally not named Run while #5981 owns SmokeTestRegistration.cs.
-        internal static void VerifyUnregisteredContract()
+        internal static void Run()
         {
             Throws<ArgumentException>(() => new ParityWorkflowBinding(
                 new FeatureId("bim.draw.rectangle"), "bim.draw.rectangle",
