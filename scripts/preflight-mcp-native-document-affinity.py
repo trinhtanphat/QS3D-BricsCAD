@@ -48,8 +48,8 @@ def main() -> None:
                   "using (document.LockDocument())",
                   "EnsureSameActiveDocument(document, \"cad_layer_set_state\")",
                   "StartTransaction()",
+                  "EnsureSameActiveDocument(document, \"cad_layer_set_state_commit\")",
                   "transaction.Commit();",
-                  "EnsureSameActiveDocument(document, \"cad_layer_set_state_result\")",
                   "McpCadAgentRuntime.AuditDomainMutation(")
 
     restore = block(layer, "private static string RestoreSnapshot(", "private static string EncodeSnapshot(")
@@ -57,8 +57,8 @@ def main() -> None:
                   "using (document.LockDocument())",
                   "EnsureSameActiveDocument(document, \"cad_layer_restore\")",
                   "StartTransaction()",
+                  "EnsureSameActiveDocument(document, \"cad_layer_restore_commit\")",
                   "transaction.Commit();",
-                  "EnsureSameActiveDocument(document, \"cad_layer_restore_result\")",
                   "McpCadAgentRuntime.AuditDomainMutation(")
 
     zoom = block(view, "private static string ZoomExtents(", "private static string FitEntities(")
@@ -78,14 +78,14 @@ def main() -> None:
     require_order(set_view,
                   "using (document.LockDocument())",
                   "EnsureSameActiveDocument(document, \"cad_view_set\")",
+                  "EnsureSameActiveDocument(document, \"cad_view_set_commit\")",
                   "document.Editor.SetCurrentView(view);",
-                  "EnsureSameActiveDocument(document, \"cad_view_set_result\")",
                   "CurrentViewJson(document, \"set\")")
 
     apply_extents = block(view, "private static string ApplyExtents(", "private static Extents3d TransformExtents(")
     require_order(apply_extents,
+                  "EnsureSameActiveDocument(document, \"cad_view_apply_commit\")",
                   "document.Editor.SetCurrentView(view);",
-                  "EnsureSameActiveDocument(document, \"cad_view_result\")",
                   "CurrentViewJson(document, source)")
 
     for source, name in ((layer, "layer"), (view, "view")):

@@ -228,9 +228,9 @@ namespace QS3D.BricsCAD.V25
                 view.Height = height;
                 if (hasTwist) view.ViewTwist = twist;
                     RequireViewMutationIdle();
+                    EnsureSameActiveDocument(document, "cad_view_set_commit");
                     document.Editor.SetCurrentView(view);
                 }
-                EnsureSameActiveDocument(document, "cad_view_set_result");
                 result = CurrentViewJson(document, "set");
             }
             return result;
@@ -280,9 +280,9 @@ namespace QS3D.BricsCAD.V25
                 view.Width = PositiveViewSize(rawWidth * padding, "computed width");
                 view.Height = PositiveViewSize(rawHeight * padding, "computed height");
                 RequireViewMutationIdle();
+                EnsureSameActiveDocument(document, "cad_view_apply_commit");
                 document.Editor.SetCurrentView(view);
             }
-            EnsureSameActiveDocument(document, "cad_view_result");
             var result = CurrentViewJson(document, source);
             if (entityCount <= 0) return result;
             return result.Substring(0, result.Length - 1)

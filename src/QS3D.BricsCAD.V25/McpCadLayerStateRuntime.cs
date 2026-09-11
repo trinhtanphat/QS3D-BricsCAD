@@ -122,8 +122,8 @@ namespace QS3D.BricsCAD.V25
                 if (hasOn) record.IsOff = !requestedOn;
                 if (hasFrozen) record.IsFrozen = requestedFrozen;
                 if (hasLocked) record.IsLocked = requestedLocked;
+                    EnsureSameActiveDocument(document, "cad_layer_set_state_commit");
                     transaction.Commit();
-                    EnsureSameActiveDocument(document, "cad_layer_set_state_result");
                     McpCadAgentRuntime.AuditDomainMutation(
                         "cad_layer_set_state",
                         "name=" + name + "; on=" + (!record.IsOff ? "true" : "false")
@@ -195,8 +195,8 @@ namespace QS3D.BricsCAD.V25
                     record.IsFrozen = entry.Frozen;
                     record.IsLocked = entry.Locked;
                 }
+                    EnsureSameActiveDocument(document, "cad_layer_restore_commit");
                     transaction.Commit();
-                    EnsureSameActiveDocument(document, "cad_layer_restore_result");
                     McpCadAgentRuntime.AuditDomainMutation(
                         "cad_layer_restore",
                         "layerCount=" + snapshot.Entries.Count.ToString(CultureInfo.InvariantCulture)
