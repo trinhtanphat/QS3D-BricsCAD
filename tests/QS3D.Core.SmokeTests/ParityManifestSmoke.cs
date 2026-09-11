@@ -24,6 +24,7 @@ namespace QS3D.Core.SmokeTests
             ParserRules();
             RepositoryManifestBlocksPrematureClosure();
             P2ShellProjectEvidenceRules();
+            P3BimEditingModelingEvidenceRules();
         }
 
         private static ParityFeatureRecord Record(string id, ParityEvidenceStage stage) =>
@@ -95,6 +96,20 @@ namespace QS3D.Core.SmokeTests
             }
             if (manifest.CatalogComplete)
                 throw new InvalidOperationException("P2 must not mark the parity catalog complete.");
+        }
+        private static void P3BimEditingModelingEvidenceRules()
+        {
+            var path = Path.Combine("docs", "BLT3D-PARITY-MANIFEST.tsv");
+            var manifest = ParityManifestParser.Parse(File.ReadAllLines(path));
+            var ids = new[] { "bim.authoring", "draw", "tool.editing", "modeling" };
+            foreach (var id in ids)
+            {
+                var record = manifest.GetRequired(new FeatureId(id));
+                Equal(id, record.WorkflowKey);
+                Equal(ParityEvidenceStage.CommandWired, record.EvidenceStage);
+            }
+            if (manifest.CatalogComplete)
+                throw new InvalidOperationException("P3 must not mark the parity catalog complete.");
         }
         private static void RepositoryManifestBlocksPrematureClosure()
         {

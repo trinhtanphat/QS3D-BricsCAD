@@ -7,11 +7,11 @@ project.setup	Project	BLT3D / THIET LAP DU AN	project.setup	Applicable	CommandWi
 project.zone	Project	BLT3D / THIET LAP DU AN / Zone	project.zone	Applicable	CommandWired	-	-
 project.floor	Project	BLT3D / THIET LAP DU AN / Floor	project.floor	Applicable	CommandWired	-	-
 project.family	Project	BLT3D / THIET LAP DU AN / Family	project.family	Applicable	CommandWired	-	-
-bim.authoring	BIM	BLT3D / MO HINH BIM	bim.authoring	Applicable	ReferenceCaptured	-	-
+bim.authoring	BIM	BLT3D / MO HINH BIM	bim.authoring	Applicable	CommandWired	-	-
 recognition	Recognition	BLT3D / NHAN DANG	recognition	Applicable	ReferenceCaptured	-	-
-draw	Draw	BLT3D / VE	draw	Applicable	ReferenceCaptured	-	-
-tool.editing	Tool	BLT3D / TOOL	tool.editing	Applicable	ReferenceCaptured	-	-
-modeling	Modeling	BLT3D / MODELING	modeling	Applicable	ReferenceCaptured	-	-
+draw	Draw	BLT3D / VE	draw	Applicable	CommandWired	-	-
+tool.editing	Tool	BLT3D / TOOL	tool.editing	Applicable	CommandWired	-	-
+modeling	Modeling	BLT3D / MODELING	modeling	Applicable	CommandWired	-	-
 rebar	Rebar	BLT3D / COT THEP	rebar	Applicable	ReferenceCaptured	-	-
 view	View	BLT3D / XEM	view	Applicable	ReferenceCaptured	-	-
 quantity	Quantity	BLT3D / DINH LUONG	quantity	Applicable	ReferenceCaptured	-	-
