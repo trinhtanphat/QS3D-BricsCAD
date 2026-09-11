@@ -301,6 +301,8 @@ namespace QS3D.Core.Persistence
                 throw new InvalidDataException("QSDB " + owner + " must not be empty.");
             if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
                 throw new InvalidDataException("QSDB " + owner + " must not contain leading/trailing whitespace.");
+            if (value.Any(char.IsControl))
+                throw new InvalidDataException("QSDB " + owner + " must not contain control characters.");
         }
 
         private static void ValidateOptionalCanonicalAttribute(XElement element, string attributeName, string owner)
@@ -309,6 +311,8 @@ namespace QS3D.Core.Persistence
             if (value == null || value.Length == 0) return;
             if (string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal))
                 throw new InvalidDataException("QSDB " + owner + " must not contain leading/trailing whitespace.");
+            if (value.Any(char.IsControl))
+                throw new InvalidDataException("QSDB " + owner + " must not contain control characters.");
         }
 
         private static void ValidateOptionalCanonicalIdentityAttribute(XElement element, string attributeName, string owner)
