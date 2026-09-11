@@ -275,7 +275,7 @@ namespace QS3D.Core.BenchmarkParity
 
     public sealed class QsApiResponse
     {
-        public QsApiResponse(int statusCode, string apiVersion, string etag, object body, string errorCode)
+        public QsApiResponse(int statusCode, string apiVersion, string etag, object? body, string errorCode)
         {
             StatusCode = statusCode;
             ApiVersion = QsModelElementSnapshot.Require(apiVersion, "apiVersion");
@@ -286,7 +286,7 @@ namespace QS3D.Core.BenchmarkParity
         public int StatusCode { get; private set; }
         public string ApiVersion { get; private set; }
         public string ETag { get; private set; }
-        public object Body { get; private set; }
+        public object? Body { get; private set; }
         public string ErrorCode { get; private set; }
         public string ContentType { get { return "application/json"; } }
     }
