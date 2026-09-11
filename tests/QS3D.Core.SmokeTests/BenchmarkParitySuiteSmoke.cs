@@ -74,7 +74,7 @@ namespace QS3D.Core.SmokeTests
         {
             var result = new ConcreteFormworkCalculator().RectangularMember(5d, 0.3d, 0.6d, true);
             Near(0.9d, result.ConcreteVolume, 1e-12, "concrete volume");
-            Near(9.6d, result.FormworkArea, 1e-12, "formwork area");
+            Near(9.36d, result.FormworkArea, 1e-12, "formwork area");
         }
 
         private static void IfcWorkbench()
