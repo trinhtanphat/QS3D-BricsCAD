@@ -7,6 +7,7 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class ProjectToolsCommands
     {
+        private static PublishedManager? _pending;
         private static PublishedManager? _published;
 
         private sealed class PublishedManager
@@ -60,11 +61,31 @@ namespace QS3D.BricsCAD.V25
             if (document == null) return;
 
             ProjectToolsWindow? window = null;
+            PublishedManager? candidate = null;
             var nativeDatabaseIdentity = IntPtr.Zero;
             try
             {
                 nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+
+                var pending = _pending;
+                if (pending != null)
+                {
+                    if (pending.Matches(document) && pending.MatchesManagedWrapper(document))
+                    {
+                        if (pending.Window.IsLoaded)
+                        {
+                            try { pending.Window.Activate(); } catch { }
+                        }
+
+                        if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                        try { PaletteCoordinator.SetStatus("Project Tools đang được mở cho bản vẽ hiện hành."); } catch { }
+                        return;
+                    }
+
+                    throw new InvalidOperationException(
+                        "Project Tools khác đang trong quá trình mở; không tạo instance thứ hai trước khi host hoàn tất publication.");
+                }
 
                 var previous = _published;
                 if (previous != null)
@@ -100,41 +121,48 @@ namespace QS3D.BricsCAD.V25
 
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
                 window = new ProjectToolsWindow(document);
-                var published = new PublishedManager(window, document);
+                candidate = new PublishedManager(window, document);
+                var reserved = candidate;
+                _pending = reserved;
+
                 window.Closed += (_, __) =>
                 {
-                    if (ReferenceEquals(_published, published)) _published = null;
+                    if (ReferenceEquals(_pending, reserved)) _pending = null;
+                    if (ReferenceEquals(_published, reserved)) _published = null;
                 };
 
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
                 {
-                    CloseWindowOnAffinityDrift(window);
+                    ClosePendingOnAffinityDrift(reserved);
+                    candidate = null;
                     window = null;
                     return;
                 }
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
                 {
-                    CloseWindowOnAffinityDrift(window);
+                    ClosePendingOnAffinityDrift(reserved);
+                    candidate = null;
                     window = null;
                     return;
                 }
                 if (!window.IsLoaded)
                     throw new InvalidOperationException("Project Tools host show returned without a loaded window.");
+                if (!ReferenceEquals(_pending, reserved))
+                    throw new InvalidOperationException("Project Tools pending publication ownership changed during host show.");
 
-                _published = published;
+                _pending = null;
+                _published = reserved;
+                candidate = null;
                 window = null;
                 if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
                 {
-                try { PaletteCoordinator.SetStatus("Project Tools: tầng • vật liệu • template • module • health • khóa theo bản vẽ."); } catch { }
+                    try { PaletteCoordinator.SetStatus("Project Tools: tầng • vật liệu • template • module • health • khóa theo bản vẽ."); } catch { }
                 }
             }
             catch (Exception ex)
             {
-                if (window != null)
-                {
-                    try { window.Close(); } catch { }
-                }
+                ClosePendingAfterFailure(candidate, window);
 
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
                 var message = "QS3DPROJECTTOOLS lỗi: " + ex.Message;
@@ -142,6 +170,7 @@ namespace QS3D.BricsCAD.V25
                 try { document.Editor.WriteMessage("\n" + message); } catch { }
             }
         }
+
         private static IntPtr GetNativeDatabaseIdentity(Document document)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
@@ -165,11 +194,18 @@ namespace QS3D.BricsCAD.V25
             catch { return false; }
         }
 
-        private static void CloseWindowOnAffinityDrift(ProjectToolsWindow window)
+        private static void ClosePendingOnAffinityDrift(PublishedManager candidate)
+        {
+            if (candidate == null) return;
+            try { candidate.Window.Close(); } catch { }
+            if (!candidate.Window.IsLoaded && ReferenceEquals(_pending, candidate)) _pending = null;
+        }
+
+        private static void ClosePendingAfterFailure(PublishedManager? candidate, ProjectToolsWindow? window)
         {
             if (window == null) return;
             try { window.Close(); } catch { }
+            if (!window.IsLoaded && candidate != null && ReferenceEquals(_pending, candidate)) _pending = null;
         }
-
     }
 }
