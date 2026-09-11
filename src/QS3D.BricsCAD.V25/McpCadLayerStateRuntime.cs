@@ -107,10 +107,12 @@ namespace QS3D.BricsCAD.V25
             var requestedLocked = hasLocked && McpTopLevelJson.ExtractBoolean(body, "locked");
             var document = RequireDocument();
             using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartTransaction())
             {
-                var table = (LayerTable)transaction.GetObject(document.Database.LayerTableId, OpenMode.ForRead);
-                if (!table.Has(name)) throw new InvalidOperationException("Layer does not exist: " + name);
+                EnsureSameActiveDocument(document, "cad_layer_set_state");
+                using (var transaction = document.Database.TransactionManager.StartTransaction())
+                {
+                    var table = (LayerTable)transaction.GetObject(document.Database.LayerTableId, OpenMode.ForRead);
+                    if (!table.Has(name)) throw new InvalidOperationException("Layer does not exist: " + name);
                 var id = table[name];
                 var isCurrent = id == document.Database.Clayer;
                 if (isCurrent && ((hasOn && !requestedOn) || (hasFrozen && requestedFrozen)))
@@ -120,13 +122,15 @@ namespace QS3D.BricsCAD.V25
                 if (hasOn) record.IsOff = !requestedOn;
                 if (hasFrozen) record.IsFrozen = requestedFrozen;
                 if (hasLocked) record.IsLocked = requestedLocked;
-                transaction.Commit();
-                McpCadAgentRuntime.AuditDomainMutation(
-                    "cad_layer_set_state",
-                    "name=" + name + "; on=" + (!record.IsOff ? "true" : "false")
-                    + "; frozen=" + (record.IsFrozen ? "true" : "false")
-                    + "; locked=" + (record.IsLocked ? "true" : "false"));
-                return LayerStateJson(record, isCurrent);
+                    transaction.Commit();
+                    EnsureSameActiveDocument(document, "cad_layer_set_state_result");
+                    McpCadAgentRuntime.AuditDomainMutation(
+                        "cad_layer_set_state",
+                        "name=" + name + "; on=" + (!record.IsOff ? "true" : "false")
+                        + "; frozen=" + (record.IsFrozen ? "true" : "false")
+                        + "; locked=" + (record.IsLocked ? "true" : "false"));
+                    return LayerStateJson(record, isCurrent);
+                }
             }
         }
 
@@ -160,9 +164,11 @@ namespace QS3D.BricsCAD.V25
             var snapshot = DecodeSnapshot(token);
             var document = RequireDocument();
             using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartTransaction())
             {
-                var table = (LayerTable)transaction.GetObject(document.Database.LayerTableId, OpenMode.ForRead);
+                EnsureSameActiveDocument(document, "cad_layer_restore");
+                using (var transaction = document.Database.TransactionManager.StartTransaction())
+                {
+                    var table = (LayerTable)transaction.GetObject(document.Database.LayerTableId, OpenMode.ForRead);
                 var current = (LayerTableRecord)transaction.GetObject(document.Database.Clayer, OpenMode.ForRead);
 
                 // Validate the complete restore set before opening any layer for write. A stale or
@@ -189,13 +195,15 @@ namespace QS3D.BricsCAD.V25
                     record.IsFrozen = entry.Frozen;
                     record.IsLocked = entry.Locked;
                 }
-                transaction.Commit();
-                McpCadAgentRuntime.AuditDomainMutation(
-                    "cad_layer_restore",
-                    "layerCount=" + snapshot.Entries.Count.ToString(CultureInfo.InvariantCulture)
-                    + "; currentLayer=" + snapshot.CurrentLayer);
-                return "{\"restored\":true,\"layerCount\":" + snapshot.Entries.Count.ToString(CultureInfo.InvariantCulture)
-                       + ",\"currentLayer\":\"" + Escape(snapshot.CurrentLayer) + "\"}";
+                    transaction.Commit();
+                    EnsureSameActiveDocument(document, "cad_layer_restore_result");
+                    McpCadAgentRuntime.AuditDomainMutation(
+                        "cad_layer_restore",
+                        "layerCount=" + snapshot.Entries.Count.ToString(CultureInfo.InvariantCulture)
+                        + "; currentLayer=" + snapshot.CurrentLayer);
+                    return "{\"restored\":true,\"layerCount\":" + snapshot.Entries.Count.ToString(CultureInfo.InvariantCulture)
+                           + ",\"currentLayer\":\"" + Escape(snapshot.CurrentLayer) + "\"}";
+                }
             }
         }
 
@@ -267,6 +275,20 @@ namespace QS3D.BricsCAD.V25
             if (name.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)
                 throw new InvalidOperationException("Layer name contains invalid control characters.");
             return name;
+        }
+
+        private static void EnsureSameActiveDocument(Document document, string operation)
+        {
+            Document active;
+            try { active = Application.DocumentManager.MdiActiveDocument; }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    operation + ": could not confirm the active BricsCAD document; native operation/result was not continued.", ex);
+            }
+            if (document == null || active == null || !ReferenceEquals(active, document))
+                throw new InvalidOperationException(
+                    operation + ": active BricsCAD document changed; native operation/result was not continued.");
         }
 
         private static Document RequireDocument()

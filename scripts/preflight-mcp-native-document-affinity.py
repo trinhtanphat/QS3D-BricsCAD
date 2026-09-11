@@ -90,7 +90,9 @@ def main() -> None:
 
     for source, name in ((layer, "layer"), (view, "view")):
         guard = guard_block(source)
-        require("ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)" in guard,
+        require("active = Application.DocumentManager.MdiActiveDocument" in guard,
+                f"{name} exact-document guard must capture active MDI document fail-closed")
+        require("!ReferenceEquals(active, document)" in guard,
                 f"{name} exact-document guard must use reference identity")
         require("active BricsCAD document changed" in guard,
                 f"{name} exact-document guard must fail closed with explicit document-change error")
