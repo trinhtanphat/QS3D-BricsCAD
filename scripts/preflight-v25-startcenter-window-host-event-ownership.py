@@ -28,6 +28,7 @@ def require_order(first, second, message):
 for token, message in (
     ("_documentActivatedMayBeSubscribed", "Start Center window must retain DocumentActivated may-be-subscribed ownership"),
     ("_documentDestroyMayBeSubscribed", "Start Center window must retain DocumentToBeDestroyed may-be-subscribed ownership"),
+    ("_hostLifecycleActive", "Start Center window must separate active callback authority from durable native ownership"),
     ("_hostLifecycleDetachInProgress", "Start Center window must fence native detach reentrancy"),
     ("RetryHostLifecycleDetach", "Start Center window must expose retryable native host lifecycle detach"),
 ):
@@ -56,25 +57,34 @@ require_order(
 
 closed = text.find("private void OnWindowClosed")
 closed_mark = text.find("_windowClosed = true", closed)
-closed_detach = text.find("RetryHostLifecycleDetach();", closed_mark)
-if closed < 0 or closed_mark < 0 or closed_detach < 0:
-    errors.append("Closed must revoke active window authority and retry retained host-event detach")
+closed_revoke = text.find("_hostLifecycleActive = false", closed_mark)
+closed_detach = text.find("RetryHostLifecycleDetach();", closed_revoke)
+if closed < 0 or closed_mark < 0 or closed_revoke < 0 or closed_detach < 0:
+    errors.append("Closed must revoke active window authority before retrying retained host-event detach")
 
 activated = text.find("private void OnHostDocumentActivated")
-activated_closed = text.find("if (_windowClosed)", activated)
-activated_retry = text.find("RetryHostLifecycleDetach();", activated_closed)
+activated_stale = text.find("if (_windowClosed || !_hostLifecycleActive)", activated)
+activated_retry = text.find("RetryHostLifecycleDetach();", activated_stale)
 activated_queue = text.find("QueueHomeRefresh", activated)
-if activated < 0 or activated_closed < 0 or activated_retry < 0 or activated_queue < 0 or activated_retry > activated_queue:
-    errors.append("retained DocumentActivated callbacks after close must retry detach before any UI refresh")
+if activated < 0 or activated_stale < 0 or activated_retry < 0 or activated_queue < 0 or activated_retry > activated_queue:
+    errors.append("retained/inactive DocumentActivated callbacks must retry detach before any UI refresh")
 
 destroyed = text.find("private void OnHostDocumentToBeDestroyed")
-destroyed_closed = text.find("if (_windowClosed)", destroyed)
-destroyed_retry = text.find("RetryHostLifecycleDetach();", destroyed_closed)
+destroyed_stale = text.find("if (_windowClosed || !_hostLifecycleActive)", destroyed)
+destroyed_retry = text.find("RetryHostLifecycleDetach();", destroyed_stale)
+destroyed_args = text.find("e.Document", destroyed)
 destroyed_mdi = text.find("Application.DocumentManager.MdiActiveDocument", destroyed)
-if destroyed < 0 or destroyed_closed < 0 or destroyed_retry < 0 or destroyed_mdi < 0 or destroyed_retry > destroyed_mdi:
-    errors.append("retained DocumentToBeDestroyed callbacks after close must retry detach before document/UI access")
+if (destroyed < 0 or destroyed_stale < 0 or destroyed_retry < 0 or destroyed_args < 0 or destroyed_mdi < 0 or
+        destroyed_retry > destroyed_args or destroyed_retry > destroyed_mdi):
+    errors.append("retained/inactive DocumentToBeDestroyed callbacks must retry detach before document/UI access")
 
-if "_hostLifecycleSubscribed = false;" in text:
+attach_catch = text.find("catch\n            {", text.find("private void SubscribeToHostLifecycle"))
+attach_revoke = text.find("_hostLifecycleActive = false", attach_catch)
+attach_detach = text.find("RetryHostLifecycleDetach();", attach_revoke)
+if attach_catch < 0 or attach_revoke < 0 or attach_detach < 0:
+    errors.append("partial native attach failure must revoke callback authority before detach compensation")
+
+if "_hostLifecycleSubscribed" in text:
     errors.append("Start Center window must not collapse independent native ownership into a forgetful fully-subscribed boolean")
 
 if errors:
@@ -83,4 +93,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: V25 Start Center window retains independent native document-event ownership across partial add/remove failures, retries stale callbacks after close, and clears ownership only after exact removal.")
+print("PASS: V25 Start Center window retains independent native document-event ownership across partial add/remove failures, revokes stale callback authority, retries retained detaches, and clears ownership only after exact removal.")
