@@ -76,6 +76,22 @@ require('Material Catalog', material_body.find('ExistingProjectMutationContext.T
         'project snapshot must be admitted before constructing the document-bound window')
 require('Material Catalog', 'IsActiveDocumentGeneration(document, nativeDatabaseIdentity)' in material_body,
         'project snapshot must be fenced by exact document generation through publication')
+require('Material Catalog', 'private static bool IsActiveProjectGeneration(Document document, IntPtr nativeDatabaseIdentity, ProjectState project)' in material,
+        'missing exact cached-project/backing-store generation helper')
+require('Material Catalog', 'ProjectContextCoordinator.TryGetCached(document, out var cachedProject)' in material,
+        'project-generation helper must resolve the current canonical cached ProjectState')
+require('Material Catalog', 'ReferenceEquals(cachedProject, project)' in material,
+        'project-generation helper must require exact cached ProjectState reference identity')
+require('Material Catalog', 'ProjectContextCoordinator.RequireBackingStoreUnchanged(document, project, "Material Catalog publication")' in material,
+        'project-generation helper must require unchanged backing-store generation')
+project_generation_calls = material_body.count('IsActiveProjectGeneration(document, nativeDatabaseIdentity, project)')
+require('Material Catalog', project_generation_calls >= 4,
+        'must revalidate exact project generation before construction/show, after host show, and before status/error publication')
+show_pos = material_body.find('Application.ShowModelessWindow')
+publish_pos = material_body.find('_published = reserved;', show_pos)
+post_show_project = material_body.find('IsActiveProjectGeneration(document, nativeDatabaseIdentity, project)', show_pos)
+require('Material Catalog', show_pos >= 0 and post_show_project > show_pos and publish_pos > post_show_project,
+        'must revalidate exact project generation after host show before ownership publication')
 require('Material Catalog', 'CloseCandidateAfterFailure(candidate, window);' in material_body,
         'failure cleanup must use residue-aware candidate close instead of forgetting pending ownership before native close')
 require('Material Catalog', 'private static void CloseCandidateAfterFailure(PublishedManager? candidate, MaterialCatalogWindow? window)' in material,
@@ -91,4 +107,4 @@ if failures:
     print(f'FAILED: {len(failures)} Project Tools/Material Catalog publication-affinity requirement(s) missing')
     sys.exit(1)
 
-print('PASS: Project Tools and Material Catalog modeless publication is fenced to the exact active document generation')
+print('PASS: Project Tools and Material Catalog publication is fenced to the exact document generation; Material Catalog also retains the exact cached project/backing-store generation')
