@@ -27,8 +27,8 @@ required_move_tokens = (
     "publicationFailure",
     "RecordRollbackFailure(publicationFailure",
     "RollbackFailureDataKey",
-    "destination",
-    "backup",
+    "Directory.Exists(destinationPath)",
+    "!File.Exists(backupPath)",
 )
 missing = [token for token in required_move_tokens if token not in move_with_recovery]
 if missing:
