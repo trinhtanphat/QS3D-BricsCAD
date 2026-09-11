@@ -85,13 +85,13 @@ namespace QS3D.Core.BenchmarkParity
 
             foreach (var sheetId in allIds)
             {
-                TakeoffSheetResult2D oldSheet;
-                TakeoffSheetResult2D newSheet;
-                var hasOld = oldById.TryGetValue(sheetId, out oldSheet!);
-                var hasNew = newById.TryGetValue(sheetId, out newSheet!);
+                var hasOld = oldById.ContainsKey(sheetId);
+                var hasNew = newById.ContainsKey(sheetId);
 
                 if (hasOld && hasNew)
                 {
+                    var oldSheet = oldById[sheetId];
+                    var newSheet = newById[sheetId];
                     deltas.Add(new TakeoffPackageRevisionDelta(sheetId, oldSheet.Sheet.Revision, newSheet.Sheet.Revision, comparer.Compare(oldSheet, newSheet)));
                     continue;
                 }
@@ -99,11 +99,13 @@ namespace QS3D.Core.BenchmarkParity
                 var synthetic = new List<RevisionMarkupDelta2D>();
                 if (hasNew)
                 {
+                    var newSheet = newById[sheetId];
                     synthetic.AddRange(newSheet.Evidence.Select(x => new RevisionMarkupDelta2D(x.MarkupId, RevisionMarkupChangeKind.Added, null, x)));
                     deltas.Add(new TakeoffPackageRevisionDelta(sheetId, previousPackage.Revision, newSheet.Sheet.Revision, synthetic));
                 }
                 else
                 {
+                    var oldSheet = oldById[sheetId];
                     synthetic.AddRange(oldSheet.Evidence.Select(x => new RevisionMarkupDelta2D(x.MarkupId, RevisionMarkupChangeKind.Removed, x, null)));
                     deltas.Add(new TakeoffPackageRevisionDelta(sheetId, oldSheet.Sheet.Revision, currentPackage.Revision, synthetic));
                 }
