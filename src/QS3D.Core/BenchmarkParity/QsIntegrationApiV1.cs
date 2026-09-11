@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Linq;
+using System.Text;
 
 namespace QS3D.Core.BenchmarkParity
 {
@@ -347,13 +349,26 @@ namespace QS3D.Core.BenchmarkParity
             if (principal == null) return new QsApiResponse(401, Version, string.Empty, null, "UNAUTHENTICATED");
             if (!principal.HasScope("qs3d.workbook.refresh")) return new QsApiResponse(403, Version, string.Empty, null, "FORBIDDEN");
             if (batch == null) throw new ArgumentNullException("batch");
+            if (batch.Results.Any(x => !string.Equals(x.Binding.WorkbookId, workbookId, StringComparison.OrdinalIgnoreCase)))
+                return new QsApiResponse(409, Version, string.Empty, batch.Results, "WORKBOOK_IDENTITY_MISMATCH");
             if (batch.HasBlockingFailure) return new QsApiResponse(409, Version, string.Empty, batch.Results, "WORKBOOK_REFRESH_CONFLICT");
             return new QsApiResponse(200, Version, string.Empty, batch.Results, batch.HasStaleData ? "STALE_SOURCE_REVISION" : string.Empty);
         }
 
         private static string BuildEtag(string projectId, string revision, QsApiResourceKind resource)
         {
-            return "W/\"qs3d-v1-" + projectId.Replace("\"", string.Empty) + "-" + revision.Replace("\"", string.Empty) + "-" + resource + "\"";
+            return "W/\"qs3d-v1-" + FrameEtagSegment(projectId) + FrameEtagSegment(revision) + FrameEtagSegment(resource.ToString()) + "\"";
+        }
+
+        private static string FrameEtagSegment(string value)
+        {
+            value = QsModelElementSnapshot.Require(value, "etagSegment");
+            var builder = new StringBuilder(value.Length * 4 + 16);
+            builder.Append(value.Length.ToString(CultureInfo.InvariantCulture));
+            builder.Append(':');
+            foreach (var character in value)
+                builder.Append(((int)character).ToString("X4", CultureInfo.InvariantCulture));
+            return builder.ToString();
         }
     }
 }
