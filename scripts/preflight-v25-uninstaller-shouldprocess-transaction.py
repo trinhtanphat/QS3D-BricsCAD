@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed unless the V25 uninstaller admits its selected mutations as one transaction."""
+"""Fail closed unless the V25 uninstaller admits one TOCTOU-safe transaction."""
 from pathlib import Path
 import re
 
@@ -24,7 +24,6 @@ def find(source: str, pattern: str, label: str):
 
 
 def validate(source: str) -> None:
-    # Helper definitions are above the host guard; this marker begins executable behavior.
     entry = find(source, r"^\s*if\s*\(\s*Get-Process\s+-Name\s+bricscad\b", "BricsCAD executable-body guard")
     body = source[entry.start():]
 
@@ -52,16 +51,57 @@ def validate(source: str) -> None:
         "filesystem/registry mutation appears before uninstall transaction approval",
     )
 
-    for pattern, label in (
-        (r"Move-Item\s+-LiteralPath\s+\$installFull\s+-Destination\s+\$quarantine", "payload quarantine move"),
-        (r"Remove-Item\s+-LiteralPath\s+\$entry\.Target\.AppKey", "DemandLoad removal"),
-        (r"Remove-Item\s+-LiteralPath\s+\$quarantine", "quarantine cleanup"),
-        (r"Write-Host\s+[\"']QS3D DemandLoad registration removed", "success report"),
+    quarantine_move = find(
+        body,
+        r"Move-Item\s+-LiteralPath\s+\$installFull\s+-Destination\s+\$quarantine",
+        "payload quarantine move",
+    )
+    demandload_remove = find(
+        body,
+        r"Remove-Item\s+-LiteralPath\s+\$entry\.Target\.AppKey",
+        "DemandLoad removal",
+    )
+    cleanup = find(body, r"Remove-Item\s+-LiteralPath\s+\$quarantine", "quarantine cleanup")
+    success = find(body, r"Write-Host\s+[\"']QS3D DemandLoad registration removed", "success report")
+    for mutation, label in (
+        (quarantine_move, "payload quarantine move"),
+        (demandload_remove, "DemandLoad removal"),
+        (cleanup, "quarantine cleanup"),
+        (success, "success report"),
     ):
-        require(approval < find(body, pattern, label).start(), f"uninstall approval must precede {label}")
+        require(approval < mutation.start(), f"uninstall approval must precede {label}")
 
-    # -KeepFiles must remain a planning input to the one transaction rather than creating a
-    # second confirmation surface. The mutation branch itself still skips payload staging.
+    # Approval can be arbitrarily delayed. Re-admit every destructive input after approval
+    # and before the first mutation, then promote only the fresh snapshots into rollback.
+    first_mutation = min(quarantine_move.start(), demandload_remove.start())
+    post_approval = body[decline.end():first_mutation]
+    for token, label in (
+        ("$freshInstallFull = Assert-InstallDirectorySafeToRemove -Directory $InstallDirectory -ForceDelete:$Force",
+         "post-approval install-directory identity validation"),
+        ("$freshPayloadSnapshot = Get-InstallPayloadSnapshot -Directory $freshInstallFull",
+         "post-approval payload snapshot"),
+        ("Get-RegistryRemovalPlan -RequestedVersions $VersionKeys -RequestedLanguages $LanguageKeys",
+         "post-approval registry plan"),
+        ("Assert-InstallPayloadSnapshotEqual -Expected $payloadSnapshot -Actual $freshPayloadSnapshot",
+         "payload identity revalidation"),
+        ("Assert-RegistryPlanEqual -Expected $registryPlan -Actual $freshRegistryPlan",
+         "registry plan revalidation"),
+        ("$registryPlan = @($freshRegistryPlan)", "fresh rollback snapshot promotion"),
+    ):
+        require(token in post_approval, f"missing {label} between ShouldProcess and first mutation")
+
+    require(
+        "Assert-InstallPayloadSnapshotEqual -Expected $payloadSnapshot -Actual (Get-InstallPayloadSnapshot -Directory $installFull)"
+        in body[first_mutation:quarantine_move.end()],
+        "payload must be revalidated immediately before quarantine move",
+    )
+    require(
+        "Assert-RegistryTreeSnapshotEqual -Expected $entry.Snapshot -Actual (Get-RegistryTreeSnapshot -Path $entry.Target.AppKey)"
+        in body[first_mutation:],
+        "each DemandLoad key must be revalidated immediately before destructive removal",
+    )
+
+    # -KeepFiles remains a planning input to the one transaction rather than a second prompt.
     require("$KeepFiles" in body, "uninstaller lost -KeepFiles semantics")
     require(
         re.search(r"if\s*\(\s*-not\s+\$KeepFiles\b", body, flags=re.IGNORECASE) is not None,
@@ -70,14 +110,37 @@ def validate(source: str) -> None:
 
     for token, label in (
         ("Assert-InstallDirectorySafeToRemove", "install-directory identity validation"),
+        ("Get-InstallPayloadSnapshot", "recursive payload identity snapshot"),
+        ("Assert-InstallPayloadSnapshotEqual", "payload snapshot comparison"),
         ("Get-RegistryTreeSnapshot", "registry snapshot"),
+        ("Assert-RegistryTreeSnapshotEqual", "registry snapshot comparison"),
+        ("Get-RegistryRemovalPlan", "registry removal plan"),
+        ("Assert-RegistryPlanEqual", "registry plan comparison"),
         ("Restore-RegistryTreeSnapshot", "registry rollback"),
         ("Enter-Qs3dUpdateMutex", "update mutex"),
         ("Get-Process -Name bricscad", "running-host guard"),
         ("$quarantine", "payload quarantine rollback"),
         ("$rollbackFailures", "rollback error reporting"),
+        ("ReparsePoint", "payload reparse rejection"),
+        ("Get-FileHash", "payload content identity hashing"),
+        ("[StringComparer]::Ordinal", "deterministic payload identity ordering"),
     ):
-        require(token in source, f"missing existing safety control: {label}")
+        require(token in source, f"missing safety control: {label}")
+
+    restore = find(
+        source,
+        r"function\s+Restore-RegistryTreeSnapshot\s*\{(?P<body>.*?)^\}",
+        "registry restore helper",
+    )
+    restore_body = restore.group("body")
+    require(
+        re.search(r"Remove-Item\s+-LiteralPath\s+\$path\b", restore_body, flags=re.IGNORECASE) is None,
+        "registry rollback must not delete a path recreated by a foreign writer",
+    )
+    require(
+        "Refusing registry rollback because DemandLoad path was recreated" in restore_body,
+        "registry rollback must fail closed when a foreign writer recreates the target path",
+    )
 
 
 def expect_rejected(label: str, mutant: str) -> None:
@@ -96,7 +159,11 @@ except ContractError as exc:
 
 entry = find(source, r"^\s*if\s*\(\s*Get-Process\s+-Name\s+bricscad\b", "self-test executable marker")
 body = source[entry.start():]
-approval_match = find(body, r"if\s*\(\s*-not\s*\(\s*\$PSCmdlet\s*\.\s*ShouldProcess\s*\([^)]*\)\s*\)\s*\)\s*\{(?P<body>.*?)\}", "self-test transaction approval")
+approval_match = find(
+    body,
+    r"if\s*\(\s*-not\s*\(\s*\$PSCmdlet\s*\.\s*ShouldProcess\s*\([^)]*\)\s*\)\s*\)\s*\{(?P<body>.*?)\}",
+    "self-test transaction approval",
+)
 approval_start = entry.start() + approval_match.start()
 approval_end = entry.start() + approval_match.end()
 approval_block = source[approval_start:approval_end]
@@ -114,5 +181,29 @@ expect_rejected(
     "pre-admission registry mutation",
     source[:approval_start] + "New-ItemProperty -Path 'HKCU:\\unsafe' -Name Loader -Value bad -Force\n" + source[approval_start:],
 )
+expect_rejected(
+    "missing post-approval registry revalidation",
+    source.replace(
+        "Assert-RegistryPlanEqual -Expected $registryPlan -Actual $freshRegistryPlan",
+        "# removed registry revalidation",
+        1,
+    ),
+)
+expect_rejected(
+    "missing immediate payload revalidation",
+    source.replace(
+        "Assert-InstallPayloadSnapshotEqual -Expected $payloadSnapshot -Actual (Get-InstallPayloadSnapshot -Directory $installFull)",
+        "# removed payload revalidation",
+        1,
+    ),
+)
+expect_rejected(
+    "foreign-writer destructive rollback",
+    source.replace(
+        "throw \"Refusing registry rollback because DemandLoad path was recreated: $path\"",
+        "Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop",
+        1,
+    ),
+)
 
-print("OK: V25 uninstaller admits selected file + DemandLoad removals as one ShouldProcess transaction")
+print("OK: V25 uninstaller has one approval plus post-approval TOCTOU revalidation and non-destructive rollback")
