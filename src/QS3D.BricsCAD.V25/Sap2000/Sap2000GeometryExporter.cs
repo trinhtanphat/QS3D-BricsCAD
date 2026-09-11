@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Bricscad.ApplicationServices;
 using Bricscad.EditorInput;
+using QS3D.BricsCAD.V25.Cad;
 using QS3D.Core.Interoperability.Sap2000;
 using Teigha.DatabaseServices;
 using Teigha.Geometry;
@@ -37,7 +38,9 @@ namespace QS3D.BricsCAD.Sap2000
                 throw new InvalidOperationException("Không lấy được tập đối tượng để xuất SAP2000.");
             }
 
-            var metresPerDrawingUnit = GetMetresPerDrawingUnit(document.Database.Insunits);
+            // Reuse QS3D's canonical unit-resolution policy instead of maintaining a
+            // second INSUNITS table. This also honors an explicit project unit override.
+            var metresPerDrawingUnit = CadUnitService.DrawingUnitsToMeters(document, 1d);
             var frames = new List<Sap2000FrameMember>();
             var areas = new List<Sap2000AreaMember>();
             var warnings = new List<string>();
@@ -158,32 +161,6 @@ namespace QS3D.BricsCAD.Sap2000
                 point.X * metresPerDrawingUnit,
                 point.Y * metresPerDrawingUnit,
                 point.Z * metresPerDrawingUnit);
-        }
-
-        private static double GetMetresPerDrawingUnit(UnitsValue units)
-        {
-            switch (units)
-            {
-                case UnitsValue.Millimeters:
-                    return 0.001d;
-                case UnitsValue.Centimeters:
-                    return 0.01d;
-                case UnitsValue.Decimeters:
-                    return 0.1d;
-                case UnitsValue.Meters:
-                    return 1d;
-                case UnitsValue.Inches:
-                    return 0.0254d;
-                case UnitsValue.Feet:
-                    return 0.3048d;
-                case UnitsValue.Yards:
-                    return 0.9144d;
-                case UnitsValue.USSurveyFeet:
-                    return 1200d / 3937d;
-                default:
-                    throw new InvalidOperationException(
-                        "INSUNITS phải là đơn vị chiều dài được hỗ trợ (mm, cm, dm, m, inch, foot, yard hoặc US survey foot) trước khi xuất SAP2000.");
-            }
         }
     }
 }
