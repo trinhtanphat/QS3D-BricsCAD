@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 from pathlib import Path
+import os
+import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "release-v25.yml"
@@ -149,9 +151,33 @@ def read(path: Path) -> str | None:
         return None
 
 
+def run_windows_runtime() -> list[str]:
+    if os.name != "nt":
+        return []
+    try:
+        completed = subprocess.run(
+            ["powershell", "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(RUNTIME_TEST)],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=120,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return [f"unable to execute Windows release cleanup adversarial runtime harness: {exc}"]
+    if completed.returncode != 0:
+        tail = completed.stdout[-4000:] if completed.stdout else "<no output>"
+        return [f"Windows release cleanup adversarial runtime harness failed (exit={completed.returncode}):\n{tail}"]
+    print(completed.stdout, end="")
+    return []
+
+
 def main() -> int:
     errors = self_test()
     errors.extend(contract_errors(read(WORKFLOW), read(HELPER), read(RUNTIME_TEST)))
+    if not errors:
+        errors.extend(run_windows_runtime())
     if errors:
         for error in errors:
             print("FAIL:", error)
