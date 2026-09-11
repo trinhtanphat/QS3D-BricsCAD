@@ -19,6 +19,7 @@ namespace QS3D.Core.SmokeTests
             IfcWorkbench();
             QsCubicostQuantBimSmoke.Run();
             ConstructionLifecycle();
+            QsTrimbleConstructionLifecycleSmoke.Run();
         }
 
         private static void QaGateBlocksInvalidModel()
