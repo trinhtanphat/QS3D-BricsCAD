@@ -89,6 +89,12 @@ namespace QS3D.BricsCAD.V25.Cad
                 {
                     if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
                         throw new InvalidOperationException("Beam Stirrup 3D: DWG active đã thay đổi sau document lock; native mutation bị hủy.");
+                    ProjectContextCoordinator.RequireBackingStoreUnchanged(document, project, "Beam Stirrup 3D post-lock mutation");
+                    var postLockTargetIds = project.Elements
+                        .Where(x => x.Category == ElementCategory.Beam && x.SourceHandles.Any(selectedHandles.Contains))
+                        .Select(x => x.Id);
+                    if (!expectedTargetIds.SetEquals(postLockTargetIds))
+                        throw new InvalidOperationException("Beam Stirrup 3D: semantic Beam target set đã thay đổi sau document lock; native mutation bị hủy.");
 
                     var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
                     var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
