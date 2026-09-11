@@ -105,10 +105,9 @@ function Test-ReleaseRelevantDrift {
 function Assert-ReleaseBaseIsSafe {
     param([Parameter(Mandatory = $true)][string]$TargetSha)
 
-    # Historical compatibility interface: expected release-relevant supersession is
-    # classified as unsafe/false, while Test-ReleaseRelevantDrift still throws for
-    # ambiguous or non-ancestor history so those states remain fail-closed.
-    return -not (Test-ReleaseRelevantDrift -TargetSha $TargetSha)
+    if (Test-ReleaseRelevantDrift -TargetSha $TargetSha) {
+        throw "main moved after dispatch with release-relevant changes. Dispatched=$dispatch current-origin/main=$TargetSha. A newer release-relevant main push must own the next release."
+    }
 }
 
 function Set-ProjectVersionValue {
@@ -195,10 +194,7 @@ try {
     $maxAttempts = 12
     for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
         $releaseBase = Get-RemoteMain
-        if (-not (Assert-ReleaseBaseIsSafe -TargetSha $releaseBase)) {
-            Write-Warning "main moved after dispatch with release-relevant changes. Keeping dispatched source $dispatch as the bounded release workspace so the publish-stage stale-source no-op can classify supersession before any persistent release mutation. current-origin/main=$releaseBase"
-            $releaseBase = $dispatch
-        }
+        Assert-ReleaseBaseIsSafe -TargetSha $releaseBase
 
         & git reset --hard
         if ($LASTEXITCODE -ne 0) {
@@ -268,11 +264,7 @@ try {
         }
 
         $latestMain = Get-RemoteMain
-        if (-not (Assert-ReleaseBaseIsSafe -TargetSha $latestMain)) {
-            Write-Warning "main contains release-relevant changes after dispatched source $dispatch. Release preparation is handing this bounded workspace to the publish-stage stale-source no-op; no protected-main mutation was performed. current-origin/main=$latestMain"
-            Write-Output -InputObject $releaseBase
-            return
-        }
+        Assert-ReleaseBaseIsSafe -TargetSha $latestMain
         if ($latestMain -ne $releaseBase) {
             if ($attempt -ge $maxAttempts) {
                 throw "main kept advancing through non-release paths during $maxAttempts protected-main release-preparation attempts. Retry from a fresh workflow run."

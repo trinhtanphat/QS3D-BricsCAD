@@ -213,7 +213,7 @@ namespace QS3D.BricsCAD.V25
                 Require(rebarCount == 4, "Beam longitudinal rebar count");
                 rebarStage = "stirrup_build";
                 Select(document, sources.Beam.ObjectId);
-                var stirrupResult = BeamStirrupSolidBuilder.BuildSelected(document, project);
+                var stirrupResult = BeamStirrupSolidBuilder.BuildSelected(document, project, new[] { sources.Beam.ObjectId }, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { beam.Id });
                 observedBeamStirrupElementCount = stirrupResult.Elements;
                 observedBeamStirrupCount = stirrupResult.Stirrups;
                 rebarStage = "stirrup_count";
