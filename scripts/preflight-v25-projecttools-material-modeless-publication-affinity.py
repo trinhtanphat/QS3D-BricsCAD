@@ -39,15 +39,30 @@ for label, path in FILES.items():
             'generation helper must require exact native database identity')
 
     show_pos = body.find('Application.ShowModelessWindow')
-    publish_token = '_published = published' if label == 'Project Tools' else '_published = reserved'
+    publish_token = '_published = reserved'
     publish_pos = body.find(publish_token)
     if show_pos >= 0 and publish_pos >= 0:
         require(label, any(show_pos < p < publish_pos for p in calls),
                 'must revalidate after host show before published ownership transfer')
-    require(label, ('CloseWindowOnAffinityDrift' in text if label == 'Project Tools' else 'CloseCandidateOnAffinityDrift' in text),
+    require(label, ('ClosePendingOnAffinityDrift' in text if label == 'Project Tools' else 'CloseCandidateOnAffinityDrift' in text),
             'affinity drift must close/retain an unpublished candidate rather than orphan it')
     require(label, 'if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))' in body,
             'success/error status publication must be gated to the same exact generation')
+
+project_tools = FILES['Project Tools'].read_text(encoding='utf-8')
+project_tools_body = project_tools[project_tools.find('public void Show'):]
+require('Project Tools', 'private static PublishedManager? _pending;' in project_tools,
+        'Project Tools must retain pending ownership before host publication')
+require('Project Tools', '_pending = reserved;' in project_tools_body,
+        'Project Tools must reserve pending ownership before ShowModelessWindow')
+require('Project Tools', 'if (!ReferenceEquals(_pending, reserved))' in project_tools_body,
+        'Project Tools must verify exact pending ownership after host show')
+require('Project Tools', '_pending = null;\n                _published = reserved;' in project_tools_body,
+        'Project Tools must transfer pending ownership to published only after loaded exact-head admission')
+require('Project Tools', 'ClosePendingAfterFailure(candidate, window);' in project_tools_body,
+        'Project Tools failure cleanup must retain a loaded residue instead of forgetting it')
+require('Project Tools', 'if (!window.IsLoaded && candidate != null && ReferenceEquals(_pending, candidate)) _pending = null;' in project_tools,
+        'Project Tools must clear pending ownership only after terminal candidate close')
 
 material = FILES['Material Catalog'].read_text(encoding='utf-8')
 material_body = material[material.find('public void Show'):]
