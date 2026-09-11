@@ -70,7 +70,7 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithElement(invalidZoneElement), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => SetRawProperty(x, "P-\u0001-1", "ok")), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => SetRawProperty(x, "Note", "bad-\u0001-value")), "REV-XML"));
-            Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => x.Quantities["Q-\u0001-1"] = 1d), "REV-XML"));
+            Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => SetRawQuantity(x, "Q-\u0001-1", 1d)), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => AddRawRelationValue(x.SourceHandles, "H-\u0001-1")), "REV-XML"));
             Throws<InvalidOperationException>(() => service.Capture(ProjectWithMutation(x => AddRawRelationValue(x.DependsOn, "D-\u0001-1")), "REV-XML"));
         }
@@ -126,6 +126,15 @@ namespace QS3D.Core.SmokeTests
                 ?? throw new Exception("ProjectElement property backing dictionary was not found.");
             var backing = field.GetValue(element) as Dictionary<string, string>
                 ?? throw new Exception("ProjectElement property backing dictionary had an unexpected type.");
+            backing[key] = value;
+        }
+
+        private static void SetRawQuantity(ProjectElement element, string key, double value)
+        {
+            var field = typeof(ProjectElement).GetField("_quantityValues", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("ProjectElement quantity backing dictionary was not found.");
+            var backing = field.GetValue(element) as Dictionary<string, double>
+                ?? throw new Exception("ProjectElement quantity backing dictionary had an unexpected type.");
             backing[key] = value;
         }
 

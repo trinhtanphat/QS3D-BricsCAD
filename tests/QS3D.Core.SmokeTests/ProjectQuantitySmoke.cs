@@ -101,7 +101,7 @@ namespace QS3D.Core.SmokeTests
             ExpectThrows<OverflowException>(() => ProjectQuantityReportBuilder.Detail(multiplicationOverflow));
 
             var invalidExplicit = MassProject("invalid-explicit", string.Empty, 1d);
-            invalidExplicit.Elements[0].Quantities["WeightKg"] = double.NaN;
+            ProjectElementPersistenceFixture.SetQuantity(invalidExplicit.Elements[0], "WeightKg", double.NaN);
             ExpectThrows<InvalidOperationException>(() => ProjectQuantityReportBuilder.Group(invalidExplicit));
 
             var aggregateOverflow = MassProject("aggregate-overflow", string.Empty, 0d);
@@ -249,9 +249,9 @@ namespace QS3D.Core.SmokeTests
             project.Families.Add(family);
             var wall = new ProjectElement("W-PREFERRED", ElementCategory.ArchitecturalWall, family.Id, "f", "z");
             wall.Quantities["GrossConcreteM3"] = 2d;
-            wall.Quantities["GrossVolumeM3"] = double.NaN;
+            ProjectElementPersistenceFixture.SetQuantity(wall, "GrossVolumeM3", double.NaN);
             wall.Quantities["NetConcreteM3"] = 1.5d;
-            wall.Quantities["NetVolumeM3"] = double.PositiveInfinity;
+            ProjectElementPersistenceFixture.SetQuantity(wall, "NetVolumeM3", double.PositiveInfinity);
             wall.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(wall);
 

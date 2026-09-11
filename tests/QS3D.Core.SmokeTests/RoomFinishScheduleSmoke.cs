@@ -96,8 +96,8 @@ namespace QS3D.Core.SmokeTests
             project.Families.Add(family);
             var finish = Finish("wf-priority-1", ElementCategory.WallFinish, family.Id, "room-1");
             finish.Quantities["NetFinishAreaM2"] = 9d;
-            finish.Quantities["SideAreaM2"] = double.NaN;
-            finish.Quantities["AreaM2"] = -1d;
+            ProjectElementPersistenceFixture.SetQuantity(finish, "SideAreaM2", double.NaN);
+            ProjectElementPersistenceFixture.SetQuantity(finish, "AreaM2", -1d);
             project.Elements.Add(finish);
 
             var row = RoomFinishScheduleBuilder.Build(project).Single(x => x.Category == "WallFinish");

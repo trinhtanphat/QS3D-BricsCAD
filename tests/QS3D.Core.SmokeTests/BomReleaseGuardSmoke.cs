@@ -39,7 +39,7 @@ namespace QS3D.Core.SmokeTests
             Has(BomReleaseGuardService.Inspect(project), "BOM_QUANTITY_DIRTY");
             element.MarkClean(ElementDirtyFlags.All);
 
-            element.Quantities["NetConcreteM3"] = double.NaN;
+            ProjectElementPersistenceFixture.SetQuantity(element, "NetConcreteM3", double.NaN);
             Has(BomReleaseGuardService.Inspect(project), "BOM_QUANTITY_NONFINITE");
             element.Quantities["NetConcreteM3"] = 1.25d;
 
@@ -84,7 +84,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = ProjectWithBeam("bom-key", "beam-key", addCanonicalQuantity: false);
             var element = project.Elements[0];
-            element.Quantities[" NetConcreteM3 "] = 1.25d;
+            ProjectElementPersistenceFixture.SetQuantity(element, " NetConcreteM3 ", 1.25d);
 
             var issues = BomReleaseGuardService.Inspect(project);
             Has(issues, "BOM_QUANTITY_KEY_INVALID");
@@ -121,7 +121,7 @@ namespace QS3D.Core.SmokeTests
 
                 var quantityProject = ProjectWithBeam("bom-bad-quantity", "beam-bad-quantity", addCanonicalQuantity: false);
                 var quantityElement = quantityProject.Elements[0];
-                quantityElement.Quantities[invalidKey] = double.NaN;
+                ProjectElementPersistenceFixture.SetQuantity(quantityElement, invalidKey, double.NaN);
                 var quantityIssues = BomReleaseGuardService.Inspect(quantityProject);
                 Equal(1, Count(quantityIssues, "BOM_QUANTITY_KEY_INVALID"));
                 Equal(0, Count(quantityIssues, "BOM_QUANTITY_NONFINITE"));
@@ -142,7 +142,7 @@ namespace QS3D.Core.SmokeTests
             foreach (var malformedCase in malformedCases)
             {
                 var project = ProjectWithBeam("bom-precedence", "beam-precedence", addCanonicalQuantity: false);
-                project.Elements[0].Quantities[malformedCase.Key] = malformedCase.Value;
+                ProjectElementPersistenceFixture.SetQuantity(project.Elements[0], malformedCase.Key, malformedCase.Value);
 
                 var issues = BomReleaseGuardService.Inspect(project);
                 Equal(1, Count(issues, "BOM_QUANTITY_KEY_INVALID"));
@@ -151,7 +151,7 @@ namespace QS3D.Core.SmokeTests
             }
 
             var canonical = ProjectWithBeam("bom-canonical-nonfinite", "beam-canonical-nonfinite", addCanonicalQuantity: false);
-            canonical.Elements[0].Quantities["NetConcreteM3"] = double.PositiveInfinity;
+            ProjectElementPersistenceFixture.SetQuantity(canonical.Elements[0], "NetConcreteM3", double.PositiveInfinity);
             var canonicalIssues = BomReleaseGuardService.Inspect(canonical);
             Equal(0, Count(canonicalIssues, "BOM_QUANTITY_KEY_INVALID"));
             Equal(1, Count(canonicalIssues, "BOM_QUANTITY_NONFINITE"));
