@@ -72,8 +72,15 @@ def main() -> int:
         "[int64]$stream.Length -ne $admittedLength",
         "function Get-HeldStreamSha256",
         "$hex = Get-HeldStreamSha256 -Stream $held.Stream",
-        "$copyDigest = Get-HeldStreamSha256 -Stream $held.Stream",
+        "$destinationHolds = Open-HeldDestinationDirectoryChain",
+        "$sourceDigest = Get-HeldStreamSha256 -Stream $held.Stream",
+        "[IO.FileMode]::CreateNew",
+        "[IO.FileAccess]::ReadWrite",
         "$held.Stream.CopyTo($output)",
+        "$output.Flush($true)",
+        "$destinationDigest = Get-HeldStreamSha256 -Stream $output",
+        "[string]::Equals($sourceDigest, $destinationDigest, [StringComparison]::OrdinalIgnoreCase)",
+        "Publish-CommercialZipDigest -CanonicalPath $held.CanonicalPath -Digest $sourceDigest",
     )
     for token in helper_tokens:
         require(token in helper, "V25 release held-generation helper missing exact-stream integrity contract: " + token)
@@ -82,6 +89,8 @@ def main() -> int:
         "Get-FileHash -LiteralPath $canonical",
         "Get-FileHash -LiteralPath $Path",
         "$sha.ComputeHash($held.Stream)",
+        "FILE_SHARE_DELETE",
+        "Remove-Item -LiteralPath $destinationFull",
     )
     for token in helper_forbidden:
         require(token not in helper, "V25 release held-generation helper regressed to pathname/direct-call digest semantics: " + token)
@@ -135,7 +144,7 @@ def main() -> int:
     positions = (tag_create_pos, ownership_pos, release_create_pos, release_id_pos, upload_pos, tag_pos, download_pos, set_pos, hash_pos, copy_pos, checksum_pos, signature_pos, publish_pos, publish_assert_pos, publish_snapshot_pos)
     require(min(positions) >= 0 and list(positions) == sorted(positions), "V25 release must create exact owned tag -> create exact draft -> upload held local asset generations -> assert exact tag SHA -> download exact asset set -> compare admitted hashes -> stable ZIP copy/checksum -> signature verify -> publish -> verify the successful response against the exact transaction")
 
-    print("PASS: V25 commercial publication uses positive exact-tag ownership, exact draft identity, held-generation asset upload, exact asset set, reusable exact-tag assertion, admitted local hashes, stable ZIP checksum, Authenticode verification, and exact-transaction verification of the successful publication response.")
+    print("PASS: V25 commercial publication uses positive exact-tag ownership, exact draft identity, held-generation asset upload, exact asset set, reusable exact-tag assertion, admitted local hashes, destination-stream-proven stable ZIP copy/checksum, Authenticode verification, and exact-transaction verification of the successful publication response.")
     return 0
 
 
