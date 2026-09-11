@@ -70,37 +70,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw "Cloud release source SHA must be an ancestor of protected main before trusted admission: $sourceSha"
           }
-          $releaseRelevantPaths = @(
-            'src/',
-            'tests/',
-            'scripts/',
-            'samples/generated/',
-            'external/QS3D-Platform',
-            '.gitmodules',
-            'Directory.Build.props',
-            'QS3D.sln',
-            'QS3D.V26.sln',
-            '.github/workflows/dispatch-v25-cloud-after-main-integration.yml',
-            '.github/workflows/release-v25-cloud.yml'
-          )
-          & git diff --quiet --no-ext-diff $sourceSha $currentMain -- $releaseRelevantPaths
-          $driftStatus = $LASTEXITCODE
-          if ($driftStatus -eq 1) {
-            "proceed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-            $message = "Protected main superseded SOURCE_SHA before stale source execution. SOURCE_SHA=$sourceSha currentMain=$currentMain"
-            Write-Host "::notice title=V25 release source superseded::$message"
-            Write-Host "V25_RELEASE_SUPERSEDED source_sha=$sourceSha current_main=$currentMain"
-            @"
-          ### V25 trusted source admission
-
-          - SOURCE_SHA: `$sourceSha`
-          - Current protected main: `$currentMain`
-          - Result: **successful no-op before stale source scripts/build/package execute**
-          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-            exit 0
-          }
-          if ($driftStatus -ne 0) {
-            throw "Could not classify trusted SOURCE_SHA..currentMain release-relevant drift. git diff exit=$driftStatus"
+          if ($sourceSha -ne $currentMain) {
+            Write-Host "::notice title=V25 release source pinned::Protected main advanced after dispatch; release remains pinned to admitted SOURCE_SHA=$sourceSha currentMain=$currentMain"
           }
           "proceed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
@@ -509,48 +480,20 @@ jobs:
           if ($preMutationAncestorStatus -ne 0) {
             throw "Release SOURCE_SHA is no longer an ancestor of protected main before V25 release mutation: $env:SOURCE_SHA"
           }
-          $preMutationReleaseRelevantPaths = @(
-            'src/',
-            'tests/',
-            'scripts/',
-            'samples/generated/',
-            'external/QS3D-Platform',
-            '.gitmodules',
-            'Directory.Build.props',
-            'QS3D.sln',
-            'QS3D.V26.sln',
-            '.github/workflows/dispatch-v25-cloud-after-main-integration.yml',
-            '.github/workflows/release-v25-cloud.yml'
-          )
-          & git diff --quiet --no-ext-diff $env:SOURCE_SHA $preMutationMain -- $preMutationReleaseRelevantPaths
-          $preMutationReleaseDriftStatus = $LASTEXITCODE
-          if ($preMutationReleaseDriftStatus -eq 1) {
-            $supersededMessage = "Protected main contains release-relevant changes after SOURCE_SHA; the stale V25 source will publish nothing. SOURCE_SHA=$env:SOURCE_SHA currentMain=$preMutationMain"
-            Write-Warning $supersededMessage
-            Write-Host "::notice title=V25 release source superseded::$supersededMessage"
-            Write-Host "V25_RELEASE_SUPERSEDED source_sha=$env:SOURCE_SHA current_main=$preMutationMain"
-            @"
-          ### V25 release source superseded
-
-          - SOURCE_SHA: `$env:SOURCE_SHA`
-          - Current protected main: `$preMutationMain`
-          - Result: **successful no-op before the first persistent release mutation**
-          - Recovery: the canonical dispatcher will re-evaluate protected main from this successful workflow completion; preview ordinal ownership is not reassigned.
-          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-            exit 0
-          }
-          if ($preMutationReleaseDriftStatus -ne 0) {
-            throw "Could not classify SOURCE_SHA..preMutationMain release-relevant drift; refusing draft release mutation. git diff exit=$preMutationReleaseDriftStatus"
-          }
           $preMutationPublishMainResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers
           $preMutationPublishMain = ([string]$preMutationPublishMainResponse.sha).Trim().ToLowerInvariant()
           if ($preMutationPublishMain -notmatch '^[0-9a-f]{40}$') {
             throw "Protected main API returned an invalid pre-mutation confirmation SHA: $preMutationPublishMain"
           }
           if ($preMutationPublishMain -ne $preMutationMain) {
-            throw "Protected main changed after pre-mutation release-relevant drift classification; refusing draft release creation. classified=$preMutationMain current=$preMutationPublishMain"
+            & git fetch --no-tags --force origin "+refs/heads/main:$preMutationMainRef"
+            if ($LASTEXITCODE -ne 0) { throw 'Could not refresh moved protected main before V25 release mutation.' }
+            & git merge-base --is-ancestor $env:SOURCE_SHA $preMutationPublishMain
+            if ($LASTEXITCODE -ne 0) {
+              throw "Release SOURCE_SHA is no longer an ancestor of moved protected main before V25 release mutation: $env:SOURCE_SHA"
+            }
           }
-          Write-Host "V25 release SOURCE_SHA remains admitted against stable protected main before the first persistent release mutation: $preMutationMain"
+          Write-Host "V25 release remains pinned to admitted SOURCE_SHA $env:SOURCE_SHA while protected main is $preMutationPublishMain."
 
           $body = @{
             tag_name = $env:RELEASE_TAG
@@ -683,36 +626,20 @@ jobs:
           if ($finalAncestorStatus -ne 0) {
             throw "Release SOURCE_SHA is no longer an ancestor of protected main during final publication admission: $env:SOURCE_SHA"
           }
-          $finalReleaseRelevantPaths = @(
-            'src/',
-            'tests/',
-            'scripts/',
-            'samples/generated/',
-            'external/QS3D-Platform',
-            '.gitmodules',
-            'Directory.Build.props',
-            'QS3D.sln',
-            'QS3D.V26.sln',
-            '.github/workflows/dispatch-v25-cloud-after-main-integration.yml',
-            '.github/workflows/release-v25-cloud.yml'
-          )
-          & git diff --quiet --no-ext-diff $env:SOURCE_SHA $finalMain -- $finalReleaseRelevantPaths
-          $finalReleaseDriftStatus = $LASTEXITCODE
-          if ($finalReleaseDriftStatus -eq 1) {
-            throw "Protected main contains release-relevant changes after SOURCE_SHA; refusing stale V25 cloud publication. SOURCE_SHA=$env:SOURCE_SHA finalMain=$finalMain"
-          }
-          if ($finalReleaseDriftStatus -ne 0) {
-            throw "Could not classify SOURCE_SHA..finalMain release-relevant drift; refusing publication. git diff exit=$finalReleaseDriftStatus"
-          }
           $publishMainResponse = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main" -Headers $headers
           $publishMain = ([string]$publishMainResponse.sha).Trim().ToLowerInvariant()
           if ($publishMain -notmatch '^[0-9a-f]{40}$') {
             throw "Protected main API returned an invalid publish-time SHA: $publishMain"
           }
           if ($publishMain -ne $finalMain) {
-            throw "Protected main changed after final release-relevant drift classification; refusing publication. classified=$finalMain current=$publishMain"
+            & git fetch --no-tags --force origin "+refs/heads/main:$finalMainRef"
+            if ($LASTEXITCODE -ne 0) { throw 'Could not refresh moved protected main during final publication admission.' }
+            & git merge-base --is-ancestor $env:SOURCE_SHA $publishMain
+            if ($LASTEXITCODE -ne 0) {
+              throw "Release SOURCE_SHA is no longer an ancestor of moved protected main during final publication admission: $env:SOURCE_SHA"
+            }
           }
-          Write-Host "Release SOURCE_SHA remains an ancestor of protected main, no release-relevant drift was found, and protected main remained stable through final publication admission: $finalMain"
+          Write-Host "Release SOURCE_SHA remains an ancestor of protected main and publication stays pinned to verified source $env:SOURCE_SHA while main is $publishMain."
 
           $publishBody = @{ draft = $false } | ConvertTo-Json
           try {
