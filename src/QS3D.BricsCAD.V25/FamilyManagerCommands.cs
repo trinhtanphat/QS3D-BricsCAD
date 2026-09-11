@@ -63,7 +63,11 @@ namespace QS3D.BricsCAD.V25
             PublishedManager? candidate = null;
             try
             {
+                var nativeDatabaseIdentity = document.Database.UnmanagedObject;
+                if (nativeDatabaseIdentity == IntPtr.Zero) return;
+
                 ExistingProjectMutationContext.TryGet(document, out _);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
 
                 var pending = _pending;
                 if (pending != null)
@@ -72,6 +76,8 @@ namespace QS3D.BricsCAD.V25
                 var previous = _published;
                 if (previous != null)
                 {
+                    if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+
                     if (previous.Window.IsLoaded &&
                         previous.Matches(document) &&
                         previous.MatchesManagedWrapper(document))
@@ -94,7 +100,19 @@ namespace QS3D.BricsCAD.V25
                 };
 
                 _pending = owner;
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                {
+                    CloseCandidateOnAffinityDrift(candidate);
+                    return;
+                }
+
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                {
+                    CloseCandidateOnAffinityDrift(candidate);
+                    return;
+                }
+
                 if (!window.IsLoaded)
                     throw new InvalidOperationException("Family Manager did not remain loaded after host publication.");
                 if (!ReferenceEquals(_pending, owner))
@@ -115,6 +133,38 @@ namespace QS3D.BricsCAD.V25
                 var message = "QS3DFAMILIES không thể mở Family Manager (" + ex.GetType().Name + ").";
                 try { PaletteCoordinator.SetStatus(message); } catch { }
                 try { document.Editor.WriteMessage("\n" + message); } catch { }
+            }
+        }
+
+        private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (document == null || nativeDatabaseIdentity == IntPtr.Zero) return false;
+
+            try
+            {
+                var activeDocument = Application.DocumentManager.MdiActiveDocument;
+                if (!ReferenceEquals(activeDocument, document)) return false;
+
+                var database = activeDocument.Database;
+                return database != null &&
+                       database.UnmanagedObject != IntPtr.Zero &&
+                       database.UnmanagedObject == nativeDatabaseIdentity;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void CloseCandidateOnAffinityDrift(PublishedManager? candidate)
+        {
+            if (candidate == null) return;
+
+            try { candidate.Window.Close(); } catch { }
+            if (!candidate.Window.IsLoaded)
+            {
+                if (ReferenceEquals(_pending, candidate)) _pending = null;
+                if (ReferenceEquals(_published, candidate)) _published = null;
             }
         }
 
