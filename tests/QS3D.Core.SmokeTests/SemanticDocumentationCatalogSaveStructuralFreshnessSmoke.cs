@@ -30,7 +30,7 @@ namespace QS3D.Core.SmokeTests
                 ReplaceElementWhileEnumeratingViews(project),
                 Array.Empty<SemanticSheetDefinition>()));
 
-            Equal(beforeVersion, project.ChangeVersion);
+            Equal(checked(beforeVersion + 1L), project.ChangeVersion);
             NotSame(original, project.Elements[0]);
             MetadataAbsent(project);
         }
@@ -86,7 +86,7 @@ namespace QS3D.Core.SmokeTests
                 StableViews(),
                 ReplaceElementWhileEnumeratingSheets(project)));
 
-            Equal(beforeVersion, project.ChangeVersion);
+            Equal(checked(beforeVersion + 1L), project.ChangeVersion);
             NotSame(original, project.Elements[0]);
             MetadataAbsent(project);
         }

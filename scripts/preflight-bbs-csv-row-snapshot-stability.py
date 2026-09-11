@@ -23,7 +23,7 @@ for token in required_source:
 
 capture = source.index("var snapshot = SnapshotRow(sourceRow);")
 stability = source.index("EnsureRowStable(sourceRows[index], snapshots[index], index);")
-projection = source.index("var sb = new StringBuilder();")
+projection = source.index("private static void WriteCsv(TextWriter writer, IReadOnlyList<RebarScheduleRow> snapshots)")
 if not capture < stability < projection:
     raise SystemExit("BBS CSV must capture rows, validate source-row stability, then project CSV")
 

@@ -33,6 +33,197 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
+if (-not ('Qs3dNativeFile' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
+
+public sealed class Qs3dHeldFile : IDisposable
+{
+    public SafeFileHandle Handle { get; private set; }
+    public string FinalPath { get; private set; }
+
+    internal Qs3dHeldFile(SafeFileHandle handle, string finalPath)
+    {
+        Handle = handle;
+        FinalPath = finalPath;
+    }
+
+    public void Dispose()
+    {
+        if (Handle != null)
+        {
+            Handle.Dispose();
+            Handle = null;
+        }
+    }
+}
+
+public static class Qs3dNativeFile
+{
+    private const uint GENERIC_READ = 0x80000000;
+    private const uint FILE_READ_ATTRIBUTES = 0x00000080;
+    private const uint FILE_SHARE_READ = 0x00000001;
+    private const uint FILE_SHARE_WRITE = 0x00000002;
+    private const uint OPEN_EXISTING = 3;
+    private const uint FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000;
+    private const uint FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
+    private const uint FILE_ATTRIBUTE_DIRECTORY = 0x00000010;
+    private const uint FILE_ATTRIBUTE_REPARSE_POINT = 0x00000400;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BY_HANDLE_FILE_INFORMATION
+    {
+        public uint FileAttributes;
+        public System.Runtime.InteropServices.ComTypes.FILETIME CreationTime;
+        public System.Runtime.InteropServices.ComTypes.FILETIME LastAccessTime;
+        public System.Runtime.InteropServices.ComTypes.FILETIME LastWriteTime;
+        public uint VolumeSerialNumber;
+        public uint FileSizeHigh;
+        public uint FileSizeLow;
+        public uint NumberOfLinks;
+        public uint FileIndexHigh;
+        public uint FileIndexLow;
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFileW(
+        string fileName,
+        uint desiredAccess,
+        uint shareMode,
+        IntPtr securityAttributes,
+        uint creationDisposition,
+        uint flagsAndAttributes,
+        IntPtr templateFile);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetFileInformationByHandle(
+        SafeFileHandle file,
+        out BY_HANDLE_FILE_INFORMATION information);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetFinalPathNameByHandleW(
+        SafeFileHandle file,
+        StringBuilder path,
+        uint pathLength,
+        uint flags);
+
+    public static Qs3dHeldFile OpenOrdinaryReadHeld(string path)
+    {
+        SafeFileHandle handle = CreateFileW(
+            path,
+            GENERIC_READ,
+            FILE_SHARE_READ,
+            IntPtr.Zero,
+            OPEN_EXISTING,
+            FILE_FLAG_OPEN_REPARSE_POINT,
+            IntPtr.Zero);
+        if (handle == null || handle.IsInvalid)
+        {
+            int error = Marshal.GetLastWin32Error();
+            if (handle != null) handle.Dispose();
+            throw new Win32Exception(error, "Could not atomically open the updater installer without following a reparse point.");
+        }
+
+        try
+        {
+            BY_HANDLE_FILE_INFORMATION information;
+            if (!GetFileInformationByHandle(handle, out information))
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not inspect the held updater installer.");
+            }
+            if ((information.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0)
+            {
+                throw new IOException("Updater installer is a directory, not an ordinary file.");
+            }
+            if ((information.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+            {
+                throw new IOException("Updater installer is a reparse point.");
+            }
+
+            StringBuilder resolved = new StringBuilder(32768);
+            uint length = GetFinalPathNameByHandleW(handle, resolved, (uint)resolved.Capacity, 0);
+            if (length == 0)
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not resolve the held updater installer path.");
+            }
+            if (length >= (uint)resolved.Capacity)
+            {
+                throw new PathTooLongException("Held updater installer resolved path exceeded the supported Win32 path buffer.");
+            }
+
+            Qs3dHeldFile held = new Qs3dHeldFile(handle, resolved.ToString());
+            handle = null;
+            return held;
+        }
+        finally
+        {
+            if (handle != null) handle.Dispose();
+        }
+    }
+
+    public static Qs3dHeldFile OpenOrdinaryDirectoryHeld(string path)
+    {
+        SafeFileHandle handle = CreateFileW(
+            path,
+            FILE_READ_ATTRIBUTES,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            IntPtr.Zero,
+            OPEN_EXISTING,
+            FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS,
+            IntPtr.Zero);
+        if (handle == null || handle.IsInvalid)
+        {
+            int error = Marshal.GetLastWin32Error();
+            if (handle != null) handle.Dispose();
+            throw new Win32Exception(error, "Could not atomically pin the updater extraction directory without following a reparse point.");
+        }
+
+        try
+        {
+            BY_HANDLE_FILE_INFORMATION information;
+            if (!GetFileInformationByHandle(handle, out information))
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not inspect the held updater extraction directory.");
+            }
+            if ((information.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
+            {
+                throw new IOException("Updater extraction boundary is not a directory.");
+            }
+            if ((information.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+            {
+                throw new IOException("Updater extraction boundary is a reparse point.");
+            }
+
+            StringBuilder resolved = new StringBuilder(32768);
+            uint length = GetFinalPathNameByHandleW(handle, resolved, (uint)resolved.Capacity, 0);
+            if (length == 0)
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not resolve the held updater extraction directory path.");
+            }
+            if (length >= (uint)resolved.Capacity)
+            {
+                throw new PathTooLongException("Held updater extraction directory resolved path exceeded the supported Win32 path buffer.");
+            }
+
+            Qs3dHeldFile held = new Qs3dHeldFile(handle, resolved.ToString());
+            handle = null;
+            return held;
+        }
+        finally
+        {
+            if (handle != null) handle.Dispose();
+        }
+    }
+}
+'@
+}
+
 $SignedPayloadNames = @(
     'QS3D.BricsCAD.V25.dll',
     'QS3D.Core.dll',
@@ -425,6 +616,67 @@ function Assert-AuthenticodeSigner {
     }
 }
 
+function Convert-FromExtendedWin32Path {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if ($Path.StartsWith('\\?\UNC\', [StringComparison]::OrdinalIgnoreCase)) {
+        return '\\' + $Path.Substring(8)
+    }
+    if ($Path.StartsWith('\\?\', [StringComparison]::OrdinalIgnoreCase)) {
+        return $Path.Substring(4)
+    }
+    return $Path
+}
+
+function Open-HeldVerifiedDirectory {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $full = [IO.Path]::GetFullPath($Path).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $held = $null
+    try {
+        $held = [Qs3dNativeFile]::OpenOrdinaryDirectoryHeld($full)
+        $heldFinal = [IO.Path]::GetFullPath((Convert-FromExtendedWin32Path -Path $held.FinalPath)).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+        if (-not [string]::Equals($heldFinal, $full, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Updater extraction boundary resolved path '$heldFinal' does not match admitted path '$full'."
+        }
+        return $held
+    }
+    catch {
+        if ($held) { $held.Dispose() }
+        throw
+    }
+}
+
+function Open-HeldVerifiedInstaller {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$ExtractionRoot,
+        [Parameter(Mandatory = $true)][string]$ExpectedSigner
+    )
+
+    $full = [IO.Path]::GetFullPath($Path)
+    $root = [IO.Path]::GetFullPath($ExtractionRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $rootWithSeparator = $root + [IO.Path]::DirectorySeparatorChar
+    if (-not $full.StartsWith($rootWithSeparator, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Updater installer path escaped the extraction root: $full"
+    }
+
+    $held = $null
+    try {
+        $held = [Qs3dNativeFile]::OpenOrdinaryReadHeld($full)
+        $heldFinal = [IO.Path]::GetFullPath((Convert-FromExtendedWin32Path -Path $held.FinalPath))
+        if (-not [string]::Equals($heldFinal, $full, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Updater installer resolved path '$heldFinal' does not match admitted path '$full'."
+        }
+        Assert-AuthenticodeSigner -Path $full -ExpectedSigner $ExpectedSigner -Label 'Downloaded QS3D installer'
+        return $held
+    }
+    catch {
+        if ($held) { $held.Dispose() }
+        throw
+    }
+}
+
 function Expand-VerifiedHeldArchive {
     param(
         [Parameter(Mandatory = $true)][string]$ZipPath,
@@ -692,7 +944,8 @@ function Assert-PackageRoot {
         if (-not $path.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)) { throw "Unsafe SHA256SUMS entry: $name" }
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing hashed payload: $name" }
         $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToUpperInvariant()
-        if ($actual -ne $expected) { throw "SHA-256 mismatch for downloaded payload: $name" }
+        if ($actual -ne $expected) { throw "SHA-256 mismatch for downloaded payload: $name"
+        }
         $verified++
     }
     if ($verified -eq 0) { throw 'Downloaded SHA256SUMS.txt contains no payload entries.' }
@@ -715,9 +968,15 @@ try {
     $manifestPath = Join-Path $tempRoot 'manifest.json'
     $zipPath = Join-Path $tempRoot 'package.zip'
     $extractRoot = Join-Path $tempRoot 'package'
+    $heldTempRoot = $null
+    $heldExtractRoot = $null
+    $heldInstaller = $null
+    $installerStream = $null
+    $installerReader = $null
 
     try {
         New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
+        $heldTempRoot = Open-HeldVerifiedDirectory -Path $tempRoot
         Invoke-BoundedHttpsDownload -Address $manifestAddress -DestinationPath $manifestPath -MaxBytes 65536 -TimeoutMilliseconds 30000 -Label 'Update manifest' | Out-Null
         $manifestFile = Get-Item -LiteralPath $manifestPath
         if ($manifestFile.Length -le 0 -or $manifestFile.Length -gt 65536) { throw 'Update manifest must be between 1 byte and 64 KiB.' }
@@ -778,6 +1037,16 @@ try {
             -MaxPackageBytes $maxBytes `
             -MaxExpandedBytes $maxExpandedBytes `
             -MaxEntries $MaxArchiveEntries
+
+        $heldExtractRoot = Open-HeldVerifiedDirectory -Path $extractRoot
+        $installer = Join-Path $extractRoot 'install-v25-autoload.ps1'
+        $heldInstaller = Open-HeldVerifiedInstaller -Path $installer -ExtractionRoot $extractRoot -ExpectedSigner $expectedSigner
+        $installerStream = [IO.FileStream]::new($heldInstaller.Handle, [IO.FileAccess]::Read)
+        $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
+        $installerReader = [IO.StreamReader]::new($installerStream, $strictUtf8, $false, 4096, $true)
+        $installerText = $installerReader.ReadToEnd()
+        if ([string]::IsNullOrWhiteSpace($installerText)) { throw 'Downloaded QS3D installer is empty.' }
+        $installerScript = [ScriptBlock]::Create($installerText)
         Assert-PackageRoot -Directory $extractRoot -ExpectedSigner $expectedSigner
 
         $downloadedPluginPath = Join-Path $extractRoot 'QS3D.BricsCAD.V25.dll'
@@ -816,7 +1085,6 @@ try {
             throw "Installed QS3D productVersion changed during update preparation ($($installedProductVersion.Text) -> $($currentInstalledProductVersion.Text)). Refusing concurrent/stale install."
         }
 
-        $installer = Join-Path $extractRoot 'install-v25-autoload.ps1'
         $arguments = @{
             PackageDirectory = $extractRoot
             InstallDirectory = $InstallDirectory
@@ -827,11 +1095,16 @@ try {
         }
         if ($VersionKeys) { $arguments.VersionKeys = $VersionKeys }
         if ($LanguageKeys) { $arguments.LanguageKeys = $LanguageKeys }
-        & $installer @arguments
+        & $installerScript @arguments
 
         Write-Host "QS3D updated securely to product $($targetProductVersion.Text) (assembly $targetVersion)."
     }
     finally {
+        if ($installerReader) { $installerReader.Dispose() }
+        if ($installerStream) { $installerStream.Dispose() }
+        if ($heldInstaller) { $heldInstaller.Dispose() }
+        if ($heldExtractRoot) { $heldExtractRoot.Dispose() }
+        if ($heldTempRoot) { $heldTempRoot.Dispose() }
         if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue }
     }
 }

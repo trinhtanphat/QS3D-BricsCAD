@@ -56,7 +56,7 @@ def main():
         ("RemovedDependentDuringSourceEnumerationFailsClosed", "structural remove regression"),
         ("ReplacedDependentDuringSourceEnumerationFailsClosed", "structural replacement regression"),
         ("StablePlanStillIncludesDependent", "stable structural regression"),
-        ("Project element ownership changed while dependency impact was being planned", "structural freshness diagnostic"),
+        ("Project changed while dependency impact was being planned; recompute the impact plan.", "project-version freshness diagnostic"),
     ]:
         ok = require(structural_smoke, token, label) and ok
 

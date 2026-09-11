@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.IO;
 using System.Text.RegularExpressions;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Agent;
@@ -23,13 +24,17 @@ namespace QS3D.BricsCAD.V25
         {
             return string.Equals(tool, "qs3d_status", StringComparison.Ordinal)
                 || string.Equals(tool, "qs3d_domain_status", StringComparison.Ordinal)
+                || string.Equals(tool, "qs3d_project_bind", StringComparison.Ordinal)
+                || string.Equals(tool, "qs3d_project_reload", StringComparison.Ordinal)
                 || string.Equals(tool, "qs3d_run_command", StringComparison.Ordinal)
                 || string.Equals(tool, "qs3d_place_single_footing", StringComparison.Ordinal);
         }
 
         internal static bool RequiresMutation(string? tool)
         {
-            return string.Equals(tool, "qs3d_run_command", StringComparison.Ordinal)
+            return string.Equals(tool, "qs3d_project_bind", StringComparison.Ordinal)
+                || string.Equals(tool, "qs3d_project_reload", StringComparison.Ordinal)
+                || string.Equals(tool, "qs3d_run_command", StringComparison.Ordinal)
                 || string.Equals(tool, "qs3d_place_single_footing", StringComparison.Ordinal);
         }
 
@@ -59,7 +64,7 @@ namespace QS3D.BricsCAD.V25
                     ProjectState project;
                     contextAvailable = ExistingProjectMutationContext.TryGet(document, out project);
                     if (!contextAvailable)
-                        contextReason = "No persisted QS3D project context. Open or bind QS3D business context before using qs3d_* mutations.";
+                        contextReason = "No persisted QS3D project context. Call qs3d_project_bind with createIfMissing=false to bind an existing sidecar or createIfMissing=true to explicitly create and persist one before qs3d_* mutations.";
                 }
                 catch (Exception ex)
                 {
@@ -101,6 +106,8 @@ namespace QS3D.BricsCAD.V25
                 var result = McpDiagnosticHub.InvokeInCadContext(() =>
                 {
                     McpCadAgentRuntime.EnsureCurrentMutationRunning();
+                    if (string.Equals(tool, "qs3d_project_bind", StringComparison.Ordinal)) return BindProject(body);
+                    if (string.Equals(tool, "qs3d_project_reload", StringComparison.Ordinal)) return ReloadProject();
                     if (string.Equals(tool, "qs3d_run_command", StringComparison.Ordinal)) return RunQs3dCommand(body);
                     if (string.Equals(tool, "qs3d_place_single_footing", StringComparison.Ordinal)) return PlaceSingleFooting(body);
                     throw new InvalidOperationException("Unknown QS3D domain mutation tool: " + tool);
@@ -113,6 +120,55 @@ namespace QS3D.BricsCAD.V25
                 RecordFailure(McpToolCapabilityContract.ClassifyFailure(tool, ex));
                 throw;
             }
+        }
+
+        private static string BindProject(string body)
+        {
+            var document = RequireDocument();
+            var createIfMissing = McpTopLevelJson.ExtractBoolean(body, "createIfMissing");
+            ProjectState project;
+            if (ExistingProjectMutationContext.TryGet(document, out project))
+            {
+                ProjectContextCoordinator.RequireBackingStoreUnchanged(document, project, "QS3D MCP project bind");
+                McpCadAgentRuntime.AuditDomainMutation("qs3d_project_bind", "created=false; restored=true; projectId=" + project.ProjectId);
+                return ProjectContextJson(project, false, true);
+            }
+
+            if (!createIfMissing)
+                throw new InvalidOperationException(
+                    "No existing QS3D project is attached to the active document. Set createIfMissing=true only when you intend to create and persist a new project for this DWG.");
+
+            var drawingPath = document.Database.Filename ?? string.Empty;
+            if (!Path.IsPathRooted(drawingPath))
+                throw new InvalidOperationException(
+                    "qs3d_project_bind cannot create a restart-persistent project for an unsaved drawing. Save the DWG to a local path first.");
+
+            project = ProjectContextCoordinator.GetOrCreate(document);
+            var sidecarPath = ProjectContextCoordinator.Save(document);
+            if (!File.Exists(sidecarPath) && !File.Exists(sidecarPath + ".bak"))
+            {
+                ProjectContextCoordinator.Forget(document);
+                throw new InvalidOperationException("QS3D project creation returned without a persisted sidecar; binding was rolled back.");
+            }
+            McpCadAgentRuntime.AuditDomainMutation("qs3d_project_bind", "created=true; restored=false; projectId=" + project.ProjectId);
+            return ProjectContextJson(project, true, false);
+        }
+
+        private static string ReloadProject()
+        {
+            var document = RequireDocument();
+            var project = ProjectContextCoordinator.Reload(document);
+            ProjectContextCoordinator.RequireBackingStoreUnchanged(document, project, "QS3D MCP project reload");
+            McpCadAgentRuntime.AuditDomainMutation("qs3d_project_reload", "restored=true; projectId=" + project.ProjectId);
+            return ProjectContextJson(project, false, true);
+        }
+
+        private static string ProjectContextJson(ProjectState project, bool created, bool restored)
+        {
+            return "{\"bound\":true,\"created\":" + JsonBool(created)
+                + ",\"restored\":" + JsonBool(restored)
+                + ",\"projectId\":\"" + Escape(project.ProjectId) + "\"}"
+                ;
         }
 
         private static string RunQs3dCommand(string body)

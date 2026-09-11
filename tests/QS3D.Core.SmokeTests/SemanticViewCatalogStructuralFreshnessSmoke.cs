@@ -26,7 +26,7 @@ namespace QS3D.Core.SmokeTests
                 project,
                 ReplaceElementWhileEnumerating(project)));
 
-            Equal(beforeVersion, project.ChangeVersion);
+            Equal(checked(beforeVersion + 1L), project.ChangeVersion);
             if (ReferenceEquals(original, project.Elements[0]))
                 throw new InvalidOperationException("Structural-freshness fixture did not replace the semantic element instance.");
         }

@@ -16,6 +16,10 @@ required = [
     "public partial class WorkspacePanel",
     "private static readonly bool DocumentAffinityRegistrationReady",
     "private bool _workspaceDocumentAffinityAttached;",
+    "private bool _workspaceDocumentActivatedMayBeSubscribed;",
+    "private bool _workspaceDocumentDestroyMayBeSubscribed;",
+    "private bool _workspaceDocumentAffinityDetachInProgress;",
+    "RetryWorkspaceDocumentAffinityDetach",
     "FrameworkElement.LoadedEvent",
     "FrameworkElement.UnloadedEvent",
     "Application.DocumentManager.DocumentActivated += OnWorkspaceDocumentActivated;",
@@ -65,15 +69,32 @@ attach = method_body("private void AttachWorkspaceDocumentAffinity", "private vo
 if attach:
     if "if (_workspaceDocumentAffinityAttached) return;" not in attach:
         errors.append("Workspace affinity attach must be idempotent")
-    if "_workspaceDocumentAffinityAttached = true;" not in attach:
-        errors.append("Workspace affinity attach must publish attached state only after both native hooks succeed")
+    activated_publish = attach.find("_workspaceDocumentActivatedMayBeSubscribed = true;")
+    activated_add = attach.find("Application.DocumentManager.DocumentActivated += OnWorkspaceDocumentActivated;")
+    destroy_publish = attach.find("_workspaceDocumentDestroyMayBeSubscribed = true;")
+    destroy_add = attach.find("Application.DocumentManager.DocumentToBeDestroyed += OnWorkspaceDocumentToBeDestroyed;")
+    attached_publish = attach.find("_workspaceDocumentAffinityAttached =")
+    if min(activated_publish, activated_add, destroy_publish, destroy_add, attached_publish) < 0 or not (activated_publish < activated_add < destroy_publish < destroy_add < attached_publish):
+        errors.append("Workspace affinity attach must publish conservative per-event ownership before fallible native adds and derive aggregate attached state only after both attempts")
+    if "RetryWorkspaceDocumentAffinityDetach();" not in attach:
+        errors.append("Workspace partial-add failure must retry exact retained native ownership")
 
 detach = method_body("private void DetachWorkspaceDocumentAffinity", "private void OnWorkspaceDocumentActivated")
 if detach:
-    if "if (!_workspaceDocumentAffinityAttached) return;" not in detach:
-        errors.append("Workspace affinity detach must be idempotent")
-    if "_workspaceDocumentAffinityAttached = false;" not in detach:
-        errors.append("Workspace affinity detach must clear attached state")
+    if "RetryWorkspaceDocumentAffinityDetach();" not in detach:
+        errors.append("Workspace affinity detach must always retry retained native ownership")
+
+retry = method_body("private void RetryWorkspaceDocumentAffinityDetach", "private void OnWorkspaceDocumentActivated")
+if retry:
+    if "if (_workspaceDocumentAffinityDetachInProgress) return;" not in retry:
+        errors.append("Workspace retry detach must fence reentrancy")
+    if "!_workspaceDocumentActivatedMayBeSubscribed && !_workspaceDocumentDestroyMayBeSubscribed" not in retry:
+        errors.append("Workspace retry detach must be idempotent only when both native ownership channels are clear")
+    for detach_token, clear_token in [("Application.DocumentManager.DocumentActivated -= OnWorkspaceDocumentActivated;", "_workspaceDocumentActivatedMayBeSubscribed = false;"),("Application.DocumentManager.DocumentToBeDestroyed -= OnWorkspaceDocumentToBeDestroyed;", "_workspaceDocumentDestroyMayBeSubscribed = false;")]:
+        dp, cp = retry.find(detach_token), retry.find(clear_token)
+        if dp < 0 or cp < dp: errors.append("Workspace native event ownership must clear only after matching detach succeeds: " + detach_token)
+    if "_workspaceDocumentAffinityAttached =" not in retry:
+        errors.append("Workspace retry detach must derive aggregate attached state from retained per-event ownership")
 
 activated = method_body("private void OnWorkspaceDocumentActivated", "private void OnWorkspaceDocumentToBeDestroyed")
 if activated and "InvalidateWorkspaceDocumentState" not in activated:

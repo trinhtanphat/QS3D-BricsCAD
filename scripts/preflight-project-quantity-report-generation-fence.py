@@ -64,7 +64,8 @@ for token in [
     'Quantities["GrossConcreteM3"] = 9d',
     'field.SetValue(p.Families[0], "Wall Type Drifted")',
     'SourceHandles.Add("BEEF")',
-    "p.Elements[0] = replacement",
+    'p.Elements.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)',
+    "Project element backing list is unavailable for generation-fence regression injection.",
     'GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)',
     "items[0] = replacement",
     "Project changed while the quantity report was being built",
@@ -72,6 +73,8 @@ for token in [
     if token not in smoke:
         raise SystemExit("Missing deterministic Project Quantity generation-fence smoke contract: " + token)
 
+if "p.Elements[0] = replacement" in smoke:
+    raise SystemExit("Element replacement generation-fence smoke must bypass StructuralRevisionList.Touch so ChangeVersion cannot satisfy the regression by itself.")
 if "p.Families[0] = replacement" in smoke:
     raise SystemExit("Family replacement generation-fence smoke must bypass CatalogOwnershipList.Touch so ChangeVersion cannot satisfy the regression by itself.")
 
@@ -81,7 +84,7 @@ for token in [
     'types: new[] { typeof(ProjectState), snapshot.GetType() }',
     'method.Invoke(null, new[] { (object)project, snapshot })',
     'StructuralReplacementWithoutTouchFailsClosed();',
-    'Equal(originalVersion, project.ChangeVersion);',
+    'Equal(checked(originalVersion + 1L), project.ChangeVersion);',
 ]:
     if token not in legacy_revision_smoke:
         raise SystemExit("Legacy quantity revision smoke is not bound to the immutable generation snapshot contract: " + token)

@@ -1,0 +1,22 @@
+# catalog-complete=false
+FeatureId	Domain	ReferencePath	WorkflowKey	Applicability	EvidenceStage	DecisionReference	DecisionReason
+shell.start	Shell	BLT3D / KHOI DAU	shell.start	Applicable	ReferenceCaptured	-	-
+project.setup	Project	BLT3D / THIET LAP DU AN	project.setup	Applicable	ReferenceCaptured	-	-
+bim.authoring	BIM	BLT3D / MO HINH BIM	bim.authoring	Applicable	ReferenceCaptured	-	-
+recognition	Recognition	BLT3D / NHAN DANG	recognition	Applicable	ReferenceCaptured	-	-
+draw	Draw	BLT3D / VE	draw	Applicable	ReferenceCaptured	-	-
+tool.editing	Tool	BLT3D / TOOL	tool.editing	Applicable	ReferenceCaptured	-	-
+modeling	Modeling	BLT3D / MODELING	modeling	Applicable	ReferenceCaptured	-	-
+rebar	Rebar	BLT3D / COT THEP	rebar	Applicable	ReferenceCaptured	-	-
+view	View	BLT3D / XEM	view	Applicable	ReferenceCaptured	-	-
+quantity	Quantity	BLT3D / DINH LUONG	quantity	Applicable	ReferenceCaptured	-	-
+revision	Revision	BLT3D / BAN SUA DOI	revision	Applicable	ReferenceCaptured	-	-
+drawing-manager	DrawingManager	BLT3D / Drawing Manager	drawing-manager	Applicable	ReferenceCaptured	-	-
+ifc	Interoperability	BLT3D / IFC	ifc	Applicable	ReferenceCaptured	-	-
+ai.luna	AI	BLT3D / LUNA AI	ai.luna	Applicable	ReferenceCaptured	-	-
+mcp.direct-cad	MCP	BLT3D MCP reference + QS3D direct MCP-to-CAD requirement	mcp.direct-cad	Applicable	ReferenceCaptured	-	-
+settings	Settings	BLT3D / Settings	settings	Applicable	ReferenceCaptured	-	-
+launcher	Infrastructure	BLT3D Launcher observed workflow	launcher	Applicable	ReferenceCaptured	-	-
+license.activation	Infrastructure	BLT3D activation UX reference; QS3D-owned implementation	license.activation	Applicable	ReferenceCaptured	-	-
+updater	Infrastructure	BLT3D updater UX reference; QS3D-owned implementation	updater	Applicable	ReferenceCaptured	-	-
+installer	Infrastructure	BLT3D install/repair workflow reference	installer	Applicable	ReferenceCaptured	-	-

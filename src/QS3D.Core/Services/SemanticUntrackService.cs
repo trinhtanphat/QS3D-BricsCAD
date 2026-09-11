@@ -57,7 +57,6 @@ namespace QS3D.Core.Services
                         throw new InvalidOperationException("Semantic untrack target is no longer owned by this project: " + target.Id);
                 }
 
-                project.Touch();
                 return new SemanticUntrackResult(targets.Select(x => x.Id).OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList().AsReadOnly());
             });
         }

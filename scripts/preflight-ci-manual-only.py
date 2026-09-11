@@ -233,8 +233,7 @@ def extract_job_if_expression(job_lines):
     if not expression:
         return None
     if expression.startswith("${{"):
-        if not expression.endswith("}}"):
-            return None
+        if not expression.endswith("}}"): return None
         expression = expression[3:-2].strip()
     return expression or None
 
@@ -267,12 +266,19 @@ def is_hard_auto_dispatch_guard(expression):
     )
 
 
+_VALIDATION_EVENT_GUARD = (
+    "github.event_name == 'workflow_dispatch' || "
+    "github.event_name == 'push' || "
+    "github.event_name == 'pull_request'"
+)
+
+
 def is_hard_validation_guard(expression):
-    return normalize_expression(expression) == (
-        "github.event_name == 'workflow_dispatch' || "
-        "github.event_name == 'push' || "
-        "github.event_name == 'pull_request'"
-    )
+    return normalize_expression(expression) == _VALIDATION_EVENT_GUARD
+
+
+def is_hard_validation_core_guard(expression):
+    return normalize_expression(expression) == f"!cancelled() && ({_VALIDATION_EVENT_GUARD})"
 
 
 def parse_trigger_name(line):
@@ -324,6 +330,20 @@ def validate_guard_parser():
     ])
     if not is_hard_validation_guard(validation_good) or is_hard_validation_guard(validation_bad):
         errors.append("shared validation guard parser regression")
+
+    core_good = extract_job_if_expression([
+        "    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request') }}"
+    ])
+    core_always = extract_job_if_expression([
+        "    if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event_name == 'pull_request') }}"
+    ])
+    core_scope_bad = extract_job_if_expression([
+        "    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.ref == 'refs/heads/main') }}"
+    ])
+    if not is_hard_validation_core_guard(core_good):
+        errors.append("shared core validation guard must admit exact cancellation-aware dependency-failure form")
+    if is_hard_validation_core_guard(core_always) or is_hard_validation_core_guard(core_scope_bad):
+        errors.append("shared core validation guard must reject always() and event-surface expansion")
 
     auto_good = extract_job_if_expression([
         "    if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') || (github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]') }}"
@@ -452,8 +472,13 @@ for path, text in workflow_sources:
         if {name for name, _ in job_blocks} != expected_jobs:
             errors.append(f"{path.name}: shared validation jobs must be exactly {sorted(expected_jobs)}")
         for job_name, job_lines in job_blocks:
-            if not is_hard_validation_guard(extract_job_if_expression(job_lines)):
-                errors.append(f"{path.name}/{job_name}: job must hard-require only workflow_dispatch/push/pull_request validation events")
+            expression = extract_job_if_expression(job_lines)
+            guard_ok = is_hard_validation_core_guard(expression) if job_name == "core" else is_hard_validation_guard(expression)
+            if not guard_ok:
+                errors.append(
+                    f"{path.name}/{job_name}: job must hard-require only workflow_dispatch/push/pull_request validation events"
+                    + (" with exact !cancelled() dependency-failure admission" if job_name == "core" else "")
+                )
         core_block = next(("\n".join(block) for name, block in job_blocks if name == "core"), "")
         if "needs: preflight" not in core_block:
             errors.append(f"{path.name}/core: Core/V25 validation must depend on preflight")

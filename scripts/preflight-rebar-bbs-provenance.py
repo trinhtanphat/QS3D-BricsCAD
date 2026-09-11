@@ -39,9 +39,9 @@ for token in [
 
 for token in [
     "FabricationStatus,FabricationStandardCode,FabricationDetailingRevision",
-    ".Append(Q(row.FabricationStatus))",
-    ".Append(Q(row.FabricationStandardCode))",
-    ".Append(Q(row.FabricationDetailingRevision))",
+    "writer.Write(Q(row.FabricationStatus));",
+    "writer.Write(Q(row.FabricationStandardCode));",
+    "writer.Write(Q(row.FabricationDetailingRevision));",
 ]:
     require(csv, token, "BBS CSV provenance")
 

@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.SmokeTests
@@ -65,7 +67,7 @@ namespace QS3D.Core.SmokeTests
             var duplicateFixture = CreateFixture("duplicate-id");
             PrepareOpeningForAtomicityCheck(duplicateFixture.Opening);
             var duplicateSnapshot = Snapshot(duplicateFixture.Project, duplicateFixture.Opening);
-            duplicateFixture.Project.Elements.Add(new ProjectElement(duplicateFixture.Host.Id.ToUpperInvariant(), ElementCategory.Slab));
+            RawAddElement(duplicateFixture.Project, new ProjectElement(duplicateFixture.Host.Id.ToUpperInvariant(), ElementCategory.Slab));
 
             Throws<InvalidOperationException>(() => SlabOpeningContract.Bind(duplicateFixture.Project, duplicateFixture.Opening, duplicateFixture.Host));
             RequireUnchanged(duplicateFixture.Project, duplicateFixture.Opening, duplicateSnapshot, "duplicate project element id");
@@ -106,6 +108,21 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(opening);
             project.Elements.Add(host);
             return new Fixture(project, opening, host);
+        }
+
+        private static void RawAddElement(ProjectState project, ProjectElement element)
+        {
+            if (project.Elements is List<ProjectElement> list)
+            {
+                list.Add(element);
+                return;
+            }
+
+            var itemsField = project.Elements.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to access the ProjectState.Elements backing list for a corrupt-state fixture.");
+            if (itemsField.GetValue(project.Elements) is not List<ProjectElement> items)
+                throw new InvalidOperationException("Unexpected ProjectState.Elements backing collection for a corrupt-state fixture.");
+            items.Add(element);
         }
 
         private static void PrepareOpeningForAtomicityCheck(ProjectElement opening)
