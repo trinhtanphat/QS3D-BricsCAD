@@ -70,11 +70,21 @@ def main() -> int:
         "[IO.FileShare]::Read",
         "$rebound = Get-Item -LiteralPath $canonical",
         "[int64]$stream.Length -ne $admittedLength",
-        "$sha.ComputeHash($held.Stream)",
+        "function Get-HeldStreamSha256",
+        "$hex = Get-HeldStreamSha256 -Stream $held.Stream",
+        "$copyDigest = Get-HeldStreamSha256 -Stream $held.Stream",
         "$held.Stream.CopyTo($output)",
     )
     for token in helper_tokens:
-        require(token in helper, "V25 release held-generation helper missing token: " + token)
+        require(token in helper, "V25 release held-generation helper missing exact-stream integrity contract: " + token)
+
+    helper_forbidden = (
+        "Get-FileHash -LiteralPath $canonical",
+        "Get-FileHash -LiteralPath $Path",
+        "$sha.ComputeHash($held.Stream)",
+    )
+    for token in helper_forbidden:
+        require(token not in helper, "V25 release held-generation helper regressed to pathname/direct-call digest semantics: " + token)
 
     forbidden = (
         "$existing = @(git ls-remote --tags origin $tagRef",
