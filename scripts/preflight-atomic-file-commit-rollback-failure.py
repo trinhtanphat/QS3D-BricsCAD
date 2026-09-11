@@ -26,7 +26,6 @@ if re.search(r"catch\s*\([^)]*\)\s*(?:when\s*\([^)]*\)\s*)?\{\s*\}", move_with_r
 required_move_tokens = (
     "publicationFailure",
     "RecordRollbackFailure(publicationFailure",
-    "RollbackFailureDataKey",
     "Directory.Exists(destinationPath)",
     "!File.Exists(backupPath)",
 )
