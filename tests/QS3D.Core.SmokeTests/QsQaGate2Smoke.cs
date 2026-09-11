@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             AppliesConfigurableSeverityThreshold();
             DetectsIfcPsetSpatialTypeAndGuidConsistency();
             HardGateDemandFailsClosedForGuardedWorkflows();
+            GuardedExecutorBlocksBeforeWorkflowInvocation();
         }
 
         private static void BlocksTakeoffBoqAndEstimateOnCriticalRelationshipFailure()
@@ -117,6 +118,36 @@ namespace QS3D.Core.SmokeTests
             allowed.DemandAllowed(QsQaGuardedWorkflow.Takeoff);
             allowed.DemandAllowed(QsQaGuardedWorkflow.Boq);
             allowed.DemandAllowed(QsQaGuardedWorkflow.Estimate);
+        }
+
+        private static void GuardedExecutorBlocksBeforeWorkflowInvocation()
+        {
+            var blocked = new QsQaGate2().Evaluate(
+                new[] { ValidElement("E9", "GUID-9", includeTypeRelationship: false) },
+                QsQaRuleProfile.SolibriQuantityStrict(),
+                null!,
+                Utc(2026, 9, 12));
+            var executor = new QsQaGuardedExecutor();
+
+            foreach (var workflow in new[] { QsQaGuardedWorkflow.Takeoff, QsQaGuardedWorkflow.Boq, QsQaGuardedWorkflow.Estimate })
+            {
+                var invoked = false;
+                ExpectThrows(() => executor.Execute(blocked, workflow, () => { invoked = true; return 42; }), workflow + " guarded execution must fail closed");
+                Expect(!invoked, workflow + " work must not run when QA is blocked");
+            }
+
+            var allowed = new QsQaGate2().Evaluate(
+                new[] { ValidElement("E10", "GUID-10", includeTypeRelationship: true) },
+                QsQaRuleProfile.SolibriQuantityStrict(),
+                null!,
+                Utc(2026, 9, 12));
+            var count = 0;
+            var value = executor.Execute(allowed, QsQaGuardedWorkflow.Takeoff, () => { count++; return 7; });
+            executor.Execute(allowed, QsQaGuardedWorkflow.Boq, () => count++);
+            executor.Execute(allowed, QsQaGuardedWorkflow.Estimate, () => count++);
+
+            Expect(value == 7, "guarded generic execution must return workflow result");
+            Expect(count == 3, "allowed workflows must execute exactly once each");
         }
 
         private static QsModelElementSnapshot ValidElement(string id, string guid, bool includeTypeRelationship)

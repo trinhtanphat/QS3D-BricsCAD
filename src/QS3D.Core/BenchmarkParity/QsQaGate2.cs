@@ -127,6 +127,27 @@ namespace QS3D.Core.BenchmarkParity
         }
     }
 
+    public sealed class QsQaGuardedExecutor
+    {
+        public T Execute<T>(QsQaGate2Decision decision, QsQaGuardedWorkflow workflow, Func<T> work)
+        {
+            if (decision == null) throw new ArgumentNullException("decision");
+            if (work == null) throw new ArgumentNullException("work");
+
+            decision.DemandAllowed(workflow);
+            return work();
+        }
+
+        public void Execute(QsQaGate2Decision decision, QsQaGuardedWorkflow workflow, Action work)
+        {
+            if (decision == null) throw new ArgumentNullException("decision");
+            if (work == null) throw new ArgumentNullException("work");
+
+            decision.DemandAllowed(workflow);
+            work();
+        }
+    }
+
     public sealed class QsQaGate2
     {
         public QsQaGate2Decision Evaluate(
