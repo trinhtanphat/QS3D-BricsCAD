@@ -31,18 +31,22 @@ def main() -> None:
     require(text, "Activated += OnWindowActivated;", "window activation lifecycle")
     require(text, "Closed += OnWindowClosed;", "window close lifecycle")
     require(text, "SubscribeToHostLifecycle();", "window host subscription")
-    require(text, "UnsubscribeFromHostLifecycle();", "window host unsubscription")
-    require(text, "private bool _hostLifecycleSubscribed;", "idempotent subscription state")
-    require(text, "if (_hostLifecycleSubscribed || _windowClosed)", "idempotent subscription guard")
+    require(text, "RetryHostLifecycleDetach();", "window host retry detach")
+    require(text, "private bool _documentActivatedMayBeSubscribed;", "DocumentActivated durable ownership")
+    require(text, "private bool _documentDestroyMayBeSubscribed;", "DocumentToBeDestroyed durable ownership")
+    require(text, "private bool _hostLifecycleActive;", "active callback authority")
+    require(text, "private bool _hostLifecycleDetachInProgress;", "detach reentrancy state")
+    require(text, "_windowClosed || _hostLifecycleActive ||", "idempotent subscription guard")
 
     # Unsubscription deliberately attempts both removes even when the published ownership flag is false.
     # A transactional add rollback can itself fail during host teardown; close must retry that cleanup.
-    unsubscribe = method_body(text, "private void UnsubscribeFromHostLifecycle()", "private void OnHostDocumentActivated", "host unsubscription")
-    if re.search(r"if\s*\(\s*!_hostLifecycleSubscribed\s*\)\s*return\s*;", unsubscribe):
-        raise AssertionError("Start Center close must retry native detach after a partially failed subscription rollback")
+    unsubscribe = method_body(text, "private void RetryHostLifecycleDetach()", "private void OnHostDocumentActivated", "host retry detach")
     if unsubscribe.count("try") < 2 or unsubscribe.count("catch") < 2:
         raise AssertionError("Start Center host unsubscription must attempt both native detach operations independently")
-    require(unsubscribe, "_hostLifecycleSubscribed = false;", "unsubscription ownership reset")
+    require(unsubscribe, "_hostLifecycleDetachInProgress = true;", "detach reentrancy acquisition")
+    require(unsubscribe, "_hostLifecycleDetachInProgress = false;", "detach reentrancy release")
+    require(unsubscribe, "_documentActivatedMayBeSubscribed = false;", "activation ownership reset after detach")
+    require(unsubscribe, "_documentDestroyMayBeSubscribed = false;", "destroy ownership reset after detach")
 
     # Host transitions are symmetrical and do not directly refresh from the event stack.
     require(text, "Application.DocumentManager.DocumentActivated += OnHostDocumentActivated;", "document activation subscription")
@@ -52,7 +56,7 @@ def main() -> None:
     activated = method_body(text, "private void OnHostDocumentActivated", "private void OnHostDocumentToBeDestroyed", "activation handler")
     destroying = method_body(text, "private void OnHostDocumentToBeDestroyed", "private void QueueHomeRefresh", "destruction handler")
     require(activated, "QueueHomeRefresh(ActiveDrawingRecordIntent.Record);", "activation deferred record refresh")
-    require(destroying, "var destroyingDocument = e.Document;", "destruction event-local document")
+    require(destroying, "destroyingDocument = e.Document;", "destruction event-local document")
     require(destroying, "Application.DocumentManager.MdiActiveDocument", "destruction active-document comparison")
     require(destroying, "ReferenceEquals(destroyingDocument, activeDocument)", "destruction document affinity")
     require(destroying, "? ActiveDrawingRecordIntent.Suppress", "active destruction suppression")

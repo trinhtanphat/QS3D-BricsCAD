@@ -206,7 +206,7 @@ if not errors:
                 "if (!ReferenceEquals(_pending, reserved))",
                 "_pending = null;",
                 "_published = reserved;",
-                "if (candidate != null && ReferenceEquals(_pending, candidate))",
+                "if (!window.IsLoaded && candidate != null && ReferenceEquals(_pending, candidate)) _pending = null;",
                 "if (ReferenceEquals(_pending, reserved)) _pending = null;",
                 "if (ReferenceEquals(_published, reserved)) _published = null;",
             ):
@@ -252,10 +252,10 @@ if not errors:
                 show = source.index("Application.ShowModelessWindow(IntPtr.Zero, candidate, true);", reserve)
                 loaded = source.index("if (!candidate.IsLoaded)", show)
                 promote = source.index("if (!PromotePendingWindow(candidate, document, nativeDatabaseIdentity))", loaded)
-                release = source.index("ReleaseOwnedWindow(candidate);", promote)
-                clear_local = source.index("candidate = null;", promote)
-                if not (construct < owner < closed < reserve < show < loaded < promote < release < clear_local):
-                    errors.append("curtain_hub launcher must reserve exact pending owner before host show and publish only after loaded/exact-owner proof")
+                retained_close = source.index("if (!CloseOwnedCandidateOnFailure(candidate))", promote)
+                clear_local = source.index("candidate = null;", retained_close)
+                if not (construct < owner < closed < reserve < show < loaded < promote < retained_close < clear_local):
+                    errors.append("curtain_hub launcher must reserve exact pending owner before host show, retain it across failed close, and publish only after loaded/exact-owner proof")
             except ValueError as exc:
                 errors.append("curtain_hub launcher publication ordering marker missing: " + str(exc))
         elif "Application.ShowModelessWindow(IntPtr.Zero, window, true);" not in source:

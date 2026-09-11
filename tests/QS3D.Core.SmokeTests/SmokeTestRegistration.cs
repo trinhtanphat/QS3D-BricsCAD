@@ -225,9 +225,11 @@ namespace QS3D.Core.SmokeTests
             ProjectSessionAuditSmoke.Run();
             ProjectInterchangeValidationSmoke.Run();
             QsdbSaveAtomicitySmoke.Run();
+            QsdbSaveRollbackRevisionFenceSmoke.Run();
             ProjectPersistenceLifecycleSmoke.Run();
             ProjectSidecarRevisionStampSmoke.Run();
             QsdbCanonicalPersistenceSmoke.Run();
+            QsdbInvalidQuantityNameBackupFallbackSmoke.Run();
             QsdbCanonicalLoadIdentitySmoke.Run();
             RepositorySyntheticQsdbSmoke.Run();
             QsdbFamilyCategoryReferenceSmoke.Run();

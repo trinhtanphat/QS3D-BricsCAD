@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Reporting;
@@ -79,8 +81,8 @@ namespace QS3D.Core.SmokeTests
 
         private static void RejectsInvalidAndOverflowingInputs()
         {
-            Expect<InvalidOperationException>(() => BuildTwo("LengthM", -1d, 1d), "negative contribution");
-            Expect<InvalidOperationException>(() => BuildTwo("LengthM", double.NaN, 1d), "non-finite contribution");
+            Expect<InvalidOperationException>(() => BuildTwoPersistedCorrupt("LengthM", -1d, 1d), "negative contribution");
+            Expect<InvalidOperationException>(() => BuildTwoPersistedCorrupt("LengthM", double.NaN, 1d), "non-finite contribution");
             Expect<OverflowException>(() => BuildTwo("LengthM", double.MaxValue, double.MaxValue), "overflowing aggregate");
         }
 
@@ -101,6 +103,14 @@ namespace QS3D.Core.SmokeTests
             return MaterialUsageScheduleBuilder.Build(project).Single();
         }
 
+        private static MaterialUsageRow BuildTwoPersistedCorrupt(string quantityKey, double first, double second)
+        {
+            var project = Project();
+            AddPersistedCorrupt(project, "a", quantityKey, first);
+            Add(project, "b", quantityKey, second);
+            return MaterialUsageScheduleBuilder.Build(project).Single();
+        }
+
         private static ProjectState Project()
         {
             var project = new ProjectState("material-precision", "Material precision");
@@ -116,6 +126,17 @@ namespace QS3D.Core.SmokeTests
         {
             var element = new ProjectElement(id, ElementCategory.ArchitecturalWall, "wall", "f", "z");
             element.Quantities[quantityKey] = value;
+            project.Elements.Add(element);
+        }
+
+        private static void AddPersistedCorrupt(ProjectState project, string id, string quantityKey, double value)
+        {
+            var element = new ProjectElement(id, ElementCategory.ArchitecturalWall, "wall", "f", "z");
+            var quantitiesField = typeof(ProjectElement).GetField("_quantityValues", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement quantity backing field changed; update Material Usage corruption fixture intentionally.");
+            var quantities = quantitiesField.GetValue(element) as Dictionary<string, double>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement quantity backing dictionary.");
+            quantities.Add(quantityKey, value);
             project.Elements.Add(element);
         }
 

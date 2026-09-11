@@ -1,13 +1,18 @@
 # catalog-complete=false
 FeatureId	Domain	ReferencePath	WorkflowKey	Applicability	EvidenceStage	DecisionReference	DecisionReason
-shell.start	Shell	BLT3D / KHOI DAU	shell.start	Applicable	ReferenceCaptured	-	-
-project.setup	Project	BLT3D / THIET LAP DU AN	project.setup	Applicable	ReferenceCaptured	-	-
-bim.authoring	BIM	BLT3D / MO HINH BIM	bim.authoring	Applicable	ReferenceCaptured	-	-
-recognition	Recognition	BLT3D / NHAN DANG	recognition	Applicable	ReferenceCaptured	-	-
-draw	Draw	BLT3D / VE	draw	Applicable	ReferenceCaptured	-	-
-tool.editing	Tool	BLT3D / TOOL	tool.editing	Applicable	ReferenceCaptured	-	-
-modeling	Modeling	BLT3D / MODELING	modeling	Applicable	ReferenceCaptured	-	-
-rebar	Rebar	BLT3D / COT THEP	rebar	Applicable	ReferenceCaptured	-	-
+shell.start	Shell	BLT3D / KHOI DAU	shell.start	Applicable	CommandWired	-	-
+shell.workspace	Shell	BLT3D / Workspace	shell.workspace	Applicable	CommandWired	-	-
+shell.ribbon	Shell	BLT3D / Ribbon	shell.ribbon	Applicable	CommandWired	-	-
+project.setup	Project	BLT3D / THIET LAP DU AN	project.setup	Applicable	CommandWired	-	-
+project.zone	Project	BLT3D / THIET LAP DU AN / Zone	project.zone	Applicable	CommandWired	-	-
+project.floor	Project	BLT3D / THIET LAP DU AN / Floor	project.floor	Applicable	CommandWired	-	-
+project.family	Project	BLT3D / THIET LAP DU AN / Family	project.family	Applicable	CommandWired	-	-
+bim.authoring	BIM	BLT3D / MO HINH BIM	bim.authoring	Applicable	CommandWired	-	-
+recognition	Recognition	BLT3D / NHAN DANG	recognition	Applicable	CommandWired	-	-
+draw	Draw	BLT3D / VE	draw	Applicable	CommandWired	-	-
+tool.editing	Tool	BLT3D / TOOL	tool.editing	Applicable	CommandWired	-	-
+modeling	Modeling	BLT3D / MODELING	modeling	Applicable	CommandWired	-	-
+rebar	Rebar	BLT3D / COT THEP	rebar	Applicable	CommandWired	-	-
 view	View	BLT3D / XEM	view	Applicable	ReferenceCaptured	-	-
 quantity	Quantity	BLT3D / DINH LUONG	quantity	Applicable	ReferenceCaptured	-	-
 revision	Revision	BLT3D / BAN SUA DOI	revision	Applicable	ReferenceCaptured	-	-

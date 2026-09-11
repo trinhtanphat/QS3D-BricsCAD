@@ -235,10 +235,13 @@ namespace QS3D.Core.Export
 
         private static List<QuantityReportRow> SnapshotRows(IReadOnlyList<QuantityReportRow> rows)
         {
-            var result = new List<QuantityReportRow>(rows.Count);
+            var admittedCount = rows.Count;
+            var result = new List<QuantityReportRow>(admittedCount);
             string? fingerprint = null;
-            for (var index = 0; index < rows.Count; index++)
+            for (var index = 0; index < admittedCount; index++)
             {
+                if (rows.Count != admittedCount)
+                    throw new InvalidDataException("Template export quantity row collection changed during snapshot capture.");
                 var row = rows[index] ?? throw new InvalidDataException("Template export contains a null quantity row.");
                 if (row.Count <= 0) throw new InvalidDataException("Template export row Count must be positive.");
                 var ids = CanonicalTokens(row.ElementIds, "QS3D Element ID", false);
@@ -308,7 +311,79 @@ namespace QS3D.Core.Export
                 foreach (var handle in handles) copy.SourceHandles.Add(handle);
                 result.Add(copy);
             }
+
+            if (rows.Count != admittedCount)
+                throw new InvalidDataException("Template export quantity row collection changed during snapshot capture.");
+            for (var index = 0; index < admittedCount; index++)
+                EnsureSnapshotRowStable(rows, admittedCount, index, result[index]);
+            if (rows.Count != admittedCount)
+                throw new InvalidDataException("Template export quantity row collection changed during snapshot capture.");
             return result;
+        }
+
+        private static void EnsureSnapshotRowStable(
+            IReadOnlyList<QuantityReportRow> rows,
+            int admittedCount,
+            int index,
+            QuantityReportRow snapshot)
+        {
+            if (rows.Count != admittedCount)
+                throw new InvalidDataException("Template export quantity row collection changed during snapshot capture.");
+            QuantityReportRow live;
+            try
+            {
+                live = rows[index] ?? throw new InvalidDataException("Template export contains a null quantity row.");
+            }
+            catch (ArgumentOutOfRangeException ex)
+            {
+                throw new InvalidDataException("Template export quantity row collection changed during snapshot capture.", ex);
+            }
+
+            var liveIds = CanonicalTokens(live.ElementIds, "QS3D Element ID", false);
+            var liveHandles = CanonicalTokens(live.SourceHandles, "CAD Handle", true);
+            var liveFingerprint = Required(live.DrawingFingerprint, "Drawing Fingerprint");
+            if (live.Count != snapshot.Count ||
+                !string.Equals(live.Floor ?? string.Empty, snapshot.Floor, StringComparison.Ordinal) ||
+                !string.Equals(live.Zone ?? string.Empty, snapshot.Zone, StringComparison.Ordinal) ||
+                !string.Equals(live.Category ?? string.Empty, snapshot.Category, StringComparison.Ordinal) ||
+                !string.Equals(live.FamilyId ?? string.Empty, snapshot.FamilyId, StringComparison.Ordinal) ||
+                !string.Equals(live.FamilyName ?? string.Empty, snapshot.FamilyName, StringComparison.Ordinal) ||
+                !string.Equals(live.ElementName ?? string.Empty, snapshot.ElementName, StringComparison.Ordinal) ||
+                !string.Equals(live.Material ?? string.Empty, snapshot.Material, StringComparison.Ordinal) ||
+                !string.Equals(live.Note ?? string.Empty, snapshot.Note, StringComparison.Ordinal) ||
+                !string.Equals(liveFingerprint, snapshot.DrawingFingerprint, StringComparison.Ordinal) ||
+                !live.GrossConcreteM3.Equals(snapshot.GrossConcreteM3) ||
+                !live.DeductionM3.Equals(snapshot.DeductionM3) ||
+                !live.NetConcreteM3.Equals(snapshot.NetConcreteM3) ||
+                !live.FormworkM2.Equals(snapshot.FormworkM2) ||
+                !live.LengthM.Equals(snapshot.LengthM) ||
+                !live.OuterPerimeterM.Equals(snapshot.OuterPerimeterM) ||
+                !live.InnerPerimeterM.Equals(snapshot.InnerPerimeterM) ||
+                !live.DoorAreaM2.Equals(snapshot.DoorAreaM2) ||
+                !live.SideAreaM2.Equals(snapshot.SideAreaM2) ||
+                !live.BottomAreaM2.Equals(snapshot.BottomAreaM2) ||
+                !live.TopAreaM2.Equals(snapshot.TopAreaM2) ||
+                !live.OtherAreaM2.Equals(snapshot.OtherAreaM2) ||
+                live.HasGrossConcreteM3Evidence != snapshot.HasGrossConcreteM3Evidence ||
+                live.HasDeductionM3Evidence != snapshot.HasDeductionM3Evidence ||
+                live.HasNetConcreteM3Evidence != snapshot.HasNetConcreteM3Evidence ||
+                live.HasFormworkM2Evidence != snapshot.HasFormworkM2Evidence ||
+                live.HasLengthMEvidence != snapshot.HasLengthMEvidence ||
+                live.HasOuterPerimeterMEvidence != snapshot.HasOuterPerimeterMEvidence ||
+                live.HasInnerPerimeterMEvidence != snapshot.HasInnerPerimeterMEvidence ||
+                live.HasDoorAreaM2Evidence != snapshot.HasDoorAreaM2Evidence ||
+                live.HasSideAreaM2Evidence != snapshot.HasSideAreaM2Evidence ||
+                live.HasBottomAreaM2Evidence != snapshot.HasBottomAreaM2Evidence ||
+                live.HasTopAreaM2Evidence != snapshot.HasTopAreaM2Evidence ||
+                live.HasOtherAreaM2Evidence != snapshot.HasOtherAreaM2Evidence ||
+                !Nullable.Equals(live.DensityKgM3, snapshot.DensityKgM3) ||
+                !Nullable.Equals(live.MassKg, snapshot.MassKg) ||
+                !liveIds.SequenceEqual(snapshot.ElementIds, StringComparer.Ordinal) ||
+                !liveHandles.SequenceEqual(snapshot.SourceHandles, StringComparer.Ordinal))
+                throw new InvalidDataException("Template export quantity row changed during snapshot capture.");
+
+            if (rows.Count != admittedCount)
+                throw new InvalidDataException("Template export quantity row collection changed during snapshot capture.");
         }
 
         private static void ApplyRows(XDocument worksheet, IReadOnlyList<QuantityReportRow> rows, QsWorkbookTemplateDefinition definition)

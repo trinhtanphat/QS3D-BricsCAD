@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import subprocess
 
-EXPECTED_PLATFORM_SHA = "728aa5779e3b1b0a30dae641359d95688228f50f"
+EXPECTED_PLATFORM_SHA = "8b0206d3b74e7bbb3c02ed71ac4c5aeef47d5efd"
 SUBMODULE_PATH = "external/QS3D-Platform"
 
 

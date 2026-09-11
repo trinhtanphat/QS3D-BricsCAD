@@ -114,6 +114,7 @@ namespace QS3D.BricsCAD.V25
             using (document.LockDocument())
             {
                 RequireViewMutationIdle();
+                EnsureSameActiveDocument(document, "cad_view_zoom_extents");
                 var extents = RequireFiniteExtents(
                     new Extents3d(document.Database.Extmin, document.Database.Extmax),
                     "drawing extents");
@@ -128,10 +129,12 @@ namespace QS3D.BricsCAD.V25
             var document = RequireDocument();
             RequireViewMutationIdle();
             using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
                 RequireViewMutationIdle();
-                var hasExtents = false;
+                EnsureSameActiveDocument(document, "cad_view_fit_entities");
+                using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
+                {
+                    var hasExtents = false;
                 var combined = new Extents3d();
                 var skippedHandles = new List<string>();
                 var fittedCount = 0;
@@ -160,8 +163,9 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException(
                         "No usable entity extents were supplied. Skipped live handles with unusable extents: "
                         + string.Join(",", skippedHandles) + ".");
-                var result = ApplyExtents(document, combined, padding, "entities", fittedCount);
-                return AppendFitWarnings(result, handles.Count, skippedHandles);
+                    var result = ApplyExtents(document, combined, padding, "entities", fittedCount);
+                    return AppendFitWarnings(result, handles.Count, skippedHandles);
+                }
             }
         }
 
@@ -210,19 +214,26 @@ namespace QS3D.BricsCAD.V25
 
             var document = RequireDocument();
             RequireViewMutationIdle();
+            string result;
             using (document.LockDocument())
-            using (var view = document.Editor.GetCurrentView())
             {
-                RequireCompatibleViewAspect(view, width, height);
+                RequireViewMutationIdle();
+                EnsureSameActiveDocument(document, "cad_view_set");
+                using (var view = document.Editor.GetCurrentView())
+                {
+                    RequireCompatibleViewAspect(view, width, height);
                 if (direction.HasValue) RequireCompatibleViewDirection(view, direction.Value);
                 view.CenterPoint = new Point2d(centerX, centerY);
                 view.Width = width;
                 view.Height = height;
                 if (hasTwist) view.ViewTwist = twist;
-                RequireViewMutationIdle();
-                document.Editor.SetCurrentView(view);
+                    RequireViewMutationIdle();
+                    EnsureSameActiveDocument(document, "cad_view_set_commit");
+                    document.Editor.SetCurrentView(view);
+                }
+                result = CurrentViewJson(document, "set");
             }
-            return CurrentViewJson(document, "set");
+            return result;
         }
 
         private static void RequireCompatibleViewAspect(ViewTableRecord currentView, double requestedWidth, double requestedHeight)
@@ -269,6 +280,7 @@ namespace QS3D.BricsCAD.V25
                 view.Width = PositiveViewSize(rawWidth * padding, "computed width");
                 view.Height = PositiveViewSize(rawHeight * padding, "computed height");
                 RequireViewMutationIdle();
+                EnsureSameActiveDocument(document, "cad_view_apply_commit");
                 document.Editor.SetCurrentView(view);
             }
             var result = CurrentViewJson(document, source);
@@ -354,7 +366,15 @@ namespace QS3D.BricsCAD.V25
         {
             lock (CommandGate)
             {
-                if (CommandTrackers.ContainsKey(document)) return;
+                CommandTracker existing;
+                if (CommandTrackers.TryGetValue(document, out existing))
+                {
+                    if (existing.AcceptCallbacks) return;
+                    existing.DetachBestEffort();
+                    if (!existing.IsFullyDetached) return;
+                    CommandTrackers.Remove(document);
+                }
+
                 if (CommandTrackers.Count >= 32)
                 {
                     Document? removable = null;
@@ -364,13 +384,27 @@ namespace QS3D.BricsCAD.V25
                     }
                     if (removable != null)
                     {
-                        try { CommandTrackers[removable].Dispose(); } catch { }
+                        var stale = CommandTrackers[removable];
+                        stale.DetachBestEffort();
+                        if (!stale.IsFullyDetached) return;
                         CommandTrackers.Remove(removable);
                     }
                 }
+
                 var tracker = new CommandTracker(document);
-                tracker.Subscribe();
                 CommandTrackers[document] = tracker;
+                try
+                {
+                    tracker.Subscribe();
+                }
+                catch
+                {
+                    tracker.DetachBestEffort();
+                    if (tracker.IsFullyDetached
+                        && CommandTrackers.TryGetValue(document, out existing)
+                        && ReferenceEquals(existing, tracker))
+                        CommandTrackers.Remove(document);
+                }
             }
         }
 
@@ -385,7 +419,7 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void TrackCommand(Document document, string phase, CommandEventArgs args)
+        private static void TrackCommand(CommandTracker source, Document document, string phase, CommandEventArgs args)
         {
             var command = SafeCommandName(args == null ? string.Empty : args.GlobalCommandName);
             if (command.Length == 0) return;
@@ -393,6 +427,8 @@ namespace QS3D.BricsCAD.V25
             {
                 CommandTracker tracker;
                 if (!CommandTrackers.TryGetValue(document, out tracker)) return;
+                if (!ReferenceEquals(tracker, source)) return;
+                if (!tracker.AcceptCallbacks) return;
                 tracker.Track(command, phase);
             }
         }
@@ -531,6 +567,20 @@ namespace QS3D.BricsCAD.V25
                     "BricsCAD view update is blocked while the application window is minimized.");
         }
 
+        private static void EnsureSameActiveDocument(Document document, string operation)
+        {
+            Document active;
+            try { active = Application.DocumentManager.MdiActiveDocument; }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    operation + ": could not confirm the active BricsCAD document; native operation/result was not continued.", ex);
+            }
+            if (document == null || active == null || !ReferenceEquals(active, document))
+                throw new InvalidOperationException(
+                    operation + ": active BricsCAD document changed; native operation/result was not continued.");
+        }
+
         private static Document RequireDocument()
         {
             return Application.DocumentManager.MdiActiveDocument
@@ -586,22 +636,45 @@ namespace QS3D.BricsCAD.V25
             private readonly CommandEventHandler _ended;
             private readonly CommandEventHandler _cancelled;
             private readonly CommandEventHandler _failed;
+            private bool _willStartMayBeSubscribed;
+            private bool _endedMayBeSubscribed;
+            private bool _cancelledMayBeSubscribed;
+            private bool _failedMayBeSubscribed;
 
             internal CommandTracker(Document document)
             {
                 _document = document;
-                _willStart = (sender, args) => TrackCommand(_document, "start", args);
-                _ended = (sender, args) => TrackCommand(_document, "end", args);
-                _cancelled = (sender, args) => TrackCommand(_document, "cancelled", args);
-                _failed = (sender, args) => TrackCommand(_document, "failed", args);
+                _willStart = (sender, args) => TrackCommand(this, _document, "start", args);
+                _ended = (sender, args) => TrackCommand(this, _document, "end", args);
+                _cancelled = (sender, args) => TrackCommand(this, _document, "cancelled", args);
+                _failed = (sender, args) => TrackCommand(this, _document, "failed", args);
+            }
+
+            internal bool AcceptCallbacks { get; private set; }
+
+            internal bool IsFullyDetached
+            {
+                get
+                {
+                    return !_willStartMayBeSubscribed
+                           && !_endedMayBeSubscribed
+                           && !_cancelledMayBeSubscribed
+                           && !_failedMayBeSubscribed;
+                }
             }
 
             internal void Subscribe()
             {
+                AcceptCallbacks = false;
+                _willStartMayBeSubscribed = true;
                 _document.CommandWillStart += _willStart;
+                _endedMayBeSubscribed = true;
                 _document.CommandEnded += _ended;
+                _cancelledMayBeSubscribed = true;
                 _document.CommandCancelled += _cancelled;
+                _failedMayBeSubscribed = true;
                 _document.CommandFailed += _failed;
+                AcceptCallbacks = true;
             }
 
             internal void Track(string command, string phase)
@@ -629,12 +702,30 @@ namespace QS3D.BricsCAD.V25
                 return new CommandLifecycleSnapshot(active, _lastCommand, _lastPhase, _updatedUtc);
             }
 
+            internal void DetachBestEffort()
+            {
+                AcceptCallbacks = false;
+                if (_willStartMayBeSubscribed)
+                {
+                    try { _document.CommandWillStart -= _willStart; _willStartMayBeSubscribed = false; } catch { }
+                }
+                if (_endedMayBeSubscribed)
+                {
+                    try { _document.CommandEnded -= _ended; _endedMayBeSubscribed = false; } catch { }
+                }
+                if (_cancelledMayBeSubscribed)
+                {
+                    try { _document.CommandCancelled -= _cancelled; _cancelledMayBeSubscribed = false; } catch { }
+                }
+                if (_failedMayBeSubscribed)
+                {
+                    try { _document.CommandFailed -= _failed; _failedMayBeSubscribed = false; } catch { }
+                }
+            }
+
             public void Dispose()
             {
-                try { _document.CommandWillStart -= _willStart; } catch { }
-                try { _document.CommandEnded -= _ended; } catch { }
-                try { _document.CommandCancelled -= _cancelled; } catch { }
-                try { _document.CommandFailed -= _failed; } catch { }
+                DetachBestEffort();
             }
         }
     }

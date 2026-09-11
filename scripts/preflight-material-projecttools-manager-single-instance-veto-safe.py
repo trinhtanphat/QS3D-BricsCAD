@@ -23,13 +23,10 @@ def ordered(source, label, *needles):
         position = found + len(needle)
 
 
-if not MATERIAL.is_file():
-    errors.append(f"missing Material manager command source: {MATERIAL.relative_to(ROOT)}")
-else:
-    material = MATERIAL.read_text(encoding="utf-8")
+def check_pending_first(source, label, constructor):
     require(
-        material,
-        "Material manager",
+        source,
+        label,
         "private static PublishedManager? _pending;",
         "private static PublishedManager? _published;",
         "private readonly WeakReference<Document> _document;",
@@ -39,8 +36,6 @@ else:
         "database.UnmanagedObject == NativeDatabaseIdentity",
         "_document.TryGetTarget(out var ownedDocument)",
         "ReferenceEquals(ownedDocument, document)",
-        "ExistingProjectMutationContext.TryGet(document, out var project)",
-        "new MaterialCatalogWindow(document, project)",
         "var pending = _pending;",
         "pending.Matches(document) && pending.MatchesManagedWrapper(document)",
         "var previous = _published;",
@@ -48,6 +43,7 @@ else:
         "if (previous.Matches(document) && previous.MatchesManagedWrapper(document))",
         "previous.Window.Close();",
         "if (ReferenceEquals(_published, previous))",
+        constructor,
         "candidate = new PublishedManager(window, document);",
         "var reserved = candidate;",
         "_pending = reserved;",
@@ -59,17 +55,16 @@ else:
         "if (!ReferenceEquals(_pending, reserved))",
         "_pending = null;",
         "_published = reserved;",
-        "if (candidate != null && ReferenceEquals(_pending, candidate))",
+        "candidate = null;",
+        "window = null;",
         "try { window.Close(); } catch { }",
-        "QS3DMATERIALS không thể mở Material Catalog an toàn; trạng thái hiện tại được giữ nguyên.",
     )
     ordered(
-        material,
-        "Material manager pending-first publication",
-        "ExistingProjectMutationContext.TryGet(document, out var project)",
+        source,
+        f"{label} pending-first publication",
         "var pending = _pending;",
         "var previous = _published;",
-        "window = new MaterialCatalogWindow(document, project);",
+        constructor,
         "candidate = new PublishedManager(window, document);",
         "var reserved = candidate;",
         "_pending = reserved;",
@@ -79,69 +74,47 @@ else:
         "if (!ReferenceEquals(_pending, reserved))",
         "_pending = null;",
         "_published = reserved;",
+        "candidate = null;",
+        "window = null;",
     )
     for forbidden in (
-        "ex.Message",
         "_published = reserved;\n                Application.ShowModelessWindow",
         "Application.ShowModelessWindow(IntPtr.Zero, window, true);\n                _pending = reserved;",
+        "try { previous.Window.Close(); } catch { }",
     ):
-        if forbidden in material:
-            errors.append(f"Material manager contains unsafe publication/reporting shortcut: {forbidden.strip()}")
+        if forbidden in source:
+            errors.append(f"{label} contains unsafe publication/close shortcut: {forbidden.strip()}")
+
+
+if not MATERIAL.is_file():
+    errors.append(f"missing Material manager command source: {MATERIAL.relative_to(ROOT)}")
+else:
+    material = MATERIAL.read_text(encoding="utf-8")
+    check_pending_first(material, "Material manager", "window = new MaterialCatalogWindow(document, project);")
+    require(
+        material,
+        "Material manager",
+        "ExistingProjectMutationContext.TryGet(document, out var project)",
+        "new MaterialCatalogWindow(document, project)",
+        "if (!window.IsLoaded && candidate != null && ReferenceEquals(_pending, candidate)) _pending = null;",
+        "QS3DMATERIALS không thể mở Material Catalog an toàn; trạng thái hiện tại được giữ nguyên.",
+    )
+    if "ex.Message" in material:
+        errors.append("Material manager must not expose caught host exception details")
 
 if not PROJECT_TOOLS.is_file():
     errors.append(f"missing ProjectTools manager command source: {PROJECT_TOOLS.relative_to(ROOT)}")
 else:
     project_tools = PROJECT_TOOLS.read_text(encoding="utf-8")
+    check_pending_first(project_tools, "ProjectTools manager", "window = new ProjectToolsWindow(document);")
     require(
         project_tools,
         "ProjectTools manager",
-        "private static PublishedManager? _published;",
-        "private readonly WeakReference<Document> _document;",
-        "database.UnmanagedObject == IntPtr.Zero",
-        "NativeDatabaseIdentity = database.UnmanagedObject;",
-        "_document = new WeakReference<Document>(document);",
-        "database.UnmanagedObject == NativeDatabaseIdentity",
-        "_document.TryGetTarget(out var ownedDocument)",
-        "ReferenceEquals(ownedDocument, document)",
-        "var previous = _published;",
-        "if (previous.Window.IsLoaded)",
-        "if (previous.Matches(document) && previous.MatchesManagedWrapper(document))",
-        "previous.Window.Activate();",
-        "previous.Window.Close();",
-        "if (ReferenceEquals(_published, previous))",
-        "_published = null;",
-        "var published = new PublishedManager(window, document);",
-        "window.Closed += (_, __) =>",
-        "if (ReferenceEquals(_published, published)) _published = null;",
-        "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
-        "if (!window.IsLoaded)",
-        "host show returned without a loaded window.",
-        "_published = published;",
-        "window = null;",
-        "if (window != null)",
-        "try { window.Close(); } catch { }",
         "new ProjectToolsWindow(document)",
+        "ClosePendingOnAffinityDrift(reserved);",
+        "ClosePendingAfterFailure(candidate, window);",
+        "QS3DPROJECTTOOLS không thể mở Project Tools an toàn; trạng thái hiện tại được giữ nguyên.",
     )
-    ordered(
-        project_tools,
-        "ProjectTools manager published lifecycle",
-        "var previous = _published;",
-        "if (previous.Matches(document) && previous.MatchesManagedWrapper(document))",
-        "previous.Window.Close();",
-        "if (ReferenceEquals(_published, previous))",
-        "window = new ProjectToolsWindow(document);",
-        "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
-        "if (!window.IsLoaded)",
-        "_published = published;",
-    )
-    for forbidden in (
-        "if (previous.Matches(document))\n",
-        "_published = null;\n                        try { previous.Window.Close();",
-        "try { previous.Window.Close(); } catch { }",
-        "_published = published;\n                Application.ShowModelessWindow",
-    ):
-        if forbidden in project_tools:
-            errors.append(f"ProjectTools manager contains unsafe publication shortcut: {forbidden.strip()}")
 
 print("QS3D Material/Project Tools manager single-instance veto-safe preflight")
 if errors:
@@ -151,5 +124,5 @@ if errors:
     raise SystemExit(1)
 
 print(
-    "PASS: Material Catalog uses pending-first exact-owner publication with redacted failure handling, while Project Tools retains exact native+managed-wrapper affinity, terminal close arbitration, veto safety, loaded host-show admission and instance-safe Closed release."
+    "PASS: Material Catalog and Project Tools both reserve exact pending ownership before host show, retain native+managed-wrapper affinity and terminal close/veto arbitration, require Loaded + exact-owner admission before publication, and release only the exact pending/published generation."
 )

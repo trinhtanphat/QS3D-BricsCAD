@@ -21,6 +21,124 @@ namespace QS3D.Core.SmokeTests
             PreservesDestinationOnInvalidMapping();
             RejectsMappedFormulaCells();
             RejectsUnsafeExpansionPastFooter();
+            RejectsCollectionGenerationDrift();
+            RejectsRowValueGenerationDrift();
+        }
+
+        private static void RejectsCollectionGenerationDrift()
+        {
+            var root = TempDirectory("qs-template-generation-drift");
+            try
+            {
+                var template = Path.Combine(root, "template.xlsx");
+                var destination = Path.Combine(root, "existing.xlsx");
+                WriteTemplate(template, false, false);
+                File.WriteAllText(destination, "KEEP-ME", Encoding.UTF8);
+                var original = File.ReadAllBytes(destination);
+                var rows = Rows().ToList();
+                var hostile = new ShrinkingRows(rows);
+
+                ExpectThrows<InvalidDataException>(
+                    () => QsWorkbookTemplateExporter.Export(template, destination, hostile, Definition()),
+                    "Template export must reject collection Count drift during snapshot capture.");
+
+                Require(original.SequenceEqual(File.ReadAllBytes(destination)),
+                    "Generation-drift rejection must preserve an existing destination workbook.");
+            }
+            finally
+            {
+                DeleteDirectory(root);
+            }
+        }
+
+        private static void RejectsRowValueGenerationDrift()
+        {
+            var root = TempDirectory("qs-template-row-value-drift");
+            try
+            {
+                var template = Path.Combine(root, "template.xlsx");
+                var destination = Path.Combine(root, "existing.xlsx");
+                WriteTemplate(template, false, false);
+                File.WriteAllText(destination, "KEEP-ME", Encoding.UTF8);
+                var original = File.ReadAllBytes(destination);
+                var row = Rows().First();
+                var hostile = new MutatingRowOnRevalidation(row);
+
+                ExpectThrows<InvalidDataException>(
+                    () => QsWorkbookTemplateExporter.Export(template, destination, hostile, Definition()),
+                    "Template export must reject scalar/provenance drift during snapshot capture.");
+
+                Require(original.SequenceEqual(File.ReadAllBytes(destination)),
+                    "Row-generation drift rejection must preserve an existing destination workbook.");
+            }
+            finally
+            {
+                DeleteDirectory(root);
+            }
+        }
+
+        private sealed class MutatingRowOnRevalidation : IReadOnlyList<QuantityReportRow>
+        {
+            private readonly QuantityReportRow _row;
+            private int _reads;
+
+            internal MutatingRowOnRevalidation(QuantityReportRow row)
+            {
+                _row = row;
+            }
+
+            public int Count => 1;
+
+            public QuantityReportRow this[int index]
+            {
+                get
+                {
+                    if (index != 0) throw new ArgumentOutOfRangeException(nameof(index));
+                    _reads++;
+                    if (_reads >= 2)
+                    {
+                        _row.ElementName = "MUTATED";
+                        _row.NetConcreteM3 = 99.0;
+                        _row.SourceHandles.Clear();
+                        _row.SourceHandles.Add("BEEF");
+                    }
+                    return _row;
+                }
+            }
+
+            public IEnumerator<QuantityReportRow> GetEnumerator()
+            {
+                yield return this[0];
+            }
+
+            System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+        }
+
+        private sealed class ShrinkingRows : IReadOnlyList<QuantityReportRow>
+        {
+            private readonly List<QuantityReportRow> _rows;
+
+            internal ShrinkingRows(List<QuantityReportRow> rows)
+            {
+                _rows = rows;
+            }
+
+            public int Count => _rows.Count;
+
+            public QuantityReportRow this[int index]
+            {
+                get
+                {
+                    var row = _rows[index];
+                    if (index == 0 && _rows.Count > 1)
+                        _rows.RemoveAt(_rows.Count - 1);
+                    return row;
+                }
+            }
+
+            public IEnumerator<QuantityReportRow> GetEnumerator() => _rows.GetEnumerator();
+
+            System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private static void RendersCanonicalRowsAndPreservesTemplateParts()
