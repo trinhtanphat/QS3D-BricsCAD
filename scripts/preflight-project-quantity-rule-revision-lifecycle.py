@@ -1,6 +1,7 @@
 from pathlib import Path
 
-SOURCE = Path("src/QS3D.Core/Domain/ProjectState.cs")
+ROOT = Path(__file__).resolve().parents[1]
+SOURCE = ROOT / "src" / "QS3D.Core" / "Domain" / "ProjectState.cs"
 text = SOURCE.read_text(encoding="utf-8")
 
 required = [
@@ -22,4 +23,4 @@ if stale in text:
         "ProjectState revision tracking for persisted rule mutations."
     )
 
-print("OK: ProjectState quantity-rule structural mutations are revision-tracked.")
+print("PASS ProjectState quantity-rule structural mutation revision source guard")
