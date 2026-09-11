@@ -26,6 +26,19 @@ namespace QS3D.Core.BenchmarkParity
         public string EvidenceReference { get; private set; }
 
         internal string Key { get { return Kind + ":" + SourceId; } }
+        internal string Fingerprint
+        {
+            get
+            {
+                var quantity = Quantity.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+                return Segment(Revision) + "|" + Segment(quantity) + "|" + Segment(EvidenceReference);
+            }
+        }
+
+        private static string Segment(string value)
+        {
+            return value.Length.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + value;
+        }
     }
 
     public sealed class LiveWorkbookBinding
@@ -75,7 +88,12 @@ namespace QS3D.Core.BenchmarkParity
         public double Offset { get; private set; }
         public double LastValue { get; private set; }
 
-        internal string CellKey { get { return WorkbookId + "|" + Sheet + "|" + Cell; } }
+        internal string CellKey { get { return Segment(WorkbookId) + "|" + Segment(Sheet) + "|" + Segment(Cell); } }
+
+        private static string Segment(string value)
+        {
+            return value.Length.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + value;
+        }
     }
 
     public sealed class LiveWorkbookRefreshResult
@@ -169,7 +187,7 @@ namespace QS3D.Core.BenchmarkParity
 
             var sourceGroups = sourceList.GroupBy(x => x.Key, StringComparer.OrdinalIgnoreCase).ToDictionary(x => x.Key, x => x.ToList(), StringComparer.OrdinalIgnoreCase);
             var sourceConflicts = new HashSet<string>(sourceGroups
-                .Where(x => x.Value.Select(y => y.Revision + "|" + y.Quantity.ToString("R", System.Globalization.CultureInfo.InvariantCulture) + "|" + y.EvidenceReference).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
+                .Where(x => x.Value.Select(y => y.Fingerprint).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
                 .Select(x => x.Key), StringComparer.OrdinalIgnoreCase);
 
             var orderedIds = TopologicalOrder(distinctBindings);
