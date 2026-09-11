@@ -123,6 +123,10 @@ namespace QS3D.BricsCAD.V25.UI
             actions.Children.Add(current);
 
             actions.Children.Add(CreateEstimateWorkspaceButton(
+                "Dự toán / Đơn giá",
+                "QS3DESTIMATING",
+                "Mở workspace dự toán, đơn giá, rate build-up, BQ library và trade/CFA từ Core/TBQ hiện hữu."));
+            actions.Children.Add(CreateEstimateWorkspaceButton(
                 "Vật liệu",
                 "QS3DMATERIALS",
                 "Mở danh mục vật liệu QS3D built-in/custom và áp theo semantic selection."));
