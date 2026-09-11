@@ -780,7 +780,8 @@ jobs:
                         -not [string]::Equals([string]$authoritativeCommercialReleaseBeforeCompensation.tag_name, $env:RELEASE_TAG, [StringComparison]::Ordinal) -or
                         -not [string]::Equals([string]$authoritativeCommercialReleaseBeforeCompensation.target_commitish, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase) -or
                         -not [string]::Equals([string]$authoritativeCommercialReleaseBeforeCompensation.name, $expectedReleaseName, [StringComparison]::Ordinal) -or
-                        ([string]$authoritativeCommercialReleaseBeforeCompensation.body).IndexOf($draftTransactionMarker, [StringComparison]::Ordinal) -lt 0) {
+                        ([string]$authoritativeCommercialReleaseBeforeCompensation.body).IndexOf($draftTransactionMarker, [StringComparison]::Ordinal) -lt 0 -or
+                        [bool]$authoritativeCommercialReleaseBeforeCompensation.prerelease -ne ($env:RELEASE_PRERELEASE -eq 'true')) {
                       throw 'V25 commercial compensation preflight found a release identity mismatch; refusing mutation.'
                     }
                     $preCompensationAssets = @($authoritativeCommercialReleaseBeforeCompensation.assets)
@@ -805,7 +806,7 @@ jobs:
                       Write-Host 'V25 commercial release was already restored to draft before compensation; no mutation required.'
                     }
                     else {
-                      $commercialCompensationBody = @{ draft = $true; prerelease = $true } | ConvertTo-Json
+                      $commercialCompensationBody = @{ draft = $true } | ConvertTo-Json
                       $commercialCompensatedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri -Headers $headers -ContentType 'application/json' -Body $commercialCompensationBody
                     }
                     $authoritativeCommercialReleaseAfterCompensation = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
@@ -815,6 +816,7 @@ jobs:
                         $authoritativeCommercialReleaseAfterCompensation.draft -ne $true -or
                         -not [string]::Equals([string]$authoritativeCommercialReleaseAfterCompensation.tag_name, $env:RELEASE_TAG, [StringComparison]::Ordinal) -or
                         -not [string]::Equals([string]$authoritativeCommercialReleaseAfterCompensation.target_commitish, $env:GITHUB_SHA, [StringComparison]::OrdinalIgnoreCase) -or
+                        [bool]$authoritativeCommercialReleaseAfterCompensation.prerelease -ne ($env:RELEASE_PRERELEASE -eq 'true') -or
                         -not [string]::Equals([string]$authoritativeCommercialReleaseAfterCompensation.name, $expectedReleaseName, [StringComparison]::Ordinal) -or
                         ([string]$authoritativeCommercialReleaseAfterCompensation.body).IndexOf($draftTransactionMarker, [StringComparison]::Ordinal) -lt 0) {
                       throw 'V25 commercial compensation postflight did not prove the exact release is safely non-public.'
