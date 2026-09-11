@@ -23,11 +23,7 @@ def main() -> int:
     command = COMMAND.read_text(encoding="utf-8")
     builder = BUILDER.read_text(encoding="utf-8")
 
-    require(
-        command,
-        "CadSelectionGuard.AcquireCurrentSelection(document)",
-        "single command-level admitted selection",
-    )
+    require(command, "CadSelectionGuard.AcquireCurrentSelection(document)", "single command-level admitted selection")
     require(
         command,
         "BeamStirrupSolidBuilder.BuildSelected(document, project, selectedIds, expectedTargetIds)",
@@ -35,47 +31,26 @@ def main() -> int:
     )
     require(builder, "ObjectId[] selectedIds", "builder selection-snapshot parameter")
     require(builder, "ISet<string> expectedTargetIds", "builder target-generation parameter")
+    require(builder, "if (selectedIds == null) throw new ArgumentNullException(nameof(selectedIds));", "null selection snapshot refusal")
+    require(builder, "if (expectedTargetIds == null) throw new ArgumentNullException(nameof(expectedTargetIds));", "null target-set refusal")
+    require(builder, "foreach (var id in selectedIds)", "builder handle derivation from admitted snapshot")
+    require(builder, "if (!expectedTargetIds.SetEquals(elements.Select(x => x.Id)))", "pre-mutation semantic target-set fence")
+    require(builder, "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)", "exact active-document fence")
+    require(builder, "using (document.LockDocument())", "native document-lock boundary")
+    require(builder, "DWG active đã thay đổi sau document lock", "post-lock document affinity fence")
     require(
         builder,
-        "if (selectedIds == null) throw new ArgumentNullException(nameof(selectedIds));",
-        "null selection snapshot refusal",
+        'ProjectContextCoordinator.RequireBackingStoreUnchanged(document, project, "Beam Stirrup 3D post-lock mutation")',
+        "post-lock canonical project/backing-store fence",
     )
-    require(
-        builder,
-        "if (expectedTargetIds == null) throw new ArgumentNullException(nameof(expectedTargetIds));",
-        "null target-set refusal",
-    )
-    require(
-        builder,
-        "foreach (var id in selectedIds)",
-        "builder handle derivation from admitted snapshot",
-    )
-    require(
-        builder,
-        "if (!expectedTargetIds.SetEquals(elements.Select(x => x.Id)))",
-        "pre-mutation semantic target-set fence",
-    )
-    require(
-        builder,
-        "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)",
-        "exact active-document fence",
-    )
-    require(
-        builder,
-        "using (document.LockDocument())",
-        "native document-lock boundary",
-    )
-    require(
-        builder,
-        "DWG active đã thay đổi sau document lock",
-        "post-lock document affinity fence",
-    )
+    require(builder, "var postLockTargetIds = project.Elements", "post-lock target generation reacquisition")
+    require(builder, "if (!expectedTargetIds.SetEquals(postLockTargetIds))", "post-lock exact target-set fence")
 
     forbid(builder, "document.Editor.SelectImplied()", "selection re-read inside builder")
     forbid(builder, "document.Editor.GetSelection()", "selection prompt inside builder")
     forbid(builder, "document.Editor.SetImpliedSelection(", "selection mutation inside builder")
 
-    print("PASS: Beam Stirrup consumes only the command-admitted selection and target generation")
+    print("PASS: Beam Stirrup consumes only the admitted selection/project/target generation")
     return 0
 
 
