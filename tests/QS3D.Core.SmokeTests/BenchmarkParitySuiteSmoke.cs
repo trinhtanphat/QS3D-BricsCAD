@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             QaGateBlocksInvalidModel();
+            QsQaGate2Smoke.Run();
             CalibratedTwoDimensionalTakeoff();
             WorkbookLiveLinkRefresh();
             IntegrationRoutes();
