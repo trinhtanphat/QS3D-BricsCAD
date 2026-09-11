@@ -87,21 +87,23 @@ if recreate_catch is None:
     sys.exit(1)
 
 # Once a newly installed primary is rejected because a backup appeared, rollback
-# ownership must transfer before attempting to delete that primary. Otherwise a
-# failed File.Delete leaves installed=true and finally can delete the staged old
-# backup instead of preserving it for recovery/diagnosis.
-recreate_rollback = re.search(
-    r"if\s*\(File\.Exists\(backupPath\)\s*\|\|\s*Directory\.Exists\(backupPath\)\)\s*\{(?P<body>.*?)\n\s*\}",
-    recreate,
-    re.S,
-)
-if recreate_rollback is None:
+# ownership must transfer before attempting to delete that primary. Avoid parsing
+# the nested try/catch with a non-greedy brace regex: that truncates at the inner
+# catch and can report a false failure even when source ordering is correct.
+rollback_branch = "if (File.Exists(backupPath) || Directory.Exists(backupPath))"
+rollback_branch_start = recreate.find(rollback_branch)
+if rollback_branch_start < 0:
     print("ERROR: AtomicFileCommit missing-destination rollback branch was not found.")
     sys.exit(1)
-recreate_rollback_body = recreate_rollback.group("body")
-rollback_owner_transfer = recreate_rollback_body.find("installed = false;")
-rollback_delete = recreate_rollback_body.find("File.Delete(destinationPath);")
-if rollback_owner_transfer < 0 or rollback_delete < 0 or rollback_owner_transfer > rollback_delete:
+rollback_owner_transfer = recreate.find("installed = false;", rollback_branch_start)
+rollback_delete = recreate.find("File.Delete(destinationPath);", rollback_branch_start)
+rollback_inner_catch = recreate.find("catch (Exception ex) when", rollback_branch_start)
+if (
+    rollback_owner_transfer < 0
+    or rollback_delete < 0
+    or rollback_inner_catch < 0
+    or not (rollback_owner_transfer < rollback_delete < rollback_inner_catch)
+):
     print(
         "ERROR: AtomicFileCommit missing-destination rollback must mark the install uncommitted "
         "before deleting the rejected primary so delete failure cannot discard the staged old backup."
