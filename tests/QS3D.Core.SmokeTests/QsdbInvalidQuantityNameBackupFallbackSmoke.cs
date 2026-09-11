@@ -49,20 +49,20 @@ namespace QS3D.Core.SmokeTests
                 if (!string.Equals(tamperedName, "Area\tM2", StringComparison.Ordinal))
                     throw new Exception("Invalid quantity-name fixture did not preserve the internal XML-permitted control character.");
 
-                var normalizedAtPersistenceBoundary = false;
+                var normalizedAtSchemaBoundary = false;
                 try
                 {
                     store.Load(path);
                 }
                 catch (InvalidDataException ex)
                 {
-                    normalizedAtPersistenceBoundary =
-                        ex.Message.IndexOf("Invalid persisted QSDB element quantity", StringComparison.Ordinal) >= 0
-                        && ex.InnerException is ArgumentException;
+                    normalizedAtSchemaBoundary =
+                        ex.Message.IndexOf("quantity name", StringComparison.OrdinalIgnoreCase) >= 0
+                        && ex.Message.IndexOf("control characters", StringComparison.OrdinalIgnoreCase) >= 0;
                 }
 
-                if (!normalizedAtPersistenceBoundary)
-                    throw new Exception("Invalid persisted quantity name was not normalized to InvalidDataException at the QSDB load boundary.");
+                if (!normalizedAtSchemaBoundary)
+                    throw new Exception("Invalid persisted quantity name was not rejected as InvalidDataException at the QSDB schema boundary.");
 
                 var recovered = store.LoadWithBackupFallback(path);
                 if (!recovered.RecoveredFromBackup)
