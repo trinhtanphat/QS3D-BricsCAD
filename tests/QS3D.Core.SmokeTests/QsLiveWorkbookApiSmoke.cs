@@ -106,19 +106,7 @@ namespace QS3D.Core.SmokeTests
             True(api.Describe().Any(x => x.Resource == QsApiResourceKind.Procurement), "procurement route");
             True(api.Describe().Any(x => x.Resource == QsApiResourceKind.WorkbookRefresh && x.Method == "POST"), "workbook refresh route");
 
-            var snapshot = new QsApiProjectSnapshot(
-                new QsApiProjectDto("P1", "Demo", "R2"),
-                new[] { new QsApiSourceDto("E1", "IFC", "R2", "model.ifc") },
-                new[] { new QsApiQuantityDto("ARC.WALL", "m2", 100d, 4) },
-                new[] { new QsApiBoqLineDto("L1", "ARC.WALL", "Wall", "m2", 100d) },
-                new[] { new QsApiEstimateLineDto("L1", 100d, 20d) },
-                new[] { new QsApiNamedDto("ARC.WALL", "Wall", "active") },
-                new QsQaFinding[0],
-                new[] { new QsApiRevisionDto("R2", "S2", DateTime.SpecifyKind(new DateTime(2026, 9, 12), DateTimeKind.Utc)) },
-                new[] { new QsApiNamedDto("S2", "Snapshot R2", "current") },
-                new[] { new QsApiDiffDto("R1", "R2", "ARC.WALL", 5d, 100d) },
-                new[] { new QsApiNamedDto("T1", "Tender 1", "open") },
-                new[] { new QsApiNamedDto("PO1", "Order 1", "delivering") });
+            var snapshot = CreateSnapshot("P1", "R2");
 
             var unauthenticated = api.Get(new QsApiRequest("GET", "P1", QsApiResourceKind.Quantity, null!, string.Empty), snapshot);
             Equal(401, unauthenticated.StatusCode, "API authentication");
@@ -136,11 +124,42 @@ namespace QS3D.Core.SmokeTests
             var cached = api.Get(new QsApiRequest("GET", "P1", QsApiResourceKind.Quantity, reader, ok.ETag), snapshot);
             Equal(304, cached.StatusCode, "API conditional GET");
 
+            var collisionA = api.Get(new QsApiRequest("GET", "P1-R2", QsApiResourceKind.Quantity, reader, string.Empty), CreateSnapshot("P1-R2", "X"));
+            var collisionB = api.Get(new QsApiRequest("GET", "P1", QsApiResourceKind.Quantity, reader, string.Empty), CreateSnapshot("P1", "R2-X"));
+            True(!string.Equals(collisionA.ETag, collisionB.ETag, StringComparison.Ordinal), "delimiter-bearing project/revision identities produce distinct ETags");
+
             var refreshPrincipal = new QsApiPrincipal("erp", new[] { "qs3d.workbook.refresh" });
             var missingBinding = new LiveWorkbookBinding("B9", "WB", "BOQ", "D99", "L99", LiveWorkbookSourceKind.BimElement, "MISSING", "R2", new string[0], 1d, 0d, 0d);
             var blockedBatch = new LiveWorkbookRefreshEngine2().Refresh(new[] { missingBinding }, new LiveWorkbookSourceSnapshot[0], "R2");
             var refresh = api.RefreshWorkbook(refreshPrincipal, "P1", "WB", blockedBatch);
             Equal(409, refresh.StatusCode, "conflicted workbook refresh");
+            Equal("WORKBOOK_REFRESH_CONFLICT", refresh.ErrorCode, "conflicted workbook refresh code");
+
+            var otherWorkbookBinding = new LiveWorkbookBinding("B10", "WB-OTHER", "BOQ", "D100", "L100", LiveWorkbookSourceKind.BimElement, "E1", "R2", new string[0], 1d, 0d, 0d);
+            var otherWorkbookBatch = new LiveWorkbookRefreshEngine2().Refresh(
+                new[] { otherWorkbookBinding },
+                new[] { new LiveWorkbookSourceSnapshot(LiveWorkbookSourceKind.BimElement, "E1", "R2", 1d, "ifc://model/E1") },
+                "R2");
+            var wrongWorkbook = api.RefreshWorkbook(refreshPrincipal, "P1", "WB", otherWorkbookBatch);
+            Equal(409, wrongWorkbook.StatusCode, "workbook route identity mismatch");
+            Equal("WORKBOOK_IDENTITY_MISMATCH", wrongWorkbook.ErrorCode, "workbook route identity mismatch code");
+        }
+
+        private static QsApiProjectSnapshot CreateSnapshot(string projectId, string revision)
+        {
+            return new QsApiProjectSnapshot(
+                new QsApiProjectDto(projectId, "Demo", revision),
+                new[] { new QsApiSourceDto("E1", "IFC", revision, "model.ifc") },
+                new[] { new QsApiQuantityDto("ARC.WALL", "m2", 100d, 4) },
+                new[] { new QsApiBoqLineDto("L1", "ARC.WALL", "Wall", "m2", 100d) },
+                new[] { new QsApiEstimateLineDto("L1", 100d, 20d) },
+                new[] { new QsApiNamedDto("ARC.WALL", "Wall", "active") },
+                new QsQaFinding[0],
+                new[] { new QsApiRevisionDto(revision, "S2", DateTime.SpecifyKind(new DateTime(2026, 9, 12), DateTimeKind.Utc)) },
+                new[] { new QsApiNamedDto("S2", "Snapshot " + revision, "current") },
+                new[] { new QsApiDiffDto("R1", revision, "ARC.WALL", 5d, 100d) },
+                new[] { new QsApiNamedDto("T1", "Tender 1", "open") },
+                new[] { new QsApiNamedDto("PO1", "Order 1", "delivering") });
         }
 
         private static void True(bool value, string message)
