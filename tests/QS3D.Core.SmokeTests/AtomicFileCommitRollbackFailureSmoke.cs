@@ -18,9 +18,11 @@ namespace QS3D.Core.SmokeTests
                 BindingFlags.NonPublic | BindingFlags.Static)
                 ?? throw new InvalidOperationException("AtomicFileCommit rollback evidence helper was not found.");
 
-            var publicationFailure = new IOException("publication sentinel");
+            var publicationFailure = CapturePublicationFailureWithStack();
             var rollbackFailure = new UnauthorizedAccessException("rollback sentinel");
             var originalStack = publicationFailure.StackTrace;
+            Require(!string.IsNullOrWhiteSpace(originalStack),
+                "Publication sentinel must carry real stack evidence before rollback metadata is attached.");
 
             var result = helper.Invoke(null, new object[] { publicationFailure, rollbackFailure });
 
@@ -40,6 +42,18 @@ namespace QS3D.Core.SmokeTests
                 "First rollback failure evidence was lost or reordered.");
             Require(ReferenceEquals(aggregate.InnerExceptions[1], secondRollbackFailure),
                 "Second rollback failure evidence was lost or reordered.");
+        }
+
+        private static IOException CapturePublicationFailureWithStack()
+        {
+            try
+            {
+                throw new IOException("publication sentinel");
+            }
+            catch (IOException ex)
+            {
+                return ex;
+            }
         }
 
         private static void Require(bool condition, string message)
