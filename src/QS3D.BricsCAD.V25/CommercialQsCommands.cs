@@ -7,11 +7,32 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class CommercialQsCommands
     {
-        private static CommercialQsWindow? _window;
-        private static CommercialQsWindow? _unpublishedCandidate;
-        private static CommercialQsWindow? _publicationInFlightCandidate;
-        private static CommercialQsWindow? _cleanupInFlightCandidate;
-        private static IntPtr _nativeDatabaseIdentity;
+        private static PublishedWindow? _pending;
+        private static PublishedWindow? _published;
+
+        private sealed class PublishedWindow
+        {
+            private readonly WeakReference<Document> _document;
+
+            public PublishedWindow(CommercialQsWindow window, Document document, IntPtr nativeDatabaseIdentity)
+            {
+                Window = window ?? throw new ArgumentNullException(nameof(window));
+                _document = new WeakReference<Document>(document ?? throw new ArgumentNullException(nameof(document)));
+                NativeDatabaseIdentity = nativeDatabaseIdentity;
+            }
+
+            public CommercialQsWindow Window { get; }
+
+            public IntPtr NativeDatabaseIdentity { get; }
+
+            public bool Matches(Document document, IntPtr nativeDatabaseIdentity)
+            {
+                return _document.TryGetTarget(out var ownedDocument)
+                    && ReferenceEquals(ownedDocument, document)
+                    && nativeDatabaseIdentity != IntPtr.Zero
+                    && nativeDatabaseIdentity == NativeDatabaseIdentity;
+            }
+        }
 
         [CommandMethod("QS3DCOMMERCIAL", CommandFlags.Modal)]
         public void ShowCommercialQsWorkspace()
@@ -19,158 +40,124 @@ namespace QS3D.BricsCAD.V25
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
 
+            var nativeDatabaseIdentity = IntPtr.Zero;
+            PublishedWindow? owner = null;
             try
             {
-                if (!PrepareUnpublishedCandidate())
+                nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+
+                var pending = _pending;
+                if (pending != null && !TryCloseOwner(pending))
                 {
-                    Report(document, "QS3DCOMMERCIAL: a previous unpublished Commercial QS window has not reached terminal Closed.");
+                    ReportIfActive(document, nativeDatabaseIdentity, "QS3DCOMMERCIAL: a previous unpublished Commercial QS window has not reached terminal Closed.");
                     return;
                 }
 
-                var requestedIdentity = GetNativeDatabaseIdentity(document);
-                if (!PreparePublishedWindow(requestedIdentity))
-                {
-                    Report(document, "QS3DCOMMERCIAL: the existing Commercial QS window belongs to another drawing and could not close safely.");
-                    return;
-                }
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
 
-                if (_window != null)
+                var published = _published;
+                if (published != null)
                 {
-                    try { _window.Activate(); } catch { }
-                    Report(document, "Commercial QS workspace activated.");
-                    return;
-                }
-
-                var candidate = new CommercialQsWindow(document);
-                candidate.Closed += (_, __) => ReleaseCandidate(candidate);
-                _unpublishedCandidate = candidate;
-                _publicationInFlightCandidate = candidate;
-                try
-                {
-                    Application.ShowModelessWindow(IntPtr.Zero, candidate, true);
-                }
-                catch (Exception)
-                {
-                    if (!CloseUnpublishedCandidate(candidate))
+                    if (published.Window.IsLoaded && published.Matches(document, nativeDatabaseIdentity))
                     {
-                        Report(document, "QS3DCOMMERCIAL: failed to publish the window and the candidate could not close safely.");
+                        try { published.Window.Activate(); } catch { }
+                        ReportIfActive(document, nativeDatabaseIdentity, "Commercial QS workspace activated.");
                         return;
                     }
 
-                    Report(document, "QS3DCOMMERCIAL: unable to open the Commercial QS workspace.");
-                    return;
-                }
-                finally
-                {
-                    if (ReferenceEquals(_publicationInFlightCandidate, candidate))
-                        _publicationInFlightCandidate = null;
+                    if (!TryCloseOwner(published))
+                    {
+                        ReportIfActive(document, nativeDatabaseIdentity, "QS3DCOMMERCIAL: the existing Commercial QS window belongs to another drawing generation and could not close safely.");
+                        return;
+                    }
+
+                    if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
                 }
 
-                if (!candidate.IsLoaded)
+                var window = new CommercialQsWindow(document);
+                owner = new PublishedWindow(window, document, nativeDatabaseIdentity);
+                var releaseOwner = owner;
+                window.Closed += (_, __) => ReleaseOwnedWindow(releaseOwner);
+                _pending = owner;
+
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
                 {
-                    CloseUnpublishedCandidate(candidate);
+                    TryCloseOwner(owner);
                     return;
                 }
 
-                _window = candidate;
-                _nativeDatabaseIdentity = requestedIdentity;
-                if (ReferenceEquals(_unpublishedCandidate, candidate))
-                    _unpublishedCandidate = null;
-                Report(document, "Commercial QS workspace opened: Variation • IPC • Final Account • Tender • CVR • XLSX.");
+                Application.ShowModelessWindow(IntPtr.Zero, window, true);
+
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                {
+                    TryCloseOwner(owner);
+                    return;
+                }
+
+                if (!window.IsLoaded)
+                {
+                    ReleaseOwnedWindow(owner);
+                    return;
+                }
+
+                if (!ReferenceEquals(_pending, owner))
+                    return;
+
+                _pending = null;
+                _published = owner;
+                owner = null;
+                ReportIfActive(document, nativeDatabaseIdentity, "Commercial QS workspace opened: Variation • IPC • Final Account • Tender • CVR • XLSX.");
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                Report(document, "QS3DCOMMERCIAL: unable to open the Commercial QS workspace.");
+                if (owner != null)
+                    TryCloseOwner(owner);
+
+                ReportIfActive(document, nativeDatabaseIdentity, "QS3DCOMMERCIAL failed (" + ex.GetType().Name + ").");
             }
         }
 
-        private static bool PrepareUnpublishedCandidate()
+        private static bool TryCloseOwner(PublishedWindow owner)
         {
-            if (_cleanupInFlightCandidate != null || _publicationInFlightCandidate != null)
-                return false;
-            var candidate = _unpublishedCandidate;
-            return candidate == null || CloseUnpublishedCandidate(candidate);
-        }
-
-        private static bool PreparePublishedWindow(IntPtr requestedNativeDatabaseIdentity)
-        {
-            var published = _window;
-            if (published == null) return true;
-            if (!published.IsLoaded)
+            if (!owner.Window.IsLoaded)
             {
-                ReleaseCandidate(published);
+                ReleaseOwnedWindow(owner);
                 return true;
             }
-            if (_nativeDatabaseIdentity == requestedNativeDatabaseIdentity)
-                return true;
 
-            _cleanupInFlightCandidate = published;
-            try
-            {
-                published.Close();
-            }
-            catch
-            {
-                if (!published.IsLoaded)
-                {
-                    ReleaseCandidate(published);
-                    return true;
-                }
-                return false;
-            }
-            finally
-            {
-                if (ReferenceEquals(_cleanupInFlightCandidate, published))
-                    _cleanupInFlightCandidate = null;
-            }
+            try { owner.Window.Close(); }
+            catch { return false; }
 
-            if (published.IsLoaded) return false;
-            ReleaseCandidate(published);
+            if (owner.Window.IsLoaded) return false;
+            ReleaseOwnedWindow(owner);
             return true;
         }
 
-        private static bool CloseUnpublishedCandidate(CommercialQsWindow candidate)
+        private static void ReleaseOwnedWindow(PublishedWindow owner)
         {
-            _cleanupInFlightCandidate = candidate;
+            if (ReferenceEquals(_pending, owner))
+                _pending = null;
+            if (ReferenceEquals(_published, owner))
+                _published = null;
+        }
+
+        private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (nativeDatabaseIdentity == IntPtr.Zero) return false;
             try
             {
-                candidate.Close();
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                    return false;
+                var database = document.Database;
+                return database != null
+                    && database.UnmanagedObject != IntPtr.Zero
+                    && database.UnmanagedObject == nativeDatabaseIdentity;
             }
             catch
             {
-                if (!candidate.IsLoaded)
-                {
-                    ReleaseCandidate(candidate);
-                    return true;
-                }
-                _unpublishedCandidate = candidate;
                 return false;
             }
-            finally
-            {
-                if (ReferenceEquals(_cleanupInFlightCandidate, candidate))
-                    _cleanupInFlightCandidate = null;
-            }
-
-            if (!candidate.IsLoaded)
-            {
-                ReleaseCandidate(candidate);
-                return true;
-            }
-
-            _unpublishedCandidate = candidate;
-            return false;
-        }
-
-        private static void ReleaseCandidate(CommercialQsWindow candidate)
-        {
-            if (ReferenceEquals(_window, candidate))
-            {
-                _window = null;
-                _nativeDatabaseIdentity = IntPtr.Zero;
-            }
-            if (ReferenceEquals(_unpublishedCandidate, candidate))
-                _unpublishedCandidate = null;
         }
 
         private static IntPtr GetNativeDatabaseIdentity(Document document)
@@ -184,9 +171,11 @@ namespace QS3D.BricsCAD.V25
             return identity;
         }
 
-        private static void Report(Document document, string message)
+        private static void ReportIfActive(Document document, IntPtr nativeDatabaseIdentity, string message)
         {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             try { document.Editor.WriteMessage("\n" + message); } catch { }
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             try { PaletteCoordinator.SetStatus(message); } catch { }
         }
     }
