@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed when Beam Stirrup re-reads native selection after command admission."""
+"""Fail closed when Beam Stirrup escapes its admitted selection/target generation."""
 
 from pathlib import Path
 import sys
@@ -30,30 +30,52 @@ def main() -> int:
     )
     require(
         command,
-        "BeamStirrupSolidBuilder.BuildSelected(document, project, selectedIds)",
-        "exact admitted ObjectId handoff",
+        "BeamStirrupSolidBuilder.BuildSelected(document, project, selectedIds, expectedTargetIds)",
+        "exact admitted ObjectId and target-set handoff",
     )
-    require(
-        builder,
-        "BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)",
-        "builder selection-snapshot parameter",
-    )
+    require(builder, "ObjectId[] selectedIds", "builder selection-snapshot parameter")
+    require(builder, "ISet<string> expectedTargetIds", "builder target-generation parameter")
     require(
         builder,
         "if (selectedIds == null) throw new ArgumentNullException(nameof(selectedIds));",
-        "null snapshot refusal",
+        "null selection snapshot refusal",
+    )
+    require(
+        builder,
+        "if (expectedTargetIds == null) throw new ArgumentNullException(nameof(expectedTargetIds));",
+        "null target-set refusal",
     )
     require(
         builder,
         "foreach (var id in selectedIds)",
         "builder handle derivation from admitted snapshot",
     )
+    require(
+        builder,
+        "if (!expectedTargetIds.SetEquals(elements.Select(x => x.Id)))",
+        "pre-mutation semantic target-set fence",
+    )
+    require(
+        builder,
+        "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)",
+        "exact active-document fence",
+    )
+    require(
+        builder,
+        "using (document.LockDocument())",
+        "native document-lock boundary",
+    )
+    require(
+        builder,
+        "DWG active đã thay đổi sau document lock",
+        "post-lock document affinity fence",
+    )
 
     forbid(builder, "document.Editor.SelectImplied()", "selection re-read inside builder")
     forbid(builder, "document.Editor.GetSelection()", "selection prompt inside builder")
     forbid(builder, "document.Editor.SetImpliedSelection(", "selection mutation inside builder")
 
-    print("PASS: Beam Stirrup consumes only the command-admitted selection snapshot")
+    print("PASS: Beam Stirrup consumes only the command-admitted selection and target generation")
     return 0
 
 
