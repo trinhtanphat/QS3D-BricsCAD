@@ -2,6 +2,7 @@
 """Fail closed unless V26 post-PATCH safety invalidation removes only the exact stale release."""
 
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / "scripts" / "publish-v26-release.ps1"
@@ -12,8 +13,8 @@ def function_body(source: str, name: str) -> str:
     start = source.find(marker)
     if start < 0:
         return ""
-    next_function = source.find("\nfunction ", start + len(marker))
-    return source[start:] if next_function < 0 else source[start:next_function]
+    closing_brace = re.search(r"(?m)^}\s*$", source[start:])
+    return "" if closing_brace is None else source[start : start + closing_brace.end()]
 
 
 def validate(source: str) -> list[str]:
@@ -42,7 +43,11 @@ def validate(source: str) -> list[str]:
     if catch_index < 0:
         errors.append("missing catch for post-release-publish safety invalidation")
         return errors
-    catch_tail = source[catch_index : catch_index + 5000]
+    catch_end = source.find("\n  Assert-PublishedReleaseMatchesVerifiedTransaction `", catch_index)
+    if catch_end < 0:
+        errors.append("missing successful publish reconciliation after post-release-publish safety catch")
+        return errors
+    catch_tail = source[catch_index:catch_end]
     call_index = catch_tail.find(helper_name)
     reset_index = catch_tail.find("$releaseId = [long]0")
     throw_index = catch_tail.find(
@@ -116,6 +121,14 @@ def main() -> None:
         "prove stale snapshot": source.replace(
             "-ReleaseSnapshot $currentRelease",
             "-ReleaseSnapshot $published",
+        ),
+        "stale PATCH snapshot in safety catch": source.replace(
+            "Remove-PublishedReleaseAfterSafetyInvalidation `\n      -ReleaseUri $releaseUri `",
+            "Remove-PublishedReleaseAfterSafetyInvalidation `\n      -ReleaseSnapshot $published `\n      -ReleaseUri $releaseUri `",
+        ),
+        "second release-state PATCH in helper": source.replace(
+            "Invoke-RestMethod -Method Delete -Uri $ReleaseUri -Headers $headers | Out-Null",
+            "Invoke-RestMethod -Method Delete -Uri $ReleaseUri -Headers $headers | Out-Null\n    Invoke-RestMethod -Method Patch -Uri $ReleaseUri -Headers $headers | Out-Null",
         ),
         "drop exact DELETE": source.replace(
             "Invoke-RestMethod -Method Delete -Uri $ReleaseUri",
