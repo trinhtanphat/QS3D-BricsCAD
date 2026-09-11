@@ -49,12 +49,14 @@ def main() -> int:
     update_manifest = update.find("$manifestAddress = Convert-ToSafeHttpsUri")
     update_network = update.find("Invoke-BoundedHttpsDownload -Address $manifestAddress")
     update_package = update.find("Invoke-BoundedHttpsDownload -Address $packageAddress")
-    update_installer = update.find("& $installer @arguments")
+    update_installer = update.find("& $installerScript @arguments")
     update_release = update.rfind("Exit-Qs3dUpdateMutex -Mutex $updateMutex")
     if min(update_cad, update_lock, update_manifest, update_network, update_package, update_installer, update_release) < 0 or not (
         update_cad < update_lock < update_manifest < update_network < update_package < update_installer < update_release
     ):
-        raise AssertionError("secure updater must refuse live CAD, acquire cross-entry lock, then hold it through bounded manifest/package preparation and nested installer")
+        raise AssertionError("secure updater must refuse live CAD, acquire cross-entry lock, then hold it through bounded manifest/package preparation and held in-memory installer")
+    if "& $installer @arguments" in update:
+        raise AssertionError("secure updater must not reopen the admitted installer by pathname while holding the cross-entry lock")
 
     install_cad = install.find("$runningBricsCAD = @(Get-RunningBricsCADProcessDetails)")
     install_lock = install.find("$updateMutex = Enter-Qs3dUpdateMutex")
