@@ -36,6 +36,7 @@ public static class Qs3dCommercialArchiveNative
 {
     private const uint FILE_READ_ATTRIBUTES = 0x00000080;
     private const uint FILE_SHARE_READ = 0x00000001;
+    private const uint FILE_SHARE_WRITE = 0x00000002;
     private const uint OPEN_EXISTING = 3;
     private const uint FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000;
     private const uint FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
@@ -86,7 +87,7 @@ public static class Qs3dCommercialArchiveNative
         SafeFileHandle handle = CreateFileW(
             path,
             FILE_READ_ATTRIBUTES,
-            FILE_SHARE_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
             IntPtr.Zero,
             OPEN_EXISTING,
             FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
