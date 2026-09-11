@@ -859,7 +859,7 @@ namespace QS3D.BricsCAD.V25
                 }
             }
 
-            var expected = (Environment.GetEnvironmentVariable(ExpectedSha256Environment) ?? string.Empty).Trim();
+            var expected = ResolveExpectedSha256Pin();
             if (!Sha256Regex.IsMatch(expected))
             {
                 error = "binary không có Authenticode OpenAI hợp lệ (WinVerifyTrust=0x" + trust.ToString("X8")
@@ -1010,6 +1010,16 @@ namespace QS3D.BricsCAD.V25
             catch { return string.Empty; }
         }
 
+        private static string ResolveExpectedSha256Pin()
+        {
+            var value = (Environment.GetEnvironmentVariable(ExpectedSha256Environment, EnvironmentVariableTarget.Process) ?? string.Empty).Trim();
+            if (!string.IsNullOrWhiteSpace(value)) return value;
+
+            value = (Environment.GetEnvironmentVariable(ExpectedSha256Environment, EnvironmentVariableTarget.User) ?? string.Empty).Trim();
+            if (!string.IsNullOrWhiteSpace(value)) return value;
+
+            return (Environment.GetEnvironmentVariable(ExpectedSha256Environment, EnvironmentVariableTarget.Machine) ?? string.Empty).Trim();
+        }
         private static string NormalizeClientPath(string path)
         {
             try { return string.IsNullOrWhiteSpace(path) ? string.Empty : Path.GetFullPath(path.Trim()); }
