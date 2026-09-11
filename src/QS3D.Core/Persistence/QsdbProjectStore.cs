@@ -229,7 +229,14 @@ namespace QS3D.Core.Persistence
                             var quantityValue = Double(q.Attribute("value")?.Value);
                             if (element.Quantities.ContainsKey(quantityName))
                                 throw new InvalidDataException("Duplicate QSDB element quantity name: " + element.Id + "/" + quantityName);
-                            element.SetQuantity(quantityName, quantityValue);
+                            try
+                            {
+                                element.SetQuantity(quantityName, quantityValue);
+                            }
+                            catch (ArgumentException ex)
+                            {
+                                throw new InvalidDataException("Invalid persisted QSDB element quantity: " + element.Id + "/" + quantityName + ".", ex);
+                            }
                         }
                     }
                     element.RestorePersistenceState(Dirty(item.Attribute("dirty")?.Value), Date(item.Attribute("updatedUtc")?.Value));
