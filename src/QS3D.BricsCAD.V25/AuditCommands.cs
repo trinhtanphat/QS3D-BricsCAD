@@ -63,7 +63,6 @@ namespace QS3D.BricsCAD.V25
                 var candidate = new AuditLogWindow(document);
                 candidate.Closed += (_, __) => ReleaseCandidate(candidate);
                 _unpublishedCandidate = candidate;
-                _publicationInFlightCandidate = candidate;
 
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
                 {
@@ -71,6 +70,7 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
+                _publicationInFlightCandidate = candidate;
                 try
                 {
                     Application.ShowModelessWindow(IntPtr.Zero, candidate, true);
