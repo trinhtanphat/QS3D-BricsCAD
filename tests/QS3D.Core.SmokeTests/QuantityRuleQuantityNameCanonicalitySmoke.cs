@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Rules;
@@ -20,14 +21,14 @@ namespace QS3D.Core.SmokeTests
         private static void RejectsPaddedQuantityNameBeforeRuleMutation()
         {
             var setup = Create();
-            setup.Element.Quantities[" LengthM "] = 3d;
+            SeedPersistedQuantity(setup.Element, " LengthM ", 3d);
             AssertRejectedWithoutMutation(setup, "padded quantity name");
         }
 
         private static void RejectsBlankQuantityNameBeforeRuleMutation()
         {
             var setup = Create();
-            setup.Element.Quantities[string.Empty] = 3d;
+            SeedPersistedQuantity(setup.Element, string.Empty, 3d);
             AssertRejectedWithoutMutation(setup, "blank quantity name");
         }
 
@@ -60,6 +61,13 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("Rejected " + label + " wrote quantity-rule provenance.");
             if (setup.Element.UpdatedUtc != beforeUpdatedUtc || setup.Element.Dirty != beforeDirty)
                 throw new InvalidOperationException("Rejected " + label + " changed element freshness state.");
+        }
+
+        private static void SeedPersistedQuantity(ProjectElement element, string key, double value)
+        {
+            var method = element.Quantities.GetType().GetMethod("SetPersistenceValue", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Quantity persistence reconstruction boundary changed; update this malformed-state regression intentionally.");
+            method.Invoke(element.Quantities, new object[] { key, value });
         }
 
         private static Setup Create()
