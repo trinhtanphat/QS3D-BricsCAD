@@ -47,7 +47,10 @@ def contract_errors(text: str | None) -> list[str]:
 
     hold = text.find("$destinationHolds = Open-HeldDestinationDirectoryChain")
     source_hash = text.find("$sourceDigest = Get-HeldStreamSha256 -Stream $held.Stream", hold)
-    create = text.find("[IO.File]::Open($destinationFull, [IO.FileMode]::CreateNew", source_hash)
+    create = text.find(
+        "$output = [IO.File]::Open($destinationFull, [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)",
+        source_hash,
+    )
     copy = text.find("$held.Stream.CopyTo($output)", create)
     flush = text.find("$output.Flush($true)", copy)
     destination_hash = text.find("$destinationDigest = Get-HeldStreamSha256 -Stream $output", flush)
@@ -58,7 +61,9 @@ def contract_errors(text: str | None) -> list[str]:
     # second, correctly-placed disposal later in the block.
     dispose = text.find("$destinationHolds[$i].Dispose()", hold)
     if not (0 <= hold < source_hash < create < copy < flush < destination_hash < compare < publish < dispose):
-        errors.append("destination ancestors must stay pinned from before CreateNew through exact destination-stream digest equality and ZIP-digest publication")
+        errors.append(
+            "destination ancestors must stay pinned from before exclusive CreateNew through exact destination-stream digest equality and ZIP-digest publication"
+        )
 
     return errors
 
@@ -91,6 +96,11 @@ $destinationHolds[$i].Dispose()
         "delete sharing": safe + "\nFILE_SHARE_DELETE",
         "clobber": safe.replace("[IO.FileMode]::CreateNew", "[IO.FileMode]::Create", 1),
         "write-only destination": safe.replace("[IO.FileAccess]::ReadWrite", "[IO.FileAccess]::Write", 1),
+        # Keep an explicit decoy token so the guard proves sharing is bound to the exact output open,
+        # not merely present somewhere in the Copy body.
+        "shared destination with decoy exclusive token": safe.replace(
+            "[IO.FileShare]::None)", "[IO.FileShare]::Read) # [IO.FileShare]::None", 1
+        ),
         "missing destination digest": safe.replace("$destinationDigest = Get-HeldStreamSha256 -Stream $output", "$destinationDigest = $sourceDigest", 1),
         "missing digest equality": safe.replace("[string]::Equals($sourceDigest, $destinationDigest, [StringComparison]::OrdinalIgnoreCase)", "$true", 1),
         "pathname hash": safe + "\nGet-FileHash -LiteralPath $destinationFull",
@@ -114,7 +124,7 @@ def main() -> int:
         for error in errors:
             print("FAIL:", error)
         return 1
-    print("PASS: V25 held-file Copy pins every destination ancestor and verifies the exact created destination stream before admission is published.")
+    print("PASS: V25 held-file Copy pins every destination ancestor and verifies the exact exclusively-created destination stream before admission is published.")
     return 0
 
 
