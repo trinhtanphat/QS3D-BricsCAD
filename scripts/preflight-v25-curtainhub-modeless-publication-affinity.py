@@ -7,8 +7,9 @@ errors = []
 
 required = [
     "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;",
-    "if (!CloseOwnedCandidateOnFailure(candidate))",
-    "if (!candidate.IsLoaded) ReleaseOwnedWindow(candidate);",
+    "CloseOwnedCandidateOnFailure(candidate)",
+    "if (candidate.IsLoaded) return false;",
+    "ReleaseOwnedWindow(candidate);",
     "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)",
     "database.UnmanagedObject == nativeDatabaseIdentity",
 ]
@@ -23,6 +24,12 @@ for forbidden in (
     if forbidden in text:
         errors.append("Curtain Wall Hub must not forget candidate ownership before terminal Close")
 
+close_helper = text.find("private static bool CloseOwnedCandidateOnFailure")
+release_in_helper = text.find("ReleaseOwnedWindow(candidate);", close_helper)
+loaded_fence = text.find("if (candidate.IsLoaded) return false;", close_helper, release_in_helper)
+if min(close_helper, loaded_fence, release_in_helper) < 0 or not (close_helper < loaded_fence < release_in_helper):
+    errors.append("Curtain Wall Hub failure cleanup must release ownership only after terminal !IsLoaded proof")
+
 prepare = text.find("if (!PreparePublishedWindow(document, nativeDatabaseIdentity))")
 construct = text.find("candidate = new CurtainWallWindow(document);")
 show = text.find("Application.ShowModelessWindow(IntPtr.Zero, candidate, true);")
@@ -35,8 +42,8 @@ else:
     if text.find("if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))", show, promote) < 0:
         errors.append("Curtain Wall Hub must revalidate after host show before promotion")
 
-if "TrySetStatus(\"Vách Kính Hub: Family • panel grid • schedule • workflow 3D.\");" in text:
-    success = text.find("TrySetStatus(\"Vách Kính Hub: Family • panel grid • schedule • workflow 3D.\");")
+success = text.find("TrySetStatus(\"Vách Kính Hub: Family • panel grid • schedule • workflow 3D.\");")
+if success >= 0:
     gate = text.rfind("IsActiveDocumentGeneration(document, nativeDatabaseIdentity)", promote, success)
     if gate < promote:
         errors.append("Curtain Wall Hub success status must be gated to the same exact document generation")
