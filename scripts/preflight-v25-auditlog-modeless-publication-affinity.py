@@ -51,6 +51,17 @@ require('if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) retu
 require('if (ReferenceEquals(_window, candidate))' in text and '_publishedDocument = null;' in text,
         'terminal published-window release must clear managed-wrapper ownership')
 
+candidate_pos = body.find('var candidate = new AuditLogWindow(document);')
+unpublished_pos = body.find('_unpublishedCandidate = candidate;', candidate_pos)
+inflight_pos = body.find('_publicationInFlightCandidate = candidate;', candidate_pos)
+pre_show_fence_pos = body.find('if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))', unpublished_pos)
+require(candidate_pos >= 0 and unpublished_pos >= 0 and pre_show_fence_pos >= 0 and inflight_pos >= 0,
+        'must retain unpublished ownership and a pre-show document-generation fence')
+require(pre_show_fence_pos < inflight_pos < show_pos,
+        'publication-in-flight ownership must begin only after the pre-show affinity fence, immediately before host show')
+require('finally\n                {\n                    if (ReferenceEquals(_publicationInFlightCandidate, candidate))\n                        _publicationInFlightCandidate = null;' in body,
+        'publication-in-flight ownership must be cleared in the ShowModelessWindow finally path')
+
 if failures:
     for failure in failures:
         print('FAIL Audit Log:', failure)
