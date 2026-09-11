@@ -59,6 +59,47 @@ namespace QS3D.Core.SmokeTests
             True(csv.Contains("ARC.WALL,m2,12"), "CSV export");
             var navigation = workbench.DefaultNavigation(selection);
             Equal(IfcViewCommandKind.FocusSelection, navigation.Last().Kind, "viewer focus command");
+
+            var evidenceEngine = new QuantBimTraceableTakeoffEngine();
+            var evidence = evidenceEngine.Build(document, selection);
+            Equal(2, evidence.Count, "traceable evidence count");
+            True(evidence.All(x => x.Revision == "R5"), "traceable revision");
+            True(evidence.All(x => x.GeometryReference == "mesh://G1"), "traceable geometry");
+            True(evidence.Any(x => x.QuantityName == "NetSideArea" && x.Unit == "m2" && Math.Abs(x.Quantity - 12d) < 1e-12), "traceable quantity item");
+            var traceableBoq = evidenceEngine.BuildBoq(evidence);
+            Near(12d, traceableBoq.Single(x => x.Classification == "ARC.WALL" && x.Unit == "m2").Quantity, 1e-12, "traceable BOQ area");
+            var evidenceCsv = evidenceEngine.ExportEvidenceCsv(evidence);
+            True(evidenceCsv.Contains("DocumentPath,Revision,Guid,Entity,Storey,Classification,QuantityName,Quantity,Unit,GeometryReference"), "evidence CSV header");
+            True(evidenceCsv.Contains("sample.ifc,R5,G1,IfcWall,L01,ARC.WALL,NetSideArea,12,m2,mesh://G1"), "evidence CSV provenance");
+
+            var unknownSelectionRejected = false;
+            try
+            {
+                evidenceEngine.Build(document, new IfcSelectionSet("Invalid", new[] { "NOT-IN-MODEL" }));
+            }
+            catch (InvalidOperationException)
+            {
+                unknownSelectionRejected = true;
+            }
+            True(unknownSelectionRejected, "unknown selection fails closed");
+
+            var mismatchedDocument = new IfcStandaloneDocument("bad.ifc", "R1", new[]
+            {
+                new IfcStandaloneElement("G9", "IfcWall", "Wall-09", "L01", "External", "ARC.WALL", Array.Empty<IfcPropertyNode>(), new[]
+                {
+                    new IfcQtoItem("OTHER", "IfcWall", "L01", "ARC.WALL", "NetSideArea", 1d, "m2")
+                }, "mesh://G9")
+            });
+            var mismatchedQuantityRejected = false;
+            try
+            {
+                evidenceEngine.Build(mismatchedDocument, new IfcSelectionSet("Mismatch", new[] { "G9" }));
+            }
+            catch (InvalidOperationException)
+            {
+                mismatchedQuantityRejected = true;
+            }
+            True(mismatchedQuantityRejected, "quantity owner mismatch fails closed");
         }
 
         private sealed class FakeIfcSource : IIfcStandaloneSource

@@ -7,9 +7,33 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class WallQuantityCommands
     {
-        private static WallQuantityWindow? _window;
-        private static Document? _document;
-        private static IntPtr _nativeDatabaseIdentity;
+        private static PublishedWindow? _pending;
+        private static PublishedWindow? _published;
+
+        private sealed class PublishedWindow
+        {
+            private readonly WeakReference<Document> _document;
+
+            public PublishedWindow(WallQuantityWindow window, Document document, IntPtr nativeDatabaseIdentity)
+            {
+                Window = window ?? throw new ArgumentNullException(nameof(window));
+                if (document == null) throw new ArgumentNullException(nameof(document));
+                if (nativeDatabaseIdentity == IntPtr.Zero) throw new ArgumentException("Native database identity is required.", nameof(nativeDatabaseIdentity));
+                _document = new WeakReference<Document>(document);
+                NativeDatabaseIdentity = nativeDatabaseIdentity;
+            }
+
+            public WallQuantityWindow Window { get; }
+            public IntPtr NativeDatabaseIdentity { get; }
+
+            public bool Matches(Document document, IntPtr nativeDatabaseIdentity)
+            {
+                return nativeDatabaseIdentity != IntPtr.Zero &&
+                       nativeDatabaseIdentity == NativeDatabaseIdentity &&
+                       _document.TryGetTarget(out var ownedDocument) &&
+                       ReferenceEquals(ownedDocument, document);
+            }
+        }
 
         [CommandMethod("QS3DWALLQTY", CommandFlags.Modal)]
         public void ShowWallQuantity()
@@ -17,89 +41,107 @@ namespace QS3D.BricsCAD.V25
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
 
+            var nativeDatabaseIdentity = IntPtr.Zero;
+            PublishedWindow? owner = null;
             try
             {
-                var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
-                if (!PreparePublishedWindow(document, nativeDatabaseIdentity))
-                {
-                    const string blockedStatus = "Khối lượng Tường hiện tại chưa thể đóng an toàn; không mở bản sao thứ hai.";
-                    try { document.Editor.WriteMessage("\nQS3DWALLQTY: cửa sổ hiện tại chưa đạt terminal Closed; không mở bản sao thứ hai."); } catch { }
-                    try { PaletteCoordinator.SetStatus(blockedStatus); } catch { }
-                    return;
-                }
+                nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
 
-                if (_window != null)
+                var pending = _pending;
+                if (pending != null && !TryCloseOwner(pending)) return;
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+
+                var published = _published;
+                if (published != null)
                 {
-                    try { _window.Activate(); } catch { }
-                    try { PaletteCoordinator.SetStatus("Khối lượng Tường hiện có đã được kích hoạt cho đúng bản vẽ."); } catch { }
-                    return;
+                    if (published.Window.IsLoaded && published.Matches(document, nativeDatabaseIdentity))
+                    {
+                        try { published.Window.Activate(); } catch { }
+                        return;
+                    }
+                    if (!TryCloseOwner(published)) return;
+                    if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
                 }
 
                 var window = new WallQuantityWindow(document);
-                window.Closed += (_, __) => ReleasePublishedWindow(window);
-                Application.ShowModelessWindow(IntPtr.Zero, window, true);
-                if (!window.IsLoaded) return;
+                owner = new PublishedWindow(window, document, nativeDatabaseIdentity);
+                var releaseOwner = owner;
+                window.Closed += (_, __) => ReleaseOwnedWindow(releaseOwner);
+                _pending = owner;
 
-                _window = window;
-                _document = document;
-                _nativeDatabaseIdentity = nativeDatabaseIdentity;
-                PaletteCoordinator.SetStatus("Khối lượng Tường: danh sách • thuộc tính • chi tiết • XLSX • read-only.");
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                {
+                    TryCloseOwner(owner);
+                    return;
+                }
+
+                Application.ShowModelessWindow(IntPtr.Zero, window, true);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                {
+                    TryCloseOwner(owner);
+                    return;
+                }
+                if (!window.IsLoaded)
+                    throw new InvalidOperationException("Wall Quantity did not remain loaded after host publication.");
+                if (!ReferenceEquals(_pending, owner))
+                    throw new InvalidOperationException("Wall Quantity publication ownership changed unexpectedly.");
+
+                _pending = null;
+                _published = owner;
+                owner = null;
+                try { PaletteCoordinator.SetStatus("Wall Quantity ready for the active drawing."); } catch { }
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
-                var message = "QS3DWALLQTY lỗi: " + ex.Message;
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\n" + message);
+                if (owner != null) TryCloseOwner(owner);
+                if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                {
+                    var message = "QS3DWALLQTY failed (" + ex.GetType().Name + ").";
+                    try { PaletteCoordinator.SetStatus(message); } catch { }
+                    try { document.Editor.WriteMessage("\n" + message); } catch { }
+                }
             }
         }
 
-        private static bool PreparePublishedWindow(Document requestedDocument, IntPtr requestedNativeDatabaseIdentity)
+        private static bool TryCloseOwner(PublishedWindow owner)
         {
-            var published = _window;
-            if (published == null) return true;
-
-            if (!published.IsLoaded)
+            if (owner == null) return true;
+            if (!owner.Window.IsLoaded)
             {
-                ReleasePublishedWindow(published);
+                ReleaseOwnedWindow(owner);
                 return true;
             }
-
-            if (_nativeDatabaseIdentity == requestedNativeDatabaseIdentity && ReferenceEquals(_document, requestedDocument))
-                return true;
-
-            try
-            {
-                published.Close();
-            }
-            catch
-            {
-                return false;
-            }
-
-            if (published.IsLoaded)
-                return false;
-
-            ReleasePublishedWindow(published);
+            try { owner.Window.Close(); } catch { return false; }
+            if (owner.Window.IsLoaded) return false;
+            ReleaseOwnedWindow(owner);
             return true;
         }
 
-        private static void ReleasePublishedWindow(WallQuantityWindow window)
+        private static void ReleaseOwnedWindow(PublishedWindow owner)
         {
-            if (!ReferenceEquals(_window, window)) return;
-            _window = null;
-            _document = null;
-            _nativeDatabaseIdentity = IntPtr.Zero;
+            if (ReferenceEquals(_pending, owner)) _pending = null;
+            if (ReferenceEquals(_published, owner)) _published = null;
+        }
+
+        private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (document == null || nativeDatabaseIdentity == IntPtr.Zero) return false;
+            try
+            {
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)) return false;
+                var database = document.Database;
+                return database != null && database.UnmanagedObject == nativeDatabaseIdentity;
+            }
+            catch { return false; }
         }
 
         private static IntPtr GetNativeDatabaseIdentity(Document document)
         {
             var database = document.Database;
-            if (database == null)
-                throw new InvalidOperationException("Wall Quantity requires a BricsCAD document database.");
-
+            if (database == null) throw new InvalidOperationException("Wall Quantity requires a BricsCAD database.");
             var identity = database.UnmanagedObject;
-            if (identity == IntPtr.Zero)
-                throw new InvalidOperationException("Wall Quantity requires a live native BricsCAD database.");
+            if (identity == IntPtr.Zero) throw new InvalidOperationException("Wall Quantity requires a live native database.");
             return identity;
         }
     }

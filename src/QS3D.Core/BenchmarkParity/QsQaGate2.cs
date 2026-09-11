@@ -5,6 +5,13 @@ using System.Linq;
 
 namespace QS3D.Core.BenchmarkParity
 {
+    public enum QsQaGuardedWorkflow
+    {
+        Takeoff,
+        Boq,
+        Estimate
+    }
+
     public sealed class QsQaRuleProfile
     {
         private readonly IReadOnlyDictionary<string, QsQaSeverity> _severityByRule;
@@ -45,6 +52,7 @@ namespace QS3D.Core.BenchmarkParity
                     { "QA2.MISSING_PSET", QsQaSeverity.Error },
                     { "QA2.MISSING_RELATIONSHIP", QsQaSeverity.Critical },
                     { "QA2.SPATIAL_MISMATCH", QsQaSeverity.Critical },
+                    { "QA2.TYPE_ASSIGNMENT_MISMATCH", QsQaSeverity.Critical },
                     { "QA2.DUPLICATE_IFC_GUID", QsQaSeverity.Critical }
                 },
                 QsQaSeverity.Error);
@@ -109,6 +117,14 @@ namespace QS3D.Core.BenchmarkParity
         public bool CanTakeoff { get { return Status != QsQaGateStatus.Blocked; } }
         public bool CanBoq { get { return Status != QsQaGateStatus.Blocked; } }
         public bool CanEstimate { get { return Status != QsQaGateStatus.Blocked; } }
+
+        public void DemandAllowed(QsQaGuardedWorkflow workflow)
+        {
+            if (Status != QsQaGateStatus.Blocked) return;
+
+            throw new InvalidOperationException(
+                "QA Gate 2.0 blocked " + workflow + " because " + ActiveFindings.Count + " active finding(s) meet the configured blocking threshold.");
+        }
     }
 
     public sealed class QsQaGate2
@@ -200,6 +216,18 @@ namespace QS3D.Core.BenchmarkParity
                         QsQaSeverity.Critical,
                         element.Id,
                         "Storey and IFC spatial container disagree.");
+                }
+
+                string typeAssignment;
+                if (element.Type.Length > 0 && element.Properties.TryGetValue("IfcRel.TypeAssignment", out typeAssignment) && !string.IsNullOrWhiteSpace(typeAssignment))
+                {
+                    AddIf(result,
+                        !string.Equals(element.Type, typeAssignment.Trim(), StringComparison.OrdinalIgnoreCase),
+                        profile,
+                        "QA2.TYPE_ASSIGNMENT_MISMATCH",
+                        QsQaSeverity.Critical,
+                        element.Id,
+                        "Element type and IFC type assignment disagree.");
                 }
             }
 
