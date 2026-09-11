@@ -46,8 +46,20 @@ for label, path in FILES.items():
                 'must revalidate after host show before published ownership transfer')
     require(label, ('ClosePendingOnAffinityDrift' in text if label == 'Project Tools' else 'CloseCandidateOnAffinityDrift' in text),
             'affinity drift must close/retain an unpublished candidate rather than orphan it')
-    require(label, 'if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))' in body,
-            'success/error status publication must be gated to the same exact generation')
+    if label == 'Material Catalog':
+        success_status = body.find('PaletteCoordinator.SetStatus("Material Catalog: built-in + custom + apply theo semantic selection')
+        success_doc = body.rfind('IsActiveDocumentGeneration(document, nativeDatabaseIdentity)', publish_pos, success_status)
+        success_project = body.rfind('IsActiveProjectGeneration(document, nativeDatabaseIdentity, project)', publish_pos, success_status)
+        error_status = body.find('const string message = \"QS3DMATERIALS')
+        error_doc = body.rfind('IsActiveDocumentGeneration(document, nativeDatabaseIdentity)', publish_pos, error_status)
+        error_project = body.rfind('IsActiveProjectGeneration(document, nativeDatabaseIdentity, admittedProject)', publish_pos, error_status)
+        require(label, success_status >= 0 and success_doc > publish_pos and success_project > publish_pos,
+                'success status publication must be gated to the same exact document + project generation')
+        require(label, error_status >= 0 and error_doc > publish_pos and error_project > publish_pos,
+                'error status publication must be gated to the admitted exact document + project generation')
+    else:
+        require(label, 'if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))' in body,
+                'success/error status publication must be gated to the same exact generation')
 
 project_tools = FILES['Project Tools'].read_text(encoding='utf-8')
 project_tools_body = project_tools[project_tools.find('public void Show'):]

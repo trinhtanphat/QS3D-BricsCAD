@@ -96,7 +96,7 @@ else:
         "Material manager",
         "ExistingProjectMutationContext.TryGet(document, out var project)",
         "new MaterialCatalogWindow(document, project)",
-        "if (candidate != null && ReferenceEquals(_pending, candidate))",
+        "if (!window.IsLoaded && candidate != null && ReferenceEquals(_pending, candidate)) _pending = null;",
         "QS3DMATERIALS không thể mở Material Catalog an toàn; trạng thái hiện tại được giữ nguyên.",
     )
     if "ex.Message" in material:

@@ -63,8 +63,9 @@ for label, path in CASES.items():
     if min(old_close, retained) < 0 or old_close > retained:
         errors.append(f"{label} must preserve terminal-close/veto arbitration before replacement")
 
-    affinity_before_show = source.rfind("if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))", reserve, show)
-    affinity_after_show = source.find("if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))", show, loaded)
+    generation_call = "IsActiveDocumentGeneration(document, nativeDatabaseIdentity)"
+    affinity_before_show = source.rfind(generation_call, reserve, show)
+    affinity_after_show = source.find(generation_call, show, loaded)
     if affinity_before_show < reserve:
         errors.append(f"{label} must revalidate exact active document generation after reservation and before host show")
     if affinity_after_show < show:
