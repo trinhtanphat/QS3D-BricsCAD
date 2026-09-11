@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,29 +14,43 @@ if start < 0 or end < 0:
 
 move_with_recovery = text[start:end]
 
-# Once the canonical destination has been staged aside, a failure restoring it is
-# a stronger persistence-safety failure than the original publication failure.
-# Never regress to an empty filtered catch that discards that evidence.
-empty_rollback_catch = (
-    "catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException) { }"
-)
-if empty_rollback_catch in move_with_recovery:
+# The publication exception remains primary (historical #5579 contract), but a
+# failure restoring a staged canonical destination must never disappear.
+if re.search(r"catch\s*\([^)]*\)\s*(?:when\s*\([^)]*\)\s*)?\{\s*\}", move_with_recovery, re.S):
     print(
-        "ERROR: AtomicFileCommit.MoveWithRecovery still suppresses a critical "
-        "destination rollback failure after publication fails."
+        "ERROR: AtomicFileCommit.MoveWithRecovery still contains an empty catch "
+        "that can discard critical rollback evidence."
     )
     sys.exit(1)
 
-required_evidence = (
-    "rollback",
-    "IOException",
+required_move_tokens = (
+    "publicationFailure",
+    "RecordRollbackFailure(publicationFailure",
+    "RollbackFailureDataKey",
+    "destination",
+    "backup",
 )
-missing = [token for token in required_evidence if token not in move_with_recovery]
+missing = [token for token in required_move_tokens if token not in move_with_recovery]
 if missing:
     print(
-        "ERROR: AtomicFileCommit.MoveWithRecovery is missing explicit rollback "
-        "failure evidence: " + ", ".join(missing)
+        "ERROR: AtomicFileCommit.MoveWithRecovery is missing rollback evidence/fence tokens: "
+        + ", ".join(missing)
     )
     sys.exit(1)
+
+if "private const string RollbackFailureDataKey = \"QS3D.AtomicFileCommit.RollbackFailure\";" not in text:
+    print("ERROR: AtomicFileCommit is missing the stable rollback evidence Data key.")
+    sys.exit(1)
+
+helper_start = text.find("private static void RecordRollbackFailure")
+if helper_start < 0:
+    print("ERROR: AtomicFileCommit.RecordRollbackFailure helper not found.")
+    sys.exit(1)
+helper_end = text.find("private static", helper_start + len("private static void RecordRollbackFailure"))
+helper = text[helper_start:] if helper_end < 0 else text[helper_start:helper_end]
+for token in ("publicationFailure.Data", "rollbackFailure", "AggregateException"):
+    if token not in helper:
+        print("ERROR: AtomicFileCommit.RecordRollbackFailure does not preserve rollback evidence: " + token)
+        sys.exit(1)
 
 print("AtomicFileCommit rollback-failure preflight passed.")
