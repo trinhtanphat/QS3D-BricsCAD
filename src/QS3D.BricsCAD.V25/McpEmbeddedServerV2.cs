@@ -7,6 +7,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using QS3D.Core.Agent;
 
@@ -24,6 +25,7 @@ namespace QS3D.BricsCAD.V25
         private const int MaxHeaderBytes = 64 * 1024;
         private const int MaxBodyBytes = 1024 * 1024;
         private const int MaxConcurrentClients = 16;
+        private const int MaxPublicErrorCharacters = 512;
         private const int AdmissionRejectWriteTimeoutMilliseconds = 1000;
         private const int MaxSessions = 128;
         private const string ModernProtocolVersion = "2026-07-28";
@@ -310,7 +312,7 @@ namespace QS3D.BricsCAD.V25
                         catch (HttpProtocolException ex)
                         {
                             TryWriteResponse(stream, ex.StatusCode, ex.Reason,
-                                "{\"error\":\"" + JsonEscape(ex.Message) + "\"}", null);
+                                "{\"error\":\"" + JsonEscape(SanitizePublicError(ex.Message)) + "\"}", null);
                         }
                     }
                 }
@@ -1082,11 +1084,34 @@ namespace QS3D.BricsCAD.V25
             return trimmed.Length >= 2 && trimmed[0] == '{' && trimmed[trimmed.Length - 1] == '}';
         }
 
+        private static string SanitizePublicError(string message)
+        {
+            var value = string.IsNullOrWhiteSpace(message) ? "MCP request failed." : message;
+            value = Regex.Replace(value, @"(?i)(Authorization\s*:\s*(?:Bearer|Basic)\s+)[^\s,;]+", "$1[REDACTED]");
+            value = Regex.Replace(value, @"(?i)\b(api[-_]?key|access[-_]?token|auth[-_]?token|secret|password)\b\s*[:=]\s*[^\s,;]+", "$1=[REDACTED]");
+            value = Regex.Replace(value, @"(?i)\bBearer\s+[A-Za-z0-9._~+/-]+=*", "Bearer [REDACTED]");
+            value = Regex.Replace(value, @"(?i)(?:[A-Z]:\\|\\\\)[^\r\n\t]+", "[PATH]");
+            value = Regex.Replace(value, @"(?i)(?:/home/|/Users/|/tmp/|/var/tmp/)[^\r\n\t]+", "[PATH]");
+            var clean = new StringBuilder(Math.Min(value.Length, MaxPublicErrorCharacters));
+            foreach (var ch in value)
+            {
+                if (clean.Length >= MaxPublicErrorCharacters) break;
+                if (char.IsControl(ch))
+                {
+                    if (ch == '\r' || ch == '\n' || ch == '\t') clean.Append(' ');
+                    continue;
+                }
+                clean.Append(ch);
+            }
+            var bounded = clean.ToString().Trim();
+            return bounded.Length == 0 ? "MCP request failed." : bounded;
+        }
+
         private static string ToolError(string code, string lane, string message, string? repairJson = null)
         {
             var safeCode = string.IsNullOrWhiteSpace(code) ? McpToolCapabilityContract.ToolFailedCode : code;
             var safeLane = string.IsNullOrWhiteSpace(lane) ? "unknown" : lane;
-            var safeMessage = string.IsNullOrWhiteSpace(message) ? "MCP tool failed." : message;
+            var safeMessage = SanitizePublicError(string.IsNullOrWhiteSpace(message) ? "MCP tool failed." : message);
             var repair = string.IsNullOrWhiteSpace(repairJson) ? string.Empty : ",\"repair\":" + repairJson;
             return "{\"content\":[{\"type\":\"text\",\"text\":\"" + JsonEscape(safeCode + ": " + safeMessage)
                    + "\"}],\"structuredContent\":{\"error\":{\"code\":\"" + JsonEscape(safeCode)
@@ -1534,7 +1559,7 @@ namespace QS3D.BricsCAD.V25
         {
             return "{\"jsonrpc\":\"2.0\",\"id\":" + (string.IsNullOrWhiteSpace(id) ? "null" : id)
                    + ",\"error\":{\"code\":" + code.ToString(CultureInfo.InvariantCulture)
-                   + ",\"message\":\"" + JsonEscape(message ?? string.Empty) + "\"}}";
+                   + ",\"message\":\"" + JsonEscape(SanitizePublicError(message ?? string.Empty)) + "\"}}";
         }
 
         private static void WriteResponse(
