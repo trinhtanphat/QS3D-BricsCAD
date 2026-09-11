@@ -379,7 +379,20 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                if (args != null && EqualityComparer<Document>.Default.Equals(args.Document, _document))
+                Document deactivatingDocument;
+                try
+                {
+                    deactivatingDocument = args.Document;
+                }
+                catch
+                {
+                    // The callback must never let a native event-args wrapper failure escape into
+                    // BricsCAD. Losing the document identity makes continuing unsafe, so fail closed.
+                    _wasDeactivated = true;
+                    return;
+                }
+
+                if (EqualityComparer<Document>.Default.Equals(deactivatingDocument, _document))
                     _wasDeactivated = true;
             }
         }
