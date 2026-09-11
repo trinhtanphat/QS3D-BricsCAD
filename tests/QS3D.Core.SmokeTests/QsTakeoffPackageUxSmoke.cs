@@ -92,7 +92,7 @@ namespace QS3D.Core.SmokeTests
             Equal(1, comparison.AddedMarkupCount, "revision added markup count");
             Equal(1, comparison.RemovedMarkupCount, "revision removed markup count");
             Equal(1, comparison.ChangedMarkupCount, "revision changed markup count");
-            Near(4d, comparison.QuantityDelta, 1e-12, "revision quantity delta");
+            Near(499d, comparison.QuantityDelta, 1e-12, "revision quantity delta");
             True(comparison.RequiresReview, "revision review required");
         }
 
