@@ -27,7 +27,15 @@ forbid(
     "hard failure for expected release-relevant supersession",
 )
 require(
-    "if (Test-ReleaseRelevantDrift -TargetSha $releaseBase) {",
+    "function Assert-ReleaseBaseIsSafe",
+    "backward-compatible release-base safety interface",
+)
+require(
+    "return -not (Test-ReleaseRelevantDrift -TargetSha $TargetSha)",
+    "release-base safety classification delegates to fail-closed drift detection",
+)
+require(
+    "if (-not (Assert-ReleaseBaseIsSafe -TargetSha $releaseBase)) {",
     "initial release-relevant supersession classification",
 )
 require(
@@ -39,11 +47,11 @@ require(
     "explicit stale-source handoff audit message",
 )
 require(
-    "if (Test-ReleaseRelevantDrift -TargetSha $latestMain) {",
+    "if (-not (Assert-ReleaseBaseIsSafe -TargetSha $latestMain)) {",
     "final release-relevant supersession classification",
 )
 require(
-    "Write-Output $releaseBase",
+    "Write-Output -InputObject $releaseBase",
     "successful stale handoff output",
 )
 
