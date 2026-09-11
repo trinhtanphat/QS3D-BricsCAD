@@ -104,10 +104,20 @@ def validate(source: str) -> None:
         re.search(r"(?im)^\s*(?:New-Item(?:Property)?|Set-ItemProperty|Remove-Item(?:Property)?|Move-Item|Copy-Item|Unblock-File)\b", between_payload_revalidation_and_move) is None,
         "no filesystem/registry mutation may occur between payload revalidation and quarantine move",
     )
+
+    registry_revalidation = find(
+        body,
+        re.escape("Assert-RegistryTreeSnapshotEqual -Expected $entry.Snapshot -Actual (Get-RegistryTreeSnapshot -Path $entry.Target.AppKey)"),
+        "immediate DemandLoad registry revalidation",
+    )
     require(
-        "Assert-RegistryTreeSnapshotEqual -Expected $entry.Snapshot -Actual (Get-RegistryTreeSnapshot -Path $entry.Target.AppKey)"
-        in body[first_mutation:],
-        "each DemandLoad key must be revalidated immediately before destructive removal",
+        approval < registry_revalidation.start() < demandload_remove.start(),
+        "DemandLoad key must be revalidated after approval and before destructive removal",
+    )
+    between_registry_revalidation_and_remove = body[registry_revalidation.end():demandload_remove.start()]
+    require(
+        re.search(r"(?im)^\s*(?:New-Item(?:Property)?|Set-ItemProperty|Remove-Item(?:Property)?|Move-Item|Copy-Item|Unblock-File)\b", between_registry_revalidation_and_remove) is None,
+        "no filesystem/registry mutation may occur between DemandLoad revalidation and removal",
     )
 
     # -KeepFiles remains a planning input to the one transaction rather than a second prompt.
@@ -212,6 +222,16 @@ expect_rejected(
     source.replace(
         "Assert-InstallPayloadSnapshotEqual -Expected $payloadSnapshot -Actual (Get-InstallPayloadSnapshot -Directory $installFull)",
         "Assert-InstallPayloadSnapshotEqual -Expected $payloadSnapshot -Actual (Get-InstallPayloadSnapshot -Directory $installFull)\nRemove-Item -LiteralPath 'unsafe' -Force",
+        1,
+    ),
+)
+registry_revalidation_token = "Assert-RegistryTreeSnapshotEqual -Expected $entry.Snapshot -Actual (Get-RegistryTreeSnapshot -Path $entry.Target.AppKey)"
+registry_remove_token = "Remove-Item -LiteralPath $entry.Target.AppKey -Recurse -Force -ErrorAction Stop"
+expect_rejected(
+    "registry revalidation moved after destructive removal",
+    source.replace(registry_revalidation_token, "# moved registry revalidation", 1).replace(
+        registry_remove_token,
+        registry_remove_token + "\n            " + registry_revalidation_token,
         1,
     ),
 )
