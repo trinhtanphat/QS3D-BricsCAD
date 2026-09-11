@@ -15,85 +15,74 @@ def require(token: str) -> None:
 
 def forbid(token: str) -> None:
     if token in text:
-        errors.append("forbidden Door/Opening Schedule publication shape remains: " + token)
+        errors.append("forbidden legacy Door/Opening Schedule publication shape remains: " + token)
 
+
+for token in (
+    "private static PublishedWindow? _pending;",
+    "private static PublishedWindow? _published;",
+    "PublishedWindow? owner = null;",
+    "nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
+    "PreparePublishedWindow(document, nativeDatabaseIdentity)",
+    "var window = new DoorOpeningScheduleWindow(document);",
+    "owner = new PublishedWindow(window, document, nativeDatabaseIdentity);",
+    "var releaseOwner = owner;",
+    "window.Closed += (_, __) => ReleaseOwnedWindow(releaseOwner);",
+    "_pending = owner;",
+    "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
+    "if (!window.IsLoaded)",
+    "if (!ReferenceEquals(_pending, owner))",
+    "_pending = null;",
+    "_published = owner;",
+    "owner = null;",
+    "private static void ReleaseOwnedWindow(PublishedWindow owner)",
+    "if (ReferenceEquals(_pending, owner)) _pending = null;",
+    "if (ReferenceEquals(_published, owner)) _published = null;",
+    "database.UnmanagedObject",
+    "if (nativeDatabaseIdentity == IntPtr.Zero) return false;",
+):
+    require(token)
 
 for token in (
     "private static DoorOpeningScheduleWindow? _window;",
     "private static Document? _document;",
     "private static IntPtr _nativeDatabaseIdentity;",
-    "DoorOpeningScheduleWindow? candidate = null;",
-    "GetNativeDatabaseIdentity(document)",
-    "PreparePublishedWindow(document, nativeDatabaseIdentity)",
-    "ReferenceEquals(_document, requestedDocument)",
-    "published.Close();",
-    "if (published.IsLoaded)",
-    "candidate = new DoorOpeningScheduleWindow(document);",
-    "var window = candidate;",
-    "window.Closed += (_, __) => ReleasePublishedWindow(window);",
-    "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
-    "if (!window.IsLoaded) return;",
-    "_window = window;",
-    "_document = document;",
-    "_nativeDatabaseIdentity = nativeDatabaseIdentity;",
-    "candidate = null;",
-    "finally",
-    "if (candidate != null) TryCloseUnpublishedWindow(candidate);",
-    "if (!ReferenceEquals(_window, window)) return;",
-    "if (ReferenceEquals(_window, window)) return;",
-    "database.UnmanagedObject",
-    "if (identity == IntPtr.Zero)",
-):
-    require(token)
-
-for token in (
     "ShowModelessWindow(IntPtr.Zero, new DoorOpeningScheduleWindow(document)",
-    "_window = new DoorOpeningScheduleWindow(document)",
 ):
     forbid(token)
 
 show_start = text.find("public void ShowDoorOpeningSchedule()")
 prepare_start = text.find("private static bool PreparePublishedWindow", show_start + 1)
 show = text[show_start:prepare_start] if show_start >= 0 and prepare_start > show_start else ""
-publish_pos = show.find("_window = window;")
-transfer_pos = show.find("candidate = null;", publish_pos + 1) if publish_pos >= 0 else -1
+
 positions = [
-    show.find("DoorOpeningScheduleWindow? candidate = null;"),
-    show.find("candidate = new DoorOpeningScheduleWindow(document);"),
-    show.find("var window = candidate;"),
-    show.find("window.Closed += (_, __) => ReleasePublishedWindow(window);"),
+    show.find("owner = new PublishedWindow(window, document, nativeDatabaseIdentity);"),
+    show.find("var releaseOwner = owner;"),
+    show.find("window.Closed += (_, __) => ReleaseOwnedWindow(releaseOwner);"),
+    show.find("_pending = owner;"),
     show.find("Application.ShowModelessWindow(IntPtr.Zero, window, true);"),
-    show.find("if (!window.IsLoaded) return;"),
-    publish_pos,
-    show.find("_document = document;", publish_pos + 1),
-    show.find("_nativeDatabaseIdentity = nativeDatabaseIdentity;", publish_pos + 1),
-    transfer_pos,
-    show.find("finally"),
-    show.find("if (candidate != null) TryCloseUnpublishedWindow(candidate);"),
+    show.find("if (!window.IsLoaded)"),
+    show.find("if (!ReferenceEquals(_pending, owner))"),
+    show.find("_pending = null;"),
+    show.find("_published = owner;"),
+    show.find("owner = null;", show.find("_published = owner;") + 1),
 ]
-if min(positions) < 0:
-    errors.append("unable to prove Door/Opening Schedule show/load/publication/cleanup ordering")
-elif positions != sorted(positions):
-    errors.append("Door/Opening Schedule candidate must stay cleanup-owned through show/load and transfer only after full publication")
+if min(positions) < 0 or positions != sorted(positions):
+    errors.append("Door/Opening Schedule ownership must be pending-first, loaded/exact-owner proven, and only then published")
+
+for token in (
+    "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;",
+    "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))",
+):
+    if show.count(token) < 2:
+        errors.append("Door/Opening Schedule must revalidate exact document generation across destructive/host pumping boundaries")
 
 prepare = text[prepare_start:] if prepare_start >= 0 else ""
-close_pos = prepare.find("published.Close();")
-post_close_loaded_pos = prepare.find("if (published.IsLoaded)", close_pos + 1)
-release_pos = prepare.find("ReleasePublishedWindow(published);", post_close_loaded_pos + 1)
+close_pos = prepare.find("published.Window.Close();")
+post_close_loaded_pos = prepare.find("if (published.Window.IsLoaded) return false;", close_pos + 1)
+release_pos = prepare.find("ReleaseOwnedWindow(published);", post_close_loaded_pos + 1)
 if min(close_pos, post_close_loaded_pos, release_pos) < 0 or not (close_pos < post_close_loaded_pos < release_pos):
-    errors.append("replacement must terminal-close before releasing the published owner")
-
-release_start = text.find("private static void ReleasePublishedWindow", prepare_start + 1)
-cleanup_start = text.find("private static void TryCloseUnpublishedWindow", release_start + 1)
-release = text[release_start:cleanup_start] if release_start >= 0 and cleanup_start > release_start else ""
-if release.find("if (!ReferenceEquals(_window, window)) return;") < 0:
-    errors.append("published release must be exact-owner guarded")
-cleanup_end = text.find("private static IntPtr GetNativeDatabaseIdentity", cleanup_start + 1)
-cleanup = text[cleanup_start:cleanup_end] if cleanup_start >= 0 and cleanup_end > cleanup_start else ""
-refuse_pos = cleanup.find("if (ReferenceEquals(_window, window)) return;")
-close_unpublished_pos = cleanup.find("window.Close();", refuse_pos + 1)
-if refuse_pos < 0 or close_unpublished_pos < 0 or refuse_pos >= close_unpublished_pos:
-    errors.append("unpublished cleanup must refuse the authoritative owner before close")
+    errors.append("replacement must retain published ownership until Close is confirmed terminal")
 
 if errors:
     for error in errors:
@@ -101,4 +90,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: Door/Opening Schedule has exact-document/native-DB single-owner publication, terminal replacement, and failure-clean unpublished candidate ownership.")
+print("PASS: Door/Opening Schedule keeps pending-first exact document/native-DB ownership, terminal-safe replacement, and loaded/exact-owner publication.")
