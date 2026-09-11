@@ -280,13 +280,17 @@ namespace QS3D.Core.BenchmarkParity
     {
         public IReadOnlyList<IfcQtoItem> Filter(IEnumerable<IfcQtoItem> items, string entity, string storey)
         {
-            if (items == null) throw new ArgumentNullException("items"); entity = QsModelElementSnapshot.Optional(entity); storey = QsModelElementSnapshot.Optional(storey);
-            return items.Where(x => (entity.Length == 0 || string.Equals(x.Entity, entity, StringComparison.OrdinalIgnoreCase)) && (storey.Length == 0 || string.Equals(x.Storey, storey, StringComparison.OrdinalIgnoreCase))).ToList();
+            if (items == null) throw new ArgumentNullException("items");
+            var snapshot = items.ToList();
+            entity = QsModelElementSnapshot.Optional(entity);
+            storey = QsModelElementSnapshot.Optional(storey);
+            return snapshot.Where(x => (entity.Length == 0 || string.Equals(x.Entity, entity, StringComparison.OrdinalIgnoreCase)) && (storey.Length == 0 || string.Equals(x.Storey, storey, StringComparison.OrdinalIgnoreCase))).ToList();
         }
         public IReadOnlyList<TakeoffInventoryLine> Aggregate(IEnumerable<IfcQtoItem> items)
         {
             if (items == null) throw new ArgumentNullException("items");
-            return items.GroupBy(x => new { Key = x.Classification.Length == 0 ? x.Entity : x.Classification, x.Unit }).Select(g => new TakeoffInventoryLine(g.Key.Key, g.Key.Unit, g.Sum(x => x.Quantity), g.Count())).ToList();
+            var snapshot = items.ToList();
+            return snapshot.GroupBy(x => new { Key = x.Classification.Length == 0 ? x.Entity : x.Classification, x.Unit }).Select(g => new TakeoffInventoryLine(g.Key.Key, g.Key.Unit, g.Sum(x => x.Quantity), g.Count())).ToList();
         }
     }
 
