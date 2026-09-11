@@ -25,10 +25,10 @@ if SOURCE.is_file():
         "else if (!File.Exists(backupPath))",
         "RecordRollbackFailure(",
         "File.Move(backupPath, destinationPath);",
-        "RestorePreviousBackup(previousBackupSafety, backupPath);",
+        "RestorePreviousBackup(previousBackupSafety, backupPath, publicationFailure);",
         'RequireSafe(previousBackupPath, "previous-backup safety");',
         'RequireSafe(backupPath, "backup");',
-        "if (!File.Exists(backupPath))",
+        "if (File.Exists(backupPath) || Directory.Exists(backupPath))",
         "File.Move(previousBackupPath, backupPath);",
         'RequireSafe(tempPath, "temporary");',
         'RequireSafe(destination, "destination");',
@@ -42,20 +42,18 @@ if SOURCE.is_file():
         errors.append("AtomicFileCommit.cs missing RestorePreviousBackup method boundaries.")
     else:
         restore = text[restore_start:restore_end]
-        legacy_restore = "if (!File.Exists(backupPath)) File.Move(previousBackupPath, backupPath);"
-        if legacy_restore not in restore:
-            cursor = 0
-            for token in (
-                "if (!File.Exists(backupPath))",
-                'RequireSafe(previousBackupPath, "previous-backup safety");',
-                'RequireSafe(backupPath, "backup");',
-                "File.Move(previousBackupPath, backupPath);",
-            ):
-                index = restore.find(token, cursor)
-                if index < 0:
-                    errors.append("RestorePreviousBackup missing ordered post-observation revalidation token: " + token)
-                    break
-                cursor = index + len(token)
+        cursor = 0
+        for token in (
+            "if (File.Exists(backupPath) || Directory.Exists(backupPath))",
+            'RequireSafe(previousBackupPath, "previous-backup safety");',
+            'RequireSafe(backupPath, "backup");',
+            "File.Move(previousBackupPath, backupPath);",
+        ):
+            index = restore.find(token, cursor)
+            if index < 0:
+                errors.append("RestorePreviousBackup missing ordered occupation/revalidation token: " + token)
+                break
+            cursor = index + len(token)
 
     if "if (File.Exists(backupPath)) File.Delete(backupPath);" in text:
         errors.append("Atomic fallback must not delete an existing backup before the previous destination has been safely staged.")
@@ -84,4 +82,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: atomic file fallback validates normalized and non-redirected paths before move-based replacement, restores the previous destination on install failure, preserves any pre-existing backup until commit succeeds, and does not delete recovery state on failed commit.")
+print("PASS: atomic file fallback validates normalized and non-redirected paths before move-based replacement, restores the previous destination on install failure, preserves any pre-existing backup until commit succeeds, records previous-backup rollback failure evidence without masking the publication failure, and does not delete recovery state on failed commit.")
