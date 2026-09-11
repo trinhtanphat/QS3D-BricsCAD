@@ -21,6 +21,60 @@ namespace QS3D.Core.SmokeTests
             PreservesDestinationOnInvalidMapping();
             RejectsMappedFormulaCells();
             RejectsUnsafeExpansionPastFooter();
+            RejectsCollectionGenerationDrift();
+        }
+
+        private static void RejectsCollectionGenerationDrift()
+        {
+            var root = TempDirectory("qs-template-generation-drift");
+            try
+            {
+                var template = Path.Combine(root, "template.xlsx");
+                var destination = Path.Combine(root, "existing.xlsx");
+                WriteTemplate(template, false, false);
+                File.WriteAllText(destination, "KEEP-ME", Encoding.UTF8);
+                var original = File.ReadAllBytes(destination);
+                var rows = Rows().ToList();
+                var hostile = new ShrinkingRows(rows);
+
+                ExpectThrows<InvalidDataException>(
+                    () => QsWorkbookTemplateExporter.Export(template, destination, hostile, Definition()),
+                    "Template export must reject collection Count drift during snapshot capture.");
+
+                Require(original.SequenceEqual(File.ReadAllBytes(destination)),
+                    "Generation-drift rejection must preserve an existing destination workbook.");
+            }
+            finally
+            {
+                DeleteDirectory(root);
+            }
+        }
+
+        private sealed class ShrinkingRows : IReadOnlyList<QuantityReportRow>
+        {
+            private readonly List<QuantityReportRow> _rows;
+
+            internal ShrinkingRows(List<QuantityReportRow> rows)
+            {
+                _rows = rows;
+            }
+
+            public int Count => _rows.Count;
+
+            public QuantityReportRow this[int index]
+            {
+                get
+                {
+                    var row = _rows[index];
+                    if (index == 0 && _rows.Count > 1)
+                        _rows.RemoveAt(_rows.Count - 1);
+                    return row;
+                }
+            }
+
+            public IEnumerator<QuantityReportRow> GetEnumerator() => _rows.GetEnumerator();
+
+            System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
         }
 
         private static void RendersCanonicalRowsAndPreservesTemplateParts()
