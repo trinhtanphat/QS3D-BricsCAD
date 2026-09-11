@@ -63,6 +63,10 @@ require('Project Tools', 'ClosePendingAfterFailure(candidate, window);' in proje
         'Project Tools failure cleanup must retain a loaded residue instead of forgetting it')
 require('Project Tools', 'if (!window.IsLoaded && candidate != null && ReferenceEquals(_pending, candidate)) _pending = null;' in project_tools,
         'Project Tools must clear pending ownership only after terminal candidate close')
+require('Project Tools', 'const string message = "QS3DPROJECTTOOLS không thể mở Project Tools an toàn; trạng thái hiện tại được giữ nguyên.";' in project_tools_body,
+        'failure UI must use one constant redacted message')
+require('Project Tools', 'ex.Message' not in project_tools_body,
+        'failure UI must not expose exception details through palette/editor status')
 
 material = FILES['Material Catalog'].read_text(encoding='utf-8')
 material_body = material[material.find('public void Show'):]
