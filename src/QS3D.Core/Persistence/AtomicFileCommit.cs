@@ -5,6 +5,8 @@ namespace QS3D.Core.Persistence
 {
     internal static class AtomicFileCommit
     {
+        private const string RollbackFailureDataKey = "QS3D.AtomicFileCommit.RollbackFailure";
+
         private static readonly StringComparison PathComparison =
             Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
@@ -196,6 +198,7 @@ namespace QS3D.Core.Persistence
 
             var destinationStaged = false;
             var installed = false;
+            Exception? publicationFailure = null;
             try
             {
                 RequireSafe(destinationPath, "destination");
@@ -207,24 +210,47 @@ namespace QS3D.Core.Persistence
                 File.Move(tempPath, destinationPath);
                 installed = true;
             }
+            catch (Exception ex)
+            {
+                publicationFailure = ex;
+                throw;
+            }
             finally
             {
                 if (!installed)
                 {
-                    if (destinationStaged)
+                    if (destinationStaged && publicationFailure != null)
                     {
                         try
                         {
                             RequireSafe(destinationPath, "destination");
                             RequireSafe(backupPath, "backup");
-                            if (!File.Exists(destinationPath) && File.Exists(backupPath))
+
+                            if (File.Exists(destinationPath) || Directory.Exists(destinationPath))
                             {
+                                RecordRollbackFailure(
+                                    publicationFailure,
+                                    new IOException("QS3D could not restore the staged primary because the destination became occupied during rollback."));
+                            }
+                            else if (!File.Exists(backupPath))
+                            {
+                                RecordRollbackFailure(
+                                    publicationFailure,
+                                    new IOException("QS3D could not restore the staged primary because its rollback backup is missing."));
+                            }
+                            else
+                            {
+                                // Revalidate after the final filesystem observations and
+                                // immediately before moving the staged primary back.
                                 RequireSafe(backupPath, "backup");
                                 RequireSafe(destinationPath, "destination");
                                 File.Move(backupPath, destinationPath);
                             }
                         }
-                        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException) { }
+                        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException)
+                        {
+                            RecordRollbackFailure(publicationFailure, ex);
+                        }
                     }
                     RestorePreviousBackup(previousBackupSafety, backupPath);
                 }
@@ -235,6 +261,28 @@ namespace QS3D.Core.Persistence
             }
 
             if (!keepBackup) TryDelete(backupPath);
+        }
+
+        private static void RecordRollbackFailure(Exception publicationFailure, Exception rollbackFailure)
+        {
+            var existing = publicationFailure.Data[RollbackFailureDataKey];
+            if (existing is AggregateException aggregate)
+            {
+                var failures = new Exception[aggregate.InnerExceptions.Count + 1];
+                for (var i = 0; i < aggregate.InnerExceptions.Count; i++)
+                    failures[i] = aggregate.InnerExceptions[i];
+                failures[failures.Length - 1] = rollbackFailure;
+                publicationFailure.Data[RollbackFailureDataKey] = new AggregateException(failures);
+                return;
+            }
+
+            if (existing is Exception existingFailure)
+            {
+                publicationFailure.Data[RollbackFailureDataKey] = new AggregateException(existingFailure, rollbackFailure);
+                return;
+            }
+
+            publicationFailure.Data[RollbackFailureDataKey] = rollbackFailure;
         }
 
         private static void RestorePreviousBackup(string? previousBackupSafety, string backupPath)
