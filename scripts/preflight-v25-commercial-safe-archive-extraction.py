@@ -46,7 +46,8 @@ def contract_errors(workflow: str, extractor: str | None) -> list[str]:
         ("[IO.FileMode]::CreateNew", "no-clobber extraction"),
         ("FILE_FLAG_OPEN_REPARSE_POINT", "native no-follow directory open"),
         ("FILE_FLAG_BACKUP_SEMANTICS", "native directory handle open"),
-        ("FILE_SHARE_READ", "directory hold without delete sharing"),
+        ("FILE_SHARE_WRITE = 0x00000002", "native write-sharing constant"),
+        ("FILE_SHARE_READ | FILE_SHARE_WRITE", "directory hold permits child materialization while delete sharing remains denied"),
         ("GetFileInformationByHandle", "handle-bound directory attributes"),
         ("GetFinalPathNameByHandleW", "handle-bound final path"),
         ("OpenDirectoryNoFollow", "no-follow directory hold"),
@@ -134,7 +135,10 @@ def runtime_errors(registry: str | None, runtime: str | None) -> list[str]:
 
 def self_test() -> list[str]:
     safe = f"""
-FILE_FLAG_OPEN_REPARSE_POINT FILE_FLAG_BACKUP_SEMANTICS FILE_SHARE_READ GetFileInformationByHandle GetFinalPathNameByHandleW OpenDirectoryNoFollow
+FILE_FLAG_OPEN_REPARSE_POINT FILE_FLAG_BACKUP_SEMANTICS
+FILE_SHARE_WRITE = 0x00000002
+FILE_SHARE_READ | FILE_SHARE_WRITE
+GetFileInformationByHandle GetFinalPathNameByHandleW OpenDirectoryNoFollow
 $parentHold = Open-HeldSafeDirectory
 [IO.Directory]::CreateDirectory($destinationFull)
 $rootHold = Open-HeldSafeDirectory
@@ -179,6 +183,7 @@ leaving destination residue because its generation can no longer be proven safe 
         "ASCII-only devices": (workflow, safe.replace(DEVICE, "con|prn|aux|nul|com[1-9]|lpt[1-9]", 1)),
         "case-sensitive aliases": (workflow, safe.replace("[StringComparer]::OrdinalIgnoreCase", "[StringComparer]::Ordinal", 1)),
         "clobber output": (workflow, safe.replace("[IO.FileMode]::CreateNew", "[IO.FileMode]::Create", 1)),
+        "missing write sharing": (workflow, safe.replace("FILE_SHARE_READ | FILE_SHARE_WRITE", "FILE_SHARE_READ", 1)),
         "delete-sharing directory hold": (workflow, safe + " FILE_SHARE_DELETE"),
         "missing parent hold": (workflow, safe.replace("$directoryHolds.ContainsKey($parent)", "$true", 1)),
         "pathname cleanup after hold release": (workflow, safe + "\nRemove-Item -LiteralPath $destinationFull -Recurse -Force"),
