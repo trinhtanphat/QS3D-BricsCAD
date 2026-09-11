@@ -19,7 +19,7 @@ namespace QS3D.Core.SmokeTests
         private static void BlocksTakeoffBoqAndEstimateOnCriticalRelationshipFailure()
         {
             var element = ValidElement("E1", "GUID-1", includeTypeRelationship: false);
-            var decision = new QsQaGate2().Evaluate(new[] { element }, QsQaRuleProfile.SolibriQuantityStrict(), null, Utc(2026, 9, 12));
+            var decision = new QsQaGate2().Evaluate(new[] { element }, QsQaRuleProfile.SolibriQuantityStrict(), null!, Utc(2026, 9, 12));
 
             Expect(decision.Status == QsQaGateStatus.Blocked, "missing required relationship must block");
             Expect(!decision.CanTakeoff, "hard gate must block takeoff");
@@ -51,7 +51,7 @@ namespace QS3D.Core.SmokeTests
             var profile = new QsQaRuleProfile(
                 new string[0],
                 new[] { "TypeAssignment" },
-                null,
+                null!,
                 QsQaSeverity.Error);
             var now = Utc(2026, 9, 12);
             var element = ValidElement("E3", "GUID-3", includeTypeRelationship: false);
@@ -70,7 +70,7 @@ namespace QS3D.Core.SmokeTests
                 new Dictionary<string, QsQaSeverity> { { "QA2.MISSING_RELATIONSHIP", QsQaSeverity.Warning } },
                 QsQaSeverity.Error);
             var element = ValidElement("E4", "GUID-4", includeTypeRelationship: false);
-            var decision = new QsQaGate2().Evaluate(new[] { element }, profile, null, Utc(2026, 9, 12));
+            var decision = new QsQaGate2().Evaluate(new[] { element }, profile, null!, Utc(2026, 9, 12));
 
             Expect(decision.Status == QsQaGateStatus.PassWithWarnings, "rule severity override must be honored");
             Expect(decision.CanTakeoff && decision.CanBoq && decision.CanEstimate, "warning must not block an Error-threshold gate");
@@ -87,7 +87,7 @@ namespace QS3D.Core.SmokeTests
                 { "IfcRel.TypeAssignment", "IfcWallType:A" }
             };
             var b = new QsModelElementSnapshot("E6", "Wall", "Concrete", "A-WALL", "L02", 4d, 0.2d, 3d, badProperties);
-            var decision = new QsQaGate2().Evaluate(new[] { a, b }, QsQaRuleProfile.SolibriQuantityStrict(), null, Utc(2026, 9, 12));
+            var decision = new QsQaGate2().Evaluate(new[] { a, b }, QsQaRuleProfile.SolibriQuantityStrict(), null!, Utc(2026, 9, 12));
 
             Expect(decision.ActiveFindings.Any(x => x.RuleId == "QA2.DUPLICATE_IFC_GUID"), "duplicate IFC GUID must be detected");
             Expect(decision.ActiveFindings.Any(x => x.RuleId == "QA2.MISSING_PSET" && x.ElementId == "E6"), "missing required Pset must be detected");
