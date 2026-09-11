@@ -19,4 +19,10 @@ if missing:
 if "IsRecoverableDataFailure(Exception exception) => exception is InvalidDataException" not in source:
     raise SystemExit("QSDB backup fallback must continue to normalize malformed persisted data through InvalidDataException.")
 
+if "exception is ArgumentException" in source:
+    raise SystemExit(
+        "QSDB backup fallback must not globally classify caller ArgumentException as recoverable; "
+        "normalization belongs at the persisted quantity deserialization boundary."
+    )
+
 print("QSDB invalid persisted quantity backup-fallback guard passed.")
