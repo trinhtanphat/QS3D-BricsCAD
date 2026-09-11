@@ -123,6 +123,14 @@ namespace QS3D.BricsCAD.V25
                     transaction.Commit();
                 }
 
+                RequireCurrentMutationAuthority(
+                    document,
+                    project,
+                    expectedProjectId,
+                    expectedChangeVersion,
+                    expectedOpeningIds,
+                    selected);
+
                 var service = new HostLinkService();
                 var linked = 0;
                 var unchanged = 0;
@@ -177,6 +185,30 @@ namespace QS3D.BricsCAD.V25
             {
                 ReportAutoHostError(document);
             }
+        }
+
+        private static void RequireCurrentMutationAuthority(
+            Document document,
+            ProjectState project,
+            string expectedProjectId,
+            long expectedChangeVersion,
+            HashSet<string> expectedOpeningIds,
+            HashSet<string> selected)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                throw new InvalidOperationException("Auto Host: DWG active đã thay đổi trong lúc đánh giá host; hãy chạy lại lệnh.");
+
+            if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject) ||
+                !ReferenceEquals(currentProject, project))
+                throw new InvalidOperationException("Auto Host: QS3D project generation đã thay đổi trong lúc đánh giá host; hãy chạy lại lệnh.");
+
+            if (!string.Equals(currentProject.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase) ||
+                currentProject.ChangeVersion != expectedChangeVersion)
+                throw new InvalidOperationException("Auto Host: QS3D project đã thay đổi trong lúc đánh giá host; hãy chạy lại lệnh.");
+
+            var currentOpenings = ResolveSelectedOpenings(currentProject, selected);
+            if (!expectedOpeningIds.SetEquals(currentOpenings.Select(x => x.Id)))
+                throw new InvalidOperationException("Auto Host: Door/WallOpening target set đã thay đổi trong lúc đánh giá host; hãy chọn lại target.");
         }
 
         private static bool IsActiveDocument(Document document) =>
