@@ -43,6 +43,9 @@ namespace QS3D.BricsCAD.V25
 
         private static Timer? _pollTimer;
         private static bool _started;
+        private static bool _unhandledExceptionMayBeSubscribed;
+        private static bool _unobservedTaskExceptionMayBeSubscribed;
+        private static bool _documentBecameCurrentMayBeSubscribed;
         private static long _sequence;
         private static string _lastMcpError = string.Empty;
         private static DateTime _lastOAuthActivityUtc = DateTime.MinValue;
@@ -152,15 +155,29 @@ namespace QS3D.BricsCAD.V25
             lock (Gate)
             {
                 if (_started) return;
+                if (HasGlobalSubscriptionOwnershipLocked())
+                    throw new InvalidOperationException("Diagnostic global subscription cleanup remains unresolved; start was not repeated.");
                 _sequence = Math.Max(_sequence, LoadLatestPersistedSequence());
-                _started = true;
                 _lastMcpError = string.Empty;
                 _lastOAuthActivityUtc = DateTime.MinValue;
             }
 
-            AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
-            TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
-            Application.DocumentManager.DocumentBecameCurrent += OnDocumentBecameCurrent;
+            try
+            {
+                lock (Gate) _unhandledExceptionMayBeSubscribed = true;
+                AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
+                lock (Gate) _unobservedTaskExceptionMayBeSubscribed = true;
+                TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
+                lock (Gate) _documentBecameCurrentMayBeSubscribed = true;
+                Application.DocumentManager.DocumentBecameCurrent += OnDocumentBecameCurrent;
+                lock (Gate) _started = true;
+            }
+            catch
+            {
+                DetachGlobalSubscriptionsBestEffort();
+                throw;
+            }
+
             Record("qs3d", "info", "diagnostics-start", "Unified MCP/QS3D/BricsCAD diagnostics bridge started.");
             QueueAttachActiveDocument();
             _pollTimer = new Timer(Poll, null, 750, 1000);
@@ -172,7 +189,7 @@ namespace QS3D.BricsCAD.V25
             DocumentSubscription[] subscriptions;
             lock (Gate)
             {
-                if (!_started && Subscriptions.Count == 0) return;
+                if (!_started && Subscriptions.Count == 0 && !HasGlobalSubscriptionOwnershipLocked()) return;
                 _started = false;
                 timer = _pollTimer;
                 _pollTimer = null;
@@ -193,10 +210,40 @@ namespace QS3D.BricsCAD.V25
                 if (!detached)
                     Record("bricscad", "warning", "command-monitor-detach-pending", "Native command monitor detach remains unresolved; ownership was retained for retry.", subscription.Document);
             }
-            try { Application.DocumentManager.DocumentBecameCurrent -= OnDocumentBecameCurrent; } catch { }
-            try { AppDomain.CurrentDomain.UnhandledException -= OnUnhandledException; } catch { }
-            try { TaskScheduler.UnobservedTaskException -= OnUnobservedTaskException; } catch { }
+            if (!DetachGlobalSubscriptionsBestEffort())
+                Record("qs3d", "warning", "diagnostics-global-detach-pending", "Global diagnostics detach remains unresolved; ownership was retained for retry.");
             Record("qs3d", "info", "diagnostics-stop", "Unified diagnostics bridge stopped.");
+        }
+
+        private static bool HasGlobalSubscriptionOwnershipLocked()
+        {
+            return _unhandledExceptionMayBeSubscribed
+                || _unobservedTaskExceptionMayBeSubscribed
+                || _documentBecameCurrentMayBeSubscribed;
+        }
+
+        private static bool DetachGlobalSubscriptionsBestEffort()
+        {
+            var detached = true;
+            lock (Gate)
+            {
+                if (_documentBecameCurrentMayBeSubscribed)
+                {
+                    try { Application.DocumentManager.DocumentBecameCurrent -= OnDocumentBecameCurrent; _documentBecameCurrentMayBeSubscribed = false; }
+                    catch { detached = false; }
+                }
+                if (_unobservedTaskExceptionMayBeSubscribed)
+                {
+                    try { TaskScheduler.UnobservedTaskException -= OnUnobservedTaskException; _unobservedTaskExceptionMayBeSubscribed = false; }
+                    catch { detached = false; }
+                }
+                if (_unhandledExceptionMayBeSubscribed)
+                {
+                    try { AppDomain.CurrentDomain.UnhandledException -= OnUnhandledException; _unhandledExceptionMayBeSubscribed = false; }
+                    catch { detached = false; }
+                }
+                return detached && !HasGlobalSubscriptionOwnershipLocked();
+            }
         }
 
         internal static string InvokeInCadContext(Func<string> action)
