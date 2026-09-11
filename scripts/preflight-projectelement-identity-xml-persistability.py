@@ -105,12 +105,18 @@ if QUANTITY_DICTIONARY.is_file():
     else:
         body = pair_remove.group("body")
         for token in (
-            "if (!_values.TryGetValue(candidate, out var existing))",
+            "if (_values.TryGetValue(candidate, out var existing))",
             "if (!existing.Equals(item.Value)) return false;",
-            "return _owner.RemoveQuantity(key);",
+            "if (_owner.RemoveQuantity(key)) return true;",
+            "string? persistedKey = null;",
+            "string.Equals(CanonicalReadKey(pair.Key), candidate, StringComparison.OrdinalIgnoreCase)",
+            "if (matches > 1) return false;",
+            "if (matches != 1 || !persistedValue.Equals(item.Value)) return false;",
+            "if (!_values.Remove(persistedKey!)) return false;",
+            "_owner.MarkDirty(ElementDirtyFlags.Quantity);",
         ):
             if token not in body:
-                errors.append("ProjectElement quantity pair removal lost persisted-corruption cleanup contract: " + token)
+                errors.append("ProjectElement quantity pair removal lost persisted-corruption identity repair contract: " + token)
         if "_owner.SetQuantity(" in body:
             errors.append("ProjectElement quantity pair removal must not re-admit persisted values through SetQuantity")
 
@@ -141,6 +147,9 @@ if QUANTITY_SMOKE.is_file():
         "PairRemovalCanDeletePersistedCorruptValue",
         'SeedPersistedQuantity(element, "Area", -1d)',
         'new KeyValuePair<string, double>(" area ", -1d)',
+        "PairRemovalCanDeletePersistedMalformedKey",
+        'SeedPersistedQuantity(element, " Area ", 5d)',
+        'new KeyValuePair<string, double>(" area ", 5d)',
         "Equal(ElementDirtyFlags.None, element.Dirty);",
         "Equal(before, element.UpdatedUtc);",
     ):
@@ -160,4 +169,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: ProjectElement Id/relation/fingerprint text remains XML-preflighted; semantic quantity mutations and reads share canonical identity, pair removal can clean persisted-corrupt values without re-admission, and reads stay lifecycle-neutral.")
+print("PASS: ProjectElement Id/relation/fingerprint text remains XML-preflighted; semantic quantity mutations and reads share canonical identity, pair removal repairs a unique persisted malformed identity/value without re-admission, ambiguous persisted aliases fail closed, and reads stay lifecycle-neutral.")
