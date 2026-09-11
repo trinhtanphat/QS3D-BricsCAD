@@ -35,6 +35,8 @@ for path in FILES:
     if "[PATH]" not in text:
         errors.append(f"{name}: missing local-path redaction")
 
+    if "Regex." in text and "using System.Text.RegularExpressions;" not in text:
+        errors.append(f"{name}: Regex sanitizer calls are missing System.Text.RegularExpressions compile scope")
 if errors:
     print("MCP public error redaction preflight FAILED")
     for error in errors:
