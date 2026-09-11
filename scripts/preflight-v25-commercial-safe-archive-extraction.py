@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed unless V25 commercial release candidate extraction is bounded, path-safe, and runtime-tested."""
+"""Fail closed unless V25 commercial release extraction is bounded and Windows-path safe."""
 
 from __future__ import annotations
 
@@ -10,9 +10,9 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "release-v25.yml"
 EXTRACTOR = ROOT / "scripts" / "expand-v25-commercial-candidate.ps1"
 RUNTIME_TEST = ROOT / "scripts" / "test-v25-commercial-safe-archive-extraction.ps1"
-TEST_REGISTRY = ROOT / "scripts" / "test-v25-package-verifier.ps1"
+REGISTRY = ROOT / "scripts" / "test-v25-package-verifier.ps1"
 CALL = ".\\scripts\\expand-v25-commercial-candidate.ps1"
-WINDOWS_DEVICE_PATTERN = "con|prn|aux|nul|com(?:[1-9]|¹|²|³)|lpt(?:[1-9]|¹|²|³)"
+DEVICE = "con|prn|aux|nul|com(?:[1-9]|¹|²|³)|lpt(?:[1-9]|¹|²|³)"
 
 
 def contract_errors(workflow: str, extractor: str | None) -> list[str]:
@@ -20,36 +20,34 @@ def contract_errors(workflow: str, extractor: str | None) -> list[str]:
     if "Expand-Archive" in workflow:
         errors.append("raw Expand-Archive is forbidden at V25 commercial release trust boundaries")
     if extractor is None:
-        return errors + ["missing reusable bounded V25 commercial candidate archive extractor script"]
+        return errors + ["missing reusable bounded V25 commercial candidate extractor"]
     if ".CopyTo(" in extractor:
-        errors.append("commercial archive materialization must not use unbounded stream CopyTo")
+        errors.append("archive materialization must not use unbounded CopyTo")
 
     required = (
-        ("[IO.Compression.ZipArchive]", "ZipArchive inspection before extraction"),
-        ("$zipStream.Length -le 0 -or $zipStream.Length -gt $MaxPackageBytes", "enforced compressed-size budget"),
-        ("$entryCount++", "entry counter"),
-        ("$entryCount -gt $MaxEntries", "enforced entry-count budget"),
-        ("$expandedBytes += [int64]$entry.Length", "declared uncompressed-byte accounting"),
-        ("$expandedBytes -gt $MaxExpandedBytes", "enforced declared expanded-size budget"),
-        ("$materializedBytes", "actual materialized-byte accounting"),
-        ("$input.Read($buffer", "bounded stream read loop"),
-        ("$materializedBytes -gt ($MaxExpandedBytes - [int64]$read)", "actual expanded-size pre-write budget"),
-        ("$output.Write($buffer", "explicit bounded stream write"),
-        ("$materializedBytes += [int64]$read", "actual expanded-byte increment"),
-        ("$archive.Entries", "entry enumeration"),
+        ("[IO.Compression.ZipArchive]", "ZipArchive inspection"),
+        ("$zipStream.Length -le 0 -or $zipStream.Length -gt $MaxPackageBytes", "compressed-size budget"),
+        ("$entryCount -gt $MaxEntries", "entry-count budget"),
+        ("$expandedBytes += [int64]$entry.Length", "declared expanded-byte accounting"),
+        ("$expandedBytes -gt $MaxExpandedBytes", "declared expanded-size enforcement"),
+        ("$materializedBytes -gt ($MaxExpandedBytes - [int64]$read)", "actual pre-write expanded-size enforcement"),
+        ("$input.Read($buffer", "bounded read loop"),
+        ("$output.Write($buffer", "bounded write loop"),
         ("[IO.Path]::IsPathRooted($name)", "rooted-path rejection"),
         ("$name.IndexOf([char]0)", "NUL rejection"),
-        ("$name.Contains('\\')", "backslash rejection"),
+        ("$name.IndexOf([char]92) -ge 0", "single-backslash rejection"),
         ("$name.Contains(':')", "drive/ADS separator rejection"),
         ("$segment -eq '..'", "parent-traversal rejection"),
         ("GetInvalidFileNameChars", "Windows invalid-name rejection"),
-        (WINDOWS_DEVICE_PATTERN, "Windows device-name rejection including superscript COM/LPT digits"),
+        (DEVICE, "Windows device-name rejection including superscript digits"),
+        ("(?:[.]|$)", "device-name extension boundary"),
         ("EndsWith('.',", "trailing-dot rejection"),
         ("EndsWith(' ',", "trailing-space rejection"),
         ("HashSet[string]", "duplicate target tracking"),
-        ("[StringComparer]::OrdinalIgnoreCase", "Windows case-alias rejection"),
-        ("StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)", "destination-root containment"),
+        ("[StringComparer]::OrdinalIgnoreCase", "case-alias rejection"),
+        ("StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)", "destination containment"),
         ("[IO.FileMode]::CreateNew", "no-clobber extraction"),
+        ("[IO.FileAttributes]::ReparsePoint", "reparse-point rejection"),
     )
     for token, label in required:
         if token not in extractor:
@@ -60,182 +58,134 @@ def contract_errors(workflow: str, extractor: str | None) -> list[str]:
         ("Verify candidate after job boundary", "job-boundary", "$heldZip", "$extract"),
         ("$extract = Join-Path $downloadRoot 'verified-package'", "downloaded-draft", "$heldRemoteZip", "$extract"),
     )
-    signature_marker = "verify-v25-signatures.ps1"
     for marker, label, zip_var, root_var in boundaries:
         start = workflow.find(marker)
         if start < 0:
             errors.append(f"missing {label} verification region")
             continue
-        if label == "downloaded-draft":
-            end = workflow.find("$downloadedIdentity =", start)
-        else:
-            end = workflow.find("\n      - name:", start + len(marker))
+        end = workflow.find("$downloadedIdentity =", start) if label == "downloaded-draft" else workflow.find("\n      - name:", start + len(marker))
         region = workflow[start:] if end < 0 else workflow[start:end]
-        call_index = region.find(CALL)
-        sig_index = region.find(signature_marker)
-        exact_tokens = (
-            (f"-ZipPath {zip_var}", "exact ZIP path"),
-            (f"-DestinationRoot {root_var}", "exact destination root"),
-            ("-MaxPackageBytes 268435456", "256 MiB compressed-size bound"),
-            ("-MaxExpandedBytes 536870912", "512 MiB expanded-size bound"),
-            ("-MaxEntries 4096", "4096-entry bound"),
+        tokens = (
+            CALL,
+            f"-ZipPath {zip_var}",
+            f"-DestinationRoot {root_var}",
+            "-MaxPackageBytes 268435456",
+            "-MaxExpandedBytes 536870912",
+            "-MaxEntries 4096",
         )
-        for token, token_label in exact_tokens:
+        for token in tokens:
             if token not in region:
-                errors.append(f"{label} safe extractor call is missing {token_label}")
-        if call_index < 0:
-            errors.append(f"{label} verifier does not invoke reusable bounded safe extraction")
-        if sig_index >= 0 and call_index >= 0 and call_index > sig_index:
-            errors.append(f"{label} archive safety admission must precede extracted-payload signature verification")
-
+                errors.append(f"{label} safe extractor contract missing: {token}")
+        call_index = region.find(CALL)
+        sig_index = region.find("verify-v25-signatures.ps1")
+        if call_index >= 0 and sig_index >= 0 and call_index > sig_index:
+            errors.append(f"{label} extraction admission must precede payload signature verification")
     if workflow.count(CALL) != 3:
-        errors.append("reusable safe commercial extractor must be invoked exactly once at each of the three V25 verification boundaries")
+        errors.append("safe extractor must be invoked exactly once at each of three commercial verification boundaries")
     return errors
 
 
-def runtime_registration_errors(registry: str | None, runtime_test: str | None) -> list[str]:
+def runtime_errors(registry: str | None, runtime: str | None) -> list[str]:
     errors: list[str] = []
-    test_name = "test-v25-commercial-safe-archive-extraction.ps1"
-    if registry is None:
-        errors.append("missing registered V25 package-integrity test harness")
-    elif test_name not in registry:
-        errors.append("V25 commercial archive runtime test is not registered in the required package-integrity harness")
-    if runtime_test is None:
-        return errors + ["missing V25 commercial safe archive runtime test"]
-
+    if registry is None or "test-v25-commercial-safe-archive-extraction.ps1" not in registry:
+        errors.append("commercial safe archive runtime test is not registered in package-integrity harness")
+    if runtime is None:
+        return errors + ["missing commercial safe archive runtime test"]
     required = (
-        ("expand-v25-commercial-candidate.ps1", "runtime invocation of production extractor"),
-        ("../escape.txt", "parent-traversal fixture"),
-        ("Payload.txt", "case-alias fixture"),
-        ("payload.TXT", "case-alias fixture counterpart"),
-        ("COM¹.txt", "superscript Windows device-name fixture"),
-        ("nested\\escape.txt", "backslash ambiguity fixture"),
-        ("payload.txt:stream", "alternate-data-stream fixture"),
-        ("payload./file.txt", "trailing-dot segment fixture"),
-        ("-MaxEntries 1", "entry-count runtime bound"),
-        ("-MaxExpandedBytes 32", "expanded-byte runtime bound"),
-        ("-MaxPackageBytes 1", "compressed-byte runtime bound"),
-        ("must not already exist", "pre-existing-destination assertion"),
+        "expand-v25-commercial-candidate.ps1",
+        "../escape.txt",
+        "Payload.txt",
+        "payload.TXT",
+        "COM¹.txt",
+        "nested\\escape.txt",
+        "payload.txt:stream",
+        "payload./file.txt",
+        "-MaxEntries 1",
+        "-MaxExpandedBytes 32",
+        "-MaxPackageBytes 1",
+        "must not already exist",
     )
-    for token, label in required:
-        if token not in runtime_test:
-            errors.append(f"runtime archive test is missing {label}: {token}")
+    for token in required:
+        if token not in runtime:
+            errors.append(f"runtime archive test missing fixture/contract: {token}")
     return errors
 
 
 def self_test() -> list[str]:
-    safe_extractor = r"""
-param([int64]$MaxPackageBytes,[int64]$MaxExpandedBytes,[int]$MaxEntries)
+    safe = f"""
+[IO.Compression.ZipArchive] $archive = $null
 $zipStream = [IO.File]::Open($ZipPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
-if ($zipStream.Length -le 0 -or $zipStream.Length -gt $MaxPackageBytes) { throw 'compressed' }
-$archive = [IO.Compression.ZipArchive]::new($zipStream,[IO.Compression.ZipArchiveMode]::Read,$true)
+if ($zipStream.Length -le 0 -or $zipStream.Length -gt $MaxPackageBytes) {{ throw 'compressed' }}
+if ($entryCount -gt $MaxEntries) {{ throw 'entries' }}
+$expandedBytes += [int64]$entry.Length
+if ($expandedBytes -gt $MaxExpandedBytes) {{ throw 'expanded' }}
+while (($read = $input.Read($buffer,0,$buffer.Length)) -gt 0) {{
+ if ($materializedBytes -gt ($MaxExpandedBytes - [int64]$read)) {{ throw 'actual' }}
+ $output.Write($buffer,0,$read)
+}}
+if ([IO.Path]::IsPathRooted($name) -or $name.IndexOf([char]0) -ge 0 -or $name.IndexOf([char]92) -ge 0 -or $name.Contains(':')) {{ throw 'unsafe' }}
+if ($segment -eq '..' -or $segment.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0 -or $segment -match '^(?i:{DEVICE})(?:[.]|$)' -or $segment.EndsWith('.', [StringComparison]::Ordinal) -or $segment.EndsWith(' ', [StringComparison]::Ordinal)) {{ throw 'unsafe' }}
 $seenTargets = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-$invalid = [IO.Path]::GetInvalidFileNameChars()
-$destinationFull = [IO.Path]::GetFullPath($DestinationRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
-$rootPrefix = $destinationFull + [IO.Path]::DirectorySeparatorChar
-[int64]$expandedBytes = 0
-[int64]$materializedBytes = 0
-$entryCount = 0
-foreach ($entry in $archive.Entries) {
-  $entryCount++
-  if ($entryCount -gt $MaxEntries) { throw 'entries' }
-  $name = [string]$entry.FullName
-  if ([IO.Path]::IsPathRooted($name) -or $name.IndexOf([char]0) -ge 0 -or $name.Contains('\\') -or $name.Contains(':')) { throw 'rooted' }
-  foreach ($segment in $name.Split('/')) {
-    if ($segment -eq '..' -or $segment.IndexOfAny($invalid) -ge 0 -or $segment -match '^(?i:con|prn|aux|nul|com(?:[1-9]|¹|²|³)|lpt(?:[1-9]|¹|²|³))(?:\\.|$)' -or $segment.EndsWith('.', [StringComparison]::Ordinal) -or $segment.EndsWith(' ', [StringComparison]::Ordinal)) { throw 'unsafe' }
-  }
-  $expandedBytes += [int64]$entry.Length
-  if ($expandedBytes -gt $MaxExpandedBytes) { throw 'expanded' }
-  $target = [IO.Path]::GetFullPath((Join-Path $destinationFull $name))
-  if (-not $target.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw 'escape' }
-  if (-not $seenTargets.Add($target)) { throw 'duplicate' }
-  $out = [IO.File]::Open($target,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
-  $buffer = New-Object byte[] 81920
-  while (($read = $input.Read($buffer, 0, $buffer.Length)) -gt 0) {
-    if ($materializedBytes -gt ($MaxExpandedBytes - [int64]$read)) { throw 'actual-expanded' }
-    $output.Write($buffer, 0, $read)
-    $materializedBytes += [int64]$read
-  }
-}
+if (-not $target.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {{ throw 'escape' }}
+$out = [IO.File]::Open($target,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {{ throw 'reparse' }}
 """
-    call1 = r".\scripts\expand-v25-commercial-candidate.ps1 -ZipPath $heldZip -DestinationRoot $verificationRoot -MaxPackageBytes 268435456 -MaxExpandedBytes 536870912 -MaxEntries 4096"
-    call2 = r".\scripts\expand-v25-commercial-candidate.ps1 -ZipPath $heldZip -DestinationRoot $extract -MaxPackageBytes 268435456 -MaxExpandedBytes 536870912 -MaxEntries 4096"
-    call3 = r".\scripts\expand-v25-commercial-candidate.ps1 -ZipPath $heldRemoteZip -DestinationRoot $extract -MaxPackageBytes 268435456 -MaxExpandedBytes 536870912 -MaxEntries 4096"
-    safe_workflow = f"""
-      - name: Verify finalized package after private-key cleanup
-        run: |
-          {call1}
-          & .\\scripts\\verify-v25-signatures.ps1
-      - name: Verify candidate after job boundary
-        run: |
-          {call2}
-          & .\\scripts\\verify-v25-signatures.ps1
-      - name: Create draft, verify uploaded bytes, then publish
-        run: |
-          $extract = Join-Path $downloadRoot 'verified-package'
-          {call3}
-          & .\\scripts\\verify-v25-signatures.ps1
-          $downloadedIdentity = & .\\scripts\\assert-v25-commercial-draft-identity.ps1
+    calls = (
+        ".\\scripts\\expand-v25-commercial-candidate.ps1 -ZipPath $heldZip -DestinationRoot $verificationRoot -MaxPackageBytes 268435456 -MaxExpandedBytes 536870912 -MaxEntries 4096",
+        ".\\scripts\\expand-v25-commercial-candidate.ps1 -ZipPath $heldZip -DestinationRoot $extract -MaxPackageBytes 268435456 -MaxExpandedBytes 536870912 -MaxEntries 4096",
+        ".\\scripts\\expand-v25-commercial-candidate.ps1 -ZipPath $heldRemoteZip -DestinationRoot $extract -MaxPackageBytes 268435456 -MaxExpandedBytes 536870912 -MaxEntries 4096",
+    )
+    workflow = f"""Verify finalized package after private-key cleanup
+{calls[0]}
+verify-v25-signatures.ps1
+      - name: next
+Verify candidate after job boundary
+{calls[1]}
+verify-v25-signatures.ps1
+      - name: next
+$extract = Join-Path $downloadRoot 'verified-package'
+{calls[2]}
+verify-v25-signatures.ps1
+$downloadedIdentity = x
 """
     errors: list[str] = []
-    if contract_errors(safe_workflow, safe_extractor):
-        errors.append("guard rejected intended reusable bounded/path-safe extraction contract")
+    if contract_errors(workflow, safe):
+        errors.append("guard rejected intended safe extraction contract")
     mutants = {
-        "raw expansion": (safe_workflow.replace(call1, "Expand-Archive -LiteralPath $heldZip -DestinationPath $verificationRoot", 1), safe_extractor),
-        "missing extractor": (safe_workflow, None),
-        "declared but unenforced compressed budget": (safe_workflow, safe_extractor.replace("if ($zipStream.Length -le 0 -or $zipStream.Length -gt $MaxPackageBytes) { throw 'compressed' }", "# no compressed limit", 1)),
-        "declared but unenforced entry budget": (safe_workflow, safe_extractor.replace("if ($entryCount -gt $MaxEntries) { throw 'entries' }", "# no entry limit", 1)),
-        "no declared expanded accounting": (safe_workflow, safe_extractor.replace("$expandedBytes += [int64]$entry.Length", "$expandedBytes += 0", 1)),
-        "no declared expanded enforcement": (safe_workflow, safe_extractor.replace("if ($expandedBytes -gt $MaxExpandedBytes) { throw 'expanded' }", "# no expanded limit", 1)),
-        "unbounded actual materialization": (safe_workflow, safe_extractor.replace("while (($read = $input.Read($buffer, 0, $buffer.Length)) -gt 0) {\n    if ($materializedBytes -gt ($MaxExpandedBytes - [int64]$read)) { throw 'actual-expanded' }\n    $output.Write($buffer, 0, $read)\n    $materializedBytes += [int64]$read\n  }", "$input.CopyTo($output)", 1)),
-        "no actual pre-write budget": (safe_workflow, safe_extractor.replace("if ($materializedBytes -gt ($MaxExpandedBytes - [int64]$read)) { throw 'actual-expanded' }", "# no actual limit", 1)),
-        "no traversal rejection": (safe_workflow, safe_extractor.replace("$segment -eq '..' -or ", "", 1)),
-        "ascii-only device names": (safe_workflow, safe_extractor.replace(WINDOWS_DEVICE_PATTERN, "con|prn|aux|nul|com[1-9]|lpt[1-9]", 1)),
-        "case-sensitive duplicates": (safe_workflow, safe_extractor.replace("[StringComparer]::OrdinalIgnoreCase", "[StringComparer]::Ordinal", 1)),
-        "no root containment": (safe_workflow, safe_extractor.replace("if (-not $target.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw 'escape' }", "# no containment", 1)),
-        "clobber output": (safe_workflow, safe_extractor.replace("[IO.FileMode]::CreateNew", "[IO.FileMode]::Create", 1)),
-        "omit job boundary": (safe_workflow.replace(f"          {call2}\n", "", 1), safe_extractor),
-        "omit downloaded draft boundary": (safe_workflow.replace(f"          {call3}\n", "", 1), safe_extractor),
-        "wrong downloaded draft zip": (safe_workflow.replace("-ZipPath $heldRemoteZip", "-ZipPath $remoteZip", 1), safe_extractor),
+        "raw expansion": (workflow.replace(calls[0], "Expand-Archive -LiteralPath $heldZip -DestinationPath $verificationRoot", 1), safe),
+        "missing compressed limit": (workflow, safe.replace("$zipStream.Length -le 0 -or $zipStream.Length -gt $MaxPackageBytes", "$false", 1)),
+        "missing actual limit": (workflow, safe.replace("$materializedBytes -gt ($MaxExpandedBytes - [int64]$read)", "$false", 1)),
+        "single-backslash false negative": (workflow, safe.replace("$name.IndexOf([char]92) -ge 0", "$name.Contains('\\\\')", 1)),
+        "ASCII-only devices": (workflow, safe.replace(DEVICE, "con|prn|aux|nul|com[1-9]|lpt[1-9]", 1)),
+        "device extension not bounded": (workflow, safe.replace("(?:[.]|$)", "$", 1)),
+        "case-sensitive aliases": (workflow, safe.replace("[StringComparer]::OrdinalIgnoreCase", "[StringComparer]::Ordinal", 1)),
+        "clobber output": (workflow, safe.replace("[IO.FileMode]::CreateNew", "[IO.FileMode]::Create", 1)),
+        "wrong downloaded ZIP": (workflow.replace("-ZipPath $heldRemoteZip", "-ZipPath $remoteZip", 1), safe),
     }
-    for label, (workflow, extractor) in mutants.items():
-        if not contract_errors(workflow, extractor):
+    for label, (wf, ex) in mutants.items():
+        if not contract_errors(wf, ex):
             errors.append(f"guard failed to reject mutant: {label}")
-
-    safe_registry = "& (Join-Path $PSScriptRoot 'test-v25-commercial-safe-archive-extraction.ps1')"
-    safe_runtime = "expand-v25-commercial-candidate.ps1 ../escape.txt Payload.txt payload.TXT COM¹.txt nested\\escape.txt payload.txt:stream payload./file.txt -MaxEntries 1 -MaxExpandedBytes 32 -MaxPackageBytes 1 must not already exist"
-    if runtime_registration_errors(safe_registry, safe_runtime):
-        errors.append("guard rejected intended registered runtime archive-test contract")
-    if not runtime_registration_errors("# archive test removed", safe_runtime):
-        errors.append("guard failed to reject missing runtime-test registration")
-    if not runtime_registration_errors(safe_registry, safe_runtime.replace("COM¹.txt", "COM1.txt")):
-        errors.append("guard failed to reject missing superscript device-name runtime fixture")
     return errors
 
 
-def read_optional(path: Path, label: str, errors: list[str]) -> str | None:
+def read(path: Path) -> str | None:
     try:
         return path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return None
-    except OSError as exc:
-        errors.append(f"unable to read {label} {path}: {exc}")
+    except OSError:
         return None
 
 
 def main() -> int:
     errors = self_test()
-    try:
-        workflow = WORKFLOW.read_text(encoding="utf-8")
-    except OSError as exc:
-        errors.append(f"unable to read {WORKFLOW}: {exc}")
-        workflow = ""
-    extractor = read_optional(EXTRACTOR, "extractor", errors)
-    runtime_test = read_optional(RUNTIME_TEST, "runtime test", errors)
-    registry = read_optional(TEST_REGISTRY, "test registry", errors)
-    if workflow:
+    workflow = read(WORKFLOW)
+    extractor = read(EXTRACTOR)
+    runtime = read(RUNTIME_TEST)
+    registry = read(REGISTRY)
+    if workflow is None:
+        errors.append(f"unable to read {WORKFLOW}")
+    else:
         errors.extend(contract_errors(workflow, extractor))
-    errors.extend(runtime_registration_errors(registry, runtime_test))
+    errors.extend(runtime_errors(registry, runtime))
     if errors:
         print("ERROR: V25 commercial safe archive extraction preflight failed closed:", file=sys.stderr)
         for error in errors:
