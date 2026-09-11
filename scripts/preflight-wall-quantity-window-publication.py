@@ -5,47 +5,64 @@ SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "WallQuantityCommands.cs"
 text = SOURCE.read_text(encoding="utf-8")
 
 required = [
-    "private static WallQuantityWindow? _window;",
-    "private static Document? _document;",
-    "private static IntPtr _nativeDatabaseIdentity;",
-    "GetNativeDatabaseIdentity(document)",
-    "PreparePublishedWindow(document, nativeDatabaseIdentity)",
-    "ReferenceEquals(_document, requestedDocument)",
-    "published.Close();",
-    "if (published.IsLoaded)",
-    "window.Closed += (_, __) => ReleasePublishedWindow(window);",
+    "private static PublishedWindow? _pending;",
+    "private static PublishedWindow? _published;",
+    "private readonly WeakReference<Document> _document;",
+    "NativeDatabaseIdentity = nativeDatabaseIdentity;",
+    "ReferenceEquals(ownedDocument, document)",
+    "nativeDatabaseIdentity == NativeDatabaseIdentity",
+    "nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
+    "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;",
+    "var pending = _pending;",
+    "if (pending != null && !TryCloseOwner(pending)) return;",
+    "var published = _published;",
+    "published.Window.IsLoaded && published.Matches(document, nativeDatabaseIdentity)",
+    "if (!TryCloseOwner(published)) return;",
+    "var releaseOwner = owner;",
+    "window.Closed += (_, __) => ReleaseOwnedWindow(releaseOwner);",
+    "_pending = owner;",
     "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
-    "if (!window.IsLoaded) return;",
-    "_window = window;",
-    "_document = document;",
-    "_nativeDatabaseIdentity = nativeDatabaseIdentity;",
-    "if (!ReferenceEquals(_window, window)) return;",
-    "database.UnmanagedObject",
-    "if (identity == IntPtr.Zero)",
+    "if (!window.IsLoaded)",
+    "if (!ReferenceEquals(_pending, owner))",
+    "_pending = null;",
+    "_published = owner;",
+    "try { owner.Window.Close(); } catch { return false; }",
+    "if (owner.Window.IsLoaded) return false;",
+    "ReleaseOwnedWindow(owner);",
+    "if (ReferenceEquals(_pending, owner)) _pending = null;",
+    "if (ReferenceEquals(_published, owner)) _published = null;",
+    "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)",
+    "database.UnmanagedObject == nativeDatabaseIdentity",
 ]
-
 missing = [token for token in required if token not in text]
 if missing:
-    raise SystemExit("Wall Quantity publication preflight failed; missing: " + ", ".join(missing))
+    raise SystemExit("Wall Quantity publication preflight failed; missing behavioral contract: " + ", ".join(missing))
 
-forbidden = [
+show = text.index("Application.ShowModelessWindow(IntPtr.Zero, window, true);")
+post_show_generation = text.index("if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))", show)
+loaded = text.index("if (!window.IsLoaded)", post_show_generation)
+exact_owner = text.index("if (!ReferenceEquals(_pending, owner))", loaded)
+clear_pending = text.index("_pending = null;", exact_owner)
+publish = text.index("_published = owner;", clear_pending)
+if not (show < post_show_generation < loaded < exact_owner < clear_pending < publish):
+    raise SystemExit("Wall Quantity must revalidate generation and exact pending owner before publication")
+
+pending_assign = text.index("_pending = owner;")
+if pending_assign > show:
+    raise SystemExit("Wall Quantity must root pending ownership before host publication")
+
+close_call = text.index("try { owner.Window.Close(); } catch { return false; }")
+close_check = text.index("if (owner.Window.IsLoaded) return false;", close_call)
+release_after_close = text.index("ReleaseOwnedWindow(owner);", close_check)
+if not (close_call < close_check < release_after_close):
+    raise SystemExit("Wall Quantity replacement must retain ownership until terminal close")
+
+for forbidden in [
+    "private static WallQuantityWindow? _window;",
+    "window.Closed += (_, __) => ReleaseOwnedWindow(owner);",
     "ShowModelessWindow(IntPtr.Zero, new WallQuantityWindow(document)",
-    "_window = null;\n            _document = null;\n            _nativeDatabaseIdentity = IntPtr.Zero;\n        }\n\n        [CommandMethod",
-]
-for token in forbidden:
-    if token in text:
-        raise SystemExit("Wall Quantity publication preflight failed; forbidden source shape: " + token)
+]:
+    if forbidden in text:
+        raise SystemExit("Wall Quantity publication preflight found superseded/unsafe topology: " + forbidden)
 
-show_pos = text.index("Application.ShowModelessWindow(IntPtr.Zero, window, true);")
-loaded_pos = text.index("if (!window.IsLoaded) return;", show_pos)
-publish_pos = text.index("_window = window;", loaded_pos)
-if not show_pos < loaded_pos < publish_pos:
-    raise SystemExit("Wall Quantity publication preflight failed; candidate must show, confirm Loaded, then publish")
-
-close_pos = text.index("published.Close();")
-post_close_loaded_pos = text.index("if (published.IsLoaded)", close_pos)
-release_pos = text.index("ReleasePublishedWindow(published);", post_close_loaded_pos)
-if not close_pos < post_close_loaded_pos < release_pos:
-    raise SystemExit("Wall Quantity publication preflight failed; replacement must terminal-close before release")
-
-print("PASS Wall Quantity single-instance document-safe publication lifecycle")
+print("PASS Wall Quantity generation-bound pending-first modeless publication lifecycle")
