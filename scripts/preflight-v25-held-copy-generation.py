@@ -53,10 +53,10 @@ def contract_errors(text: str | None) -> list[str]:
     destination_hash = text.find("$destinationDigest = Get-HeldStreamSha256 -Stream $output", flush)
     compare = text.find("[string]::Equals($sourceDigest, $destinationDigest, [StringComparison]::OrdinalIgnoreCase)", destination_hash)
     publish = text.find("Publish-CommercialZipDigest -CanonicalPath $held.CanonicalPath -Digest $sourceDigest", compare)
-    # Scope disposal ordering to the Copy critical section. The helper legitimately disposes
-    # partially-acquired handles in Open-HeldDestinationDirectoryChain's error path before the
-    # Copy operation appears in the file; that cleanup must not be mistaken for an early release.
-    dispose = text.find("$destinationHolds[$i].Dispose()", publish)
+    # Ignore legitimate partial-acquisition cleanup that occurs before the Copy block, but use
+    # the first disposal after Copy acquires its holds so an early release cannot hide behind a
+    # second, correctly-placed disposal later in the block.
+    dispose = text.find("$destinationHolds[$i].Dispose()", hold)
     if not (0 <= hold < source_hash < create < copy < flush < destination_hash < compare < publish < dispose):
         errors.append("destination ancestors must stay pinned from before CreateNew through exact destination-stream digest equality and ZIP-digest publication")
 
