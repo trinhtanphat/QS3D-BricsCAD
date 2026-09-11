@@ -11,6 +11,14 @@ def require(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
+def replace_after(text: str, marker: str, old: str, new: str, label: str) -> str:
+    marker_pos = text.find(marker)
+    require(marker_pos >= 0, f"{label} marker not found: {marker}")
+    old_pos = text.find(old, marker_pos)
+    require(old_pos >= 0, f"{label} token not found after marker: {old}")
+    return text[:old_pos] + new + text[old_pos + len(old):]
+
+
 def require_order(text: str, tokens: tuple[str, ...], label: str) -> None:
     cursor = -1
     for token in tokens:
@@ -122,8 +130,8 @@ def main() -> int:
     workflow_mutations = (
         (workflow.replace("-Operation Hash -Path $heldZip", "-Operation Hash -Path $zip", 1), "candidate split generation"),
         (workflow.replace("-Operation Hash -Path $heldRemoteZip", "-Operation Hash -Path $remoteZip", 1), "draft split generation"),
-        (workflow.replace("-ZipPath $heldZip", "-ZipPath $zip", 1), "candidate pathname extraction"),
-        (workflow.replace("-ZipPath $heldRemoteZip", "-ZipPath $remoteZip", 1), "draft pathname extraction"),
+        (replace_after(workflow, "- name: Verify candidate after job boundary", "-ZipPath $heldZip", "-ZipPath $zip", "candidate pathname extraction"), "candidate pathname extraction"),
+        (replace_after(workflow, "- name: Create draft, verify uploaded bytes, then publish", "-ZipPath $heldRemoteZip", "-ZipPath $remoteZip", "draft pathname extraction"), "draft pathname extraction"),
     )
     for mutated, label in workflow_mutations:
         require(mutated != workflow, "workflow mutation setup failed for " + label)
