@@ -77,8 +77,10 @@ prepare_tokens = (
     "git merge-base --is-ancestor $dispatch $TargetSha",
     "git diff --quiet --no-ext-diff $range -- @releaseRelevantPathspecs",
     "$diffExit = $LASTEXITCODE",
-    "function Assert-ReleaseBaseIsSafe",
-    "main moved after dispatch with release-relevant changes",
+    "if (Test-ReleaseRelevantDrift -TargetSha $releaseBase) {",
+    "$releaseBase = $dispatch",
+    "publish-stage stale-source no-op",
+    "if (Test-ReleaseRelevantDrift -TargetSha $latestMain) {",
     "$maxAttempts = 12",
     "git reset --hard",
     "git checkout --detach $releaseBase",
@@ -157,26 +159,28 @@ if workflow:
         errors.append("dispatcher must not classify release drift from line-oriented pathname output")
 
 if prepare:
-    checkout_index = prepare.find("git checkout --detach $releaseBase")
-    runtime_identity_index = prepare.find("preflight-runtime-product-version-identity.py")
-    sync_index = prepare.find("Set-WorkspaceProductVersion -ReleaseTagValue $tag")
-    post_sync_index = prepare.find("Runtime product-version identity preflight failed after workspace synchronization.")
-    expected_index = prepare.find("$expectedProductVersion = $tag.Substring(1)")
-    head_guard_index = prepare.find("Release workspace HEAD must remain the protected-main source commit")
-    bounded_status_index = prepare.find("$finalStatus = @(Get-ReleaseStatusEntries)")
-    refetch_index = prepare.find("$latestMain = Get-RemoteMain")
-    retry_index = prepare.find("main advanced through additional non-release paths while validating release source")
-    output_index = prepare.find("Write-Output $releaseBase")
+    initial_drift_index = prepare.find("if (Test-ReleaseRelevantDrift -TargetSha $releaseBase) {")
+    stale_base_index = prepare.find("$releaseBase = $dispatch", initial_drift_index)
+    checkout_index = prepare.find("git checkout --detach $releaseBase", stale_base_index)
+    runtime_identity_index = prepare.find("preflight-runtime-product-version-identity.py", checkout_index)
+    sync_index = prepare.find("Set-WorkspaceProductVersion -ReleaseTagValue $tag", runtime_identity_index)
+    post_sync_index = prepare.find("Runtime product-version identity preflight failed after workspace synchronization.", sync_index)
+    expected_index = prepare.find("$expectedProductVersion = $tag.Substring(1)", post_sync_index)
+    head_guard_index = prepare.find("Release workspace HEAD must remain the protected-main source commit", expected_index)
+    bounded_status_index = prepare.find("$finalStatus = @(Get-ReleaseStatusEntries)", head_guard_index)
+    refetch_index = prepare.find("$latestMain = Get-RemoteMain", bounded_status_index)
+    final_drift_index = prepare.find("if (Test-ReleaseRelevantDrift -TargetSha $latestMain) {", refetch_index)
+    stale_output_index = prepare.find("Write-Output $releaseBase", final_drift_index)
+    retry_index = prepare.find("main advanced through additional non-release paths while validating release source", stale_output_index)
+    output_index = prepare.find("Write-Output $releaseBase", retry_index)
     indexes = (
-        checkout_index, runtime_identity_index, sync_index, post_sync_index, expected_index,
-        head_guard_index, bounded_status_index, refetch_index, retry_index, output_index,
+        initial_drift_index, stale_base_index, checkout_index, runtime_identity_index,
+        sync_index, post_sync_index, expected_index, head_guard_index, bounded_status_index,
+        refetch_index, final_drift_index, stale_output_index, retry_index, output_index,
     )
-    if min(indexes) < 0 or not (
-        checkout_index < runtime_identity_index < sync_index < post_sync_index < expected_index
-        < head_guard_index < bounded_status_index < refetch_index < retry_index < output_index
-    ):
+    if min(indexes) < 0 or indexes != tuple(sorted(indexes)):
         errors.append(
-            "manual release preparation must select safe base, sync bounded tag identity, validate it, preserve HEAD, bound dirty paths, recheck drift, then output exact source SHA"
+            "manual release preparation must classify stale release-relevant main to the dispatched source, sync bounded tag identity, hand stale output to publish-stage no-op, retry non-release churn, then output exact normal source SHA"
         )
     if "Start a fresh release run instead of overwriting concurrent work." in prepare:
         errors.append("legacy unconditional main-drift failure must not remain in release preparation")

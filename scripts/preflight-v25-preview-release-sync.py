@@ -90,9 +90,12 @@ def main():
                 "Unexpected release-preparation workspace change",
                 "git diff --check",
                 "git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'",
-                "main moved after dispatch with release-relevant changes",
+                "if (Test-ReleaseRelevantDrift -TargetSha $releaseBase) {",
+                "$releaseBase = $dispatch",
+                "publish-stage stale-source no-op",
                 "Release workspace HEAD must remain the protected-main source commit",
                 "$latestMain = Get-RemoteMain",
+                "if (Test-ReleaseRelevantDrift -TargetSha $latestMain) {",
                 "main advanced through additional non-release paths while validating release source",
                 "No commit, push, branch-protection bypass, or protected-main mutation was performed by release preparation.",
                 "Write-Output $releaseBase",
@@ -116,22 +119,33 @@ def main():
             if contains_executable_line(prepare, forbidden):
                 raise ValueError(f"V25 release preparation must keep protected main read-only: {forbidden}")
 
+        initial_drift = prepare.find("if (Test-ReleaseRelevantDrift -TargetSha $releaseBase) {")
+        stale_base = prepare.find("$releaseBase = $dispatch", initial_drift)
+        final_drift = prepare.find("if (Test-ReleaseRelevantDrift -TargetSha $latestMain) {")
+        stale_output = prepare.find("Write-Output $releaseBase", final_drift)
+        retry = prepare.find("main advanced through additional non-release paths while validating release source", stale_output)
+        normal_output = prepare.find("Write-Output $releaseBase", retry)
         anchors = [
             prepare.find("$initialStatus = @(Get-ReleaseStatusEntries)"),
-            prepare.find("git checkout --detach $releaseBase"),
-            prepare.find("preflight-runtime-product-version-identity.py"),
-            prepare.find("Set-WorkspaceProductVersion -ReleaseTagValue $tag"),
-            prepare.find("Runtime product-version identity preflight failed after workspace synchronization."),
-            prepare.find("$expectedProductVersion = $tag.Substring(1)"),
-            prepare.find("git diff --check"),
-            prepare.find("Release workspace HEAD must remain the protected-main source commit"),
-            prepare.find("$finalStatus = @(Get-ReleaseStatusEntries)"),
-            prepare.find("$latestMain = Get-RemoteMain"),
-            prepare.find("Write-Output $releaseBase"),
+            initial_drift,
+            stale_base,
+            prepare.find("git checkout --detach $releaseBase", stale_base),
+            prepare.find("preflight-runtime-product-version-identity.py", stale_base),
+            prepare.find("Set-WorkspaceProductVersion -ReleaseTagValue $tag", stale_base),
+            prepare.find("Runtime product-version identity preflight failed after workspace synchronization.", stale_base),
+            prepare.find("$expectedProductVersion = $tag.Substring(1)", stale_base),
+            prepare.find("git diff --check", stale_base),
+            prepare.find("Release workspace HEAD must remain the protected-main source commit", stale_base),
+            prepare.find("$finalStatus = @(Get-ReleaseStatusEntries)", stale_base),
+            prepare.find("$latestMain = Get-RemoteMain", stale_base),
+            final_drift,
+            stale_output,
+            retry,
+            normal_output,
         ]
         if min(anchors) < 0 or anchors != sorted(anchors):
             raise ValueError(
-                "V25 release preparation must start clean, select protected main, synchronize bounded workspace identity, validate it, preserve HEAD, bound dirty paths, recheck main, then return source SHA"
+                "V25 release preparation must classify stale release-relevant main to the dispatched source, synchronize only the bounded workspace, hand stale output to publish-stage no-op, retry non-release churn, then return the normal source SHA"
             )
 
         require_tokens(
