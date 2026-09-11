@@ -27,4 +27,6 @@ The included `tests/fixtures/quantbim/minimal-qto.ifc` fixture covers one classi
 
 Existing `IIfcStandaloneSource` implementations remain binary/source compatible; this is an additional adapter. BricsCAD-specific assemblies remain optional and outside the parser boundary.
 
+The carrier has also been revalidated after protected `main` advanced through the Solibri QA executor, Live Workbook/API and Commercial QS modeless-affinity merges. Those sibling changes own disjoint paths; exact-head CI remains the merge authority for cross-cutting compatibility.
+
 This carrier deliberately does **not** claim full IFC implementation or full QuantBIM desktop parity. Remaining product work includes schema-complete unit resolution and entity coverage, geometry tessellation, renderer/navigation UI, persisted named selections/workbench state, Windows shell/file-open UX, installer/signing and packaging validation. Those should be separate ownership slices and should reuse `IfcStandaloneDocument` rather than bypassing it.
