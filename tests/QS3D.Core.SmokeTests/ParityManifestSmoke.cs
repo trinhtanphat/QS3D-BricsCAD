@@ -23,6 +23,7 @@ namespace QS3D.Core.SmokeTests
             ClosureRules();
             ParserRules();
             RepositoryManifestBlocksPrematureClosure();
+            P2ShellProjectEvidenceRules();
         }
 
         private static ParityFeatureRecord Record(string id, ParityEvidenceStage stage) =>
@@ -77,6 +78,23 @@ namespace QS3D.Core.SmokeTests
             });
             if (dashed.Records[0].DecisionReference != null || dashed.Records[0].DecisionReason != null)
                 throw new InvalidOperationException("TSV dash sentinel must normalize optional decision evidence to null.");
+        }
+        private static void P2ShellProjectEvidenceRules()
+        {
+            var path = Path.Combine("docs", "BLT3D-PARITY-MANIFEST.tsv");
+            var manifest = ParityManifestParser.Parse(File.ReadAllLines(path));
+            var ids = new[] {
+                "shell.start", "shell.workspace", "shell.ribbon", "project.setup",
+                "project.zone", "project.floor", "project.family"
+            };
+            foreach (var id in ids)
+            {
+                var record = manifest.GetRequired(new FeatureId(id));
+                Equal(id, record.WorkflowKey);
+                Equal(ParityEvidenceStage.CommandWired, record.EvidenceStage);
+            }
+            if (manifest.CatalogComplete)
+                throw new InvalidOperationException("P2 must not mark the parity catalog complete.");
         }
         private static void RepositoryManifestBlocksPrematureClosure()
         {
