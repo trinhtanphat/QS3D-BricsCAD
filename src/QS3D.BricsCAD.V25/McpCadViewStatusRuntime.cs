@@ -114,6 +114,7 @@ namespace QS3D.BricsCAD.V25
             using (document.LockDocument())
             {
                 RequireViewMutationIdle();
+                EnsureSameActiveDocument(document, "cad_view_zoom_extents");
                 var extents = RequireFiniteExtents(
                     new Extents3d(document.Database.Extmin, document.Database.Extmax),
                     "drawing extents");
@@ -128,10 +129,12 @@ namespace QS3D.BricsCAD.V25
             var document = RequireDocument();
             RequireViewMutationIdle();
             using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
             {
                 RequireViewMutationIdle();
-                var hasExtents = false;
+                EnsureSameActiveDocument(document, "cad_view_fit_entities");
+                using (var transaction = document.Database.TransactionManager.StartOpenCloseTransaction())
+                {
+                    var hasExtents = false;
                 var combined = new Extents3d();
                 var skippedHandles = new List<string>();
                 var fittedCount = 0;
@@ -160,8 +163,9 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException(
                         "No usable entity extents were supplied. Skipped live handles with unusable extents: "
                         + string.Join(",", skippedHandles) + ".");
-                var result = ApplyExtents(document, combined, padding, "entities", fittedCount);
-                return AppendFitWarnings(result, handles.Count, skippedHandles);
+                    var result = ApplyExtents(document, combined, padding, "entities", fittedCount);
+                    return AppendFitWarnings(result, handles.Count, skippedHandles);
+                }
             }
         }
 
@@ -210,19 +214,26 @@ namespace QS3D.BricsCAD.V25
 
             var document = RequireDocument();
             RequireViewMutationIdle();
+            string result;
             using (document.LockDocument())
-            using (var view = document.Editor.GetCurrentView())
             {
-                RequireCompatibleViewAspect(view, width, height);
+                RequireViewMutationIdle();
+                EnsureSameActiveDocument(document, "cad_view_set");
+                using (var view = document.Editor.GetCurrentView())
+                {
+                    RequireCompatibleViewAspect(view, width, height);
                 if (direction.HasValue) RequireCompatibleViewDirection(view, direction.Value);
                 view.CenterPoint = new Point2d(centerX, centerY);
                 view.Width = width;
                 view.Height = height;
                 if (hasTwist) view.ViewTwist = twist;
-                RequireViewMutationIdle();
-                document.Editor.SetCurrentView(view);
+                    RequireViewMutationIdle();
+                    EnsureSameActiveDocument(document, "cad_view_set_commit");
+                    document.Editor.SetCurrentView(view);
+                }
+                result = CurrentViewJson(document, "set");
             }
-            return CurrentViewJson(document, "set");
+            return result;
         }
 
         private static void RequireCompatibleViewAspect(ViewTableRecord currentView, double requestedWidth, double requestedHeight)
@@ -269,6 +280,7 @@ namespace QS3D.BricsCAD.V25
                 view.Width = PositiveViewSize(rawWidth * padding, "computed width");
                 view.Height = PositiveViewSize(rawHeight * padding, "computed height");
                 RequireViewMutationIdle();
+                EnsureSameActiveDocument(document, "cad_view_apply_commit");
                 document.Editor.SetCurrentView(view);
             }
             var result = CurrentViewJson(document, source);
@@ -529,6 +541,20 @@ namespace QS3D.BricsCAD.V25
             if (IsBricsCadWindowMinimized())
                 throw new InvalidOperationException(
                     "BricsCAD view update is blocked while the application window is minimized.");
+        }
+
+        private static void EnsureSameActiveDocument(Document document, string operation)
+        {
+            Document active;
+            try { active = Application.DocumentManager.MdiActiveDocument; }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    operation + ": could not confirm the active BricsCAD document; native operation/result was not continued.", ex);
+            }
+            if (document == null || active == null || !ReferenceEquals(active, document))
+                throw new InvalidOperationException(
+                    operation + ": active BricsCAD document changed; native operation/result was not continued.");
         }
 
         private static Document RequireDocument()
