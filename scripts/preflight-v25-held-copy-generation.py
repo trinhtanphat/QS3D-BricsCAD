@@ -53,7 +53,7 @@ def contract_errors(text: str | None) -> list[str]:
     destination_hash = text.find("$destinationDigest = Get-HeldStreamSha256 -Stream $output", flush)
     compare = text.find("[string]::Equals($sourceDigest, $destinationDigest, [StringComparison]::OrdinalIgnoreCase)", destination_hash)
     publish = text.find("Publish-CommercialZipDigest -CanonicalPath $held.CanonicalPath -Digest $sourceDigest", compare)
-    dispose = text.find("$destinationHolds[$i].Dispose()", publish)
+    dispose = text.find("$destinationHolds[$i].Dispose()")
     if not (0 <= hold < source_hash < create < copy < flush < destination_hash < compare < publish < dispose):
         errors.append("destination ancestors must stay pinned from before CreateNew through exact destination-stream digest equality and ZIP-digest publication")
 
