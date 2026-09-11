@@ -184,7 +184,7 @@ try {
             if (-not $isDirectory) {
                 $childPrefix = $normalizedRelative + '/'
                 foreach ($existing in $records) {
-                    if ([string]$existing.Relative -like "$childPrefix*") {
+                    if (([string]$existing.Relative).StartsWith($childPrefix, [StringComparison]::OrdinalIgnoreCase)) {
                         throw "Commercial candidate archive file conflicts with an already admitted child path: $name"
                     }
                 }
