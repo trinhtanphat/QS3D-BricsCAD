@@ -110,6 +110,21 @@ if WORKFLOW.count(held_publish_token) != 2:
     raise SystemExit("FAIL v26 candidate identity: signed and unsigned publication must both execute under held candidate generations")
 if WORKFLOW.count("-ExpectedPackageUri $expectedPackageUri") != 1 or WORKFLOW.count("-ExpectedSignerThumbprint $expectedSignerThumbprint") != 1:
     raise SystemExit("FAIL v26 candidate identity: manifest URI/signer admission arguments must be confined to the signed publication path")
+
+signed_branch = WORKFLOW.find("if ($env:V26_RELEASE_REQUEST_SIGN_PACKAGE -eq 'true') {")
+unsigned_branch = WORKFLOW.find("else {", signed_branch)
+if signed_branch < 0 or unsigned_branch < 0 or signed_branch >= unsigned_branch:
+    raise SystemExit("FAIL v26 candidate identity: unable to locate signed V26 publication branch")
+for token in (
+    "$expectedPackageUri = \"https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:RELEASE_TAG/QS3D-BricsCAD-V26.zip\"",
+    "$expectedSignerThumbprint = $env:QS3D_SIGNING_CERT_THUMBPRINT",
+    "-ExpectedPackageUri $expectedPackageUri",
+    "-ExpectedSignerThumbprint $expectedSignerThumbprint",
+    "-ExpectedManifestSchemaVersion 2",
+):
+    if WORKFLOW.find(token, signed_branch, unsigned_branch) < 0:
+        raise SystemExit(f"FAIL v26 candidate identity: signed publication branch is missing exact manifest admission token: {token}")
+
 if "- name: Publish V26 GitHub Release" in WORKFLOW:
     raise SystemExit("FAIL v26 candidate identity: publication must not be split into a later step after held-generation admission")
 
