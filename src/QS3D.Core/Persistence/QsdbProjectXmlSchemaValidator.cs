@@ -31,8 +31,8 @@ namespace QS3D.Core.Persistence
                 false,
                 false);
 
-            ValidateRequiredCanonicalAttribute(root, "projectId", "project id");
-            ValidateRequiredCanonicalAttribute(root, "name", "project name");
+            ValidateRequiredCanonicalIdentityAttribute(root, "projectId", "project id");
+            ValidateRequiredCanonicalIdentityAttribute(root, "name", "project name");
             ValidateOptionalCanonicalAttribute(root, "drawingFingerprint", "drawing fingerprint");
             ValidateOptionalCanonicalAttribute(root, "activeZoneId", "active zone id");
             ValidateOptionalCanonicalAttribute(root, "activeFloorId", "active floor id");
@@ -78,8 +78,8 @@ namespace QS3D.Core.Persistence
             foreach (var zone in zones.Elements("zone"))
             {
                 ValidateElement(zone, "zone", new[] { "id", "name" }, Array.Empty<string>());
-                ValidateRequiredCanonicalAttribute(zone, "id", "zone id");
-                ValidateRequiredCanonicalAttribute(zone, "name", "zone name");
+                ValidateRequiredCanonicalIdentityAttribute(zone, "id", "zone id");
+                ValidateRequiredCanonicalIdentityAttribute(zone, "name", "zone name");
             }
         }
 
@@ -89,8 +89,8 @@ namespace QS3D.Core.Persistence
             foreach (var floor in floors.Elements("floor"))
             {
                 ValidateElement(floor, "floor", new[] { "id", "name", "elevationM" }, Array.Empty<string>());
-                ValidateRequiredCanonicalAttribute(floor, "id", "floor id");
-                ValidateRequiredCanonicalAttribute(floor, "name", "floor name");
+                ValidateRequiredCanonicalIdentityAttribute(floor, "id", "floor id");
+                ValidateRequiredCanonicalIdentityAttribute(floor, "name", "floor name");
             }
         }
 
@@ -100,8 +100,8 @@ namespace QS3D.Core.Persistence
             foreach (var family in families.Elements("family"))
             {
                 ValidateElement(family, "family", new[] { "id", "name", "category" }, new[] { "properties" });
-                ValidateRequiredCanonicalAttribute(family, "id", "family id");
-                ValidateRequiredCanonicalAttribute(family, "name", "family name");
+                ValidateRequiredCanonicalIdentityAttribute(family, "id", "family id");
+                ValidateRequiredCanonicalIdentityAttribute(family, "name", "family name");
                 ValidateNamedCategoryAttribute(family, "family category");
                 RequireAtMostOne(family, "properties");
                 foreach (var properties in family.Elements("properties")) ValidateMap(properties, "family properties");
@@ -114,11 +114,11 @@ namespace QS3D.Core.Persistence
             foreach (var rule in rules.Elements("rule"))
             {
                 ValidateElement(rule, "rule", new[] { "id", "category", "output", "expression", "version" }, Array.Empty<string>());
-                ValidateRequiredCanonicalAttribute(rule, "id", "quantity rule id");
+                ValidateRequiredCanonicalIdentityAttribute(rule, "id", "quantity rule id");
                 ValidateNamedCategoryAttribute(rule, "quantity rule category");
-                ValidateRequiredCanonicalAttribute(rule, "output", "quantity rule output");
+                ValidateRequiredCanonicalIdentityAttribute(rule, "output", "quantity rule output");
                 ValidateRequiredCanonicalAttribute(rule, "expression", "quantity rule expression");
-                ValidateRequiredCanonicalAttribute(rule, "version", "quantity rule version");
+                ValidateRequiredCanonicalIdentityAttribute(rule, "version", "quantity rule version");
             }
         }
 
@@ -137,7 +137,7 @@ namespace QS3D.Core.Persistence
                     },
                     new[] { "handles", "dependencies", "properties", "quantities" });
 
-                ValidateRequiredCanonicalAttribute(element, "id", "element id");
+                ValidateRequiredCanonicalIdentityAttribute(element, "id", "element id");
                 ValidateNamedCategoryAttribute(element, "element category");
                 ValidateOptionalCanonicalAttribute(element, "familyId", "element family id");
                 ValidateOptionalCanonicalAttribute(element, "floorId", "element floor id");
@@ -183,7 +183,7 @@ namespace QS3D.Core.Persistence
                     foreach (var quantity in quantities.Elements("q"))
                     {
                         ValidateElement(quantity, "q", new[] { "name", "value" }, Array.Empty<string>());
-                        ValidateRequiredCanonicalAttribute(quantity, "name", "quantity name");
+                        ValidateRequiredCanonicalIdentityAttribute(quantity, "name", "quantity name");
                         ValidateNonNegativeQuantityValue(quantity, element.Attribute("id")?.Value ?? string.Empty);
                     }
                 }
@@ -294,6 +294,14 @@ namespace QS3D.Core.Persistence
                 throw new InvalidDataException("QSDB " + owner + " must use a named ElementCategory token.");
         }
 
+        private static void ValidateRequiredCanonicalIdentityAttribute(XElement element, string attributeName, string owner)
+        {
+            ValidateRequiredCanonicalAttribute(element, attributeName, owner);
+            var value = element.Attribute(attributeName)?.Value ?? string.Empty;
+            if (value.Any(char.IsControl))
+                throw new InvalidDataException("QSDB " + owner + " must not contain control characters.");
+        }
+
         private static void ValidateRequiredCanonicalAttribute(XElement element, string attributeName, string owner)
         {
             var value = element.Attribute(attributeName)?.Value;
@@ -301,8 +309,6 @@ namespace QS3D.Core.Persistence
                 throw new InvalidDataException("QSDB " + owner + " must not be empty.");
             if (!string.Equals(value, value.Trim(), StringComparison.Ordinal))
                 throw new InvalidDataException("QSDB " + owner + " must not contain leading/trailing whitespace.");
-            if (value.Any(char.IsControl))
-                throw new InvalidDataException("QSDB " + owner + " must not contain control characters.");
         }
 
         private static void ValidateOptionalCanonicalAttribute(XElement element, string attributeName, string owner)
