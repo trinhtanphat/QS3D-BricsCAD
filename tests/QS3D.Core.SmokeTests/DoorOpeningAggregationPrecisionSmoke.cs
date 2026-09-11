@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Reporting;
@@ -99,9 +100,24 @@ namespace QS3D.Core.SmokeTests
         {
             var element = new ProjectElement(id, ElementCategory.Door, "D1", "F1", "Z1");
             element.Properties["HostWallId"] = hostId;
-            element.Quantities["OpeningAreaM2"] = areaM2;
+            SetFixtureOpeningArea(element, areaM2);
             element.SourceHandles.Add(sourceHandle);
             project.Elements.Add(element);
+        }
+
+        private static void SetFixtureOpeningArea(ProjectElement element, double areaM2)
+        {
+            if (!double.IsNaN(areaM2) && !double.IsInfinity(areaM2))
+            {
+                element.Quantities["OpeningAreaM2"] = areaM2;
+                return;
+            }
+
+            var quantityField = typeof(ProjectElement).GetField("_quantityValues", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed persisted non-finite door-opening quantity state.");
+            var quantities = quantityField.GetValue(element) as Dictionary<string, double>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement quantity backing dictionary.");
+            quantities["OpeningAreaM2"] = areaM2;
         }
 
         private static T Capture<T>(Action action) where T : Exception

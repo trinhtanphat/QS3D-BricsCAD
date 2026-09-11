@@ -116,26 +116,27 @@ namespace QS3D.Core.SmokeTests
             Equal(1, single.PresentCount);
             if (!single.Value.HasValue) throw new Exception("Signed-zero quantity projection lost the selected value.");
             Equal(0L, BitConverter.DoubleToInt64Bits(single.Value.Value));
-            Equal(long.MinValue, BitConverter.DoubleToInt64Bits(negativeElement.Quantities["LengthM"]));
+            Equal(0L, BitConverter.DoubleToInt64Bits(negativeElement.Quantities["LengthM"]));
             Equal(version, project.ChangeVersion);
 
             positiveElement.Quantities["LengthM"] = 0d;
+            var combinedVersion = project.ChangeVersion;
             var combined = SemanticSelectionInspector.Inspect(project, new[] { "B-002", "B-001" })
                 .Quantities.Single(x => x.Name == "LengthM");
             Equal(false, combined.IsMixed);
             Equal(2, combined.PresentCount);
             if (!combined.Value.HasValue) throw new Exception("Equivalent signed zeros must retain a canonical shared quantity value.");
             Equal(0L, BitConverter.DoubleToInt64Bits(combined.Value.Value));
-            Equal(long.MinValue, BitConverter.DoubleToInt64Bits(negativeElement.Quantities["LengthM"]));
+            Equal(0L, BitConverter.DoubleToInt64Bits(negativeElement.Quantities["LengthM"]));
             Equal(0L, BitConverter.DoubleToInt64Bits(positiveElement.Quantities["LengthM"]));
-            Equal(version, project.ChangeVersion);
+            Equal(combinedVersion, project.ChangeVersion);
         }
 
         private static void NegativeInjectedQuantityFailsClosed()
         {
             var project = BuildProject();
             var element = project.FindElement("B-001")!;
-            element.Quantities["LengthM"] = -1d;
+            ProjectElementPersistenceFixture.SetQuantity(element, "LengthM", -1d);
             var version = project.ChangeVersion;
 
             MustFail(
@@ -150,22 +151,22 @@ namespace QS3D.Core.SmokeTests
         {
             var blankProject = BuildProject();
             var blankElement = blankProject.FindElement("B-001")!;
-            blankElement.Quantities["   "] = 1d;
+            ProjectElementPersistenceFixture.SetQuantity(blankElement, "   ", 1d);
             var blankVersion = blankProject.ChangeVersion;
             MustFail(
                 () => SemanticSelectionInspector.Inspect(blankProject, new[] { blankElement.Id }),
                 "Whitespace-only quantity names must fail closed at the semantic selection boundary.");
-            Equal(true, blankElement.Quantities.ContainsKey("   "));
+            Equal(true, ProjectElementPersistenceFixture.ContainsQuantityKey(blankElement, "   "));
             Equal(blankVersion, blankProject.ChangeVersion);
 
             var paddedProject = BuildProject();
             var paddedElement = paddedProject.FindElement("B-001")!;
-            paddedElement.Quantities[" LengthM "] = 9d;
+            ProjectElementPersistenceFixture.SetQuantity(paddedElement, " LengthM ", 9d);
             var paddedVersion = paddedProject.ChangeVersion;
             MustFail(
                 () => SemanticSelectionInspector.Inspect(paddedProject, new[] { paddedElement.Id }),
                 "Padded quantity names must fail closed at the semantic selection boundary.");
-            Equal(true, paddedElement.Quantities.ContainsKey(" LengthM "));
+            Equal(true, ProjectElementPersistenceFixture.ContainsQuantityKey(paddedElement, " LengthM "));
             Equal(paddedVersion, paddedProject.ChangeVersion);
 
             var canonical = SemanticSelectionInspector.Inspect(BuildProject(), new[] { "B-001" })

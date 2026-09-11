@@ -120,8 +120,13 @@ namespace QS3D.Core.SmokeTests
         private static void NonFiniteAndInvalidMagnitudeFailClosed()
         {
             var service = new QuantityReportRevisionService();
-            Throws<InvalidOperationException>(() => service.Capture(Project("not-finite", ("E1", double.NaN)), "R1"));
-            Throws<InvalidOperationException>(() => service.Capture(Project("negative", ("E1", -double.MaxValue)), "R2"));
+            var nonFinite = Project("not-finite", ("E1", 0d));
+            SetRawQuantity(nonFinite.Elements.Single(), "LengthM", double.NaN);
+            Throws<InvalidOperationException>(() => service.Capture(nonFinite, "R1"));
+
+            var negative = Project("negative", ("E1", 0d));
+            SetRawQuantity(negative.Elements.Single(), "LengthM", -double.MaxValue);
+            Throws<InvalidOperationException>(() => service.Capture(negative, "R2"));
         }
 
         private static ProjectState Project(string id, params (string Id, double LengthM)[] elements) =>
@@ -141,6 +146,15 @@ namespace QS3D.Core.SmokeTests
                 project.Elements.Add(element);
             }
             return project;
+        }
+
+        private static void SetRawQuantity(ProjectElement element, string key, double value)
+        {
+            var field = typeof(ProjectElement).GetField("_quantityValues", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("ProjectElement quantity backing dictionary was not found.");
+            var backing = field.GetValue(element) as Dictionary<string, double>
+                ?? throw new Exception("ProjectElement quantity backing dictionary had an unexpected type.");
+            backing[key] = value;
         }
 
         private static void ReplaceElementProperties(ProjectElement element, IDictionary<string, string> properties)

@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.Domain;
 using QS3D.Core.Reporting;
 
@@ -87,9 +89,9 @@ namespace QS3D.Core.SmokeTests
             project.Zones.Add(new ZoneDefinition("z", "Zone"));
             var wall = new ProjectElement("w-primary", ElementCategory.ArchitecturalWall, family.Id, "floor", "z");
             wall.Quantities["NetVolumeM3"] = 2.4d;
-            wall.Quantities["VolumeM3"] = -99d;
+            SetPersistedQuantityFixture(wall, "VolumeM3", -99d);
             wall.Quantities["NetWallAreaM2"] = 12d;
-            wall.Quantities["SideAreaM2"] = double.NaN;
+            SetPersistedQuantityFixture(wall, "SideAreaM2", double.NaN);
             project.Elements.Add(wall);
 
             var row = MaterialUsageScheduleBuilder.Build(project).Single();
@@ -106,7 +108,7 @@ namespace QS3D.Core.SmokeTests
             project.Floors.Add(new FloorDefinition("floor", "Floor", 0d));
             project.Zones.Add(new ZoneDefinition("z", "Zone"));
             var wall = new ProjectElement("w-fallback", ElementCategory.ArchitecturalWall, family.Id, "floor", "z");
-            wall.Quantities["SideAreaM2"] = -1d;
+            SetPersistedQuantityFixture(wall, "SideAreaM2", -1d);
             project.Elements.Add(wall);
             Throws<InvalidOperationException>(() => MaterialUsageScheduleBuilder.Build(project));
         }
@@ -147,9 +149,18 @@ namespace QS3D.Core.SmokeTests
             project.Floors.Add(new FloorDefinition("floor", "Floor", 0d));
             project.Zones.Add(new ZoneDefinition("z", "Zone"));
             var wall = new ProjectElement("w", ElementCategory.ArchitecturalWall, family.Id, "floor", "z");
-            wall.Quantities["NetWallAreaM2"] = -1d;
+            SetPersistedQuantityFixture(wall, "NetWallAreaM2", -1d);
             project.Elements.Add(wall);
             Throws<InvalidOperationException>(() => MaterialUsageScheduleBuilder.Build(project));
+        }
+
+        private static void SetPersistedQuantityFixture(ProjectElement element, string key, double value)
+        {
+            var quantityField = typeof(ProjectElement).GetField("_quantityValues", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed persisted material-usage quantity state.");
+            var quantities = quantityField.GetValue(element) as Dictionary<string, double>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement quantity backing dictionary.");
+            quantities[key] = value;
         }
 
         private static void Near(double expected, double actual, double tolerance = 1e-10d)
