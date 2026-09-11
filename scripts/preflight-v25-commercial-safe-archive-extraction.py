@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed unless V25 commercial release extraction is bounded and Windows-path safe."""
+"""Fail closed unless V25 commercial release extraction is bounded and Windows-path/TOCTOU safe."""
 
 from __future__ import annotations
 
@@ -47,11 +47,32 @@ def contract_errors(workflow: str, extractor: str | None) -> list[str]:
         ("[StringComparer]::OrdinalIgnoreCase", "case-alias rejection"),
         ("StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)", "destination containment"),
         ("[IO.FileMode]::CreateNew", "no-clobber extraction"),
-        ("[IO.FileAttributes]::ReparsePoint", "reparse-point rejection"),
+        ("FILE_FLAG_OPEN_REPARSE_POINT", "native no-follow directory open"),
+        ("FILE_FLAG_BACKUP_SEMANTICS", "native directory handle open"),
+        ("FILE_SHARE_READ", "directory hold that denies write/delete sharing"),
+        ("GetFileInformationByHandle", "handle-bound directory attributes"),
+        ("GetFinalPathNameByHandleW", "handle-bound final path"),
+        ("OpenDirectoryNoFollow", "reusable no-follow directory hold"),
+        ("$directoryHolds", "directory-generation hold registry"),
+        ("$holdOrder", "directory-generation hold lifetime"),
+        ("$parentHold = Open-HeldSafeDirectory", "destination-parent generation hold"),
+        ("$rootHold = Open-HeldSafeDirectory", "destination-root generation hold"),
+        ("Ensure-HeldSafeDirectory -Path $parent", "file-parent generation admission"),
+        ("$directoryHolds.ContainsKey($parent)", "file-parent hold assertion"),
+        ("$holdOrder[$i].Handle.Dispose()", "ordered hold disposal after extraction"),
     )
     for token, label in required:
         if token not in extractor:
             errors.append(f"missing {label}: {token}")
+
+    open_parent = extractor.find("$parentHold = Open-HeldSafeDirectory")
+    create_root = extractor.find("[IO.Directory]::CreateDirectory($destinationFull)")
+    open_root = extractor.find("$rootHold = Open-HeldSafeDirectory")
+    create_file = extractor.find("[IO.File]::Open([string]$record.Target, [IO.FileMode]::CreateNew")
+    parent_assert = extractor.find("$directoryHolds.ContainsKey($parent)")
+    dispose_hold = extractor.find("$holdOrder[$i].Handle.Dispose()")
+    if not (0 <= open_parent < create_root < open_root < parent_assert < create_file < dispose_hold):
+        errors.append("directory generations must be pinned before root/file creation and held through all writes")
 
     boundaries = (
         ("Verify finalized package after private-key cleanup", "post-key-cleanup", "$heldZip", "$verificationRoot"),
@@ -114,6 +135,17 @@ def runtime_errors(registry: str | None, runtime: str | None) -> list[str]:
 def self_test() -> list[str]:
     safe = f"""
 [IO.Compression.ZipArchive] $archive = $null
+const FILE_FLAG_OPEN_REPARSE_POINT
+const FILE_FLAG_BACKUP_SEMANTICS
+const FILE_SHARE_READ
+GetFileInformationByHandle
+GetFinalPathNameByHandleW
+OpenDirectoryNoFollow
+$directoryHolds = x
+$holdOrder = x
+$parentHold = Open-HeldSafeDirectory
+[IO.Directory]::CreateDirectory($destinationFull)
+$rootHold = Open-HeldSafeDirectory
 $zipStream = [IO.File]::Open($ZipPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
 if ($zipStream.Length -le 0 -or $zipStream.Length -gt $MaxPackageBytes) {{ throw 'compressed' }}
 if ($entryCount -gt $MaxEntries) {{ throw 'entries' }}
@@ -127,8 +159,10 @@ if ([IO.Path]::IsPathRooted($name) -or $name.IndexOf([char]0) -ge 0 -or $name.In
 if ($segment -eq '..' -or $segment.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0 -or $segment -match '^(?i:{DEVICE})(?:[.]|$)' -or $segment.EndsWith('.', [StringComparison]::Ordinal) -or $segment.EndsWith(' ', [StringComparison]::Ordinal)) {{ throw 'unsafe' }}
 $seenTargets = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 if (-not $target.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {{ throw 'escape' }}
-$out = [IO.File]::Open($target,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
-if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {{ throw 'reparse' }}
+Ensure-HeldSafeDirectory -Path $parent
+if (-not $directoryHolds.ContainsKey($parent)) {{ throw 'unheld' }}
+$out = [IO.File]::Open([string]$record.Target, [IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+$holdOrder[$i].Handle.Dispose()
 """
     calls = (
         ".\\scripts\\expand-v25-commercial-candidate.ps1 -ZipPath $heldZip -DestinationRoot $verificationRoot -MaxPackageBytes 268435456 -MaxExpandedBytes 536870912 -MaxEntries 4096",
@@ -160,6 +194,8 @@ $downloadedIdentity = x
         "device extension not bounded": (workflow, safe.replace("(?:[.]|$)", "$", 1)),
         "case-sensitive aliases": (workflow, safe.replace("[StringComparer]::OrdinalIgnoreCase", "[StringComparer]::Ordinal", 1)),
         "clobber output": (workflow, safe.replace("[IO.FileMode]::CreateNew", "[IO.FileMode]::Create", 1)),
+        "delete-sharing directory hold": (workflow, safe.replace("const FILE_SHARE_READ", "const FILE_SHARE_DELETE", 1)),
+        "missing parent hold assertion": (workflow, safe.replace("$directoryHolds.ContainsKey($parent)", "$true", 1)),
         "wrong downloaded ZIP": (workflow.replace("-ZipPath $heldRemoteZip", "-ZipPath $remoteZip", 1), safe),
     }
     for label, (wf, ex) in mutants.items():
