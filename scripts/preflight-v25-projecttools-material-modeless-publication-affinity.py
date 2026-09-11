@@ -57,6 +57,14 @@ require('Material Catalog', material_body.find('ExistingProjectMutationContext.T
         'project snapshot must be admitted before constructing the document-bound window')
 require('Material Catalog', 'IsActiveDocumentGeneration(document, nativeDatabaseIdentity)' in material_body,
         'project snapshot must be fenced by exact document generation through publication')
+require('Material Catalog', 'CloseCandidateAfterFailure(candidate, window);' in material_body,
+        'failure cleanup must use residue-aware candidate close instead of forgetting pending ownership before native close')
+require('Material Catalog', 'private static void CloseCandidateAfterFailure(PublishedManager? candidate, MaterialCatalogWindow? window)' in material,
+        'missing residue-aware failure cleanup helper')
+require('Material Catalog', 'if (!window.IsLoaded && candidate != null && ReferenceEquals(_pending, candidate)) _pending = null;' in material,
+        'failed/vetoed close must retain pending ownership while the candidate remains loaded')
+require('Material Catalog', 'if (candidate != null && ReferenceEquals(_pending, candidate))\n                    _pending = null;\n\n                if (window != null)' not in material_body,
+        'catch path must not clear pending ownership before attempting candidate close')
 
 if failures:
     for failure in failures:
