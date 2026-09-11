@@ -145,13 +145,13 @@ namespace QS3D.Core.Intelligence
 
         internal static string OptionalToken(string? value, string parameterName)
         {
-            if (string.IsNullOrEmpty(value)) return string.Empty;
+            if (value == null || value.Length == 0) return string.Empty;
             return RequireToken(value, parameterName);
         }
 
         internal static string OptionalText(string? value, string parameterName)
         {
-            if (string.IsNullOrEmpty(value)) return string.Empty;
+            if (value == null || value.Length == 0) return string.Empty;
             var canonical = value.Trim();
             if (!string.Equals(value, canonical, StringComparison.Ordinal))
                 throw new ArgumentException("Value must not contain surrounding whitespace.", parameterName);
