@@ -10,7 +10,7 @@ contracts = {
     "beam longitudinal": ("src/QS3D.BricsCAD.V25/Cad/BeamRebarSolidBuilder.cs", 'geometry.rebar.beam', "BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)"),
     "shape rebar": ("src/QS3D.BricsCAD.V25/Cad/ShapeRebarSolidBuilder.cs", 'geometry.rebar.shape', "BuildSelected(Document document, ProjectState project)"),
     "column ties": ("src/QS3D.BricsCAD.V25/Cad/ColumnTieSolidBuilder.cs", 'geometry.rebar.column.tie', "BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)"),
-    "beam stirrups": ("src/QS3D.BricsCAD.V25/Cad/BeamStirrupSolidBuilder.cs", 'geometry.rebar.beam.stirrup', "BuildSelected(Document document, ProjectState project)"),
+    "beam stirrups": ("src/QS3D.BricsCAD.V25/Cad/BeamStirrupSolidBuilder.cs", 'geometry.rebar.beam.stirrup', "BuildSelected(\n            Document document,\n            ProjectState project,\n            ObjectId[] selectedIds,\n            ISet<string> expectedTargetIds)"),
     "slab mesh": ("src/QS3D.BricsCAD.V25/Cad/SlabMeshSolidBuilder.cs", 'geometry.rebar.slab.mesh', "BuildSelected(Document document, ProjectState project)"),
     "structural-wall mesh": ("src/QS3D.BricsCAD.V25/Cad/StructuralWallMeshSolidBuilder.cs", 'geometry.rebar.wall.mesh', "BuildSelected(Document document, ProjectState project)"),
     "foundation mesh": ("src/QS3D.BricsCAD.V25/Cad/FoundationMeshSolidBuilder.cs", 'geometry.rebar.foundation.mesh', "BuildSelected(Document document, ProjectState project)"),
@@ -47,6 +47,19 @@ for label, (relative, event_name, build_signature) in contracts.items():
     if semantic_index >= 0 and commit_index >= 0 and semantic_index > commit_index:
         errors.append(f"{label}: semantic/audit publish moved after CAD commit")
 
+    if label == "beam stirrups":
+        for required in (
+            "if (selectedIds == null) throw new ArgumentNullException(nameof(selectedIds));",
+            "if (expectedTargetIds == null) throw new ArgumentNullException(nameof(expectedTargetIds));",
+            "expectedTargetIds.SetEquals(elements.Select(x => x.Id))",
+            "expectedTargetIds.SetEquals(postLockTargetIds)",
+        ):
+            if required not in build_body:
+                errors.append(f"{label}: admitted selection/target freshness contract missing: {required}")
+        for forbidden in ("document.Editor.SelectImplied()", "document.Editor.GetSelection()", "PromptStatus"):
+            if forbidden in build_body:
+                errors.append(f"{label}: builder must not reacquire selection after command admission: {forbidden}")
+
     next_helper = text.find("\n        private ", helper_start + 1)
     helper_body = text[helper_start: next_helper if next_helper >= 0 else len(text)]
     if "ProjectState project" not in helper_body:
@@ -71,4 +84,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: every generated rebar/mesh replacement family records its canonical audit event through the pre-CAD-commit semantic update path; Column Rebar, Beam Rebar and Column Tie consume admitted selection snapshots, with no duplicate Shape Rebar audit in the post-commit UI layer.")
+print("PASS: every generated rebar/mesh replacement family records its canonical audit event through the pre-CAD-commit semantic update path; Column Rebar, Beam Rebar, Column Tie and Beam Stirrup consume admitted selection snapshots, with Beam Stirrup revalidating the admitted semantic target generation before and after document lock and no duplicate Shape Rebar audit in the post-commit UI layer.")
