@@ -46,7 +46,8 @@ namespace QS3D.BricsCAD.V25
 
                 var window = new ScheduleHubWindow(document);
                 owner = new PublishedManager(window, document, nativeDatabaseIdentity);
-                window.Closed += (_, __) => ReleaseOwnedWindow(owner);
+                var releaseOwner = owner;
+                window.Closed += (_, __) => ReleaseOwnedWindow(releaseOwner);
 
                 // Own the candidate before any host call can pump messages. A failed
                 // close/show then leaves a durable reference for the next invocation.
