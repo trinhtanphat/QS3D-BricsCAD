@@ -25,6 +25,7 @@ namespace QS3D.Core.SmokeTests
 
             Throws<InvalidOperationException>(() => new ParityWorkflowRegistry(new[] { safe, safe }));
             P2ShellProjectBindings();
+            P3BimEditingModelingBindings();
         }
 
         private static void P2ShellProjectBindings()
@@ -51,6 +52,26 @@ namespace QS3D.Core.SmokeTests
                 ParityWorkflowSurface.Ui, mutationRequirements);
             AssertBinding(registry, "project.family", ParityWorkflowKind.SemanticMutation,
                 ParityWorkflowSurface.Ui, mutationRequirements);
+        }
+
+        private static void P3BimEditingModelingBindings()
+        {
+            var registry = ParityBimEditingModelingCatalog.CreateRegistry();
+            if (registry.Bindings.Count != 4)
+                throw new InvalidOperationException("P3 BIM/edit/modeling catalog must contain exactly four bindings.");
+
+            var mutation = ParityWorkflowRequirement.ActiveDocument |
+                ParityWorkflowRequirement.Project | ParityWorkflowRequirement.AtomicMutation |
+                ParityWorkflowRequirement.Audit;
+            AssertBinding(registry, "bim.authoring", ParityWorkflowKind.SemanticMutation,
+                ParityWorkflowSurface.Ui, mutation | ParityWorkflowRequirement.Zone |
+                ParityWorkflowRequirement.Floor | ParityWorkflowRequirement.Family);
+            AssertBinding(registry, "draw", ParityWorkflowKind.SemanticMutation,
+                ParityWorkflowSurface.Ui, mutation);
+            AssertBinding(registry, "tool.editing", ParityWorkflowKind.SemanticMutation,
+                ParityWorkflowSurface.Ui, mutation | ParityWorkflowRequirement.Selection);
+            AssertBinding(registry, "modeling", ParityWorkflowKind.SemanticMutation,
+                ParityWorkflowSurface.Ui, mutation | ParityWorkflowRequirement.Selection);
         }
 
         private static void AssertBinding(ParityWorkflowRegistry registry, string id,
