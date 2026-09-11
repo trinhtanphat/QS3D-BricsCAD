@@ -58,9 +58,12 @@ def main() -> int:
         "$finalStatus.Count -ne 0 -and $finalStatus.Count -ne $workspaceVersionPaths.Count",
         "Workspace version synchronization must either be a no-op or produce exactly three bounded project modifications.",
         "Workspace ProductVersion is already synchronized", "if ($finalStatus.Count -eq $workspaceVersionPaths.Count)",
-        "Unexpected release-preparation workspace change", "$releaseRelevantPathspecs = @(",
-        "external/QS3D-Platform", "git diff --quiet --no-ext-diff $range -- @releaseRelevantPathspecs",
-        "Release workspace HEAD must remain the protected-main source commit",
+        "Unexpected release-preparation workspace change",
+        "function Assert-ReleaseSourceReachable", "git merge-base --is-ancestor $dispatch $TargetSha",
+        "$releaseBase = $dispatch", "$admissionMain = Get-RemoteMain",
+        "Assert-ReleaseSourceReachable -TargetSha $admissionMain",
+        "Release workspace HEAD must remain the admitted source commit",
+        "$latestMain = Get-RemoteMain", "Assert-ReleaseSourceReachable -TargetSha $latestMain",
         "No commit, push, branch-protection bypass, or protected-main mutation was performed by release preparation.",
         "Write-Output $releaseBase",
     ), "release preparation", failures)
@@ -123,7 +126,7 @@ def main() -> int:
 
     print("PASS: V25 preview release and pre-merge compile contracts are protected-main safe.")
     print(" - manual preview identity may already be synchronized or is derived only in the bounded V25/V26/Core workspace; protected main is never mutated")
-    print(" - source HEAD/provenance remains an exact protected-main commit and release drift uses Git pathspec semantics")
+    print(" - release provenance remains pinned to the exact admitted SOURCE_SHA while protected-main ancestry is revalidated")
     print(" - canonical core check compiles V25 through held reference generations whose fresh publication uses an explicitly armed cancelable disposition until same-handle verification commits it")
     return 0
 
