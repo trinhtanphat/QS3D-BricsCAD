@@ -16,10 +16,10 @@ required = [
     "nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
     "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;",
     "var pending = _pending;",
-    "if (pending != null && !TryCloseOwner(pending)) return;",
+    "if (pending != null && !TryCloseOwner(pending))",
     "var published = _published;",
     "published.Window.IsLoaded && published.Matches(document, nativeDatabaseIdentity)",
-    "if (!TryCloseOwner(published)) return;",
+    "if (!TryCloseOwner(published))",
     "var releaseOwner = owner;",
     "window.Closed += (_, __) => ReleaseOwnedWindow(releaseOwner);",
     "_pending = owner;",
@@ -28,7 +28,8 @@ required = [
     "if (!ReferenceEquals(_pending, owner))",
     "_pending = null;",
     "_published = owner;",
-    "try { owner.Window.Close(); } catch { return false; }",
+    "try { owner.Window.Close(); }",
+    "catch { return false; }",
     "if (owner.Window.IsLoaded) return false;",
     "ReleaseOwnedWindow(owner);",
     "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)",
@@ -37,6 +38,20 @@ required = [
 for needle in required:
     if needle not in text:
         errors.append("missing contract: " + needle)
+
+# The close-failure paths intentionally use blocks so they can emit generation-bound
+# diagnostics before returning. Validate the semantic branch and terminal return
+# rather than coupling the guard to one-line formatting.
+def require_returning_branch(condition: str, label: str) -> None:
+    start = text.find(condition)
+    if start < 0:
+        return
+    end = text.find("}", start)
+    if end < 0 or "return;" not in text[start:end + 1]:
+        errors.append(f"{label} must fail closed with return")
+
+require_returning_branch("if (pending != null && !TryCloseOwner(pending))", "pending close failure")
+require_returning_branch("if (!TryCloseOwner(published))", "published close failure")
 
 show = text.find("Application.ShowModelessWindow(IntPtr.Zero, window, true);")
 publish = text.find("_published = owner;", show)
