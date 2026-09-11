@@ -12,12 +12,14 @@ namespace QS3D.Core.Export
     public static class RebarCsvExporter
     {
         private const int MaxRowCount = 10000;
+        private const long MaxCsvBytes = 16L * 1024L * 1024L;
         private static readonly UTF8Encoding StrictUtf8WithBom = CreateStrictUtf8WithBom();
 
         public static void Export(string path, IEnumerable<RebarScheduleRow> rows)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Path is required.", nameof(path));
-            var content = ToCsv(rows);
+            var snapshots = SnapshotRows(rows);
+            ValidateCsvByteCount(snapshots);
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
@@ -27,7 +29,7 @@ namespace QS3D.Core.Export
                 using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 using (var writer = new StreamWriter(stream, StrictUtf8WithBom))
                 {
-                    writer.Write(content);
+                    WriteCsv(writer, snapshots);
                     writer.Flush();
                     stream.Flush(true);
                 }
@@ -40,6 +42,16 @@ namespace QS3D.Core.Export
         }
 
         public static string ToCsv(IEnumerable<RebarScheduleRow> rows)
+        {
+            var snapshots = SnapshotRows(rows);
+            ValidateCsvByteCount(snapshots);
+            var sb = new StringBuilder();
+            using (var writer = new StringWriter(sb, CultureInfo.InvariantCulture))
+                WriteCsv(writer, snapshots);
+            return sb.ToString();
+        }
+
+        private static List<RebarScheduleRow> SnapshotRows(IEnumerable<RebarScheduleRow> rows)
         {
             if (rows == null) throw new ArgumentNullException(nameof(rows));
             var admittedCount = ReadKnownCount(rows);
@@ -82,31 +94,97 @@ namespace QS3D.Core.Export
                 throw new InvalidOperationException("BBS CSV row Count did not match the admitted Count during serialization.");
             for (var index = 0; index < snapshots.Count; index++)
                 EnsureRowStable(sourceRows[index], snapshots[index], index);
+            return snapshots;
+        }
 
-            var sb = new StringBuilder();
-            sb.Append("ElementId,BarMark,ShapeCode,Notation,DiameterMm,Quantity,CuttingLengthM,TotalLengthM,UnitWeightKgM,NetWeightKg,WastePercent,TotalWeightKg,FabricationStatus,FabricationStandardCode,FabricationDetailingRevision").Append("\r\n");
+        private static void ValidateCsvByteCount(IReadOnlyList<RebarScheduleRow> snapshots)
+        {
+            long byteCount = StrictUtf8WithBom.GetPreamble().Length;
+            AddCsvBytes(ref byteCount, "ElementId,BarMark,ShapeCode,Notation,DiameterMm,Quantity,CuttingLengthM,TotalLengthM,UnitWeightKgM,NetWeightKg,WastePercent,TotalWeightKg,FabricationStatus,FabricationStandardCode,FabricationDetailingRevision\r\n");
             foreach (var row in snapshots)
             {
-                sb.Append(QIdentity(row.ElementId, "element id")).Append(',')
-                    .Append(Q(row.BarMark)).Append(',')
-                    .Append(Q(row.ShapeCode)).Append(',')
-                    .Append(Q(row.Notation)).Append(',')
-                    .Append(F(row.DiameterMm)).Append(',')
-                    .Append(row.Quantity.ToString(CultureInfo.InvariantCulture)).Append(',')
-                    .Append(F(row.CuttingLengthM)).Append(',')
-                    .Append(F(row.TotalLengthM)).Append(',')
-                    .Append(F(row.UnitWeightKgM)).Append(',')
-                    .Append(F(row.NetWeightKg)).Append(',')
-                    .Append(F(row.WastePercent)).Append(',')
-                    .Append(F(row.TotalWeightKg)).Append(',')
-                    .Append(Q(row.FabricationStatus)).Append(',')
-                    .Append(Q(row.FabricationStandardCode)).Append(',')
-                    .Append(Q(row.FabricationDetailingRevision)).Append("\r\n");
+                AddIdentityCsvFieldBytes(ref byteCount, row.ElementId, "element id"); AddCsvBytes(ref byteCount, ",");
+                AddEscapedCsvFieldBytes(ref byteCount, row.BarMark); AddCsvBytes(ref byteCount, ",");
+                AddEscapedCsvFieldBytes(ref byteCount, row.ShapeCode); AddCsvBytes(ref byteCount, ",");
+                AddEscapedCsvFieldBytes(ref byteCount, row.Notation); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.DiameterMm)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, row.Quantity.ToString(CultureInfo.InvariantCulture)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.CuttingLengthM)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.TotalLengthM)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.UnitWeightKgM)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.NetWeightKg)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.WastePercent)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.TotalWeightKg)); AddCsvBytes(ref byteCount, ",");
+                AddEscapedCsvFieldBytes(ref byteCount, row.FabricationStatus); AddCsvBytes(ref byteCount, ",");
+                AddEscapedCsvFieldBytes(ref byteCount, row.FabricationStandardCode); AddCsvBytes(ref byteCount, ",");
+                AddEscapedCsvFieldBytes(ref byteCount, row.FabricationDetailingRevision); AddCsvBytes(ref byteCount, "\r\n");
             }
+        }
 
-            var content = sb.ToString();
-            StrictUtf8WithBom.GetByteCount(content);
-            return content;
+        private static void AddCsvBytes(ref long byteCount, string value)
+        {
+            AddCsvByteCount(ref byteCount, StrictUtf8WithBom.GetByteCount(value));
+        }
+
+        private static void AddIdentityCsvFieldBytes(ref long byteCount, string value, string label)
+        {
+            var safe = RequireCanonicalIdentity(value, label);
+            var probe = safe.TrimStart();
+            if (probe.Length > 0 && IsFormulaPrefix(probe[0]))
+                throw new InvalidDataException("BBS CSV " + label + " cannot begin with a spreadsheet formula prefix because semantic identity must be preserved exactly.");
+            AddQuotedCsvBytes(ref byteCount, safe, false);
+        }
+
+        private static void AddEscapedCsvFieldBytes(ref long byteCount, string value)
+        {
+            var safe = value ?? string.Empty;
+            var probe = safe.TrimStart();
+            AddQuotedCsvBytes(ref byteCount, safe, probe.Length > 0 && IsFormulaPrefix(probe[0]));
+        }
+
+        private static void AddQuotedCsvBytes(ref long byteCount, string value, bool formulaEscape)
+        {
+            long extraBytes = 2L + StrictUtf8WithBom.GetByteCount(value) + (formulaEscape ? 1L : 0L);
+            foreach (var ch in value)
+            {
+                if (ch == '"') extraBytes = checked(extraBytes + 1L);
+            }
+            AddCsvByteCount(ref byteCount, extraBytes);
+        }
+
+        private static bool IsFormulaPrefix(char value)
+        {
+            return value == '=' || value == '+' || value == '-' || value == '@';
+        }
+
+        private static void AddCsvByteCount(ref long byteCount, long amount)
+        {
+            byteCount = checked(byteCount + amount);
+            if (byteCount > MaxCsvBytes)
+                throw new InvalidDataException("CSV output exceeds the bounded UTF-8 size contract of " + MaxCsvBytes.ToString(CultureInfo.InvariantCulture) + " bytes.");
+        }
+
+        private static void WriteCsv(TextWriter writer, IReadOnlyList<RebarScheduleRow> snapshots)
+        {
+            writer.Write("ElementId,BarMark,ShapeCode,Notation,DiameterMm,Quantity,CuttingLengthM,TotalLengthM,UnitWeightKgM,NetWeightKg,WastePercent,TotalWeightKg,FabricationStatus,FabricationStandardCode,FabricationDetailingRevision\r\n");
+            foreach (var row in snapshots)
+            {
+                writer.Write(QIdentity(row.ElementId, "element id")); writer.Write(',');
+                writer.Write(Q(row.BarMark)); writer.Write(',');
+                writer.Write(Q(row.ShapeCode)); writer.Write(',');
+                writer.Write(Q(row.Notation)); writer.Write(',');
+                writer.Write(F(row.DiameterMm)); writer.Write(',');
+                writer.Write(row.Quantity.ToString(CultureInfo.InvariantCulture)); writer.Write(',');
+                writer.Write(F(row.CuttingLengthM)); writer.Write(',');
+                writer.Write(F(row.TotalLengthM)); writer.Write(',');
+                writer.Write(F(row.UnitWeightKgM)); writer.Write(',');
+                writer.Write(F(row.NetWeightKg)); writer.Write(',');
+                writer.Write(F(row.WastePercent)); writer.Write(',');
+                writer.Write(F(row.TotalWeightKg)); writer.Write(',');
+                writer.Write(Q(row.FabricationStatus)); writer.Write(',');
+                writer.Write(Q(row.FabricationStandardCode)); writer.Write(',');
+                writer.Write(Q(row.FabricationDetailingRevision)); writer.Write("\r\n");
+            }
         }
 
         private static RebarScheduleRow SnapshotRow(RebarScheduleRow source)

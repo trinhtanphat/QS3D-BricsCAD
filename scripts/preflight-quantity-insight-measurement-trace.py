@@ -107,10 +107,15 @@ def main():
     xlsx = require(XLSX, [
         '"Operands"',
         'ValidateText(row.Operands, index, "Operands")',
-        "AppendTextCell(builder, CellReference(17, rowNumber), row.Operands)",
     ], "quantity evidence XLSX")
     if isinstance(xlsx, int):
         return xlsx
+    operand_cell_writers = [
+        "AppendTextCell(builder, CellReference(17, rowNumber), row.Operands)",
+        "WriteTextCell(writer, CellReference(17, rowNumber), row.Operands)",
+    ]
+    if not any(token in xlsx for token in operand_cell_writers):
+        return fail("quantity evidence XLSX must preserve Operands in worksheet column 18")
 
     smoke = require(SMOKE, [
         "MeasurementLength = 1.50d",

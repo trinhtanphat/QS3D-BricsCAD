@@ -19,7 +19,7 @@ namespace QS3D.Core.SmokeTests
             RejectsPaddedLiveHandleIdentities();
 
             var project = NewProject();
-            project.Elements.Add(null!);
+            CorruptProjectStateSeed.AddNullElement(project);
 
             var opening = new ProjectElement("opening-1", ElementCategory.WallOpening, string.Empty, "floor-0", "zone-1");
             opening.SourceHandles.Add("AB12");

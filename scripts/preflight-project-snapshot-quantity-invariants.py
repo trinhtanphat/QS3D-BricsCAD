@@ -59,16 +59,26 @@ required_smoke = (
     'ExpectRejectedQuantity("negative", "AreaM2", -1d);',
     'ExpectRejectedQuantity("NaN", "AreaM2", double.NaN);',
     'ExpectRejectedQuantity("malformed UTF-16 name", "Area\\uD800M2", 1d);',
-    'element.Quantities["AreaM2"] = BitConverter.Int64BitsToDouble',
+    "SeedPersistedQuantity(element, name, value);",
+    'SeedPersistedQuantity(element, " AreaM2 ", 2d);',
+    'SeedPersistedQuantity(element, "AreaM2", BitConverter.Int64BitsToDouble',
+    "PersistedQuantities(element)",
     'detachedElement.Quantities.ContainsKey("AreaM2")',
     "BitConverter.DoubleToInt64Bits(copied) == 0L",
-    "Rejected snapshot quantity validation mutated the source quantity dictionary.",
+    "Rejected snapshot quantity validation mutated the source persisted quantity dictionary.",
     "Rejected snapshot quantity validation changed project ChangeVersion.",
 )
 missing = [token for token in required_smoke if token not in smoke]
 if missing:
     raise SystemExit("Project snapshot quantity regression coverage missing: " + repr(missing))
+for forbidden in (
+    "element.Quantities[name] = value;",
+    'element.Quantities[" AreaM2 "] = 2d;',
+    'element.Quantities["AreaM2"] = BitConverter.Int64BitsToDouble',
+):
+    if forbidden in smoke:
+        raise SystemExit("Project snapshot persisted-corruption fixture regressed to semantic quantity admission: " + forbidden)
 if "DetachedCopyCanonicalizesQuantityNameAndNegativeZero" in smoke:
     raise SystemExit("Legacy padded-key canonicalization smoke returned; padded mutable quantity identity must fail closed.")
 
-print("PASS project snapshot quantity fail-closed canonicality, rollback, and negative-zero guard")
+print("PASS project snapshot quantity fail-closed canonicality, rollback, persisted-corrupt fixture boundary, and negative-zero guard")

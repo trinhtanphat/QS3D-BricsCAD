@@ -191,6 +191,7 @@ namespace QS3D.Core.SmokeTests
             DependencyGraphDirectDependentsSmoke.Run();
             DependencyGraphKnownCountContractSmoke.Run();
             ProjectStateLookupSmoke.Run();
+            ProjectStateElementStructuralRevisionSmoke.Run();
             ProjectCatalogPersistenceFreshnessSmoke.Run();
             ProjectStateSnapshotActiveContextIntegritySmoke.Run();
             ProjectStateSnapshotElementIdentitySmoke.Run();
@@ -244,6 +245,8 @@ namespace QS3D.Core.SmokeTests
             ClashDetectionResultBoundSmoke.Run();
             CoordinationSpatialIdentitySmoke.Run();
             FeatureInteractionContractsSmoke.Run();
+            ParityManifestSmoke.Run();
+            ParityWorkflowRegistrySmoke.Run();
             WorkspaceFeatureSessionSmoke.Run();
             WorkspaceSchemaFormsSmoke.Run();
             CubicostParitySmoke.Run();

@@ -58,7 +58,7 @@ namespace QS3D.Core.SmokeTests
             var wall = CreateWall("WALL-1");
             wall.SetQuantity("NetWallAreaM2", 321d);
             project.Elements.Add(wall);
-            project.Elements.Add(null!);
+            CorruptProjectStateSeed.AddNullElement(project);
 
             Throws<InvalidOperationException>(() => new WallRegenerator().Regenerate(project, wall));
 
@@ -74,7 +74,7 @@ namespace QS3D.Core.SmokeTests
                 var wall = CreateWall("WALL-1");
                 wall.SetQuantity("NetWallAreaM2", 777d);
                 var opening = CreateOpening("OPENING-1", "WALL-1");
-                opening.Quantities["OpeningAreaM2"] = corrupt;
+                ProjectElementPersistenceFixture.SetQuantity(opening, "OpeningAreaM2", corrupt);
                 opening.MarkClean(ElementDirtyFlags.All);
                 project.Elements.Add(wall);
                 project.Elements.Add(opening);
@@ -95,7 +95,7 @@ namespace QS3D.Core.SmokeTests
                 var wall = CreateStructuralWall("SWALL-1");
                 wall.SetQuantity("NetWallAreaM2", 555d);
                 var opening = CreateOpening("OPENING-1", "SWALL-1");
-                opening.Quantities["OpeningAreaM2"] = corrupt;
+                ProjectElementPersistenceFixture.SetQuantity(opening, "OpeningAreaM2", corrupt);
                 opening.MarkClean(ElementDirtyFlags.All);
                 project.Elements.Add(wall);
                 project.Elements.Add(opening);
@@ -113,7 +113,7 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("wall-host-dirty-cache", "Dirty opening cache recompute");
             var wall = CreateWall("WALL-1");
             var opening = CreateOpening("OPENING-1", "WALL-1");
-            opening.Quantities["OpeningAreaM2"] = double.NaN;
+            ProjectElementPersistenceFixture.SetQuantity(opening, "OpeningAreaM2", double.NaN);
             project.Elements.Add(wall);
             project.Elements.Add(opening);
 

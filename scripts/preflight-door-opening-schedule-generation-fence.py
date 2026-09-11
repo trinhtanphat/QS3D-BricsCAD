@@ -45,7 +45,7 @@ for token in [
 for token in [
     "[ModuleInitializer]",
     "StableGenerationRemainsAccepted",
-    "DirectElementReplacementIsRejectedWithoutProjectVersionHelp",
+    "DirectElementReplacementAdvancesProjectVersionAndIsRejected",
     "InPlaceOpeningQuantityMutationIsRejected",
     "InPlaceDoorPropertyMutationIsRejected",
     "InPlaceFloorNameMutationIsRejected",

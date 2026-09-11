@@ -20,6 +20,11 @@ namespace QS3D.Core.Export
     {
         private const int MaxDataRows = 1048575;
         private const int MaxCellTextCharacters = 32767;
+        private const long MaxWorksheetEntryBytes = 32L * 1024L * 1024L;
+        private const long MaxTotalUncompressedBytes = 64L * 1024L * 1024L;
+        private const long MaxArchiveBytes = 64L * 1024L * 1024L;
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
+        private static readonly DateTimeOffset FixedZipTimestamp = new DateTimeOffset(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
         private static readonly string[] Headers =
         {
@@ -162,31 +167,32 @@ namespace QS3D.Core.Export
         {
             WritePackage(path, rows, AtomicFileCommit.ReplaceWithoutBackup);
         }
-
         private static void WritePackage(
             string path,
             IReadOnlyList<QuantityEvidenceExportRecord> rows,
             Action<string, string> commit)
         {
             if (commit == null) throw new ArgumentNullException(nameof(commit));
-
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
-
             var temporaryPath = AtomicFileCommit.CreateTempPath(fullPath);
             try
             {
+                long totalUncompressedBytes = 0L;
                 using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
-                using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: false))
+                using (var boundedArchive = new BoundedArchiveWriteStream(stream, MaxArchiveBytes))
+                using (var archive = new ZipArchive(boundedArchive, ZipArchiveMode.Create, true, Encoding.UTF8))
                 {
-                    WriteEntry(archive, "[Content_Types].xml", ContentTypesXml());
-                    WriteEntry(archive, "_rels/.rels", RootRelationshipsXml());
-                    WriteEntry(archive, "xl/workbook.xml", WorkbookXml());
-                    WriteEntry(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml());
-                    WriteEntry(archive, "xl/worksheets/sheet1.xml", WorksheetXml(rows));
+                    WriteEntry(archive, "[Content_Types].xml", ContentTypesXml(), ref totalUncompressedBytes);
+                    WriteEntry(archive, "_rels/.rels", RootRelationshipsXml(), ref totalUncompressedBytes);
+                    WriteEntry(archive, "xl/workbook.xml", WorkbookXml(), ref totalUncompressedBytes);
+                    WriteEntry(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml(), ref totalUncompressedBytes);
+                    WriteWorksheet(archive, "xl/worksheets/sheet1.xml", rows, ref totalUncompressedBytes);
                 }
-
+                var archiveLength = new FileInfo(temporaryPath).Length;
+                if (archiveLength <= 0L || archiveLength > MaxArchiveBytes)
+                    throw new InvalidDataException("Quantity evidence XLSX archive exceeds the bounded output contract.");
                 commit(temporaryPath, fullPath);
             }
             finally
@@ -194,16 +200,46 @@ namespace QS3D.Core.Export
                 AtomicFileCommit.TryDelete(temporaryPath);
             }
         }
-
-        private static void WriteEntry(ZipArchive archive, string name, string content)
+        private static void WriteEntry(
+            ZipArchive archive,
+            string name,
+            string content,
+            ref long totalUncompressedBytes)
+        {
+            var bytes = StrictUtf8.GetBytes(content);
+            ReserveUncompressed(bytes.LongLength, ref totalUncompressedBytes, name);
+            var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
+            entry.LastWriteTime = FixedZipTimestamp;
+            using (var target = entry.Open())
+                target.Write(bytes, 0, bytes.Length);
+        }
+        private static void WriteWorksheet(
+            ZipArchive archive,
+            string name,
+            IReadOnlyList<QuantityEvidenceExportRecord> rows,
+            ref long totalUncompressedBytes)
         {
             var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
-            entry.LastWriteTime = new DateTimeOffset(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
-            using (var stream = entry.Open())
-            using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
-                writer.Write(content);
+            entry.LastWriteTime = FixedZipTimestamp;
+            long worksheetBytes;
+            using (var target = entry.Open())
+            using (var boundedEntry = new BoundedEntryWriteStream(target, MaxWorksheetEntryBytes))
+            {
+                using (var writer = new StreamWriter(boundedEntry, StrictUtf8, 4096, true))
+                    WriteWorksheetXml(writer, rows);
+                worksheetBytes = boundedEntry.BytesWritten;
+            }
+            ReserveUncompressed(worksheetBytes, ref totalUncompressedBytes, name);
         }
-
+        private static void ReserveUncompressed(long entryBytes, ref long totalUncompressedBytes, string name)
+        {
+            if (entryBytes < 0L || entryBytes > MaxWorksheetEntryBytes)
+                throw new InvalidDataException("Quantity evidence XLSX worksheet exceeds the bounded entry contract: " + name + ".");
+            var projectedTotal = checked(totalUncompressedBytes + entryBytes);
+            if (projectedTotal > MaxTotalUncompressedBytes)
+                throw new InvalidDataException("Quantity evidence XLSX package exceeds the bounded uncompressed output contract.");
+            totalUncompressedBytes = projectedTotal;
+        }
         private static string ContentTypesXml()
         {
             return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
@@ -239,58 +275,62 @@ namespace QS3D.Core.Export
                    "</Relationships>";
         }
 
-        private static string WorksheetXml(IReadOnlyList<QuantityEvidenceExportRecord> rows)
+        private static void WriteWorksheetXml(TextWriter writer, IReadOnlyList<QuantityEvidenceExportRecord> rows)
         {
-            var builder = new StringBuilder(4096 + rows.Count * 1024);
-            builder.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
-            builder.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>");
-            builder.Append("<row r=\"1\">");
+            writer.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+            writer.Write("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>");
+            writer.Write("<row r=\"1\">");
             for (var column = 0; column < Headers.Length; column++)
-                AppendTextCell(builder, CellReference(column, 1), Headers[column]);
-            builder.Append("</row>");
+                WriteTextCell(writer, CellReference(column, 1), Headers[column]);
+            writer.Write("</row>");
 
             for (var index = 0; index < rows.Count; index++)
             {
                 var rowNumber = index + 2;
                 var row = rows[index];
-                builder.Append("<row r=\"").Append(rowNumber.ToString(CultureInfo.InvariantCulture)).Append("\">");
-                AppendTextCell(builder, CellReference(0, rowNumber), row.EvidenceId);
-                AppendTextCell(builder, CellReference(1, rowNumber), row.ParentEvidenceId);
-                AppendTextCell(builder, CellReference(2, rowNumber), row.RecordKind);
-                AppendTextCell(builder, CellReference(3, rowNumber), row.SubjectKey);
-                AppendTextCell(builder, CellReference(4, rowNumber), row.Category);
-                AppendTextCell(builder, CellReference(5, rowNumber), row.Metric);
-                AppendTextCell(builder, CellReference(6, rowNumber), row.Unit);
-                AppendNumberCell(builder, CellReference(7, rowNumber), row.GrossValue);
-                AppendNumberCell(builder, CellReference(8, rowNumber), row.NetValue);
-                AppendNumberCell(builder, CellReference(9, rowNumber), row.Value);
-                AppendTextCell(builder, CellReference(10, rowNumber), row.Operation);
-                AppendTextCell(builder, CellReference(11, rowNumber), row.SemanticKey);
-                AppendTextCell(builder, CellReference(12, rowNumber), row.FormulaOrReason);
-                AppendTextCell(builder, CellReference(13, rowNumber), row.SelectorKind);
-                AppendTextCell(builder, CellReference(14, rowNumber), row.SelectorKey);
-                AppendTextCell(builder, CellReference(15, rowNumber), row.SourceReference);
-                AppendTextCell(builder, CellReference(16, rowNumber), row.TargetReference);
-                AppendTextCell(builder, CellReference(17, rowNumber), row.Operands);
-                builder.Append("</row>");
+                writer.Write("<row r=\"");
+                writer.Write(rowNumber.ToString(CultureInfo.InvariantCulture));
+                writer.Write("\">");
+                WriteTextCell(writer, CellReference(0, rowNumber), row.EvidenceId);
+                WriteTextCell(writer, CellReference(1, rowNumber), row.ParentEvidenceId);
+                WriteTextCell(writer, CellReference(2, rowNumber), row.RecordKind);
+                WriteTextCell(writer, CellReference(3, rowNumber), row.SubjectKey);
+                WriteTextCell(writer, CellReference(4, rowNumber), row.Category);
+                WriteTextCell(writer, CellReference(5, rowNumber), row.Metric);
+                WriteTextCell(writer, CellReference(6, rowNumber), row.Unit);
+                WriteNumberCell(writer, CellReference(7, rowNumber), row.GrossValue);
+                WriteNumberCell(writer, CellReference(8, rowNumber), row.NetValue);
+                WriteNumberCell(writer, CellReference(9, rowNumber), row.Value);
+                WriteTextCell(writer, CellReference(10, rowNumber), row.Operation);
+                WriteTextCell(writer, CellReference(11, rowNumber), row.SemanticKey);
+                WriteTextCell(writer, CellReference(12, rowNumber), row.FormulaOrReason);
+                WriteTextCell(writer, CellReference(13, rowNumber), row.SelectorKind);
+                WriteTextCell(writer, CellReference(14, rowNumber), row.SelectorKey);
+                WriteTextCell(writer, CellReference(15, rowNumber), row.SourceReference);
+                WriteTextCell(writer, CellReference(16, rowNumber), row.TargetReference);
+                WriteTextCell(writer, CellReference(17, rowNumber), row.Operands);
+                writer.Write("</row>");
             }
 
-            builder.Append("</sheetData></worksheet>");
-            return builder.ToString();
+            writer.Write("</sheetData></worksheet>");
         }
 
-        private static void AppendTextCell(StringBuilder builder, string reference, string value)
+        private static void WriteTextCell(TextWriter writer, string reference, string value)
         {
-            builder.Append("<c r=\"").Append(reference).Append("\" t=\"inlineStr\"><is><t xml:space=\"preserve\">");
-            builder.Append(Escape(value ?? string.Empty));
-            builder.Append("</t></is></c>");
+            writer.Write("<c r=\"");
+            writer.Write(reference);
+            writer.Write("\" t=\"inlineStr\"><is><t xml:space=\"preserve\">");
+            writer.Write(Escape(value ?? string.Empty));
+            writer.Write("</t></is></c>");
         }
 
-        private static void AppendNumberCell(StringBuilder builder, string reference, decimal value)
+        private static void WriteNumberCell(TextWriter writer, string reference, decimal value)
         {
-            builder.Append("<c r=\"").Append(reference).Append("\"><v>");
-            builder.Append(value.ToString("G29", CultureInfo.InvariantCulture));
-            builder.Append("</v></c>");
+            writer.Write("<c r=\"");
+            writer.Write(reference);
+            writer.Write("\"><v>");
+            writer.Write(value.ToString("G29", CultureInfo.InvariantCulture));
+            writer.Write("</v></c>");
         }
 
         private static string Escape(string value)
@@ -309,6 +349,128 @@ namespace QS3D.Core.Export
                 column /= 26;
             }
             return letters + oneBasedRow.ToString(CultureInfo.InvariantCulture);
+        }
+
+        private sealed class BoundedEntryWriteStream : Stream
+        {
+            private readonly Stream _inner;
+            private readonly long _maxLength;
+            private long _bytesWritten;
+
+            internal BoundedEntryWriteStream(Stream inner, long maxLength)
+            {
+                _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+                if (maxLength < 0L) throw new ArgumentOutOfRangeException(nameof(maxLength));
+                _maxLength = maxLength;
+            }
+
+            public override bool CanRead => false;
+            public override bool CanSeek => false;
+            public override bool CanWrite => true;
+            public long BytesWritten => _bytesWritten;
+            public override long Length => _bytesWritten;
+            public override long Position
+            {
+                get => _bytesWritten;
+                set => throw new NotSupportedException();
+            }
+
+            public override void Flush() => _inner.Flush();
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                var projectedLength = checked(_bytesWritten + count);
+                if (projectedLength > _maxLength) throw EntrySizeExceeded();
+                _inner.Write(buffer, offset, count);
+                _bytesWritten = projectedLength;
+            }
+
+            public override void WriteByte(byte value)
+            {
+                var projectedLength = checked(_bytesWritten + 1L);
+                if (projectedLength > _maxLength) throw EntrySizeExceeded();
+                _inner.WriteByte(value);
+                _bytesWritten = projectedLength;
+            }
+
+            private static InvalidDataException EntrySizeExceeded()
+                => new InvalidDataException("Quantity evidence XLSX worksheet exceeds the bounded entry contract.");
+        }
+
+        private sealed class BoundedArchiveWriteStream : Stream
+        {
+            private readonly Stream _inner;
+            private readonly long _maxLength;
+            internal BoundedArchiveWriteStream(Stream inner, long maxLength)
+            {
+                _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+                if (maxLength < 0L) throw new ArgumentOutOfRangeException(nameof(maxLength));
+                _maxLength = maxLength;
+            }
+
+            public override bool CanRead => _inner.CanRead;
+            public override bool CanSeek => _inner.CanSeek;
+            public override bool CanWrite => _inner.CanWrite;
+            public override long Length => _inner.Length;
+            public override long Position
+            {
+                get => _inner.Position;
+                set
+                {
+                    if (value < 0L || value > _maxLength) throw ArchiveSizeExceeded();
+                    _inner.Position = value;
+                }
+            }
+
+            public override void Flush() => _inner.Flush();
+            public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+
+            public override long Seek(long offset, SeekOrigin origin)
+            {
+                long target;
+                switch (origin)
+                {
+                    case SeekOrigin.Begin:
+                        target = offset;
+                        break;
+                    case SeekOrigin.Current:
+                        target = checked(_inner.Position + offset);
+                        break;
+                    case SeekOrigin.End:
+                        target = checked(_inner.Length + offset);
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(origin));
+                }
+                if (target < 0L || target > _maxLength) throw ArchiveSizeExceeded();
+                return _inner.Seek(offset, origin);
+            }
+
+            public override void SetLength(long value)
+            {
+                if (value < 0L || value > _maxLength) throw ArchiveSizeExceeded();
+                _inner.SetLength(value);
+            }
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                var projectedLength = Math.Max(_inner.Length, checked(_inner.Position + count));
+                if (projectedLength > _maxLength) throw ArchiveSizeExceeded();
+                _inner.Write(buffer, offset, count);
+            }
+
+            public override void WriteByte(byte value)
+            {
+                var projectedLength = Math.Max(_inner.Length, checked(_inner.Position + 1L));
+                if (projectedLength > _maxLength) throw ArchiveSizeExceeded();
+                _inner.WriteByte(value);
+            }
+
+            private static InvalidDataException ArchiveSizeExceeded()
+                => new InvalidDataException("Quantity evidence XLSX archive exceeds the bounded output contract.");
         }
     }
 }

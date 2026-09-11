@@ -58,16 +58,17 @@ def main() -> int:
     package = updater.find(package_call)
     held_archive = updater.find("Expand-VerifiedHeldArchive -ZipPath $zipPath")
     signed_root = updater.find("Assert-PackageRoot -Directory $extractRoot -ExpectedSigner $expectedSigner")
-    installer = updater.find("& $installer @arguments")
+    installer = updater.find("& $installerScript @arguments")
     release = updater.rfind("Exit-Qs3dUpdateMutex -Mutex $updateMutex")
     positions = (helper, mutex, manifest, manifest_parse, snapshot_package, package, held_archive, signed_root, installer, release)
     if min(positions) < 0 or not (
         helper < mutex < manifest < manifest_parse < snapshot_package < package < held_archive < signed_root < installer < release
     ):
         raise AssertionError(
-            "bounded transfer ordering must preserve mutex -> manifest -> release snapshot -> package -> held archive -> signer -> installer"
+            "bounded transfer ordering must preserve mutex -> manifest -> release snapshot -> package -> held archive -> signer -> held in-memory installer"
         )
 
+    reject(updater, "& $installer @arguments", "pathname installer reopen after held-generation admission")
     reject(updater, "Get-FileHash -LiteralPath $zipPath", "pathname ZIP hash reopen after bounded package download")
     reject(updater, "Expand-Archive -LiteralPath $zipPath", "pathname ZIP extraction reopen after bounded package download")
     require(updater, "Update manifest must be between 1 byte and 64 KiB.", "post-download manifest defense in depth")
@@ -80,7 +81,7 @@ def main() -> int:
 
     print(
         "PASS: final updater manifest/package transfers are HTTPS, timeout/redirect/stream bounded, clean partial files on failure, "
-        "and retain release-snapshot/held-archive/signer/install ordering."
+        "and retain release-snapshot/held-archive/signer/held in-memory install ordering."
     )
     return 0
 

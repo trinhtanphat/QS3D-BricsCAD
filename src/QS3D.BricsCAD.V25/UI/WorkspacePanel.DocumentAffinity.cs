@@ -17,6 +17,9 @@ namespace QS3D.BricsCAD.V25.UI
     {
         private static readonly bool DocumentAffinityRegistrationReady = RegisterWorkspaceDocumentAffinity();
         private bool _workspaceDocumentAffinityAttached;
+        private bool _workspaceDocumentActivatedMayBeSubscribed;
+        private bool _workspaceDocumentDestroyMayBeSubscribed;
+        private bool _workspaceDocumentAffinityDetachInProgress;
 
         private static bool RegisterWorkspaceDocumentAffinity()
         {
@@ -54,41 +57,134 @@ namespace QS3D.BricsCAD.V25.UI
         private void AttachWorkspaceDocumentAffinity()
         {
             if (_workspaceDocumentAffinityAttached) return;
-            Application.DocumentManager.DocumentActivated += OnWorkspaceDocumentActivated;
+
             try
             {
-                Application.DocumentManager.DocumentToBeDestroyed += OnWorkspaceDocumentToBeDestroyed;
-                _workspaceDocumentAffinityAttached = true;
+                if (!_workspaceDocumentActivatedMayBeSubscribed)
+                {
+                    _workspaceDocumentActivatedMayBeSubscribed = true;
+                    Application.DocumentManager.DocumentActivated += OnWorkspaceDocumentActivated;
+                }
+
+                if (!_workspaceDocumentDestroyMayBeSubscribed)
+                {
+                    _workspaceDocumentDestroyMayBeSubscribed = true;
+                    Application.DocumentManager.DocumentToBeDestroyed += OnWorkspaceDocumentToBeDestroyed;
+                }
+
+                _workspaceDocumentAffinityAttached =
+                    _workspaceDocumentActivatedMayBeSubscribed &&
+                    _workspaceDocumentDestroyMayBeSubscribed;
             }
             catch
             {
-                try { Application.DocumentManager.DocumentActivated -= OnWorkspaceDocumentActivated; }
-                catch { }
+                // Either native add may have registered before throwing. Retain exact per-event
+                // ownership until best-effort removal actually succeeds.
+                RetryWorkspaceDocumentAffinityDetach();
                 throw;
             }
         }
 
         private void DetachWorkspaceDocumentAffinity()
         {
-            if (!_workspaceDocumentAffinityAttached) return;
-            _workspaceDocumentAffinityAttached = false;
-            try { Application.DocumentManager.DocumentActivated -= OnWorkspaceDocumentActivated; }
-            catch { }
-            try { Application.DocumentManager.DocumentToBeDestroyed -= OnWorkspaceDocumentToBeDestroyed; }
-            catch { }
+            RetryWorkspaceDocumentAffinityDetach();
+        }
+
+        private void RetryWorkspaceDocumentAffinityDetach()
+        {
+            if (_workspaceDocumentAffinityDetachInProgress) return;
+            if (!_workspaceDocumentActivatedMayBeSubscribed && !_workspaceDocumentDestroyMayBeSubscribed)
+            {
+                _workspaceDocumentAffinityAttached = false;
+                return;
+            }
+
+            _workspaceDocumentAffinityDetachInProgress = true;
+            try
+            {
+                if (_workspaceDocumentActivatedMayBeSubscribed)
+                {
+                    try
+                    {
+                        Application.DocumentManager.DocumentActivated -= OnWorkspaceDocumentActivated;
+                        _workspaceDocumentActivatedMayBeSubscribed = false;
+                    }
+                    catch
+                    {
+                        // Keep ownership true so a later Unloaded/stale callback can retry.
+                    }
+                }
+
+                if (_workspaceDocumentDestroyMayBeSubscribed)
+                {
+                    try
+                    {
+                        Application.DocumentManager.DocumentToBeDestroyed -= OnWorkspaceDocumentToBeDestroyed;
+                        _workspaceDocumentDestroyMayBeSubscribed = false;
+                    }
+                    catch
+                    {
+                        // Keep ownership true so a later cleanup can retry without duplicate add.
+                    }
+                }
+            }
+            finally
+            {
+                _workspaceDocumentAffinityAttached =
+                    _workspaceDocumentActivatedMayBeSubscribed &&
+                    _workspaceDocumentDestroyMayBeSubscribed;
+                _workspaceDocumentAffinityDetachInProgress = false;
+            }
         }
 
         private void OnWorkspaceDocumentActivated(object sender, DocumentCollectionEventArgs e)
         {
+            if (!_workspaceDocumentAffinityAttached)
+            {
+                RetryWorkspaceDocumentAffinityDetach();
+                return;
+            }
+
             // Synchronous by design: queuing behind lifecycle ApplicationIdle would recreate the
             // exact A-state/B-document action window this fence owns.
-            InvalidateWorkspaceDocumentState();
+            TryInvalidateWorkspaceDocumentStateFromNativeCallback();
         }
 
         private void OnWorkspaceDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)
         {
-            if (ReferenceEquals(Application.DocumentManager.MdiActiveDocument, e.Document))
+            if (!_workspaceDocumentAffinityAttached)
+            {
+                RetryWorkspaceDocumentAffinityDetach();
+                return;
+            }
+
+            try
+            {
+                if (ReferenceEquals(Application.DocumentManager.MdiActiveDocument, e.Document))
+                    TryInvalidateWorkspaceDocumentStateFromNativeCallback();
+            }
+            catch (Exception)
+            {
+                // Native document wrappers can become unavailable during teardown. Fail closed by
+                // clearing document-bound Workspace presentation; never let a host callback escape.
+                TryInvalidateWorkspaceDocumentStateFromNativeCallback();
+            }
+        }
+
+        private void TryInvalidateWorkspaceDocumentStateFromNativeCallback()
+        {
+            try
+            {
                 InvalidateWorkspaceDocumentState();
+            }
+            catch (Exception)
+            {
+                // A callback racing Unloaded/disposal is cleanup-only. Retain normal subscriptions
+                // for a still-loaded Workspace so an isolated presentation error does not silently
+                // disable future document-affinity fencing.
+                if (!IsLoaded)
+                    RetryWorkspaceDocumentAffinityDetach();
+            }
         }
 
         private void InvalidateWorkspaceDocumentState()

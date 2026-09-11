@@ -20,6 +20,8 @@ namespace QS3D.Core.SmokeTests
             ExplanationCountDriftFailsClosedBeforePublication();
             MalformedUtf16FailsClosedAndValidSupplementaryTextSurvives();
             WorkbookPreservesDeterministicEvidenceOrderAndProvenance();
+            CumulativeWorksheetBudgetFailsBeforeDestinationReplacement();
+            ExistingQuantityEvidenceWorkbookSurvivesBudgetFailure();
             PublicationFailurePreservesExistingDestination();
         }
 
@@ -239,6 +241,88 @@ namespace QS3D.Core.SmokeTests
             {
                 DeleteDirectory(root);
             }
+        }
+
+        private static void CumulativeWorksheetBudgetFailsBeforeDestinationReplacement()
+        {
+            var root = TempDirectory("quantity-evidence-xlsx-budget");
+            try
+            {
+                var path = Path.Combine(root, "budget.xlsx");
+                RequireWorksheetBudgetRejected(path);
+                Require(!File.Exists(path),
+                    "Quantity evidence XLSX published a destination after worksheet budget rejection.");
+                Require(Directory.GetFiles(root).Length == 0,
+                    "Quantity evidence XLSX worksheet budget rejection left a temporary package behind.");
+            }
+            finally
+            {
+                DeleteDirectory(root);
+            }
+        }
+        private static void ExistingQuantityEvidenceWorkbookSurvivesBudgetFailure()
+        {
+            var root = TempDirectory("quantity-evidence-xlsx-budget-existing");
+            try
+            {
+                var path = Path.Combine(root, "existing.xlsx");
+                const string sentinel = "existing-quantity-evidence-workbook-must-survive-budget-failure";
+                File.WriteAllText(path, sentinel, new UTF8Encoding(false));
+                RequireWorksheetBudgetRejected(path);
+                Require(File.ReadAllText(path, Encoding.UTF8) == sentinel,
+                    "Quantity evidence XLSX worksheet budget failure changed the existing destination.");
+                Require(Directory.GetFiles(root).Length == 1,
+                    "Quantity evidence XLSX worksheet budget failure left a temporary package behind.");
+            }
+            finally
+            {
+                DeleteDirectory(root);
+            }
+        }
+        private static void RequireWorksheetBudgetRejected(string path)
+        {
+            var payload = new string('Q', 32700);
+            var rows = new List<QuantityEvidenceExportRecord>();
+            for (var index = 0; index < 72; index++)
+            {
+                rows.Add(new QuantityEvidenceExportRecord
+                {
+                    EvidenceId = payload,
+                    ParentEvidenceId = payload,
+                    RecordKind = payload,
+                    SubjectKey = payload,
+                    Category = payload,
+                    Metric = payload,
+                    Unit = payload,
+                    GrossValue = 1.2345678901234567890123456789m,
+                    NetValue = 1.2345678901234567890123456789m,
+                    Value = 1.2345678901234567890123456789m,
+                    Operation = payload,
+                    SemanticKey = payload,
+                    FormulaOrReason = payload,
+                    SelectorKind = payload,
+                    SelectorKey = payload,
+                    SourceReference = payload,
+                    TargetReference = payload,
+                    Operands = payload
+                });
+            }
+            var method = typeof(XlsxQuantityEvidenceExporter)
+                .GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
+                .Single(candidate => candidate.Name == "WritePackage" && candidate.GetParameters().Length == 3);
+            Action<string, string> unexpectedCommit = (_, __) =>
+                throw new Exception("Quantity evidence XLSX worksheet budget was enforced after destination commit handoff.");
+            var rejected = false;
+            try
+            {
+                method.Invoke(null, new object[] { path, rows, unexpectedCommit });
+            }
+            catch (TargetInvocationException ex) when (ex.InnerException is InvalidDataException invalid)
+            {
+                rejected = invalid.Message.IndexOf("Quantity evidence XLSX worksheet exceeds", StringComparison.Ordinal) >= 0;
+            }
+            Require(rejected,
+                "Quantity evidence XLSX cumulative worksheet output did not fail closed at the bounded byte budget.");
         }
 
         private static void PublicationFailurePreservesExistingDestination()

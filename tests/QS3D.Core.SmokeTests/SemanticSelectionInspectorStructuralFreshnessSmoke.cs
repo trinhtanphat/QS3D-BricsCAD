@@ -23,11 +23,11 @@ namespace QS3D.Core.SmokeTests
             var project = CreateProject(out var family, out var element);
             var beforeVersion = project.ChangeVersion;
 
-            ThrowsStructuralOwnershipFreshness(() => SemanticSelectionInspector.Inspect(
+            ThrowsProjectGenerationFreshness(() => SemanticSelectionInspector.Inspect(
                 project,
                 ReplaceElementAndYield(project, family, element)));
 
-            Equal(beforeVersion, project.ChangeVersion, "element replacement change version");
+            Equal(checked(beforeVersion + 2L), project.ChangeVersion, "element replacement change version");
             Equal(1, project.Elements.Count, "element replacement count");
             False(ReferenceEquals(project.Elements[0], element), "element replacement ownership");
         }

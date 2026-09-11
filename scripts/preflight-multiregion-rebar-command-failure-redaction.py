@@ -19,8 +19,8 @@ else:
         'ExistingProjectMutationContext.Require(document, "Slab Multi-Region Rebar 3D")',
         'ExistingProjectMutationContext.Require(document, "Foundation Multi-Region Rebar 3D")',
         'EnsureSameProjectSnapshot(project.ProjectId, project.ChangeVersion, expectedProjectId, expectedChangeVersion',
-        'SlabFoundationMultiRegionMeshSolidBuilder.BuildSlab(document, project)',
-        'SlabFoundationMultiRegionMeshSolidBuilder.BuildFoundation(document, project)',
+        'SlabFoundationMultiRegionMeshSolidBuilder.BuildSlab(document, project, selectedIds)',
+        'SlabFoundationMultiRegionMeshSolidBuilder.BuildFoundation(document, project, selectedIds)',
         'GeneratedMultiRegionRebarRuntimeHealthService.Inspect(document, project)',
         'catch (Exception)\n            {\n                Report(document, "QS3DSLABREBAR3DMULTI không thể hoàn tất.',
         'catch (Exception)\n            {\n                Report(document, "QS3DFOUNDATIONREBAR3DMULTI không thể hoàn tất.',
@@ -53,7 +53,7 @@ else:
 
     slab_preview = text.find('ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject)')
     slab_mutation = text.find('ExistingProjectMutationContext.Require(document, "Slab Multi-Region Rebar 3D")')
-    slab_build = text.find('SlabFoundationMultiRegionMeshSolidBuilder.BuildSlab(document, project)')
+    slab_build = text.find('SlabFoundationMultiRegionMeshSolidBuilder.BuildSlab(document, project, selectedIds)')
     slab_finalize = text.find('FinalizeUi(document, "Slab Multi-Region Rebar 3D", message)')
     if min(slab_preview, slab_mutation, slab_build, slab_finalize) < 0 or not slab_preview < slab_mutation < slab_build < slab_finalize:
         errors.append("Slab multi-region ordering must remain read-only preview -> mutation admission -> native build -> post-commit UI")
@@ -61,7 +61,7 @@ else:
     foundation_start = text.find('public void BuildFoundationMultiRegionRebar3D()')
     foundation_preview = text.find('ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject)', foundation_start)
     foundation_mutation = text.find('ExistingProjectMutationContext.Require(document, "Foundation Multi-Region Rebar 3D")', foundation_start)
-    foundation_build = text.find('SlabFoundationMultiRegionMeshSolidBuilder.BuildFoundation(document, project)', foundation_start)
+    foundation_build = text.find('SlabFoundationMultiRegionMeshSolidBuilder.BuildFoundation(document, project, selectedIds)', foundation_start)
     foundation_finalize = text.find('FinalizeUi(document, "Foundation Multi-Region Rebar 3D", message)', foundation_start)
     if min(foundation_start, foundation_preview, foundation_mutation, foundation_build, foundation_finalize) < 0 or not foundation_start < foundation_preview < foundation_mutation < foundation_build < foundation_finalize:
         errors.append("Foundation multi-region ordering must remain read-only preview -> mutation admission -> native build -> post-commit UI")

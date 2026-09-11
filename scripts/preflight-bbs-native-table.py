@@ -97,7 +97,7 @@ if BBS_SMOKE.is_file():
     for token in (
         'ProjectScheduleRejectsNullSemanticEntry();',
         'ProjectScheduleRejectsDuplicateSemanticIdentity();',
-        'project.Elements.Add(null!);',
+        'CorruptProjectStateSeed.AddNullElement(project);',
         'new ProjectElement("b1", ElementCategory.Room',
         'ProjectRebarScheduleBuilder.Build(project)',
     ):

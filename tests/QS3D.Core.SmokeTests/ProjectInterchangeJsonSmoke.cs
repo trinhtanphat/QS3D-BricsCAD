@@ -59,7 +59,7 @@ namespace QS3D.Core.SmokeTests
         private static void NumericContractFailsClosed()
         {
             var project = BuildFixture();
-            project.FindElement("E-001")!.Quantities["Broken"] = double.NaN;
+            ProjectElementPersistenceFixture.SetQuantity(project.FindElement("E-001")!, "Broken", double.NaN);
             ThrowsInvalidData(() => ProjectInterchangeJsonExporter.Build(project), "Non-finite interchange quantities must fail closed.");
         }
 

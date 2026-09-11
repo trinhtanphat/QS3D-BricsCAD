@@ -107,11 +107,13 @@ if STRUCTURAL_SMOKE.is_file():
         "ReplacementDuringSubsetEnumerationFailsFreshness();",
         "StableSubsetStillPreviews();",
         "project.Elements[index] = replacement;",
-        "element ownership changed",
+        "ThrowsProjectFreshness(() => new RegenerationPreviewService().PreviewSubset(project, Targets()));",
+        "beforeVersion + 1L, project.ChangeVersion",
+        "Public element replacement must advance ChangeVersion and fail on project freshness before the structural ownership fallback.",
         "failed preview must not mutate live target quantities",
     ):
         if token not in text:
-            errors.append("RegenerationPreviewStructuralFreshnessSmoke missing regression token: " + token)
+            errors.append("RegenerationPreviewStructuralFreshnessSmoke missing revision-first regression token: " + token)
 
 if errors:
     print("QS3D regeneration preview preflight")

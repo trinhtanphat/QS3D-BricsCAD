@@ -18,7 +18,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = ProjectWithBeam("bom-negative", "beam-negative");
             var element = project.Elements[0];
-            element.Quantities["FormworkM2"] = -0.25d;
+            ProjectElementPersistenceFixture.SetQuantity(element, "FormworkM2", -0.25d);
 
             var issues = BomReleaseGuardService.Inspect(project);
             var matches = issues.Where(x => x.Code == "BOM_QUANTITY_NEGATIVE").ToList();
@@ -36,7 +36,7 @@ namespace QS3D.Core.SmokeTests
         private static void MalformedKeyKeepsKeyDiagnosticPrecedence()
         {
             var project = ProjectWithBeam("bom-negative-bad-key", "beam-negative-bad-key", addCanonicalQuantity: false);
-            project.Elements[0].Quantities[" BadQuantity "] = -1d;
+            ProjectElementPersistenceFixture.SetQuantity(project.Elements[0], " BadQuantity ", -1d);
 
             var issues = BomReleaseGuardService.Inspect(project);
             if (issues.Count(x => x.Code == "BOM_QUANTITY_KEY_INVALID") != 1)

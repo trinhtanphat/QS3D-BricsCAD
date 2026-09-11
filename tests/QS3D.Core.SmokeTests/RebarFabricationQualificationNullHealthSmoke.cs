@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
@@ -19,7 +21,7 @@ namespace QS3D.Core.SmokeTests
         private static void EnabledQualificationRejectsNullElementDirectly()
         {
             var project = QualifiedProject("FAB-NULL-DIRECT");
-            project.Elements.Add(null!);
+            RawElements(project).Add(null!);
 
             try
             {
@@ -37,7 +39,7 @@ namespace QS3D.Core.SmokeTests
         private static void CompositeHealthSurfacesProviderFailure()
         {
             var project = QualifiedProject("FAB-NULL-COMPOSITE");
-            project.Elements.Add(null!);
+            RawElements(project).Add(null!);
 
             var issues = new ComprehensiveModelHealthService().Inspect(project);
             if (issues.Any(issue =>
@@ -47,6 +49,14 @@ namespace QS3D.Core.SmokeTests
                 return;
 
             throw new InvalidOperationException("Comprehensive health must surface malformed fabrication qualification state as a provider failure.");
+        }
+
+        private static List<ProjectElement> RawElements(ProjectState project)
+        {
+            var itemsField = project.Elements.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed corrupt rebar-fabrication qualification project state.");
+            return itemsField.GetValue(project.Elements) as List<ProjectElement>
+                ?? throw new InvalidOperationException("Unexpected ProjectState.Elements backing collection.");
         }
 
         private static void ValidQualifiedProjectWithoutOutputKeepsExistingDiagnosis()

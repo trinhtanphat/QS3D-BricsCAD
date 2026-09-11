@@ -35,7 +35,6 @@ def exact_coverage(manifest_names, actual_names):
     return len(manifest) == len(set(manifest)) and set(manifest) == set(actual)
 
 
-# Contract-level negative/positive cases independent of PowerShell runtime availability.
 require(exact_coverage(["a.dll", "Samples/x.dxf"], ["a.dll", "Samples/x.dxf", "SHA256SUMS.txt"]),
         "coverage model baseline must pass")
 require(exact_coverage(
@@ -55,10 +54,6 @@ install_source = read(INSTALL)
 update_source = read(UPDATE)
 package_active = executable_lines(package_source)
 
-# Both package construction and signed-package finalization must traverse the payload
-# fail-closed: reparse/non-regular entries are rejected before hashing. Package creation
-# may use the legacy safe pipeline or the deterministic ordinal dictionary producer;
-# both must enumerate payload files exclusively through Get-SafePackageFiles.
 package_traversal_tokens = (
     "function Get-SafePackageFiles",
     "Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop",
@@ -155,10 +150,15 @@ updater_tokens = (
     "$record.Entry.Open()",
     "Expand-VerifiedHeldArchive -ZipPath $zipPath",
     "$installer = Join-Path $extractRoot 'install-v25-autoload.ps1'",
-    "& $installer @arguments",
+    "$heldInstaller = Open-HeldVerifiedInstaller -Path $installer",
+    "$installerReader.ReadToEnd()",
+    "$installerScript = [ScriptBlock]::Create($installerText)",
+    "& $installerScript @arguments",
 )
 for token in updater_tokens:
     require(token in update_source, f"secure updater trust-chain guard missing token: {token}")
+require("& $installer @arguments" not in executable_lines(update_source),
+        "secure updater must not reopen the admitted installer pathname for execution")
 require("Get-FileHash -LiteralPath $zipPath" not in update_source,
         "secure updater must not reopen the admitted ZIP pathname for SHA-256")
 require("Expand-Archive -LiteralPath $zipPath" not in update_source,
@@ -170,15 +170,19 @@ if update_source:
     held_zip_index = update_source.find("[IO.Compression.ZipArchive]::new($zipStream", held_hash_index)
     held_entry_index = update_source.find("$record.Entry.Open()", held_zip_index)
     held_call_index = update_source.find("Expand-VerifiedHeldArchive -ZipPath $zipPath", held_entry_index)
-    installer_index = update_source.find("& $installer @arguments", held_call_index)
+    held_installer_index = update_source.find("$heldInstaller = Open-HeldVerifiedInstaller -Path $installer", held_call_index)
+    installer_read_index = update_source.find("$installerReader.ReadToEnd()", held_installer_index)
+    installer_script_index = update_source.find("$installerScript = [ScriptBlock]::Create($installerText)", installer_read_index)
+    installer_index = update_source.find("& $installerScript @arguments", installer_script_index)
     require(
-        min(held_function_index, held_hash_index, held_zip_index, held_entry_index, held_call_index, installer_index) >= 0
-        and held_function_index < held_hash_index < held_zip_index < held_entry_index < held_call_index < installer_index,
-        "updater must bind ZIP digest, ZipArchive admission and entry extraction to the held generation before delegating installation",
+        min(held_function_index, held_hash_index, held_zip_index, held_entry_index, held_call_index,
+            held_installer_index, installer_read_index, installer_script_index, installer_index) >= 0
+        and held_function_index < held_hash_index < held_zip_index < held_entry_index < held_call_index
+        < held_installer_index < installer_read_index < installer_script_index < installer_index,
+        "updater must bind ZIP digest/extraction and installer bytes to held generations before single in-memory installation",
     )
 
-# Deterministic regression probes: the guard must reject traversal bypass and a
-# producer that silently drops staging reparse rejection, for either admitted producer.
+
 def producer_safe(source):
     active = executable_lines(source)
     return (

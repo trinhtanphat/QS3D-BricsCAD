@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import os
 import re
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 
@@ -38,6 +40,70 @@ def find_after(source: str, token: str, after: int, label: str) -> int:
     if pos < 0:
         errors.append(f"missing {label}: {token}")
     return pos
+
+
+def read_version_project_text() -> str:
+    workspace_text = VERSION_PROJECT.read_text(encoding="utf-8")
+    release_tag = os.environ.get("RELEASE_TAG", "").strip()
+    if not release_tag:
+        return workspace_text
+
+    source_sha = os.environ.get("SOURCE_SHA", "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", source_sha):
+        errors.append("release-workspace source version validation requires an exact 40-hex SOURCE_SHA")
+        return ""
+    if not re.fullmatch(r"v[^\s]+", release_tag):
+        errors.append(f"release-workspace source version validation requires a canonical v-prefixed RELEASE_TAG; found {release_tag!r}")
+        return ""
+
+    try:
+        workspace_root = ET.fromstring(workspace_text)
+    except ET.ParseError as exc:
+        errors.append(f"could not parse bounded workspace V25 version project: {exc}")
+        return ""
+    workspace_versions = [node.text.strip() for node in workspace_root.iter("Version") if node.text and node.text.strip()]
+    requested_version = release_tag[1:]
+    if len(workspace_versions) != 1 or workspace_versions[0] != requested_version:
+        errors.append(
+            "bounded release workspace Version must exactly match RELEASE_TAG before immutable source validation; "
+            f"tag={release_tag!r} versions={workspace_versions!r}"
+        )
+        return ""
+
+    head = subprocess.run(
+        ["git", "rev-parse", "--verify", "HEAD"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if head.returncode != 0:
+        errors.append(f"could not resolve release-workspace HEAD for immutable source validation: {head.stderr.strip()}")
+        return ""
+    if head.stdout.strip().lower() != source_sha:
+        errors.append(
+            "release-workspace HEAD must equal SOURCE_SHA before immutable source version validation; "
+            f"head={head.stdout.strip().lower()!r} source_sha={source_sha!r}"
+        )
+        return ""
+
+    project_path = VERSION_PROJECT.relative_to(ROOT).as_posix()
+    committed = subprocess.run(
+        ["git", "show", f"{source_sha}:{project_path}"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if committed.returncode != 0:
+        errors.append(
+            "could not read immutable V25 version project from SOURCE_SHA: "
+            f"{committed.stderr.strip()}"
+        )
+        return ""
+    return committed.stdout
 
 
 # A stale source is a successful no-op only before the first durable release
@@ -181,17 +247,21 @@ for forbidden in (
 ):
     forbid(dispatch, forbidden, "preview-ordinal ownership transfer support")
 
-# 10307 is burned. The source must commit a strictly newer canonical preview
-# identity and keep Version/FileVersion/InformationalVersion bound together.
+# 10307 is burned. Validate the immutable committed source identity. The V25
+# release workflow may intentionally synchronize ProductVersion only in its
+# bounded workspace before aggregate preflight; RELEASE_TAG + SOURCE_SHA prove
+# that state and make this guard read the exact committed source instead.
 try:
-    root = ET.parse(VERSION_PROJECT).getroot()
+    version_project_text = read_version_project_text()
+    root = ET.fromstring(version_project_text) if version_project_text else None
     values: dict[str, str] = {}
-    for name in ("Version", "FileVersion", "InformationalVersion"):
-        matches = [node.text.strip() for node in root.iter(name) if node.text and node.text.strip()]
-        if len(matches) != 1:
-            errors.append(f"V25 project must contain exactly one {name}; found {len(matches)}")
-        else:
-            values[name] = matches[0]
+    if root is not None:
+        for name in ("Version", "FileVersion", "InformationalVersion"):
+            matches = [node.text.strip() for node in root.iter(name) if node.text and node.text.strip()]
+            if len(matches) != 1:
+                errors.append(f"V25 project must contain exactly one {name}; found {len(matches)}")
+            else:
+                values[name] = matches[0]
     version = values.get("Version", "")
     match = re.fullmatch(r"0\.1\.0-preview\.([1-9][0-9]*)", version)
     if not match:

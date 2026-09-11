@@ -107,7 +107,7 @@ if SMOKE.is_file():
         'HasFor(issues, "DEPENDENCY_TARGET_AMBIGUOUS", "D")',
         'HasFor(issues, "BOTTOM_LEVEL_REFERENCE_AMBIGUOUS", "D")',
         'Has(issues, "HEALTH_PROVIDER_FAILED")',
-        "project.Elements.Add(null!);",
+        "CorruptProjectStateSeed.AddNullElement(project);",
     ):
         if token not in text:
             errors.append("ModelHealthIdentityAmbiguitySmoke.cs missing regression token: " + token)
