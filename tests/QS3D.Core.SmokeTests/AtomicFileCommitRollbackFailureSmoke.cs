@@ -17,6 +17,10 @@ namespace QS3D.Core.SmokeTests
                 "RecordRollbackFailure",
                 BindingFlags.NonPublic | BindingFlags.Static)
                 ?? throw new InvalidOperationException("AtomicFileCommit rollback evidence helper was not found.");
+            var restorePreviousBackup = atomicType.GetMethod(
+                "RestorePreviousBackup",
+                BindingFlags.NonPublic | BindingFlags.Static)
+                ?? throw new InvalidOperationException("AtomicFileCommit previous-backup recovery helper was not found.");
 
             var publicationFailure = CapturePublicationFailureWithStack();
             var rollbackFailure = new UnauthorizedAccessException("rollback sentinel");
@@ -45,6 +49,52 @@ namespace QS3D.Core.SmokeTests
                 "First rollback failure evidence was lost or reordered.");
             Require(ReferenceEquals(aggregate.InnerExceptions[1], secondRollbackFailure),
                 "Second rollback failure evidence was lost or reordered.");
+
+            PreviousBackupRestoreFailureIsRecorded(restorePreviousBackup);
+        }
+
+        private static void PreviousBackupRestoreFailureIsRecorded(MethodInfo restorePreviousBackup)
+        {
+            var directory = Path.Combine(
+                Path.GetTempPath(),
+                "qs3d-rollback-evidence-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                var previousBackup = Path.Combine(directory, "project.qsdb.bak.previous");
+                var canonicalBackup = Path.Combine(directory, "project.qsdb.bak");
+                File.WriteAllText(previousBackup, "older-good-backup");
+                File.WriteAllText(canonicalBackup, "unexpected-occupant");
+
+                var publicationFailure = CapturePublicationFailureWithStack();
+                var originalStack = publicationFailure.StackTrace;
+                var result = restorePreviousBackup.Invoke(
+                    null,
+                    new object?[] { previousBackup, canonicalBackup, publicationFailure });
+
+                Require(result == null,
+                    "Previous-backup recovery must remain best-effort and must not replace the primary publication exception.");
+                Require(publicationFailure.StackTrace == originalStack,
+                    "Previous-backup recovery changed publication exception stack evidence.");
+                if (publicationFailure.Data[RollbackFailureDataKey] is not IOException recoveryFailure)
+                {
+                    throw new InvalidOperationException(
+                        "Occupied previous-backup destination must be retained as rollback evidence on the primary failure.");
+                }
+                Require(
+                    recoveryFailure.Message.IndexOf("backup", StringComparison.OrdinalIgnoreCase) >= 0,
+                    "Previous-backup recovery evidence did not identify the backup recovery failure.");
+                Require(File.Exists(previousBackup),
+                    "Failed previous-backup recovery must preserve the staged older backup for diagnosis/retry.");
+                Require(File.Exists(canonicalBackup),
+                    "Best-effort previous-backup recovery must not overwrite an unexpected canonical backup occupant.");
+            }
+            finally
+            {
+                try { Directory.Delete(directory, true); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
         }
 
         private static IOException CapturePublicationFailureWithStack()
