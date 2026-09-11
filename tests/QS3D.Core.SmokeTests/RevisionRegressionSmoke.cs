@@ -34,7 +34,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = NewProject();
             var element = new ProjectElement("REV-BAD", ElementCategory.CustomQuantity, string.Empty, "f", "z");
-            element.Quantities["Bad"] = double.NaN;
+            SeedPersistedQuantity(element, "Bad", double.NaN);
             project.Elements.Add(element);
             Throws<InvalidOperationException>(() => new RevisionService().Capture(project, "bad"));
         }
@@ -116,7 +116,7 @@ namespace QS3D.Core.SmokeTests
 
             var quantityProject = NewProject();
             var quantityElement = new ProjectElement("E-QUANTITY", ElementCategory.Beam, string.Empty, "f", "z");
-            quantityElement.Quantities[" Q "] = 1d;
+            SeedPersistedQuantity(quantityElement, " Q ", 1d);
             quantityProject.Elements.Add(quantityElement);
             Throws<InvalidOperationException>(() => new RevisionService().Capture(quantityProject, "padded-quantity-key"));
         }
@@ -339,6 +339,15 @@ namespace QS3D.Core.SmokeTests
                 ?? throw new InvalidOperationException("Legacy Element fixture could not locate the property backing dictionary.");
             var backing = field.GetValue(element) as Dictionary<string, string>
                 ?? throw new InvalidOperationException("Legacy Element fixture property backing dictionary had an unexpected type.");
+            backing[key] = value;
+        }
+
+        private static void SeedPersistedQuantity(ProjectElement element, string key, double value)
+        {
+            var field = typeof(ProjectElement).GetField("_quantityValues", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Persisted quantity fixture could not locate the quantity backing dictionary.");
+            var backing = field.GetValue(element) as Dictionary<string, double>
+                ?? throw new InvalidOperationException("Persisted quantity fixture backing dictionary had an unexpected type.");
             backing[key] = value;
         }
 
