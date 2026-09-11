@@ -7,8 +7,8 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class DomainHubCommands
     {
-        private static DomainHubWindow? _published;
-        private static DomainHubWindow? _pending;
+        private static PublishedWindow? _pending;
+        private static PublishedWindow? _published;
 
         [CommandMethod("QS3DDOMAIN", CommandFlags.Modal)]
         public void ShowDomainHub()
@@ -16,96 +16,193 @@ namespace QS3D.BricsCAD.V25
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
 
-            DomainHubWindow? candidate = null;
+            var nativeDatabaseIdentity = IntPtr.Zero;
+            PublishedWindow? owner = null;
             try
             {
-                var pending = _pending;
-                if (pending != null && !TryClosePendingWindow(pending))
+                nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+
+                if (!PreparePublishedWindow(document, nativeDatabaseIdentity))
                 {
-                    ReportStatus(document, "Domain Hub chưa thể mở lại vì cửa sổ lỗi trước đó chưa đóng hoàn toàn.");
+                    PublishBlockedStatusIfOwned(document, nativeDatabaseIdentity);
                     return;
                 }
 
-                var previous = _published;
-                if (previous != null)
-                {
-                    if (previous.IsLoaded)
-                    {
-                        try { previous.Activate(); } catch { }
-                        ReportStatus(document, "Domain Hub đã mở.");
-                        return;
-                    }
+                // Closing a prior modeless owner may pump MDI work. Never construct for
+                // a document generation that became background during that boundary.
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
 
-                    ReleasePublishedWindow(previous);
+                var published = _published;
+                if (published != null)
+                {
+                    try { published.Window.Activate(); } catch { }
+                    if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                    {
+                        try { PaletteCoordinator.SetStatus("Domain Hub hiện có đã được kích hoạt cho đúng bản vẽ."); } catch { }
+                    }
+                    return;
                 }
 
-                candidate = new DomainHubWindow();
-                var window = candidate;
-                _pending = window;
-                window.Closed += (_, __) => ReleaseWindow(window);
+                var window = new DomainHubWindow();
+                owner = new PublishedWindow(window, document, nativeDatabaseIdentity);
+                var releaseOwner = owner;
+                window.Closed += (_, __) => ReleaseOwnedWindow(releaseOwner);
+
+                // Own the candidate before any host call can pump messages. A failed
+                // close/show then leaves a durable reference for the next invocation.
+                _pending = owner;
+
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                {
+                    ClosePendingOnFailure(owner);
+                    return;
+                }
 
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
+
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                {
+                    ClosePendingOnFailure(owner);
+                    return;
+                }
+
                 if (!window.IsLoaded)
-                    throw new InvalidOperationException("Domain Hub host publication did not remain loaded.");
+                {
+                    ReleaseOwnedWindow(owner);
+                    return;
+                }
 
-                _published = window;
-                ReleasePendingWindow(window);
-                candidate = null;
-                ReportStatus(document, "Đã mở Domain Hub.");
+                if (!ReferenceEquals(_pending, owner))
+                {
+                    ClosePendingOnFailure(owner);
+                    return;
+                }
+
+                _pending = null;
+                _published = owner;
+                owner = null;
+
+                if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                {
+                    try { PaletteCoordinator.SetStatus("Đã mở Domain Hub cho đúng bản vẽ."); } catch { }
+                }
             }
-            catch (Exception ex)
+            catch
             {
-                ReportStatus(document, "QS3DDOMAIN lỗi khi mở cửa sổ.");
-                try { document.Editor.WriteMessage("\nQS3DDOMAIN failed (" + ex.GetType().Name + ")."); } catch { }
-            }
-            finally
-            {
-                if (candidate != null)
-                    TryClosePendingWindow(candidate);
+                if (owner != null) ClosePendingOnFailure(owner);
+                PublishFailureStatusIfOwned(document, nativeDatabaseIdentity);
             }
         }
 
-        private static void ReleaseWindow(DomainHubWindow window)
+        private static bool PreparePublishedWindow(Document requestedDocument, IntPtr requestedNativeDatabaseIdentity)
         {
-            ReleasePublishedWindow(window);
-            ReleasePendingWindow(window);
-        }
-
-        private static void ReleasePublishedWindow(DomainHubWindow window)
-        {
-            if (!ReferenceEquals(_published, window)) return;
-            _published = null;
-        }
-
-        private static void ReleasePendingWindow(DomainHubWindow window)
-        {
-            if (!ReferenceEquals(_pending, window)) return;
-            _pending = null;
-        }
-
-        private static bool TryClosePendingWindow(DomainHubWindow window)
-        {
-            if (!ReferenceEquals(_pending, window)) return true;
-            if (ReferenceEquals(_published, window))
+            var pending = _pending;
+            if (pending != null)
             {
-                ReleasePendingWindow(window);
+                if (!pending.Window.IsLoaded)
+                {
+                    ReleaseOwnedWindow(pending);
+                }
+                else
+                {
+                    try { pending.Window.Close(); } catch { return false; }
+                    if (pending.Window.IsLoaded) return false;
+                    ReleaseOwnedWindow(pending);
+                }
+            }
+
+            var published = _published;
+            if (published == null) return true;
+
+            if (!published.Window.IsLoaded)
+            {
+                ReleaseOwnedWindow(published);
                 return true;
             }
 
-            if (window.IsLoaded)
-            {
-                try { window.Close(); } catch (Exception) { }
-            }
+            if (published.NativeDatabaseIdentity == requestedNativeDatabaseIdentity &&
+                ReferenceEquals(published.Document, requestedDocument))
+                return true;
 
-            if (window.IsLoaded) return false;
-            ReleasePendingWindow(window);
+            try { published.Window.Close(); }
+            catch { return false; }
+
+            if (published.Window.IsLoaded) return false;
+
+            ReleaseOwnedWindow(published);
             return true;
         }
 
-        private static void ReportStatus(Document document, string message)
+        private static void ClosePendingOnFailure(PublishedWindow owner)
         {
+            try { owner.Window.Close(); } catch { }
+            if (!owner.Window.IsLoaded) ReleaseOwnedWindow(owner);
+        }
+
+        private static void ReleaseOwnedWindow(PublishedWindow owner)
+        {
+            if (ReferenceEquals(_pending, owner)) _pending = null;
+            if (ReferenceEquals(_published, owner)) _published = null;
+        }
+
+        private static void PublishBlockedStatusIfOwned(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            const string blockedStatus = "Domain Hub hiện tại chưa thể đóng an toàn; không mở bản sao thứ hai.";
+            try { document.Editor.WriteMessage("\nQS3DDOMAIN: cửa sổ hiện tại chưa đạt terminal Closed; không mở bản sao thứ hai."); } catch { }
+            try { PaletteCoordinator.SetStatus(blockedStatus); } catch { }
+        }
+
+        private static void PublishFailureStatusIfOwned(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            const string message = "QS3DDOMAIN không thể mở Domain Hub an toàn; trạng thái hiện tại được giữ nguyên.";
             try { PaletteCoordinator.SetStatus(message); } catch { }
             try { document.Editor.WriteMessage("\n" + message); } catch { }
+        }
+
+        private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (nativeDatabaseIdentity == IntPtr.Zero) return false;
+            try
+            {
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)) return false;
+                var database = document.Database;
+                return database != null &&
+                       database.UnmanagedObject != IntPtr.Zero &&
+                       database.UnmanagedObject == nativeDatabaseIdentity;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static IntPtr GetNativeDatabaseIdentity(Document document)
+        {
+            var database = document.Database;
+            if (database == null)
+                throw new InvalidOperationException("Domain Hub requires a BricsCAD document database.");
+
+            var identity = database.UnmanagedObject;
+            if (identity == IntPtr.Zero)
+                throw new InvalidOperationException("Domain Hub requires a live native BricsCAD database.");
+            return identity;
+        }
+
+        private sealed class PublishedWindow
+        {
+            internal PublishedWindow(DomainHubWindow window, Document document, IntPtr nativeDatabaseIdentity)
+            {
+                Window = window ?? throw new ArgumentNullException(nameof(window));
+                Document = document ?? throw new ArgumentNullException(nameof(document));
+                NativeDatabaseIdentity = nativeDatabaseIdentity;
+            }
+
+            internal DomainHubWindow Window { get; }
+            internal Document Document { get; }
+            internal IntPtr NativeDatabaseIdentity { get; }
         }
     }
 }
