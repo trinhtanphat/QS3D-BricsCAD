@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Bricscad.ApplicationServices;
-using Bricscad.EditorInput;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
@@ -41,27 +40,30 @@ namespace QS3D.BricsCAD.V25.Cad
             public CadElementVerticalPlacement VerticalPlacement { get; set; } = null!;
         }
 
-        public static BeamStirrupBuildResult BuildSelected(Document document, ProjectState project)
+        public static BeamStirrupBuildResult BuildSelected(
+            Document document,
+            ProjectState project,
+            ObjectId[] selectedIds,
+            ISet<string> expectedTargetIds)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
-
-            var selection = document.Editor.SelectImplied();
-            if (selection.Status != PromptStatus.OK || selection.Value == null)
-            {
-                selection = document.Editor.GetSelection();
-                if (selection.Status != PromptStatus.OK || selection.Value == null) return new BeamStirrupBuildResult();
-                document.Editor.SetImpliedSelection(selection.Value.GetObjectIds());
-            }
+            if (selectedIds == null) throw new ArgumentNullException(nameof(selectedIds));
+            if (expectedTargetIds == null) throw new ArgumentNullException(nameof(expectedTargetIds));
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                throw new InvalidOperationException("Beam Stirrup 3D: DWG active đã thay đổi trước native mutation; hãy chọn lại target.");
 
             var selectedHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var id in selection.Value.GetObjectIds())
+            foreach (var id in selectedIds)
                 try { selectedHandles.Add(id.Handle.ToString()); } catch { }
+            if (selectedHandles.Count == 0) return new BeamStirrupBuildResult();
 
             var elements = project.Elements
                 .Where(x => x.Category == ElementCategory.Beam && x.SourceHandles.Any(selectedHandles.Contains))
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+            if (!expectedTargetIds.SetEquals(elements.Select(x => x.Id)))
+                throw new InvalidOperationException("Beam Stirrup 3D: semantic Beam target set đã thay đổi trước native mutation; hãy chọn lại target.");
             if (elements.Count == 0) return new BeamStirrupBuildResult();
 
             var duplicateSelectedSource = elements
@@ -85,6 +87,9 @@ namespace QS3D.BricsCAD.V25.Cad
                 using (document.LockDocument())
                 using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
+                    if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                        throw new InvalidOperationException("Beam Stirrup 3D: DWG active đã thay đổi sau document lock; native mutation bị hủy.");
+
                     var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
                     var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
 
