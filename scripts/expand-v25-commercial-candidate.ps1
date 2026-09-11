@@ -34,6 +34,7 @@ using Microsoft.Win32.SafeHandles;
 
 public static class Qs3dCommercialArchiveNative
 {
+    private const uint FILE_LIST_DIRECTORY = 0x00000001;
     private const uint FILE_READ_ATTRIBUTES = 0x00000080;
     private const uint FILE_SHARE_READ = 0x00000001;
     private const uint FILE_SHARE_WRITE = 0x00000002;
@@ -86,7 +87,7 @@ public static class Qs3dCommercialArchiveNative
     {
         SafeFileHandle handle = CreateFileW(
             path,
-            FILE_READ_ATTRIBUTES,
+            FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES,
             FILE_SHARE_READ | FILE_SHARE_WRITE,
             IntPtr.Zero,
             OPEN_EXISTING,
