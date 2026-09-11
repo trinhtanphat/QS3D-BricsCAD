@@ -1,15 +1,24 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 PATH = ROOT / "src/QS3D.BricsCAD.V25/AutoHostLinkCommands.cs"
 errors = []
 
+AUTHORITY_CALL_RE = re.compile(
+    r"RequireCurrentMutationAuthority\s*\(\s*"
+    r"document\s*,\s*project\s*,\s*expectedProjectId\s*,\s*"
+    r"expectedChangeVersion\s*,\s*expectedOpeningIds\s*,\s*selected\s*\)\s*;",
+    re.MULTILINE,
+)
+
 if not PATH.is_file():
     errors.append("missing AutoHostLinkCommands.cs")
 else:
     text = PATH.read_text(encoding="utf-8")
+    authority_call = AUTHORITY_CALL_RE.search(text)
     if "ProjectContextCoordinator.GetOrCreate(document)" in text:
         errors.append("QS3DAUTOLINKHOSTS must not create/cache an empty QS3D project directly")
     if "ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject)" not in text:
@@ -26,7 +35,7 @@ else:
         errors.append("Auto Host must fail closed on same-project semantic version drift after preview")
     if "expectedOpeningIds.SetEquals(openings.Select(x => x.Id))" not in text:
         errors.append("Auto Host must revalidate the selected Opening target set after canonical bind")
-    if "RequireCurrentMutationAuthority(document, project, expectedProjectId, expectedChangeVersion, expectedOpeningIds, selected);" not in text:
+    if authority_call is None:
         errors.append("Auto Host must revalidate active-document/exact-project generation after CAD matching and before semantic mutation")
     if "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)" not in text:
         errors.append("Auto Host final mutation fence must require the exact active managed Document")
@@ -47,7 +56,7 @@ else:
     canonical_resolve_index = text.find("var openings = ResolveSelectedOpenings(project, selected);")
     target_freshness_index = text.find("expectedOpeningIds.SetEquals(openings.Select(x => x.Id))")
     scan_commit_index = text.find("transaction.Commit();", target_freshness_index)
-    final_authority_index = text.find("RequireCurrentMutationAuthority(document, project, expectedProjectId, expectedChangeVersion, expectedOpeningIds, selected);")
+    final_authority_index = authority_call.start() if authority_call is not None else -1
     semantic_service_index = text.find("var service = new HostLinkService();")
     rollback_index = text.find("var rollback = ProjectStateSnapshot.Capture(project);")
     link_index = text.find("service.LinkOpening(project, item.Opening.Id, item.HostId);")
