@@ -18,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             RemoveAndClearUseSemanticLifecycle();
             PairRemovalUsesCanonicalIdentity();
             PairRemovalCanDeletePersistedCorruptValue();
+            PairRemovalCanDeletePersistedMalformedKey();
             NoOpMutationsStayStable();
         }
 
@@ -164,6 +165,22 @@ namespace QS3D.Core.SmokeTests
             Equal(0, element.Quantities.Count);
             Has(element.Dirty, ElementDirtyFlags.Quantity);
             Changed(before, element.UpdatedUtc, "Removing persisted-corrupt quantity state must advance element persistence lifecycle.");
+        }
+
+        private static void PairRemovalCanDeletePersistedMalformedKey()
+        {
+            var element = new ProjectElement("E-QTY-PAIR-MALFORMED-KEY", ElementCategory.Slab);
+            SeedPersistedQuantity(element, " Area ", 5d);
+            element.MarkClean(ElementDirtyFlags.All);
+            var before = element.UpdatedUtc;
+            var quantities = (ICollection<KeyValuePair<string, double>>)element.Quantities;
+
+            if (!quantities.Remove(new KeyValuePair<string, double>(" area ", 5d)))
+                throw new Exception("Exact pair removal must allow cleanup of a persisted non-canonical quantity key through canonical identity.");
+
+            Equal(0, element.Quantities.Count);
+            Has(element.Dirty, ElementDirtyFlags.Quantity);
+            Changed(before, element.UpdatedUtc, "Removing a persisted malformed quantity key must advance element persistence lifecycle.");
         }
 
         private static void NoOpMutationsStayStable()
