@@ -20,7 +20,6 @@ else:
         'Application.ShowModelessWindow(IntPtr.Zero, candidate, true);',
         'if (!candidate.IsLoaded)',
         'CloseUnpublishedCandidate(candidate)',
-        'if (candidate.IsLoaded)',
         '_window = candidate;',
         '_nativeDatabaseIdentity = nativeDatabaseIdentity;',
         'Đã mở Nhật ký thay đổi • chưa có QS3D project hiện hữu; không tạo project mới.',
@@ -49,7 +48,8 @@ else:
     # Preserve read-only project access and stable/redacted host-facing errors while
     # proving the stronger atomic publication contract. The exact candidate must be
     # reserved as unpublished + publication-in-flight before native publication can
-    # reenter, and publishing singleton authority remains conditional on IsLoaded.
+    # reenter, and singleton publication remains after explicit non-loaded rejection
+    # plus a fresh exact-document-generation fence.
     show_start = text.find("public void ShowAuditLog()")
     prepare_start = text.find("private static bool PrepareUnpublishedCandidate", show_start + 1)
     show = text[show_start:prepare_start] if show_start >= 0 and prepare_start > show_start else ""
@@ -59,8 +59,8 @@ else:
     inflight_pos = show.find("_publicationInFlightCandidate = candidate;", unpublished_pos + 1)
     show_pos = show.find("Application.ShowModelessWindow(IntPtr.Zero, candidate, true);", inflight_pos + 1)
     loaded_guard_pos = show.find("if (!candidate.IsLoaded)", show_pos + 1)
-    loaded_publish_pos = show.find("if (candidate.IsLoaded)", loaded_guard_pos + 1)
-    publish_window_pos = show.find("_window = candidate;", loaded_publish_pos + 1)
+    post_load_affinity_pos = show.find("if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))", loaded_guard_pos + 1)
+    publish_window_pos = show.find("_window = candidate;", post_load_affinity_pos + 1)
     publish_identity_pos = show.find("_nativeDatabaseIdentity = nativeDatabaseIdentity;", publish_window_pos + 1)
     if min(
         construct_pos,
@@ -69,7 +69,7 @@ else:
         inflight_pos,
         show_pos,
         loaded_guard_pos,
-        loaded_publish_pos,
+        post_load_affinity_pos,
         publish_window_pos,
         publish_identity_pos,
     ) < 0:
@@ -81,12 +81,12 @@ else:
         < inflight_pos
         < show_pos
         < loaded_guard_pos
-        < loaded_publish_pos
+        < post_load_affinity_pos
         < publish_window_pos
         < publish_identity_pos
     ):
         errors.append(
-            "Audit command must construct -> attach exact Closed owner -> reserve unpublished -> reserve publication-in-flight -> show -> reject non-loaded -> confirm loaded -> publish window -> publish native identity"
+            "Audit command must construct -> attach exact Closed owner -> reserve unpublished -> reserve publication-in-flight -> show -> reject non-loaded -> revalidate exact document generation -> publish window -> publish native identity"
         )
 
     # A failed native show must remain redacted and must attempt terminal cleanup
