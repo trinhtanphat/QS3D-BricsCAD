@@ -29,7 +29,7 @@ for label, path in FILES.items():
 
     require(label, 'IsActiveDocumentGeneration' in text,
             'missing exact active-document/native-database generation helper')
-    require(label, 'var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);' in body,
+    require(label, 'nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);' in body,
             'must capture exact native database identity at command admission')
     require(label, len(calls) >= 5,
             'must revalidate before destructive replacement, after close, before show, after show, and before UI publication')
@@ -39,11 +39,12 @@ for label, path in FILES.items():
             'generation helper must require exact native database identity')
 
     show_pos = body.find('Application.ShowModelessWindow')
-    publish_pos = body.find('_published =')
+    publish_token = '_published = published' if label == 'Project Tools' else '_published = reserved'
+    publish_pos = body.find(publish_token)
     if show_pos >= 0 and publish_pos >= 0:
         require(label, any(show_pos < p < publish_pos for p in calls),
                 'must revalidate after host show before published ownership transfer')
-    require(label, 'CloseCandidateOnAffinityDrift' in text,
+    require(label, ('CloseWindowOnAffinityDrift' in text if label == 'Project Tools' else 'CloseCandidateOnAffinityDrift' in text),
             'affinity drift must close/retain an unpublished candidate rather than orphan it')
     require(label, 'if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))' in body,
             'success/error status publication must be gated to the same exact generation')
