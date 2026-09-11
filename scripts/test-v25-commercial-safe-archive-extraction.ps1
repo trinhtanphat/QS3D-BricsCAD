@@ -82,7 +82,8 @@ try {
     $env:QS3D_V25_COMMERCIAL_ZIP_SHA256 = ('0' * 64)
     $digestMismatchDestination = Join-Path $tempRoot 'digest-mismatch-output'
     Assert-Rejected -Label 'exact parsed generation digest mismatch' -ExpectedMessage 'generation changed between admission and exact-stream extraction' -Action { Invoke-SafeExtract -ZipPath $validZip -Destination $digestMismatchDestination -SkipAdmission }
-    if (Test-Path -LiteralPath $digestMismatchDestination) { throw 'Digest mismatch left a partial extraction destination.' }
+    if (-not (Test-Path -LiteralPath $digestMismatchDestination -PathType Container)) { throw 'Digest mismatch did not leave fail-closed residue after destination generation pinning.' }
+    if (@(Get-ChildItem -LiteralPath $digestMismatchDestination -Force).Count -ne 0) { throw 'Digest mismatch fail-closed residue unexpectedly contains materialized payload files.' }
 
     $validDestination = Join-Path $tempRoot 'valid-output'
     Invoke-SafeExtract -ZipPath $validZip -Destination $validDestination

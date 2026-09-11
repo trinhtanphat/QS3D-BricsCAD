@@ -55,6 +55,7 @@ def contract_errors(workflow: str, extractor: str | None) -> list[str]:
         ("Ensure-HeldSafeDirectory -Path $parent", "file-parent generation admission"),
         ("$directoryHolds.ContainsKey($parent)", "file-parent hold assertion"),
         ("$holdOrder[$i].Handle.Dispose()", "post-materialization hold disposal"),
+        ("leaving destination residue because its generation can no longer be proven safe for pathname cleanup", "fail-closed ambiguous-generation cleanup"),
         ("$expectedZipSha256 = [string]$env:QS3D_V25_COMMERCIAL_ZIP_SHA256", "admitted ZIP digest input"),
         ("$parsedDigestBytes = $zipSha.ComputeHash($zipStream)", "exact opened-stream hashing"),
         ("[string]::Equals($parsedDigest, $expectedZipSha256, [StringComparison]::OrdinalIgnoreCase)", "exact stream digest comparison"),
@@ -67,6 +68,8 @@ def contract_errors(workflow: str, extractor: str | None) -> list[str]:
         errors.append("directory-generation holds must deny delete/rename sharing")
     if "Get-FileHash" in extractor:
         errors.append("extractor must not reopen the ZIP pathname for digest verification")
+    if "Remove-Item -LiteralPath $destinationFull" in extractor:
+        errors.append("failed extraction must not release generation holds and then recursively delete an unproven destination pathname")
 
     open_zip = extractor.find("$zipStream = [IO.File]::Open($zipFull")
     compute = extractor.find("$parsedDigestBytes = $zipSha.ComputeHash($zipStream)", open_zip)
@@ -121,7 +124,7 @@ def runtime_errors(registry: str | None, runtime: str | None) -> list[str]:
         "generation changed between admission and exact-stream extraction",
         "Hashing an unrelated release asset overwrote",
         "../escape.txt", "Payload.txt", "payload.TXT", "COM¹.txt", "nested\\escape.txt", "payload.txt:stream", "payload./file.txt",
-        "-MaxEntries 1", "-MaxExpandedBytes 32", "-MaxPackageBytes 1", "must not already exist",
+        "-MaxEntries 1", "-MaxExpandedBytes 32", "-MaxPackageBytes 1", "must not already exist", "fail-closed residue",
     )
     for token in required:
         if token not in runtime:
@@ -156,6 +159,7 @@ Ensure-HeldSafeDirectory -Path $parent
 if (-not $directoryHolds.ContainsKey($parent)) {{throw}}
 $out = [IO.File]::Open([string]$record.Target, [IO.FileMode]::CreateNew,x,x)
 $holdOrder[$i].Handle.Dispose()
+leaving destination residue because its generation can no longer be proven safe for pathname cleanup
 """
     calls = (
         ".\\scripts\\expand-v25-commercial-candidate.ps1 -ZipPath $heldZip -DestinationRoot $verificationRoot -MaxPackageBytes 268435456 -MaxExpandedBytes 536870912 -MaxEntries 4096",
@@ -177,6 +181,7 @@ $holdOrder[$i].Handle.Dispose()
         "clobber output": (workflow, safe.replace("[IO.FileMode]::CreateNew", "[IO.FileMode]::Create", 1)),
         "delete-sharing directory hold": (workflow, safe + " FILE_SHARE_DELETE"),
         "missing parent hold": (workflow, safe.replace("$directoryHolds.ContainsKey($parent)", "$true", 1)),
+        "pathname cleanup after hold release": (workflow, safe + "\nRemove-Item -LiteralPath $destinationFull -Recurse -Force"),
         "wrong downloaded ZIP": (workflow.replace("-ZipPath $heldRemoteZip", "-ZipPath $remoteZip", 1), safe),
     }
     for label, (wf, ex) in mutants.items():

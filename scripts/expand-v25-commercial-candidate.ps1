@@ -341,7 +341,12 @@ finally {
     if ($archive) { $archive.Dispose() }
     if ($zipStream) { $zipStream.Dispose() }
     for ($i = $holdOrder.Count - 1; $i -ge 0; $i--) { try { $holdOrder[$i].Handle.Dispose() } catch { } }
-    if (-not $completed -and (Test-Path -LiteralPath $destinationFull)) { Remove-Item -LiteralPath $destinationFull -Recurse -Force -ErrorAction SilentlyContinue }
+    if (-not $completed -and (Test-Path -LiteralPath $destinationFull)) {
+        # Once the pinned directory-generation handles are released, pathname identity is no longer
+        # authoritative. Fail closed and leave bounded residue rather than risk deleting a replacement
+        # generation that an external writer installed after our holds were released.
+        Write-Warning "Commercial candidate extraction failed; leaving destination residue because its generation can no longer be proven safe for pathname cleanup: $destinationFull"
+    }
 }
 
 Write-Host "Safely extracted V25 commercial candidate archive: entries=$entryCount declaredExpandedBytes=$expandedBytes materializedBytes=$materializedBytes destination=$destinationFull"
