@@ -111,7 +111,7 @@ namespace QS3D.Core.BenchmarkParity
 
     public sealed class RevisionMarkupDelta2D
     {
-        public RevisionMarkupDelta2D(string markupId, RevisionMarkupChangeKind kind, TakeoffQuantityEvidence2D previous, TakeoffQuantityEvidence2D current)
+        public RevisionMarkupDelta2D(string markupId, RevisionMarkupChangeKind kind, TakeoffQuantityEvidence2D? previous, TakeoffQuantityEvidence2D? current)
         {
             MarkupId = QsModelElementSnapshot.Require(markupId, "markupId");
             Kind = kind;
@@ -120,8 +120,8 @@ namespace QS3D.Core.BenchmarkParity
         }
         public string MarkupId { get; private set; }
         public RevisionMarkupChangeKind Kind { get; private set; }
-        public TakeoffQuantityEvidence2D Previous { get; private set; }
-        public TakeoffQuantityEvidence2D Current { get; private set; }
+        public TakeoffQuantityEvidence2D? Previous { get; private set; }
+        public TakeoffQuantityEvidence2D? Current { get; private set; }
         public double QuantityDelta { get { return (Current == null ? 0d : Current.Quantity) - (Previous == null ? 0d : Previous.Quantity); } }
     }
 
@@ -138,8 +138,8 @@ namespace QS3D.Core.BenchmarkParity
             var result = new List<RevisionMarkupDelta2D>();
             foreach (var id in ids)
             {
-                TakeoffQuantityEvidence2D oldValue;
-                TakeoffQuantityEvidence2D newValue;
+                TakeoffQuantityEvidence2D? oldValue;
+                TakeoffQuantityEvidence2D? newValue;
                 oldById.TryGetValue(id, out oldValue);
                 newById.TryGetValue(id, out newValue);
                 var kind = oldValue == null ? RevisionMarkupChangeKind.Added : newValue == null ? RevisionMarkupChangeKind.Removed : Equivalent(oldValue, newValue) ? RevisionMarkupChangeKind.Unchanged : RevisionMarkupChangeKind.Changed;
@@ -197,11 +197,11 @@ namespace QS3D.Core.BenchmarkParity
             public string Classification { get; private set; }
             public string Zone { get; private set; }
             public string Unit { get; private set; }
-            public bool Equals(WorkflowKey other)
+            public bool Equals(WorkflowKey? other)
             {
                 return other != null && string.Equals(Classification, other.Classification, StringComparison.OrdinalIgnoreCase) && string.Equals(Zone, other.Zone, StringComparison.OrdinalIgnoreCase) && string.Equals(Unit, other.Unit, StringComparison.OrdinalIgnoreCase);
             }
-            public override bool Equals(object obj) { return Equals(obj as WorkflowKey); }
+            public override bool Equals(object? obj) { return Equals(obj as WorkflowKey); }
             public override int GetHashCode()
             {
                 unchecked
