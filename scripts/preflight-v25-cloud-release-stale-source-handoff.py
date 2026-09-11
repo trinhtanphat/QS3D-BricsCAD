@@ -106,26 +106,26 @@ def read_version_project_text() -> str:
     return committed.stdout
 
 
-# A stale source is a successful no-op only before the first durable release
-# mutation. Guard executable mutation calls, not generic `$body` literals.
-stale_block, stale_start, stale_end = slice_block(
-    release,
-    "if ($preMutationReleaseDriftStatus -eq 1) {",
-    "if ($preMutationReleaseDriftStatus -ne 0) {",
-    "pre-mutation stale-source branch",
-)
+# An admitted release stays pinned to exact SOURCE_SHA. Protected main may
+# advance while build/package verification runs; ancestry is revalidated at
+# each durable release boundary, but release-relevant drift does not turn a
+# successful release workflow into a no-op.
+publish = release[release.find("      - name: Publish GitHub prerelease"):]
 for token, label in (
-    ("V25_RELEASE_SUPERSEDED source_sha=", "superseded audit marker"),
-    ("::notice title=V25 release source superseded::", "superseded Actions notice"),
-    ("successful no-op before the first persistent release mutation", "successful no-op summary"),
-    ("preview ordinal ownership is not reassigned", "immutable ordinal summary"),
-    ("exit 0", "successful stale no-op exit"),
+    ("git merge-base --is-ancestor $env:SOURCE_SHA $preMutationMain", "pre-mutation source ancestry"),
+    ("git merge-base --is-ancestor $env:SOURCE_SHA $preMutationPublishMain", "moved pre-mutation source ancestry"),
+    ("git merge-base --is-ancestor $env:SOURCE_SHA $finalMain", "final source ancestry"),
+    ("git merge-base --is-ancestor $env:SOURCE_SHA $publishMain", "moved final source ancestry"),
+    ("$publishedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri", "final publication PATCH"),
 ):
-    require(stale_block, token, label)
-for token in ("throw ", "Invoke-RestMethod -Method Post", "upload-v25-held-release-asset.ps1", "Invoke-RestMethod -Method Patch"):
-    forbid(stale_block, token, "persistent/failing operation inside stale no-op")
-if stale_block.find("V25_RELEASE_SUPERSEDED source_sha=") >= stale_block.find("exit 0") >= 0:
-    errors.append("superseded audit marker must precede the successful stale exit")
+    require(publish, token, label)
+for token in (
+    "V25_RELEASE_SUPERSEDED source_sha=$env:SOURCE_SHA",
+    "successful no-op before the first persistent release mutation",
+    "$preMutationReleaseRelevantPaths",
+    "$finalReleaseRelevantPaths",
+):
+    forbid(publish, token, "green-without-release/stale-drift suppression")
 
 release_mutations = [
     '$release = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases"',
@@ -136,8 +136,6 @@ release_mutation_positions = [release.find(token) for token in release_mutations
 for token, pos in zip(release_mutations, release_mutation_positions):
     if pos < 0:
         errors.append(f"missing guarded release mutation: {token}")
-    elif stale_end >= 0 and pos <= stale_end:
-        errors.append(f"stale no-op does not precede guarded release mutation: {token}")
 if all(pos >= 0 for pos in release_mutation_positions) and release_mutation_positions != sorted(release_mutation_positions):
     errors.append("release mutation order changed: draft create -> held asset upload -> publish PATCH is required")
 
@@ -283,4 +281,4 @@ if errors:
         print(f" - {error}", file=sys.stderr)
     raise SystemExit(1)
 
-print("PASS: stale V25 release no-ops before release mutation; dispatcher preserves immutable ordinal ownership, authenticated retry, final-main admission, and ordered durable side effects")
+print("PASS: V25 release stays pinned to exact ancestor source across main advancement; dispatcher preserves immutable ordinal ownership and ordered durable side effects")

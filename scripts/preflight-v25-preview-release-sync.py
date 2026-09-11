@@ -63,13 +63,13 @@ def main():
             prepare,
             [
                 "Get-ReleaseStatusEntries",
+                "function Assert-ReleaseSourceReachable",
+                "$releaseBase = $dispatch",
+                "$admissionMain = Get-RemoteMain",
+                "Assert-ReleaseSourceReachable -TargetSha $admissionMain",
+                "Protected main advanced after dispatch; release preparation remains pinned",
                 "git status --porcelain=v1 --untracked-files=all -- . ':(exclude).nuget/packages/**'",
                 "Release preparation must start from a clean checkout/index",
-                "$releaseRelevantPathspecs = @(",
-                "external/QS3D-Platform",
-                "git diff --quiet --no-ext-diff $range -- @releaseRelevantPathspecs",
-                "git reset --hard",
-                "git checkout --detach $releaseBase",
                 "preflight-runtime-product-version-identity.py",
                 "$workspaceVersionPaths = @(",
                 "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj",
@@ -89,11 +89,10 @@ def main():
                 "if ($finalStatus.Count -eq $workspaceVersionPaths.Count)",
                 "Unexpected release-preparation workspace change",
                 "git diff --check",
+                "Release workspace HEAD must remain the admitted source commit",
                 "git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'",
-                "main moved after dispatch with release-relevant changes",
-                "Release workspace HEAD must remain the protected-main source commit",
                 "$latestMain = Get-RemoteMain",
-                "main advanced through additional non-release paths while validating release source",
+                "Assert-ReleaseSourceReachable -TargetSha $latestMain",
                 "No commit, push, branch-protection bypass, or protected-main mutation was performed by release preparation.",
                 "Write-Output $releaseBase",
             ],
@@ -118,20 +117,23 @@ def main():
 
         anchors = [
             prepare.find("$initialStatus = @(Get-ReleaseStatusEntries)"),
-            prepare.find("git checkout --detach $releaseBase"),
+            prepare.find("$releaseBase = $dispatch"),
+            prepare.find("$admissionMain = Get-RemoteMain"),
+            prepare.find("Assert-ReleaseSourceReachable -TargetSha $admissionMain"),
             prepare.find("preflight-runtime-product-version-identity.py"),
             prepare.find("Set-WorkspaceProductVersion -ReleaseTagValue $tag"),
             prepare.find("Runtime product-version identity preflight failed after workspace synchronization."),
             prepare.find("$expectedProductVersion = $tag.Substring(1)"),
             prepare.find("git diff --check"),
-            prepare.find("Release workspace HEAD must remain the protected-main source commit"),
+            prepare.find("Release workspace HEAD must remain the admitted source commit"),
             prepare.find("$finalStatus = @(Get-ReleaseStatusEntries)"),
             prepare.find("$latestMain = Get-RemoteMain"),
+            prepare.find("Assert-ReleaseSourceReachable -TargetSha $latestMain"),
             prepare.find("Write-Output $releaseBase"),
         ]
         if min(anchors) < 0 or anchors != sorted(anchors):
             raise ValueError(
-                "V25 release preparation must start clean, select protected main, synchronize bounded workspace identity, validate it, preserve HEAD, bound dirty paths, recheck main, then return source SHA"
+                "V25 release preparation must start clean, pin the admitted dispatch SHA, revalidate protected-main ancestry, synchronize bounded workspace identity, preserve HEAD, recheck ancestry, then return source SHA"
             )
 
         require_tokens(
@@ -147,7 +149,7 @@ def main():
         return fail(str(exc))
 
     print(
-        "PASS: V25 preview release accepts an already-synchronized requested preview identity or derives it only in the bounded V25/V26/Core workspace, preserves exact protected-main HEAD provenance, and packages only the synchronized tag identity"
+        "PASS: V25 preview release accepts an already-synchronized requested preview identity or derives it only in the bounded V25/V26/Core workspace, preserves exact admitted SOURCE_SHA provenance, and packages only the synchronized tag identity"
     )
     return 0
 

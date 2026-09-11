@@ -45,11 +45,9 @@ if not PREPARE.is_file():
 else:
     prepare = PREPARE.read_text(encoding="utf-8")
 
-for dispatcher_surface, prepare_surface in surface_contract:
+for dispatcher_surface, _prepare_surface in surface_contract:
     if dispatcher_surface not in workflow:
         errors.append("dispatcher release-relevant surface missing: " + dispatcher_surface)
-    if prepare_surface not in prepare:
-        errors.append("release preparation surface classifier missing: " + prepare_surface)
 
 workflow_tokens = (
     'if [[ "${current_main}" != "${source_sha}" ]]; then',
@@ -71,17 +69,11 @@ for token in workflow_tokens:
         errors.append("dispatcher drift contract missing token: " + token)
 
 prepare_tokens = (
-    "$releaseRelevantPathspecs = @(",
-    "'external/QS3D-Platform'",
-    "function Test-ReleaseRelevantDrift",
+    "function Assert-ReleaseSourceReachable",
     "git merge-base --is-ancestor $dispatch $TargetSha",
-    "git diff --quiet --no-ext-diff $range -- @releaseRelevantPathspecs",
-    "$diffExit = $LASTEXITCODE",
-    "function Assert-ReleaseBaseIsSafe",
-    "main moved after dispatch with release-relevant changes",
-    "$maxAttempts = 12",
-    "git reset --hard",
-    "git checkout --detach $releaseBase",
+    "$releaseBase = $dispatch",
+    "$admissionMain = Get-RemoteMain",
+    "Assert-ReleaseSourceReachable -TargetSha $admissionMain",
     "preflight-runtime-product-version-identity.py",
     "$workspaceVersionPaths = @(",
     "function Set-WorkspaceProductVersion",
@@ -94,9 +86,9 @@ prepare_tokens = (
     "Workspace ProductVersion is already synchronized",
     "if ($finalStatus.Count -eq $workspaceVersionPaths.Count)",
     "Unexpected release-preparation workspace change",
-    "Release workspace HEAD must remain the protected-main source commit",
+    "Release workspace HEAD must remain the admitted source commit",
     "$latestMain = Get-RemoteMain",
-    "main advanced through additional non-release paths while validating release source",
+    "Assert-ReleaseSourceReachable -TargetSha $latestMain",
     "No commit, push, branch-protection bypass, or protected-main mutation was performed by release preparation.",
     "Write-Output $releaseBase",
 )
@@ -157,29 +149,28 @@ if workflow:
         errors.append("dispatcher must not classify release drift from line-oriented pathname output")
 
 if prepare:
-    checkout_index = prepare.find("git checkout --detach $releaseBase")
+    base_index = prepare.find("$releaseBase = $dispatch")
+    admission_index = prepare.find("Assert-ReleaseSourceReachable -TargetSha $admissionMain")
     runtime_identity_index = prepare.find("preflight-runtime-product-version-identity.py")
     sync_index = prepare.find("Set-WorkspaceProductVersion -ReleaseTagValue $tag")
     post_sync_index = prepare.find("Runtime product-version identity preflight failed after workspace synchronization.")
     expected_index = prepare.find("$expectedProductVersion = $tag.Substring(1)")
-    head_guard_index = prepare.find("Release workspace HEAD must remain the protected-main source commit")
+    head_guard_index = prepare.find("Release workspace HEAD must remain the admitted source commit")
     bounded_status_index = prepare.find("$finalStatus = @(Get-ReleaseStatusEntries)")
     refetch_index = prepare.find("$latestMain = Get-RemoteMain")
-    retry_index = prepare.find("main advanced through additional non-release paths while validating release source")
+    final_ancestry_index = prepare.find("Assert-ReleaseSourceReachable -TargetSha $latestMain")
     output_index = prepare.find("Write-Output $releaseBase")
     indexes = (
-        checkout_index, runtime_identity_index, sync_index, post_sync_index, expected_index,
-        head_guard_index, bounded_status_index, refetch_index, retry_index, output_index,
+        base_index, admission_index, runtime_identity_index, sync_index, post_sync_index, expected_index,
+        head_guard_index, bounded_status_index, refetch_index, final_ancestry_index, output_index,
     )
     if min(indexes) < 0 or not (
-        checkout_index < runtime_identity_index < sync_index < post_sync_index < expected_index
-        < head_guard_index < bounded_status_index < refetch_index < retry_index < output_index
+        base_index < admission_index < runtime_identity_index < sync_index < post_sync_index < expected_index
+        < head_guard_index < bounded_status_index < refetch_index < final_ancestry_index < output_index
     ):
         errors.append(
-            "manual release preparation must select safe base, sync bounded tag identity, validate it, preserve HEAD, bound dirty paths, recheck drift, then output exact source SHA"
+            "manual release preparation must pin admitted source, prove ancestry, sync bounded identity, preserve HEAD, recheck ancestry, then return exact source SHA"
         )
-    if "Start a fresh release run instead of overwriting concurrent work." in prepare:
-        errors.append("legacy unconditional main-drift failure must not remain in release preparation")
 
 print("QS3D V25 main-drift preflight")
 if errors:
@@ -189,5 +180,5 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: V25 automation preserves triggering source provenance and pathname-safe drift handling; automatic dispatch keeps committed reservation identity while manual release accepts an already-synchronized preview identity or derives the requested preview identity only in the bounded workspace without writing protected main."
+    "PASS: V25 automation preserves automatic dispatcher pathname-safe drift handling and committed reservation identity; manual release stays pinned to the admitted SOURCE_SHA while revalidating protected-main ancestry without writing protected main."
 )
