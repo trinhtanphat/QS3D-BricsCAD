@@ -9,6 +9,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "release-v25.yml"
 EXTRACTOR = ROOT / "scripts" / "expand-v25-commercial-candidate.ps1"
+CALL = ".\\scripts\\expand-v25-commercial-candidate.ps1"
 
 
 def contract_errors(workflow: str, extractor: str | None) -> list[str]:
@@ -44,35 +45,41 @@ def contract_errors(workflow: str, extractor: str | None) -> list[str]:
         if token not in extractor:
             errors.append(f"missing {label}: {token}")
 
-    call = ".\\scripts\\expand-v25-commercial-candidate.ps1"
-    cleanup_marker = "Verify finalized package after private-key cleanup"
-    boundary_marker = "Verify candidate after job boundary"
+    boundaries = (
+        ("Verify finalized package after private-key cleanup", "post-key-cleanup", "$heldZip", "$verificationRoot"),
+        ("Verify candidate after job boundary", "job-boundary", "$heldZip", "$extract"),
+        ("$extract = Join-Path $downloadRoot 'verified-package'", "downloaded-draft", "$heldRemoteZip", "$extract"),
+    )
     signature_marker = "verify-v25-signatures.ps1"
-    for marker, label in ((cleanup_marker, "post-key-cleanup"), (boundary_marker, "job-boundary")):
+    for marker, label, zip_var, root_var in boundaries:
         start = workflow.find(marker)
         if start < 0:
             errors.append(f"missing {label} verification region")
             continue
-        next_step = workflow.find("\n      - name:", start + len(marker))
-        region = workflow[start:] if next_step < 0 else workflow[start:next_step]
-        call_index = region.find(call)
+        if label == "downloaded-draft":
+            end = workflow.find("$downloadedIdentity =", start)
+        else:
+            end = workflow.find("\n      - name:", start + len(marker))
+        region = workflow[start:] if end < 0 else workflow[start:end]
+        call_index = region.find(CALL)
         sig_index = region.find(signature_marker)
-        for token, token_label in (
-            ("-ZipPath", "ZIP path"),
-            ("-DestinationRoot", "destination root"),
-            ("-MaxPackageBytes", "compressed-size bound"),
-            ("-MaxExpandedBytes", "expanded-size bound"),
-            ("-MaxEntries", "entry-count bound"),
-        ):
+        exact_tokens = (
+            (f"-ZipPath {zip_var}", "exact ZIP path"),
+            (f"-DestinationRoot {root_var}", "exact destination root"),
+            ("-MaxPackageBytes 268435456", "256 MiB compressed-size bound"),
+            ("-MaxExpandedBytes 536870912", "512 MiB expanded-size bound"),
+            ("-MaxEntries 4096", "4096-entry bound"),
+        )
+        for token, token_label in exact_tokens:
             if token not in region:
-                errors.append(f"{label} safe extractor call is missing explicit {token_label}")
+                errors.append(f"{label} safe extractor call is missing {token_label}")
         if call_index < 0:
             errors.append(f"{label} verifier does not invoke reusable bounded safe extraction")
         if sig_index >= 0 and call_index >= 0 and call_index > sig_index:
             errors.append(f"{label} archive safety admission must precede extracted-payload signature verification")
 
-    if workflow.count(call) != 2:
-        errors.append("reusable safe commercial extractor must be invoked exactly once at each of the two V25 verification boundaries")
+    if workflow.count(CALL) != 3:
+        errors.append("reusable safe commercial extractor must be invoked exactly once at each of the three V25 verification boundaries")
     return errors
 
 
@@ -104,21 +111,30 @@ foreach ($entry in $archive.Entries) {
   $out = [IO.File]::Open($target,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
 }
 """
-    safe_workflow = r"""
+    call1 = r".\scripts\expand-v25-commercial-candidate.ps1 -ZipPath $heldZip -DestinationRoot $verificationRoot -MaxPackageBytes 268435456 -MaxExpandedBytes 536870912 -MaxEntries 4096"
+    call2 = r".\scripts\expand-v25-commercial-candidate.ps1 -ZipPath $heldZip -DestinationRoot $extract -MaxPackageBytes 268435456 -MaxExpandedBytes 536870912 -MaxEntries 4096"
+    call3 = r".\scripts\expand-v25-commercial-candidate.ps1 -ZipPath $heldRemoteZip -DestinationRoot $extract -MaxPackageBytes 268435456 -MaxExpandedBytes 536870912 -MaxEntries 4096"
+    safe_workflow = f"""
       - name: Verify finalized package after private-key cleanup
         run: |
-          .\scripts\expand-v25-commercial-candidate.ps1 -ZipPath $heldZip -DestinationRoot $verificationRoot -MaxPackageBytes 268435456 -MaxExpandedBytes 536870912 -MaxEntries 4096
-          & .\scripts\verify-v25-signatures.ps1
+          {call1}
+          & .\\scripts\\verify-v25-signatures.ps1
       - name: Verify candidate after job boundary
         run: |
-          .\scripts\expand-v25-commercial-candidate.ps1 -ZipPath $heldZip -DestinationRoot $extract -MaxPackageBytes 268435456 -MaxExpandedBytes 536870912 -MaxEntries 4096
-          & .\scripts\verify-v25-signatures.ps1
+          {call2}
+          & .\\scripts\\verify-v25-signatures.ps1
+      - name: Create draft, verify uploaded bytes, then publish
+        run: |
+          $extract = Join-Path $downloadRoot 'verified-package'
+          {call3}
+          & .\\scripts\\verify-v25-signatures.ps1
+          $downloadedIdentity = & .\\scripts\\assert-v25-commercial-draft-identity.ps1
 """
     errors: list[str] = []
     if contract_errors(safe_workflow, safe_extractor):
         errors.append("guard rejected intended reusable bounded/path-safe extraction contract")
     mutants = {
-        "raw expansion": (safe_workflow.replace(".\\scripts\\expand-v25-commercial-candidate.ps1 -ZipPath $heldZip -DestinationRoot $verificationRoot -MaxPackageBytes 268435456 -MaxExpandedBytes 536870912 -MaxEntries 4096", "Expand-Archive -LiteralPath $heldZip -DestinationPath $verificationRoot", 1), safe_extractor),
+        "raw expansion": (safe_workflow.replace(call1, "Expand-Archive -LiteralPath $heldZip -DestinationPath $verificationRoot", 1), safe_extractor),
         "missing extractor": (safe_workflow, None),
         "declared but unenforced compressed budget": (safe_workflow, safe_extractor.replace("if ($zipStream.Length -le 0 -or $zipStream.Length -gt $MaxPackageBytes) { throw 'compressed' }", "# no compressed limit", 1)),
         "declared but unenforced entry budget": (safe_workflow, safe_extractor.replace("if ($entryCount -gt $MaxEntries) { throw 'entries' }", "# no entry limit", 1)),
@@ -128,7 +144,9 @@ foreach ($entry in $archive.Entries) {
         "case-sensitive duplicates": (safe_workflow, safe_extractor.replace("[StringComparer]::OrdinalIgnoreCase", "[StringComparer]::Ordinal", 1)),
         "no root containment": (safe_workflow, safe_extractor.replace("if (-not $target.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw 'escape' }", "# no containment", 1)),
         "clobber output": (safe_workflow, safe_extractor.replace("[IO.FileMode]::CreateNew", "[IO.FileMode]::Create", 1)),
-        "one protected boundary": (safe_workflow.replace("          .\\scripts\\expand-v25-commercial-candidate.ps1 -ZipPath $heldZip -DestinationRoot $extract -MaxPackageBytes 268435456 -MaxExpandedBytes 536870912 -MaxEntries 4096\n", "", 1), safe_extractor),
+        "omit job boundary": (safe_workflow.replace(f"          {call2}\n", "", 1), safe_extractor),
+        "omit downloaded draft boundary": (safe_workflow.replace(f"          {call3}\n", "", 1), safe_extractor),
+        "wrong downloaded draft zip": (safe_workflow.replace("-ZipPath $heldRemoteZip", "-ZipPath $remoteZip", 1), safe_extractor),
     }
     for label, (workflow, extractor) in mutants.items():
         if not contract_errors(workflow, extractor):
