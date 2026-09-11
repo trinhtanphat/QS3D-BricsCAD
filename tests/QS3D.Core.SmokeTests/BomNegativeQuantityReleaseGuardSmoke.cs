@@ -18,7 +18,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = ProjectWithBeam("bom-negative", "beam-negative");
             var element = project.Elements[0];
-            element.Quantities["FormworkM2"] = -0.25d;
+            ProjectElementPersistenceFixture.SetQuantity(element, "FormworkM2", -0.25d);
 
             var issues = BomReleaseGuardService.Inspect(project);
             var matches = issues.Where(x => x.Code == "BOM_QUANTITY_NEGATIVE").ToList();
@@ -27,7 +27,7 @@ namespace QS3D.Core.SmokeTests
             var issue = matches[0];
             if (issue.Severity != HealthSeverity.Error || issue.ElementId != element.Id)
                 throw new Exception("Negative quantity must be an Error-level blocker attributed to its owning element.");
-            if (issue.Message != "Quantity FormworkM2 không được âm.")
+            if (issue.Message != "Quantity FormworkM2 kh?ng ???c ?m.")
                 throw new Exception("Negative quantity diagnostic must identify the canonical quantity key.");
             if (!issues.Any(x => x.Code == "BOM_REPORT_FAILED"))
                 throw new Exception("Existing fail-closed report construction must remain in force for negative quantities.");
@@ -36,7 +36,7 @@ namespace QS3D.Core.SmokeTests
         private static void MalformedKeyKeepsKeyDiagnosticPrecedence()
         {
             var project = ProjectWithBeam("bom-negative-bad-key", "beam-negative-bad-key", addCanonicalQuantity: false);
-            project.Elements[0].Quantities[" BadQuantity "] = -1d;
+            ProjectElementPersistenceFixture.SetQuantity(project.Elements[0], " BadQuantity ", -1d);
 
             var issues = BomReleaseGuardService.Inspect(project);
             if (issues.Count(x => x.Code == "BOM_QUANTITY_KEY_INVALID") != 1)

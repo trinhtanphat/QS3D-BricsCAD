@@ -23,16 +23,16 @@ namespace QS3D.Core.SmokeTests
         private static void Ed2MaterialDensityMassParity()
         {
             var project = new ProjectState("ed2-mass", "ED2 mass") { DrawingFingerprint = "ED2-MASS-FP" };
-            project.Floors.Add(new FloorDefinition("f", "Tầng 1", 0d));
+            project.Floors.Add(new FloorDefinition("f", "T?ng 1", 0d));
             project.Zones.Add(new ZoneDefinition("z", "Zone A"));
-            var family = new ProjectFamily("wall", "Tường bê tông", ElementCategory.ArchitecturalWall);
-            family.Properties["Material"] = "Bê tông";
+            var family = new ProjectFamily("wall", "T??ng b? t?ng", ElementCategory.ArchitecturalWall);
+            family.Properties["Material"] = "B? t?ng";
             family.Properties["DensityKgM3"] = "2400";
             family.Properties["Note"] = "Family note";
             project.Families.Add(family);
 
             var inherited = new ProjectElement("W1", ElementCategory.ArchitecturalWall, family.Id, "f", "z");
-            inherited.Properties["Name"] = "Tường tầng 1";
+            inherited.Properties["Name"] = "T??ng t?ng 1";
             inherited.Quantities["NetConcreteM3"] = 1.875d;
             inherited.SourceHandles.Add("A1");
             project.Elements.Add(inherited);
@@ -43,7 +43,7 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(sameGroup);
 
             var densityOverride = new ProjectElement("W3", ElementCategory.ArchitecturalWall, family.Id, "f", "z");
-            densityOverride.Properties["TenCauKien"] = "Tường đặc biệt";
+            densityOverride.Properties["TenCauKien"] = "T??ng ??c bi?t";
             densityOverride.Properties["DensityKgM3"] = "2500";
             densityOverride.Properties["Note"] = "Instance note";
             densityOverride.Quantities["NetConcreteM3"] = 99d;
@@ -52,13 +52,13 @@ namespace QS3D.Core.SmokeTests
             project.Elements.Add(densityOverride);
 
             var materialOverride = new ProjectElement("W4", ElementCategory.ArchitecturalWall, family.Id, "f", "z");
-            materialOverride.Properties["Material"] = "Bê tông nhẹ";
+            materialOverride.Properties["Material"] = "B? t?ng nh?";
             materialOverride.Quantities["NetConcreteM3"] = 1d;
             materialOverride.SourceHandles.Add("A4");
             project.Elements.Add(materialOverride);
 
-            var noDensityFamily = new ProjectFamily("wall-no-density", "Tường chưa khai báo", ElementCategory.ArchitecturalWall);
-            noDensityFamily.Properties["Material"] = "Chưa xác định";
+            var noDensityFamily = new ProjectFamily("wall-no-density", "T??ng ch?a khai b?o", ElementCategory.ArchitecturalWall);
+            noDensityFamily.Properties["Material"] = "Ch?a x?c ??nh";
             project.Families.Add(noDensityFamily);
             var noDensity = new ProjectElement("W5", ElementCategory.ArchitecturalWall, noDensityFamily.Id, "f", "z");
             noDensity.Quantities["NetConcreteM3"] = 2d;
@@ -67,14 +67,14 @@ namespace QS3D.Core.SmokeTests
 
             var detail = ProjectQuantityReportBuilder.Detail(project);
             var inheritedRow = detail.Single(x => x.ElementIds.Single() == "W1");
-            if (inheritedRow.FamilyId != family.Id || inheritedRow.ElementName != "Tường tầng 1" ||
-                inheritedRow.Material != "Bê tông" || inheritedRow.Note != "Family note" ||
+            if (inheritedRow.FamilyId != family.Id || inheritedRow.ElementName != "T??ng t?ng 1" ||
+                inheritedRow.Material != "B? t?ng" || inheritedRow.Note != "Family note" ||
                 !inheritedRow.DensityKgM3.HasValue || Math.Abs(inheritedRow.DensityKgM3.Value - 2400d) > 1e-12 ||
                 !inheritedRow.MassKg.HasValue || Math.Abs(inheritedRow.MassKg.Value - 4500d) > 1e-12)
                 throw new Exception("ED2 detail must expose Family/material/name/note and calculate 1.875 * 2400 = 4500 kg.");
 
             var overrideRow = detail.Single(x => x.ElementIds.Single() == "W3");
-            if (overrideRow.ElementName != "Tường đặc biệt" || overrideRow.Note != "Instance note" ||
+            if (overrideRow.ElementName != "T??ng ??c bi?t" || overrideRow.Note != "Instance note" ||
                 !overrideRow.DensityKgM3.HasValue || Math.Abs(overrideRow.DensityKgM3.Value - 2500d) > 1e-12 ||
                 !overrideRow.MassKg.HasValue || Math.Abs(overrideRow.MassKg.Value - 123.5d) > 1e-12)
                 throw new Exception("ED2 instance density/name/note override or explicit WeightKg precedence failed.");
@@ -87,7 +87,7 @@ namespace QS3D.Core.SmokeTests
             var familyGroups = grouped.Where(x => x.FamilyId == family.Id).ToList();
             if (familyGroups.Count != 3)
                 throw new Exception("ED2 summary must not merge rows with different effective material or density.");
-            var concrete2400 = familyGroups.Single(x => x.Material == "Bê tông" && x.DensityKgM3 == 2400d);
+            var concrete2400 = familyGroups.Single(x => x.Material == "B? t?ng" && x.DensityKgM3 == 2400d);
             if (concrete2400.Count != 2 || !concrete2400.MassKg.HasValue || Math.Abs(concrete2400.MassKg.Value - 4800d) > 1e-12)
                 throw new Exception("ED2 summary mass must aggregate with checked arithmetic only inside a homogeneous material/density group.");
         }
@@ -101,7 +101,7 @@ namespace QS3D.Core.SmokeTests
             ExpectThrows<OverflowException>(() => ProjectQuantityReportBuilder.Detail(multiplicationOverflow));
 
             var invalidExplicit = MassProject("invalid-explicit", string.Empty, 1d);
-            invalidExplicit.Elements[0].Quantities["WeightKg"] = double.NaN;
+            ProjectElementPersistenceFixture.SetQuantity(invalidExplicit.Elements[0], "WeightKg", double.NaN);
             ExpectThrows<InvalidOperationException>(() => ProjectQuantityReportBuilder.Group(invalidExplicit));
 
             var aggregateOverflow = MassProject("aggregate-overflow", string.Empty, 0d);
@@ -137,9 +137,9 @@ namespace QS3D.Core.SmokeTests
         private static void DetailRowsPreserveOneElementProvenance()
         {
             var project = new ProjectState("detail", "ED2 detail") { DrawingFingerprint = "DETAIL-FP" };
-            project.Floors.Add(new FloorDefinition("f", "Tầng 1", 0d));
+            project.Floors.Add(new FloorDefinition("f", "T?ng 1", 0d));
             project.Zones.Add(new ZoneDefinition("z", "Zone A"));
-            var family = new ProjectFamily("wall", "Tường", ElementCategory.ArchitecturalWall);
+            var family = new ProjectFamily("wall", "T??ng", ElementCategory.ArchitecturalWall);
             project.Families.Add(family);
             var first = new ProjectElement("W1", ElementCategory.ArchitecturalWall, family.Id, "f", "z");
             first.SourceHandles.Add("A1");
@@ -181,9 +181,9 @@ namespace QS3D.Core.SmokeTests
         private static void MeasuredSolidMassOverridesDefaultPrismVolume()
         {
             var project = new ProjectState("solid-mass", "Measured Solid");
-            project.Floors.Add(new FloorDefinition("f", "Tầng", 0d));
+            project.Floors.Add(new FloorDefinition("f", "T?ng", 0d));
             project.Zones.Add(new ZoneDefinition("z", "Zone"));
-            var family = new ProjectFamily("slab", "Sàn", ElementCategory.Slab);
+            var family = new ProjectFamily("slab", "S?n", ElementCategory.Slab);
             project.Families.Add(family);
             var slab = new ProjectElement("S1", ElementCategory.Slab, family.Id, "f", "z");
             slab.Properties["AreaM2"] = "20";
@@ -194,7 +194,7 @@ namespace QS3D.Core.SmokeTests
 
             var regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
             if (regenerated != 1 || Math.Abs(slab.Quantities["GrossVolumeM3"] - 1.75d) > 1e-12 || Math.Abs(slab.Quantities["NetVolumeM3"] - 1.75d) > 1e-12)
-                throw new Exception("Measured Solid3d volume must override the default Area × Thickness prism estimate.");
+                throw new Exception("Measured Solid3d volume must override the default Area ? Thickness prism estimate.");
             var report = ProjectQuantityReportBuilder.Group(project).Single();
             if (Math.Abs(report.GrossConcreteM3 - 1.75d) > 1e-12 || Math.Abs(report.NetConcreteM3 - 1.75d) > 1e-12 || Math.Abs(report.OtherAreaM2 - 55d) > 1e-12)
                 throw new Exception("Measured Solid3d volume/surface area did not reach the BQ report.");
@@ -224,10 +224,10 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("p", "P");
             project.DrawingFingerprint = "DWG-FP";
-            project.Zones.Add(new ZoneDefinition("z", "Vùng-1"));
-            project.Floors.Add(new FloorDefinition("f", "Nền 0.00", 0));
-            var wallFamily = new ProjectFamily("wall", "Tường 200", ElementCategory.ArchitecturalWall); project.Families.Add(wallFamily);
-            var openingFamily = new ProjectFamily("opening", "Lỗ Mở", ElementCategory.WallOpening); project.Families.Add(openingFamily);
+            project.Zones.Add(new ZoneDefinition("z", "V?ng-1"));
+            project.Floors.Add(new FloorDefinition("f", "N?n 0.00", 0));
+            var wallFamily = new ProjectFamily("wall", "T??ng 200", ElementCategory.ArchitecturalWall); project.Families.Add(wallFamily);
+            var openingFamily = new ProjectFamily("opening", "L? M?", ElementCategory.WallOpening); project.Families.Add(openingFamily);
             var wall = new ProjectElement("W1", ElementCategory.ArchitecturalWall, wallFamily.Id, "f", "z"); wall.Properties["LengthM"]="5"; wall.Properties["HeightM"]="3"; wall.Properties["ThicknessM"]="0.2"; wall.SourceHandles.Add("AB12"); project.Elements.Add(wall);
             var opening = new ProjectElement("O1", ElementCategory.WallOpening, openingFamily.Id, "f", "z"); opening.Properties["WidthM"]="0.9"; opening.Properties["HeightM"]="2.2"; project.Elements.Add(opening);
             new HostLinkService().LinkOpening(project, opening.Id, wall.Id);
@@ -243,15 +243,15 @@ namespace QS3D.Core.SmokeTests
         private static void PreferredBqQuantityDoesNotEvaluateUnusedFallbacks()
         {
             var project = new ProjectState("p2", "BQ fallback");
-            project.Floors.Add(new FloorDefinition("f", "Tầng", 0d));
-            project.Zones.Add(new ZoneDefinition("z", "Vùng"));
-            var family = new ProjectFamily("wall", "Tường", ElementCategory.ArchitecturalWall);
+            project.Floors.Add(new FloorDefinition("f", "T?ng", 0d));
+            project.Zones.Add(new ZoneDefinition("z", "V?ng"));
+            var family = new ProjectFamily("wall", "T??ng", ElementCategory.ArchitecturalWall);
             project.Families.Add(family);
             var wall = new ProjectElement("W-PREFERRED", ElementCategory.ArchitecturalWall, family.Id, "f", "z");
             wall.Quantities["GrossConcreteM3"] = 2d;
-            wall.Quantities["GrossVolumeM3"] = double.NaN;
+            ProjectElementPersistenceFixture.SetQuantity(wall, "GrossVolumeM3", double.NaN);
             wall.Quantities["NetConcreteM3"] = 1.5d;
-            wall.Quantities["NetVolumeM3"] = double.PositiveInfinity;
+            ProjectElementPersistenceFixture.SetQuantity(wall, "NetVolumeM3", double.PositiveInfinity);
             wall.MarkClean(ElementDirtyFlags.All);
             project.Elements.Add(wall);
 
@@ -263,9 +263,9 @@ namespace QS3D.Core.SmokeTests
         private static void WallFinishPrefersRegeneratedNetArea()
         {
             var project = new ProjectState("p3", "Wall finish BQ precedence");
-            project.Floors.Add(new FloorDefinition("f", "Tầng", 0d));
-            project.Zones.Add(new ZoneDefinition("z", "Vùng"));
-            var family = new ProjectFamily("wf", "Sơn tường", ElementCategory.WallFinish);
+            project.Floors.Add(new FloorDefinition("f", "T?ng", 0d));
+            project.Zones.Add(new ZoneDefinition("z", "V?ng"));
+            var family = new ProjectFamily("wf", "S?n t??ng", ElementCategory.WallFinish);
             project.Families.Add(family);
             var finish = new ProjectElement("WF-NET", ElementCategory.WallFinish, family.Id, "f", "z");
             finish.Quantities["SideAreaM2"] = 99d;
