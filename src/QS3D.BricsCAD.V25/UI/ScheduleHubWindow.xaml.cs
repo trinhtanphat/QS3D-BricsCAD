@@ -14,10 +14,12 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class ScheduleHubWindow : Window
     {
         private readonly Document _document;
+        private readonly IntPtr _nativeDatabaseIdentity;
 
         public ScheduleHubWindow(Document document)
         {
             _document = document ?? throw new ArgumentNullException(nameof(document));
+            _nativeDatabaseIdentity = GetNativeDatabaseIdentity(_document);
             InitializeComponent();
             DocumentBoundWindowLifetime.Attach(this, _document);
             Loaded += (_, __) => RefreshSnapshot();
@@ -36,19 +38,23 @@ namespace QS3D.BricsCAD.V25.UI
                 _document.SendStringToExecute(normalizedCommand + " ", true, false, false);
                 SetStatus("Đã gửi lệnh " + normalizedCommand + " sang “" + DrawingLabel(_document) + "”.");
             }
-            catch (Exception ex) { SetStatus("Schedule Hub: " + ex.Message); }
+            catch
+            {
+                SetStatus("Schedule Hub không thể gửi lệnh an toàn cho bản vẽ nguồn; hãy kích hoạt lại đúng bản vẽ và thử lại.");
+            }
         }
 
         private void RefreshSnapshot()
         {
             try
             {
-                Title = "QS3D • Schedule Hub • " + DrawingLabel(_document);
-                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+                if (!IsBoundActiveDocumentGeneration())
                 {
-                    SetStatus("Kích hoạt lại “" + DrawingLabel(_document) + "” để làm mới Schedule snapshot; số đang hiển thị được giữ nguyên.");
+                    SetStatus("Kích hoạt lại bản vẽ đã mở Schedule Hub để làm mới snapshot; số đang hiển thị được giữ nguyên.");
                     return;
                 }
+
+                Title = "QS3D • Schedule Hub • " + DrawingLabel(_document);
 
                 if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
                 {
@@ -74,7 +80,10 @@ namespace QS3D.BricsCAD.V25.UI
 
                 SetStatus("Schedule snapshot đã tính trên bản sao semantic read-only" + (regenerated > 0 ? " • preview regen " + regenerated + " cấu kiện dirty." : "."));
             }
-            catch (Exception ex) { SetStatus("Đọc Schedule Hub lỗi: " + ex.Message); }
+            catch
+            {
+                SetStatus("Schedule Hub không thể đọc snapshot an toàn; số đang hiển thị được giữ nguyên.");
+            }
         }
 
         private void ClearSnapshotCounts()
@@ -116,21 +125,57 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void EnsureActive(string operation)
         {
-            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+            if (!IsBoundActiveDocumentGeneration())
                 throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Schedule Hub trước khi " + operation + ".");
+        }
+
+        private bool IsBoundActiveDocumentGeneration()
+        {
+            if (_nativeDatabaseIdentity == IntPtr.Zero) return false;
+            try
+            {
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)) return false;
+                var database = _document.Database;
+                return database != null &&
+                       database.UnmanagedObject != IntPtr.Zero &&
+                       database.UnmanagedObject == _nativeDatabaseIdentity;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static IntPtr GetNativeDatabaseIdentity(Document document)
+        {
+            var database = document.Database;
+            if (database == null)
+                throw new InvalidOperationException("Schedule Hub requires a BricsCAD document database.");
+
+            var identity = database.UnmanagedObject;
+            if (identity == IntPtr.Zero)
+                throw new InvalidOperationException("Schedule Hub requires a live native BricsCAD database.");
+            return identity;
         }
 
         private static string DrawingLabel(Document document)
         {
-            var name = document.Name ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(name)) return "Bản vẽ chưa lưu";
-            try { return System.IO.Path.GetFileName(name); }
-            catch { return name; }
+            try
+            {
+                var name = document.Name ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(name)) return "Bản vẽ chưa lưu";
+                return System.IO.Path.GetFileName(name);
+            }
+            catch
+            {
+                return "Bản vẽ nguồn";
+            }
         }
 
         private void SetStatus(string text)
         {
             StatusText.Text = text ?? string.Empty;
+            if (!IsBoundActiveDocumentGeneration()) return;
             try { PaletteCoordinator.SetStatus(StatusText.Text); } catch { }
         }
     }
