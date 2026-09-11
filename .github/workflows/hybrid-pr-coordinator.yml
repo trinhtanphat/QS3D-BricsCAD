@@ -18,7 +18,7 @@ name: QS3D Hybrid PR Coordinator
 
 permissions:
   contents: read
-  actions: write
+  actions: read
   pull-requests: write
 
 concurrency:
@@ -138,6 +138,8 @@ jobs:
 
   refresh-branches:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    permissions:
+      actions: write
     runs-on: ubuntu-latest
     steps:
       - name: Rebase-first refresh remaining eligible PRs from current main
