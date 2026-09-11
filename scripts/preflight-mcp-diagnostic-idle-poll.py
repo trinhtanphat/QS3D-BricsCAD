@@ -8,7 +8,7 @@ text = SOURCE.read_text(encoding="utf-8")
 
 def method_body(name: str) -> str:
     method = re.search(
-        rf"(?m)^\s*(?:(?:private|internal|public|protected)\s+)?static\s+void\s+{re.escape(name)}\s*\(",
+        rf"(?m)^\s*(?:(?:private|internal|public|protected)\s+)?static\s+(?:void|bool)\s+{re.escape(name)}\s*\(",
         text,
     )
     if not method:
@@ -52,7 +52,14 @@ required_stop = "Application.DocumentManager.DocumentBecameCurrent -= OnDocument
 if required_start not in start_body:
     raise SystemExit("FAIL: diagnostics does not subscribe to DocumentBecameCurrent")
 if required_stop not in stop_body:
-    raise SystemExit("FAIL: diagnostics does not unsubscribe from DocumentBecameCurrent")
+    if "DetachGlobalSubscriptionsBestEffort()" not in stop_body:
+        raise SystemExit("FAIL: diagnostics stop no longer delegates bounded global detach")
+    detach_body = method_body("DetachGlobalSubscriptionsBestEffort")
+    if required_stop not in detach_body:
+        raise SystemExit("FAIL: diagnostics global detach helper does not unsubscribe from DocumentBecameCurrent")
+    for token in ["_documentBecameCurrentMayBeSubscribed", "HasGlobalSubscriptionOwnershipLocked()"]:
+        if token not in detach_body:
+            raise SystemExit(f"FAIL: diagnostics global detach helper lost ownership fence: {token}")
 
 handler = re.search(
     r"private static void OnDocumentBecameCurrent\(object sender, DocumentCollectionEventArgs e\)\s*\{(?P<body>.*?)\n\s*\}",
