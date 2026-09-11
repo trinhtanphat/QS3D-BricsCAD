@@ -369,27 +369,40 @@ namespace QS3D.BricsCAD.V25
                 if (_pending != null)
                     throw new InvalidOperationException("Another queued native command already owns the DWG write lane.");
                 pending = new PendingNativeCommand(document, NormalizeCommand(command), audit);
-                pending.WillStartHandler = OnCommandWillStart;
-                pending.EndedHandler = OnCommandEnded;
-                pending.CancelledHandler = OnCommandCancelled;
-                pending.FailedHandler = OnCommandFailed;
+                pending.WillStartHandler = (sender, e) => OnCommandWillStart(pending, sender, e);
+                pending.EndedHandler = (sender, e) => OnCommandEnded(pending, sender, e);
+                pending.CancelledHandler = (sender, e) => OnCommandCancelled(pending, sender, e);
+                pending.FailedHandler = (sender, e) => OnCommandFailed(pending, sender, e);
+
+                // Publish process-global writer quarantine before the first fallible native
+                // accessor. A BricsCAD event add can partially register and then throw; cleanup
+                // ownership must already be authoritative if that happens.
+                _pending = pending;
                 try
                 {
+                    pending.WillStartMayBeSubscribed = true;
                     document.CommandWillStart += pending.WillStartHandler;
+                    pending.EndedMayBeSubscribed = true;
                     document.CommandEnded += pending.EndedHandler;
+                    pending.CancelledMayBeSubscribed = true;
                     document.CommandCancelled += pending.CancelledHandler;
+                    pending.FailedMayBeSubscribed = true;
                     document.CommandFailed += pending.FailedHandler;
+                    pending.AcceptCallbacks = true;
                 }
                 catch
                 {
-                    if (!TryDetachPendingLocked(pending))
+                    pending.AcceptCallbacks = false;
+                    if (TryDetachPendingLocked(pending))
                     {
-                        _pending = pending;
+                        if (ReferenceEquals(_pending, pending)) _pending = null;
+                    }
+                    else
+                    {
                         SafeAudit(pending.Audit, "native command handler rollback failed; writer remains quarantined");
                     }
                     throw;
                 }
-                _pending = pending;
             }
             SafeAudit(audit, "native command barrier armed; command=" + SafeTool(command));
             return new NativeCommandReservation(pending, ownsMutationGate);
@@ -429,30 +442,35 @@ namespace QS3D.BricsCAD.V25
             finally { work.Done.Set(); }
         }
 
-        private static void OnCommandWillStart(object sender, CommandEventArgs e)
+        private static void OnCommandWillStart(PendingNativeCommand pending, object sender, CommandEventArgs e)
         {
             lock (Sync)
             {
-                if (_pending == null || !PendingMatchesLocked(sender, e)) return;
-                _pending.Started = true;
-                SafeAudit(_pending.Audit, "native command started; command=" + SafeTool(_pending.Command));
+                if (!PendingMatchesLocked(pending, sender, e)) return;
+                pending.Started = true;
+                SafeAudit(pending.Audit, "native command started; command=" + SafeTool(pending.Command));
             }
         }
 
-        private static void OnCommandEnded(object sender, CommandEventArgs e) { CompletePending(sender, e, "ended"); }
-        private static void OnCommandCancelled(object sender, CommandEventArgs e) { CompletePending(sender, e, "cancelled"); }
-        private static void OnCommandFailed(object sender, CommandEventArgs e) { CompletePending(sender, e, "failed"); }
+        private static void OnCommandEnded(PendingNativeCommand pending, object sender, CommandEventArgs e) { CompletePending(pending, sender, e, "ended"); }
+        private static void OnCommandCancelled(PendingNativeCommand pending, object sender, CommandEventArgs e) { CompletePending(pending, sender, e, "cancelled"); }
+        private static void OnCommandFailed(PendingNativeCommand pending, object sender, CommandEventArgs e) { CompletePending(pending, sender, e, "failed"); }
 
-        private static void CompletePending(object sender, CommandEventArgs e, string terminalState)
+        private static void CompletePending(PendingNativeCommand pending, object sender, CommandEventArgs e, string terminalState)
         {
             PendingNativeCommand? completed = null;
             lock (Sync)
             {
-                if (_pending == null || !PendingMatchesLocked(sender, e)) return;
-                completed = _pending;
+                if (!PendingMatchesLocked(pending, sender, e)) return;
+                completed = pending;
+                completed.AcceptCallbacks = false;
+                // A terminal event proves native dispatch is over even if an event accessor
+                // refuses cleanup. Keep writer quarantine, but allow a later bounded Reset()
+                // to retry handler detach without replaying the CAD command.
+                completed.Dispatching = false;
                 if (TryDetachPendingLocked(completed))
                 {
-                    _pending = null;
+                    if (ReferenceEquals(_pending, completed)) _pending = null;
                     if (_lease != null && _lease.ReleaseWhenIdle)
                         _lease = null;
                     else
@@ -472,11 +490,11 @@ namespace QS3D.BricsCAD.V25
                 McpMutationAckLedger.MarkNativeCommandTerminal(completed, terminalState);
         }
 
-        private static bool PendingMatchesLocked(object sender, CommandEventArgs e)
+        private static bool PendingMatchesLocked(PendingNativeCommand pending, object sender, CommandEventArgs e)
         {
-            if (_pending == null || !ReferenceEquals(sender, _pending.Document)) return false;
+            if (!ReferenceEquals(_pending, pending) || !pending.AcceptCallbacks || !ReferenceEquals(sender, pending.Document)) return false;
             var eventName = NormalizeLifecycleCommand(e == null ? string.Empty : e.GlobalCommandName);
-            var pendingName = NormalizeLifecycleCommand(_pending.Command);
+            var pendingName = NormalizeLifecycleCommand(pending.Command);
             return eventName.Length != 0 && string.Equals(eventName, pendingName, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -511,12 +529,44 @@ namespace QS3D.BricsCAD.V25
 
         private static bool TryDetachPendingLocked(PendingNativeCommand pending)
         {
-            var detached = true;
-            try { pending.Document.CommandWillStart -= pending.WillStartHandler; } catch { detached = false; }
-            try { pending.Document.CommandEnded -= pending.EndedHandler; } catch { detached = false; }
-            try { pending.Document.CommandCancelled -= pending.CancelledHandler; } catch { detached = false; }
-            try { pending.Document.CommandFailed -= pending.FailedHandler; } catch { detached = false; }
-            return detached;
+            pending.AcceptCallbacks = false;
+            if (pending.WillStartMayBeSubscribed)
+            {
+                try
+                {
+                    pending.Document.CommandWillStart -= pending.WillStartHandler;
+                    pending.WillStartMayBeSubscribed = false;
+                }
+                catch { }
+            }
+            if (pending.EndedMayBeSubscribed)
+            {
+                try
+                {
+                    pending.Document.CommandEnded -= pending.EndedHandler;
+                    pending.EndedMayBeSubscribed = false;
+                }
+                catch { }
+            }
+            if (pending.CancelledMayBeSubscribed)
+            {
+                try
+                {
+                    pending.Document.CommandCancelled -= pending.CancelledHandler;
+                    pending.CancelledMayBeSubscribed = false;
+                }
+                catch { }
+            }
+            if (pending.FailedMayBeSubscribed)
+            {
+                try
+                {
+                    pending.Document.CommandFailed -= pending.FailedHandler;
+                    pending.FailedMayBeSubscribed = false;
+                }
+                catch { }
+            }
+            return !pending.HasSubscribedHandlers;
         }
 
         private static string NormalizeRequiredToken(string value)
@@ -641,6 +691,19 @@ namespace QS3D.BricsCAD.V25
             public string ActionId { get; set; } = string.Empty;
             public bool Started { get; set; }
             public bool Dispatching { get; set; }
+            public bool AcceptCallbacks { get; set; }
+            public bool WillStartMayBeSubscribed { get; set; }
+            public bool EndedMayBeSubscribed { get; set; }
+            public bool CancelledMayBeSubscribed { get; set; }
+            public bool FailedMayBeSubscribed { get; set; }
+            public bool HasSubscribedHandlers
+            {
+                get
+                {
+                    return WillStartMayBeSubscribed || EndedMayBeSubscribed
+                           || CancelledMayBeSubscribed || FailedMayBeSubscribed;
+                }
+            }
             public Action<string>? Audit { get; private set; }
             public CommandEventHandler WillStartHandler = null!;
             public CommandEventHandler EndedHandler = null!;

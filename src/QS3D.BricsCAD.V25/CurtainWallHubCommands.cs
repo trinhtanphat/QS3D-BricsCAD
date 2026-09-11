@@ -20,20 +20,28 @@ namespace QS3D.BricsCAD.V25
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
             CurtainWallWindow? candidate = null;
+            var nativeDatabaseIdentity = IntPtr.Zero;
             try
             {
-                var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+                nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+
                 if (!PreparePublishedWindow(document, nativeDatabaseIdentity))
                 {
-                    ReportBlocked(document, "Vách Kính Hub hiện tại chưa thể đóng an toàn; không mở bản sao thứ hai.",
+                    ReportBlocked(document, nativeDatabaseIdentity,
+                        "Vách Kính Hub hiện tại chưa thể đóng an toàn; không mở bản sao thứ hai.",
                         "QS3DCURTAIN: cửa sổ hiện tại chưa đạt terminal Closed; không mở bản sao thứ hai.");
                     return;
                 }
 
+                // Closing a retained pending/published owner can pump MDI work.
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+
                 if (_window != null)
                 {
                     try { _window.Activate(); } catch { }
-                    TrySetStatus("Vách Kính Hub hiện có đã được kích hoạt cho đúng bản vẽ.");
+                    if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                        TrySetStatus("Vách Kính Hub hiện có đã được kích hoạt cho đúng bản vẽ.");
                     return;
                 }
 
@@ -42,13 +50,27 @@ namespace QS3D.BricsCAD.V25
                 candidate.Closed += (_, __) => ReleaseOwnedWindow(ownedCandidate);
                 if (!ReservePendingWindow(candidate, document, nativeDatabaseIdentity))
                 {
-                    ReportBlocked(document, "Vách Kính Hub đang được host publish; không mở bản sao thứ hai.",
+                    ReportBlocked(document, nativeDatabaseIdentity,
+                        "Vách Kính Hub đang được host publish; không mở bản sao thứ hai.",
                         "QS3DCURTAIN: một cửa sổ đang trong giai đoạn publish; không mở bản sao thứ hai.");
-                    TryClose(candidate);
+                    CloseOwnedCandidateOnFailure(candidate);
+                    return;
+                }
+
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                {
+                    CloseOwnedCandidateOnFailure(candidate);
                     return;
                 }
 
                 Application.ShowModelessWindow(IntPtr.Zero, candidate, true);
+
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                {
+                    CloseOwnedCandidateOnFailure(candidate);
+                    return;
+                }
+
                 if (!candidate.IsLoaded)
                 {
                     ReleaseOwnedWindow(candidate);
@@ -57,29 +79,45 @@ namespace QS3D.BricsCAD.V25
 
                 if (!PromotePendingWindow(candidate, document, nativeDatabaseIdentity))
                 {
-                    ReleaseOwnedWindow(candidate);
-                    TryClose(candidate);
-                    ReportBlocked(document, "Vách Kính Hub không thể xác nhận owner sau khi host publish; cửa sổ ứng viên đã được hủy.",
-                        "QS3DCURTAIN: publication owner changed; ứng viên đã được hủy an toàn.");
+                    if (!CloseOwnedCandidateOnFailure(candidate))
+                    {
+                        ReportBlocked(document, nativeDatabaseIdentity,
+                            "Vách Kính Hub không thể xác nhận owner sau khi host publish; cửa sổ ứng viên vẫn được giữ để đóng an toàn.",
+                            "QS3DCURTAIN: publication owner changed; giữ owner ứng viên đến terminal Closed.");
+                    }
                     return;
                 }
 
                 candidate = null;
-                TrySetStatus("Vách Kính Hub: Family • panel grid • schedule • workflow 3D.");
+                if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                    TrySetStatus("Vách Kính Hub: Family • panel grid • schedule • workflow 3D.");
             }
             catch (System.Exception)
             {
                 if (candidate != null)
-                {
-                    ReleaseOwnedWindow(candidate);
-                    TryClose(candidate);
-                }
-                ReportFailure(document);
+                    CloseOwnedCandidateOnFailure(candidate);
+                ReportFailure(document, nativeDatabaseIdentity);
             }
         }
 
         private static bool PreparePublishedWindow(Document requestedDocument, IntPtr requestedNativeDatabaseIdentity)
         {
+            var pending = _pendingWindow;
+            if (pending != null)
+            {
+                if (!pending.IsLoaded)
+                {
+                    ReleaseOwnedWindow(pending);
+                }
+                else
+                {
+                    try { pending.Close(); }
+                    catch { return false; }
+                    if (pending.IsLoaded) return false;
+                    ReleaseOwnedWindow(pending);
+                }
+            }
+
             var published = _window;
             if (published == null) return true;
 
@@ -92,17 +130,10 @@ namespace QS3D.BricsCAD.V25
             if (_nativeDatabaseIdentity == requestedNativeDatabaseIdentity && ReferenceEquals(_document, requestedDocument))
                 return true;
 
-            try
-            {
-                published.Close();
-            }
-            catch
-            {
-                return false;
-            }
+            try { published.Close(); }
+            catch { return false; }
 
-            if (published.IsLoaded)
-                return false;
+            if (published.IsLoaded) return false;
 
             ReleaseOwnedWindow(published);
             return true;
@@ -110,8 +141,7 @@ namespace QS3D.BricsCAD.V25
 
         private static bool ReservePendingWindow(CurtainWallWindow candidate, Document document, IntPtr nativeDatabaseIdentity)
         {
-            if (_pendingWindow != null)
-                return false;
+            if (_pendingWindow != null) return false;
 
             _pendingWindow = candidate;
             _pendingDocument = document;
@@ -121,7 +151,8 @@ namespace QS3D.BricsCAD.V25
 
         private static bool PromotePendingWindow(CurtainWallWindow candidate, Document document, IntPtr nativeDatabaseIdentity)
         {
-            if (!ReferenceEquals(_pendingWindow, candidate) ||
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity) ||
+                !ReferenceEquals(_pendingWindow, candidate) ||
                 !ReferenceEquals(_pendingDocument, document) ||
                 _pendingNativeDatabaseIdentity != nativeDatabaseIdentity ||
                 _window != null)
@@ -133,6 +164,14 @@ namespace QS3D.BricsCAD.V25
             _window = candidate;
             _document = document;
             _nativeDatabaseIdentity = nativeDatabaseIdentity;
+            return true;
+        }
+
+        private static bool CloseOwnedCandidateOnFailure(CurtainWallWindow candidate)
+        {
+            try { if (candidate.IsLoaded) candidate.Close(); } catch { return false; }
+            if (candidate.IsLoaded) return false;
+            ReleaseOwnedWindow(candidate);
             return true;
         }
 
@@ -151,19 +190,16 @@ namespace QS3D.BricsCAD.V25
             _nativeDatabaseIdentity = IntPtr.Zero;
         }
 
-        private static void TryClose(CurtainWallWindow window)
+        private static void ReportBlocked(Document document, IntPtr nativeDatabaseIdentity, string status, string editorMessage)
         {
-            try { if (window.IsLoaded) window.Close(); } catch { }
-        }
-
-        private static void ReportBlocked(Document document, string status, string editorMessage)
-        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             TrySetStatus(status);
             TryWrite(document, "\n" + editorMessage);
         }
 
-        private static void ReportFailure(Document document)
+        private static void ReportFailure(Document document, IntPtr nativeDatabaseIdentity)
         {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             const string message = "QS3DCURTAIN lỗi: không thể mở Vách Kính Hub; kiểm tra document/CAD state và thử lại.";
             TrySetStatus(message);
             TryWrite(document, "\n" + message);
@@ -177,6 +213,23 @@ namespace QS3D.BricsCAD.V25
         private static void TryWrite(Document document, string message)
         {
             try { document.Editor.WriteMessage(message); } catch { }
+        }
+
+        private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (nativeDatabaseIdentity == IntPtr.Zero) return false;
+            try
+            {
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)) return false;
+                var database = document.Database;
+                return database != null &&
+                       database.UnmanagedObject != IntPtr.Zero &&
+                       database.UnmanagedObject == nativeDatabaseIdentity;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static IntPtr GetNativeDatabaseIdentity(Document document)

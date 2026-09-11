@@ -52,7 +52,8 @@ required_coordinator = (
     "NormalizeLifecycleCommand",
     "PendingMatchesLocked",
     "NormalizeLifecycleCommand(e == null ? string.Empty : e.GlobalCommandName)",
-    "NormalizeLifecycleCommand(_pending.Command)",
+    "NormalizeLifecycleCommand(pending.Command)",
+    "ReferenceEquals(_pending, pending)",
     "value[index] == '-'",
 )
 for token in required_coordinator:
