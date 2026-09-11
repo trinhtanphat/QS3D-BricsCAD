@@ -26,9 +26,18 @@ for token, label in (
     ("FileShare]::Read", "held downloaded generations"),
     ("ExpectedSourceCommit", "workflow SHA admission"),
     ("ExpectedReleaseTag", "release tag admission"),
+    ("[Parameter(Mandatory = $true)][ValidatePattern('^https://')][string]$ExpectedPackageUri", "exact HTTPS package URI admission parameter"),
+    ("[Parameter(Mandatory = $true)][ValidatePattern('^[0-9A-Fa-f]{40}$')][string]$ExpectedSignerThumbprint", "exact signer admission parameter"),
+    ("[int]$ExpectedManifestSchemaVersion = 2", "manifest schema admission parameter"),
     ("PACKAGE-METADATA.json", "held ZIP metadata"),
     ("packageSha256", "provenance package digest"),
     ("[string]$update.sha256", "update-manifest package digest"),
+    ("[string]$update.packageUri", "update-manifest package URI"),
+    ("[string]$update.signerThumbprint", "update-manifest signer thumbprint"),
+    ("[int]$update.schemaVersion", "update-manifest schema version"),
+    ("V26 update manifest package URI mismatch", "package URI mismatch rejection"),
+    ("V26 update manifest signer thumbprint mismatch", "signer mismatch rejection"),
+    ("V26 update manifest schema version mismatch", "schema mismatch rejection"),
     ("BricsCAD V26 x64", "V26 target identity"),
     ("net8.0-windows", "V26 framework identity"),
     ("[string]$AdmittedScript", "held-generation admitted action parameter"),
@@ -47,6 +56,22 @@ if "$held.Add($scriptHeld)" not in ASSERT:
 if "$maxAdmittedScriptBytes = 262144" not in ASSERT:
     raise SystemExit("FAIL v26 candidate identity: publisher script admission must retain an explicit size bound")
 
+# Keep URI/signer/schema checks inside the held update-manifest admission block and before any
+# admitted publication script is compiled/executed. This prevents a lexical decoy elsewhere from
+# satisfying the source guard while a stale cross-job manifest remains publishable.
+update_block = ASSERT.find("if ($null -ne $updateHeld)")
+publisher_block = ASSERT.find("$admittedScriptBlock = $null")
+if update_block < 0 or publisher_block < 0 or update_block >= publisher_block:
+    raise SystemExit("FAIL v26 candidate identity: update-manifest admission must precede publisher admission")
+for token in (
+    "[string]$update.packageUri",
+    "[string]$update.signerThumbprint",
+    "[int]$update.schemaVersion",
+):
+    pos = ASSERT.find(token, update_block, publisher_block)
+    if pos < 0:
+        raise SystemExit(f"FAIL v26 candidate identity: held update-manifest block is missing exact release binding: {token}")
+
 require(RUNBOOK, "Lane-Key: `issue-5313`", "original candidate-identity lane provenance")
 require(RUNBOOK, "Issue #5399", "publisher-generation hardening provenance")
 require(RUNBOOK, "exact admitted publisher-script bytes", "publisher-generation execution contract")
@@ -62,6 +87,9 @@ for token, label in (
     (admit_token, "release-job semantic admission"),
     ("-ExpectedSourceCommit $env:GITHUB_SHA", "exact workflow SHA argument"),
     ("-ExpectedReleaseTag $env:RELEASE_TAG", "exact release tag argument"),
+    ("-ExpectedPackageUri $expectedPackageUri", "exact repository/tag/asset URI argument"),
+    ("-ExpectedSignerThumbprint $expectedSignerThumbprint", "exact admitted signer argument"),
+    ("-ExpectedManifestSchemaVersion 2", "exact update-manifest schema argument"),
     (held_publish_token, "publication under held admitted generations"),
     ("GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}", "publisher token on held-admission step"),
 ):
@@ -74,4 +102,4 @@ if WORKFLOW.count(held_publish_token) != 2:
 if "- name: Publish V26 GitHub Release" in WORKFLOW:
     raise SystemExit("FAIL v26 candidate identity: publication must not be split into a later step after held-generation admission")
 
-print("PASS v26 candidate semantic identity, held publisher generation, and publication continuity")
+print("PASS v26 candidate semantic identity, manifest URI/signer/schema binding, held publisher generation, and publication continuity")
