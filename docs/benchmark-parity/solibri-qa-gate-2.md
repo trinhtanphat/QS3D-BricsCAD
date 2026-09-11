@@ -11,9 +11,10 @@
 - IFC property-set evidence for `Pset_Qto` and `Pset_Identity`;
 - IFC spatial-containment and type-assignment relationships;
 - consistency between the QS3D storey and IFC spatial-container value;
+- consistency between the QS3D element type and IFC type-assignment value;
 - unique IFC GUIDs.
 
-Rule severities are configurable per rule. A profile also carries a blocking threshold, allowing project-specific QA policies without changing the analysis engine.
+Rule severities are configurable per rule. A profile also carries a blocking threshold, allowing project-specific QA policies without changing the analysis engine. `QA2.TYPE_ASSIGNMENT_MISMATCH` is Critical in the strict profile and can be overridden like the other rule severities.
 
 ## Property/relationship adapter contract
 
@@ -24,7 +25,7 @@ Until IFC adapters expose richer typed relationship objects, snapshots provide n
 - `IfcRel.SpatialContainer`
 - `IfcRel.TypeAssignment`
 
-Adapters should populate these keys from the authoritative IFC source. Missing or blank evidence fails closed under the strict profile.
+Adapters should populate these keys from the authoritative IFC source. `IfcRel.SpatialContainer` must carry the canonical storey/spatial identity represented by `QsModelElementSnapshot.Storey`; `IfcRel.TypeAssignment` must carry the canonical type identity represented by `QsModelElementSnapshot.Type`. Missing, blank, or contradictory evidence fails closed under the strict profile.
 
 ## Waivers / exceptions
 
@@ -38,12 +39,12 @@ When any active finding meets or exceeds the profile blocking threshold, the dec
 - `CanBoq`
 - `CanEstimate`
 
-Warnings below the blocking threshold return `PassWithWarnings`. This contract is designed to be called at workflow boundaries; UI layers should not independently reinterpret severity.
+Workflow boundaries can additionally call `DemandAllowed(QsQaGuardedWorkflow)` to enforce the decision fail-closed instead of relying on a UI/client to remember a boolean check. A blocked decision throws before Takeoff, BOQ, or Estimate execution. Warnings below the blocking threshold return `PassWithWarnings`. UI layers should not independently reinterpret severity.
 
 ## Compatibility
 
-The earlier `QsQaGate` / `QsQaProfile` API remains available for existing benchmark-foundation callers. Gate 2.0 is additive so current consumers do not require a migration in the same change. New production workflow integration should prefer Gate 2.0.
+The earlier `QsQaGate` / `QsQaProfile` API remains available for existing benchmark-foundation callers. Gate 2.0 remains additive. Existing consumers of `CanTakeoff`, `CanBoq`, and `CanEstimate` continue to work unchanged; `DemandAllowed` is an additional enforcement option for new QS Intelligence and workflow-boundary integrations.
 
 ## Smoke coverage
 
-`QsQaGate2Smoke` covers hard blocking, BOQ/estimate/takeoff parity, valid and expired waivers, severity override behavior, IFC Pset completeness, spatial mismatch, relationship completeness and duplicate IFC GUID detection.
+`QsQaGate2Smoke` covers hard blocking, BOQ/estimate/takeoff parity, fail-closed workflow demand, valid and expired waivers, severity override behavior, IFC Pset completeness, spatial mismatch, IFC type-assignment mismatch, relationship completeness and duplicate IFC GUID detection.
