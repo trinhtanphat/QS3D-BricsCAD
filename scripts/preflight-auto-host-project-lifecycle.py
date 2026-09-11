@@ -26,6 +26,16 @@ else:
         errors.append("Auto Host must fail closed on same-project semantic version drift after preview")
     if "expectedOpeningIds.SetEquals(openings.Select(x => x.Id))" not in text:
         errors.append("Auto Host must revalidate the selected Opening target set after canonical bind")
+    if "RequireCurrentMutationAuthority(document, project, expectedProjectId, expectedChangeVersion, expectedOpeningIds, selected);" not in text:
+        errors.append("Auto Host must revalidate active-document/exact-project generation after CAD matching and before semantic mutation")
+    if "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)" not in text:
+        errors.append("Auto Host final mutation fence must require the exact active managed Document")
+    if "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)" not in text:
+        errors.append("Auto Host final mutation fence must re-read canonical project authority")
+    if "!ReferenceEquals(currentProject, project)" not in text:
+        errors.append("Auto Host final mutation fence must reject replacement project instances")
+    if "expectedOpeningIds.SetEquals(currentOpenings.Select(x => x.Id))" not in text:
+        errors.append("Auto Host final mutation fence must reject target-set drift after CAD matching")
 
     selected_index = text.find("var selected = ReadSelectedHandles(document);")
     empty_selection_index = text.find("if (selected.Count == 0)")
@@ -36,6 +46,11 @@ else:
     freshness_index = text.find("project.ChangeVersion != expectedChangeVersion")
     canonical_resolve_index = text.find("var openings = ResolveSelectedOpenings(project, selected);")
     target_freshness_index = text.find("expectedOpeningIds.SetEquals(openings.Select(x => x.Id))")
+    scan_commit_index = text.find("transaction.Commit();", target_freshness_index)
+    final_authority_index = text.find("RequireCurrentMutationAuthority(document, project, expectedProjectId, expectedChangeVersion, expectedOpeningIds, selected);")
+    semantic_service_index = text.find("var service = new HostLinkService();")
+    rollback_index = text.find("var rollback = ProjectStateSnapshot.Capture(project);")
+    link_index = text.find("service.LinkOpening(project, item.Opening.Id, item.HostId);")
     if min(
         selected_index,
         empty_selection_index,
@@ -46,13 +61,19 @@ else:
         freshness_index,
         canonical_resolve_index,
         target_freshness_index,
+        scan_commit_index,
+        final_authority_index,
+        semantic_service_index,
+        rollback_index,
+        link_index,
     ) < 0:
-        errors.append("missing expected Auto Host selection/read-only/canonical freshness ordering tokens")
+        errors.append("missing expected Auto Host selection/read-only/canonical/precommit freshness ordering tokens")
     elif not (
         selected_index < empty_selection_index < readonly_index < preview_resolve_index < zero_target_index <
-        project_guard_index < freshness_index < canonical_resolve_index < target_freshness_index
+        project_guard_index < freshness_index < canonical_resolve_index < target_freshness_index <
+        scan_commit_index < final_authority_index < semantic_service_index < rollback_index < link_index
     ):
-        errors.append("Auto Host must reject empty/zero-target selection read-only before one canonical mutation bind, then revalidate project/target freshness")
+        errors.append("Auto Host must revalidate the exact document/project/target generation after CAD scan and before rollback snapshot or semantic linking")
 
     if text.count("ExistingProjectMutationContext.TryGet(document, out var project)") != 1:
         errors.append("QS3DAUTOLINKHOSTS must canonicalize the batch mutation project exactly once")
@@ -63,4 +84,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Auto Host is side-effect free for empty/zero-target selections, resolves targets read-only, binds canonical existing state once, revalidates project/target freshness, and preserves semantic rollback coverage.")
+print("PASS: Auto Host binds canonical state once, revalidates exact document/project/target authority after CAD matching, and preserves rollback coverage before semantic mutation.")
