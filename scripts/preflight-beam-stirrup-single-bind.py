@@ -19,7 +19,7 @@ else:
         "ExistingProjectMutationContext.Require(document, \"Beam Stirrup 3D\")",
         "ResolveBeamTargets(project, selectedHandles)",
         "expectedTargetIds.SetEquals(targets.Select(x => x.Id))",
-        "BeamStirrupSolidBuilder.BuildSelected(document, project)",
+        "BeamStirrupSolidBuilder.BuildSelected(document, project, selectedIds, expectedTargetIds)",
         "x.Category == ElementCategory.Beam",
         "x.SourceHandles.Any(selectedHandles.Contains)",
     )
@@ -33,7 +33,7 @@ else:
     zero_target = text.find("if (previewTargets.Count == 0)")
     bind = text.find("ExistingProjectMutationContext.Require(document, \"Beam Stirrup 3D\")")
     revalidate = text.find("expectedTargetIds.SetEquals(targets.Select(x => x.Id))")
-    build = text.find("BeamStirrupSolidBuilder.BuildSelected(document, project)")
+    build = text.find("BeamStirrupSolidBuilder.BuildSelected(document, project, selectedIds, expectedTargetIds)")
     if min(selection, preview, preview_targets, zero_target, bind, revalidate, build) < 0:
         errors.append("Beam Stirrup lifecycle ordering tokens are incomplete")
     elif not selection < preview < preview_targets < zero_target < bind < revalidate < build:
@@ -46,6 +46,8 @@ else:
         errors.append("QS3DREBARSTIRRUP3D must bind the canonical mutation project exactly once")
     if "ProjectContextCoordinator.GetOrCreate(" in body:
         errors.append("QS3DREBARSTIRRUP3D must not bootstrap a project directly")
+    if body.count("CadSelectionGuard.AcquireCurrentSelection(document)") != 1:
+        errors.append("QS3DREBARSTIRRUP3D must acquire the interactive/PICKFIRST selection exactly once")
     for alias in ('CommandMethod("QS3DBEAMSTIRRUP3D"', 'CommandMethod("QS3DREBARSTIRRUP3D"'):
         if alias not in text:
             errors.append("Beam Stirrup command alias missing: " + alias)
@@ -56,4 +58,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Beam Stirrup 3D preserves aliases, resolves semantic Beam targets read-only, no-ops before mutation bind when empty, binds once, and revalidates freshness before native build.")
+print("PASS: Beam Stirrup 3D preserves aliases, captures selection once, resolves semantic Beam targets read-only, no-ops before mutation bind when empty, binds once, revalidates freshness, and hands the exact admitted selection/target generation into native build.")
