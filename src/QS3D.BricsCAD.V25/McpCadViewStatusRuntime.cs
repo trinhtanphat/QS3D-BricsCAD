@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
@@ -210,7 +210,7 @@ namespace QS3D.BricsCAD.V25
             var hasTwist = McpTopLevelJson.HasProperty(body, "twistRadians");
             var twist = hasTwist ? NumberRequired(body, "twistRadians") : 0d;
             if (hasTwist && (twist < -TwoPi || twist > TwoPi))
-                throw new InvalidOperationException("twistRadians must be between -2π and 2π.");
+                throw new InvalidOperationException("twistRadians must be between -2Ï€ and 2Ï€.");
 
             var document = RequireDocument();
             RequireViewMutationIdle();
@@ -366,7 +366,15 @@ namespace QS3D.BricsCAD.V25
         {
             lock (CommandGate)
             {
-                if (CommandTrackers.ContainsKey(document)) return;
+                CommandTracker existing;
+                if (CommandTrackers.TryGetValue(document, out existing))
+                {
+                    if (existing.AcceptCallbacks) return;
+                    existing.DetachBestEffort();
+                    if (!existing.IsFullyDetached) return;
+                    CommandTrackers.Remove(document);
+                }
+
                 if (CommandTrackers.Count >= 32)
                 {
                     Document? removable = null;
@@ -376,13 +384,27 @@ namespace QS3D.BricsCAD.V25
                     }
                     if (removable != null)
                     {
-                        try { CommandTrackers[removable].Dispose(); } catch { }
+                        var stale = CommandTrackers[removable];
+                        stale.DetachBestEffort();
+                        if (!stale.IsFullyDetached) return;
                         CommandTrackers.Remove(removable);
                     }
                 }
+
                 var tracker = new CommandTracker(document);
-                tracker.Subscribe();
                 CommandTrackers[document] = tracker;
+                try
+                {
+                    tracker.Subscribe();
+                }
+                catch
+                {
+                    tracker.DetachBestEffort();
+                    if (tracker.IsFullyDetached
+                        && CommandTrackers.TryGetValue(document, out existing)
+                        && ReferenceEquals(existing, tracker))
+                        CommandTrackers.Remove(document);
+                }
             }
         }
 
@@ -397,7 +419,7 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void TrackCommand(Document document, string phase, CommandEventArgs args)
+        private static void TrackCommand(CommandTracker source, Document document, string phase, CommandEventArgs args)
         {
             var command = SafeCommandName(args == null ? string.Empty : args.GlobalCommandName);
             if (command.Length == 0) return;
@@ -405,6 +427,8 @@ namespace QS3D.BricsCAD.V25
             {
                 CommandTracker tracker;
                 if (!CommandTrackers.TryGetValue(document, out tracker)) return;
+                if (!ReferenceEquals(tracker, source)) return;
+                if (!tracker.AcceptCallbacks) return;
                 tracker.Track(command, phase);
             }
         }
@@ -612,22 +636,45 @@ namespace QS3D.BricsCAD.V25
             private readonly CommandEventHandler _ended;
             private readonly CommandEventHandler _cancelled;
             private readonly CommandEventHandler _failed;
+            private bool _willStartMayBeSubscribed;
+            private bool _endedMayBeSubscribed;
+            private bool _cancelledMayBeSubscribed;
+            private bool _failedMayBeSubscribed;
 
             internal CommandTracker(Document document)
             {
                 _document = document;
-                _willStart = (sender, args) => TrackCommand(_document, "start", args);
-                _ended = (sender, args) => TrackCommand(_document, "end", args);
-                _cancelled = (sender, args) => TrackCommand(_document, "cancelled", args);
-                _failed = (sender, args) => TrackCommand(_document, "failed", args);
+                _willStart = (sender, args) => TrackCommand(this, _document,  start, args);
+                _ended = (sender, args) => TrackCommand(this, _document, end, args);
+                _cancelled = (sender, args) => TrackCommand(this, _document, cancelled, args);
+                _failed = (sender, args) => TrackCommand(this, _document, failed, args);
+            }
+
+            internal bool AcceptCallbacks { get; private set; }
+
+            internal bool IsFullyDetached
+            {
+                get
+                {
+                    return !_willStartMayBeSubscribed
+                           && !_endedMayBeSubscribed
+                           && !_cancelledMayBeSubscribed
+                           && !_failedMayBeSubscribed;
+                }
             }
 
             internal void Subscribe()
             {
+                AcceptCallbacks = false;
+                _willStartMayBeSubscribed = true;
                 _document.CommandWillStart += _willStart;
+                _endedMayBeSubscribed = true;
                 _document.CommandEnded += _ended;
+                _cancelledMayBeSubscribed = true;
                 _document.CommandCancelled += _cancelled;
+                _failedMayBeSubscribed = true;
                 _document.CommandFailed += _failed;
+                AcceptCallbacks = true;
             }
 
             internal void Track(string command, string phase)
@@ -635,7 +682,7 @@ namespace QS3D.BricsCAD.V25
                 _lastCommand = command;
                 _lastPhase = phase ?? string.Empty;
                 _updatedUtc = DateTime.UtcNow;
-                if (string.Equals(phase, "start", StringComparison.Ordinal))
+                if (string.Equals(phase, start, StringComparison.Ordinal))
                 {
                     _active.Add(command);
                     while (_active.Count > MaxTrackedCommandDepth) _active.RemoveAt(0);
@@ -655,12 +702,30 @@ namespace QS3D.BricsCAD.V25
                 return new CommandLifecycleSnapshot(active, _lastCommand, _lastPhase, _updatedUtc);
             }
 
+            internal void DetachBestEffort()
+            {
+                AcceptCallbacks = false;
+                if (_willStartMayBeSubscribed)
+                {
+                    try { _document.CommandWillStart -= _willStart; _willStartMayBeSubscribed = false; } catch { }
+                }
+                if (_endedMayBeSubscribed)
+                {
+                    try { _document.CommandEnded -= _ended; _endedMayBeSubscribed = false; } catch { }
+                }
+                if (_cancelledMayBeSubscribed)
+                {
+                    try { _document.CommandCancelled -= _cancelled; _cancelledMayBeSubscribed = false; } catch { }
+                }
+                if (_failedMayBeSubscribed)
+                {
+                    try { _document.CommandFailed -= _failed; _failedMayBeSubscribed = false; } catch { }
+                }
+            }
+
             public void Dispose()
             {
-                try { _document.CommandWillStart -= _willStart; } catch { }
-                try { _document.CommandEnded -= _ended; } catch { }
-                try { _document.CommandCancelled -= _cancelled; } catch { }
-                try { _document.CommandFailed -= _failed; } catch { }
+                DetachBestEffort();
             }
         }
     }
