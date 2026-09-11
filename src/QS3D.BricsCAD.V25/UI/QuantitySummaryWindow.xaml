@@ -157,6 +157,42 @@
                                            TextWrapping="Wrap" Margin="0,5,0,0"/>
                             </StackPanel>
                         </Border>
+                        <Border x:Name="BqReviewPanel" Loaded="OnBqReviewPanelLoaded"
+                                Background="{StaticResource Bg2Brush}" BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,7,0,0">
+                            <StackPanel>
+                                <TextBlock Text="REVIEW / PHÊ DUYỆT BQ" Style="{StaticResource PanelTitle}"/>
+                                <TextBlock x:Name="BqReviewStateText" Text="Chỉ khả dụng ở chế độ diễn giải chi tiết."
+                                           Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox Grid.Column="0" x:Name="BqReviewStatusCombo" Margin="0,0,3,0"/>
+                                    <TextBox Grid.Column="1" x:Name="BqReviewReviewerBox" Margin="3,0,0,0"
+                                             ToolTip="Người review / phê duyệt"/>
+                                </Grid>
+                                <TextBox x:Name="BqReviewNoteBox" Margin="0,5,0,0" MinHeight="34"
+                                         TextWrapping="Wrap" AcceptsReturn="True" ToolTip="Ghi chú review; bắt buộc khi Reject"/>
+                                <TextBlock Text="MANUAL ADJUSTMENT OVERLAY" Style="{StaticResource Caption}" Margin="0,7,0,3"/>
+                                <ComboBox x:Name="BqReviewMetricCombo" SelectionChanged="OnBqReviewMetricChanged"/>
+                                <Grid Margin="0,5,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" x:Name="BqReviewDeltaBox" ToolTip="Delta cộng/trừ vào số đo gốc khi Approved"/>
+                                    <TextBox Grid.Column="1" x:Name="BqReviewReasonBox" Margin="6,0,0,0" ToolTip="Lý do điều chỉnh"/>
+                                </Grid>
+                                <TextBlock x:Name="BqReviewAdjustmentPreviewText" Style="{StaticResource Caption}"
+                                           TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,7,0,0">
+                                    <Button Content="Lưu review" Click="OnSaveBqReviewClick" Style="{StaticResource AccentButton}"/>
+                                    <Button Content="Xóa review" Click="OnClearBqReviewClick" Style="{StaticResource DenseButton}" Margin="6,0,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
                         <TextBlock Text="Bám 3D bật: click dòng tổng hợp → reveal cả nhóm; click dòng diễn giải → reveal cấu kiện. Tắt Bám 3D vẫn dùng double-click hoặc Định vị."
                                    Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,9"/>
                     </StackPanel>
