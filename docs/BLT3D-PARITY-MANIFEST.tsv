@@ -12,7 +12,7 @@ recognition	Recognition	BLT3D / NHAN DANG	recognition	Applicable	CommandWired	-	
 draw	Draw	BLT3D / VE	draw	Applicable	CommandWired	-	-
 tool.editing	Tool	BLT3D / TOOL	tool.editing	Applicable	CommandWired	-	-
 modeling	Modeling	BLT3D / MODELING	modeling	Applicable	CommandWired	-	-
-rebar	Rebar	BLT3D / COT THEP	rebar	Applicable	ReferenceCaptured	-	-
+rebar	Rebar	BLT3D / COT THEP	rebar	Applicable	CommandWired	-	-
 view	View	BLT3D / XEM	view	Applicable	ReferenceCaptured	-	-
 quantity	Quantity	BLT3D / DINH LUONG	quantity	Applicable	ReferenceCaptured	-	-
 revision	Revision	BLT3D / BAN SUA DOI	revision	Applicable	ReferenceCaptured	-	-
