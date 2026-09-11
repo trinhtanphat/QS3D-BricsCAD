@@ -26,6 +26,14 @@ for path in FILES:
         errors.append(f"{name}: missing public-error output bound")
     if "Authorization" not in text or "REDACTED" not in text:
         errors.append(f"{name}: missing bearer/secret redaction contract")
+    if "JsonEscape(ex.Message)" in text:
+        errors.append(f"{name}: direct exception message still crosses a public JSON boundary")
+    if "JsonEscape(SanitizePublicError(ex.Message))" not in text:
+        errors.append(f"{name}: HTTP/public exception boundary is not routed through sanitizer")
+    if "char.IsControl(ch)" not in text:
+        errors.append(f"{name}: missing control-character stripping")
+    if "[PATH]" not in text:
+        errors.append(f"{name}: missing local-path redaction")
 
 if errors:
     print("MCP public error redaction preflight FAILED")
