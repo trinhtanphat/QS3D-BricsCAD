@@ -99,6 +99,11 @@ def validate(source: str) -> None:
         approval < payload_revalidation.start() < quarantine_move.start(),
         "payload must be revalidated after approval and before quarantine move",
     )
+    between_payload_revalidation_and_move = body[payload_revalidation.end():quarantine_move.start()]
+    require(
+        re.search(r"(?im)^\s*(?:New-Item(?:Property)?|Set-ItemProperty|Remove-Item(?:Property)?|Move-Item|Copy-Item|Unblock-File)\b", between_payload_revalidation_and_move) is None,
+        "no filesystem/registry mutation may occur between payload revalidation and quarantine move",
+    )
     require(
         "Assert-RegistryTreeSnapshotEqual -Expected $entry.Snapshot -Actual (Get-RegistryTreeSnapshot -Path $entry.Target.AppKey)"
         in body[first_mutation:],
@@ -128,6 +133,7 @@ def validate(source: str) -> None:
         ("ReparsePoint", "payload reparse rejection"),
         ("Get-FileHash", "payload content identity hashing"),
         ("[StringComparer]::Ordinal", "deterministic payload identity ordering"),
+        ("[Array]::Sort($relativePaths, [StringComparer]::Ordinal)", "ordinal payload snapshot ordering"),
     ):
         require(token in source, f"missing safety control: {label}")
 
@@ -198,6 +204,14 @@ expect_rejected(
     source.replace(
         "Assert-InstallPayloadSnapshotEqual -Expected $payloadSnapshot -Actual (Get-InstallPayloadSnapshot -Directory $installFull)",
         "# removed payload revalidation",
+        1,
+    ),
+)
+expect_rejected(
+    "mutation between payload revalidation and quarantine move",
+    source.replace(
+        "Assert-InstallPayloadSnapshotEqual -Expected $payloadSnapshot -Actual (Get-InstallPayloadSnapshot -Directory $installFull)",
+        "Assert-InstallPayloadSnapshotEqual -Expected $payloadSnapshot -Actual (Get-InstallPayloadSnapshot -Directory $installFull)\nRemove-Item -LiteralPath 'unsafe' -Force",
         1,
     ),
 )

@@ -144,12 +144,17 @@ function Get-InstallPayloadSnapshot {
             throw "Refusing uninstall payload snapshot containing ReparsePoint: $($item.FullName)"
         }
     }
-    $files = @($items | Where-Object { -not $_.PSIsContainer })
-    $rows = foreach ($file in $files) {
-        $relative = $file.FullName.Substring($root.Length).TrimStart([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
-        [pscustomobject]@{ RelativePath = $relative; Length = [long]$file.Length; Sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
+    $relativePaths = @($items | Where-Object { -not $_.PSIsContainer } | ForEach-Object {
+        $_.FullName.Substring($root.Length).TrimStart([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    })
+    [Array]::Sort($relativePaths, [StringComparer]::Ordinal)
+    $rows = foreach ($relative in $relativePaths) {
+        $fullPath = Join-Path $root $relative
+        $file = Get-Item -LiteralPath $fullPath -Force
+        if (($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "Refusing uninstall payload snapshot containing ReparsePoint: $fullPath" }
+        [pscustomobject]@{ RelativePath = $relative; Length = [long]$file.Length; Sha256 = (Get-FileHash -LiteralPath $fullPath -Algorithm SHA256).Hash.ToLowerInvariant() }
     }
-    return @($rows | Sort-Object -Property RelativePath)
+    return @($rows)
 }
 
 function Assert-InstallPayloadSnapshotEqual {
