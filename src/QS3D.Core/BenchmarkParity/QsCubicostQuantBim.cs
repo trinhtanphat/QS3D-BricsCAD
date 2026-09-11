@@ -113,13 +113,14 @@ namespace QS3D.Core.BenchmarkParity
             {
                 if (component == null) throw new ArgumentException("Component collection contains null.", "components");
                 if (!ids.Add(component.Id)) throw new InvalidOperationException("Duplicate recognized component id: " + component.Id + ".");
-                ComponentReviewDecision review;
+                ComponentReviewDecision? review;
                 reviewById.TryGetValue(component.Id, out review);
                 var status = review == null ? ComponentRecognitionStatus.Proposed : review.Status;
                 if (status == ComponentRecognitionStatus.Rejected) continue;
-                var length = status == ComponentRecognitionStatus.Corrected ? review.CorrectedLength.Value : component.Length;
-                var width = status == ComponentRecognitionStatus.Corrected ? review.CorrectedWidth.Value : component.Width;
-                var height = status == ComponentRecognitionStatus.Corrected ? review.CorrectedHeight.Value : component.Height;
+                var corrected = review != null && status == ComponentRecognitionStatus.Corrected;
+                var length = corrected ? review!.CorrectedLength.GetValueOrDefault(component.Length) : component.Length;
+                var width = corrected ? review!.CorrectedWidth.GetValueOrDefault(component.Width) : component.Width;
+                var height = corrected ? review!.CorrectedHeight.GetValueOrDefault(component.Height) : component.Height;
                 var quantity = new ConcreteFormworkCalculator().RectangularMember(length, width, height, includeEnds);
                 result.Add(new CubicostQuantityLine(component.Id, component.Classification, component.Storey, quantity.ConcreteVolume, quantity.FormworkArea, status, component.Evidence));
             }
