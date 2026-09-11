@@ -38,8 +38,8 @@ require('PreparePublishedWindow(document, nativeDatabaseIdentity)' in body,
         'published-window preparation must receive the exact managed Document generation')
 require('_publishedDocument = new WeakReference<Document>(document);' in body,
         'publication must bind the owner to the exact managed Document wrapper')
-require('PublishedDocumentMatches(document)' in text,
-        'same-native-database reuse must also require the exact managed Document wrapper')
+require('PublishedDocumentMatches(requestedDocument)' in text,
+        'same-native-database reuse must also require the exact requested managed Document wrapper')
 require('CloseUnpublishedCandidate(candidate)' in body,
         'affinity drift must use existing residue-aware unpublished-candidate cleanup')
 show_pos = body.find('Application.ShowModelessWindow')
