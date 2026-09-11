@@ -16,6 +16,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 if (-not ('QS3DV26HeldFileIdentity' -as [type])) {
     Add-Type -TypeDefinition @'
@@ -174,9 +175,9 @@ try {
     foreach ($name in $requiredHostNames) {
         $matches = @($hostReferences | Where-Object { [string]::Equals([string]$_.name, $name, [StringComparison]::Ordinal) })
         if ($matches.Count -ne 1) { throw "V26 candidate provenance must contain exactly one $name host-reference identity." }
-        $host = $matches[0]
-        if ([string]$host.sha256 -cnotmatch '^[0-9a-f]{64}$') { throw "V26 candidate provenance host-reference SHA-256 is noncanonical for $name." }
-        if ([long]$host.length -le 0) { throw "V26 candidate provenance host-reference length must be positive for $name." }
+        $hostReference = $matches[0]
+        if ([string]$hostReference.sha256 -cnotmatch '^[0-9a-f]{64}$') { throw "V26 candidate provenance host-reference SHA-256 is noncanonical for $name." }
+        if ([long]$hostReference.length -le 0) { throw "V26 candidate provenance host-reference length must be positive for $name." }
     }
 
     $archive = [IO.Compression.ZipArchive]::new($zipHeld.Stream, [IO.Compression.ZipArchiveMode]::Read, $true)
