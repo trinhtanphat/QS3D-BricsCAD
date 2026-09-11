@@ -31,14 +31,11 @@ function Admit-TestZip {
     $digest = (& $heldVerifier -Operation Hash -Path $ZipPath).Trim().ToLowerInvariant()
     if ($digest -notmatch '^[0-9a-f]{64}$') { throw "Held verifier returned malformed test ZIP digest: $digest" }
     if ([string]::Equals([IO.Path]::GetFileName($ZipPath), 'QS3D-BricsCAD-V25.zip', [StringComparison]::Ordinal)) {
-        if (-not [string]::Equals($env:QS3D_V25_COMMERCIAL_ZIP_SHA256, $digest, [StringComparison]::OrdinalIgnoreCase)) {
-            throw 'Held verifier did not publish the exact production-named ZIP digest for extraction.'
-        }
+        if (-not [string]::Equals($env:QS3D_V25_COMMERCIAL_ZIP_SHA256, $digest, [StringComparison]::OrdinalIgnoreCase)) { throw 'Held verifier did not publish the exact production-named ZIP digest for extraction.' }
     }
     else {
-        # Adversarial fixtures intentionally use descriptive filenames. Bind each exact fixture digest
-        # directly so path-validation failures are tested after generation admission, without broadening
-        # the production helper's exact QS3D-BricsCAD-V25.zip publication scope.
+        # Descriptive adversarial fixture names are test-only. Bind their exact held digest directly,
+        # without broadening production helper publication beyond QS3D-BricsCAD-V25.zip.
         $env:QS3D_V25_COMMERCIAL_ZIP_SHA256 = $digest
     }
     return $digest
@@ -65,9 +62,7 @@ function Assert-Rejected {
         $rejected = $true
         $message = $_.Exception.Message
         Write-Host "Expected safe-extraction rejection [$Label]: $message"
-        if (-not [string]::IsNullOrWhiteSpace($ExpectedMessage) -and $message.IndexOf($ExpectedMessage, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
-            throw "Safe extractor rejected [$Label] for the wrong reason. Expected '$ExpectedMessage', got '$message'."
-        }
+        if (-not [string]::IsNullOrWhiteSpace($ExpectedMessage) -and $message.IndexOf($ExpectedMessage, [StringComparison]::OrdinalIgnoreCase) -lt 0) { throw "Safe extractor rejected [$Label] for the wrong reason. Expected '$ExpectedMessage', got '$message'." }
     }
     if (-not $rejected) { throw "Safe extractor accepted an invalid archive fixture: $Label" }
 }
@@ -82,15 +77,11 @@ try {
     $unrelated = Join-Path $tempRoot 'QS3D-BricsCAD-V25.update.json'
     Set-Content -LiteralPath $unrelated -Value '{"schemaVersion":1}' -Encoding ASCII
     & $heldVerifier -Operation Hash -Path $unrelated | Out-Null
-    if (-not [string]::Equals($env:QS3D_V25_COMMERCIAL_ZIP_SHA256, $admitted, [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'Hashing an unrelated release asset overwrote the admitted commercial ZIP digest.'
-    }
+    if (-not [string]::Equals($env:QS3D_V25_COMMERCIAL_ZIP_SHA256, $admitted, [StringComparison]::OrdinalIgnoreCase)) { throw 'Hashing an unrelated release asset overwrote the admitted commercial ZIP digest.' }
 
     $env:QS3D_V25_COMMERCIAL_ZIP_SHA256 = ('0' * 64)
     $digestMismatchDestination = Join-Path $tempRoot 'digest-mismatch-output'
-    Assert-Rejected -Label 'exact parsed generation digest mismatch' -ExpectedMessage 'generation changed between admission and exact-stream extraction' -Action {
-        Invoke-SafeExtract -ZipPath $validZip -Destination $digestMismatchDestination -SkipAdmission
-    }
+    Assert-Rejected -Label 'exact parsed generation digest mismatch' -ExpectedMessage 'generation changed between admission and exact-stream extraction' -Action { Invoke-SafeExtract -ZipPath $validZip -Destination $digestMismatchDestination -SkipAdmission }
     if (Test-Path -LiteralPath $digestMismatchDestination) { throw 'Digest mismatch left a partial extraction destination.' }
 
     $validDestination = Join-Path $tempRoot 'valid-output'
@@ -132,6 +123,55 @@ try {
     Set-Content -LiteralPath (Join-Path $existingDestination 'sentinel.txt') -Value 'keep' -Encoding ASCII
     Assert-Rejected 'pre-existing destination' { Invoke-SafeExtract $validZip $existingDestination } 'must not already exist'
     if (-not (Test-Path -LiteralPath (Join-Path $existingDestination 'sentinel.txt') -PathType Leaf)) { throw 'Safe extractor modified a pre-existing destination.' }
+
+    # Adversarial parent-generation substitution: put an explicit directory first, then enough filler
+    # entries to create a deterministic attack window before the final child under that directory.
+    # The attacker may either be blocked by the held generation or win the tiny create->hold race; if it
+    # wins, the extractor must fail closed on the no-follow handle. In neither case may bytes escape.
+    $raceZip = Join-Path $tempRoot 'parent-substitution.zip'
+    $raceEntries = [Collections.Generic.List[object]]::new()
+    $raceEntries.Add(@{Name='race/';Text=''})
+    for ($i = 0; $i -lt 600; $i++) { $raceEntries.Add(@{Name=('filler/{0:D4}.txt' -f $i);Text=('f' * 64)}) }
+    $raceEntries.Add(@{Name='race/inside.txt';Text='must-stay-inside'})
+    New-TestArchive -Path $raceZip -Entries $raceEntries.ToArray()
+    $raceDestination = Join-Path $tempRoot 'parent-substitution-output'
+    $outsideTarget = Join-Path $tempRoot 'outside-junction-target'
+    New-Item -ItemType Directory -Path $outsideTarget -Force | Out-Null
+    $attacker = Start-Job -ArgumentList $raceDestination,$outsideTarget -ScriptBlock {
+        param($Destination,$Outside)
+        $racePath = Join-Path $Destination 'race'
+        $insidePath = Join-Path $racePath 'inside.txt'
+        $outsideInside = Join-Path $Outside 'inside.txt'
+        for ($attempt = 0; $attempt -lt 10000; $attempt++) {
+            if ((Test-Path -LiteralPath $insidePath -PathType Leaf) -or (Test-Path -LiteralPath $outsideInside -PathType Leaf)) { break }
+            if (Test-Path -LiteralPath $racePath -PathType Container) {
+                try {
+                    $moved = Join-Path $Destination 'race-original'
+                    Rename-Item -LiteralPath $racePath -NewName 'race-original' -ErrorAction Stop
+                    New-Item -ItemType Junction -Path $racePath -Target $Outside -ErrorAction Stop | Out-Null
+                    Write-Output 'REPLACED'
+                    break
+                }
+                catch { }
+            }
+            Start-Sleep -Milliseconds 1
+        }
+    }
+    $raceError = $null
+    try { Invoke-SafeExtract -ZipPath $raceZip -Destination $raceDestination -MaxEntries 1024 -MaxExpandedBytes 8388608 }
+    catch { $raceError = $_.Exception.Message }
+    $attackerResult = @($attacker | Receive-Job -Wait)
+    Remove-Job -Job $attacker -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath (Join-Path $outsideTarget 'inside.txt') -PathType Leaf) { throw 'Parent substitution wrote archive bytes outside the extraction root.' }
+    if ($attackerResult -contains 'REPLACED') {
+        if ([string]::IsNullOrWhiteSpace($raceError)) { throw 'Parent directory was replaced by a junction without fail-closed extraction.' }
+        Write-Host "Expected fail-closed parent-substitution rejection: $raceError"
+    }
+    else {
+        if (-not [string]::IsNullOrWhiteSpace($raceError)) { throw "Parent-substitution attacker was blocked but extraction failed unexpectedly: $raceError" }
+        $inside = Join-Path $raceDestination 'race\inside.txt'
+        if ((Get-Content -LiteralPath $inside -Raw) -ne 'must-stay-inside') { throw 'Held parent-generation extraction did not preserve the intended child payload.' }
+    }
 
     Write-Host 'V25 commercial safe archive extraction runtime tests passed.'
 }
