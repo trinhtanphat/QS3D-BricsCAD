@@ -45,8 +45,9 @@ def main() -> int:
     destination_canonical = copy_body.find("$destinationFull = Get-CanonicalFullPath -LiteralPath $Destination")
     destination_holds = copy_body.find("$destinationHolds = Open-HeldDestinationDirectoryChain -ParentPath $parent")
     source_digest = copy_body.find("$sourceDigest = Get-HeldStreamSha256 -Stream $held.Stream")
-    create_new = copy_body.find("[IO.FileMode]::CreateNew")
-    exclusive = copy_body.find("[IO.FileShare]::None")
+    exclusive_open = copy_body.find(
+        "$output = [IO.File]::Open($destinationFull, [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)"
+    )
     durable_flush = copy_body.find("$output.Flush($true)")
     destination_digest = copy_body.find("$destinationDigest = Get-HeldStreamSha256 -Stream $output")
     digest_compare = copy_body.find("[string]::Equals($sourceDigest, $destinationDigest, [StringComparison]::OrdinalIgnoreCase)")
@@ -57,18 +58,18 @@ def main() -> int:
         destination_canonical,
         destination_holds,
         source_digest,
-        create_new,
+        exclusive_open,
         durable_flush,
         destination_digest,
         digest_compare,
         publish,
         hold_dispose,
     )
-    if min(positions) < 0 or exclusive < 0:
+    if min(positions) < 0:
         failures.append("held-copy destination generation safety contract is incomplete")
     elif list(positions) != sorted(positions):
         failures.append(
-            "destination generations must be pinned before CreateNew and held through durable exact-stream digest equality/publication"
+            "destination generations must be pinned before exclusive CreateNew and held through durable exact-stream digest equality/publication"
         )
 
     if "continue-on-error" in source.lower():
