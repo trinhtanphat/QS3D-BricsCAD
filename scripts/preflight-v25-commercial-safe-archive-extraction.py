@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "release-v25.yml"
 EXTRACTOR = ROOT / "scripts" / "expand-v25-commercial-candidate.ps1"
 CALL = ".\\scripts\\expand-v25-commercial-candidate.ps1"
+WINDOWS_DEVICE_PATTERN = "con|prn|aux|nul|com(?:[1-9]|¹|²|³)|lpt(?:[1-9]|¹|²|³)"
 
 
 def contract_errors(workflow: str, extractor: str | None) -> list[str]:
@@ -33,7 +34,7 @@ def contract_errors(workflow: str, extractor: str | None) -> list[str]:
         ("$name.Contains(':')", "drive/ADS separator rejection"),
         ("$segment -eq '..'", "parent-traversal rejection"),
         ("GetInvalidFileNameChars", "Windows invalid-name rejection"),
-        ("con|prn|aux|nul|com[1-9]|lpt[1-9]", "Windows device-name rejection"),
+        (WINDOWS_DEVICE_PATTERN, "Windows device-name rejection including superscript COM/LPT digits"),
         ("EndsWith('.',", "trailing-dot rejection"),
         ("EndsWith(' ',", "trailing-space rejection"),
         ("HashSet[string]", "duplicate target tracking"),
@@ -101,7 +102,7 @@ foreach ($entry in $archive.Entries) {
   $name = [string]$entry.FullName
   if ([IO.Path]::IsPathRooted($name) -or $name.IndexOf([char]0) -ge 0 -or $name.Contains('\\') -or $name.Contains(':')) { throw 'rooted' }
   foreach ($segment in $name.Split('/')) {
-    if ($segment -eq '..' -or $segment.IndexOfAny($invalid) -ge 0 -or $segment -match '^(?i:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\.|$)' -or $segment.EndsWith('.', [StringComparison]::Ordinal) -or $segment.EndsWith(' ', [StringComparison]::Ordinal)) { throw 'unsafe' }
+    if ($segment -eq '..' -or $segment.IndexOfAny($invalid) -ge 0 -or $segment -match '^(?i:con|prn|aux|nul|com(?:[1-9]|¹|²|³)|lpt(?:[1-9]|¹|²|³))(?:\\.|$)' -or $segment.EndsWith('.', [StringComparison]::Ordinal) -or $segment.EndsWith(' ', [StringComparison]::Ordinal)) { throw 'unsafe' }
   }
   $expandedBytes += [int64]$entry.Length
   if ($expandedBytes -gt $MaxExpandedBytes) { throw 'expanded' }
@@ -141,6 +142,7 @@ foreach ($entry in $archive.Entries) {
         "no expanded accounting": (safe_workflow, safe_extractor.replace("$expandedBytes += [int64]$entry.Length", "$expandedBytes += 0", 1)),
         "no expanded enforcement": (safe_workflow, safe_extractor.replace("if ($expandedBytes -gt $MaxExpandedBytes) { throw 'expanded' }", "# no expanded limit", 1)),
         "no traversal rejection": (safe_workflow, safe_extractor.replace("$segment -eq '..' -or ", "", 1)),
+        "ascii-only device names": (safe_workflow, safe_extractor.replace(WINDOWS_DEVICE_PATTERN, "con|prn|aux|nul|com[1-9]|lpt[1-9]", 1)),
         "case-sensitive duplicates": (safe_workflow, safe_extractor.replace("[StringComparer]::OrdinalIgnoreCase", "[StringComparer]::Ordinal", 1)),
         "no root containment": (safe_workflow, safe_extractor.replace("if (-not $target.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw 'escape' }", "# no containment", 1)),
         "clobber output": (safe_workflow, safe_extractor.replace("[IO.FileMode]::CreateNew", "[IO.FileMode]::Create", 1)),
