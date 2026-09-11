@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             QaGateBlocksInvalidModel();
             QsQaGate2Smoke.Run();
             CalibratedTwoDimensionalTakeoff();
+            Qs2DTakeoffWorkflowSmoke.Run();
             WorkbookLiveLinkRefresh();
             IntegrationRoutes();
             ConcreteAndFormwork();
