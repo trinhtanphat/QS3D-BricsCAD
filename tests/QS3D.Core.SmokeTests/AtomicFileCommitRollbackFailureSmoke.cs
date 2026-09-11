@@ -34,8 +34,11 @@ namespace QS3D.Core.SmokeTests
 
             var secondRollbackFailure = new IOException("second rollback sentinel");
             helper.Invoke(null, new object[] { publicationFailure, secondRollbackFailure });
-            Require(publicationFailure.Data[RollbackFailureDataKey] is AggregateException aggregate,
-                "Multiple rollback failures must retain prior evidence instead of overwriting it.");
+            if (publicationFailure.Data[RollbackFailureDataKey] is not AggregateException aggregate)
+            {
+                throw new InvalidOperationException(
+                    "Multiple rollback failures must retain prior evidence instead of overwriting it.");
+            }
             Require(aggregate.InnerExceptions.Count == 2,
                 "Multiple rollback failures did not retain both rollback exceptions.");
             Require(ReferenceEquals(aggregate.InnerExceptions[0], rollbackFailure),
