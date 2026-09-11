@@ -86,6 +86,28 @@ if recreate_catch is None:
     print("ERROR: AtomicFileCommit missing-destination recreation must capture and bare-rethrow its publication failure.")
     sys.exit(1)
 
+# Once a newly installed primary is rejected because a backup appeared, rollback
+# ownership must transfer before attempting to delete that primary. Otherwise a
+# failed File.Delete leaves installed=true and finally can delete the staged old
+# backup instead of preserving it for recovery/diagnosis.
+recreate_rollback = re.search(
+    r"if\s*\(File\.Exists\(backupPath\)\s*\|\|\s*Directory\.Exists\(backupPath\)\)\s*\{(?P<body>.*?)\n\s*\}",
+    recreate,
+    re.S,
+)
+if recreate_rollback is None:
+    print("ERROR: AtomicFileCommit missing-destination rollback branch was not found.")
+    sys.exit(1)
+recreate_rollback_body = recreate_rollback.group("body")
+rollback_owner_transfer = recreate_rollback_body.find("installed = false;")
+rollback_delete = recreate_rollback_body.find("File.Delete(destinationPath);")
+if rollback_owner_transfer < 0 or rollback_delete < 0 or rollback_owner_transfer > rollback_delete:
+    print(
+        "ERROR: AtomicFileCommit missing-destination rollback must mark the install uncommitted "
+        "before deleting the rejected primary so delete failure cannot discard the staged old backup."
+    )
+    sys.exit(1)
+
 restore_start = text.find("private static void RestorePreviousBackup", end)
 restore_end = text.find("private static void Validate", restore_start)
 if restore_start < 0 or restore_end < 0:
