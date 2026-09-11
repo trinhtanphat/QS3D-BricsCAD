@@ -102,7 +102,10 @@ namespace QS3D.BricsCAD.V25
                 }
 
                 if (!ReferenceEquals(_pending, owner))
+                {
+                    TryCloseOwner(owner);
                     return;
+                }
 
                 _pending = null;
                 _published = owner;
