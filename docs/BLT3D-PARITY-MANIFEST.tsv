@@ -8,7 +8,7 @@ project.zone	Project	BLT3D / THIET LAP DU AN / Zone	project.zone	Applicable	Comm
 project.floor	Project	BLT3D / THIET LAP DU AN / Floor	project.floor	Applicable	CommandWired	-	-
 project.family	Project	BLT3D / THIET LAP DU AN / Family	project.family	Applicable	CommandWired	-	-
 bim.authoring	BIM	BLT3D / MO HINH BIM	bim.authoring	Applicable	CommandWired	-	-
-recognition	Recognition	BLT3D / NHAN DANG	recognition	Applicable	ReferenceCaptured	-	-
+recognition	Recognition	BLT3D / NHAN DANG	recognition	Applicable	CommandWired	-	-
 draw	Draw	BLT3D / VE	draw	Applicable	CommandWired	-	-
 tool.editing	Tool	BLT3D / TOOL	tool.editing	Applicable	CommandWired	-	-
 modeling	Modeling	BLT3D / MODELING	modeling	Applicable	CommandWired	-	-

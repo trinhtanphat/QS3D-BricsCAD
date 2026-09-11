@@ -26,6 +26,7 @@ namespace QS3D.Core.SmokeTests
             Throws<InvalidOperationException>(() => new ParityWorkflowRegistry(new[] { safe, safe }));
             P2ShellProjectBindings();
             P3BimEditingModelingBindings();
+            P4RecognitionBinding();
         }
 
         private static void P2ShellProjectBindings()
@@ -74,6 +75,18 @@ namespace QS3D.Core.SmokeTests
                 ParityWorkflowSurface.Ui, mutation | ParityWorkflowRequirement.Selection);
         }
 
+        private static void P4RecognitionBinding()
+        {
+            var registry = ParityRecognitionCatalog.CreateRegistry();
+            if (registry.Bindings.Count != 1)
+                throw new InvalidOperationException("P4 recognition catalog must contain exactly one binding.");
+
+            var mutation = ParityWorkflowRequirement.ActiveDocument |
+                ParityWorkflowRequirement.Project | ParityWorkflowRequirement.AtomicMutation |
+                ParityWorkflowRequirement.Audit;
+            AssertBinding(registry, "recognition", ParityWorkflowKind.SemanticMutation,
+                ParityWorkflowSurface.Ui, mutation);
+        }
         private static void AssertBinding(ParityWorkflowRegistry registry, string id,
             ParityWorkflowKind kind, ParityWorkflowSurface surfaces, ParityWorkflowRequirement requirements)
         {
