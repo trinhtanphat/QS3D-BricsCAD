@@ -106,9 +106,17 @@ def main() -> None:
         "catch (System.Exception)" in source and "CloseUnpublishedCandidate(candidate)" in source,
         "ShowModelessWindow exception path must clean the unpublished candidate",
     )
+    loaded_reject_index = source.find("if (!candidate.IsLoaded)", show_index)
+    post_load_affinity_index = source.find(
+        "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))",
+        loaded_reject_index + 1,
+    )
+    publish_window_index = source.find("_window = candidate;", post_load_affinity_index + 1)
     require(
-        "if (candidate.IsLoaded)" in source and "_window = candidate;" in source,
-        "Audit Log publication must remain conditional on a loaded candidate",
+        loaded_reject_index > show_index
+        and post_load_affinity_index > loaded_reject_index
+        and publish_window_index > post_load_affinity_index,
+        "Audit Log publication must reject non-loaded candidates and revalidate exact document generation before authority transfer",
     )
 
     publish_index = source.find("_window = candidate;", show_index)
