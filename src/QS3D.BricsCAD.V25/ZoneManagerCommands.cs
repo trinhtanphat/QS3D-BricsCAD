@@ -72,7 +72,10 @@ namespace QS3D.BricsCAD.V25
 
                 var pending = _pending;
                 if (pending != null)
+                {
                     CloseOwnerBeforeReplacement(pending, "pending");
+                    if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                }
 
                 var previous = _published;
                 if (previous != null)
@@ -92,6 +95,7 @@ namespace QS3D.BricsCAD.V25
                     }
 
                     CloseOwnerBeforeReplacement(previous, "published");
+                    if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
                 }
 
                 var window = new ZoneManagerWindow(document);

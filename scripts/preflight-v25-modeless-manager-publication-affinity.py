@@ -25,10 +25,10 @@ for label, path in FILES.items():
 
     body_start = text.find('public void Show')
     body = text[body_start:] if body_start >= 0 else text
-    close_positions = [
-        p for token in ('CloseOwnerBeforeReplacement(pending', 'CloseOwnerBeforeReplacement(previous')
-        if (p := body.find(token)) >= 0
-    ]
+    pending_close = body.find('CloseOwnerBeforeReplacement(pending')
+    published_close = body.find('CloseOwnerBeforeReplacement(previous')
+    constructor_tokens = ('new FamilyManagerWindow(document)', 'new FloorLevelWindow(document)', 'new ZoneManagerWindow(document)')
+    constructor_pos = min((p for token in constructor_tokens if (p := body.find(token)) >= 0), default=-1)
     pending_publish_pos = body.find('_pending = owner')
     show_pos = body.find('Application.ShowModelessWindow')
     publish_pos = body.find('_published = owner')
@@ -42,11 +42,18 @@ for label, path in FILES.items():
         calls.append(found)
         pos = found + len(needle)
 
-    require(label, len(calls) >= 3,
-            'must fence destructive replacement, host publication, and post-show authority transfer')
+    require(label, len(calls) >= 5,
+            'must fence destructive replacement, post-close construction, host publication, post-show authority, and UI publication')
+    close_positions = [p for p in (pending_close, published_close) if p >= 0]
     if close_positions:
         require(label, any(call < min(close_positions) for call in calls),
                 'a generation fence must precede destructive close/replacement')
+    if pending_close >= 0 and constructor_pos >= 0:
+        require(label, any(pending_close < call < constructor_pos for call in calls),
+                'must revalidate after pending-owner close before constructing a replacement window')
+    if published_close >= 0 and constructor_pos >= 0:
+        require(label, any(published_close < call < constructor_pos for call in calls),
+                'must revalidate after published-owner close before constructing a replacement window')
     if pending_publish_pos >= 0 and show_pos >= 0:
         require(label, any(pending_publish_pos < call < show_pos for call in calls),
                 'a fresh generation fence must run after candidate ownership and before ShowModelessWindow')
@@ -60,8 +67,6 @@ for label, path in FILES.items():
             'generation helper must require the exact managed active-document wrapper')
     require(label, 'database.UnmanagedObject == nativeDatabaseIdentity' in text,
             'generation helper must require the exact native database identity')
-    require(label, 'CloseCandidateOnAffinityDrift(candidate);' in body,
-            'must close unpublished candidate instead of retaining a stale modeless generation')
     require(label, body.count('CloseCandidateOnAffinityDrift(candidate);') >= 2,
             'candidate cleanup must cover both pre-show and post-show affinity drift')
     require(label, 'if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))' in body,
