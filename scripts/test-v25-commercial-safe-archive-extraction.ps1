@@ -115,7 +115,7 @@ try {
         @{ Name = 'Payload.txt'; Text = 'one' },
         @{ Name = 'payload.TXT'; Text = 'two' }
     )
-    Assert-Rejected -Label 'case alias' -ExpectedMessage 'Duplicate or case-aliased' -Action {
+    Assert-Rejected -Label 'case alias' -ExpectedMessage 'Duplicate commercial candidate archive file entry' -Action {
         Invoke-SafeExtract -ZipPath $caseZip -Destination (Join-Path $tempRoot 'case-output')
     }
 
