@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using Bricscad.ApplicationServices;
 using Microsoft.Win32;
+using QS3D.BricsCAD.V25;
 using QS3D.BricsCAD.V25.UI;
 using QS3D.Core.Interoperability.Sap2000;
 using Teigha.Runtime;

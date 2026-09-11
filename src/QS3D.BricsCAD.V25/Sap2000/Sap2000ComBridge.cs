@@ -46,7 +46,7 @@ namespace QS3D.BricsCAD.Sap2000
                 throw new InvalidOperationException("Could not create the SAP2000 OAPI helper.");
             }
 
-            object sapObject = null;
+            object? sapObject = null;
             var startedNewInstance = false;
 
             try
@@ -232,9 +232,6 @@ namespace QS3D.BricsCAD.Sap2000
             ReleaseComObject(_sapModel);
             ReleaseComObject(_sapObject);
             ReleaseComObject(_helper);
-            _sapModel = null;
-            _sapObject = null;
-            _helper = null;
         }
 
         private void UnlockForEditing()
@@ -317,7 +314,7 @@ namespace QS3D.BricsCAD.Sap2000
             return false;
         }
 
-        private static void ReleaseComObject(object value)
+        private static void ReleaseComObject(object? value)
         {
             if (value == null)
             {
@@ -349,7 +346,7 @@ namespace QS3D.BricsCAD.Sap2000
     internal static class Sap2000Session
     {
         private static readonly object Gate = new object();
-        private static Sap2000ComBridge _current;
+        private static Sap2000ComBridge? _current;
 
         public static Sap2000ComBridge GetOrConnect()
         {
