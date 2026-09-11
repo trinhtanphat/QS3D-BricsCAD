@@ -39,52 +39,88 @@ command = ROOT / required[2]
 if command.is_file():
     text = command.read_text(encoding="utf-8")
     for needle in (
-        'CommandMethod("QS3DGEOMETRYEXT"', "private static GeometryExtensionsWindow? _published;",
-        "private static GeometryExtensionsWindow? _pending;", "var pending = _pending;",
-        "if (pending != null && !TryClosePendingWindow(pending))", "var previous = _published;",
-        "if (previous.IsLoaded)", "previous.Activate();", "ReleasePublishedWindow(previous);",
-        "candidate = new GeometryExtensionsWindow();", "_pending = window;",
-        "window.Closed += (_, __) => ReleaseWindow(window);", "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
-        "if (!window.IsLoaded)", "_published = window;", "ReleasePendingWindow(window);", "candidate = null;",
-        "finally", "if (candidate != null)", "TryClosePendingWindow(candidate);",
-        "private static void ReleaseWindow(GeometryExtensionsWindow window)",
-        "private static void ReleasePublishedWindow(GeometryExtensionsWindow window)",
-        "if (!ReferenceEquals(_published, window)) return;",
-        "private static void ReleasePendingWindow(GeometryExtensionsWindow window)",
-        "if (!ReferenceEquals(_pending, window)) return;",
-        "private static bool TryClosePendingWindow(GeometryExtensionsWindow window)",
-        "if (!ReferenceEquals(_pending, window)) return true;", "if (ReferenceEquals(_published, window))",
-        "if (window.IsLoaded) return false;", "ex.GetType().Name"):
+        'CommandMethod("QS3DGEOMETRYEXT"', "private static PublishedWindow? _pending;",
+        "private static PublishedWindow? _published;", "GetNativeDatabaseIdentity(document)",
+        "PreparePublishedWindow(document, nativeDatabaseIdentity)", "var published = _published;",
+        "published.Window.Activate();", "var window = new GeometryExtensionsWindow();",
+        "owner = new PublishedWindow(window, document, nativeDatabaseIdentity);", "var releaseOwner = owner;",
+        "window.Closed += (_, __) => ReleaseOwnedWindow(releaseOwner);", "_pending = owner;",
+        "Application.ShowModelessWindow(IntPtr.Zero, window, true);", "if (!window.IsLoaded)",
+        "if (!ReferenceEquals(_pending, owner))", "_pending = null;", "_published = owner;", "owner = null;",
+        "if (owner != null) ClosePendingOnFailure(owner);",
+        "private static bool PreparePublishedWindow(Document requestedDocument, IntPtr requestedNativeDatabaseIdentity)",
+        "private static void ClosePendingOnFailure(PublishedWindow owner)",
+        "if (!owner.Window.IsLoaded) ReleaseOwnedWindow(owner);",
+        "private static void ReleaseOwnedWindow(PublishedWindow owner)",
+        "if (ReferenceEquals(_pending, owner)) _pending = null;",
+        "if (ReferenceEquals(_published, owner)) _published = null;",
+        "private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)",
+        "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)"):
         if needle not in text:
-            errors.append("Geometry Extensions command missing lifecycle contract: " + needle)
+            errors.append("Geometry Extensions command missing generation-bound lifecycle contract: " + needle)
 
-    release_pending = text.find("ReleasePendingWindow(window);")
-    clear_candidate = text.find("candidate = null;", release_pending) if release_pending >= 0 else -1
-    positions = [text.find(token) for token in (
-        "var pending = _pending;", "if (pending != null && !TryClosePendingWindow(pending))",
-        "var previous = _published;", "candidate = new GeometryExtensionsWindow();", "_pending = window;",
-        "window.Closed += (_, __) => ReleaseWindow(window);", "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
-        "if (!window.IsLoaded)", "_published = window;", "ReleasePendingWindow(window);")]
-    positions.extend([clear_candidate, text.find("finally"), text.find("TryClosePendingWindow(candidate);")])
-    if min(positions) < 0 or positions != sorted(positions):
-        errors.append("Geometry Extensions must drain failed pending ownership before construct, then pending -> Closed -> show -> Loaded -> publish -> release pending -> finally cleanup")
+    def ordered(tokens, label):
+        cursor = 0
+        positions = []
+        for token in tokens:
+            pos = text.find(token, cursor)
+            positions.append(pos)
+            if pos >= 0:
+                cursor = pos + len(token)
+        if min(positions) < 0:
+            errors.append("Geometry Extensions " + label + " ordering is incomplete")
 
-    helper_start = text.find("private static bool TryClosePendingWindow")
-    helper = text[helper_start:] if helper_start >= 0 else ""
-    non_owner = helper.find("if (!ReferenceEquals(_pending, window)) return true;")
-    published_owner = helper.find("if (ReferenceEquals(_published, window))", non_owner + 1)
-    published_release = helper.find("ReleasePendingWindow(window);", published_owner + 1)
-    published_return = helper.find("return true;", published_release + 1)
-    close_if_loaded = helper.find("if (window.IsLoaded)", published_return + 1)
-    close_call = helper.find("window.Close();", close_if_loaded + 1)
-    live_failure = helper.find("if (window.IsLoaded) return false;", close_call + 1)
-    terminal_release = helper.find("ReleasePendingWindow(window);", live_failure + 1)
-    helper_positions = [
-        non_owner, published_owner, published_release, published_return,
-        close_if_loaded, close_call, live_failure, terminal_release,
-    ]
-    if min(helper_positions) < 0 or helper_positions != sorted(helper_positions):
-        errors.append("Geometry Extensions pending cleanup must refuse non-owner cleanup, release pending ownership for an already-published owner, close failed pending candidates best-effort, retain live failures, and release only terminal pending ownership")
+    ordered((
+        "GetNativeDatabaseIdentity(document)",
+        "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;",
+        "PreparePublishedWindow(document, nativeDatabaseIdentity)",
+        "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;",
+        "var window = new GeometryExtensionsWindow();",
+        "owner = new PublishedWindow(window, document, nativeDatabaseIdentity);",
+        "var releaseOwner = owner;",
+        "window.Closed += (_, __) => ReleaseOwnedWindow(releaseOwner);",
+        "_pending = owner;",
+        "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))",
+        "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
+        "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))",
+        "if (!window.IsLoaded)",
+        "if (!ReferenceEquals(_pending, owner))",
+        "_pending = null;",
+        "_published = owner;",
+        "owner = null;",
+    ), "pending -> host-pump fence -> Loaded -> exact-owner publication")
+
+    prepare_start = text.find("private static bool PreparePublishedWindow")
+    prepare_end = text.find("private static void ClosePendingOnFailure", prepare_start + 1)
+    prepare = text[prepare_start:prepare_end] if prepare_start >= 0 and prepare_end > prepare_start else ""
+    for needle in (
+        "var pending = _pending;", "if (!pending.Window.IsLoaded)", "ReleaseOwnedWindow(pending);",
+        "try { pending.Window.Close(); } catch { return false; }", "if (pending.Window.IsLoaded) return false;",
+        "var published = _published;", "if (!published.Window.IsLoaded)",
+        "published.NativeDatabaseIdentity == requestedNativeDatabaseIdentity",
+        "ReferenceEquals(published.Document, requestedDocument)",
+        "try { published.Window.Close(); }", "if (published.Window.IsLoaded) return false;",
+        "ReleaseOwnedWindow(published);",
+    ):
+        if needle not in prepare:
+            errors.append("Geometry Extensions replacement cleanup missing: " + needle)
+
+    close_start = text.find("private static void ClosePendingOnFailure")
+    close_end = text.find("private static void ReleaseOwnedWindow", close_start + 1)
+    close_helper = text[close_start:close_end] if close_start >= 0 and close_end > close_start else ""
+    close_call = close_helper.find("owner.Window.Close();")
+    terminal_release = close_helper.find("if (!owner.Window.IsLoaded) ReleaseOwnedWindow(owner);", close_call + 1)
+    if close_call < 0 or terminal_release < 0 or close_call > terminal_release:
+        errors.append("Geometry Extensions failed-candidate cleanup must retain ownership unless Close reaches terminal unloaded state")
+
+    show = text.find("Application.ShowModelessWindow(IntPtr.Zero, window, true);")
+    post_show_fence = text.find("if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))", show + 1)
+    loaded = text.find("if (!window.IsLoaded)", post_show_fence + 1)
+    exact_owner = text.find("if (!ReferenceEquals(_pending, owner))", loaded + 1)
+    publish = text.find("_published = owner;", exact_owner + 1)
+    if min(show, post_show_fence, loaded, exact_owner, publish) < 0 or not (show < post_show_fence < loaded < exact_owner < publish):
+        errors.append("Geometry Extensions must revalidate exact document generation after host pumping and prove Loaded + pending ownership before publication")
+
     if "ex.Message" in text:
         errors.append("Geometry Extensions launcher must not expose raw host exception messages")
 
