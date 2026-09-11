@@ -37,6 +37,19 @@ if missing:
     )
     sys.exit(1)
 
+if "throw publicationFailure;" in move_with_recovery:
+    print("ERROR: AtomicFileCommit.MoveWithRecovery must not reset the original publication exception stack.")
+    sys.exit(1)
+
+publication_catch = re.search(
+    r"catch\s*\(Exception\s+ex\)\s*\{\s*publicationFailure\s*=\s*ex;\s*throw;\s*\}",
+    move_with_recovery,
+    re.S,
+)
+if publication_catch is None:
+    print("ERROR: AtomicFileCommit.MoveWithRecovery must rethrow the captured publication failure with bare throw;.")
+    sys.exit(1)
+
 if "private const string RollbackFailureDataKey = \"QS3D.AtomicFileCommit.RollbackFailure\";" not in text:
     print("ERROR: AtomicFileCommit is missing the stable rollback evidence Data key.")
     sys.exit(1)
