@@ -24,8 +24,6 @@ namespace QS3D.BricsCAD.V25
     {
         private const string ResultSchema = "QS3D_DIRECT_DRAW_REPEAT_V1";
 
-        // Runtime qualification observers are internal, optional and exception-isolated. They do
-        // not own command input or mutation; production Direct Draw remains the only authoring path.
         internal static event Action<Document, int>? SegmentCommittedForRuntimeQualification;
         internal static event Action<Document, int, string>? SequenceCompletedForRuntimeQualification;
 
@@ -102,7 +100,6 @@ namespace QS3D.BricsCAD.V25
 
             DirectDrawCommands.RequireRepeatedPromptContextUnchanged(
                 document, commandUnit, commandUcs, label + " / điểm đầu");
-            // Editor.GetPoint reports the first point in current UCS; DrawJig uses WCS.
             var startWcs = first.Value.TransformBy(commandUcs);
             var committed = new List<DirectDrawCommitResult>();
             ProjectState? trackedProject = null;
@@ -127,13 +124,8 @@ namespace QS3D.BricsCAD.V25
                         }
                         DirectDrawCommands.RequireRepeatedPromptContextUnchanged(
                             document, commandUnit, commandUcs, label + " / trước preview");
-                        // The first segment must resolve against the preview captured before the
-                        // first point prompt. This rejects a project that appears/replaces state
-                        // while that prompt is open. Only a successfully checkpointed segment may
-                        // advance the preview to the new canonical ChangeVersion.
                         var preview = currentPreview;
-                        RequireExpectedFamily(
-                            preview, category, expectedProjectId, expectedFamilyId, label);
+                        RequireExpectedFamily(preview, category, expectedProjectId, expectedFamilyId, label);
                         var defaults = RepeatedDefaults.Resolve(preview, category);
                         var stripWidth = CadGeometryGuard.Positive(
                             CadGeometryGuard.ToDrawingUnits(
@@ -197,11 +189,6 @@ namespace QS3D.BricsCAD.V25
                                 "Repeated Direct Draw accepted CAD without a command-level semantic snapshot.");
                         try
                         {
-                            // Publish a whole-command checkpoint after every accepted segment.
-                            // All checkpoints remain in this one native command group, so Undo/Redo
-                            // still traverses the original before-state and latest accepted state as
-                            // one operation. The latest checkpoint also keeps semantic/native state
-                            // coherent if BricsCAD suspends this document-context command on a DWG switch.
                             if (checkpointed == 0)
                             {
                                 SourceReconcileUndoCoordinator.CommitExternalTransition(
@@ -325,10 +312,6 @@ namespace QS3D.BricsCAD.V25
             {
                 _document = document ?? throw new ArgumentNullException(nameof(document));
                 _documents = Application.DocumentManager;
-
-                // Treat the add accessor as potentially partially successful. If it throws after
-                // registering the handler, the compensating remove gets one immediate chance and
-                // any retained callback can keep retrying without consulting the stale document.
                 _subscribed = true;
                 try
                 {
@@ -362,8 +345,6 @@ namespace QS3D.BricsCAD.V25
                 }
                 catch
                 {
-                    // Native teardown can reject remove temporarily. Keep ownership published so a
-                    // retained callback can retry; never turn this into a command failure.
                 }
                 finally
                 {
@@ -379,7 +360,18 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
 
-                if (args != null && EqualityComparer<Document>.Default.Equals(args.Document, _document))
+                Document deactivatingDocument;
+                try
+                {
+                    deactivatingDocument = args.Document;
+                }
+                catch
+                {
+                    _wasDeactivated = true;
+                    return;
+                }
+
+                if (EqualityComparer<Document>.Default.Equals(deactivatingDocument, _document))
                     _wasDeactivated = true;
             }
         }
