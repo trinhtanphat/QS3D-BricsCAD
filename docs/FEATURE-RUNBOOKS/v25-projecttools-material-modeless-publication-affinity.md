@@ -9,7 +9,7 @@ This contract covers `QS3DPROJECTTOOLS` and `QS3DMATERIALS` modeless publication
 - A stale/background generation must never replace the current published owner or publish success/error UI for another drawing.
 - Material Catalog must preserve its existing non-creating project lookup and pending-first exact-owner publication semantics.
 - If affinity drifts after a candidate is reserved or shown, close the unpublished candidate best-effort; clear pending ownership only after terminal close so a loaded residue cannot be silently forgotten.
-- Preserve same-document activation, loaded-window admission, Closed-handler release, close-veto behavior, redacted Material Catalog failures, and Project Tools read-only behavior.
+- Preserve same-document activation, loaded-window admission, Closed-handler release, close-veto behavior, redacted failure UI, and Project Tools read-only behavior.
 - Do not retry/replay native or project mutation after affinity failure.
 
 ## Deterministic validation
