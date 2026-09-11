@@ -55,12 +55,14 @@ if not errors:
         "entity as Line",
         "entity as Polyline",
         "polyline.Closed",
-        "GetMetresPerDrawingUnit(document.Database.Insunits)",
-        "UnitsValue.Millimeters",
-        "UnitsValue.Meters",
+        "CadUnitService.DrawingUnitsToMeters(document, 1d)",
+        "ToSapPoint(polyline.GetPoint3dAt(index), metresPerDrawingUnit)",
     ):
         if token not in geometry:
             errors.append("SAP2000 CAD geometry contract missing token: " + token)
+
+    if "GetMetresPerDrawingUnit" in geometry or "switch (units)" in geometry:
+        errors.append("SAP2000 export must reuse CadUnitService rather than maintain a second INSUNITS table")
 
     for command in (
         "QS3DSAPCONNECT",
