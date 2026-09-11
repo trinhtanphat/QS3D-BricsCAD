@@ -252,6 +252,7 @@ namespace QS3D.Core.SmokeTests
             WorkspaceFeatureSessionSmoke.Run();
             WorkspaceSchemaFormsSmoke.Run();
             QsIntelligenceSmoke.Run();
+            BenchmarkParitySuiteSmoke.Run();
             CubicostParitySmoke.Run();
         }
     }
