@@ -18,83 +18,113 @@ def forbid(token: str) -> None:
 
 
 for token in (
-    "private static ScheduleHubWindow? _window;",
-    "private static Document? _document;",
-    "private static IntPtr _nativeDatabaseIdentity;",
-    "var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
+    "private static PublishedManager? _pending;",
+    "private static PublishedManager? _published;",
+    "PublishedManager? owner = null;",
+    "nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
     "if (!PreparePublishedWindow(document, nativeDatabaseIdentity))",
-    "_nativeDatabaseIdentity == requestedNativeDatabaseIdentity && ReferenceEquals(_document, requestedDocument)",
-    "published.Close();",
-    "if (published.IsLoaded)",
-    "var window = new ScheduleHubWindow(document);",
-    "window.Closed += (_, __) => ReleasePublishedWindow(window);",
+    "owner = new PublishedManager(window, document, nativeDatabaseIdentity);",
+    "var releaseOwner = owner;",
+    "window.Closed += (_, __) => ReleaseOwnedWindow(releaseOwner);",
+    "_pending = owner;",
     "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
-    "if (!window.IsLoaded) return;",
-    "_window = window;",
-    "_document = document;",
-    "_nativeDatabaseIdentity = nativeDatabaseIdentity;",
-    "if (!ReferenceEquals(_window, window)) return;",
-    "_document = null;",
-    "_nativeDatabaseIdentity = IntPtr.Zero;",
+    "if (!window.IsLoaded)",
+    "if (!ReferenceEquals(_pending, owner))",
+    "_pending = null;",
+    "_published = owner;",
+    "published.NativeDatabaseIdentity == requestedNativeDatabaseIdentity",
+    "ReferenceEquals(published.Document, requestedDocument)",
+    "try { published.Window.Close(); }",
+    "if (published.Window.IsLoaded) return false;",
+    "ReleaseOwnedWindow(published);",
+    "if (ReferenceEquals(_pending, owner)) _pending = null;",
+    "if (ReferenceEquals(_published, owner)) _published = null;",
     "database.UnmanagedObject",
-    "if (identity == IntPtr.Zero)",
+    "if (nativeDatabaseIdentity == IntPtr.Zero) return false;",
 ):
     require(token)
 
 for token in (
-    "var window = new ScheduleHubWindow(document);\n                Application.ShowModelessWindow(IntPtr.Zero, window, true);",
-    "var candidate = new ScheduleHubWindow(document);",
-    "Application.ShowModelessWindow(IntPtr.Zero, candidate, true);",
+    "private static ScheduleHubWindow? _window;",
+    "private static Document? _document;",
+    "private static IntPtr _nativeDatabaseIdentity;",
+    "_window = window;",
+    "_document = document;",
+    "_nativeDatabaseIdentity = nativeDatabaseIdentity;",
 ):
     forbid(token)
 
 prepare_start = text.find("private static bool PreparePublishedWindow")
-release_start = text.find("private static void ReleasePublishedWindow", prepare_start + 1)
-prepare = text[prepare_start:release_start] if prepare_start >= 0 and release_start > prepare_start else ""
-exact_owner_pos = prepare.find(
-    "_nativeDatabaseIdentity == requestedNativeDatabaseIdentity && ReferenceEquals(_document, requestedDocument)"
-)
-close_pos = prepare.find("published.Close();", exact_owner_pos + 1)
-loaded_after_close_pos = prepare.find("if (published.IsLoaded)", close_pos + 1)
-release_after_close_pos = prepare.find("ReleasePublishedWindow(published);", loaded_after_close_pos + 1)
-if min(exact_owner_pos, close_pos, loaded_after_close_pos, release_after_close_pos) < 0:
+close_pending_start = text.find("private static void ClosePendingOnFailure", prepare_start + 1)
+prepare = text[prepare_start:close_pending_start] if prepare_start >= 0 and close_pending_start > prepare_start else ""
+exact_native = prepare.find("published.NativeDatabaseIdentity == requestedNativeDatabaseIdentity")
+exact_wrapper = prepare.find("ReferenceEquals(published.Document, requestedDocument)", exact_native + 1)
+close_pos = prepare.find("published.Window.Close();", exact_wrapper + 1)
+loaded_pos = prepare.find("if (published.Window.IsLoaded) return false;", close_pos + 1)
+release_pos = prepare.find("ReleaseOwnedWindow(published);", loaded_pos + 1)
+if min(exact_native, exact_wrapper, close_pos, loaded_pos, release_pos) < 0:
     errors.append("unable to prove Schedule Hub exact-owner/terminal-close ordering")
-elif not (exact_owner_pos < close_pos < loaded_after_close_pos < release_after_close_pos):
+elif not (exact_native < exact_wrapper < close_pos < loaded_pos < release_pos):
     errors.append(
-        "Schedule Hub must reuse only exact native+wrapper owner, then require terminal unload before replacement release"
+        "Schedule Hub must reuse exact native+managed owner, then require terminal unload before release"
     )
 
 show_start = text.find("public void ShowScheduleHub()")
 prepare_method_start = text.find("private static bool PreparePublishedWindow", show_start + 1)
 show = text[show_start:prepare_method_start] if show_start >= 0 and prepare_method_start > show_start else ""
 construct_pos = show.find("var window = new ScheduleHubWindow(document);")
-closed_pos = show.find("window.Closed += (_, __) => ReleasePublishedWindow(window);", construct_pos + 1)
-show_pos = show.find("Application.ShowModelessWindow(IntPtr.Zero, window, true);", closed_pos + 1)
-loaded_pos = show.find("if (!window.IsLoaded) return;", show_pos + 1)
-publish_window_pos = show.find("_window = window;", loaded_pos + 1)
-publish_document_pos = show.find("_document = document;", publish_window_pos + 1)
-publish_identity_pos = show.find("_nativeDatabaseIdentity = nativeDatabaseIdentity;", publish_document_pos + 1)
+owner_pos = show.find("owner = new PublishedManager(window, document, nativeDatabaseIdentity);", construct_pos + 1)
+release_owner_pos = show.find("var releaseOwner = owner;", owner_pos + 1)
+closed_pos = show.find("window.Closed += (_, __) => ReleaseOwnedWindow(releaseOwner);", release_owner_pos + 1)
+pending_pos = show.find("_pending = owner;", closed_pos + 1)
+pre_show_fence = show.find("if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))", pending_pos + 1)
+show_pos = show.find("Application.ShowModelessWindow(IntPtr.Zero, window, true);", pre_show_fence + 1)
+post_show_fence = show.find("if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))", show_pos + 1)
+loaded_pos = show.find("if (!window.IsLoaded)", post_show_fence + 1)
+pending_owner_pos = show.find("if (!ReferenceEquals(_pending, owner))", loaded_pos + 1)
+clear_pending_pos = show.find("_pending = null;", pending_owner_pos + 1)
+publish_pos = show.find("_published = owner;", clear_pending_pos + 1)
 if min(
     construct_pos,
+    owner_pos,
+    release_owner_pos,
     closed_pos,
+    pending_pos,
+    pre_show_fence,
     show_pos,
+    post_show_fence,
     loaded_pos,
-    publish_window_pos,
-    publish_document_pos,
-    publish_identity_pos,
+    pending_owner_pos,
+    clear_pending_pos,
+    publish_pos,
 ) < 0:
-    errors.append("unable to prove Schedule Hub window publication ordering")
+    errors.append("unable to prove Schedule Hub pending-first publication ordering")
 elif not (
     construct_pos
+    < owner_pos
+    < release_owner_pos
     < closed_pos
+    < pending_pos
+    < pre_show_fence
     < show_pos
+    < post_show_fence
     < loaded_pos
-    < publish_window_pos
-    < publish_document_pos
-    < publish_identity_pos
+    < pending_owner_pos
+    < clear_pending_pos
+    < publish_pos
 ):
     errors.append(
-        "Schedule Hub must construct -> attach exact Closed owner -> show -> confirm loaded -> publish window -> wrapper -> native identity"
+        "Schedule Hub must bind owner -> attach Closed -> publish pending -> fence/show/refence -> loaded/exact-pending -> publish"
+    )
+
+cleanup_start = text.find("private static void ClosePendingOnFailure")
+release_start = text.find("private static void ReleaseOwnedWindow", cleanup_start + 1)
+cleanup = text[cleanup_start:release_start] if cleanup_start >= 0 and release_start > cleanup_start else ""
+close_cleanup = cleanup.find("owner.Window.Close();")
+terminal_cleanup = cleanup.find("if (!owner.Window.IsLoaded) ReleaseOwnedWindow(owner);", close_cleanup + 1)
+if min(close_cleanup, terminal_cleanup) < 0 or close_cleanup >= terminal_cleanup:
+    errors.append(
+        "Schedule Hub failure cleanup must retain ownership unless close reaches terminal unload"
     )
 
 if errors:
@@ -104,5 +134,5 @@ if errors:
     sys.exit(1)
 
 print(
-    "PASS: Schedule Hub reuses only the exact native+managed document owner, treats wrapper drift/cross-DWG as replacement, requires terminal close, and cannot publish a duplicate after close veto/failure."
+    "PASS: Schedule Hub uses pending/published generation ownership, exact native+managed reuse, terminal-close replacement, pending-first publication, and veto/failure-safe cleanup."
 )

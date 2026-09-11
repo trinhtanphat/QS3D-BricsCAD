@@ -67,8 +67,8 @@ else:
         ("document.CommandCancelled += OnCommandCancelled;", "_commandCancelledAttached = true;"),
         ("document.CommandFailed += OnCommandFailed;", "_commandFailedAttached = true;"),
     ]:
-        if attach.index(add) > attach.index(mark):
-            raise SystemExit(f"ERROR: ownership must publish only after successful subscription: {add}")
+        if attach.index(mark) > attach.index(add):
+            raise SystemExit(f"ERROR: may-be-subscribed ownership must publish before fallible native subscription: {add}")
 
     if "catch\n                {\n                    if (!DetachInCadContext())" not in attach:
         raise SystemExit("ERROR: partial subscription failure must rollback and fail closed when detach cannot be proven")
