@@ -30,8 +30,16 @@ function Admit-TestZip {
     param([Parameter(Mandatory = $true)][string]$ZipPath)
     $digest = (& $heldVerifier -Operation Hash -Path $ZipPath).Trim().ToLowerInvariant()
     if ($digest -notmatch '^[0-9a-f]{64}$') { throw "Held verifier returned malformed test ZIP digest: $digest" }
-    if (-not [string]::Equals($env:QS3D_V25_COMMERCIAL_ZIP_SHA256, $digest, [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'Held verifier did not publish the exact admitted ZIP digest for extraction.'
+    if ([string]::Equals([IO.Path]::GetFileName($ZipPath), 'QS3D-BricsCAD-V25.zip', [StringComparison]::Ordinal)) {
+        if (-not [string]::Equals($env:QS3D_V25_COMMERCIAL_ZIP_SHA256, $digest, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Held verifier did not publish the exact production-named ZIP digest for extraction.'
+        }
+    }
+    else {
+        # Adversarial fixtures intentionally use descriptive filenames. Bind each exact fixture digest
+        # directly so path-validation failures are tested after generation admission, without broadening
+        # the production helper's exact QS3D-BricsCAD-V25.zip publication scope.
+        $env:QS3D_V25_COMMERCIAL_ZIP_SHA256 = $digest
     }
     return $digest
 }
