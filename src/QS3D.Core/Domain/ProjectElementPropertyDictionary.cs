@@ -124,9 +124,12 @@ namespace QS3D.Core.Domain
             return canonical;
         }
 
-        private static string CanonicalizeLookupKey(string key)
+        private string CanonicalizeLookupKey(string key)
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
+            // Preserve exact access to malformed legacy persisted keys before applying semantic canonicalization.
+            // The backing dictionary is ordinal-ignore-case, so this check changes only whitespace/control/XML-invalid legacy identities.
+            if (_values.ContainsKey(key)) return key;
             if (string.IsNullOrWhiteSpace(key)) return key;
 
             var canonical = key.Trim();
