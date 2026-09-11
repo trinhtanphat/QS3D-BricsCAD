@@ -21,7 +21,7 @@ function New-TestArchive {
             $entry = $archive.CreateEntry($name, [IO.Compression.CompressionLevel]::Optimal)
             $stream = $entry.Open()
             try {
-                $bytes = if ($spec.ContainsKey('Bytes')) {
+                [byte[]]$bytes = if ($spec.ContainsKey('Bytes')) {
                     [byte[]]$spec.Bytes
                 }
                 else {
