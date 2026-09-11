@@ -160,18 +160,12 @@ namespace QS3D.BricsCAD.V25
                 window = null;
                 if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
                 {
-                try { PaletteCoordinator.SetStatus("Material Catalog: built-in + custom + apply theo semantic selection • khóa theo bản vẽ đang mở."); } catch { }
+                    try { PaletteCoordinator.SetStatus("Material Catalog: built-in + custom + apply theo semantic selection • khóa theo bản vẽ đang mở."); } catch { }
                 }
             }
             catch (Exception)
             {
-                if (candidate != null && ReferenceEquals(_pending, candidate))
-                    _pending = null;
-
-                if (window != null)
-                {
-                    try { window.Close(); } catch { }
-                }
+                CloseCandidateAfterFailure(candidate, window);
 
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
                 const string message = "QS3DMATERIALS không thể mở Material Catalog an toàn; trạng thái hiện tại được giữ nguyên.";
@@ -208,6 +202,13 @@ namespace QS3D.BricsCAD.V25
             if (candidate == null) return;
             try { candidate.Window.Close(); } catch { }
             if (!candidate.Window.IsLoaded && ReferenceEquals(_pending, candidate)) _pending = null;
+        }
+
+        private static void CloseCandidateAfterFailure(PublishedManager? candidate, MaterialCatalogWindow? window)
+        {
+            if (window == null) return;
+            try { window.Close(); } catch { }
+            if (!window.IsLoaded && candidate != null && ReferenceEquals(_pending, candidate)) _pending = null;
         }
     }
 }
