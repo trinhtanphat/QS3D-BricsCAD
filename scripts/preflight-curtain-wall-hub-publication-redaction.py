@@ -13,7 +13,7 @@ for token in (
     "Application.ShowModelessWindow(IntPtr.Zero, candidate, true);",
     "if (!PromotePendingWindow(candidate, document, nativeDatabaseIdentity))",
     "if (ReferenceEquals(_pendingWindow, window))",
-    "ReportFailure(document);",
+    "ReportFailure(document, nativeDatabaseIdentity);",
     'const string message = "QS3DCURTAIN lỗi: không thể mở Vách Kính Hub; kiểm tra document/CAD state và thử lại.";',
     "try { PaletteCoordinator.SetStatus(message); } catch { }",
     "try { document.Editor.WriteMessage(message); } catch { }",
@@ -35,11 +35,12 @@ if min(reserve, host_show, promote) < 0 or not (reserve < host_show < promote):
     errors.append("pending ownership must be reserved before host show and promoted only afterward")
 
 catch_pos = show.find("catch (System.Exception)")
-release_pos = show.find("ReleaseOwnedWindow(candidate);", catch_pos + 1)
-close_pos = show.find("TryClose(candidate);", release_pos + 1)
-report_pos = show.find("ReportFailure(document);", close_pos + 1)
-if min(catch_pos, release_pos, close_pos, report_pos) < 0 or not (catch_pos < release_pos < close_pos < report_pos):
-    errors.append("failure path must release exact ownership and close candidate before stable reporting")
+close_pos = show.find("CloseOwnedCandidateOnFailure(candidate);", catch_pos + 1)
+report_pos = show.find("ReportFailure(document, nativeDatabaseIdentity);", close_pos + 1)
+if min(catch_pos, close_pos, report_pos) < 0 or not (catch_pos < close_pos < report_pos):
+    errors.append("failure path must close through retained-ownership helper before stable reporting")
+if show.find("ReleaseOwnedWindow(candidate);", catch_pos + 1, close_pos) >= 0:
+    errors.append("failure path must not forget exact ownership before terminal close")
 
 if errors:
     for error in errors:

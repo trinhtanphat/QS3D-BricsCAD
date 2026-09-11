@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed if MCP native-command event subscription can publish partial handlers."""
+"""Fail closed if MCP native-command event subscription can lose partial-handler ownership."""
 
 from pathlib import Path
 import re
@@ -14,70 +14,76 @@ if start < 0 or end < 0:
     raise SystemExit("FAIL: could not isolate ArmNativeCommandInCadContext")
 method = text[start:end]
 
-subscriptions = [
-    "document.CommandWillStart += pending.WillStartHandler;",
-    "document.CommandEnded += pending.EndedHandler;",
-    "document.CommandCancelled += pending.CancelledHandler;",
-    "document.CommandFailed += pending.FailedHandler;",
+publish = "_pending = pending;"
+if method.count(publish) != 1:
+    raise SystemExit("FAIL: authoritative writer quarantine must publish exactly one pending candidate")
+
+handlers = [
+    ("WillStartMayBeSubscribed", "document.CommandWillStart += pending.WillStartHandler;"),
+    ("EndedMayBeSubscribed", "document.CommandEnded += pending.EndedHandler;"),
+    ("CancelledMayBeSubscribed", "document.CommandCancelled += pending.CancelledHandler;"),
+    ("FailedMayBeSubscribed", "document.CommandFailed += pending.FailedHandler;"),
 ]
-for token in subscriptions:
+first_add = min(method.find(token) for _, token in handlers)
+if first_add < 0 or method.find(publish) < 0 or method.find(publish) > first_add:
+    raise SystemExit("FAIL: authoritative writer quarantine must be published before first fallible native +=")
+
+last_add = -1
+for flag, token in handlers:
     if method.count(token) != 1:
         raise SystemExit(f"FAIL: expected exactly one native event subscription: {token}")
+    flag_set = method.find(f"pending.{flag} = true;")
+    add_at = method.find(token)
+    if flag_set < 0 or flag_set > add_at:
+        raise SystemExit(f"FAIL: {flag} must publish may-be-subscribed ownership before native +=")
+    last_add = max(last_add, add_at)
 
-publish = "_pending = pending;"
-if method.count(publish) != 2:
-    raise SystemExit("FAIL: expected success publication plus rollback-failure quarantine publication")
-success_publish_at = method.rindex(publish)
-if any(method.index(token) > success_publish_at for token in subscriptions):
-    raise SystemExit("FAIL: success _pending publication must follow all event subscriptions")
-
-# Attachment must be transactional. If detach itself cannot be proven, the candidate must be
-# published as quarantine state before rethrow so outer gate release cannot admit a second writer.
-# Inspect the conditional body rather than requiring it to contain only the assignment: production
-# may emit redacted audit metadata while quarantining, and that must not turn this guard into a
-# false negative.
-rollback = re.search(
-    r"catch\s*\{\s*if\s*\(!TryDetachPendingLocked\(pending\)\)\s*\{(?P<body>.*?)\}\s*throw;\s*\}",
-    method,
-    flags=re.DOTALL,
-)
-try_at = method.find("try", method.index(subscriptions[0]) - 200)
-if try_at < 0 or rollback is None:
-    raise SystemExit("FAIL: native event attachment lacks rollback quarantine/rethrow")
-rollback_body = rollback.group("body")
-if rollback_body.count(publish) != 1:
-    raise SystemExit("FAIL: rollback failure must publish exactly one quarantine candidate")
-if "return" in rollback_body:
-    raise SystemExit("FAIL: rollback quarantine must not return instead of rethrowing the host failure")
-if not (try_at < method.index(subscriptions[0]) < method.index(subscriptions[-1]) < rollback.start() < success_publish_at):
-    raise SystemExit("FAIL: rollback quarantine must cover every event add before success publication")
+accept_at = method.find("pending.AcceptCallbacks = true;")
+if accept_at < last_add:
+    raise SystemExit("FAIL: callbacks must remain disabled until every native handler add returns")
+rollback_at = method.find("if (TryDetachPendingLocked(pending))")
+clear_at = method.find("if (ReferenceEquals(_pending, pending)) _pending = null;", rollback_at)
+audit_at = method.find("native command handler rollback failed; writer remains quarantined", rollback_at)
+throw_at = method.find("throw;", rollback_at)
+if rollback_at < 0 or clear_at < rollback_at or audit_at < clear_at or throw_at < audit_at:
+    raise SystemExit("FAIL: partial attach failure must clear only after proven detach, otherwise retain quarantine, then rethrow")
 
 helper_start = text.find("private static bool TryDetachPendingLocked(")
 helper_end = text.find("\n        private static string NormalizeRequiredToken", helper_start)
 if helper_start < 0 or helper_end < 0:
     raise SystemExit("FAIL: rollback helper must report whether every unsubscribe succeeded")
 helper = text[helper_start:helper_end]
-for event_name in ("CommandWillStart", "CommandEnded", "CommandCancelled", "CommandFailed"):
-    if f"pending.Document.{event_name} -= pending." not in helper:
-        raise SystemExit(f"FAIL: rollback helper does not detach {event_name}")
-if "return detached;" not in helper or "detached = false;" not in helper:
-    raise SystemExit("FAIL: rollback helper must report unsubscribe failure instead of swallowing it")
+for flag, event_name in (
+    ("WillStartMayBeSubscribed", "CommandWillStart"),
+    ("EndedMayBeSubscribed", "CommandEnded"),
+    ("CancelledMayBeSubscribed", "CommandCancelled"),
+    ("FailedMayBeSubscribed", "CommandFailed"),
+):
+    condition = f"if (pending.{flag})"
+    remove = f"pending.Document.{event_name} -= pending."
+    clear = f"pending.{flag} = false;"
+    if condition not in helper or remove not in helper:
+        raise SystemExit(f"FAIL: detach does not retain exact ownership for {event_name}")
+    if helper.find(clear) < helper.find(remove):
+        raise SystemExit(f"FAIL: {flag} clears before matching native -= succeeds")
+if "return !pending.HasSubscribedHandlers;" not in helper:
+    raise SystemExit("FAIL: detach result must derive from unresolved per-handler ownership")
 
-# All cleanup paths that can reopen writer admission must preserve quarantine on detach failure.
+# Cleanup paths may reopen writer admission only after every native -= is proven.
 reset_start = text.find("internal static void Reset()")
 reset_end = text.find("\n        private static NativeCommandReservation ArmNativeCommandInCadContext", reset_start)
 reset = text[reset_start:reset_end]
 if "if (TryDetachPendingLocked(_pending))" not in reset or "_pending = null;" not in reset:
-    raise SystemExit("FAIL: Reset must not clear pending state unless unsubscribe cleanup succeeds")
+    raise SystemExit("FAIL: Reset must preserve writer quarantine when native detach is unresolved")
 
 dispose_start = text.find("public void Dispose()", text.find("internal sealed class NativeCommandReservation"))
 dispose_end = text.find("\n        private sealed class InteractiveModalScope", dispose_start)
 dispose = text[dispose_start:dispose_end]
 if "if (TryDetachPendingLocked(_pending))" not in dispose or "McpCadMutationCoordinator._pending = null;" not in dispose:
-    raise SystemExit("FAIL: reservation Dispose must preserve quarantine when unsubscribe cleanup fails")
+    raise SystemExit("FAIL: reservation Dispose must clear authoritative pending only after proven full detach")
 
-# Never repair this native boundary by retrying event registration.
+# Never repair this native boundary by retrying event registration or replaying a CAD command.
 if re.search(r"(?:while|for)\s*\([^)]*\)[\s\S]{0,500}Command(?:WillStart|Ended|Cancelled|Failed)\s*\+=", method):
     raise SystemExit("FAIL: native event subscription must not be retried")
 
-print("PASS: MCP native-command event attachment is atomic and cleanup failure remains quarantined")
+print("PASS: MCP native-command subscription ownership is fail-closed across partial attach/detach failure")
