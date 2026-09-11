@@ -27,6 +27,7 @@ namespace QS3D.Core.SmokeTests
             P2ShellProjectBindings();
             P3BimEditingModelingBindings();
             P4RecognitionBinding();
+            P5RebarBinding();
         }
 
         private static void P2ShellProjectBindings()
@@ -85,6 +86,18 @@ namespace QS3D.Core.SmokeTests
                 ParityWorkflowRequirement.Project | ParityWorkflowRequirement.AtomicMutation |
                 ParityWorkflowRequirement.Audit;
             AssertBinding(registry, "recognition", ParityWorkflowKind.SemanticMutation,
+                ParityWorkflowSurface.Ui, mutation);
+        }
+        private static void P5RebarBinding()
+        {
+            var registry = ParityRebarCatalog.CreateRegistry();
+            if (registry.Bindings.Count != 1)
+                throw new InvalidOperationException("P5 Rebar catalog must contain exactly one binding.");
+
+            var mutation = ParityWorkflowRequirement.ActiveDocument |
+                ParityWorkflowRequirement.Project | ParityWorkflowRequirement.Selection |
+                ParityWorkflowRequirement.AtomicMutation | ParityWorkflowRequirement.Audit;
+            AssertBinding(registry, "rebar", ParityWorkflowKind.SemanticMutation,
                 ParityWorkflowSurface.Ui, mutation);
         }
         private static void AssertBinding(ParityWorkflowRegistry registry, string id,

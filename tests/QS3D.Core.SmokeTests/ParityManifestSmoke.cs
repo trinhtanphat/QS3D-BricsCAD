@@ -26,6 +26,7 @@ namespace QS3D.Core.SmokeTests
             P2ShellProjectEvidenceRules();
             P3BimEditingModelingEvidenceRules();
             P4RecognitionEvidenceRules();
+            P5RebarEvidenceRules();
         }
 
         private static ParityFeatureRecord Record(string id, ParityEvidenceStage stage) =>
@@ -122,6 +123,17 @@ namespace QS3D.Core.SmokeTests
             Equal(ParityEvidenceStage.CommandWired, record.EvidenceStage);
             if (manifest.CatalogComplete)
                 throw new InvalidOperationException("P4 must not mark the parity catalog complete.");
+        }
+        private static void P5RebarEvidenceRules()
+        {
+            var path = Path.Combine("docs", "BLT3D-PARITY-MANIFEST.tsv");
+            var manifest = ParityManifestParser.Parse(File.ReadAllLines(path));
+            var record = manifest.GetRequired(new FeatureId("rebar"));
+            Equal("rebar", record.WorkflowKey);
+            Equal(ParityApplicability.Applicable, record.Applicability);
+            Equal(ParityEvidenceStage.CommandWired, record.EvidenceStage);
+            if (manifest.CatalogComplete)
+                throw new InvalidOperationException("P5 must not mark the parity catalog complete.");
         }
         private static void RepositoryManifestBlocksPrematureClosure()
         {
