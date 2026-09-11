@@ -18,7 +18,7 @@ required = {
     "InformationalVersion synchronization": "Set-ProjectVersionValue -Name 'InformationalVersion' -Value $productVersion",
     "workspace-only rewrite call": "Set-WorkspaceProductVersion",
     "post-sync identity validation": "Runtime product-version identity preflight failed after workspace synchronization.",
-    "source HEAD remains release base": "Release workspace HEAD must remain the protected-main source commit.",
+    "source HEAD remains release base": "Release workspace HEAD must remain the admitted source commit.",
     "no commit/push mutation contract": "No commit, push, branch-protection bypass, or protected-main mutation was performed by release preparation.",
 }
 for label, needle in required.items():
@@ -47,12 +47,12 @@ if "Workspace ProductVersion is already synchronized" not in text:
 if "if ($finalStatus.Count -eq $workspaceVersionPaths.Count)" not in text:
     errors.append("missing all-three identity path completeness guard")
 
-# Keep source identity and drift admission before any workspace mutation.
+# Keep source ancestry admission before any workspace mutation.
 try:
-    admission = text.index("Assert-ReleaseBaseIsSafe -TargetSha $releaseBase")
+    admission = text.index("Assert-ReleaseSourceReachable -TargetSha $admissionMain")
     sync = text.index("Set-WorkspaceProductVersion", admission)
     if sync <= admission:
-        errors.append("workspace version synchronization must happen only after protected-main drift admission")
+        errors.append("workspace version synchronization must happen only after protected-main ancestry admission")
 except ValueError:
     pass
 
@@ -61,4 +61,4 @@ if errors:
         print(f"ERROR: {error}")
     raise SystemExit(1)
 
-print("PASS: V25 manual release accepts an already-synchronized preview identity or synchronizes the coherent V25/V26/Core identity only in the bounded workspace while preserving protected-main source identity.")
+print("PASS: V25 manual release accepts an already-synchronized preview identity or synchronizes the coherent V25/V26/Core identity only in the bounded workspace while preserving the admitted SOURCE_SHA identity.")

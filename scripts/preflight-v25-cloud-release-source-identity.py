@@ -132,7 +132,7 @@ def main() -> int:
         "function Set-WorkspaceProductVersion",
         "Set-WorkspaceProductVersion -ReleaseTagValue $tag",
         "$expectedProductVersion = $tag.Substring(1)",
-        "Release workspace HEAD must remain the protected-main source commit",
+        "Release workspace HEAD must remain the admitted source commit",
         "$finalStatus.Count -ne 0 -and $finalStatus.Count -ne $workspaceVersionPaths.Count",
         "Workspace version synchronization must either be a no-op or produce exactly three bounded project modifications.",
         "Workspace ProductVersion is already synchronized",
@@ -160,22 +160,27 @@ def main() -> int:
     if _line_parsed_diff(dispatch):
         failures.append("main release dispatcher still parses line-oriented git diff --name-only")
 
-    prepare_pathspec_tokens = (
-        "$releaseRelevantPathspecs", "'src/'", "'tests/'", "'scripts/'",
-        "'external/QS3D-Platform'", "'.gitmodules'", "'Directory.Build.props'",
-        "'QS3D.sln'", "'QS3D.V26.sln'", "'.github/workflows/release-v25-cloud.yml'",
-        "'.github/workflows/dispatch-v25-cloud-after-main-integration.yml'",
+    prepare_ancestry_signals = (
+        "function Assert-ReleaseSourceReachable",
+        "git merge-base --is-ancestor $dispatch $TargetSha",
+        "$releaseBase = $dispatch",
+        "$admissionMain = Get-RemoteMain",
+        "Assert-ReleaseSourceReachable -TargetSha $admissionMain",
+        "$latestMain = Get-RemoteMain",
+        "Assert-ReleaseSourceReachable -TargetSha $latestMain",
     )
-    missing_pathspecs = [token for token in prepare_pathspec_tokens if token not in source]
-    if missing_pathspecs:
-        failures.append("release drift admission is missing Git pathspecs: " + ", ".join(missing_pathspecs))
+    missing_ancestry = [token for token in prepare_ancestry_signals if token not in source]
+    if missing_ancestry:
+        failures.append("release preparation is missing exact-source ancestry signals: " + ", ".join(missing_ancestry))
 
-    quiet_diff_pattern = re.compile(r"(?is)&\s*git\s+diff\s+--quiet\s+--no-ext-diff\s+\$range\s+--\s+@releaseRelevantPathspecs")
-    if not quiet_diff_pattern.search(source):
-        failures.append("release preparation must use pathname-safe --quiet pathspec comparison")
-    exit_code_pattern = re.compile(r"(?is)\$diffExit\s*=\s*\$LASTEXITCODE.*?\$diffExit\s+-eq\s+0.*?return\s+\$false.*?\$diffExit\s+-eq\s+1.*?return\s+\$true.*?throw")
-    if not exit_code_pattern.search(source):
-        failures.append("release preparation does not fail-close git diff clean/drift/error exit codes")
+    for stale_policy in (
+        "function Test-ReleaseRelevantDrift",
+        "function Assert-ReleaseBaseIsSafe",
+        "main moved after dispatch with release-relevant changes",
+        "git checkout --detach $releaseBase",
+    ):
+        if stale_policy in source:
+            failures.append("release preparation still carries stale/rebase policy: " + stale_policy)
 
     dispatch_signals = (
         '- "external/QS3D-Platform"', '- ".gitmodules"', "release_relevant_pathspecs=(",
@@ -207,7 +212,7 @@ def main() -> int:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
 
-    print("PASS: V25 manual release accepts an already-synchronized identity or permits only bounded workspace preview identity changes while preserving exact protected-main source provenance and pathname-safe drift admission")
+    print("PASS: V25 manual release accepts an already-synchronized identity or permits only bounded workspace preview identity changes while preserving exact admitted SOURCE_SHA provenance and dispatcher pathname-safe drift admission")
     return 0
 
 
