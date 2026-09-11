@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 
 source = Path('src/QS3D.BricsCAD.V25/McpCadViewStatusRuntime.cs').read_text(encoding='utf-8')
 
@@ -43,4 +43,12 @@ require('CommandTrackers.Remove(removable)' in ensure,
         'bounded tracker eviction must remain supported')
 require(ensure.find('CommandTrackers.Remove(removable)') > ensure.find('IsFullyDetached'),
         'tracker eviction must remove ownership only after detach is proven')
+for phase in (b'"start"', b'"end"', b'"cancelled"', b'"failed"'):
+    require(phase.decode('ascii') in block, 'command lifecycle phase must remain a C# string literal: ' + phase.decode('ascii'))
+
+require('string.Equals(phase, "start", StringComparison.Ordinal)' in block,
+        'command start comparison must retain its C# string literal')
+require('twistRadians must be between -2π and 2π.' in source,
+        'view twist diagnostic must preserve the UTF-8 pi literal')
+
 print('PASS: MCP command tracker retains native event ownership across partial attach/detach failure')

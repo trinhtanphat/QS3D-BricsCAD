@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
@@ -210,7 +210,7 @@ namespace QS3D.BricsCAD.V25
             var hasTwist = McpTopLevelJson.HasProperty(body, "twistRadians");
             var twist = hasTwist ? NumberRequired(body, "twistRadians") : 0d;
             if (hasTwist && (twist < -TwoPi || twist > TwoPi))
-                throw new InvalidOperationException("twistRadians must be between -2Ï€ and 2Ï€.");
+                throw new InvalidOperationException("twistRadians must be between -2π and 2π.");
 
             var document = RequireDocument();
             RequireViewMutationIdle();
@@ -644,10 +644,10 @@ namespace QS3D.BricsCAD.V25
             internal CommandTracker(Document document)
             {
                 _document = document;
-                _willStart = (sender, args) => TrackCommand(this, _document,  start, args);
-                _ended = (sender, args) => TrackCommand(this, _document, end, args);
-                _cancelled = (sender, args) => TrackCommand(this, _document, cancelled, args);
-                _failed = (sender, args) => TrackCommand(this, _document, failed, args);
+                _willStart = (sender, args) => TrackCommand(this, _document, "start", args);
+                _ended = (sender, args) => TrackCommand(this, _document, "end", args);
+                _cancelled = (sender, args) => TrackCommand(this, _document, "cancelled", args);
+                _failed = (sender, args) => TrackCommand(this, _document, "failed", args);
             }
 
             internal bool AcceptCallbacks { get; private set; }
@@ -682,7 +682,7 @@ namespace QS3D.BricsCAD.V25
                 _lastCommand = command;
                 _lastPhase = phase ?? string.Empty;
                 _updatedUtc = DateTime.UtcNow;
-                if (string.Equals(phase, start, StringComparison.Ordinal))
+                if (string.Equals(phase, "start", StringComparison.Ordinal))
                 {
                     _active.Add(command);
                     while (_active.Count > MaxTrackedCommandDepth) _active.RemoveAt(0);
