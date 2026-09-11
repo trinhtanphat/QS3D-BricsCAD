@@ -161,8 +161,8 @@ namespace QS3D.Core.SmokeTests
         {
             var project = ProjectWithBeam("bom-unicode-key", "beam-unicode-key", addCanonicalQuantity: false);
             var element = project.Elements[0];
-            element.Properties["V?tLi?u_??"] = "C30";
-            element.Quantities["Kh?iL??ng_??"] = 1.25d;
+            element.Properties["VậtLiệu_😀"] = "C30";
+            element.Quantities["KhốiLượng_😀"] = 1.25d;
 
             var issues = BomReleaseGuardService.Inspect(project);
             Equal(0, Count(issues, "BOM_PROPERTY_KEY_INVALID"));
@@ -201,9 +201,9 @@ namespace QS3D.Core.SmokeTests
         private static void RoomFinishProvenanceReachesReleaseGuard()
         {
             var project = new ProjectState("finish-release", "Finish release guard");
-            project.Floors.Add(new FloorDefinition("f1", "T?ng 1", 0d));
+            project.Floors.Add(new FloorDefinition("f1", "Tầng 1", 0d));
             project.Zones.Add(new ZoneDefinition("z1", "Zone 1"));
-            project.Families.Add(new ProjectFamily("finish", "S?n", ElementCategory.WallFinish));
+            project.Families.Add(new ProjectFamily("finish", "Sơn", ElementCategory.WallFinish));
             var orphan = new ProjectElement("finish-orphan", ElementCategory.WallFinish, "finish", "f1", "z1");
             orphan.Properties[AutoRoomLifecycle.RoomSourceIdKey] = "missing-room";
             orphan.SetQuantity("NetFinishAreaM2", 12d);
@@ -218,10 +218,10 @@ namespace QS3D.Core.SmokeTests
         private static void ProvenanceConflictDoesNotCrashReleaseGuard()
         {
             var project = new ProjectState("finish-conflict-release", "Finish conflict release guard");
-            project.Floors.Add(new FloorDefinition("f1", "T?ng 1", 0d));
+            project.Floors.Add(new FloorDefinition("f1", "Tầng 1", 0d));
             project.Zones.Add(new ZoneDefinition("z1", "Zone 1"));
-            project.Families.Add(new ProjectFamily("room", "Ph?ng", ElementCategory.Room));
-            project.Families.Add(new ProjectFamily("finish", "S?n", ElementCategory.WallFinish));
+            project.Families.Add(new ProjectFamily("room", "Phòng", ElementCategory.Room));
+            project.Families.Add(new ProjectFamily("finish", "Sơn", ElementCategory.WallFinish));
             project.Elements.Add(new ProjectElement("room-a", ElementCategory.Room, "room", "f1", "z1"));
             project.Elements.Add(new ProjectElement("room-b", ElementCategory.Room, "room", "f1", "z1"));
             var finish = new ProjectElement("finish-conflict", ElementCategory.WallFinish, "finish", "f1", "z1");
@@ -235,8 +235,8 @@ namespace QS3D.Core.SmokeTests
             Has(issues, "ROOM_PROVENANCE_CONFLICT");
             Has(issues, "BOM_EXCLUSION_FAILED");
             Has(issues, "BOM_REPORT_FAILED");
-            MessageEquals(issues, "BOM_EXCLUSION_FAILED", "Kh?ng th? quy?t ??nh an to?n c?u ki?n c? ???c ??a v?o BQ hay kh?ng.");
-            MessageEquals(issues, "BOM_REPORT_FAILED", "Kh?ng th? d?ng b?ng kh?i l??ng an to?n.");
+            MessageEquals(issues, "BOM_EXCLUSION_FAILED", "Không thể quyết định an toàn cấu kiện có được đưa vào BQ hay không.");
+            MessageEquals(issues, "BOM_REPORT_FAILED", "Không thể dựng bảng khối lượng an toàn.");
         }
 
         private static void NullSemanticEntryBlocksReleaseWithoutCrashing()
@@ -249,8 +249,8 @@ namespace QS3D.Core.SmokeTests
             Has(issues, "BOM_CURTAIN_PANEL_HEALTH_FAILED");
             Equal(1, Count(issues, "BOM_ROOM_FINISH_HEALTH_FAILED"));
             Equal(1, Count(issues, "BOM_CURTAIN_PANEL_HEALTH_FAILED"));
-            MessageEquals(issues, "BOM_ROOM_FINISH_HEALTH_FAILED", "Kh?ng th? ch?y ch?n ?o?n Room Finish an to?n; ph?t h?nh BQ b? ch?n.");
-            MessageEquals(issues, "BOM_CURTAIN_PANEL_HEALTH_FAILED", "Kh?ng th? ch?y ch?n ?o?n Curtain Panel an to?n; ph?t h?nh BQ b? ch?n.");
+            MessageEquals(issues, "BOM_ROOM_FINISH_HEALTH_FAILED", "Không thể chạy chẩn đoán Room Finish an toàn; phát hành BQ bị chặn.");
+            MessageEquals(issues, "BOM_CURTAIN_PANEL_HEALTH_FAILED", "Không thể chạy chẩn đoán Curtain Panel an toàn; phát hành BQ bị chặn.");
             if (!issues.Any(x => x.Code == "BOM_NULL_ELEMENT" && x.Severity == HealthSeverity.Error) ||
                 !issues.Any(x => x.Code == "BOM_ROOM_FINISH_HEALTH_FAILED" && x.Severity == HealthSeverity.Error) ||
                 !issues.Any(x => x.Code == "BOM_CURTAIN_PANEL_HEALTH_FAILED" && x.Severity == HealthSeverity.Error))
@@ -273,7 +273,7 @@ namespace QS3D.Core.SmokeTests
 
             var issues = BomReleaseGuardService.Inspect(project);
             Has(issues, "BOM_TRACEABILITY_FAILED");
-            MessageEquals(issues, "BOM_TRACEABILITY_FAILED", "Kh?ng th? d?ng provenance Handle an to?n cho c?u ki?n.");
+            MessageEquals(issues, "BOM_TRACEABILITY_FAILED", "Không thể dựng provenance Handle an toàn cho cấu kiện.");
         }
 
         private static void Empty(IReadOnlyList<ModelHealthIssue> issues)

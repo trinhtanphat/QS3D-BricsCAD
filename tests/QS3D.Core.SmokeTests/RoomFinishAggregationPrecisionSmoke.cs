@@ -57,7 +57,7 @@ namespace QS3D.Core.SmokeTests
             Equal(2, row.Count, "Ordinary aggregation must preserve count.");
             Equal("FloorFinish", row.Category, "Category projection must remain unchanged.");
             Equal("Floor finish family", row.FamilyName, "Family projection must remain unchanged.");
-            Equal("m?", row.UnitHint, "Unit projection must remain unchanged.");
+            Equal("m²", row.UnitHint, "Unit projection must remain unchanged.");
         }
 
         private static void FinalUnrepresentableTotalStillFailsClosed()

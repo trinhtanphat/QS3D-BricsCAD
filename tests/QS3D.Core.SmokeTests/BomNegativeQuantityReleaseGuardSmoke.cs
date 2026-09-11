@@ -27,7 +27,7 @@ namespace QS3D.Core.SmokeTests
             var issue = matches[0];
             if (issue.Severity != HealthSeverity.Error || issue.ElementId != element.Id)
                 throw new Exception("Negative quantity must be an Error-level blocker attributed to its owning element.");
-            if (issue.Message != "Quantity FormworkM2 kh?ng ???c ?m.")
+            if (issue.Message != "Quantity FormworkM2 không được âm.")
                 throw new Exception("Negative quantity diagnostic must identify the canonical quantity key.");
             if (!issues.Any(x => x.Code == "BOM_REPORT_FAILED"))
                 throw new Exception("Existing fail-closed report construction must remain in force for negative quantities.");
