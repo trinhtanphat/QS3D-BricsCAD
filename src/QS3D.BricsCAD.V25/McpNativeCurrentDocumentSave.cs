@@ -287,12 +287,15 @@ namespace QS3D.BricsCAD.V25
             {
                 try
                 {
-                    document.CommandEnded += OnCommandEnded;
+                    // Publish conservative may-be-subscribed ownership before each fallible
+                    // native accessor. BricsCAD can partially register a handler and then throw;
+                    // cleanup must still attempt the exact matching remove in that state.
                     _commandEndedAttached = true;
-                    document.CommandCancelled += OnCommandCancelled;
+                    document.CommandEnded += OnCommandEnded;
                     _commandCancelledAttached = true;
-                    document.CommandFailed += OnCommandFailed;
+                    document.CommandCancelled += OnCommandCancelled;
                     _commandFailedAttached = true;
+                    document.CommandFailed += OnCommandFailed;
                 }
                 catch
                 {
