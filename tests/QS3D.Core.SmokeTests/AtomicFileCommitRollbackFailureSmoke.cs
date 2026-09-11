@@ -1,37 +1,46 @@
 using System;
+using System.Collections;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 
 namespace QS3D.Core.SmokeTests
 {
     internal static class AtomicFileCommitRollbackFailureSmoke
     {
+        private const string RollbackFailureDataKey = "QS3D.AtomicFileCommit.RollbackFailure";
+
         internal static void Run()
         {
             var assembly = typeof(QS3D.Core.Persistence.QsdbProjectStore).Assembly;
             var atomicType = assembly.GetType("QS3D.Core.Persistence.AtomicFileCommit", throwOnError: true)
                 ?? throw new InvalidOperationException("AtomicFileCommit type was not found.");
             var helper = atomicType.GetMethod(
-                "CreateRollbackFailure",
+                "RecordRollbackFailure",
                 BindingFlags.NonPublic | BindingFlags.Static)
                 ?? throw new InvalidOperationException("AtomicFileCommit rollback evidence helper was not found.");
 
             var publicationFailure = new IOException("publication sentinel");
             var rollbackFailure = new UnauthorizedAccessException("rollback sentinel");
-            var result = helper.Invoke(null, new object[] { publicationFailure, rollbackFailure }) as IOException
-                ?? throw new InvalidOperationException("AtomicFileCommit rollback evidence helper did not return IOException.");
+            var originalStack = publicationFailure.StackTrace;
 
-            Require(result.Message.IndexOf("rollback", StringComparison.OrdinalIgnoreCase) >= 0,
-                "Combined atomic publication failure must identify rollback failure in its message.");
-            var aggregate = result.InnerException as AggregateException
-                ?? throw new InvalidOperationException("Combined atomic publication failure did not retain both failures.");
-            var failures = aggregate.InnerExceptions;
-            Require(failures.Count == 2, "Combined atomic publication failure must contain exactly publication and rollback failures.");
-            Require(failures.Any(x => ReferenceEquals(x, publicationFailure)),
-                "Combined atomic publication failure lost the original publication exception.");
-            Require(failures.Any(x => ReferenceEquals(x, rollbackFailure)),
-                "Combined atomic publication failure lost the rollback exception.");
+            var result = helper.Invoke(null, new object[] { publicationFailure, rollbackFailure });
+
+            Require(result == null, "Rollback evidence helper must not replace the primary publication exception.");
+            Require(ReferenceEquals(publicationFailure.Data[RollbackFailureDataKey], rollbackFailure),
+                "Rollback evidence helper did not retain the exact rollback exception on the primary failure.");
+            Require(publicationFailure.StackTrace == originalStack,
+                "Rollback evidence helper changed publication exception stack evidence.");
+
+            var secondRollbackFailure = new IOException("second rollback sentinel");
+            helper.Invoke(null, new object[] { publicationFailure, secondRollbackFailure });
+            Require(publicationFailure.Data[RollbackFailureDataKey] is AggregateException aggregate,
+                "Multiple rollback failures must retain prior evidence instead of overwriting it.");
+            Require(aggregate.InnerExceptions.Count == 2,
+                "Multiple rollback failures did not retain both rollback exceptions.");
+            Require(ReferenceEquals(aggregate.InnerExceptions[0], rollbackFailure),
+                "First rollback failure evidence was lost or reordered.");
+            Require(ReferenceEquals(aggregate.InnerExceptions[1], secondRollbackFailure),
+                "Second rollback failure evidence was lost or reordered.");
         }
 
         private static void Require(bool condition, string message)
