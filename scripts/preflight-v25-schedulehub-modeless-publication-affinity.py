@@ -11,9 +11,9 @@ errors = []
 required = [
     "private static PublishedManager? _pending;",
     "private static PublishedManager? _published;",
-    "var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
+    "nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
     "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;",
-    "var owner = new PublishedManager(window, document, nativeDatabaseIdentity);",
+    "owner = new PublishedManager(window, document, nativeDatabaseIdentity);",
     "var releaseOwner = owner;",
     "window.Closed += (_, __) => ReleaseOwnedWindow(releaseOwner);",
     "_pending = owner;",
