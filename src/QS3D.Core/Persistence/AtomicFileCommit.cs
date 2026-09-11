@@ -141,6 +141,7 @@ namespace QS3D.Core.Persistence
             }
 
             var installed = false;
+            Exception? publicationFailure = null;
             try
             {
                 RequireSafe(tempPath, "temporary");
@@ -172,10 +173,15 @@ namespace QS3D.Core.Persistence
                     throw new IOException("A QS3D backup appeared during primary recreation; the new primary was rolled back.");
                 }
             }
+            catch (Exception ex)
+            {
+                publicationFailure = ex;
+                throw;
+            }
             finally
             {
                 if (!installed)
-                    RestorePreviousBackup(staleBackupSafety, backupPath);
+                    RestorePreviousBackup(staleBackupSafety, backupPath, publicationFailure);
                 else if (!string.IsNullOrWhiteSpace(staleBackupSafety))
                     TryDelete(staleBackupSafety);
             }
