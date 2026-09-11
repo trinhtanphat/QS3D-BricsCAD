@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
         {
             PropertyCapacityMatchesPersistenceBoundary();
             PairRemovalUsesCanonicalIdentityAndLifecycle();
+            ReadLookupsUseCanonicalPropertyIdentity();
         }
 
         private static void PropertyCapacityMatchesPersistenceBoundary()
@@ -92,6 +93,38 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Property pair removal with a mismatched value must report false.");
             Equal(1, element.Properties.Count);
             Equal("0.4", element.Properties["WidthM"]);
+            Equal(ElementDirtyFlags.None, element.Dirty);
+            Equal(before, element.UpdatedUtc);
+        }
+
+        private static void ReadLookupsUseCanonicalPropertyIdentity()
+        {
+            var element = new ProjectElement("E-READ-CANONICAL", ElementCategory.Beam);
+            element.SetProperty("WidthM", "0.4");
+            element.MarkClean(ElementDirtyFlags.All);
+            var before = element.UpdatedUtc;
+            var pairs = (ICollection<KeyValuePair<string, string>>)element.Properties;
+
+            if (!element.Properties.ContainsKey(" widthm "))
+                throw new Exception("Property ContainsKey must canonicalize semantic key identity.");
+            if (!element.Properties.TryGetValue(" WIDTHM ", out var value))
+                throw new Exception("Property TryGetValue must canonicalize semantic key identity.");
+            Equal("0.4", value);
+            Equal("0.4", element.Properties[" widthm "]);
+            if (!pairs.Contains(new KeyValuePair<string, string>(" WIDTHM ", "0.4")))
+                throw new Exception("Property pair Contains must canonicalize semantic key identity.");
+            if (pairs.Contains(new KeyValuePair<string, string>(" widthm ", "0.5")))
+                throw new Exception("Property pair Contains must preserve exact value matching.");
+
+            if (element.Properties.ContainsKey(" "))
+                throw new Exception("Invalid blank property lookup must remain a miss.");
+            if (element.Properties.TryGetValue(" ", out _))
+                throw new Exception("Invalid blank property TryGetValue must remain a miss.");
+            Throws<KeyNotFoundException>(() => { var ignored = element.Properties[" "]; });
+            Throws<ArgumentNullException>(() => element.Properties.ContainsKey(null!));
+            Throws<ArgumentNullException>(() => element.Properties.TryGetValue(null!, out _));
+            Throws<ArgumentNullException>(() => { var ignored = element.Properties[null!]; });
+
             Equal(ElementDirtyFlags.None, element.Dirty);
             Equal(before, element.UpdatedUtc);
         }
