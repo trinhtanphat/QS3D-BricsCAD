@@ -22,10 +22,11 @@ for token in (
     "private static AuditLogWindow? _publicationInFlightCandidate;",
     "private static AuditLogWindow? _cleanupInFlightCandidate;",
     "private static IntPtr _nativeDatabaseIdentity;",
-    "var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
+    "var nativeDatabaseIdentity = IntPtr.Zero;",
+    "nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
     "if (!PrepareUnpublishedCandidate())",
-    "if (!PreparePublishedWindow(nativeDatabaseIdentity))",
-    "if (_nativeDatabaseIdentity == requestedNativeDatabaseIdentity)",
+    "if (!PreparePublishedWindow(document, nativeDatabaseIdentity))",
+    "if (_nativeDatabaseIdentity == requestedNativeDatabaseIdentity && PublishedDocumentMatches(requestedDocument))",
     "published.Close();",
     "if (published.IsLoaded)",
     "candidate.Closed += (_, __) => ReleaseCandidate(candidate);",
@@ -33,7 +34,6 @@ for token in (
     "_publicationInFlightCandidate = candidate;",
     "Application.ShowModelessWindow(IntPtr.Zero, candidate, true);",
     "if (!candidate.IsLoaded)",
-    "if (candidate.IsLoaded)",
     "_window = candidate;",
     "_nativeDatabaseIdentity = nativeDatabaseIdentity;",
     "if (ReferenceEquals(_window, candidate))",
@@ -69,7 +69,7 @@ elif not (cleanup_guard_pos < publication_guard_pos < unpublished_read_pos):
 # accept only proven terminal closure, and release singleton authority exactly.
 published_end = text.find("private static bool CloseUnpublishedCandidate", published_start + 1)
 published = text[published_start:published_end] if published_start >= 0 and published_end > published_start else ""
-same_native_pos = published.find("if (_nativeDatabaseIdentity == requestedNativeDatabaseIdentity)")
+same_native_pos = published.find("if (_nativeDatabaseIdentity == requestedNativeDatabaseIdentity && PublishedDocumentMatches(requestedDocument))")
 cleanup_set_pos = published.find("_cleanupInFlightCandidate = published;", same_native_pos + 1)
 close_pos = published.find("published.Close();", cleanup_set_pos + 1)
 catch_pos = published.find("catch", close_pos + 1)
@@ -119,8 +119,8 @@ unpublished_reserve_pos = show.find("_unpublishedCandidate = candidate;", closed
 inflight_reserve_pos = show.find("_publicationInFlightCandidate = candidate;", unpublished_reserve_pos + 1)
 show_pos = show.find("Application.ShowModelessWindow(IntPtr.Zero, candidate, true);", inflight_reserve_pos + 1)
 loaded_reject_pos = show.find("if (!candidate.IsLoaded)", show_pos + 1)
-loaded_publish_pos = show.find("if (candidate.IsLoaded)", loaded_reject_pos + 1)
-publish_window_pos = show.find("_window = candidate;", loaded_publish_pos + 1)
+post_load_affinity_pos = show.find("if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))", loaded_reject_pos + 1)
+publish_window_pos = show.find("_window = candidate;", post_load_affinity_pos + 1)
 publish_identity_pos = show.find("_nativeDatabaseIdentity = nativeDatabaseIdentity;", publish_window_pos + 1)
 if min(
     construct_pos,
@@ -129,7 +129,7 @@ if min(
     inflight_reserve_pos,
     show_pos,
     loaded_reject_pos,
-    loaded_publish_pos,
+    post_load_affinity_pos,
     publish_window_pos,
     publish_identity_pos,
 ) < 0:
@@ -141,12 +141,12 @@ elif not (
     < inflight_reserve_pos
     < show_pos
     < loaded_reject_pos
-    < loaded_publish_pos
+    < post_load_affinity_pos
     < publish_window_pos
     < publish_identity_pos
 ):
     errors.append(
-        "Audit Log must construct -> attach Closed -> reserve unpublished -> reserve publication-in-flight -> show -> reject non-loaded -> confirm loaded -> publish window -> publish native identity"
+        "Audit Log must construct -> attach Closed -> reserve unpublished -> reserve publication-in-flight -> show -> reject non-loaded -> revalidate exact document generation -> publish window -> publish native identity"
     )
 
 # ReleaseCandidate may clear published/unpublished singleton ownership, but the

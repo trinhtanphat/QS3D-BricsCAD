@@ -5,6 +5,8 @@ using System.IO.Compression;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Xml.Linq;
 using QS3D.Core.Coordination;
 using QS3D.Core.Domain;
@@ -28,6 +30,7 @@ namespace QS3D.Core.SmokeTests
             CanonicalIssuesProjectWithoutReRunningDetectors();
             CanonicalLifecyclePairMismatchFailsClosed();
             MixedDrawingFailsBeforeReplacingExistingWorkbook();
+            QuantityRowsAreDetachedBeforeWorkbookPublication();
         }
 
         private static void ExcelResavedRelationshipsAndSharedStringsRoundTrip()
@@ -288,6 +291,47 @@ namespace QS3D.Core.SmokeTests
             {
                 TryDelete(path);
             }
+        }
+
+        private static void QuantityRowsAreDetachedBeforeWorkbookPublication()
+        {
+            var path = Path.Combine(Path.GetTempPath(), "qs3d-review-qto-detached-" + Guid.NewGuid().ToString("N") + ".xlsx");
+            try
+            {
+                const int rowCount = 6000;
+                var details = new List<QuantityReportRow>(rowCount);
+                var summaries = new List<QuantityReportRow>(rowCount);
+                for (var index = 0; index < rowCount; index++)
+                {
+                    var id = "EL-" + index.ToString("D5");
+                    var handle = (index + 1).ToString("X");
+                    details.Add(QuantityRow("drawing-fp", id, handle, 1d, 0d, 1d, 2d));
+                    summaries.Add(QuantityRow("drawing-fp", id, handle, 1d, 0d, 1d, 2d));
+                }
+                var model = new Qs3dReviewModelInfo("P", "A.dwg", "drawing-fp", "R1", DateTimeOffset.UtcNow);
+                var export = Task.Run(() => Qs3dReviewWorkbookExporter.Export(
+                    path, details, summaries, Array.Empty<CoordinationClashExportRow>(),
+                    Array.Empty<CoordinationDuplicateExportRow>(), null, model));
+                var directory = Path.GetDirectoryName(path) ?? Path.GetTempPath();
+                var prefix = Path.GetFileName(path) + ".";
+                var deadline = DateTime.UtcNow.AddSeconds(15);
+                while (DateTime.UtcNow < deadline && !Directory.EnumerateFiles(directory, prefix + "*.tmp").Any())
+                    Thread.Sleep(1);
+                if (!Directory.EnumerateFiles(directory, prefix + "*.tmp").Any())
+                    throw new InvalidOperationException("Qs3dReviewWorkbookSmoke: export did not reach package publication.");
+                details[0].ElementIds[0] = "EL-MUTATED";
+                details[0].SourceHandles[0] = "BAD";
+                details[0].NetConcreteM3 = 999d;
+                export.GetAwaiter().GetResult();
+                var trace = Qs3dReviewWorkbookTraceReader.Read(path, Qs3dReviewWorkbookExporter.QuantitySheet, 2);
+                Equal("EL-00000", trace.ElementIds.Single(), "QTO row must publish the admitted detached semantic id");
+                Equal("1", trace.Handles.Single(), "QTO row must publish the admitted detached CAD handle");
+                var xml = XDocument.Parse(ReadEntry(path, "xl/worksheets/sheet2.xml"));
+                XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+                var netConcrete = xml.Descendants(ns + "c").Single(cell => (string?)cell.Attribute("r") == "M2").Element(ns + "v")?.Value;
+                Equal("1", netConcrete, "QTO row must publish the admitted detached NetConcreteM3 value");
+            }
+            finally { TryDelete(path); }
         }
 
         private static void MixedDrawingFailsBeforeReplacingExistingWorkbook()
