@@ -48,7 +48,7 @@ namespace QS3D.Core.Intelligence
                 for (var j = 0; j < rule.Terms.Count; j++)
                 {
                     var term = rule.Terms[j];
-                    if (searchable.IndexOf(term, StringComparison.Ordinal) < 0) continue;
+                    if (!ContainsTerm(searchable, term)) continue;
                     matches.Add(term);
                     specificity += term.Length;
                 }
@@ -111,6 +111,22 @@ namespace QS3D.Core.Intelligence
             builder.Append(value);
         }
 
+        private static bool ContainsTerm(string searchable, string term)
+        {
+            var start = 0;
+            while (start <= searchable.Length - term.Length)
+            {
+                var index = searchable.IndexOf(term, start, StringComparison.Ordinal);
+                if (index < 0) return false;
+                var beforeIsWord = index > 0 && char.IsLetterOrDigit(searchable[index - 1]);
+                var afterIndex = index + term.Length;
+                var afterIsWord = afterIndex < searchable.Length && char.IsLetterOrDigit(searchable[afterIndex]);
+                if (!beforeIsWord && !afterIsWord) return true;
+                start = index + 1;
+            }
+            return false;
+        }
+
         private static string Fold(string value)
         {
             var normalized = value.Normalize(NormalizationForm.FormD);
@@ -119,6 +135,11 @@ namespace QS3D.Core.Intelligence
             {
                 var c = normalized[i];
                 if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark) continue;
+                if (c == 'đ' || c == 'Đ')
+                {
+                    builder.Append('d');
+                    continue;
+                }
                 builder.Append(char.ToLowerInvariant(c));
             }
             return builder.ToString().Normalize(NormalizationForm.FormC);
