@@ -40,7 +40,7 @@ for token, label in (
     ("Record", "activation must request recording"),
     ("Suppress", "active-document destruction must suppress recording"),
     ("QueueHomeRefresh(ActiveDrawingRecordIntent.Record)", "normal activation must record"),
-    ("var destroyingDocument = e.Document;", "destroy handler must inspect the document being destroyed"),
+    ("destroyingDocument = e.Document;", "destroy handler must inspect the document being destroyed"),
     ("Application.DocumentManager.MdiActiveDocument", "destroy handler must resolve current active document at event time"),
     ("ReferenceEquals(destroyingDocument, activeDocument)", "destroy suppression must be document-affine"),
     ("? ActiveDrawingRecordIntent.Suppress", "active-document destroy must suppress recording"),

@@ -41,7 +41,10 @@ namespace QS3D.BricsCAD.V25.UI
         private readonly TextBlock _floorText = new TextBlock();
         private readonly TextBlock _elevationText = new TextBlock();
         private readonly TextBlock _statusText = new TextBlock();
-        private bool _hostLifecycleSubscribed;
+        private bool _documentActivatedMayBeSubscribed;
+        private bool _documentDestroyMayBeSubscribed;
+        private bool _hostLifecycleActive;
+        private bool _hostLifecycleDetachInProgress;
         private bool _hostRefreshQueued;
         private bool _hostRefreshInProgress;
         private ActiveDrawingRecordIntent _queuedActiveDrawingRecordIntent = ActiveDrawingRecordIntent.Preserve;
@@ -70,89 +73,124 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void OnWindowActivated(object sender, EventArgs e)
         {
+            // A transient native add failure can leave the first Loaded generation fully detached.
+            // Activated is a safe UI-thread opportunity to establish a fresh generation only when
+            // no may-be-subscribed ownership remains from the failed attempt.
+            SubscribeToHostLifecycle();
             QueueHomeRefresh(ActiveDrawingRecordIntent.Record);
         }
 
         private void OnWindowClosed(object sender, EventArgs e)
         {
             _windowClosed = true;
+            _hostLifecycleActive = false;
             _queuedActiveDrawingRecordIntent = ActiveDrawingRecordIntent.Preserve;
-            UnsubscribeFromHostLifecycle();
+            RetryHostLifecycleDetach();
         }
 
         private void SubscribeToHostLifecycle()
         {
-            if (_hostLifecycleSubscribed || _windowClosed)
+            if (_windowClosed || _hostLifecycleActive ||
+                _documentActivatedMayBeSubscribed || _documentDestroyMayBeSubscribed)
                 return;
 
             try
             {
+                // Native event add accessors are treated as potentially partially successful.
+                // Publish durable ownership before each += so compensation can never forget a
+                // handler that BricsCAD may already have registered when the accessor throws.
+                _documentActivatedMayBeSubscribed = true;
                 Application.DocumentManager.DocumentActivated += OnHostDocumentActivated;
+
+                _documentDestroyMayBeSubscribed = true;
                 Application.DocumentManager.DocumentToBeDestroyed += OnHostDocumentToBeDestroyed;
-                _hostLifecycleSubscribed = true;
+                _hostLifecycleActive = true;
             }
             catch
             {
-                // Host add accessors can fail independently while BricsCAD is tearing down.
-                // Roll back both handlers so a half-subscribed window is never retained.
-                try
-                {
-                    Application.DocumentManager.DocumentToBeDestroyed -= OnHostDocumentToBeDestroyed;
-                }
-                catch
-                {
-                    // Best effort only; close will retry both detach operations.
-                }
-
-                try
-                {
-                    Application.DocumentManager.DocumentActivated -= OnHostDocumentActivated;
-                }
-                catch
-                {
-                    // Best effort only; close will retry both detach operations.
-                }
-
-                _hostLifecycleSubscribed = false;
+                // A half-attached generation has no authority to refresh this modeless window.
+                // Retain any failed-removal ownership so a native callback/close can retry later.
+                _hostLifecycleActive = false;
+                RetryHostLifecycleDetach();
             }
         }
 
-        private void UnsubscribeFromHostLifecycle()
+        private void RetryHostLifecycleDetach()
         {
-            // Always attempt both removals. A failed transactional rollback can leave a native
-            // handler attached even though ownership was never published as fully subscribed.
+            if (_hostLifecycleDetachInProgress ||
+                (!_documentActivatedMayBeSubscribed && !_documentDestroyMayBeSubscribed))
+                return;
+
+            _hostLifecycleDetachInProgress = true;
             try
             {
-                Application.DocumentManager.DocumentActivated -= OnHostDocumentActivated;
-            }
-            catch
-            {
-                // Host teardown may already be disposing the document collection.
-            }
+                // Reverse attach order. Clear each ownership bit only after its exact native -=
+                // returns successfully; a failure means the delegate may still root this window.
+                if (_documentDestroyMayBeSubscribed)
+                {
+                    try
+                    {
+                        Application.DocumentManager.DocumentToBeDestroyed -= OnHostDocumentToBeDestroyed;
+                        _documentDestroyMayBeSubscribed = false;
+                    }
+                    catch
+                    {
+                        // Keep durable ownership published for a later retry.
+                    }
+                }
 
-            try
-            {
-                Application.DocumentManager.DocumentToBeDestroyed -= OnHostDocumentToBeDestroyed;
+                if (_documentActivatedMayBeSubscribed)
+                {
+                    try
+                    {
+                        Application.DocumentManager.DocumentActivated -= OnHostDocumentActivated;
+                        _documentActivatedMayBeSubscribed = false;
+                    }
+                    catch
+                    {
+                        // Keep durable ownership published for a later retry.
+                    }
+                }
             }
-            catch
+            finally
             {
-                // Host teardown may already be disposing the document collection.
+                _hostLifecycleDetachInProgress = false;
             }
-
-            _hostLifecycleSubscribed = false;
         }
 
         private void OnHostDocumentActivated(object sender, Bricscad.ApplicationServices.DocumentCollectionEventArgs e)
         {
+            if (_windowClosed || !_hostLifecycleActive)
+            {
+                RetryHostLifecycleDetach();
+                return;
+            }
+
             QueueHomeRefresh(ActiveDrawingRecordIntent.Record);
         }
 
         private void OnHostDocumentToBeDestroyed(object sender, Bricscad.ApplicationServices.DocumentCollectionEventArgs e)
         {
+            if (_windowClosed || !_hostLifecycleActive)
+            {
+                RetryHostLifecycleDetach();
+                return;
+            }
+
             // Defer until the host transition completes and never retain a Document wrapper beyond this event.
             // Only destruction of the currently active document suppresses a pending Record. Closing a
             // background document must preserve another document's already-queued activation intent.
-            var destroyingDocument = e.Document;
+            Bricscad.ApplicationServices.Document destroyingDocument;
+            try
+            {
+                destroyingDocument = e.Document;
+            }
+            catch
+            {
+                QueueHomeRefresh(ActiveDrawingRecordIntent.Suppress);
+                return;
+            }
+
             Bricscad.ApplicationServices.Document activeDocument;
             try
             {
