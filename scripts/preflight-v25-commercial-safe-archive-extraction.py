@@ -19,14 +19,21 @@ def contract_errors(workflow: str, extractor: str | None) -> list[str]:
         errors.append("raw Expand-Archive is forbidden at V25 commercial release trust boundaries")
     if extractor is None:
         return errors + ["missing reusable bounded V25 commercial candidate archive extractor script"]
+    if ".CopyTo(" in extractor:
+        errors.append("commercial archive materialization must not use unbounded stream CopyTo")
 
     required = (
         ("[IO.Compression.ZipArchive]", "ZipArchive inspection before extraction"),
         ("$zipStream.Length -le 0 -or $zipStream.Length -gt $MaxPackageBytes", "enforced compressed-size budget"),
         ("$entryCount++", "entry counter"),
         ("$entryCount -gt $MaxEntries", "enforced entry-count budget"),
-        ("$expandedBytes += [int64]$entry.Length", "uncompressed-byte accounting"),
-        ("$expandedBytes -gt $MaxExpandedBytes", "enforced expanded-size budget"),
+        ("$expandedBytes += [int64]$entry.Length", "declared uncompressed-byte accounting"),
+        ("$expandedBytes -gt $MaxExpandedBytes", "enforced declared expanded-size budget"),
+        ("$materializedBytes", "actual materialized-byte accounting"),
+        ("$input.Read($buffer", "bounded stream read loop"),
+        ("$materializedBytes -gt ($MaxExpandedBytes - [int64]$read)", "actual expanded-size pre-write budget"),
+        ("$output.Write($buffer", "explicit bounded stream write"),
+        ("$materializedBytes += [int64]$read", "actual expanded-byte increment"),
         ("$archive.Entries", "entry enumeration"),
         ("[IO.Path]::IsPathRooted($name)", "rooted-path rejection"),
         ("$name.IndexOf([char]0)", "NUL rejection"),
@@ -95,6 +102,7 @@ $invalid = [IO.Path]::GetInvalidFileNameChars()
 $destinationFull = [IO.Path]::GetFullPath($DestinationRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
 $rootPrefix = $destinationFull + [IO.Path]::DirectorySeparatorChar
 [int64]$expandedBytes = 0
+[int64]$materializedBytes = 0
 $entryCount = 0
 foreach ($entry in $archive.Entries) {
   $entryCount++
@@ -110,6 +118,12 @@ foreach ($entry in $archive.Entries) {
   if (-not $target.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw 'escape' }
   if (-not $seenTargets.Add($target)) { throw 'duplicate' }
   $out = [IO.File]::Open($target,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+  $buffer = New-Object byte[] 81920
+  while (($read = $input.Read($buffer, 0, $buffer.Length)) -gt 0) {
+    if ($materializedBytes -gt ($MaxExpandedBytes - [int64]$read)) { throw 'actual-expanded' }
+    $output.Write($buffer, 0, $read)
+    $materializedBytes += [int64]$read
+  }
 }
 """
     call1 = r".\scripts\expand-v25-commercial-candidate.ps1 -ZipPath $heldZip -DestinationRoot $verificationRoot -MaxPackageBytes 268435456 -MaxExpandedBytes 536870912 -MaxEntries 4096"
@@ -139,8 +153,10 @@ foreach ($entry in $archive.Entries) {
         "missing extractor": (safe_workflow, None),
         "declared but unenforced compressed budget": (safe_workflow, safe_extractor.replace("if ($zipStream.Length -le 0 -or $zipStream.Length -gt $MaxPackageBytes) { throw 'compressed' }", "# no compressed limit", 1)),
         "declared but unenforced entry budget": (safe_workflow, safe_extractor.replace("if ($entryCount -gt $MaxEntries) { throw 'entries' }", "# no entry limit", 1)),
-        "no expanded accounting": (safe_workflow, safe_extractor.replace("$expandedBytes += [int64]$entry.Length", "$expandedBytes += 0", 1)),
-        "no expanded enforcement": (safe_workflow, safe_extractor.replace("if ($expandedBytes -gt $MaxExpandedBytes) { throw 'expanded' }", "# no expanded limit", 1)),
+        "no declared expanded accounting": (safe_workflow, safe_extractor.replace("$expandedBytes += [int64]$entry.Length", "$expandedBytes += 0", 1)),
+        "no declared expanded enforcement": (safe_workflow, safe_extractor.replace("if ($expandedBytes -gt $MaxExpandedBytes) { throw 'expanded' }", "# no expanded limit", 1)),
+        "unbounded actual materialization": (safe_workflow, safe_extractor.replace("while (($read = $input.Read($buffer, 0, $buffer.Length)) -gt 0) {\n    if ($materializedBytes -gt ($MaxExpandedBytes - [int64]$read)) { throw 'actual-expanded' }\n    $output.Write($buffer, 0, $read)\n    $materializedBytes += [int64]$read\n  }", "$input.CopyTo($output)", 1)),
+        "no actual pre-write budget": (safe_workflow, safe_extractor.replace("if ($materializedBytes -gt ($MaxExpandedBytes - [int64]$read)) { throw 'actual-expanded' }", "# no actual limit", 1)),
         "no traversal rejection": (safe_workflow, safe_extractor.replace("$segment -eq '..' -or ", "", 1)),
         "ascii-only device names": (safe_workflow, safe_extractor.replace(WINDOWS_DEVICE_PATTERN, "con|prn|aux|nul|com[1-9]|lpt[1-9]", 1)),
         "case-sensitive duplicates": (safe_workflow, safe_extractor.replace("[StringComparer]::OrdinalIgnoreCase", "[StringComparer]::Ordinal", 1)),
