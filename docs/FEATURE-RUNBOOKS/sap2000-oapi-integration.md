@@ -15,7 +15,7 @@ V26 links the shared V25 host source, so the same SAP command implementation is 
 - Windows x64.
 - BricsCAD V25 or V26 with the matching QS3D plugin loaded.
 - A locally installed SAP2000 release exposing the `SAP2000v1.Helper` / `CSI.SAP2000.API.SapObject` OAPI registration.
-- Drawing `INSUNITS` set to one of the supported length units: millimetres, centimetres, decimetres, metres, inches, feet, yards or US survey feet.
+- Drawing units resolvable by QS3D's canonical unit policy (`INSUNITS` or an intentional QS3D project unit override). Unresolved units are rejected before OAPI mutation.
 - For export into an existing SAP model, configure any project-specific material/section/area properties in SAP2000 as required. The MVP requests the OAPI `Default` property when creating objects.
 
 ## Commands
@@ -37,7 +37,7 @@ V26 links the shared V25 host source, so the same SAP command implementation is 
 - Open 2D `POLYLINE` -> one Frame object for every consecutive segment.
 - Closed 2D `POLYLINE` with at least three vertices -> one SAP2000 Area object.
 - Other entity types are skipped with command-line warnings.
-- Coordinates are converted from DWG `INSUNITS` to metres before crossing the OAPI boundary.
+- Coordinates are converted through the canonical `CadUnitService` from the resolved QS3D drawing unit to metres before crossing the OAPI boundary.
 - Stable user names use the source CAD handle, for example `QS3D_F_<handle>` and `QS3D_A_<handle>`.
 - Export never calls `InitializeNewModel` or `NewBlank`; wiping/reinitializing a model is isolated to `QS3DSAPNEW`.
 
@@ -45,7 +45,7 @@ The MVP does not infer analytical centre-lines from arbitrary solids, does not a
 
 ## Recommended workflow
 
-1. Open the target DWG and verify `INSUNITS`.
+1. Open the target DWG and verify QS3D's resolved drawing unit (`INSUNITS` or an intentional project override).
 2. Open/configure the intended SAP2000 model, or run `QS3DSAPNEW` only when a blank model is genuinely intended.
 3. Run `QS3DSAPCONNECT`.
 4. Run `QS3DSAPEXPORT` and select analytical `LINE` / 2D `POLYLINE` geometry.
@@ -74,7 +74,7 @@ python scripts/preflight.py
 python scripts/preflight-all.py
 ```
 
-The focused guard verifies command registration, late-bound OAPI ProgIDs/methods, unit-aware geometry mapping, explicit confirmation before blank-model initialization, V25/V26 source sharing and absence of a proprietary SAP2000 compile-time reference.
+The focused guard verifies command registration, late-bound OAPI ProgIDs/methods, canonical unit-policy geometry mapping, explicit confirmation before blank-model initialization, V25/V26 source sharing and absence of a proprietary SAP2000 compile-time reference.
 
 Source/static checks and host compilation are **not** licensed native SAP2000 runtime proof. A production qualification should record the exact QS3D SHA, BricsCAD major/build, SAP2000 version, OAPI registration, DWG fixture, SDB result and observed return codes.
 
