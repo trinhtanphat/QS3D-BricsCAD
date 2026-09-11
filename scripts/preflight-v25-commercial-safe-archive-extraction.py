@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed unless V25 commercial release candidate extraction is bounded and path-safe."""
+"""Fail closed unless V25 commercial release candidate extraction is bounded, path-safe, and runtime-tested."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "release-v25.yml"
 EXTRACTOR = ROOT / "scripts" / "expand-v25-commercial-candidate.ps1"
+RUNTIME_TEST = ROOT / "scripts" / "test-v25-commercial-safe-archive-extraction.ps1"
+TEST_REGISTRY = ROOT / "scripts" / "test-v25-package-verifier.ps1"
 CALL = ".\\scripts\\expand-v25-commercial-candidate.ps1"
 WINDOWS_DEVICE_PATTERN = "con|prn|aux|nul|com(?:[1-9]|¹|²|³)|lpt(?:[1-9]|¹|²|³)"
 
@@ -91,6 +93,36 @@ def contract_errors(workflow: str, extractor: str | None) -> list[str]:
     return errors
 
 
+def runtime_registration_errors(registry: str | None, runtime_test: str | None) -> list[str]:
+    errors: list[str] = []
+    test_name = "test-v25-commercial-safe-archive-extraction.ps1"
+    if registry is None:
+        errors.append("missing registered V25 package-integrity test harness")
+    elif test_name not in registry:
+        errors.append("V25 commercial archive runtime test is not registered in the required package-integrity harness")
+    if runtime_test is None:
+        return errors + ["missing V25 commercial safe archive runtime test"]
+
+    required = (
+        ("expand-v25-commercial-candidate.ps1", "runtime invocation of production extractor"),
+        ("../escape.txt", "parent-traversal fixture"),
+        ("Payload.txt", "case-alias fixture"),
+        ("payload.TXT", "case-alias fixture counterpart"),
+        ("COM¹.txt", "superscript Windows device-name fixture"),
+        ("nested\\escape.txt", "backslash ambiguity fixture"),
+        ("payload.txt:stream", "alternate-data-stream fixture"),
+        ("payload./file.txt", "trailing-dot segment fixture"),
+        ("-MaxEntries 1", "entry-count runtime bound"),
+        ("-MaxExpandedBytes 32", "expanded-byte runtime bound"),
+        ("-MaxPackageBytes 1", "compressed-byte runtime bound"),
+        ("must not already exist", "pre-existing-destination assertion"),
+    )
+    for token, label in required:
+        if token not in runtime_test:
+            errors.append(f"runtime archive test is missing {label}: {token}")
+    return errors
+
+
 def self_test() -> list[str]:
     safe_extractor = r"""
 param([int64]$MaxPackageBytes,[int64]$MaxExpandedBytes,[int]$MaxEntries)
@@ -169,7 +201,26 @@ foreach ($entry in $archive.Entries) {
     for label, (workflow, extractor) in mutants.items():
         if not contract_errors(workflow, extractor):
             errors.append(f"guard failed to reject mutant: {label}")
+
+    safe_registry = "& (Join-Path $PSScriptRoot 'test-v25-commercial-safe-archive-extraction.ps1')"
+    safe_runtime = "expand-v25-commercial-candidate.ps1 ../escape.txt Payload.txt payload.TXT COM¹.txt nested\\escape.txt payload.txt:stream payload./file.txt -MaxEntries 1 -MaxExpandedBytes 32 -MaxPackageBytes 1 must not already exist"
+    if runtime_registration_errors(safe_registry, safe_runtime):
+        errors.append("guard rejected intended registered runtime archive-test contract")
+    if not runtime_registration_errors("# archive test removed", safe_runtime):
+        errors.append("guard failed to reject missing runtime-test registration")
+    if not runtime_registration_errors(safe_registry, safe_runtime.replace("COM¹.txt", "COM1.txt")):
+        errors.append("guard failed to reject missing superscript device-name runtime fixture")
     return errors
+
+
+def read_optional(path: Path, label: str, errors: list[str]) -> str | None:
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        errors.append(f"unable to read {label} {path}: {exc}")
+        return None
 
 
 def main() -> int:
@@ -179,16 +230,12 @@ def main() -> int:
     except OSError as exc:
         errors.append(f"unable to read {WORKFLOW}: {exc}")
         workflow = ""
-    extractor: str | None
-    try:
-        extractor = EXTRACTOR.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        extractor = None
-    except OSError as exc:
-        errors.append(f"unable to read {EXTRACTOR}: {exc}")
-        extractor = None
+    extractor = read_optional(EXTRACTOR, "extractor", errors)
+    runtime_test = read_optional(RUNTIME_TEST, "runtime test", errors)
+    registry = read_optional(TEST_REGISTRY, "test registry", errors)
     if workflow:
         errors.extend(contract_errors(workflow, extractor))
+    errors.extend(runtime_registration_errors(registry, runtime_test))
     if errors:
         print("ERROR: V25 commercial safe archive extraction preflight failed closed:", file=sys.stderr)
         for error in errors:
