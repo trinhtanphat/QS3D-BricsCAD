@@ -20,21 +20,25 @@ def contract_errors(workflow: str, extractor: str | None) -> list[str]:
 
     required = (
         ("[IO.Compression.ZipArchive]", "ZipArchive inspection before extraction"),
-        ("MaxPackageBytes", "compressed-size budget"),
-        ("MaxExpandedBytes", "expanded-size budget"),
-        ("MaxEntries", "entry-count budget"),
+        ("$zipStream.Length -le 0 -or $zipStream.Length -gt $MaxPackageBytes", "enforced compressed-size budget"),
+        ("$entryCount++", "entry counter"),
+        ("$entryCount -gt $MaxEntries", "enforced entry-count budget"),
+        ("$expandedBytes += [int64]$entry.Length", "uncompressed-byte accounting"),
+        ("$expandedBytes -gt $MaxExpandedBytes", "enforced expanded-size budget"),
         ("$archive.Entries", "entry enumeration"),
-        ("[IO.Path]::IsPathRooted", "rooted-path rejection"),
+        ("[IO.Path]::IsPathRooted($name)", "rooted-path rejection"),
+        ("$name.IndexOf([char]0)", "NUL rejection"),
+        ("$name.Contains('\\')", "backslash rejection"),
+        ("$name.Contains(':')", "drive/ADS separator rejection"),
         ("$segment -eq '..'", "parent-traversal rejection"),
         ("GetInvalidFileNameChars", "Windows invalid-name rejection"),
         ("con|prn|aux|nul|com[1-9]|lpt[1-9]", "Windows device-name rejection"),
         ("EndsWith('.',", "trailing-dot rejection"),
         ("EndsWith(' ',", "trailing-space rejection"),
         ("HashSet[string]", "duplicate target tracking"),
-        ("OrdinalIgnoreCase", "Windows case-alias rejection"),
-        ("$expandedBytes", "expanded-byte accounting"),
-        ("$entry.Length", "uncompressed-entry length accounting"),
-        ("FileMode]::CreateNew", "no-clobber extraction"),
+        ("[StringComparer]::OrdinalIgnoreCase", "Windows case-alias rejection"),
+        ("StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)", "destination-root containment"),
+        ("[IO.FileMode]::CreateNew", "no-clobber extraction"),
     )
     for token, label in required:
         if token not in extractor:
@@ -75,19 +79,28 @@ def contract_errors(workflow: str, extractor: str | None) -> list[str]:
 def self_test() -> list[str]:
     safe_extractor = r"""
 param([int64]$MaxPackageBytes,[int64]$MaxExpandedBytes,[int]$MaxEntries)
-$stream = [IO.File]::Open($ZipPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
-$archive = [IO.Compression.ZipArchive]::new($stream,[IO.Compression.ZipArchiveMode]::Read,$true)
+$zipStream = [IO.File]::Open($ZipPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+if ($zipStream.Length -le 0 -or $zipStream.Length -gt $MaxPackageBytes) { throw 'compressed' }
+$archive = [IO.Compression.ZipArchive]::new($zipStream,[IO.Compression.ZipArchiveMode]::Read,$true)
 $seenTargets = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 $invalid = [IO.Path]::GetInvalidFileNameChars()
+$destinationFull = [IO.Path]::GetFullPath($DestinationRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
+$rootPrefix = $destinationFull + [IO.Path]::DirectorySeparatorChar
 [int64]$expandedBytes = 0
+$entryCount = 0
 foreach ($entry in $archive.Entries) {
-  if ([IO.Path]::IsPathRooted($entry.FullName)) { throw 'rooted' }
-  foreach ($segment in $entry.FullName.Split('/')) {
+  $entryCount++
+  if ($entryCount -gt $MaxEntries) { throw 'entries' }
+  $name = [string]$entry.FullName
+  if ([IO.Path]::IsPathRooted($name) -or $name.IndexOf([char]0) -ge 0 -or $name.Contains('\\') -or $name.Contains(':')) { throw 'rooted' }
+  foreach ($segment in $name.Split('/')) {
     if ($segment -eq '..' -or $segment.IndexOfAny($invalid) -ge 0 -or $segment -match '^(?i:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\.|$)' -or $segment.EndsWith('.', [StringComparison]::Ordinal) -or $segment.EndsWith(' ', [StringComparison]::Ordinal)) { throw 'unsafe' }
   }
   $expandedBytes += [int64]$entry.Length
   if ($expandedBytes -gt $MaxExpandedBytes) { throw 'expanded' }
-  if (-not $seenTargets.Add($entry.FullName)) { throw 'duplicate' }
+  $target = [IO.Path]::GetFullPath((Join-Path $destinationFull $name))
+  if (-not $target.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw 'escape' }
+  if (-not $seenTargets.Add($target)) { throw 'duplicate' }
   $out = [IO.File]::Open($target,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
 }
 """
@@ -107,9 +120,13 @@ foreach ($entry in $archive.Entries) {
     mutants = {
         "raw expansion": (safe_workflow.replace(".\\scripts\\expand-v25-commercial-candidate.ps1 -ZipPath $heldZip -DestinationRoot $verificationRoot -MaxPackageBytes 268435456 -MaxExpandedBytes 536870912 -MaxEntries 4096", "Expand-Archive -LiteralPath $heldZip -DestinationPath $verificationRoot", 1), safe_extractor),
         "missing extractor": (safe_workflow, None),
+        "declared but unenforced compressed budget": (safe_workflow, safe_extractor.replace("if ($zipStream.Length -le 0 -or $zipStream.Length -gt $MaxPackageBytes) { throw 'compressed' }", "# no compressed limit", 1)),
+        "declared but unenforced entry budget": (safe_workflow, safe_extractor.replace("if ($entryCount -gt $MaxEntries) { throw 'entries' }", "# no entry limit", 1)),
         "no expanded accounting": (safe_workflow, safe_extractor.replace("$expandedBytes += [int64]$entry.Length", "$expandedBytes += 0", 1)),
+        "no expanded enforcement": (safe_workflow, safe_extractor.replace("if ($expandedBytes -gt $MaxExpandedBytes) { throw 'expanded' }", "# no expanded limit", 1)),
         "no traversal rejection": (safe_workflow, safe_extractor.replace("$segment -eq '..' -or ", "", 1)),
         "case-sensitive duplicates": (safe_workflow, safe_extractor.replace("[StringComparer]::OrdinalIgnoreCase", "[StringComparer]::Ordinal", 1)),
+        "no root containment": (safe_workflow, safe_extractor.replace("if (-not $target.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw 'escape' }", "# no containment", 1)),
         "clobber output": (safe_workflow, safe_extractor.replace("[IO.FileMode]::CreateNew", "[IO.FileMode]::Create", 1)),
         "one protected boundary": (safe_workflow.replace("          .\\scripts\\expand-v25-commercial-candidate.ps1 -ZipPath $heldZip -DestinationRoot $extract -MaxPackageBytes 268435456 -MaxExpandedBytes 536870912 -MaxEntries 4096\n", "", 1), safe_extractor),
     }
