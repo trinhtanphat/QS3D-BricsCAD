@@ -51,6 +51,41 @@ if publication_catch is None:
     print("ERROR: AtomicFileCommit.MoveWithRecovery must rethrow the captured publication failure with bare throw;.")
     sys.exit(1)
 
+recreate_start = text.find("private static void PublishMissingDestinationWithoutStaleBackup")
+recreate_end = text.find("private static void MoveWithRecovery", recreate_start)
+if recreate_start < 0 or recreate_end < 0:
+    print("ERROR: AtomicFileCommit missing-destination recreation boundary not found.")
+    sys.exit(1)
+recreate = text[recreate_start:recreate_end]
+
+# Missing-primary recreation stages an older backup too. If publication fails,
+# failure to restore that staged backup is rollback evidence on the same primary
+# exception and must not be silently lost in finally.
+for token in (
+    "Exception? publicationFailure",
+    "publicationFailure = ex;",
+    "RestorePreviousBackup(staleBackupSafety, backupPath, publicationFailure);",
+):
+    if token not in recreate:
+        print(
+            "ERROR: AtomicFileCommit missing-destination recreation can still lose "
+            "previous-backup rollback evidence: " + token
+        )
+        sys.exit(1)
+
+if "throw publicationFailure;" in recreate:
+    print("ERROR: AtomicFileCommit missing-destination recreation must preserve the original failure stack with bare throw;.")
+    sys.exit(1)
+
+recreate_catch = re.search(
+    r"catch\s*\(Exception\s+ex\)\s*\{\s*publicationFailure\s*=\s*ex;\s*throw;\s*\}",
+    recreate,
+    re.S,
+)
+if recreate_catch is None:
+    print("ERROR: AtomicFileCommit missing-destination recreation must capture and bare-rethrow its publication failure.")
+    sys.exit(1)
+
 restore_start = text.find("private static void RestorePreviousBackup", end)
 restore_end = text.find("private static void Validate", restore_start)
 if restore_start < 0 or restore_end < 0:
