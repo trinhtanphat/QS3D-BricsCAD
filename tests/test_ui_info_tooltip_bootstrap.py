@@ -86,7 +86,7 @@ internal class TestWindow : Window {
         return _panel;
     }
 }
-internal sealed class McpAgentControlCenter : TestWindow { }
+internal sealed class McpAgentControlCenterWindow : TestWindow { }
 internal sealed class OtherWindow : TestWindow { }
 public static class Probe {
     private static void Check(bool condition, string message) {
@@ -103,7 +103,7 @@ public static class Probe {
     }
     public static void Run() {
         // Never call Show: this test creates no visible window or host session.
-        var target = new McpAgentControlCenter();
+        var target = new McpAgentControlCenterWindow();
         var panel = Populate(target);
         Loaded(target);
         Check(panel.Children.Count == 1, "Assembly loading must not install tooltip handlers");
