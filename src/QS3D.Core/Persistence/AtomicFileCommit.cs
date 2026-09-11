@@ -162,6 +162,11 @@ namespace QS3D.Core.Persistence
                 {
                     try
                     {
+                        // From this point the newly installed primary is rejected and
+                        // rollback owns cleanup. Flip the state before File.Delete so a
+                        // delete failure cannot send finally down the committed-install
+                        // cleanup path and discard the staged older backup.
+                        installed = false;
                         RequireSafe(destinationPath, "destination");
                         File.Delete(destinationPath);
                     }
@@ -169,7 +174,6 @@ namespace QS3D.Core.Persistence
                     {
                         throw new IOException("A QS3D backup appeared during primary recreation and the new primary could not be rolled back.", ex);
                     }
-                    installed = false;
                     throw new IOException("A QS3D backup appeared during primary recreation; the new primary was rolled back.");
                 }
             }
