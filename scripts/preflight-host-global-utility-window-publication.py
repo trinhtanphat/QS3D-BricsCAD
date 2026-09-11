@@ -8,7 +8,7 @@ properties_path = ROOT / "src/QS3D.BricsCAD.V25/ProjectPropertiesCommands.cs"
 if not properties_path.is_file():
     errors.append("missing Project Properties command source")
 else:
-    source = properties_path.read_text(encoding="utf-8")
+    source = properties_path.read_text(encoding="utf-8-sig")
     for needle in (
         "private static ProjectPropertiesWindow? _pending;", "private static ProjectPropertiesWindow? _published;",
         "var pending = _pending;", 'CloseOwnerBeforeReplacement(pending, "pending");',
@@ -47,37 +47,48 @@ geometry_path = ROOT / "src/QS3D.BricsCAD.V25/GeometryExtensionsCommands.cs"
 if not geometry_path.is_file():
     errors.append("missing Geometry Extensions command source")
 else:
-    source = geometry_path.read_text(encoding="utf-8")
+    source = geometry_path.read_text(encoding="utf-8-sig")
     for needle in (
-        "private static GeometryExtensionsWindow? _published;", "private static GeometryExtensionsWindow? _pending;",
-        "var pending = _pending;", "if (pending != null && !TryClosePendingWindow(pending))",
-        "var previous = _published;", "if (previous.IsLoaded)", "previous.Activate();", "ReleasePublishedWindow(previous);",
-        "candidate = new GeometryExtensionsWindow();", "_pending = window;", "window.Closed += (_, __) => ReleaseWindow(window);",
-        "Application.ShowModelessWindow(IntPtr.Zero, window, true);", "if (!window.IsLoaded)", "_published = window;",
-        "ReleasePendingWindow(window);", "candidate = null;", "finally", "TryClosePendingWindow(candidate);",
-        "if (!ReferenceEquals(_pending, window)) return true;", "if (ReferenceEquals(_published, window))",
-        "if (window.IsLoaded) return false;"):
+        "private static PublishedWindow? _pending;", "private static PublishedWindow? _published;",
+        "GetNativeDatabaseIdentity(document)", "PreparePublishedWindow(document, nativeDatabaseIdentity)",
+        "owner = new PublishedWindow(window, document, nativeDatabaseIdentity);", "var releaseOwner = owner;",
+        "window.Closed += (_, __) => ReleaseOwnedWindow(releaseOwner);", "_pending = owner;",
+        "Application.ShowModelessWindow(IntPtr.Zero, window, true);", "if (!window.IsLoaded)",
+        "if (!ReferenceEquals(_pending, owner))", "_pending = null;", "_published = owner;", "owner = null;",
+        "try { owner.Window.Close(); } catch { }", "if (!owner.Window.IsLoaded) ReleaseOwnedWindow(owner);",
+        "if (published.NativeDatabaseIdentity == requestedNativeDatabaseIdentity &&",
+        "ReferenceEquals(published.Document, requestedDocument)"):
         if needle not in source:
-            errors.append("Geometry Extensions missing pending-owner host-global publication contract: " + needle)
-    release_pending = source.find("ReleasePendingWindow(window);")
-    clear_candidate = source.find("candidate = null;", release_pending) if release_pending >= 0 else -1
-    positions = [source.find(token) for token in (
-        "var pending = _pending;", "if (pending != null && !TryClosePendingWindow(pending))", "var previous = _published;",
-        "candidate = new GeometryExtensionsWindow();", "_pending = window;", "window.Closed += (_, __) => ReleaseWindow(window);",
-        "Application.ShowModelessWindow(IntPtr.Zero, window, true);", "if (!window.IsLoaded)", "_published = window;",
-        "ReleasePendingWindow(window);")]
-    positions.extend([clear_candidate, source.find("finally"), source.find("TryClosePendingWindow(candidate);")])
-    if min(positions) < 0 or positions != sorted(positions):
-        errors.append("Geometry Extensions must drain pending failure before construct and transfer ownership only after Loaded admission")
-    if source.find("_published = window;", source.find("Application.ShowModelessWindow"), source.find("if (!window.IsLoaded)")) >= 0:
-        errors.append("Geometry Extensions publishes before Loaded admission")
+            errors.append("Geometry Extensions missing generation-bound publication contract: " + needle)
+
+    ordered = (
+        "owner = new PublishedWindow(window, document, nativeDatabaseIdentity);",
+        "var releaseOwner = owner;",
+        "window.Closed += (_, __) => ReleaseOwnedWindow(releaseOwner);",
+        "_pending = owner;",
+        "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
+    )
+    pos = [source.find(token) for token in ordered]
+    if min(pos) < 0 or pos != sorted(pos) or len(set(pos)) != len(pos):
+        errors.append("Geometry Extensions candidate must be generation-owned and pending-rooted before host show")
+    show = source.find("Application.ShowModelessWindow(IntPtr.Zero, window, true);")
+    post = source.find("if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))", show)
+    loaded = source.find("if (!window.IsLoaded)", post)
+    exact = source.find("if (!ReferenceEquals(_pending, owner))", loaded)
+    clear_pending = source.find("_pending = null;", exact)
+    publish = source.find("_published = owner;", clear_pending)
+    if min(show, post, loaded, exact, clear_pending, publish) < 0 or not (show < post < loaded < exact < clear_pending < publish):
+        errors.append("Geometry Extensions must revalidate generation and Loaded/exact-owner before publication")
+    for forbidden in ("private static GeometryExtensionsWindow? _pending;", "private static GeometryExtensionsWindow? _published;", "+ ex.Message"):
+        if forbidden in source:
+            errors.append("Geometry Extensions retains unsafe raw-window/error pattern: " + forbidden)
 
 geometry_code = ROOT / "src/QS3D.BricsCAD.V25/UI/GeometryExtensionsWindow.xaml.cs"
 if not geometry_code.is_file():
     errors.append("missing GeometryExtensionsWindow code-behind")
 else:
-    geometry = geometry_code.read_text(encoding="utf-8")
-    for needle in ("Application.DocumentManager.MdiActiveDocument", "document.SendStringToExecute(normalizedCommand + \" \", true, false, false);"):
+    geometry = geometry_code.read_text(encoding="utf-8-sig")
+    for needle in ("Application.DocumentManager.MdiActiveDocument", 'document.SendStringToExecute(normalizedCommand + " ", true, false, false);'):
         if needle not in geometry:
             errors.append("Geometry Extensions must retain click-time active-document dispatch: " + needle)
 
@@ -85,7 +96,7 @@ properties_window = ROOT / "src/QS3D.BricsCAD.V25/UI/ProjectPropertiesWindow.cs"
 if not properties_window.is_file():
     errors.append("missing ProjectPropertiesWindow")
 else:
-    properties = properties_window.read_text(encoding="utf-8")
+    properties = properties_window.read_text(encoding="utf-8-sig")
     if "(Chưa xây dựng — Thuộc tính dự án)" not in properties:
         errors.append("Project Properties must retain the bounded BLT3D placeholder")
     for forbidden in ("ProjectState", "ProjectContextCoordinator", "ExistingProjectMutationContext"):
@@ -96,4 +107,4 @@ if errors:
     for error in errors:
         print("ERROR:", error)
     raise SystemExit(f"FAILED with {len(errors)} host-global utility publication error(s).")
-print("PASS: Project Properties and Geometry Extensions retain pending-owned, failure-clean host-global publication contracts")
+print("PASS: Project Properties remains pending-owned and Geometry Extensions is exact-generation/pending-first publication safe")

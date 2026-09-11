@@ -3,120 +3,82 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-COMMANDS = ROOT / "src" / "QS3D.BricsCAD.V25" / "DomainHubCommands.cs"
-WINDOW = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "DomainHubWindow.xaml.cs"
-commands = COMMANDS.read_text(encoding="utf-8")
-window = WINDOW.read_text(encoding="utf-8")
+COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/DomainHubCommands.cs"
+WINDOW = ROOT / "src/QS3D.BricsCAD.V25/UI/DomainHubWindow.xaml.cs"
+commands = COMMANDS.read_text(encoding="utf-8-sig")
+window = WINDOW.read_text(encoding="utf-8-sig")
 errors = []
-
 
 def require(text: str, token: str, label: str) -> None:
     if token not in text:
-        errors.append(f"missing {label} token: {token}")
-
+        errors.append(f"missing {label}: {token}")
 
 def forbid(text: str, token: str, label: str) -> None:
     if token in text:
-        errors.append(f"forbidden {label} token remains: {token}")
-
+        errors.append(f"forbidden {label}: {token}")
 
 for token in (
-    "private static DomainHubWindow? _published;",
-    "private static DomainHubWindow? _pending;",
-    "DomainHubWindow? candidate = null;",
-    "var pending = _pending;",
-    "if (pending != null && !TryClosePendingWindow(pending))",
-    "var previous = _published;",
-    "if (previous != null)",
-    "if (previous.IsLoaded)",
-    "ReleasePublishedWindow(previous);",
-    "candidate = new DomainHubWindow();",
-    "var window = candidate;",
-    "_pending = window;",
-    "window.Closed += (_, __) => ReleaseWindow(window);",
+    "private static PublishedWindow? _pending;",
+    "private static PublishedWindow? _published;",
+    "GetNativeDatabaseIdentity(document)",
+    "PreparePublishedWindow(document, nativeDatabaseIdentity)",
+    "owner = new PublishedWindow(window, document, nativeDatabaseIdentity);",
+    "var releaseOwner = owner;",
+    "window.Closed += (_, __) => ReleaseOwnedWindow(releaseOwner);",
+    "_pending = owner;",
     "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
     "if (!window.IsLoaded)",
-    "_published = window;",
-    "ReleasePendingWindow(window);",
-    "candidate = null;",
-    "finally",
-    "if (candidate != null)",
-    "TryClosePendingWindow(candidate);",
-    "private static void ReleasePublishedWindow(DomainHubWindow window)",
-    "if (!ReferenceEquals(_published, window)) return;",
-    "_published = null;",
-    "private static void ReleasePendingWindow(DomainHubWindow window)",
-    "if (!ReferenceEquals(_pending, window)) return;",
+    "if (!ReferenceEquals(_pending, owner))",
     "_pending = null;",
-    "private static bool TryClosePendingWindow(DomainHubWindow window)",
-    "if (window.IsLoaded) return false;",
-    "ReportStatus(document, \"QS3DDOMAIN lỗi khi mở cửa sổ.\");",
-    "ex.GetType().Name",
+    "_published = owner;",
+    "owner = null;",
+    "try { owner.Window.Close(); } catch { }",
+    "if (!owner.Window.IsLoaded) ReleaseOwnedWindow(owner);",
+    "if (published.NativeDatabaseIdentity == requestedNativeDatabaseIdentity &&",
+    "ReferenceEquals(published.Document, requestedDocument)",
+    "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;",
 ):
-    require(commands, token, "Domain Hub publication lifecycle")
+    require(commands, token, "generation-bound Domain Hub lifecycle token")
 
 for token in (
     "private static DomainHubWindow? _window;",
-    "_window = new DomainHubWindow();",
-    "_window.Closed += (_, __) => _window = null;",
-    "window.Closed += (_, __) => _window = null;",
+    "private static DomainHubWindow? _pending;",
+    "private static DomainHubWindow? _published;",
     '"\\nQS3DDOMAIN error: " + ex.Message',
 ):
-    forbid(commands, token, "Domain Hub publication lifecycle")
+    forbid(commands, token, "legacy/raw Domain Hub lifecycle token")
 
-show_start = commands.find("public void ShowDomainHub()")
-release_start = commands.find("private static void ReleaseWindow", show_start + 1)
-show = commands[show_start:release_start] if show_start >= 0 and release_start > show_start else ""
 ordered = (
-    "var pending = _pending;",
-    "candidate = new DomainHubWindow();",
-    "_pending = window;",
-    "window.Closed += (_, __) => ReleaseWindow(window);",
+    "owner = new PublishedWindow(window, document, nativeDatabaseIdentity);",
+    "var releaseOwner = owner;",
+    "window.Closed += (_, __) => ReleaseOwnedWindow(releaseOwner);",
+    "_pending = owner;",
     "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
-    "if (!window.IsLoaded)",
-    "_published = window;",
-    "ReleasePendingWindow(window);",
 )
-positions = [show.find(token) for token in ordered]
-if min(positions) < 0:
-    errors.append("unable to prove Domain Hub pending -> show -> loaded -> publish ordering")
-elif positions != sorted(positions) or len(set(positions)) != len(positions):
-    errors.append("Domain Hub must drain pending -> construct -> pending-own -> attach exact Closed -> show -> confirm loaded -> publish -> release pending")
-else:
-    release_pending_position = positions[-1]
-    cleanup_transfer_position = show.find(
-        "candidate = null;",
-        release_pending_position + len("ReleasePendingWindow(window);"),
-    )
-    if cleanup_transfer_position < 0 or cleanup_transfer_position <= release_pending_position:
-        errors.append("Domain Hub local cleanup ownership must transfer only after pending ownership is released")
+positions = [commands.find(token) for token in ordered]
+if min(positions) < 0 or positions != sorted(positions) or len(set(positions)) != len(positions):
+    errors.append("Domain Hub candidate must be generation-owned, Closed-bound and pending-rooted before host show")
 
-close_start = commands.find("private static bool TryClosePendingWindow")
-status_start = commands.find("private static void ReportStatus", close_start + 1)
-close_body = commands[close_start:status_start] if close_start >= 0 and status_start > close_start else ""
-for token in (
-    "if (!ReferenceEquals(_pending, window)) return true;",
-    "if (ReferenceEquals(_published, window))",
-    "try { window.Close(); } catch (Exception) { }",
-    "if (window.IsLoaded) return false;",
-    "ReleasePendingWindow(window);",
+show = commands.find("Application.ShowModelessWindow(IntPtr.Zero, window, true);")
+post = commands.find("if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))", show)
+loaded = commands.find("if (!window.IsLoaded)", post)
+exact = commands.find("if (!ReferenceEquals(_pending, owner))", loaded)
+clear_pending = commands.find("_pending = null;", exact)
+publish = commands.find("_published = owner;", clear_pending)
+release_local = commands.find("owner = null;", publish)
+if min(show, post, loaded, exact, clear_pending, publish, release_local) < 0 or not (
+    show < post < loaded < exact < clear_pending < publish < release_local
 ):
-    require(close_body, token, "Domain Hub pending-close fail-closed")
+    errors.append("Domain Hub must revalidate generation then Loaded/exact-owner before pending-to-published transfer")
 
-# The Domain Hub is intentionally host-global: it must not retain a managed Document.
 for token in (
     "public DomainHubWindow()",
-    "var document = Application.DocumentManager.MdiActiveDocument;",
-    "document.SendStringToExecute(command + \" \", true, false, false);",
+    "Application.DocumentManager.MdiActiveDocument",
+    'document.SendStringToExecute(command + " ", true, false, false);',
 ):
-    require(window, token, "Domain Hub active-document dispatch")
-
-for token in (
-    "DomainHubWindow(Document",
-    "private readonly Document",
-    "private Document _document",
-):
-    forbid(window, token, "Domain Hub retained-document")
+    require(window, token, "click-time active-document dispatch")
+for token in ("DomainHubWindow(Document", "private readonly Document", "private Document _document"):
+    forbid(window, token, "retained-document state")
 
 if errors:
     for error in errors:
@@ -124,4 +86,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: Domain Hub publication is pending-owned until terminal close or loaded-only publication, duplicate-safe, exact-owner released, redacted, and active-document dispatch remains host-global.")
+print("PASS: Domain Hub lifecycle is exact-generation bound, pending-first, veto-safe, duplicate-safe, and click dispatch stays host-global.")
