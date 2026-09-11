@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             DeterministicWorkbookCascade();
             ConflictAndCycleHandling();
+            CollisionSafeWorkbookIdentity();
             VersionedApiAuthorizationAndCaching();
         }
 
@@ -72,6 +73,30 @@ namespace QS3D.Core.SmokeTests
             };
             var cycleBatch = new LiveWorkbookRefreshEngine2().Refresh(cycle, new LiveWorkbookSourceSnapshot[0], "R2");
             True(cycleBatch.Results.All(x => x.Freshness == LiveWorkbookFreshness.Error), "cycle errors");
+        }
+
+        private static void CollisionSafeWorkbookIdentity()
+        {
+            var sources = new[]
+            {
+                new LiveWorkbookSourceSnapshot(LiveWorkbookSourceKind.BimElement, "E-A", "R|1", 2d, "E"),
+                new LiveWorkbookSourceSnapshot(LiveWorkbookSourceKind.BimElement, "E-A", "R", 1d, "2|E"),
+                new LiveWorkbookSourceSnapshot(LiveWorkbookSourceKind.BimElement, "E-B", "R2", 5d, "ifc://B")
+            };
+            var bindings = new[]
+            {
+                new LiveWorkbookBinding("K1", "A|B", "C", "D", "L1", LiveWorkbookSourceKind.BimElement, "E-A", "R2", new string[0], 1d, 0d, 0d),
+                new LiveWorkbookBinding("K2", "A", "B|C", "D", "L2", LiveWorkbookSourceKind.BimElement, "E-B", "R2", new string[0], 1d, 0d, 0d)
+            };
+
+            var batch = new LiveWorkbookRefreshEngine2().Refresh(bindings, sources, "R2");
+            var first = batch.Results.Single(x => x.Binding.BindingId == "K1");
+            var second = batch.Results.Single(x => x.Binding.BindingId == "K2");
+
+            Equal(LiveWorkbookFreshness.Conflict, first.Freshness, "hostile-token source snapshots remain conflicting");
+            True(first.Message.IndexOf("source", StringComparison.OrdinalIgnoreCase) >= 0, "source conflict is not misclassified as cell conflict");
+            Equal(LiveWorkbookFreshness.Refreshed, second.Freshness, "distinct delimiter-bearing workbook address remains independent");
+            Near(5d, second.Value, "independent workbook address quantity");
         }
 
         private static void VersionedApiAuthorizationAndCaching()
