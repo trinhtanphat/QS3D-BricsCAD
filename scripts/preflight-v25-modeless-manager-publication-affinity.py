@@ -54,7 +54,7 @@ for label, path in FILES.items():
         require(label, any(show_pos < call < publish_pos for call in calls),
                 'a post-show generation fence must run before _published authority transfer')
 
-    require(label, 'var nativeDatabaseIdentity = document.Database.UnmanagedObject;' in body,
+    require(label, 'nativeDatabaseIdentity = document.Database.UnmanagedObject;' in body,
             'must capture exact native database identity at command admission')
     require(label, 'ReferenceEquals(activeDocument, document)' in text,
             'generation helper must require the exact managed active-document wrapper')
@@ -64,6 +64,11 @@ for label, path in FILES.items():
             'must close unpublished candidate instead of retaining a stale modeless generation')
     require(label, body.count('CloseCandidateOnAffinityDrift(candidate);') >= 2,
             'candidate cleanup must cover both pre-show and post-show affinity drift')
+    require(label, 'if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))' in body,
+            'status/error publication must be gated by the exact active document generation')
+    require(label, 'if (!candidate.Window.IsLoaded)' in text and
+                   'if (ReferenceEquals(_pending, candidate)) _pending = null;' in text,
+            'failed candidate close must retain ownership while a window remains loaded')
 
 if failures:
     for failure in failures:

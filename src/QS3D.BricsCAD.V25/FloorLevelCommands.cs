@@ -60,10 +60,11 @@ namespace QS3D.BricsCAD.V25
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
 
+            var nativeDatabaseIdentity = IntPtr.Zero;
             PublishedManager? candidate = null;
             try
             {
-                var nativeDatabaseIdentity = document.Database.UnmanagedObject;
+                nativeDatabaseIdentity = document.Database.UnmanagedObject;
                 if (nativeDatabaseIdentity == IntPtr.Zero) return;
 
                 ExistingProjectMutationContext.TryGet(document, out _);
@@ -83,7 +84,10 @@ namespace QS3D.BricsCAD.V25
                         previous.MatchesManagedWrapper(document))
                     {
                         try { previous.Window.Activate(); } catch { }
-                        try { PaletteCoordinator.SetStatus("Level Picker đã mở cho bản vẽ hiện hành."); } catch { }
+                        if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                        {
+                            try { PaletteCoordinator.SetStatus("Level Picker đã mở cho bản vẽ hiện hành."); } catch { }
+                        }
                         return;
                     }
 
@@ -121,7 +125,10 @@ namespace QS3D.BricsCAD.V25
                 _pending = null;
                 _published = owner;
                 candidate = null;
-                try { PaletteCoordinator.SetStatus("Level Picker: active floor + semantic floor assignment • khóa theo bản vẽ đang mở; CAD geometry không tự di chuyển."); } catch { }
+                if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                {
+                    try { PaletteCoordinator.SetStatus("Level Picker: active floor + semantic floor assignment • khóa theo bản vẽ đang mở; CAD geometry không tự di chuyển."); } catch { }
+                }
             }
             catch (Exception ex)
             {
@@ -130,9 +137,12 @@ namespace QS3D.BricsCAD.V25
                     try { candidate.Window.Close(); } catch { }
                 }
 
-                var message = "QS3DLEVELS không thể mở Level Picker (" + ex.GetType().Name + ").";
-                try { PaletteCoordinator.SetStatus(message); } catch { }
-                try { document.Editor.WriteMessage("\n" + message); } catch { }
+                if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                {
+                    var message = "QS3DLEVELS không thể mở Level Picker (" + ex.GetType().Name + ").";
+                    try { PaletteCoordinator.SetStatus(message); } catch { }
+                    try { document.Editor.WriteMessage("\n" + message); } catch { }
+                }
             }
         }
 
