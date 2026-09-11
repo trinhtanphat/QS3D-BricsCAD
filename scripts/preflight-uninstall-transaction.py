@@ -141,12 +141,12 @@ def main() -> int:
         raise AssertionError("failure path must restore canonical files before registry snapshots and then rethrow the original failure")
 
     # Regression checks: the superseded independently-approved topology must stay rejected.
+    # The exact-one check plus exact transaction-target call above rejects both legacy
+    # per-target and separate file confirmations without matching across helper scopes.
     if "$registryPlan = @()" in text:
         raise AssertionError("legacy mutable registry-plan accumulator must not return")
     if "$stageFiles = $PSCmdlet.ShouldProcess($installFull, 'Remove QS3D installed files')" in text:
         raise AssertionError("file removal must not have an independent ShouldProcess decision")
-    if re.search(r"foreach\s*\(\s*\$target\b.*?\$PSCmdlet\s*\.\s*ShouldProcess", text, flags=re.IGNORECASE | re.DOTALL):
-        raise AssertionError("per-target ShouldProcess approval must not return")
 
     require(text, "if (-not $KeepFiles", "KeepFiles preservation")
     require(text, "if (Get-Process -Name bricscad -ErrorAction SilentlyContinue)", "all-BricsCAD closed precondition")
