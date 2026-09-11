@@ -361,6 +361,19 @@ namespace QS3D.BricsCAD.V25.UI
             return value == 0d ? 0d : value;
         }
 
+        private static bool TryParseOptionalDelta(string? text, out double delta)
+        {
+            var normalized = (text ?? string.Empty).Trim();
+            if (normalized.Length == 0)
+            {
+                delta = 0d;
+                return false;
+            }
+
+            delta = ParseFiniteDouble(normalized, "BQ adjustment delta");
+            return true;
+        }
+
         private static string FormatDouble(double value) =>
             value.ToString("0.############################", CultureInfo.InvariantCulture);
 

@@ -72,6 +72,8 @@ for token in (
     "AuditTrail.ForProject(project).Record",
     "FindFreshDetailRow(elementId)",
     "BqReviewService.CreateEntry",
+    "TryParseOptionalDelta",
+    "ParseFiniteDouble(normalized, \"BQ adjustment delta\")",
 ):
     require(ui, token, "quantity review UI")
 
