@@ -30,7 +30,9 @@ namespace QS3D.Core.SmokeTests
                 new LiveWorkbookBinding("B4", "WB", "BOQ", "D13", "BOQ-13", LiveWorkbookSourceKind.BimElement, "MISSING", "R2", new string[0], 1d, 0d, 7d)
             };
 
-            var batch = new LiveWorkbookRefreshEngine2().Refresh(bindings.Reverse(), sources.Reverse(), "R2");
+            var reversedBindings = bindings.OrderByDescending(x => x.BindingId, StringComparer.Ordinal).ToArray();
+            var reversedSources = sources.OrderByDescending(x => x.SourceId, StringComparer.Ordinal).ToArray();
+            var batch = new LiveWorkbookRefreshEngine2().Refresh(reversedBindings, reversedSources, "R2");
             var b1 = batch.Results.Single(x => x.Binding.BindingId == "B1");
             var b2 = batch.Results.Single(x => x.Binding.BindingId == "B2");
             var b3 = batch.Results.Single(x => x.Binding.BindingId == "B3");
@@ -93,7 +95,7 @@ namespace QS3D.Core.SmokeTests
                 new[] { new QsApiNamedDto("T1", "Tender 1", "open") },
                 new[] { new QsApiNamedDto("PO1", "Order 1", "delivering") });
 
-            var unauthenticated = api.Get(new QsApiRequest("GET", "P1", QsApiResourceKind.Quantity, null, string.Empty), snapshot);
+            var unauthenticated = api.Get(new QsApiRequest("GET", "P1", QsApiResourceKind.Quantity, null!, string.Empty), snapshot);
             Equal(401, unauthenticated.StatusCode, "API authentication");
 
             var wrongScope = new QsApiPrincipal("powerbi", new[] { "qs3d.project.read" });
