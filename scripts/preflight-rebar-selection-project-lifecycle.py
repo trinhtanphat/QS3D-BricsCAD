@@ -42,7 +42,7 @@ for forbidden in ("ProjectContextCoordinator", "ExistingProjectMutationContext",
 
 interactive_cases = (
     (ADAPTER / "BeamRebarCommands.cs", "public void BuildBeamRebar3D()", "private static void FinalizeUi", "Beam Rebar", "ExistingProjectMutationContext.Require(document, \"Beam Rebar 3D\")", "BeamRebarSolidBuilder.BuildSelected(document, project, selectedIds)"),
-    (ADAPTER / "BeamStirrupCommands.cs", "public void BuildBeamStirrups()", "[CommandMethod(\"QS3DBEAMSTIRRUPHEALTH\"", "Beam Stirrup", "ExistingProjectMutationContext.Require(document, \"Beam Stirrup 3D\")", "BeamStirrupSolidBuilder.BuildSelected(document, project)"),
+    (ADAPTER / "BeamStirrupCommands.cs", "public void BuildBeamStirrups()", "[CommandMethod(\"QS3DBEAMSTIRRUPHEALTH\"", "Beam Stirrup", "ExistingProjectMutationContext.Require(document, \"Beam Stirrup 3D\")", "BeamStirrupSolidBuilder.BuildSelected(document, project, selectedIds, expectedTargetIds)"),
     (ADAPTER / "SlabMeshCommands.cs", "public void BuildSlabMesh3D()", "[CommandMethod(\"QS3DSLABREBARHEALTH\"", "Slab Mesh", "ExistingProjectMutationContext.Require(document, \"Slab Mesh 3D\")", "SlabMeshSolidBuilder.BuildSelected(document, project)"),
     (ADAPTER / "FoundationMeshCommands.cs", "public void BuildFoundationMesh3D()", "private static void FinalizeUi", "Foundation Mesh", "ExistingProjectMutationContext.Require(document, \"Foundation Rebar 3D\")", "FoundationMeshSolidBuilder.BuildSelected(document, project)"),
     (ADAPTER / "StructuralWallMeshCommands.cs", "public void BuildStructuralWallMesh3D()", "private static void FinalizeUi", "Structural Wall Mesh", "ExistingProjectMutationContext.Require(document, \"Wall Mesh 3D\")", "StructuralWallMeshSolidBuilder.BuildSelected(document, project)"),
@@ -86,6 +86,19 @@ for forbidden in ("document.Editor.SelectImplied()", "document.Editor.GetSelecti
     if forbidden in beam_builder:
         errors.append("Beam Rebar builder must consume the admitted command snapshot without editor re-selection: " + forbidden)
 
+beam_stirrup_builder = read(ADAPTER / "Cad" / "BeamStirrupSolidBuilder.cs")
+for required in (
+    "ObjectId[] selectedIds",
+    "ISet<string> expectedTargetIds",
+    "expectedTargetIds.SetEquals(elements.Select(x => x.Id))",
+    "expectedTargetIds.SetEquals(postLockTargetIds)",
+):
+    if required not in beam_stirrup_builder:
+        errors.append("Beam Stirrup builder missing admitted selection/project freshness token: " + required)
+for forbidden in ("document.Editor.SelectImplied()", "document.Editor.GetSelection()", "PromptStatus"):
+    if forbidden in beam_stirrup_builder:
+        errors.append("Beam Stirrup builder must consume the admitted command snapshot without editor re-selection: " + forbidden)
+
 multi_commands = read(ADAPTER / "MultiRegionRebarCommands.cs")
 for label, method, build in (
     ("Slab Multi-Region Rebar", "public void BuildSlabMultiRegionRebar3D()", "SlabFoundationMultiRegionMeshSolidBuilder.BuildSlab(document, project, selectedIds)"),
@@ -111,4 +124,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: guarded rebar 3D commands establish their existing selection contract before canonical project binding; Column stays PICKFIRST-only, and Beam Rebar carries its admitted interactive/PICKFIRST snapshot into native generation without a second editor selection.")
+print("PASS: guarded rebar 3D commands establish their existing selection contract before canonical project binding; Column stays PICKFIRST-only, and Beam Rebar plus Beam Stirrup carry their admitted interactive/PICKFIRST snapshots into native generation without a second editor selection; Beam Stirrup also revalidates its semantic target generation before and after the document lock.")
