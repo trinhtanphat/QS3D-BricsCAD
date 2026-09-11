@@ -26,8 +26,8 @@ for token, label in (
     ("FileShare]::Read", "held downloaded generations"),
     ("ExpectedSourceCommit", "workflow SHA admission"),
     ("ExpectedReleaseTag", "release tag admission"),
-    ("[Parameter(Mandatory = $true)][ValidatePattern('^https://')][string]$ExpectedPackageUri", "exact HTTPS package URI admission parameter"),
-    ("[Parameter(Mandatory = $true)][ValidatePattern('^[0-9A-Fa-f]{40}$')][string]$ExpectedSignerThumbprint", "exact signer admission parameter"),
+    ("[string]$ExpectedPackageUri", "exact HTTPS package URI admission parameter"),
+    ("[string]$ExpectedSignerThumbprint", "exact signer admission parameter"),
     ("[int]$ExpectedManifestSchemaVersion = 2", "manifest schema admission parameter"),
     ("PACKAGE-METADATA.json", "held ZIP metadata"),
     ("packageSha256", "provenance package digest"),
@@ -56,20 +56,22 @@ if "$held.Add($scriptHeld)" not in ASSERT:
 if "$maxAdmittedScriptBytes = 262144" not in ASSERT:
     raise SystemExit("FAIL v26 candidate identity: publisher script admission must retain an explicit size bound")
 
-# Keep URI/signer/schema checks inside the held update-manifest admission block and before any
-# admitted publication script is compiled/executed. This prevents a lexical decoy elsewhere from
-# satisfying the source guard while a stale cross-job manifest remains publishable.
+# Signed manifests need the extra release identity; unsigned candidates legitimately have no update
+# manifest and must not be forced to depend on a signing variable. The implementation therefore
+# accepts optional expected manifest fields globally, but must fail closed if a held manifest exists
+# without all of them and must validate them before publisher admission.
 update_block = ASSERT.find("if ($null -ne $updateHeld)")
 publisher_block = ASSERT.find("$admittedScriptBlock = $null")
 if update_block < 0 or publisher_block < 0 or update_block >= publisher_block:
     raise SystemExit("FAIL v26 candidate identity: update-manifest admission must precede publisher admission")
 for token in (
+    "ExpectedPackageUri is required when UpdateManifestPath is supplied",
+    "ExpectedSignerThumbprint is required when UpdateManifestPath is supplied",
     "[string]$update.packageUri",
     "[string]$update.signerThumbprint",
     "[int]$update.schemaVersion",
 ):
-    pos = ASSERT.find(token, update_block, publisher_block)
-    if pos < 0:
+    if ASSERT.find(token, update_block, publisher_block) < 0:
         raise SystemExit(f"FAIL v26 candidate identity: held update-manifest block is missing exact release binding: {token}")
 
 require(RUNBOOK, "Lane-Key: `issue-5313`", "original candidate-identity lane provenance")
@@ -99,6 +101,8 @@ if not (WORKFLOW.index(create_token) < WORKFLOW.index(upload_token)):
     raise SystemExit("FAIL v26 candidate identity: provenance must be created before artifact upload")
 if WORKFLOW.count(held_publish_token) != 2:
     raise SystemExit("FAIL v26 candidate identity: signed and unsigned publication must both execute under held candidate generations")
+if WORKFLOW.count("-ExpectedPackageUri $expectedPackageUri") != 1 or WORKFLOW.count("-ExpectedSignerThumbprint $expectedSignerThumbprint") != 1:
+    raise SystemExit("FAIL v26 candidate identity: manifest URI/signer admission arguments must be confined to the signed publication path")
 if "- name: Publish V26 GitHub Release" in WORKFLOW:
     raise SystemExit("FAIL v26 candidate identity: publication must not be split into a later step after held-generation admission")
 
