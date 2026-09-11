@@ -19,7 +19,6 @@ namespace QS3D.Core.BenchmarkParity
             Revision = QsModelElementSnapshot.Require(revision, "revision");
             Calibration = calibration ?? throw new ArgumentNullException("calibration");
         }
-
         public string Id { get; private set; }
         public string Name { get; private set; }
         public DrawingSheetSourceKind SourceKind { get; private set; }
@@ -41,7 +40,6 @@ namespace QS3D.Core.BenchmarkParity
             Layer = QsModelElementSnapshot.Optional(layer);
             SourceHandle = QsModelElementSnapshot.Require(sourceHandle, "sourceHandle");
         }
-
         public string Id { get; private set; }
         public string SheetId { get; private set; }
         public TakeoffMeasurementKind Kind { get; private set; }
@@ -67,7 +65,6 @@ namespace QS3D.Core.BenchmarkParity
             Quantity = QsModelElementSnapshot.Finite(quantity, "quantity");
             Unit = QsModelElementSnapshot.Require(unit, "unit");
         }
-
         public string MarkupId { get; private set; }
         public string SheetId { get; private set; }
         public string Revision { get; private set; }
@@ -87,7 +84,6 @@ namespace QS3D.Core.BenchmarkParity
             Sheet = sheet ?? throw new ArgumentNullException("sheet");
             Evidence = evidence ?? throw new ArgumentNullException("evidence");
         }
-
         public DrawingSheet2D Sheet { get; private set; }
         public IReadOnlyList<TakeoffQuantityEvidence2D> Evidence { get; private set; }
     }
@@ -98,7 +94,6 @@ namespace QS3D.Core.BenchmarkParity
         {
             if (sheet == null) throw new ArgumentNullException("sheet");
             if (markups == null) throw new ArgumentNullException("markups");
-
             var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var result = new List<TakeoffQuantityEvidence2D>();
             foreach (var markup in markups)
@@ -106,17 +101,10 @@ namespace QS3D.Core.BenchmarkParity
                 if (markup == null) throw new ArgumentException("Markup collection contains null.", "markups");
                 if (!string.Equals(markup.SheetId, sheet.Id, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Markup belongs to another sheet.");
                 if (!ids.Add(markup.Id)) throw new InvalidOperationException("Duplicate markup id.");
-
-                var quantity = markup.Kind == TakeoffMeasurementKind.Count
-                    ? markup.RawValue
-                    : markup.Kind == TakeoffMeasurementKind.Length
-                        ? markup.RawValue * sheet.Calibration.Scale
-                        : markup.RawValue * sheet.Calibration.Scale * sheet.Calibration.Scale;
+                var quantity = markup.Kind == TakeoffMeasurementKind.Count ? markup.RawValue : markup.Kind == TakeoffMeasurementKind.Length ? markup.RawValue * sheet.Calibration.Scale : markup.RawValue * sheet.Calibration.Scale * sheet.Calibration.Scale;
                 var unit = markup.Kind == TakeoffMeasurementKind.Count ? "ea" : markup.Kind == TakeoffMeasurementKind.Length ? sheet.Calibration.Unit : sheet.Calibration.Unit + "2";
-
                 result.Add(new TakeoffQuantityEvidence2D(markup.Id, sheet.Id, sheet.Revision, sheet.SourceReference, markup.SourceHandle, markup.Classification, markup.Zone, markup.Layer, quantity, unit));
             }
-
             return new TakeoffSheetResult2D(sheet, new ReadOnlyCollection<TakeoffQuantityEvidence2D>(result));
         }
     }
@@ -130,7 +118,6 @@ namespace QS3D.Core.BenchmarkParity
             Previous = previous;
             Current = current;
         }
-
         public string MarkupId { get; private set; }
         public RevisionMarkupChangeKind Kind { get; private set; }
         public TakeoffQuantityEvidence2D Previous { get; private set; }
@@ -145,7 +132,6 @@ namespace QS3D.Core.BenchmarkParity
             if (previous == null) throw new ArgumentNullException("previous");
             if (current == null) throw new ArgumentNullException("current");
             if (!string.Equals(previous.Sheet.Id, current.Sheet.Id, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Revision compare requires the same logical sheet id.");
-
             var oldById = previous.Evidence.ToDictionary(x => x.MarkupId, StringComparer.OrdinalIgnoreCase);
             var newById = current.Evidence.ToDictionary(x => x.MarkupId, StringComparer.OrdinalIgnoreCase);
             var ids = oldById.Keys.Union(newById.Keys, StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase);
@@ -156,16 +142,11 @@ namespace QS3D.Core.BenchmarkParity
                 TakeoffQuantityEvidence2D newValue;
                 oldById.TryGetValue(id, out oldValue);
                 newById.TryGetValue(id, out newValue);
-                RevisionMarkupChangeKind kind;
-                if (oldValue == null) kind = RevisionMarkupChangeKind.Added;
-                else if (newValue == null) kind = RevisionMarkupChangeKind.Removed;
-                else if (Equivalent(oldValue, newValue)) kind = RevisionMarkupChangeKind.Unchanged;
-                else kind = RevisionMarkupChangeKind.Changed;
+                var kind = oldValue == null ? RevisionMarkupChangeKind.Added : newValue == null ? RevisionMarkupChangeKind.Removed : Equivalent(oldValue, newValue) ? RevisionMarkupChangeKind.Unchanged : RevisionMarkupChangeKind.Changed;
                 result.Add(new RevisionMarkupDelta2D(id, kind, oldValue, newValue));
             }
             return new ReadOnlyCollection<RevisionMarkupDelta2D>(result);
         }
-
         private static bool Equivalent(TakeoffQuantityEvidence2D left, TakeoffQuantityEvidence2D right)
         {
             return string.Equals(left.Classification, right.Classification, StringComparison.OrdinalIgnoreCase)
@@ -186,9 +167,9 @@ namespace QS3D.Core.BenchmarkParity
             MeasuredQuantity = QsModelElementSnapshot.Finite(measuredQuantity, "measuredQuantity");
             FormulaQuantity = QsModelElementSnapshot.Finite(formulaQuantity, "formulaQuantity");
             UnitRate = QsModelElementSnapshot.Finite(unitRate, "unitRate");
+            if (evidenceCount < 1) throw new ArgumentOutOfRangeException("evidenceCount");
             EvidenceCount = evidenceCount;
         }
-
         public string Classification { get; private set; }
         public string Zone { get; private set; }
         public string Unit { get; private set; }
@@ -201,54 +182,59 @@ namespace QS3D.Core.BenchmarkParity
 
     public sealed class AutodeskTakeoffWorkflow
     {
-        public IReadOnlyList<TakeoffWorkflowLine> BuildInventoryAndEstimate(
-            IEnumerable<TakeoffQuantityEvidence2D> drawingEvidence,
-            IEnumerable<IfcQtoItem> bimQuantities,
-            Func<string, double, double> formula,
-            Func<string, string, double> rateProvider)
+        private sealed class WorkflowRow
+        {
+            public WorkflowRow(string classification, string zone, string unit, double quantity) { Classification = classification; Zone = zone ?? string.Empty; Unit = unit; Quantity = quantity; }
+            public string Classification { get; private set; }
+            public string Zone { get; private set; }
+            public string Unit { get; private set; }
+            public double Quantity { get; private set; }
+        }
+
+        private sealed class WorkflowKey : IEquatable<WorkflowKey>
+        {
+            public WorkflowKey(string classification, string zone, string unit) { Classification = classification; Zone = zone ?? string.Empty; Unit = unit; }
+            public string Classification { get; private set; }
+            public string Zone { get; private set; }
+            public string Unit { get; private set; }
+            public bool Equals(WorkflowKey other)
+            {
+                return other != null && string.Equals(Classification, other.Classification, StringComparison.OrdinalIgnoreCase) && string.Equals(Zone, other.Zone, StringComparison.OrdinalIgnoreCase) && string.Equals(Unit, other.Unit, StringComparison.OrdinalIgnoreCase);
+            }
+            public override bool Equals(object obj) { return Equals(obj as WorkflowKey); }
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    var hash = StringComparer.OrdinalIgnoreCase.GetHashCode(Classification);
+                    hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(Zone);
+                    hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(Unit);
+                    return hash;
+                }
+            }
+        }
+
+        public IReadOnlyList<TakeoffWorkflowLine> BuildInventoryAndEstimate(IEnumerable<TakeoffQuantityEvidence2D> drawingEvidence, IEnumerable<IfcQtoItem> bimQuantities, Func<string, double, double> formula, Func<string, string, double> rateProvider)
         {
             if (drawingEvidence == null) throw new ArgumentNullException("drawingEvidence");
             if (bimQuantities == null) throw new ArgumentNullException("bimQuantities");
             if (formula == null) throw new ArgumentNullException("formula");
             if (rateProvider == null) throw new ArgumentNullException("rateProvider");
-
-            var rows = new List<Tuple<string, string, string, double>>();
-            rows.AddRange(drawingEvidence.Select(x => Tuple.Create(x.Classification, x.Zone, x.Unit, x.Quantity)));
-            rows.AddRange(bimQuantities.Select(x => Tuple.Create(QsModelElementSnapshot.Require(x.Classification, "classification"), x.Storey, x.Unit, x.Quantity)));
-
+            var rows = new List<WorkflowRow>();
+            rows.AddRange(drawingEvidence.Select(x => new WorkflowRow(x.Classification, x.Zone, x.Unit, x.Quantity)));
+            rows.AddRange(bimQuantities.Select(x => new WorkflowRow(QsModelElementSnapshot.Require(x.Classification, "classification"), x.Storey, x.Unit, x.Quantity)));
             return rows
-                .GroupBy(x => new { Classification = x.Item1, Zone = x.Item2, Unit = x.Item3 }, new WorkflowKeyComparer())
+                .GroupBy(x => new WorkflowKey(x.Classification, x.Zone, x.Unit))
                 .Select(g =>
                 {
-                    var measured = g.Sum(x => x.Item4);
-                    var adjusted = formula(g.Key.Classification, measured);
-                    var rate = rateProvider(g.Key.Classification, g.Key.Unit);
+                    var measured = g.Sum(x => x.Quantity);
+                    var adjusted = QsModelElementSnapshot.Finite(formula(g.Key.Classification, measured), "formulaQuantity");
+                    var rate = QsModelElementSnapshot.Finite(rateProvider(g.Key.Classification, g.Key.Unit), "unitRate");
                     return new TakeoffWorkflowLine(g.Key.Classification, g.Key.Zone, g.Key.Unit, measured, adjusted, rate, g.Count());
                 })
                 .OrderBy(x => x.Classification, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Zone, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-        }
-
-        private sealed class WorkflowKeyComparer : IEqualityComparer<dynamic>
-        {
-            public bool Equals(dynamic x, dynamic y)
-            {
-                return string.Equals((string)x.Classification, (string)y.Classification, StringComparison.OrdinalIgnoreCase)
-                    && string.Equals((string)x.Zone, (string)y.Zone, StringComparison.OrdinalIgnoreCase)
-                    && string.Equals((string)x.Unit, (string)y.Unit, StringComparison.OrdinalIgnoreCase);
-            }
-
-            public int GetHashCode(dynamic obj)
-            {
-                unchecked
-                {
-                    var hash = StringComparer.OrdinalIgnoreCase.GetHashCode((string)obj.Classification);
-                    hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode((string)obj.Zone ?? string.Empty);
-                    hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode((string)obj.Unit);
-                    return hash;
-                }
-            }
         }
     }
 }
