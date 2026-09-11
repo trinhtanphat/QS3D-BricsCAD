@@ -22,6 +22,7 @@ def require_order(text: str, tokens: tuple[str, ...], label: str) -> None:
 def validate_workflow(workflow: str) -> None:
     workflow_tokens = (
         "scripts\\verify-v25-held-file.ps1",
+        "scripts\\expand-v25-commercial-candidate.ps1",
         "-Operation Hash",
         "-Operation Copy",
     )
@@ -49,11 +50,15 @@ def validate_workflow(workflow: str) -> None:
             "-Operation Copy -Path $zip -Destination $heldZip",
             "-Operation Hash -Path $heldZip",
             "if ($zipHash -ne $Matches[1])",
-            "Expand-Archive -LiteralPath $heldZip",
+            ".\\scripts\\expand-v25-commercial-candidate.ps1",
+            "-ZipPath $heldZip",
+            "-DestinationRoot $extract",
         ),
         "candidate stable-copy verification",
     )
     require("-Operation Hash -Path $zip" not in candidate, "candidate must not hash original ZIP before reopening it for copy")
+    require("Expand-Archive" not in candidate, "candidate must not bypass bounded safe extraction with raw Expand-Archive")
+    require("-ZipPath $zip" not in candidate, "candidate safe extractor must consume the admitted held ZIP generation")
 
     draft_start = workflow.find("- name: Create draft, verify uploaded bytes, then publish")
     require(draft_start >= 0, "draft verification block not found")
@@ -65,11 +70,15 @@ def validate_workflow(workflow: str) -> None:
             "-Operation Copy -Path $remoteZip -Destination $heldRemoteZip",
             "-Operation Hash -Path $heldRemoteZip",
             "if ($remoteZipHash -ne $Matches[1])",
-            "Expand-Archive -LiteralPath $heldRemoteZip",
+            ".\\scripts\\expand-v25-commercial-candidate.ps1",
+            "-ZipPath $heldRemoteZip",
+            "-DestinationRoot $extract",
         ),
         "downloaded draft stable-copy verification",
     )
     require("-Operation Hash -Path $remoteZip" not in draft, "downloaded draft must not hash original ZIP before reopening it for copy")
+    require("Expand-Archive" not in draft, "downloaded draft must not bypass bounded safe extraction with raw Expand-Archive")
+    require("-ZipPath $remoteZip" not in draft, "downloaded draft safe extractor must consume the admitted held ZIP generation")
 
 
 def main() -> int:
@@ -113,6 +122,8 @@ def main() -> int:
     workflow_mutations = (
         (workflow.replace("-Operation Hash -Path $heldZip", "-Operation Hash -Path $zip", 1), "candidate split generation"),
         (workflow.replace("-Operation Hash -Path $heldRemoteZip", "-Operation Hash -Path $remoteZip", 1), "draft split generation"),
+        (workflow.replace("-ZipPath $heldZip", "-ZipPath $zip", 1), "candidate pathname extraction"),
+        (workflow.replace("-ZipPath $heldRemoteZip", "-ZipPath $remoteZip", 1), "draft pathname extraction"),
     )
     for mutated, label in workflow_mutations:
         require(mutated != workflow, "workflow mutation setup failed for " + label)
@@ -123,7 +134,7 @@ def main() -> int:
             rejected = True
         require(rejected, "workflow mutation probe failed to reject " + label)
 
-    print("PASS: V25 commercial release asset verification copies admitted ZIP generations into private stable files before digest verification and expands those same stable copies; split Hash(original)->Copy(original) regressions are rejected.")
+    print("PASS: V25 commercial release asset verification copies admitted ZIP generations into private stable files before digest verification and bounded safe extraction consumes those same held copies; split Hash(original)->Copy(original), pathname extraction, and raw Expand-Archive regressions are rejected.")
     return 0
 
 
