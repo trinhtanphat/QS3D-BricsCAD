@@ -71,7 +71,7 @@ namespace QS3D.BricsCAD.V25
                 if (!expectedTargetIds.SetEquals(targets.Select(x => x.Id)))
                     throw new InvalidOperationException("Beam Stirrup 3D: semantic Beam target set đã thay đổi sau khi đọc selection; hãy chọn lại target.");
 
-                var result = BeamStirrupSolidBuilder.BuildSelected(document, project);
+                var result = BeamStirrupSolidBuilder.BuildSelected(document, project, selectedIds, expectedTargetIds);
                 var message = result.Stirrups == 0
                     ? "Beam Stirrup 3D: chọn Beam semantic LINE có RebarStirrupNotation (ví dụ D8@150 hoặc 20D8)."
                     : "Beam Stirrup 3D: đã tạo/cập nhật " + result.Stirrups + " đai trên " + result.Elements + " dầm.";
