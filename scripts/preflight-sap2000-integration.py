@@ -51,7 +51,7 @@ if not errors:
         errors.append("QS3D SAP bridge must not close a user-owned SAP2000 process")
 
     for token in (
-        "document.Editor.GetSelection(options)",
+        "editor.GetSelection(options)",
         "entity as Line",
         "entity as Polyline",
         "polyline.Closed",
