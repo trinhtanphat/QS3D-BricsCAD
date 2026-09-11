@@ -78,35 +78,12 @@ function Get-RemoteMain {
     return $remoteMain
 }
 
-function Test-ReleaseRelevantDrift {
+function Assert-ReleaseSourceReachable {
     param([Parameter(Mandatory = $true)][string]$TargetSha)
-
-    if ([string]::Equals($TargetSha, $dispatch, [StringComparison]::OrdinalIgnoreCase)) {
-        return $false
-    }
 
     & git merge-base --is-ancestor $dispatch $TargetSha
     if ($LASTEXITCODE -ne 0) {
         throw "Dispatched source $dispatch is not an ancestor of current main $TargetSha. Refusing ambiguous release preparation."
-    }
-
-    $range = "${dispatch}..${TargetSha}"
-    & git diff --quiet --no-ext-diff $range -- @releaseRelevantPathspecs
-    $diffExit = $LASTEXITCODE
-    if ($diffExit -eq 0) {
-        return $false
-    }
-    if ($diffExit -eq 1) {
-        return $true
-    }
-    throw "Could not inspect release-relevant main drift between $dispatch and $TargetSha (git diff exit $diffExit)."
-}
-
-function Assert-ReleaseBaseIsSafe {
-    param([Parameter(Mandatory = $true)][string]$TargetSha)
-
-    if (Test-ReleaseRelevantDrift -TargetSha $TargetSha) {
-        throw "main moved after dispatch with release-relevant changes. Dispatched=$dispatch current-origin/main=$TargetSha. A newer release-relevant main push must own the next release."
     }
 }
 
@@ -191,95 +168,67 @@ try {
 
     & (Join-Path $PSScriptRoot 'validate-preview-release-sequence.ps1') -ReleaseTag $tag
 
-    $maxAttempts = 12
-    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
-        $releaseBase = Get-RemoteMain
-        Assert-ReleaseBaseIsSafe -TargetSha $releaseBase
-
-        & git reset --hard
-        if ($LASTEXITCODE -ne 0) {
-            throw 'Could not reset release workspace before selecting the current safe main base.'
-        }
-        & git checkout --detach $releaseBase
-        if ($LASTEXITCODE -ne 0) {
-            throw "Could not move release preparation onto safe main base $releaseBase."
-        }
-
-        $baseStatus = @(Get-ReleaseStatusEntries)
-        foreach ($entry in $baseStatus) {
-            throw "Release base must be clean before workspace version synchronization. Unexpected status '$($entry.State)' at $($entry.Path)."
-        }
-
-        if ($releaseBase -ne $dispatch) {
-            Write-Host "main advanced only through non-release paths; release preparation is rebased safely from dispatched source $dispatch onto $releaseBase."
-        }
-
-        & python (Join-Path $PSScriptRoot 'preflight-runtime-product-version-identity.py')
-        if ($LASTEXITCODE -ne 0) {
-            throw 'Runtime product-version identity preflight failed for committed release source.'
-        }
-
-        Set-WorkspaceProductVersion -ReleaseTagValue $tag
-
-        & python (Join-Path $PSScriptRoot 'preflight-runtime-product-version-identity.py')
-        if ($LASTEXITCODE -ne 0) {
-            throw 'Runtime product-version identity preflight failed after workspace synchronization.'
-        }
-
-        $expectedProductVersion = $tag.Substring(1)
-        $checkedOutProductVersion = Get-CheckedOutProductVersion
-        if (-not [string]::Equals($checkedOutProductVersion, $expectedProductVersion, [StringComparison]::Ordinal)) {
-            throw "Workspace ProductVersion '$checkedOutProductVersion' does not match requested release identity '$expectedProductVersion'."
-        }
-        Write-Host "Workspace ProductVersion '$checkedOutProductVersion' matches requested release tag '$tag' at protected-main source $releaseBase."
-
-        & git diff --check
-        if ($LASTEXITCODE -ne 0) {
-            throw 'Release-preparation diff failed git diff --check.'
-        }
-
-        $workspaceHead = ([string](& git rev-parse --verify HEAD)).Trim().ToLowerInvariant()
-        if ($LASTEXITCODE -ne 0 -or $workspaceHead -ne $releaseBase) {
-            throw "Release workspace HEAD must remain the protected-main source commit. Expected $releaseBase, got $workspaceHead."
-        }
-
-        $finalStatus = @(Get-ReleaseStatusEntries)
-        if ($finalStatus.Count -ne 0 -and $finalStatus.Count -ne $workspaceVersionPaths.Count) {
-            throw 'Workspace version synchronization must either be a no-op or produce exactly three bounded project modifications.'
-        }
-        foreach ($entry in $finalStatus) {
-            if ($entry.State -ne ' M' -or -not ($workspaceVersionPaths -contains $entry.Path)) {
-                throw "Unexpected release-preparation workspace change '$($entry.State)' at $($entry.Path)."
-            }
-        }
-        if ($finalStatus.Count -eq $workspaceVersionPaths.Count) {
-            foreach ($relativePath in $workspaceVersionPaths) {
-                if (-not ($finalStatus.Path -contains $relativePath)) {
-                    throw "Workspace version synchronization did not modify required project identity source: $relativePath"
-                }
-            }
-        }
-        else {
-            Write-Host "Workspace ProductVersion is already synchronized to '$expectedProductVersion'; no bounded project modifications are required."
-        }
-
-        $latestMain = Get-RemoteMain
-        Assert-ReleaseBaseIsSafe -TargetSha $latestMain
-        if ($latestMain -ne $releaseBase) {
-            if ($attempt -ge $maxAttempts) {
-                throw "main kept advancing through non-release paths during $maxAttempts protected-main release-preparation attempts. Retry from a fresh workflow run."
-            }
-            Write-Host "main advanced through additional non-release paths while validating release source ($releaseBase -> $latestMain); retrying without writing main."
-            continue
-        }
-
-        Write-Host "Release source identity $tag is synchronized only in the bounded workspace on protected-main source $releaseBase."
-        Write-Host 'No commit, push, branch-protection bypass, or protected-main mutation was performed by release preparation.'
-        Write-Output $releaseBase
-        return
+    $releaseBase = $dispatch
+    $admissionMain = Get-RemoteMain
+    Assert-ReleaseSourceReachable -TargetSha $admissionMain
+    if ($admissionMain -ne $dispatch) {
+        Write-Host "Protected main advanced after dispatch; release preparation remains pinned to admitted source $dispatch while main is $admissionMain."
     }
 
-    throw 'Release preparation exhausted its retry loop unexpectedly.'
+    & python (Join-Path $PSScriptRoot 'preflight-runtime-product-version-identity.py')
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Runtime product-version identity preflight failed for committed release source.'
+    }
+
+    Set-WorkspaceProductVersion -ReleaseTagValue $tag
+
+    & python (Join-Path $PSScriptRoot 'preflight-runtime-product-version-identity.py')
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Runtime product-version identity preflight failed after workspace synchronization.'
+    }
+
+    $expectedProductVersion = $tag.Substring(1)
+    $checkedOutProductVersion = Get-CheckedOutProductVersion
+    if (-not [string]::Equals($checkedOutProductVersion, $expectedProductVersion, [StringComparison]::Ordinal)) {
+        throw "Workspace ProductVersion '$checkedOutProductVersion' does not match requested release identity '$expectedProductVersion'."
+    }
+    Write-Host "Workspace ProductVersion '$checkedOutProductVersion' matches requested release tag '$tag' at admitted source $releaseBase."
+
+    & git diff --check
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Release-preparation diff failed git diff --check.'
+    }
+
+    $workspaceHead = ([string](& git rev-parse --verify HEAD)).Trim().ToLowerInvariant()
+    if ($LASTEXITCODE -ne 0 -or $workspaceHead -ne $releaseBase) {
+        throw "Release workspace HEAD must remain the admitted source commit. Expected $releaseBase, got $workspaceHead."
+    }
+
+    $finalStatus = @(Get-ReleaseStatusEntries)
+    if ($finalStatus.Count -ne 0 -and $finalStatus.Count -ne $workspaceVersionPaths.Count) {
+        throw 'Workspace version synchronization must either be a no-op or produce exactly three bounded project modifications.'
+    }
+    foreach ($entry in $finalStatus) {
+        if ($entry.State -ne ' M' -or -not ($workspaceVersionPaths -contains $entry.Path)) {
+            throw "Unexpected release-preparation workspace change '$($entry.State)' at $($entry.Path)."
+        }
+    }
+    if ($finalStatus.Count -eq $workspaceVersionPaths.Count) {
+        foreach ($relativePath in $workspaceVersionPaths) {
+            if (-not ($finalStatus.Path -contains $relativePath)) {
+                throw "Workspace version synchronization did not modify required project identity source: $relativePath"
+            }
+        }
+    }
+    else {
+        Write-Host "Workspace ProductVersion is already synchronized to '$expectedProductVersion'; no bounded project modifications are required."
+    }
+
+    $latestMain = Get-RemoteMain
+    Assert-ReleaseSourceReachable -TargetSha $latestMain
+    Write-Host "Release source identity $tag is synchronized only in the bounded workspace on admitted source $releaseBase; current main is $latestMain."
+    Write-Host 'No commit, push, branch-protection bypass, or protected-main mutation was performed by release preparation.'
+    Write-Output $releaseBase
 }
 finally {
     Pop-Location
