@@ -4,6 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UiInfoTooltipBootstrap.cs"
+AGENT_CENTER_SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpAgentControlCenter.cs"
 
 
 def fail(message: str) -> int:
@@ -15,6 +16,10 @@ def main() -> int:
     if not SOURCE.is_file():
         return fail(f"missing {SOURCE.relative_to(ROOT)}")
 
+    agent_center_text = AGENT_CENTER_SOURCE.read_text(encoding="utf-8")
+    if "internal sealed class McpAgentControlCenterWindow : Window" not in agent_center_text:
+        return fail("Agent Center concrete window type changed; update tooltip target and WPF regression together")
+
     text = SOURCE.read_text(encoding="utf-8")
     required = [
         "internal static void EnsureRegistered()",
@@ -22,7 +27,7 @@ def main() -> int:
         "Interlocked.Exchange(ref _registered, 0)",
         "EventManager.RegisterClassHandler",
         "typeof(Window)",
-        '"McpAgentControlCenter"',
+        '"McpAgentControlCenterWindow"',
         '"UpdateCenterWindow"',
         "ButtonBase.ClickEvent",
         "Dispatcher.BeginInvoke",
