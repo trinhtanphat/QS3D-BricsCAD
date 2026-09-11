@@ -326,9 +326,10 @@ namespace QS3D.Core.SmokeTests
                 var trace = Qs3dReviewWorkbookTraceReader.Read(path, Qs3dReviewWorkbookExporter.QuantitySheet, 2);
                 Equal("EL-00000", trace.ElementIds.Single(), "QTO row must publish the admitted detached semantic id");
                 Equal("1", trace.Handles.Single(), "QTO row must publish the admitted detached CAD handle");
-                var xml = ReadEntry(path, "xl/worksheets/sheet2.xml");
-                if (xml.Contains(">999<", StringComparison.Ordinal))
-                    throw new InvalidOperationException("Qs3dReviewWorkbookSmoke: post-admission QTO numeric mutation leaked into publication.");
+                var xml = XDocument.Parse(ReadEntry(path, "xl/worksheets/sheet2.xml"));
+                XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+                var netConcrete = xml.Descendants(ns + "c").Single(cell => (string?)cell.Attribute("r") == "M2").Element(ns + "v")?.Value;
+                Equal("1", netConcrete, "QTO row must publish the admitted detached NetConcreteM3 value");
             }
             finally { TryDelete(path); }
         }

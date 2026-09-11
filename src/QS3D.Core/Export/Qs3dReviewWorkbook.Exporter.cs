@@ -134,9 +134,11 @@ namespace QS3D.Core.Export
         private static List<QuantityReportRow> Quantity(IReadOnlyList<QuantityReportRow> source, bool single, string fingerprint)
         {
             var result = new List<QuantityReportRow>(source.Count);
-            foreach (var row in source)
+            foreach (var sourceRow in source)
             {
-                if (row == null) throw new InvalidDataException("QS3D Review QTO contains a null row.");
+                if (sourceRow == null) throw new InvalidDataException("QS3D Review QTO contains a null row.");
+                var row = SnapshotQuantityRow(sourceRow);
+                EnsureQuantityRowStable(sourceRow, row);
                 if (row.Count <= 0 || row.ElementIds.Count != row.Count) throw new InvalidDataException("QS3D Review QTO Count must equal ElementId provenance cardinality.");
                 if (single && (row.Count != 1 || row.ElementIds.Count != 1)) throw new InvalidDataException("02_CHI_TIET_QTO requires exactly one semantic element per row.");
                 if (row.SourceHandles.Count == 0) throw new InvalidDataException("QS3D Review QTO row requires CAD Handle provenance.");
@@ -145,6 +147,69 @@ namespace QS3D.Core.Export
                 result.Add(row);
             }
             return result;
+        }
+
+        private static QuantityReportRow SnapshotQuantityRow(QuantityReportRow source)
+        {
+            var snapshot = new QuantityReportRow
+            {
+                Floor = source.Floor ?? string.Empty, Zone = source.Zone ?? string.Empty, Category = source.Category ?? string.Empty,
+                FamilyId = source.FamilyId ?? string.Empty, FamilyName = source.FamilyName ?? string.Empty, ElementName = source.ElementName ?? string.Empty,
+                Material = source.Material ?? string.Empty, Note = source.Note ?? string.Empty, DrawingFingerprint = source.DrawingFingerprint ?? string.Empty,
+                Count = source.Count, GrossConcreteM3 = source.GrossConcreteM3, DeductionM3 = source.DeductionM3, NetConcreteM3 = source.NetConcreteM3,
+                FormworkM2 = source.FormworkM2, GrossFormworkM2 = source.GrossFormworkM2, ConcreteContactDeductionM2 = source.ConcreteContactDeductionM2,
+                NetFormworkM2 = source.NetFormworkM2, LengthM = source.LengthM, WidthM = source.WidthM, HeightM = source.HeightM,
+                OuterPerimeterM = source.OuterPerimeterM, InnerPerimeterM = source.InnerPerimeterM, DoorAreaM2 = source.DoorAreaM2,
+                SideAreaM2 = source.SideAreaM2, BottomAreaM2 = source.BottomAreaM2, TopAreaM2 = source.TopAreaM2, OtherAreaM2 = source.OtherAreaM2,
+                HasGrossConcreteM3Evidence = source.HasGrossConcreteM3Evidence, HasDeductionM3Evidence = source.HasDeductionM3Evidence,
+                HasNetConcreteM3Evidence = source.HasNetConcreteM3Evidence, HasFormworkM2Evidence = source.HasFormworkM2Evidence,
+                HasGrossFormworkM2Evidence = source.HasGrossFormworkM2Evidence, HasConcreteContactDeductionM2Evidence = source.HasConcreteContactDeductionM2Evidence,
+                HasNetFormworkM2Evidence = source.HasNetFormworkM2Evidence, HasLengthMEvidence = source.HasLengthMEvidence, HasWidthMEvidence = source.HasWidthMEvidence,
+                HasHeightMEvidence = source.HasHeightMEvidence, HasOuterPerimeterMEvidence = source.HasOuterPerimeterMEvidence, HasInnerPerimeterMEvidence = source.HasInnerPerimeterMEvidence,
+                HasDoorAreaM2Evidence = source.HasDoorAreaM2Evidence, HasSideAreaM2Evidence = source.HasSideAreaM2Evidence, HasBottomAreaM2Evidence = source.HasBottomAreaM2Evidence,
+                HasTopAreaM2Evidence = source.HasTopAreaM2Evidence, HasOtherAreaM2Evidence = source.HasOtherAreaM2Evidence,
+                DensityKgM3 = source.DensityKgM3, MassKg = source.MassKg
+            };
+            CopyStableValues(source.ElementIds, snapshot.ElementIds, "QTO ElementIds");
+            CopyStableValues(source.SourceHandles, snapshot.SourceHandles, "QTO SourceHandles");
+            return snapshot;
+        }
+
+        private static void CopyStableValues(IList<string> source, IList<string> destination, string label)
+        {
+            var admittedCount = source.Count;
+            for (var index = 0; index < admittedCount; index++)
+            {
+                if (source.Count != admittedCount) throw new InvalidDataException("QS3D Review " + label + " changed Count during snapshot capture.");
+                destination.Add(source[index] ?? string.Empty);
+                if (source.Count != admittedCount) throw new InvalidDataException("QS3D Review " + label + " changed Count during snapshot capture.");
+            }
+            if (source.Count != admittedCount) throw new InvalidDataException("QS3D Review " + label + " changed Count during snapshot capture.");
+        }
+
+        private static void EnsureQuantityRowStable(QuantityReportRow source, QuantityReportRow snapshot)
+        {
+            var scalarStable = string.Equals(source.Floor ?? string.Empty, snapshot.Floor, StringComparison.Ordinal) &&
+                string.Equals(source.Zone ?? string.Empty, snapshot.Zone, StringComparison.Ordinal) && string.Equals(source.Category ?? string.Empty, snapshot.Category, StringComparison.Ordinal) &&
+                string.Equals(source.FamilyId ?? string.Empty, snapshot.FamilyId, StringComparison.Ordinal) && string.Equals(source.FamilyName ?? string.Empty, snapshot.FamilyName, StringComparison.Ordinal) &&
+                string.Equals(source.ElementName ?? string.Empty, snapshot.ElementName, StringComparison.Ordinal) && string.Equals(source.Material ?? string.Empty, snapshot.Material, StringComparison.Ordinal) &&
+                string.Equals(source.Note ?? string.Empty, snapshot.Note, StringComparison.Ordinal) && string.Equals(source.DrawingFingerprint ?? string.Empty, snapshot.DrawingFingerprint, StringComparison.Ordinal) &&
+                source.Count == snapshot.Count && source.GrossConcreteM3 == snapshot.GrossConcreteM3 && source.DeductionM3 == snapshot.DeductionM3 && source.NetConcreteM3 == snapshot.NetConcreteM3 &&
+                source.FormworkM2 == snapshot.FormworkM2 && source.GrossFormworkM2 == snapshot.GrossFormworkM2 && source.ConcreteContactDeductionM2 == snapshot.ConcreteContactDeductionM2 &&
+                source.NetFormworkM2 == snapshot.NetFormworkM2 && source.LengthM == snapshot.LengthM && source.WidthM == snapshot.WidthM && source.HeightM == snapshot.HeightM &&
+                source.OuterPerimeterM == snapshot.OuterPerimeterM && source.InnerPerimeterM == snapshot.InnerPerimeterM && source.DoorAreaM2 == snapshot.DoorAreaM2 &&
+                source.SideAreaM2 == snapshot.SideAreaM2 && source.BottomAreaM2 == snapshot.BottomAreaM2 && source.TopAreaM2 == snapshot.TopAreaM2 && source.OtherAreaM2 == snapshot.OtherAreaM2 &&
+                source.HasGrossConcreteM3Evidence == snapshot.HasGrossConcreteM3Evidence && source.HasDeductionM3Evidence == snapshot.HasDeductionM3Evidence &&
+                source.HasNetConcreteM3Evidence == snapshot.HasNetConcreteM3Evidence && source.HasFormworkM2Evidence == snapshot.HasFormworkM2Evidence &&
+                source.HasGrossFormworkM2Evidence == snapshot.HasGrossFormworkM2Evidence && source.HasConcreteContactDeductionM2Evidence == snapshot.HasConcreteContactDeductionM2Evidence &&
+                source.HasNetFormworkM2Evidence == snapshot.HasNetFormworkM2Evidence && source.HasLengthMEvidence == snapshot.HasLengthMEvidence &&
+                source.HasWidthMEvidence == snapshot.HasWidthMEvidence && source.HasHeightMEvidence == snapshot.HasHeightMEvidence &&
+                source.HasOuterPerimeterMEvidence == snapshot.HasOuterPerimeterMEvidence && source.HasInnerPerimeterMEvidence == snapshot.HasInnerPerimeterMEvidence &&
+                source.HasDoorAreaM2Evidence == snapshot.HasDoorAreaM2Evidence && source.HasSideAreaM2Evidence == snapshot.HasSideAreaM2Evidence &&
+                source.HasBottomAreaM2Evidence == snapshot.HasBottomAreaM2Evidence && source.HasTopAreaM2Evidence == snapshot.HasTopAreaM2Evidence &&
+                source.HasOtherAreaM2Evidence == snapshot.HasOtherAreaM2Evidence && source.DensityKgM3 == snapshot.DensityKgM3 && source.MassKg == snapshot.MassKg;
+            if (!scalarStable || !source.ElementIds.SequenceEqual(snapshot.ElementIds, StringComparer.Ordinal) || !source.SourceHandles.SequenceEqual(snapshot.SourceHandles, StringComparer.Ordinal))
+                throw new InvalidDataException("QS3D Review QTO row changed during detached snapshot capture.");
         }
 
         private static void CanonicalElementIds(IEnumerable<string> values)
