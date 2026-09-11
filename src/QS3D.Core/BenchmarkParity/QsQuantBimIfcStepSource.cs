@@ -11,8 +11,8 @@ namespace QS3D.Core.BenchmarkParity
 {
     /// <summary>
     /// Host-neutral IFC STEP ingestion adapter for the standalone QuantBIM workbench.
-    /// The parser intentionally targets the quantity/property/spatial subset needed by
-    /// QS workflows and leaves tessellation to a separate renderer adapter.
+    /// This slice resolves QS-facing identity, spatial/type/classification relationships,
+    /// property sets and base quantities; tessellation remains a renderer-adapter concern.
     /// </summary>
     public sealed class IfcStepStandaloneSource : IIfcStandaloneSource
     {
@@ -26,27 +26,27 @@ namespace QS3D.Core.BenchmarkParity
         {
             path = QsModelElementSnapshot.Require(path, "path");
             if (string.IsNullOrWhiteSpace(stepText)) throw new InvalidDataException("IFC STEP content is empty.");
-            if (stepText.IndexOf("ISO-10303-21", StringComparison.OrdinalIgnoreCase) < 0 || stepText.IndexOf("DATA;", StringComparison.OrdinalIgnoreCase) < 0 || stepText.IndexOf("ENDSEC;", StringComparison.OrdinalIgnoreCase) < 0)
+            if (stepText.IndexOf("ISO-10303-21", StringComparison.OrdinalIgnoreCase) < 0 || stepText.IndexOf("DATA;", StringComparison.OrdinalIgnoreCase) < 0)
                 throw new InvalidDataException("IFC STEP envelope is incomplete.");
 
             var records = ParseRecords(stepText);
             if (records.Count == 0) throw new InvalidDataException("IFC STEP DATA section contains no entity records.");
 
-            var storeyNames = records.Values.Where(x => x.Entity == "IFCBUILDINGSTOREY").ToDictionary(x => x.Id, x => TextAt(x.Args, 2), StringComparer.OrdinalIgnoreCase);
+            var storeyNames = records.Values.Where(x => x.Entity == "IFCBUILDINGSTOREY")
+                .ToDictionary(x => x.Id, x => TextAt(x.Args, 2), StringComparer.OrdinalIgnoreCase);
             var productIds = new HashSet<string>(records.Values.Where(IsProduct).Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
             var storeyByProduct = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var typeByProduct = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var classificationByProduct = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var propertiesByProduct = productIds.ToDictionary(x => x, _ => new List<IfcPropertyNode>(), StringComparer.OrdinalIgnoreCase);
-            var quantitiesByProduct = productIds.ToDictionary(x => x, _ => new List<ParsedQuantity>(), StringComparer.OrdinalIgnoreCase);
+            var propertiesByProduct = productIds.ToDictionary(x => x, x => new List<IfcPropertyNode>(), StringComparer.OrdinalIgnoreCase);
+            var quantitiesByProduct = productIds.ToDictionary(x => x, x => new List<ParsedQuantity>(), StringComparer.OrdinalIgnoreCase);
 
             foreach (var rel in records.Values.Where(x => x.Entity == "IFCRELCONTAINEDINSPATIALSTRUCTURE"))
             {
-                var products = ReferencesAt(rel.Args, 4);
                 var storeyRef = ReferenceAt(rel.Args, 5);
                 string storey;
                 if (!storeyNames.TryGetValue(storeyRef, out storey)) throw new InvalidDataException("Spatial containment references missing IFCBUILDINGSTOREY " + storeyRef + ".");
-                foreach (var product in products.Where(productIds.Contains)) AssignUnique(storeyByProduct, product, storey, "storey containment");
+                foreach (var product in ReferencesAt(rel.Args, 4).Where(productIds.Contains)) AssignUnique(storeyByProduct, product, storey, "storey containment");
             }
 
             foreach (var rel in records.Values.Where(x => x.Entity == "IFCRELDEFINESBYTYPE"))
@@ -66,10 +66,9 @@ namespace QS3D.Core.BenchmarkParity
                 foreach (var propertyRef in ReferencesAt(set.Args, 4))
                 {
                     StepRecord property;
-                    if (!records.TryGetValue(propertyRef, out property) || property.Entity != "IFCPROPERTYSINGLEVALUE") throw new InvalidDataException("Property set references unsupported or missing property " + propertyRef + ".");
-                    var name = TextAt(property.Args, 0);
-                    var value = ScalarTextAt(property.Args, 2);
-                    nodes.Add(new IfcPropertyNode((prefix.Length == 0 ? "Pset" : prefix) + "." + name, value));
+                    if (!records.TryGetValue(propertyRef, out property) || property.Entity != "IFCPROPERTYSINGLEVALUE")
+                        throw new InvalidDataException("Property set references unsupported or missing property " + propertyRef + ".");
+                    nodes.Add(new IfcPropertyNode((prefix.Length == 0 ? "Pset" : prefix) + "." + TextAt(property.Args, 0), ScalarTextAt(property.Args, 2)));
                 }
                 propertySets.Add(set.Id, new ReadOnlyCollection<IfcPropertyNode>(nodes.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList()));
             }
@@ -77,14 +76,14 @@ namespace QS3D.Core.BenchmarkParity
             var quantitySets = new Dictionary<string, IReadOnlyList<ParsedQuantity>>(StringComparer.OrdinalIgnoreCase);
             foreach (var set in records.Values.Where(x => x.Entity == "IFCELEMENTQUANTITY"))
             {
-                var parsed = new List<ParsedQuantity>();
+                var quantities = new List<ParsedQuantity>();
                 foreach (var quantityRef in ReferencesAt(set.Args, 5))
                 {
                     StepRecord quantity;
                     if (!records.TryGetValue(quantityRef, out quantity)) throw new InvalidDataException("Quantity set references missing quantity " + quantityRef + ".");
-                    parsed.Add(ParseQuantity(quantity));
+                    quantities.Add(ParseQuantity(quantity));
                 }
-                quantitySets.Add(set.Id, new ReadOnlyCollection<ParsedQuantity>(parsed));
+                quantitySets.Add(set.Id, new ReadOnlyCollection<ParsedQuantity>(quantities));
             }
 
             foreach (var rel in records.Values.Where(x => x.Entity == "IFCRELDEFINESBYPROPERTIES"))
@@ -92,14 +91,15 @@ namespace QS3D.Core.BenchmarkParity
                 var definitionRef = ReferenceAt(rel.Args, 5);
                 IReadOnlyList<IfcPropertyNode> propertySet;
                 IReadOnlyList<ParsedQuantity> quantitySet;
-                if (!propertySets.TryGetValue(definitionRef, out propertySet) && !quantitySets.TryGetValue(definitionRef, out quantitySet))
-                    throw new InvalidDataException("Property relationship references unsupported or missing definition " + definitionRef + ".");
-
-                foreach (var product in ReferencesAt(rel.Args, 4).Where(productIds.Contains))
+                if (propertySets.TryGetValue(definitionRef, out propertySet))
                 {
-                    if (propertySet != null) propertiesByProduct[product].AddRange(propertySet);
-                    if (quantitySet != null) quantitiesByProduct[product].AddRange(quantitySet);
+                    foreach (var product in ReferencesAt(rel.Args, 4).Where(productIds.Contains)) propertiesByProduct[product].AddRange(propertySet);
                 }
+                else if (quantitySets.TryGetValue(definitionRef, out quantitySet))
+                {
+                    foreach (var product in ReferencesAt(rel.Args, 4).Where(productIds.Contains)) quantitiesByProduct[product].AddRange(quantitySet);
+                }
+                else throw new InvalidDataException("Property relationship references unsupported or missing definition " + definitionRef + ".");
             }
 
             var classifications = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -124,51 +124,45 @@ namespace QS3D.Core.BenchmarkParity
                 var guid = TextAt(product.Args, 0);
                 if (guid.Length == 0) throw new InvalidDataException(product.Id + " " + product.Entity + " has no GlobalId.");
                 if (!guids.Add(guid)) throw new InvalidDataException("Duplicate IFC GlobalId: " + guid + ".");
-                var entity = CanonicalEntity(product.Entity);
-                string storey; storeyByProduct.TryGetValue(product.Id, out storey);
-                string type; typeByProduct.TryGetValue(product.Id, out type);
-                string classification; classificationByProduct.TryGetValue(product.Id, out classification);
-                storey = storey ?? string.Empty;
-                type = type ?? string.Empty;
-                classification = classification ?? string.Empty;
 
+                string storey; if (!storeyByProduct.TryGetValue(product.Id, out storey)) storey = string.Empty;
+                string type; if (!typeByProduct.TryGetValue(product.Id, out type)) type = string.Empty;
+                string classification; if (!classificationByProduct.TryGetValue(product.Id, out classification)) classification = string.Empty;
+                var entity = CanonicalEntity(product.Entity);
                 var qto = quantitiesByProduct[product.Id]
                     .Select(x => new IfcQtoItem(guid, entity, storey, classification, x.Name, x.Value, x.Unit))
-                    .OrderBy(x => x.QuantityName, StringComparer.OrdinalIgnoreCase)
-                    .ThenBy(x => x.Unit, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                    .OrderBy(x => x.QuantityName, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Unit, StringComparer.OrdinalIgnoreCase).ToList();
                 var props = propertiesByProduct[product.Id]
-                    .GroupBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
-                    .Select(x => x.Last())
-                    .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                    .GroupBy(x => x.Name, StringComparer.OrdinalIgnoreCase).Select(x => x.Last())
+                    .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList();
                 elements.Add(new IfcStandaloneElement(guid, entity, TextAt(product.Args, 2), storey, type, classification, props, qto, "ifc-step://" + product.Id));
             }
 
-            return new IfcStandaloneDocument(path, Revision(stepText), elements.OrderBy(x => x.Storey, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Entity, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Guid, StringComparer.OrdinalIgnoreCase));
+            return new IfcStandaloneDocument(path, Revision(stepText), elements
+                .OrderBy(x => x.Storey, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Entity, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Guid, StringComparer.OrdinalIgnoreCase));
         }
 
         private static Dictionary<string, StepRecord> ParseRecords(string text)
         {
             var dataStart = text.IndexOf("DATA;", StringComparison.OrdinalIgnoreCase);
-            var dataEnd = text.IndexOf("ENDSEC;", dataStart + 5, StringComparison.OrdinalIgnoreCase);
-            if (dataStart < 0 || dataEnd < 0) throw new InvalidDataException("IFC STEP DATA section is missing.");
-            var data = text.Substring(dataStart + 5, dataEnd - dataStart - 5);
+            var dataEnd = dataStart < 0 ? -1 : text.IndexOf("ENDSEC;", dataStart + 5, StringComparison.OrdinalIgnoreCase);
+            if (dataStart < 0 || dataEnd < 0) throw new InvalidDataException("IFC STEP DATA section is missing or unterminated.");
             var result = new Dictionary<string, StepRecord>(StringComparer.OrdinalIgnoreCase);
-            foreach (var statement in SplitStatements(data))
+            foreach (var statement in SplitStatements(text.Substring(dataStart + 5, dataEnd - dataStart - 5)))
             {
-                var trimmed = statement.Trim();
-                if (trimmed.Length == 0) continue;
-                var equals = trimmed.IndexOf('=');
-                if (equals <= 1 || trimmed[0] != '#') throw new InvalidDataException("Malformed STEP entity statement: " + trimmed + ".");
-                var id = trimmed.Substring(0, equals).Trim();
-                var rhs = trimmed.Substring(equals + 1).Trim();
+                var value = statement.Trim();
+                if (value.Length == 0) continue;
+                var equals = value.IndexOf('=');
+                if (equals <= 1 || value[0] != '#') throw new InvalidDataException("Malformed STEP entity statement: " + value + ".");
+                var id = value.Substring(0, equals).Trim();
+                var rhs = value.Substring(equals + 1).Trim();
                 var open = rhs.IndexOf('(');
                 if (open <= 0 || rhs[rhs.Length - 1] != ')') throw new InvalidDataException("Malformed STEP entity payload for " + id + ".");
-                var entity = rhs.Substring(0, open).Trim().ToUpperInvariant();
-                var args = SplitTopLevel(rhs.Substring(open + 1, rhs.Length - open - 2));
+                var record = new StepRecord(id, rhs.Substring(0, open).Trim().ToUpperInvariant(), SplitTopLevel(rhs.Substring(open + 1, rhs.Length - open - 2)));
                 if (result.ContainsKey(id)) throw new InvalidDataException("Duplicate STEP entity id: " + id + ".");
-                result.Add(id, new StepRecord(id, entity, args));
+                result.Add(id, record);
             }
             return result;
         }
@@ -185,7 +179,7 @@ namespace QS3D.Core.BenchmarkParity
                 if (c == ';' && !quoted) { yield return builder.ToString(); builder.Length = 0; }
                 else builder.Append(c);
             }
-            if (builder.ToString().Trim().Length != 0) throw new InvalidDataException("Unterminated STEP entity statement.");
+            if (quoted || builder.ToString().Trim().Length != 0) throw new InvalidDataException("Unterminated STEP entity statement.");
         }
 
         private static List<string> SplitTopLevel(string value)
@@ -220,8 +214,17 @@ namespace QS3D.Core.BenchmarkParity
 
         private static string CanonicalEntity(string entity)
         {
-            var value = entity.StartsWith("IFC", StringComparison.Ordinal) ? "Ifc" + entity.Substring(3).ToLowerInvariant() : entity;
-            return value.Length <= 3 ? value : value.Substring(0, 3) + char.ToUpperInvariant(value[3]) + value.Substring(4);
+            switch (entity)
+            {
+                case "IFCWALL": case "IFCWALLSTANDARDCASE": return "IfcWall";
+                case "IFCSLAB": return "IfcSlab";
+                case "IFCBEAM": return "IfcBeam";
+                case "IFCCOLUMN": return "IfcColumn";
+                case "IFCDOOR": return "IfcDoor";
+                case "IFCWINDOW": return "IfcWindow";
+                case "IFCSPACE": return "IfcSpace";
+                default: throw new InvalidDataException("Unsupported IFC product entity " + entity + ".");
+            }
         }
 
         private static ParsedQuantity ParseQuantity(StepRecord record)
@@ -236,9 +239,9 @@ namespace QS3D.Core.BenchmarkParity
                 case "IFCQUANTITYWEIGHT": unit = "kg"; break;
                 default: throw new InvalidDataException("Unsupported IFC quantity entity " + record.Entity + ".");
             }
-            var explicitUnit = record.Args.Count > 2 ? record.Args[2] : "$";
-            if (explicitUnit != "$" && explicitUnit != "*") throw new InvalidDataException("Explicit IFC unit references require unit-assignment resolution and are not supported by this ingestion slice: " + explicitUnit + ".");
             if (record.Args.Count < 4) throw new InvalidDataException(record.Entity + " has no quantity value.");
+            var explicitUnit = record.Args[2].Trim();
+            if (explicitUnit != "$" && explicitUnit != "*") throw new InvalidDataException("Explicit IFC unit references require unit-assignment resolution: " + explicitUnit + ".");
             double number;
             if (!double.TryParse(record.Args[3], NumberStyles.Float, CultureInfo.InvariantCulture, out number) || double.IsNaN(number) || double.IsInfinity(number)) throw new InvalidDataException("Invalid IFC quantity value in " + record.Id + ".");
             return new ParsedQuantity(TextAt(record.Args, 0), number, unit);
