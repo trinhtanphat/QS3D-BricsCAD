@@ -7,6 +7,9 @@ param(
     [Parameter(Mandatory = $true)][ValidatePattern('^[0-9A-Fa-f]{40}$')][string]$ExpectedSourceCommit,
     [Parameter(Mandatory = $true)][string]$ExpectedReleaseTag,
     [string]$ExpectedPackageReleaseTag,
+    [string]$ExpectedPackageUri,
+    [string]$ExpectedSignerThumbprint,
+    [int]$ExpectedManifestSchemaVersion = 2,
     [string]$ExpectedInstallerSha256 = $env:BRICSCAD_V26_PINNED_MSI_SHA256,
     [string]$AdmittedScript
 )
@@ -192,11 +195,46 @@ try {
     if (-not [string]::Equals([string]$metadata.productVersion, [string]$provenance.productVersion, [StringComparison]::Ordinal)) { throw 'V26 candidate ZIP/provenance productVersion mismatch.' }
 
     if ($null -ne $updateHeld) {
-        try { $update = (Read-HeldText -Held $updateHeld -Label 'V26 update manifest') | ConvertFrom-Json -ErrorAction Stop }
+        if ([string]::IsNullOrWhiteSpace($ExpectedPackageUri)) { throw 'ExpectedPackageUri is required when UpdateManifestPath is supplied.' }
+        if ([string]::IsNullOrWhiteSpace($ExpectedSignerThumbprint)) { throw 'ExpectedSignerThumbprint is required when UpdateManifestPath is supplied.' }
+        if ($ExpectedSignerThumbprint -cnotmatch '^[0-9A-Fa-f]{40}$') { throw 'ExpectedSignerThumbprint must be exactly 40 hexadecimal characters when UpdateManifestPath is supplied.' }
+        if ($ExpectedManifestSchemaVersion -le 0) { throw 'ExpectedManifestSchemaVersion must be positive when UpdateManifestPath is supplied.' }
+
+        $expectedUri = $null
+        if (-not [Uri]::TryCreate($ExpectedPackageUri, [UriKind]::Absolute, [ref]$expectedUri) -or
+            $expectedUri.Scheme -ne [Uri]::UriSchemeHttps -or
+            [string]::IsNullOrWhiteSpace($expectedUri.Host) -or
+            -not [string]::IsNullOrEmpty($expectedUri.UserInfo)) {
+            throw 'ExpectedPackageUri must be an absolute HTTPS URI without embedded credentials.'
+        }
+        $expectedSigner = $ExpectedSignerThumbprint.ToUpperInvariant()
+
+        $updateText = Read-HeldText -Held $updateHeld -Label 'V26 update manifest'
+        foreach ($propertyName in @('schemaVersion', 'packageUri', 'sha256', 'signerThumbprint')) {
+            if ((Get-JsonPropertyOccurrenceCount -JsonText $updateText -PropertyName $propertyName) -ne 1) {
+                throw "V26 update manifest must contain exactly one $propertyName property."
+            }
+        }
+        try { $update = $updateText | ConvertFrom-Json -ErrorAction Stop }
         catch { throw "V26 update manifest JSON is invalid: $($_.Exception.Message)" }
         if ([string]$update.product -ne 'QS3D' -or [string]$update.target -ne 'BricsCAD V26 x64') { throw 'V26 update manifest product/target identity is invalid.' }
         if (-not [string]::Equals([string]$update.productVersion, [string]$metadata.productVersion, [StringComparison]::Ordinal)) { throw 'V26 update manifest productVersion mismatch.' }
         if (-not [string]::Equals([string]$update.sha256, $zipHash, [StringComparison]::OrdinalIgnoreCase)) { throw 'V26 update manifest package digest mismatch.' }
+        if ([int]$update.schemaVersion -ne $ExpectedManifestSchemaVersion) { throw 'V26 update manifest schema version mismatch.' }
+
+        $actualUri = $null
+        $actualUriText = [string]$update.packageUri
+        if (-not [Uri]::TryCreate($actualUriText, [UriKind]::Absolute, [ref]$actualUri) -or
+            $actualUri.Scheme -ne [Uri]::UriSchemeHttps -or
+            [string]::IsNullOrWhiteSpace($actualUri.Host) -or
+            -not [string]::IsNullOrEmpty($actualUri.UserInfo)) {
+            throw 'V26 update manifest package URI is not an absolute HTTPS URI without embedded credentials.'
+        }
+        if (-not [string]::Equals($actualUri.AbsoluteUri, $expectedUri.AbsoluteUri, [StringComparison]::Ordinal)) { throw 'V26 update manifest package URI mismatch.' }
+
+        $actualSigner = [string]$update.signerThumbprint
+        if ($actualSigner -cnotmatch '^[0-9A-F]{40}$') { throw 'V26 update manifest signer thumbprint must be canonical uppercase 40-hex.' }
+        if (-not [string]::Equals($actualSigner, $expectedSigner, [StringComparison]::Ordinal)) { throw 'V26 update manifest signer thumbprint mismatch.' }
     }
 
     $admittedScriptBlock = $null
@@ -209,7 +247,18 @@ try {
     }
 
     foreach ($item in $held) { Assert-Held -Held $item -Label 'V26 candidate identity input' }
-    $identity = [pscustomobject]@{ SourceCommit=$ExpectedSourceCommit.ToLowerInvariant(); ReleaseTag=$ExpectedReleaseTag; ProductVersion=[string]$metadata.productVersion; PackageSha256=$zipHash; InstallerSha256=$installerSha256; Signed=($null -ne $updateHeld); HostReferences=$hostReferences }
+    $identity = [pscustomobject]@{
+        SourceCommit=$ExpectedSourceCommit.ToLowerInvariant()
+        ReleaseTag=$ExpectedReleaseTag
+        ProductVersion=[string]$metadata.productVersion
+        PackageSha256=$zipHash
+        InstallerSha256=$installerSha256
+        Signed=($null -ne $updateHeld)
+        ManifestSchemaVersion=$(if ($null -ne $updateHeld) { [int]$update.schemaVersion } else { $null })
+        PackageUri=$(if ($null -ne $updateHeld) { [string]$update.packageUri } else { $null })
+        SignerThumbprint=$(if ($null -ne $updateHeld) { [string]$update.signerThumbprint } else { $null })
+        HostReferences=$hostReferences
+    }
     if ($null -ne $admittedScriptBlock) {
         & $admittedScriptBlock
         foreach ($item in $held) { Assert-Held -Held $item -Label 'V26 candidate identity input after publication' }
