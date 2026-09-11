@@ -62,6 +62,7 @@ semantic_requirements = {
     "active document recheck": "RequireSameActiveDocument",
     "current BricsCAD document": "Application.DocumentManager.MdiActiveDocument",
     "same target UI thread rejection": "GetCurrentThreadId",
+    "foreground ownership gate": "RequireForegroundWindowOwnedByCurrentProcess",
     "provider-completed outcome": "provider-completed",
     "uncertain outcome": "uncertain",
     "provider error reason": "provider-error",
@@ -80,6 +81,9 @@ execute_index = semantic.find("ExecuteAction(element, action)")
 invalidate_index = semantic.find("InvalidateSemanticDiscovery")
 if execute_index < 0 or invalidate_index < 0:
     fail("provider attempt/invalidation contract is missing")
+foreground_index = semantic.find("RequireForegroundWindowOwnedByCurrentProcess")
+if foreground_index < 0 or not (foreground_index < invalidate_index < execute_index):
+    fail("foreground ownership must fail closed before discovery invalidation/provider attempt")
 
 # Raw provider exception detail is forbidden on the remote surface. Keep stable bounded reason
 # codes and never propagate inner UIA exceptions/messages/stacks from this runtime.
@@ -100,6 +104,8 @@ for phrase in (
     "fresh semantic discovery",
     "expectedDiscoveryGeneration",
     "same target UI thread",
+    "foreground window",
+    "fail closed before provider",
     "active document",
     "provider-completed",
     "uncertain",

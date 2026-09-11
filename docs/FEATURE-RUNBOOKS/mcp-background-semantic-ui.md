@@ -17,6 +17,8 @@ The existing text snapshot and standard Win32 Button behavior remain available.
 
 This path is restricted to an exact visible top-level window owned by the same-process BricsCAD host. It does not focus the target window, does not move the cursor, does not inject keyboard or mouse input, and uses no screenshot or OCR.
 
+Some BricsCAD/Qt UI Automation providers can activate their host window as a provider side effect even when QS3D never calls SetFocus. Semantic mutation therefore requires the current foreground window to already belong to the same BricsCAD process. If another process owns the foreground window, the mutation must **fail closed before provider** invocation and before discovery-generation invalidation; background semantic discovery remains allowed.
+
 There is no implicit foreground fallback. An unsupported, stale, disabled, offscreen, process-mismatched, control-type-mismatched, automation-id-mismatched, discovery-generation-mismatched, active-document-mismatched, or unavailable UI Automation target must fail closed rather than calling `desktop_*`.
 
 Semantic discovery requires `confirmSensitiveRead=true`. Semantic mutation requires `confirmMutation=true` and runs through the shared mutation epoch/emergency barrier, canonical actionId ACK ledger, and process-global writer.
@@ -141,6 +143,6 @@ Licensed BricsCAD runtime qualification remains LOCAL_ONLY and should exercise a
 6. verify a normal provider path reports `provider-completed`, `cadStateVerified=false`, `retryAllowed=false`, and `requiresRediscovery=true`;
 7. verify stale generation, stale path, expected-metadata mismatch, active-document switch, and same target UI thread cases fail closed before provider invocation;
 8. if a safe deterministic provider/postcondition failure can be induced, verify `uncertain` uses only `provider-error` or `postcondition-diverged`, keeps the actionId ACK Accepted, and replaying the same actionId does not invoke the provider again;
-9. verify the user's foreground window, cursor position, and keyboard focus were not taken over;
+9. with another application owning the foreground window, verify semantic mutation fails closed before provider invocation without consuming the discovery generation; then, with BricsCAD already foreground, verify the provider path does not move the cursor or transfer keyboard focus outside the existing BricsCAD context;
 10. verify Pause/Emergency Stop blocks semantic mutations;
 11. verify no `desktop_*` fallback occurs.

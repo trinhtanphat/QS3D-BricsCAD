@@ -623,12 +623,12 @@ Closing all `OPEN` P0/P1 items does not automatically mean the product is commer
 - Priority: P0
 - Status: OPEN
 - Area: issue #5719; BricsCAD V25 background semantic UI discovery/invoke hardening
-- Source/runner status: `SOURCE_READY / PENDING_LOCAL`
+- Source/runner status: `SOURCE_FIX_IN_PROGRESS / PENDING_LOCAL`
 - Remote disposition: `PENDING_LOCAL / DO_NOT_RETRY_REMOTE`
 - Exact-source rule: Run only from a clean checkout of the final merged `main` SHA containing PR #5741. Hosted/static source guards, V25 compilation, and Shared CI are REMOTE_SAFE source/build evidence only and must not be reported as licensed runtime PASS.
 - Why local: Final acceptance requires licensed interactive BricsCAD V25 and live Windows UI Automation providers plus real BricsCAD document/UI-thread behavior.
 - Scenario: Follow `docs/FEATURE-RUNBOOKS/mcp-background-semantic-ui.md`. Obtain semantic discovery with `confirmSensitiveRead=true`, record `discoveryGeneration`, then invoke one harmless allowlisted Ribbon/WPF control with exact same-process window, `elementPath`, expected control metadata, matching `expectedDiscoveryGeneration`, explicit `actionId`, and `confirmMutation=true`. Verify `provider-completed` keeps `cadStateVerified=false`, `retryAllowed=false`, and `requiresRediscovery=true`; stale generation/path/metadata, active-document change, and same-target-UI-thread cases fail closed before provider invocation. If a safe deterministic provider/postcondition failure can be induced, verify `uncertain` is redacted, the Accepted ACK replay does not invoke the provider again, and recovery requires inspection plus fresh discovery. Verify no focus/cursor/keyboard takeover, no desktop fallback, and Pause/Emergency Stop blocks mutation.
 - Evidence required: exact merged SHA; BricsCAD V25/plugin identity; sanitized per-case outcomes and actionId ACK status; proof of no automatic retry/provider reinvocation for the same actionId; active-document/thread affinity results; no raw provider exception/path/screenshot/private identifiers; clean host/process state.
-- Evidence: `PENDING_LOCAL`
+- Evidence: `PENDING_LOCAL`. 2026-09-11 licensed V25 evidence on pre-fix exact candidate `acdb88fc3b9a5d8e927c6467d32a76efe5a5dc8d` reproduced a foreground/focus takeover at the UI Automation provider boundary: with another application foreground, harmless `modelTab` `select` and `toggle` provider calls changed foreground/focus to BricsCAD while the cursor stayed fixed and audit recorded `provider-completed`; no `desktop_*` fallback was observed. A bounded `WS_EX_NOACTIVATE` diagnostic did not prevent the provider-side activation. Follow-up source hardening on current `main` must fail closed before discovery invalidation/provider invocation when the foreground window is not owned by the current BricsCAD process, then rerun the full licensed matrix before this row can pass.
 - Related docs: `docs/FEATURE-RUNBOOKS/mcp-background-semantic-ui.md`; issue #5719; PR #5741.
-- Updated: 2026-09-05
+- Updated: 2026-09-11
