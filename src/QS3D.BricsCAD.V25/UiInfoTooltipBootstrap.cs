@@ -14,7 +14,7 @@ namespace QS3D.BricsCAD.V25
 {
     internal static class UiInfoTooltipBootstrap
     {
-        private const string AgentCenterWindowName = "McpAgentControlCenter";
+        private const string AgentCenterWindowName = "McpAgentControlCenterWindow";
         private const string UpdateCenterWindowName = "UpdateCenterWindow";
         private const string NextStepMarker = "Tiếp theo: ";
         private static int _registered;
