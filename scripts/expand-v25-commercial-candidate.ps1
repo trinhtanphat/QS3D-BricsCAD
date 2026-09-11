@@ -159,7 +159,7 @@ try {
                     $segment.IndexOfAny($invalidFileNameChars) -ge 0 -or
                     $segment.EndsWith('.', [StringComparison]::Ordinal) -or
                     $segment.EndsWith(' ', [StringComparison]::Ordinal) -or
-                    $segment -match '^(?i:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)') {
+                    $segment -match '^(?i:con|prn|aux|nul|com(?:[1-9]|¹|²|³)|lpt(?:[1-9]|¹|²|³))(?:\.|$)') {
                     throw "Unsafe commercial candidate archive entry segment '$segment' in '$name'."
                 }
             }
