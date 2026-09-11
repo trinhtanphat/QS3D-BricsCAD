@@ -72,7 +72,8 @@ namespace QS3D.Core.SmokeTests
         private static void InvalidQuantityStillFailsClosed()
         {
             var project = NewProject("room-finish-invalid");
-            AddFloorFinish(project, "A", double.PositiveInfinity, "H-A");
+            AddFloorFinish(project, "A", 0d, "H-A");
+            ProjectElementPersistenceFixture.SetQuantity(project.Elements.Single(), "BottomAreaM2", double.PositiveInfinity);
 
             Capture<InvalidOperationException>(() => RoomFinishScheduleBuilder.Build(project));
         }

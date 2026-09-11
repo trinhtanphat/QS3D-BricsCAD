@@ -27,6 +27,9 @@ if build.count("EnsureProjectRevision(project, snapshot);") < 4:
 
 fence_end = source.index("private static HashSet<string>? ResolveSelection", snapshot_start)
 fence = source[snapshot_start:fence_end]
+element_snapshot_start = source.index("private sealed class ElementSnapshot", snapshot_start)
+element_snapshot_end = source.index("private sealed class FloorSnapshot", element_snapshot_start)
+element_snapshot = source[element_snapshot_start:element_snapshot_end]
 for token in [
     "project.ChangeVersion != snapshot.Version",
     "project.ProjectId",
@@ -44,14 +47,23 @@ for token in [
     "ReferenceEquals(live, snapshot[i].SourceInstance)",
     "foreach (var handle in source.SourceHandles) clone.SourceHandles.Add(handle);",
     "foreach (var dependency in source.DependsOn) clone.DependsOn.Add(dependency);",
-    "foreach (var property in source.Properties) clone.Properties.Add(property.Key, property.Value);",
-    "foreach (var quantity in source.Quantities) clone.Quantities.Add(quantity.Key, quantity.Value);",
+    "var properties = clone.Properties as ProjectElementPropertyDictionary",
+    "var quantities = clone.Quantities as ProjectElementQuantityDictionary",
+    "foreach (var property in source.Properties) properties.SetPersistenceValue(property.Key, property.Value);",
+    "foreach (var quantity in source.Quantities) quantities.SetPersistenceValue(quantity.Key, quantity.Value);",
     "SourceHandleResolver.Resolve(project, new[] { source.Id }).ToList().AsReadOnly()",
     "SameQuantityDictionary(current.Quantities, frozen.Quantities)",
     '"Project changed while the quantity report was being built; recompute the report against the current project state."',
 ]:
     if token not in fence:
         raise SystemExit("Missing Project Quantity fail-closed semantic evidence: " + token)
+
+for forbidden in [
+    "foreach (var property in source.Properties) clone.Properties.Add(property.Key, property.Value);",
+    "foreach (var quantity in source.Quantities) clone.Quantities.Add(quantity.Key, quantity.Value);",
+]:
+    if forbidden in element_snapshot:
+        raise SystemExit("Project Quantity frozen snapshot must use persistence-only reconstruction, not semantic collection mutation: " + forbidden)
 
 for token in [
     "[ModuleInitializer]",

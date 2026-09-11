@@ -137,7 +137,7 @@ namespace QS3D.Core.SmokeTests
             project.Zones.Add(new ZoneDefinition("zone", "Zone"));
             project.Families.Add(new ProjectFamily("slab", "Slab", ElementCategory.Slab));
             var projectElement = new ProjectElement("P1", ElementCategory.Slab, "slab", "floor", "zone");
-            projectElement.Quantities["LengthM"] = -1d;
+            ProjectElementPersistenceFixture.SetQuantity(projectElement, "LengthM", -1d);
             project.Elements.Add(projectElement);
             ExpectThrows<InvalidOperationException>(() => ProjectQuantityReportBuilder.Group(project));
         }
