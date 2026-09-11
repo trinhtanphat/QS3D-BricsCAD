@@ -53,7 +53,10 @@ def contract_errors(text: str | None) -> list[str]:
     destination_hash = text.find("$destinationDigest = Get-HeldStreamSha256 -Stream $output", flush)
     compare = text.find("[string]::Equals($sourceDigest, $destinationDigest, [StringComparison]::OrdinalIgnoreCase)", destination_hash)
     publish = text.find("Publish-CommercialZipDigest -CanonicalPath $held.CanonicalPath -Digest $sourceDigest", compare)
-    dispose = text.find("$destinationHolds[$i].Dispose()")
+    # Scope disposal ordering to the Copy critical section. The helper legitimately disposes
+    # partially-acquired handles in Open-HeldDestinationDirectoryChain's error path before the
+    # Copy operation appears in the file; that cleanup must not be mistaken for an early release.
+    dispose = text.find("$destinationHolds[$i].Dispose()", publish)
     if not (0 <= hold < source_hash < create < copy < flush < destination_hash < compare < publish < dispose):
         errors.append("destination ancestors must stay pinned from before CreateNew through exact destination-stream digest equality and ZIP-digest publication")
 
@@ -64,7 +67,10 @@ def self_test() -> list[str]:
     safe = r'''FILE_FLAG_OPEN_REPARSE_POINT FILE_FLAG_BACKUP_SEMANTICS
 FILE_SHARE_READ | FILE_SHARE_WRITE
 GetFileInformationByHandle GetFinalPathNameByHandleW OpenDirectoryNoFollow
-function Open-HeldDestinationDirectoryChain {}
+function Open-HeldDestinationDirectoryChain {
+    # Legitimate cleanup of partially-acquired handles is outside the Copy critical section.
+    $destinationHolds[$i].Dispose()
+}
 $destinationHolds = Open-HeldDestinationDirectoryChain
 $sourceDigest = Get-HeldStreamSha256 -Stream $held.Stream
 $held.Stream.Position = 0
