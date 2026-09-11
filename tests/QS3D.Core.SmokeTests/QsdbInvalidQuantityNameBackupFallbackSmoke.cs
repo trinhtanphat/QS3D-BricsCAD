@@ -3,12 +3,19 @@ using System.IO;
 using System.Xml.Linq;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
+using QS3D.Core.Rules;
 
 namespace QS3D.Core.SmokeTests
 {
     internal static class QsdbInvalidQuantityNameBackupFallbackSmoke
     {
         public static void Run()
+        {
+            InvalidQuantityNameRecoversValidatedBackup();
+            QuantityRuleExpressionPreservesXmlValidControlWhitespace();
+        }
+
+        private static void InvalidQuantityNameRecoversValidatedBackup()
         {
             var path = Path.Combine(
                 Path.GetTempPath(),
@@ -73,6 +80,39 @@ namespace QS3D.Core.SmokeTests
                     throw new Exception("Validated QSDB backup quantity did not roundtrip during invalid-name recovery.");
                 if (string.IsNullOrWhiteSpace(recovered.PrimaryFailureMessage))
                     throw new Exception("QSDB backup recovery did not retain the primary invalid quantity-name validation failure.");
+            }
+            finally
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+                try { if (File.Exists(path + ".bak")) File.Delete(path + ".bak"); } catch { }
+            }
+        }
+
+        private static void QuantityRuleExpressionPreservesXmlValidControlWhitespace()
+        {
+            var path = Path.Combine(
+                Path.GetTempPath(),
+                "qs3d-quantity-rule-expression-tab-" + Guid.NewGuid().ToString("N") + ".qsdb");
+            const string expression = "LengthM\t+ 1";
+
+            try
+            {
+                var project = new ProjectState("P2", "Expression compatibility");
+                project.QuantityRules.Add(new QuantityRule(
+                    "R1",
+                    ElementCategory.ArchitecturalWall,
+                    "AreaM2",
+                    expression,
+                    "1"));
+
+                var store = new QsdbProjectStore();
+                store.Save(project, path);
+                var loaded = store.Load(path);
+                if (loaded.QuantityRules.Count != 1 ||
+                    !string.Equals(loaded.QuantityRules[0].Expression, expression, StringComparison.Ordinal))
+                {
+                    throw new Exception("QSDB identity hardening changed the XML-valid quantity-rule expression contract.");
+                }
             }
             finally
             {
