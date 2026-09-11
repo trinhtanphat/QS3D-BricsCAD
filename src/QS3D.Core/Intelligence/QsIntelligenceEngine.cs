@@ -139,13 +139,13 @@ namespace QS3D.Core.Intelligence
         public IReadOnlyList<QsBoqSuggestion> Build(IEnumerable<QsQuantityRecord> records)
         {
             if (records == null) throw new ArgumentNullException(nameof(records));
-            var groups = new Dictionary<string, Group>(StringComparer.OrdinalIgnoreCase);
+            var groups = new Dictionary<GroupKey, Group>();
 
             foreach (var record in records)
             {
                 if (record == null) throw new ArgumentException("QS record must not be null.", nameof(records));
                 var classification = string.IsNullOrEmpty(record.ClassificationCode) ? "UNCLASSIFIED" : record.ClassificationCode;
-                var key = classification + "|" + record.WbsCode + "|" + record.CostCode + "|" + record.QuantityType + "|" + record.Unit;
+                var key = new GroupKey(classification, record.WbsCode, record.CostCode, record.QuantityType, record.Unit);
                 if (!groups.TryGetValue(key, out var group))
                 {
                     group = new Group(classification, record.WbsCode, record.CostCode, record.QuantityType, record.Unit, record.Name);
@@ -171,6 +171,49 @@ namespace QS3D.Core.Intelligence
                     group.Count));
             }
             return new ReadOnlyCollection<QsBoqSuggestion>(result.ToArray());
+        }
+
+        private sealed class GroupKey : IEquatable<GroupKey>
+        {
+            internal GroupKey(string classificationCode, string wbsCode, string costCode, string quantityType, string unit)
+            {
+                ClassificationCode = classificationCode;
+                WbsCode = wbsCode;
+                CostCode = costCode;
+                QuantityType = quantityType;
+                Unit = unit;
+            }
+
+            private string ClassificationCode { get; }
+            private string WbsCode { get; }
+            private string CostCode { get; }
+            private string QuantityType { get; }
+            private string Unit { get; }
+
+            public bool Equals(GroupKey? other)
+            {
+                return other != null &&
+                    StringComparer.OrdinalIgnoreCase.Equals(ClassificationCode, other.ClassificationCode) &&
+                    StringComparer.OrdinalIgnoreCase.Equals(WbsCode, other.WbsCode) &&
+                    StringComparer.OrdinalIgnoreCase.Equals(CostCode, other.CostCode) &&
+                    StringComparer.OrdinalIgnoreCase.Equals(QuantityType, other.QuantityType) &&
+                    StringComparer.OrdinalIgnoreCase.Equals(Unit, other.Unit);
+            }
+
+            public override bool Equals(object? obj) => Equals(obj as GroupKey);
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    var hash = 17;
+                    hash = hash * 31 + StringComparer.OrdinalIgnoreCase.GetHashCode(ClassificationCode);
+                    hash = hash * 31 + StringComparer.OrdinalIgnoreCase.GetHashCode(WbsCode);
+                    hash = hash * 31 + StringComparer.OrdinalIgnoreCase.GetHashCode(CostCode);
+                    hash = hash * 31 + StringComparer.OrdinalIgnoreCase.GetHashCode(QuantityType);
+                    return hash * 31 + StringComparer.OrdinalIgnoreCase.GetHashCode(Unit);
+                }
+            }
         }
 
         private sealed class Group

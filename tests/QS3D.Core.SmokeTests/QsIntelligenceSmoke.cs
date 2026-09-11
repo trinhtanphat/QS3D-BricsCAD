@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             RevisionDelta();
             MissingScope();
             BoqSuggestion();
+            BoqSuggestionCompositeKeyCollision();
             CostImpact();
             UnifiedPipeline();
         }
@@ -99,6 +100,19 @@ namespace QS3D.Core.SmokeTests
             Equal(2, boq[0].ElementCount, "BOQ element count");
             Near(15d, boq[0].Quantity, 1e-12, "BOQ quantity");
             Equal("STR.BEAM", boq[0].ClassificationCode, "BOQ classification");
+        }
+
+        private static void BoqSuggestionCompositeKeyCollision()
+        {
+            var records = new[]
+            {
+                Record("A", "Beam", "Tuple One", "Volume", 2d, "m3", "Structure", "CLS|WBS", "A", "RATE"),
+                Record("B", "Beam", "Tuple Two", "Volume", 3d, "m3", "Structure", "CLS", "WBS|A", "RATE")
+            };
+            var boq = new QsBoqSuggestionEngine().Build(records);
+            Equal(2, boq.Count, "BOQ composite key must preserve semantic field boundaries");
+            True(boq.Any(x => x.ClassificationCode == "CLS|WBS" && x.WbsCode == "A" && Math.Abs(x.Quantity - 2d) < 1e-12), "BOQ tuple one");
+            True(boq.Any(x => x.ClassificationCode == "CLS" && x.WbsCode == "WBS|A" && Math.Abs(x.Quantity - 3d) < 1e-12), "BOQ tuple two");
         }
 
         private static void CostImpact()
