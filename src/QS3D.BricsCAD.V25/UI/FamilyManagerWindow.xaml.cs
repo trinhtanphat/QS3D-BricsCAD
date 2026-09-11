@@ -257,6 +257,8 @@ namespace QS3D.BricsCAD.V25.UI
                 if (previewIds.Count == 0) throw new InvalidOperationException("Selection hiện tại không resolve được QS3D semantic element.");
 
                 var project = ExistingProjectMutationContext.Require(_document, "Gán Family cho selection");
+                if (!ReferenceEquals(project, _boundProject) || !ReferenceEquals(project, previewProject))
+                    throw new InvalidOperationException("QS3D project đã được thay thế sau khi đọc selection. Không có Family assignment nào được áp dụng; hãy Refresh Family Manager và thử lại.");
                 if (!string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("QS3D project đã thay đổi sau khi đọc selection. Không có Family assignment nào được áp dụng; hãy Refresh và thử lại.");
                 var family = project.FindFamily(previewFamily.Id)

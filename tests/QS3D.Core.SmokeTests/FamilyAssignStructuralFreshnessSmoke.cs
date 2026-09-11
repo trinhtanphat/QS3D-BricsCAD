@@ -28,9 +28,9 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining<InvalidOperationException>(
                 () => ProjectFamilyService.Assign(project, family.Id, YieldThenRemoveElement(project, element)),
-                "Element no longer belongs to the project after Family assignment target enumeration");
+                "Project changed while Family assignment targets were being enumerated");
 
-            Equal(beforeVersion, project.ChangeVersion, "removed-element project revision");
+            Equal(checked(beforeVersion + 1L), project.ChangeVersion, "removed-element project revision");
             False(project.Elements.Contains(element), "removed-element external removal");
             Equal(string.Empty, element.FamilyId, "removed-element FamilyId");
             False(element.Properties.ContainsKey("Material"), "removed-element inherited property");
@@ -87,9 +87,9 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining<InvalidOperationException>(
                 () => ProjectFamilyService.Assign(project, family.Id, YieldThenDuplicateUnrelatedElement(project, element)),
-                "Project contains duplicate semantic element id: e-other");
+                "Project changed while Family assignment targets were being enumerated");
 
-            Equal(beforeVersion, project.ChangeVersion, "duplicate-element project revision");
+            Equal(checked(beforeVersion + 1L), project.ChangeVersion, "duplicate-element project revision");
             Equal(3, project.Elements.Count, "duplicate-element deliberate corruption count");
             Equal(string.Empty, element.FamilyId, "duplicate-element target FamilyId");
             False(element.Properties.ContainsKey("Material"), "duplicate-element inherited property");

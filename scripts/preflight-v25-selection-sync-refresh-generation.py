@@ -9,7 +9,7 @@ attach_start = text.find("public static void Attach(Document? document)")
 detach_start = text.find("public static void Detach(Document? document)", attach_start)
 refresh_start = text.find("public static void Refresh(Document? document, object attachmentToken)", detach_start)
 stop_start = text.find("public static void Stop()", refresh_start)
-rollback_start = text.find("private static void RollbackAttachment(Document document, bool subscribed, object attachmentToken, EventHandler attachmentHandler)", stop_start)
+rollback_start = text.find("private static void RollbackAttachment(", stop_start)
 release_start = text.find("private static void ReleaseRefresh(Document document, object attachmentToken)", rollback_start)
 handler_start = text.find("private static void OnImpliedSelectionChanged(Document document, object attachmentToken)", release_start)
 schedule_start = text.find("private static void ScheduleRefresh(Document document, object attachmentToken)", handler_start)
@@ -37,7 +37,7 @@ required = [
     "EventHandler attachmentHandler = (_, __) => OnImpliedSelectionChanged(document, attachmentToken);",
     "AttachmentTokens[document] = attachmentToken;",
     "AttachmentHandlers[document] = attachmentHandler;",
-    "RollbackAttachment(document, subscribed, attachmentToken, attachmentHandler);",
+    "RollbackAttachment(document, attachmentToken, attachmentHandler, subscription);",
 ]
 for needle in required:
     if needle not in text:
@@ -58,13 +58,24 @@ if min(claim_token, claim_handler, claim_attached, publish_token, publish_handle
     sys.exit(1)
 
 for needle in [
-    "AttachmentHandlers.TryGetValue(document, out var attachmentHandler)",
+    "AttachmentTokens.TryGetValue(document, out var attachmentToken)",
+    "NativeSubscriptions.TryGetValue(attachmentToken, out subscription)",
     "AttachmentHandlers.Remove(document);",
-    "document.ImpliedSelectionChanged -= attachmentHandler",
+    "AttachmentTokens.Remove(document);",
+    "Attached.Remove(document);",
+    "RequestDetach(subscription);",
 ]:
     if needle not in detach:
-        print("ERROR: Detach must remove only the exact current attachment handler; missing", needle)
+        print("ERROR: Detach must revoke exact active generation and hand native ownership to retryable detach; missing", needle)
         sys.exit(1)
+if "document.ImpliedSelectionChanged -= attachmentHandler" in detach:
+    print("ERROR: Detach must not fire-and-forget native unsubscribe after revoking active generation")
+    sys.exit(1)
+detach_revoke = detach.find("AttachmentTokens.Remove(document);")
+detach_request = detach.find("RequestDetach(subscription);")
+if min(detach_revoke, detach_request) < 0 or detach_revoke > detach_request:
+    print("ERROR: Detach must revoke active generation before requesting retryable native detach")
+    sys.exit(1)
 
 for needle in [
     "IsCurrentAttachment(document, attachmentToken)",
@@ -98,17 +109,27 @@ if "Refreshing.Remove(document);" in attach or "AttachmentTokens.Remove(document
 
 for needle in [
     "AttachmentTokens.TryGetValue(document, out var currentToken)",
-    "!ReferenceEquals(currentToken, attachmentToken)",
-    "return;",
-    "document.ImpliedSelectionChanged -= attachmentHandler",
+    "ReferenceEquals(currentToken, attachmentToken)",
+    "AttachmentHandlers.TryGetValue(document, out var currentHandler)",
+    "ReferenceEquals(currentHandler, attachmentHandler)",
     "RemovePending(document);",
+    "ReleaseRefresh(document, attachmentToken);",
     "AttachmentHandlers.Remove(document);",
     "AttachmentTokens.Remove(document);",
     "Attached.Remove(document);",
+    "RequestDetach(subscription);",
 ]:
     if needle not in rollback:
-        print("ERROR: RollbackAttachment must preserve newer generations and clean only its exact handler/token; missing", needle)
+        print("ERROR: RollbackAttachment must preserve newer generations and transfer exact native ownership to retryable detach; missing", needle)
         sys.exit(1)
+if "document.ImpliedSelectionChanged -= attachmentHandler" in rollback:
+    print("ERROR: RollbackAttachment must not abandon native ownership through fire-and-forget unsubscribe")
+    sys.exit(1)
+rollback_guard = rollback.find("if (ownsCurrentToken && ownsCurrentHandler)")
+rollback_request = rollback.find("RequestDetach(subscription);")
+if min(rollback_guard, rollback_request) < 0 or rollback_guard > rollback_request:
+    print("ERROR: RollbackAttachment must generation-fence active cleanup before requesting native detach")
+    sys.exit(1)
 
 for needle in [
     "Refreshing.TryGetValue(document, out var currentToken)",

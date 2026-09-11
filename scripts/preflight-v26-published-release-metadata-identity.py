@@ -9,10 +9,32 @@ publisher = publisher_path.read_text(encoding="utf-8")
 
 def published_assertion(text: str) -> str:
     start = text.find("function Assert-PublishedReleaseMatchesVerifiedTransaction {")
-    end = text.find("\n$isPrerelease =", start)
-    if start < 0 or end < 0:
+    if start < 0:
+        raise SystemExit("V26 publisher could not locate published-release identity assertion")
+    end = text.find("\nfunction ", start + 1)
+    if end < 0:
+        end = text.find("\n$isPrerelease =", start)
+    if end < 0:
         raise SystemExit("V26 publisher could not bound published-release identity assertion")
     return text[start:end]
+
+
+def published_identity_calls(text: str) -> list[str]:
+    lines = text.splitlines()
+    calls: list[str] = []
+    marker = "Assert-PublishedReleaseMatchesVerifiedTransaction `"
+    for index, line in enumerate(lines):
+        if line.strip() != marker:
+            continue
+        call = [line]
+        cursor = index + 1
+        while cursor < len(lines):
+            call.append(lines[cursor])
+            if not lines[cursor].rstrip().endswith("`"):
+                break
+            cursor += 1
+        calls.append("\n".join(call))
+    return calls
 
 
 def has_active_line(text: str, literal: str) -> bool:
@@ -73,19 +95,30 @@ def validate(text: str) -> list[str]:
         if "-Body $publishRequest" not in patch_line:
             errors.append("V26 final publish PATCH is not bound to the qualified atomic publish request")
 
-    call_marker = "Assert-PublishedReleaseMatchesVerifiedTransaction `"
-    calls = text.split(call_marker)[1:]
-    if len(calls) != 2:
-        errors.append(f"V26 publisher must have exactly two final identity assertion calls; found {len(calls)}")
-    else:
-        for index, call_tail in enumerate(calls, start=1):
-            call = call_tail.split("\n}", 1)[0]
-            for literal, label in (
-                ("-ExpectedReleaseName $expectedReleaseName `", "exact expected release name"),
-                ("-ExpectedReleaseBody $expectedPublishedBody `", "exact admitted release body"),
-            ):
-                if not has_active_line(call, literal):
-                    errors.append(f"Published-release identity call {index} omits active {label} wiring")
+    calls = published_identity_calls(text)
+    expected_calls = (
+        ("$currentRelease", "pre-delete authoritative compensation proof", "$ExpectedReleaseName", "$ExpectedReleaseBody"),
+        ("$remainingRelease", "post-delete surviving-release compensation proof", "$ExpectedReleaseName", "$ExpectedReleaseBody"),
+        ("$published", "direct publish acknowledgement proof", "$expectedReleaseName", "$expectedPublishedBody"),
+        ("$reconciledRelease", "ambiguous publish acknowledgement reconciliation proof", "$expectedReleaseName", "$expectedPublishedBody"),
+    )
+    if len(calls) != len(expected_calls):
+        errors.append(
+            f"V26 publisher must have exactly {len(expected_calls)} identity assertion calls; found {len(calls)}"
+        )
+    for snapshot, label, expected_name, expected_body in expected_calls:
+        snapshot_line = f"-ReleaseSnapshot {snapshot} `"
+        matches = [call for call in calls if has_active_line(call, snapshot_line)]
+        if len(matches) != 1:
+            errors.append(f"V26 publisher must have exactly one {label}; found {len(matches)}")
+            continue
+        call = matches[0]
+        for literal, binding_label in (
+            (f"-ExpectedReleaseName {expected_name} `", "exact expected release name"),
+            (f"-ExpectedReleaseBody {expected_body} `", "exact admitted release body"),
+        ):
+            if not has_active_line(call, literal):
+                errors.append(f"{label} omits active {binding_label} wiring")
 
     return errors
 
@@ -95,6 +128,27 @@ def require_mutation_failure(label: str, mutated: str) -> None:
         raise SystemExit(f"{label} mutation probe could not mutate publisher fixture")
     if not validate(mutated):
         raise SystemExit(f"{label} mutation probe did not fail closed")
+
+
+def comment_identity_binding(text: str, snapshot: str, binding: str) -> str:
+    lines = text.splitlines(keepends=True)
+    snapshot_line = f"-ReleaseSnapshot {snapshot} `"
+    in_call = False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == snapshot_line:
+            in_call = True
+            continue
+        if not in_call:
+            continue
+        if stripped == binding:
+            indent = line[: len(line) - len(line.lstrip())]
+            ending = "\n" if line.endswith("\n") else ""
+            lines[index] = indent + "# " + binding + ending
+            return "".join(lines)
+        if stripped and not stripped.endswith("`"):
+            break
+    return text
 
 
 errors = validate(publisher)
@@ -125,16 +179,13 @@ for label, literal in (
     ("atomic publish body binding", "    body = $expectedPublishedBody\n"),
 ):
     require_mutation_failure(label, publisher.replace(literal, "    # " + literal.strip() + "\n", 1))
-require_mutation_failure(
-    "commented direct publish expected body wiring",
-    publisher.replace("    -ExpectedReleaseBody $expectedPublishedBody `\n", "    # -ExpectedReleaseBody $expectedPublishedBody `\n", 1),
-)
-last_body_arg = publisher.rfind("          -ExpectedReleaseBody $expectedPublishedBody `\n")
-if last_body_arg < 0:
-    raise SystemExit("acknowledgement expected-body mutation probe could not locate call-site fixture")
-require_mutation_failure(
-    "commented acknowledgement expected body wiring",
-    publisher[:last_body_arg] + "          # -ExpectedReleaseBody $expectedPublishedBody `\n" + publisher[last_body_arg + len("          -ExpectedReleaseBody $expectedPublishedBody `\n"):],
-)
+for label, snapshot_name, body_binding in (
+    ("commented compensation pre-delete expected body wiring", "$currentRelease", "-ExpectedReleaseBody $ExpectedReleaseBody `"),
+    ("commented compensation post-delete expected body wiring", "$remainingRelease", "-ExpectedReleaseBody $ExpectedReleaseBody `"),
+    ("commented direct publish expected body wiring", "$published", "-ExpectedReleaseBody $expectedPublishedBody `"),
+    ("commented acknowledgement expected body wiring", "$reconciledRelease", "-ExpectedReleaseBody $expectedPublishedBody `"),
+):
+    require_mutation_failure(label, comment_identity_binding(publisher, snapshot_name, body_binding))
+
 
 print("PASS final V26 publication atomically preserves exact qualified mutable release metadata identity")

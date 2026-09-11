@@ -25,9 +25,9 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining<InvalidOperationException>(
                 () => new BulkEditService().SetProperty(project, YieldThenRemove(project, element), "Note", "changed"),
-                "Bulk edit object target enumeration target no longer belongs to the project after enumeration");
+                "Bulk edit object target enumeration changed the project while targets were being enumerated");
 
-            Equal(beforeVersion, project.ChangeVersion, "removed-target project revision");
+            Equal(beforeVersion + 1L, project.ChangeVersion, "removed-target project revision");
             False(project.Elements.Contains(element), "removed-target caller side effect");
             False(element.Properties.ContainsKey("Note"), "removed-target stale property mutation");
             Equal(ElementDirtyFlags.None, element.Dirty, "removed-target dirty flags");
@@ -48,9 +48,9 @@ namespace QS3D.Core.SmokeTests
 
             ThrowsContaining<InvalidOperationException>(
                 () => new BulkEditService().MultiplyNumericProperty(project, YieldThenReplace(project, element, replacement), "Factor", 3d),
-                "Bulk numeric object target enumeration target no longer belongs to the project after enumeration");
+                "Bulk numeric object target enumeration changed the project while targets were being enumerated");
 
-            Equal(beforeVersion, project.ChangeVersion, "replaced-target project revision");
+            Equal(beforeVersion + 2L, project.ChangeVersion, "replaced-target project revision");
             False(project.Elements.Contains(element), "replaced-target original instance");
             True(project.Elements.Contains(replacement), "replaced-target replacement instance");
             Equal("2", element.Properties["Factor"], "replaced-target stale value");

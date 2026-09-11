@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Reporting;
@@ -89,12 +91,12 @@ namespace QS3D.Core.SmokeTests
         private static void AddWall(ProjectState project, string id, string familyId, double value, double? frameLength = null)
         {
             var wall = new ProjectElement(id, ElementCategory.GlassWall, familyId, "f1", "z");
-            wall.Quantities["LengthM"] = value;
-            wall.Quantities["GrossWallAreaM2"] = value;
-            wall.Quantities["OpeningAreaM2"] = value;
-            wall.Quantities["CurtainNetGlassAreaM2"] = value;
-            wall.Quantities["CurtainFrameFaceAreaM2"] = value;
-            wall.Quantities["CurtainFrameLengthM"] = frameLength ?? value;
+            SetFixtureQuantity(wall, "LengthM", value);
+            SetFixtureQuantity(wall, "GrossWallAreaM2", value);
+            SetFixtureQuantity(wall, "OpeningAreaM2", value);
+            SetFixtureQuantity(wall, "CurtainNetGlassAreaM2", value);
+            SetFixtureQuantity(wall, "CurtainFrameFaceAreaM2", value);
+            SetFixtureQuantity(wall, "CurtainFrameLengthM", frameLength ?? value);
             wall.Quantities["CurtainPanelCount"] = 1d;
             wall.Quantities["CurtainVerticalFrameCount"] = 1d;
             wall.Quantities["CurtainHorizontalFrameCount"] = 1d;
@@ -103,6 +105,21 @@ namespace QS3D.Core.SmokeTests
             wall.Quantities["CurtainMinClearPanelHeightM"] = 1d;
             wall.Quantities["CurtainMaxClearPanelHeightM"] = 1d;
             project.Elements.Add(wall);
+        }
+
+        private static void SetFixtureQuantity(ProjectElement wall, string name, double value)
+        {
+            if (!double.IsNaN(value) && !double.IsInfinity(value))
+            {
+                wall.Quantities[name] = value;
+                return;
+            }
+
+            var quantityField = typeof(ProjectElement).GetField("_quantityValues", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed persisted non-finite curtain quantity state.");
+            var quantities = quantityField.GetValue(wall) as Dictionary<string, double>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement quantity backing dictionary.");
+            quantities[name] = value;
         }
 
         private static CurtainWallScheduleRow Single(ProjectState project)

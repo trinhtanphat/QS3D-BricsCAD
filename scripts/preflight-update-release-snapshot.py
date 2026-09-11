@@ -39,7 +39,7 @@ def main() -> int:
     package_parse = text.find("$packageAddress = Convert-ToSafeHttpsUri", product_snapshot_gate)
     package_snapshot_gate = text.find("Assert-OfficialGitHubPackageSnapshot -PackageAddress $packageAddress", package_parse)
     package_download = text.find("Invoke-BoundedHttpsDownload -Address $packageAddress", package_snapshot_gate)
-    installer_call = text.find("& $installer @arguments", package_download)
+    installer_call = text.find("& $installerScript @arguments", package_download)
 
     ordered = (
         manifest_parse,
@@ -54,7 +54,7 @@ def main() -> int:
     )
     if any(index < 0 for index in ordered) or list(ordered) != sorted(ordered):
         raise AssertionError(
-            "official release snapshot must be derived before bounded manifest fetch and must bind productVersion/package path before bounded ZIP download/install"
+            "official release snapshot must be derived before bounded manifest fetch and must bind productVersion/package path before bounded ZIP download/held in-memory install"
         )
 
     for needle in (
@@ -75,13 +75,15 @@ def main() -> int:
     require(text, "Refusing product-version downgrade", "monotonic product SemVer")
     require(text, "productVersion changed during update preparation", "installed-state stale recheck")
     require(text, "ExpectedSignerThumbprint = $expectedSigner", "signed installer handoff")
+    if "& $installer @arguments" in text:
+        raise AssertionError("secure updater must not reopen the admitted installer by pathname")
 
     if "Stop-Process" in text or "taskkill" in text or ".Kill(" in text:
         raise AssertionError("secure updater PowerShell must not force-terminate processes")
 
     print(
         "PASS: final official GitHub update fetch is bound to the release tag frozen in ManifestUri; "
-        "bounded re-fetched productVersion/package URL cannot switch repo/tag/asset before ZIP download/install."
+        "bounded re-fetched productVersion/package URL cannot switch repo/tag/asset before ZIP download/held in-memory install."
     )
     return 0
 

@@ -16,7 +16,8 @@ namespace QS3D.BricsCAD.V25
         private static readonly Guid StartCenterGuid = new Guid("CA48885E-9C0C-4E86-925E-5FC084FCA22A");
         private static PaletteSet? _palette;
         private static BltStartCenterPanel? _panel;
-        private static bool _documentActivatedSubscribed;
+        private static bool _documentActivatedMayBeSubscribed;
+        private static bool _documentActivatedDetachInProgress;
 
         public static bool IsVisible => _palette != null && _palette.Visible;
 
@@ -29,7 +30,7 @@ namespace QS3D.BricsCAD.V25
             if (palette == null || panel == null) return;
 
             var wasVisible = palette.Visible;
-            var wasSubscribed = _documentActivatedSubscribed;
+            var wasSubscribed = _documentActivatedMayBeSubscribed;
 
             try
             {
@@ -121,23 +122,44 @@ namespace QS3D.BricsCAD.V25
 
         private static void SubscribeToDocumentActivation()
         {
-            if (_documentActivatedSubscribed) return;
-            Application.DocumentManager.DocumentActivated += OnDocumentActivated;
-            _documentActivatedSubscribed = true;
+            if (_documentActivatedMayBeSubscribed) return;
+
+            // Native event accessors are fallible and may register before throwing. Publish
+            // conservative ownership first so rollback can never forget a live callback root.
+            _documentActivatedMayBeSubscribed = true;
+            try
+            {
+                Application.DocumentManager.DocumentActivated += OnDocumentActivated;
+            }
+            catch
+            {
+                RetryDocumentActivatedDetach();
+                throw;
+            }
         }
 
         private static void UnsubscribeFromDocumentActivation()
         {
-            if (!_documentActivatedSubscribed) return;
+            RetryDocumentActivatedDetach();
+        }
 
+        private static void RetryDocumentActivatedDetach()
+        {
+            if (!_documentActivatedMayBeSubscribed || _documentActivatedDetachInProgress) return;
+
+            _documentActivatedDetachInProgress = true;
             try
             {
                 Application.DocumentManager.DocumentActivated -= OnDocumentActivated;
-                _documentActivatedSubscribed = false;
+                _documentActivatedMayBeSubscribed = false;
             }
             catch
             {
-                // Keep the flag true so a later cleanup can retry without duplicate subscriptions.
+                // Retain ownership so Hide/Dispose or a stale callback can retry later.
+            }
+            finally
+            {
+                _documentActivatedDetachInProgress = false;
             }
         }
 
@@ -145,15 +167,34 @@ namespace QS3D.BricsCAD.V25
         {
             var palette = _palette;
             var panel = _panel;
-            if (palette == null || panel == null) return;
+            if (palette == null || panel == null)
+            {
+                RetryDocumentActivatedDetach();
+                return;
+            }
+
+            bool isVisible;
+            try
+            {
+                // A disposed PaletteSet can remain reachable while a native event generation is
+                // still rooted. Treat a failed native visibility read as a stale callback and
+                // retry exact-handler cleanup instead of misclassifying it as a refresh failure.
+                isVisible = palette.Visible;
+            }
+            catch (Exception)
+            {
+                RetryDocumentActivatedDetach();
+                return;
+            }
+
+            if (!isVisible)
+            {
+                RetryDocumentActivatedDetach();
+                return;
+            }
 
             try
             {
-                // PaletteSet visibility is a native-host boundary and can fail during teardown.
-                // Keep that read inside the fail-soft callback boundary and use the captured palette
-                // so concurrent coordinator cleanup cannot swap the reference mid-check.
-                if (!palette.Visible) return;
-
                 // Bind display state to the document carried by this activation event. Re-querying
                 // MdiActiveDocument here can observe a later host transition and render the wrong DWG.
                 panel.RefreshFromDocument(e.Document ?? Application.DocumentManager.MdiActiveDocument);

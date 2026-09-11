@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Threading;
@@ -20,6 +21,8 @@ namespace QS3D.BricsCAD.V25
         private const int CommandCompletionTimeoutMilliseconds = 30000;
         private const int DbmodSettleTimeoutMilliseconds = 3000;
         private const int PollMilliseconds = 25;
+        private static readonly object RetainedCleanupGate = new object();
+        private static readonly List<NativeSaveOperation> RetainedCleanup = new List<NativeSaveOperation>();
 
         internal sealed class SaveResult
         {
@@ -35,10 +38,16 @@ namespace QS3D.BricsCAD.V25
 
         internal static SaveResult SaveCurrentDocument(Action ensureRunning, Action<string>? audit)
         {
+            return SaveCurrentDocument(null, null, ensureRunning, audit);
+        }
+
+        internal static SaveResult SaveCurrentDocument(Document? expectedDocument, string? expectedFullPath, Action ensureRunning, Action<string>? audit)
+        {
             if (ensureRunning == null) throw new ArgumentNullException(nameof(ensureRunning));
             ensureRunning();
+            EnsureRetainedCleanupResolved(audit);
 
-            var operation = new NativeSaveOperation(audit);
+            var operation = new NativeSaveOperation(expectedDocument, expectedFullPath, audit);
             var detached = false;
             try
             {
@@ -79,6 +88,37 @@ namespace QS3D.BricsCAD.V25
                     detached = operation.DetachBestEffort();
                 if (detached)
                     operation.Done.Dispose();
+                else if (operation.HasAttachedHandlers)
+                    RetainForCleanup(operation);
+            }
+        }
+
+        private static void EnsureRetainedCleanupResolved(Action<string>? audit)
+        {
+            lock (RetainedCleanupGate)
+            {
+                for (var index = RetainedCleanup.Count - 1; index >= 0; index--)
+                {
+                    var retained = RetainedCleanup[index];
+                    if (!retained.DetachBestEffort()) continue;
+                    RetainedCleanup.RemoveAt(index);
+                    retained.Done.Dispose();
+                    try { audit?.Invoke("native QSAVE retained handler cleanup resolved"); }
+                    catch { }
+                }
+
+                if (RetainedCleanup.Count != 0)
+                    throw new InvalidOperationException(
+                        "Previous native QSAVE terminal handler cleanup remains unresolved; new save was not queued. Do not retry automatically until handler cleanup can be proven.");
+            }
+        }
+
+        private static void RetainForCleanup(NativeSaveOperation operation)
+        {
+            lock (RetainedCleanupGate)
+            {
+                if (!RetainedCleanup.Contains(operation))
+                    RetainedCleanup.Add(operation);
             }
         }
 
@@ -153,8 +193,13 @@ namespace QS3D.BricsCAD.V25
             private bool _commandCancelledAttached;
             private bool _commandFailedAttached;
 
-            internal NativeSaveOperation(Action<string>? audit)
+            private readonly Document? _expectedDocument;
+            private readonly string _expectedFullPath;
+
+            internal NativeSaveOperation(Document? expectedDocument, string? expectedFullPath, Action<string>? audit)
             {
+                _expectedDocument = expectedDocument;
+                _expectedFullPath = string.IsNullOrWhiteSpace(expectedFullPath) ? string.Empty : Path.GetFullPath(expectedFullPath);
                 _audit = audit;
             }
 
@@ -162,16 +207,22 @@ namespace QS3D.BricsCAD.V25
             internal Document? Document { get; private set; }
             internal string FullPath { get; private set; } = string.Empty;
             internal string TerminalError { get; private set; } = string.Empty;
+            internal bool HasAttachedHandlers => _commandEndedAttached || _commandCancelledAttached || _commandFailedAttached;
 
             internal void QueueInCadContext()
             {
                 EnsureCommandContextAutomationNotStopped();
                 var document = Application.DocumentManager.MdiActiveDocument;
                 if (document == null) throw new InvalidOperationException("No active BricsCAD document.");
+                if (_expectedDocument != null && !ReferenceEquals(document, _expectedDocument))
+                    throw new InvalidOperationException("The active BricsCAD document changed before native QSAVE could be queued; save completion was not attempted.");
 
                 var filename = document.Database.Filename ?? string.Empty;
                 if (!Path.IsPathRooted(filename))
                     throw new InvalidOperationException("Active drawing has no existing local path. Use cad_save_as first.");
+                var rootedFilename = Path.GetFullPath(filename);
+                if (_expectedFullPath.Length != 0 && !SamePath(rootedFilename, _expectedFullPath))
+                    throw new InvalidOperationException("The active BricsCAD document path changed before native QSAVE could be queued; save completion was not attempted.");
                 if (document.IsReadOnly)
                     throw new InvalidOperationException(
                         "Active drawing is read-only. Native QSAVE was not queued; use an explicit writable Save As target instead.");
@@ -191,7 +242,7 @@ namespace QS3D.BricsCAD.V25
                         "Cannot save while a BricsCAD command is active. Wait for idle or cancel the active command before retrying.");
 
                 Document = document;
-                FullPath = Path.GetFullPath(filename);
+                FullPath = rootedFilename;
                 AttachHandlers(document);
                 try
                 {

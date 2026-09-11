@@ -92,18 +92,21 @@ def main():
     ):
         require(errors, token in domain, "QS3D domain runtime lost token: " + token)
 
-    # Legacy status may read only cached context; the newer cold-cache-safe path may bind only an
-    # already persisted project. Neither topology may fabricate a project through GetOrCreate.
-    cached_context = "ProjectContextCoordinator.TryGetCached" in domain
-    persisted_context = "ExistingProjectMutationContext.TryGet(document, out project)" in domain
-    require(errors, cached_context or persisted_context,
-            "QS3D domain status lost both cached and persisted-existing context resolution")
-    if persisted_context:
-        require(errors, "No persisted QS3D project context" in domain,
-                "persisted-existing context path must report missing persisted context truthfully")
-    for forbidden in ("ProjectContextCoordinator.GetOrCreate", "SafeDocumentName", "currentLayer", "activeDocument"):
-        require(errors, forbidden not in domain,
-                "QS3D domain status must not bind/create or leak CAD host status field: " + forbidden)
+    # Status is a read-only capability query. Isolate BuildStatusJson so legitimate mutation-only
+    # GetOrCreate use in BindProject cannot create a false positive or hide a future status side effect.
+    status = between(domain, "internal static string BuildStatusJson", "internal static string Call")
+    require(errors, bool(status), "cannot isolate QS3D domain status implementation")
+    if status:
+        cached_context = "ProjectContextCoordinator.TryGetCached" in status
+        persisted_context = "ExistingProjectMutationContext.TryGet(document, out project)" in status
+        require(errors, cached_context or persisted_context,
+                "QS3D domain status lost both cached and persisted-existing context resolution")
+        if persisted_context:
+            require(errors, "No persisted QS3D project context" in status,
+                    "persisted-existing context path must report missing persisted context truthfully")
+        for forbidden in ("ProjectContextCoordinator.GetOrCreate", "SafeDocumentName", "currentLayer", "activeDocument"):
+            require(errors, forbidden not in status,
+                    "QS3D domain status must not bind/create or leak CAD host status field: " + forbidden)
 
     cad_dispatch = between(agent, "if (McpCadDirectModelRuntime.IsTool(tool))", "if (McpDesktopAutomationRuntime.IsTool(tool))")
     require(errors, bool(cad_dispatch), "cannot inspect direct-CAD dispatch branch")

@@ -31,8 +31,8 @@ namespace QS3D.Core.SmokeTests
             var version = project.ChangeVersion;
             Throws<InvalidOperationException>(() =>
                 new RegenerationWorkProfiler().ProfileSubset(project, ReplaceSameIdThenYield(project, first)));
-            if (project.ChangeVersion != version)
-                throw new InvalidOperationException("Direct structural replacement unexpectedly advanced ProjectState.ChangeVersion.");
+            if (project.ChangeVersion != checked(version + 1L))
+                throw new InvalidOperationException("Direct structural replacement must advance ProjectState.ChangeVersion exactly once.");
         }
 
         private static void RemovalThenEmptyFailsClosed()
@@ -41,8 +41,8 @@ namespace QS3D.Core.SmokeTests
             var version = project.ChangeVersion;
             Throws<InvalidOperationException>(() =>
                 new RegenerationWorkProfiler().ProfileSubset(project, RemoveThenEmpty(project, first)));
-            if (project.ChangeVersion != version)
-                throw new InvalidOperationException("Direct structural removal unexpectedly advanced ProjectState.ChangeVersion.");
+            if (project.ChangeVersion != checked(version + 1L))
+                throw new InvalidOperationException("Direct structural removal must advance ProjectState.ChangeVersion exactly once.");
         }
 
         private static IEnumerable<string> StableTargets()

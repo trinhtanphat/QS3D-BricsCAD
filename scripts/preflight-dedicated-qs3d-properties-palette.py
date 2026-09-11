@@ -54,7 +54,8 @@ for token in (
     "PropertiesPaletteMinHeight",
     "layout.PropertiesPaletteWidth",
     "layout.PropertiesPaletteHeight",
-    "propertiesVisible = IsPropertiesVisible",
+    "var propertiesPalette = _properties;",
+    "var propertiesRead = TryReadPaletteVisibility(propertiesPalette, out var propertiesVisible);",
     "_workspacePanel?.SetDedicatedPropertiesPaletteActive(propertiesVisible);",
     "SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);",
     "properties.StateChanged -= OnPropertiesPaletteStateChanged;",
@@ -153,4 +154,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: the dedicated QS3D Properties PaletteSet remains an optional lifecycle-owned single-editor host: native construction/configuration/AddVisual are rollback-safe before publication, default BIM embeds the editor, explicit host Show reparents it immediately, and Hide returns it without a second view/model/editor.")
+print("PASS: the dedicated QS3D Properties PaletteSet remains an optional lifecycle-owned single-editor host: native construction/configuration/AddVisual are rollback-safe before publication, default BIM embeds the editor, explicit host Show reparents it immediately, and reset restores it from the contained exact-instance visibility snapshot.")

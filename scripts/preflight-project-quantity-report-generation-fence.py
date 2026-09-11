@@ -27,6 +27,9 @@ if build.count("EnsureProjectRevision(project, snapshot);") < 4:
 
 fence_end = source.index("private static HashSet<string>? ResolveSelection", snapshot_start)
 fence = source[snapshot_start:fence_end]
+element_snapshot_start = source.index("private sealed class ElementSnapshot", snapshot_start)
+element_snapshot_end = source.index("private sealed class FloorSnapshot", element_snapshot_start)
+element_snapshot = source[element_snapshot_start:element_snapshot_end]
 for token in [
     "project.ChangeVersion != snapshot.Version",
     "project.ProjectId",
@@ -44,14 +47,23 @@ for token in [
     "ReferenceEquals(live, snapshot[i].SourceInstance)",
     "foreach (var handle in source.SourceHandles) clone.SourceHandles.Add(handle);",
     "foreach (var dependency in source.DependsOn) clone.DependsOn.Add(dependency);",
-    "foreach (var property in source.Properties) clone.Properties.Add(property.Key, property.Value);",
-    "foreach (var quantity in source.Quantities) clone.Quantities.Add(quantity.Key, quantity.Value);",
+    "var properties = clone.Properties as ProjectElementPropertyDictionary",
+    "var quantities = clone.Quantities as ProjectElementQuantityDictionary",
+    "foreach (var property in source.Properties) properties.SetPersistenceValue(property.Key, property.Value);",
+    "foreach (var quantity in source.Quantities) quantities.SetPersistenceValue(quantity.Key, quantity.Value);",
     "SourceHandleResolver.Resolve(project, new[] { source.Id }).ToList().AsReadOnly()",
     "SameQuantityDictionary(current.Quantities, frozen.Quantities)",
     '"Project changed while the quantity report was being built; recompute the report against the current project state."',
 ]:
     if token not in fence:
         raise SystemExit("Missing Project Quantity fail-closed semantic evidence: " + token)
+
+for forbidden in [
+    "foreach (var property in source.Properties) clone.Properties.Add(property.Key, property.Value);",
+    "foreach (var quantity in source.Quantities) clone.Quantities.Add(quantity.Key, quantity.Value);",
+]:
+    if forbidden in element_snapshot:
+        raise SystemExit("Project Quantity frozen snapshot must use persistence-only reconstruction, not semantic collection mutation: " + forbidden)
 
 for token in [
     "[ModuleInitializer]",
@@ -64,7 +76,8 @@ for token in [
     'Quantities["GrossConcreteM3"] = 9d',
     'field.SetValue(p.Families[0], "Wall Type Drifted")',
     'SourceHandles.Add("BEEF")',
-    "p.Elements[0] = replacement",
+    'p.Elements.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)',
+    "Project element backing list is unavailable for generation-fence regression injection.",
     'GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)',
     "items[0] = replacement",
     "Project changed while the quantity report was being built",
@@ -72,6 +85,8 @@ for token in [
     if token not in smoke:
         raise SystemExit("Missing deterministic Project Quantity generation-fence smoke contract: " + token)
 
+if "p.Elements[0] = replacement" in smoke:
+    raise SystemExit("Element replacement generation-fence smoke must bypass StructuralRevisionList.Touch so ChangeVersion cannot satisfy the regression by itself.")
 if "p.Families[0] = replacement" in smoke:
     raise SystemExit("Family replacement generation-fence smoke must bypass CatalogOwnershipList.Touch so ChangeVersion cannot satisfy the regression by itself.")
 
@@ -81,7 +96,7 @@ for token in [
     'types: new[] { typeof(ProjectState), snapshot.GetType() }',
     'method.Invoke(null, new[] { (object)project, snapshot })',
     'StructuralReplacementWithoutTouchFailsClosed();',
-    'Equal(originalVersion, project.ChangeVersion);',
+    'Equal(checked(originalVersion + 1L), project.ChangeVersion);',
 ]:
     if token not in legacy_revision_smoke:
         raise SystemExit("Legacy quantity revision smoke is not bound to the immutable generation snapshot contract: " + token)

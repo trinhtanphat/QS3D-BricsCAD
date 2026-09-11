@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Reporting;
@@ -107,7 +109,8 @@ namespace QS3D.Core.SmokeTests
         private static void NonFiniteInputStillFailsClosed()
         {
             var project = Project("PQ-PREC-NAN");
-            AddElement(project, "q1", "q", double.NaN);
+            AddElement(project, "q1", "q", 1d);
+            SeedPersistedQuantity(project.Elements[0], "LengthM", double.NaN);
             Throws<InvalidOperationException>(() => ProjectQuantityReportBuilder.Group(project));
         }
 
@@ -131,6 +134,15 @@ namespace QS3D.Core.SmokeTests
             element.Quantities["FormworkM2"] = formwork ?? value;
             if (massKg.HasValue) element.Quantities["WeightKg"] = massKg.Value;
             project.Elements.Add(element);
+        }
+
+        private static void SeedPersistedQuantity(ProjectElement element, string name, double value)
+        {
+            var field = typeof(ProjectElement).GetField("_quantityValues", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement quantity backing field changed; update persisted-corruption regression intentionally.");
+            var quantities = field.GetValue(element) as IDictionary<string, double>
+                ?? throw new InvalidOperationException("Unexpected ProjectElement quantity backing collection.");
+            quantities[name] = value;
         }
 
         private static QuantityReportRow Single(ProjectState project)

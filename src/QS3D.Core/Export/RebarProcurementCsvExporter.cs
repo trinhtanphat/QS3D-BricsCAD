@@ -12,12 +12,14 @@ namespace QS3D.Core.Export
     public static class RebarProcurementCsvExporter
     {
         private const int MaxRowCount = 10000;
+        private const long MaxCsvBytes = 16L * 1024L * 1024L;
         private static readonly UTF8Encoding StrictUtf8WithBom = new UTF8Encoding(true, true);
 
         public static void Export(string path, IEnumerable<RebarProcurementSummary> rows)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Path is required.", nameof(path));
-            var content = ToCsv(rows);
+            var snapshots = SnapshotRows(rows);
+            ValidateCsvByteCount(snapshots);
             var fullPath = Path.GetFullPath(path);
             var directory = Path.GetDirectoryName(fullPath);
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
@@ -27,7 +29,7 @@ namespace QS3D.Core.Export
                 using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 using (var writer = new StreamWriter(stream, StrictUtf8WithBom))
                 {
-                    writer.Write(content);
+                    WriteCsv(writer, snapshots);
                     writer.Flush();
                     stream.Flush(true);
                 }
@@ -41,6 +43,16 @@ namespace QS3D.Core.Export
 
         public static string ToCsv(IEnumerable<RebarProcurementSummary> rows)
         {
+            var snapshots = SnapshotRows(rows);
+            ValidateCsvByteCount(snapshots);
+            var sb = new StringBuilder();
+            using (var writer = new StringWriter(sb, CultureInfo.InvariantCulture))
+                WriteCsv(writer, snapshots);
+            return sb.ToString();
+        }
+
+        private static List<RebarProcurementSummary> SnapshotRows(IEnumerable<RebarProcurementSummary> rows)
+        {
             if (rows == null) throw new ArgumentNullException(nameof(rows));
             var admittedCount = ReadKnownCount(rows);
             if (admittedCount.HasValue)
@@ -50,8 +62,7 @@ namespace QS3D.Core.Export
                     throw new ArgumentOutOfRangeException(nameof(rows), "Rebar procurement CSV exceeds the supported row bound of " + MaxRowCount + ".");
             }
 
-            var sb = new StringBuilder();
-            sb.Append("AlgorithmId,GroupId,Grade,DiameterMm,StockLengthM,RequiredCutCount,RequiredLengthM,AllowanceLengthM,DemandBeforeKerfM,StockBarCount,KerfLengthM,OffCutLengthM,WasteLengthM,ProcurementLengthM,UnitWeightKgM,DemandWeightKg,ProcurementWeightKg,WasteWeightKg,WastePercent").Append("\r\n");
+            var snapshots = new List<RebarProcurementSummary>();
             var rowCount = 0;
             using (var enumerator = rows.GetEnumerator())
             {
@@ -65,39 +76,115 @@ namespace QS3D.Core.Export
                         throw new ArgumentOutOfRangeException(nameof(rows), "Rebar procurement CSV exceeds the supported row bound of " + MaxRowCount + ".");
                     if (admittedCount.HasValue && rowCount >= admittedCount.Value)
                         throw new InvalidOperationException("Rebar procurement CSV row Count grew beyond the admitted Count during serialization.");
-
                     var row = enumerator.Current;
                     ValidateKnownCount(rows, admittedCount);
-                    rowCount++;
                     if (row == null) throw new ArgumentException("Rebar procurement CSV cannot contain a null row.", nameof(rows));
-                    sb.Append(Q(row.AlgorithmId)).Append(',')
-                        .Append(QSemanticIdentity(row.GroupId, "group id")).Append(',')
-                        .Append(QSemanticIdentity(row.Grade, "grade")).Append(',')
-                        .Append(F(row.DiameterMm)).Append(',')
-                        .Append(F(row.StockLengthM)).Append(',')
-                        .Append(row.RequiredCutCount.ToString(CultureInfo.InvariantCulture)).Append(',')
-                        .Append(F(row.RequiredLengthM)).Append(',')
-                        .Append(F(row.AllowanceLengthM)).Append(',')
-                        .Append(F(row.DemandBeforeKerfM)).Append(',')
-                        .Append(row.StockBarCount.ToString(CultureInfo.InvariantCulture)).Append(',')
-                        .Append(F(row.KerfLengthM)).Append(',')
-                        .Append(F(row.OffCutLengthM)).Append(',')
-                        .Append(F(row.WasteLengthM)).Append(',')
-                        .Append(F(row.ProcurementLengthM)).Append(',')
-                        .Append(F(row.UnitWeightKgM)).Append(',')
-                        .Append(F(row.DemandWeightKg)).Append(',')
-                        .Append(F(row.ProcurementWeightKg)).Append(',')
-                        .Append(F(row.WasteWeightKg)).Append(',')
-                        .Append(F(row.WastePercent)).Append("\r\n");
+                    snapshots.Add(row);
+                    rowCount++;
                 }
             }
-
             ValidateKnownCount(rows, admittedCount);
             if (admittedCount.HasValue && rowCount != admittedCount.Value)
                 throw new InvalidOperationException("Rebar procurement CSV row Count did not match the admitted Count during serialization.");
-            var content = sb.ToString();
-            StrictUtf8WithBom.GetByteCount(content);
-            return content;
+            return snapshots;
+        }
+
+        private static void ValidateCsvByteCount(IReadOnlyList<RebarProcurementSummary> snapshots)
+        {
+            long byteCount = StrictUtf8WithBom.GetPreamble().Length;
+            AddCsvBytes(ref byteCount, "AlgorithmId,GroupId,Grade,DiameterMm,StockLengthM,RequiredCutCount,RequiredLengthM,AllowanceLengthM,DemandBeforeKerfM,StockBarCount,KerfLengthM,OffCutLengthM,WasteLengthM,ProcurementLengthM,UnitWeightKgM,DemandWeightKg,ProcurementWeightKg,WasteWeightKg,WastePercent\r\n");
+            foreach (var row in snapshots)
+            {
+                AddEscapedCsvFieldBytes(ref byteCount, row.AlgorithmId); AddCsvBytes(ref byteCount, ",");
+                AddSemanticIdentityCsvFieldBytes(ref byteCount, row.GroupId, "group id"); AddCsvBytes(ref byteCount, ",");
+                AddSemanticIdentityCsvFieldBytes(ref byteCount, row.Grade, "grade"); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.DiameterMm)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.StockLengthM)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, row.RequiredCutCount.ToString(CultureInfo.InvariantCulture)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.RequiredLengthM)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.AllowanceLengthM)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.DemandBeforeKerfM)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, row.StockBarCount.ToString(CultureInfo.InvariantCulture)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.KerfLengthM)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.OffCutLengthM)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.WasteLengthM)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.ProcurementLengthM)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.UnitWeightKgM)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.DemandWeightKg)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.ProcurementWeightKg)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.WasteWeightKg)); AddCsvBytes(ref byteCount, ",");
+                AddCsvBytes(ref byteCount, F(row.WastePercent)); AddCsvBytes(ref byteCount, "\r\n");
+            }
+        }
+
+        private static void AddCsvBytes(ref long byteCount, string value)
+        {
+            AddCsvByteCount(ref byteCount, StrictUtf8WithBom.GetByteCount(value));
+        }
+
+        private static void AddSemanticIdentityCsvFieldBytes(ref long byteCount, string value, string label)
+        {
+            var safe = value ?? string.Empty;
+            var probe = safe.TrimStart();
+            if (probe.Length > 0 && IsFormulaPrefix(probe[0]))
+                throw new InvalidDataException("Rebar procurement CSV " + label + " cannot begin with a spreadsheet formula prefix because semantic identity must be preserved exactly.");
+            AddQuotedCsvBytes(ref byteCount, safe, false);
+        }
+
+        private static void AddEscapedCsvFieldBytes(ref long byteCount, string value)
+        {
+            var safe = value ?? string.Empty;
+            var probe = safe.TrimStart();
+            AddQuotedCsvBytes(ref byteCount, safe, probe.Length > 0 && IsFormulaPrefix(probe[0]));
+        }
+
+        private static void AddQuotedCsvBytes(ref long byteCount, string value, bool formulaEscape)
+        {
+            long extraBytes = 2L + StrictUtf8WithBom.GetByteCount(value) + (formulaEscape ? 1L : 0L);
+            foreach (var ch in value)
+            {
+                if (ch == '"') extraBytes = checked(extraBytes + 1L);
+            }
+            AddCsvByteCount(ref byteCount, extraBytes);
+        }
+
+        private static bool IsFormulaPrefix(char value)
+        {
+            return value == '=' || value == '+' || value == '-' || value == '@';
+        }
+
+        private static void AddCsvByteCount(ref long byteCount, long amount)
+        {
+            byteCount = checked(byteCount + amount);
+            if (byteCount > MaxCsvBytes)
+                throw new InvalidDataException("CSV output exceeds the bounded UTF-8 size contract of " + MaxCsvBytes.ToString(CultureInfo.InvariantCulture) + " bytes.");
+        }
+
+        private static void WriteCsv(TextWriter writer, IReadOnlyList<RebarProcurementSummary> snapshots)
+        {
+            writer.Write("AlgorithmId,GroupId,Grade,DiameterMm,StockLengthM,RequiredCutCount,RequiredLengthM,AllowanceLengthM,DemandBeforeKerfM,StockBarCount,KerfLengthM,OffCutLengthM,WasteLengthM,ProcurementLengthM,UnitWeightKgM,DemandWeightKg,ProcurementWeightKg,WasteWeightKg,WastePercent\r\n");
+            foreach (var row in snapshots)
+            {
+                writer.Write(Q(row.AlgorithmId)); writer.Write(',');
+                writer.Write(QSemanticIdentity(row.GroupId, "group id")); writer.Write(',');
+                writer.Write(QSemanticIdentity(row.Grade, "grade")); writer.Write(',');
+                writer.Write(F(row.DiameterMm)); writer.Write(',');
+                writer.Write(F(row.StockLengthM)); writer.Write(',');
+                writer.Write(row.RequiredCutCount.ToString(CultureInfo.InvariantCulture)); writer.Write(',');
+                writer.Write(F(row.RequiredLengthM)); writer.Write(',');
+                writer.Write(F(row.AllowanceLengthM)); writer.Write(',');
+                writer.Write(F(row.DemandBeforeKerfM)); writer.Write(',');
+                writer.Write(row.StockBarCount.ToString(CultureInfo.InvariantCulture)); writer.Write(',');
+                writer.Write(F(row.KerfLengthM)); writer.Write(',');
+                writer.Write(F(row.OffCutLengthM)); writer.Write(',');
+                writer.Write(F(row.WasteLengthM)); writer.Write(',');
+                writer.Write(F(row.ProcurementLengthM)); writer.Write(',');
+                writer.Write(F(row.UnitWeightKgM)); writer.Write(',');
+                writer.Write(F(row.DemandWeightKg)); writer.Write(',');
+                writer.Write(F(row.ProcurementWeightKg)); writer.Write(',');
+                writer.Write(F(row.WasteWeightKg)); writer.Write(',');
+                writer.Write(F(row.WastePercent)); writer.Write("\r\n");
+            }
         }
 
         private static int? ReadKnownCount(IEnumerable<RebarProcurementSummary> rows)

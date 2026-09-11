@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.Diagnostics;
 using QS3D.Core.Domain;
 
@@ -36,7 +38,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = Project("null-element");
             project.Elements.Add(Element("A"));
-            project.Elements.Add(null!);
+            SeedCorruptNullElement(project);
             Throws<InvalidOperationException>(() => new DependencyHealthService().Inspect(project));
 
             var aggregateIssues = new ComprehensiveModelHealthService().Inspect(project);
@@ -116,6 +118,15 @@ namespace QS3D.Core.SmokeTests
 
         private static ProjectElement Element(string id) =>
             new ProjectElement(id, ElementCategory.CustomQuantity, string.Empty, string.Empty, string.Empty);
+
+        private static void SeedCorruptNullElement(ProjectState project)
+        {
+            var itemsField = project.Elements.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Unable to seed corrupt dependency-health project state.");
+            var items = itemsField.GetValue(project.Elements) as List<ProjectElement>
+                ?? throw new InvalidOperationException("Unexpected ProjectState.Elements backing collection.");
+            items.Add(null!);
+        }
 
         private static void Throws<TException>(Action action) where TException : Exception
         {

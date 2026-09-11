@@ -132,7 +132,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("snapshot-invalid-quantity-" + label.Replace(" ", "-"), "Invalid quantity fixture");
             var element = new ProjectElement("E1", ElementCategory.Room);
-            element.Quantities[name] = value;
+            SeedPersistedQuantity(element, name, value);
             project.Elements.Add(element);
             var originalDirty = element.Dirty;
             var originalUpdatedUtc = element.UpdatedUtc;
@@ -140,7 +140,8 @@ namespace QS3D.Core.SmokeTests
             var originalProjectUpdatedUtc = project.UpdatedUtc;
             ExpectInvalidOperation(() => ProjectStateSnapshot.Capture(project), label + " quantity was accepted by snapshot capture.");
             ExpectInvalidOperation(() => ProjectStateSnapshot.CreateDetachedCopy(project), label + " quantity was accepted by detached-copy capture.");
-            Require(element.Quantities.Count == 1 && element.Quantities.ContainsKey(name), "Rejected snapshot quantity validation mutated the source quantity dictionary.");
+            var persisted = PersistedQuantities(element);
+            Require(persisted.Count == 1 && persisted.TryGetValue(name, out var persistedValue) && persistedValue.Equals(value), "Rejected snapshot quantity validation mutated the source persisted quantity dictionary.");
             Require(element.Dirty == originalDirty, "Rejected snapshot quantity validation changed source dirty flags.");
             Require(element.UpdatedUtc == originalUpdatedUtc, "Rejected snapshot quantity validation changed source UpdatedUtc.");
             Require(project.ChangeVersion == originalChangeVersion, "Rejected snapshot quantity validation changed project ChangeVersion.");
@@ -152,17 +153,18 @@ namespace QS3D.Core.SmokeTests
             var project = new ProjectState("snapshot-quantity-collision", "Quantity collision fixture");
             var element = new ProjectElement("E1", ElementCategory.Room);
             element.Quantities["AreaM2"] = 1d;
-            element.Quantities[" AreaM2 "] = 2d;
+            SeedPersistedQuantity(element, " AreaM2 ", 2d);
             project.Elements.Add(element);
             ExpectInvalidOperation(() => ProjectStateSnapshot.Capture(project), "Snapshot accepted quantity names that collapse to one canonical identity.");
-            Require(element.Quantities.Count == 2, "Canonical-collision rejection mutated source quantities.");
+            var persisted = PersistedQuantities(element);
+            Require(persisted.Count == 2 && persisted["AreaM2"].Equals(1d) && persisted[" AreaM2 "].Equals(2d), "Canonical-collision rejection mutated source persisted quantities.");
         }
 
         private static void DetachedCopyCanonicalizesNegativeZero()
         {
             var project = new ProjectState("snapshot-negative-zero", "Negative zero fixture");
             var element = new ProjectElement("E1", ElementCategory.Room);
-            element.Quantities["AreaM2"] = BitConverter.Int64BitsToDouble(unchecked((long)0x8000000000000000UL));
+            SeedPersistedQuantity(element, "AreaM2", BitConverter.Int64BitsToDouble(unchecked((long)0x8000000000000000UL)));
             element.MarkClean(ElementDirtyFlags.All);
             var dirty = element.Dirty;
             var updatedUtc = element.UpdatedUtc;
@@ -243,6 +245,21 @@ namespace QS3D.Core.SmokeTests
             var inner = innerField.GetValue(family.Properties) as Dictionary<string, string>
                 ?? throw new InvalidOperationException("Legacy Family fixture property backing dictionary had an unexpected type.");
             inner[key] = value;
+        }
+
+        private static Dictionary<string, double> PersistedQuantities(ProjectElement element)
+        {
+            var field = typeof(ProjectElement).GetField(
+                "_quantityValues",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Persisted quantity fixture could not locate the quantity backing dictionary.");
+            return field.GetValue(element) as Dictionary<string, double>
+                ?? throw new InvalidOperationException("Persisted quantity fixture backing dictionary had an unexpected type.");
+        }
+
+        private static void SeedPersistedQuantity(ProjectElement element, string key, double value)
+        {
+            PersistedQuantities(element)[key] = value;
         }
 
         private static void ExpectInvalidOperation(Action action, string message)

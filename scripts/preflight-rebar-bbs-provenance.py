@@ -39,18 +39,18 @@ for token in [
 
 for token in [
     "FabricationStatus,FabricationStandardCode,FabricationDetailingRevision",
-    ".Append(Q(row.FabricationStatus))",
-    ".Append(Q(row.FabricationStandardCode))",
-    ".Append(Q(row.FabricationDetailingRevision))",
+    "writer.Write(Q(row.FabricationStatus));",
+    "writer.Write(Q(row.FabricationStandardCode));",
+    "writer.Write(Q(row.FabricationDetailingRevision));",
 ]:
     require(csv, token, "BBS CSV provenance")
 
 for token in [
     '"Fabrication Status", "Standard Code", "Detailing Revision"',
     'var range = "A1:O"',
-    "AppendText(sb, CellRef(12, r), row.FabricationStatus, 0);",
-    "AppendText(sb, CellRef(13, r), row.FabricationStandardCode, 0);",
-    "AppendText(sb, CellRef(14, r), row.FabricationDetailingRevision, 0);",
+    "AppendText(writer, CellRef(12, r), row.FabricationStatus, 0);",
+    "AppendText(writer, CellRef(13, r), row.FabricationStandardCode, 0);",
+    "AppendText(writer, CellRef(14, r), row.FabricationDetailingRevision, 0);",
 ]:
     require(xlsx, token, "BBS XLSX provenance")
 

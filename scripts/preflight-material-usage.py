@@ -26,7 +26,6 @@ checks = {
         "MaterialUsageRow", "MaterialUsageScheduleBuilder", "PrimaryQuantity",
         'if (unit == "m") return LengthM', 'if (unit == "m2") return AreaM2',
         'if (unit == "m3") return VolumeM3', 'if (unit == "kg") return MassKg',
-        "ProjectMaterialCatalog.GetAll(project)", "AutoRoomLifecycle.IsExcludedFromQuantity(project, element)",
         'Effective(element, family, "Material")', 'Effective(element, family, "CurtainFrameMaterial")',
         '"CurtainFrame"', '"CurtainNetGlassAreaM2"', '"CurtainFrameLengthM"',
         "element.Properties.TryGetValue(key", "family.Properties.TryGetValue(key", "ElementIds.Add(element.Id)",
@@ -58,7 +57,10 @@ checks = {
         "FamilyInheritanceAndCurtainComponents", "InstanceOverrideUsesCatalogUnit", "RejectsInvalidQuantities",
         "PrimaryQuantitiesIgnoreInvalidFallbacks", "InvalidUsedFallbackIsRejected", "RoomFinishQuantityPriorityMatchesFinishSchedule",
         "RoomFinishScheduleBuilder.Build(project)", "BottomAreaM2", "TopAreaM2", "SkirtingLengthM", "NetFinishAreaM2",
-        "VolumeM3\"] = -99d", "SideAreaM2\"] = double.NaN", "14.4d", "33d", "22d",
+        'SetPersistedQuantityFixture(wall, "VolumeM3", -99d);',
+        'SetPersistedQuantityFixture(wall, "SideAreaM2", double.NaN);',
+        'GetField("_quantityValues", BindingFlags.Instance | BindingFlags.NonPublic)',
+        "14.4d", "33d", "22d",
     ],
     required[7]: ["MaterialUsageScheduleSmoke.Run();"],
     required[8]: [
@@ -69,6 +71,14 @@ checks = {
 }
 checks[required[1]].append("XlsxPackageValidator.Validate")
 checks[required[8]].extend(("Invalid\\u0001Family", "ORIGINAL"))
+
+schedule_text = (ROOT / required[0]).read_text(encoding="utf-8") if (ROOT / required[0]).is_file() else ""
+for service, candidates in (
+    ("ProjectMaterialCatalog.GetAll", ("ProjectMaterialCatalog.GetAll(project)", "ProjectMaterialCatalog.GetAll(detachedProject)")),
+    ("AutoRoomLifecycle.IsExcludedFromQuantity", ("AutoRoomLifecycle.IsExcludedFromQuantity(project, element)", "AutoRoomLifecycle.IsExcludedFromQuantity(detachedProject, element)")),
+):
+    if schedule_text and not any(token in schedule_text for token in candidates):
+        errors.append(required[0] + " missing authoritative material usage service: " + service)
 
 for relative, needles in checks.items():
     path = ROOT / relative
@@ -127,4 +137,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
-print("PASS: material usage keeps lazy validation, checked aggregation, HT_Phòng quantity-priority parity, catalog units/provenance, detached read-only freshness, PrimaryQuantity snapshot stability, and atomic XLSX through bound UI/command entry points.")
+print("PASS: material usage keeps lazy validation, checked aggregation, HT_Phòng quantity-priority parity, catalog units/provenance, detached read-only freshness, persisted-corrupt fallback fixtures below the semantic quantity facade, PrimaryQuantity snapshot stability, and atomic XLSX through bound UI/command entry points.")

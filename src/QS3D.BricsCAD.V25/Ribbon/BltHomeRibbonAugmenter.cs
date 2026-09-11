@@ -3,6 +3,7 @@ using System.Collections;
 using System.Linq;
 using System.Reflection;
 using System.Windows.Input;
+using QS3D.BricsCAD.V25.Updates;
 
 namespace QS3D.BricsCAD.V25.Ribbon
 {
@@ -76,7 +77,8 @@ namespace QS3D.BricsCAD.V25.Ribbon
                     ConfigPanelSourceId,
                     "Cấu hình",
                     new HomeButtonSpec("QS3D_HOME_SETTINGS", "Cài đặt", () => new ProjectToolsCommands().ShowProjectTools(), RibbonIconKind.Settings),
-                    new HomeButtonSpec("QS3D_HOME_SYSTEM_OBJECTS", "Đối tượng\nhệ thống", () => new FamilyManagerCommands().ShowFamilyManager(), RibbonIconKind.Model3d));
+                    new HomeButtonSpec("QS3D_HOME_SYSTEM_OBJECTS", "Đối tượng\nhệ thống", () => new FamilyManagerCommands().ShowFamilyManager(), RibbonIconKind.Model3d),
+                    new HomeButtonSpec("QS3D_HOME_UPDATE", "Cập nhật QS3D", () => new UpdateCommands().ShowUpdateCenter(), RibbonIconKind.Update));
 
                 _initialized = true;
                 return true;

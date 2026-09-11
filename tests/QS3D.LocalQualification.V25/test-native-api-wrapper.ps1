@@ -80,11 +80,11 @@ foreach ($HostMajor in @(25,26)) {
                     $UiDriver -cne $mode.UiDriver -or $PauseForOperator -ne $mode.Pause -or -not $ConfirmDisposableCopy) {
                     throw 'FAIL: wrapper changed runner mode or disposable authorization.'
                 }
-                $expectedHash = if ($HostMajor -eq 25) { '15b86bcdacdd614fb785143f49e4d51e90bc380c2b216c583acebcc35abccdaa' }
+                $expectedHash = if ($HostMajor -eq 25) { '039c0db69bf735ff3811cfbfb8dddfcc67deaaf87fa4c8bf8d29c189bc206b21' }
                     else { '30a0a6a99875468ac5063f2397903cc913089f84410bf9d57bc3901ab2d04c1b' }
                 $expectedTimeout = if ($mode.UiDriver -ceq 'OBSERVED_CLICK_V2') { 3600 } else { 600 }
                 $expectedFramework = if ($HostMajor -eq 25) { 'net48' } else { 'net8.0-windows' }
-                if ($PackageSha256 -cne $expectedHash -or $ProductSourceSha -cne 'e768d19f967e010d0343f446b98b561dce7c24bb' -or
+                if ($PackageSha256 -cne $expectedHash -or $ProductSourceSha -cne 'af6c585190efb80581e286add7027540e7cc7c52' -or
                     $ProductDir -cne "C:\host-free-package\QS3D-BricsCAD-V$HostMajor" -or
                     $PackageZip -cne "C:\host-free-package\QS3D-BricsCAD-V$HostMajor.zip" -or
                     $ProbeDll -cne "C:\host-free-harness\tests\QS3D.LocalQualification.V$HostMajor\bin\Release\$expectedFramework\QS3D.LocalQualification.V$HostMajor.dll" -or
@@ -103,6 +103,23 @@ foreach ($HostMajor in @(25,26)) {
 $helper = $ast.Find({ param($node)
     $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Assert-Local022NativeV25Predecessor'
 }, $true)
+# The archived V26 forwarding branch below remains for future exact-pair
+# admission, but the actual entry point must reject V26 before machine setup.
+$unavailable = @($ast.EndBlock.Statements | Where-Object {
+    $_ -is [Management.Automation.Language.IfStatementAst] -and $_.Extent.Text.StartsWith('if (26 -eq $HostMajor)')
+})
+if ($unavailable.Count -ne 1 -or $unavailable[0].Extent.EndOffset -gt (Get-WrapperAssignment 'base').Extent.StartOffset) {
+    throw 'FAIL: current-source V26 must refuse before allocation and machine setup.'
+}
+$refusal = [scriptblock]::Create($unavailable[0].Extent.Text)
+& { $HostMajor = 25; & $refusal }
+$refused = $false
+try { & { $HostMajor = 26; & $refusal } } catch {
+    if ($_.Exception.Message -cne 'Current-source V26 package unavailable: CA2255 in UiInfoTooltipBootstrap. No allocation or mutation.') { throw }
+    $refused = $true
+}
+if (-not $refused) { throw 'FAIL: unmatched V26 package was admitted.' }
+Write-Output 'PASS: current V26 build failure refuses before machine setup; V25 remains admitted.'
 if ($null -eq $helper) { throw 'FAIL: native V25 predecessor assertion missing.' }
 . ([scriptblock]::Create($helper.Extent.Text))
 $v26Gate = @($ast.EndBlock.Statements | Where-Object {

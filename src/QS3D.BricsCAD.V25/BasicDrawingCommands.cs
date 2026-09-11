@@ -161,6 +161,10 @@ namespace QS3D.BricsCAD.V25
             if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
                 throw new InvalidOperationException(operation + ": bản vẽ chưa có QS3D project. Mở Workspace, Add/chọn Family trước khi vẽ.");
 
+            var hasCachedProject = ProjectContextCoordinator.TryGetCached(document, out var cachedProject);
+            if (hasCachedProject && !ReferenceEquals(cachedProject, project))
+                throw new InvalidOperationException(operation + ": QS3D project authority không ổn định. Hãy chạy lại lệnh.");
+
             var family = ProjectFamilyActivationService.GetActive(project);
             if (family == null)
                 throw new InvalidOperationException(operation + ": chưa có Family / Type active. Chọn Family trong Workspace trước khi vẽ.");
@@ -173,6 +177,8 @@ namespace QS3D.BricsCAD.V25
                 operation + ": Family active không có identity canonical hợp lệ.");
 
             return new BasicDrawingContext(
+                project,
+                hasCachedProject,
                 projectId,
                 project.ChangeVersion,
                 familyId,
@@ -213,6 +219,12 @@ namespace QS3D.BricsCAD.V25
 
             if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
                 throw new InvalidOperationException(operation + ": QS3D project không còn khả dụng trước khi commit CAD.");
+            var hasCachedProject = ProjectContextCoordinator.TryGetCached(document, out var cachedProject);
+            if (hasCachedProject != expected.HasCachedProject ||
+                (hasCachedProject &&
+                 (!ReferenceEquals(cachedProject, expected.Project) ||
+                  !ReferenceEquals(project, expected.Project))))
+                throw new InvalidOperationException(operation + ": QS3D project đã được reload/thay generation trong lúc vẽ. Hãy chạy lại để dùng ngữ cảnh mới.");
             if (!string.Equals(project.ProjectId, expected.ProjectId, StringComparison.OrdinalIgnoreCase) ||
                 project.ChangeVersion != expected.ChangeVersion)
                 throw new InvalidOperationException(operation + ": QS3D project/Floor/Zone/thuộc tính đã thay đổi trong lúc vẽ. Hãy chạy lại để dùng ngữ cảnh mới.");
@@ -385,6 +397,8 @@ namespace QS3D.BricsCAD.V25
         private sealed class BasicDrawingContext
         {
             public BasicDrawingContext(
+                ProjectState project,
+                bool hasCachedProject,
                 string projectId,
                 long changeVersion,
                 string familyId,
@@ -393,6 +407,8 @@ namespace QS3D.BricsCAD.V25
                 string floorId,
                 string zoneId)
             {
+                Project = project ?? throw new ArgumentNullException(nameof(project));
+                HasCachedProject = hasCachedProject;
                 ProjectId = projectId ?? string.Empty;
                 ChangeVersion = changeVersion;
                 FamilyId = familyId ?? string.Empty;
@@ -402,6 +418,8 @@ namespace QS3D.BricsCAD.V25
                 ZoneId = zoneId ?? string.Empty;
             }
 
+            public ProjectState Project { get; }
+            public bool HasCachedProject { get; }
             public string ProjectId { get; }
             public long ChangeVersion { get; }
             public string FamilyId { get; }

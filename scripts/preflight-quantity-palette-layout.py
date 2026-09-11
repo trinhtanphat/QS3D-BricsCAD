@@ -68,7 +68,8 @@ if COORDINATOR.is_file():
         "double.IsNaN(value.Width) || double.IsInfinity(value.Width)",
         "value.Width <= 0d || value.Height <= 0d",
         "if (_workspace == null && _properties == null && _right == null && _quantityInsight == null) return;",
-        "var quantityVisible = IsQuantityInsightVisible;",
+        "var quantityPalette = _quantityInsight;",
+        "var quantityRead = TryReadPaletteVisibility(quantityPalette, out var quantityVisible);",
         "SetVisibility(workspaceVisible, propertiesVisible, rightVisible, quantityVisible);",
         "private static void SetVisibility(bool workspace, bool properties, bool right, bool quantityInsight)",
         'SetPaletteVisibility(quantityPalette, _quantityInsight, quantityInsight, "QuantityInsight");',
@@ -99,4 +100,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Quantity Insight has independent per-user dimensions, native configuration is applied under pre-publication rollback ownership, and four-palette transactional visibility restore plus finite positive persisted-size filtering remain outside QSDB state.")
+print("PASS: Quantity Insight has independent per-user dimensions, native configuration is applied under pre-publication rollback ownership, and four-palette transactional visibility restore uses contained exact-instance reset reads plus finite positive persisted-size filtering outside QSDB state.")
