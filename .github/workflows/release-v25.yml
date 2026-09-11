@@ -257,8 +257,8 @@ jobs:
             & .\scripts\verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT
           }
           finally {
-            Remove-Item -LiteralPath $verificationRoot -Recurse -Force -ErrorAction SilentlyContinue
-            Remove-Item -LiteralPath $heldRoot -Recurse -Force -ErrorAction SilentlyContinue
+            & .\scripts\remove-v25-release-temp-tree.ps1 -Path $verificationRoot
+            & .\scripts\remove-v25-release-temp-tree.ps1 -Path $heldRoot
           }
 
       - name: Licensed V25 runtime validation for exact signed payload
@@ -377,8 +377,8 @@ jobs:
             & .\scripts\verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT
           }
           finally {
-            Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
-            Remove-Item -LiteralPath $heldRoot -Recurse -Force -ErrorAction SilentlyContinue
+            & .\scripts\remove-v25-release-temp-tree.ps1 -Path $extract
+            & .\scripts\remove-v25-release-temp-tree.ps1 -Path $heldRoot
           }
 
       - name: Create draft, verify uploaded bytes, then publish
@@ -694,9 +694,9 @@ jobs:
                   -ExpectedSignerThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT
                 if ($null -eq $downloadedIdentity) { throw 'Downloaded V25 draft semantic admission returned no identity.' }
               }
-              finally { Remove-Item -LiteralPath $heldRoot -Recurse -Force -ErrorAction SilentlyContinue }
+              finally { & .\scripts\remove-v25-release-temp-tree.ps1 -Path $heldRoot }
             }
-            finally { Remove-Item -LiteralPath $downloadRoot -Recurse -Force -ErrorAction SilentlyContinue }
+            finally { & .\scripts\remove-v25-release-temp-tree.ps1 -Path $downloadRoot }
 
             Assert-RemoteReleaseTagTargetsWorkflowSha
 
