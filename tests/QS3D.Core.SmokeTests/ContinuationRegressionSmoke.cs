@@ -90,7 +90,7 @@ namespace QS3D.Core.SmokeTests
                 Near(0d, project.Floors[0].ElevationM);
 
                 var invalid = new ProjectElement("BAD-NAN", ElementCategory.CustomQuantity, string.Empty, "f", "z");
-                invalid.Quantities["Count"] = double.NaN;
+                ProjectElementPersistenceFixture.SetQuantity(invalid, "Count", double.NaN);
                 project.Elements.Add(invalid);
                 Throws<InvalidDataException>(() => store.Save(project, path));
 
@@ -132,7 +132,7 @@ namespace QS3D.Core.SmokeTests
             var family = new ProjectFamily("wall", "Wall", ElementCategory.ArchitecturalWall);
             project.Families.Add(family);
             var element = new ProjectElement("W-RPT", ElementCategory.ArchitecturalWall, family.Id, "f", "z");
-            element.Quantities["LengthM"] = double.NaN;
+            ProjectElementPersistenceFixture.SetQuantity(element, "LengthM", double.NaN);
             project.Elements.Add(element);
             Throws<InvalidOperationException>(() => ProjectQuantityReportBuilder.Group(project));
 

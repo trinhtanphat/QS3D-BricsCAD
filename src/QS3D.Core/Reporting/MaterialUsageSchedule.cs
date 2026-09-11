@@ -151,8 +151,10 @@ namespace QS3D.Core.Reporting
                     {
                         DrawingFingerprint = element.DrawingFingerprint
                     };
-                    foreach (var pair in element.Properties) copy.Properties[pair.Key] = pair.Value;
-                    foreach (var pair in element.Quantities) copy.Quantities[pair.Key] = pair.Value;
+                    var propertyStore = (ProjectElementPropertyDictionary)copy.Properties;
+                    var quantityStore = (ProjectElementQuantityDictionary)copy.Quantities;
+                    foreach (var pair in element.Properties) propertyStore.SetPersistenceValue(pair.Key, pair.Value);
+                    foreach (var pair in element.Quantities) quantityStore.SetPersistenceValue(pair.Key, pair.Value);
                     foreach (var handle in element.SourceHandles) copy.AddSourceHandlePersistenceValue(handle);
                     foreach (var dependency in element.DependsOn) copy.AddDependencyPersistenceValue(dependency);
                     clone.Elements.Add(copy);

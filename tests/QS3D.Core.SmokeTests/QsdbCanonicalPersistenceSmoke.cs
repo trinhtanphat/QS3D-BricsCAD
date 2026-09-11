@@ -87,7 +87,14 @@ namespace QS3D.Core.SmokeTests
             var project = NewProject("quantity-key");
             var element = AddElement(project);
             element.Quantities[" AreaM2 "] = 3d;
-            RejectSave(project, "Padded quantity name was silently persisted/normalized.");
+            var semanticItems = QuantityBacking(element);
+            if (!semanticItems.ContainsKey("AreaM2") || semanticItems.ContainsKey(" AreaM2 ") || semanticItems["AreaM2"] != 3d)
+                throw new Exception("Padded semantic quantity input was not canonicalized before persistence.");
+
+            project = NewProject("quantity-key-persisted-corruption");
+            element = AddElement(project);
+            SeedPersistedQuantity(element, " AreaM2 ", 3d);
+            RejectSave(project, "Padded persisted quantity name was silently persisted/normalized.");
         }
 
         private static void DuplicateQuantityNameFailsOnLoad()
@@ -138,8 +145,16 @@ namespace QS3D.Core.SmokeTests
         {
             var rejectedProject = NewProject("negative-quantity-save");
             var rejectedElement = AddElement(rejectedProject);
-            rejectedElement.Quantities["AreaM2"] = -1d;
-            RejectSave(rejectedProject, "Negative element quantity was published through direct dictionary mutation.");
+            var rejectedAtDomainBoundary = false;
+            try { rejectedElement.Quantities["AreaM2"] = -1d; }
+            catch (ArgumentOutOfRangeException) { rejectedAtDomainBoundary = true; }
+            if (!rejectedAtDomainBoundary)
+                throw new Exception("Negative element quantity bypassed semantic dictionary admission.");
+            if (rejectedElement.Quantities.Count != 0)
+                throw new Exception("Rejected negative semantic quantity changed element state.");
+
+            SeedPersistedQuantity(rejectedElement, "AreaM2", -1d);
+            RejectSave(rejectedProject, "Negative persisted element quantity was published after semantic admission rejected it.");
 
             var path = Path.Combine(Path.GetTempPath(), "qs3d-negative-quantity-fallback-" + Guid.NewGuid().ToString("N") + ".qsdb");
             try
@@ -291,6 +306,19 @@ namespace QS3D.Core.SmokeTests
             values.Add(value);
         }
 
+        private static IDictionary<string, double> QuantityBacking(ProjectElement element)
+        {
+            var field = typeof(ProjectElement).GetField("_quantityValues", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ProjectElement quantity backing dictionary field is unavailable.");
+            return field.GetValue(element) as IDictionary<string, double>
+                ?? throw new InvalidOperationException("ProjectElement quantity backing dictionary is unavailable.");
+        }
+
+        private static void SeedPersistedQuantity(ProjectElement element, string name, double value)
+        {
+            QuantityBacking(element).Add(name, value);
+        }
+
         private static void NullAuditEventFailsClosed()
         {
             var project = NewProject("null-audit");
@@ -389,6 +417,5 @@ namespace QS3D.Core.SmokeTests
                 try { if (File.Exists(path + ".bak")) File.Delete(path + ".bak"); } catch { }
             }
         }
-
     }
 }

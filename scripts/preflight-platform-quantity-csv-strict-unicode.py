@@ -25,8 +25,8 @@ def gitlink_sha() -> str:
 actual = gitlink_sha()
 if actual != EXPECTED_PLATFORM_SHA:
     raise SystemExit(
-        "ERROR: QS3D-Platform does not contain the qualified Quantity Schedule CSV output-budget generation: "
+        "ERROR: QS3D-Platform does not contain strict Quantity Schedule CSV Unicode fidelity: "
         f"expected {EXPECTED_PLATFORM_SHA}, got {actual}"
     )
 
-print(f"PASS: QS3D-Platform Quantity Schedule CSV output-budget generation is pinned at {actual}")
+print(f"PASS: QS3D-Platform strict Quantity Schedule CSV Unicode fidelity is pinned at {actual}")
