@@ -90,10 +90,14 @@ def validate(source: str) -> None:
     ):
         require(token in post_approval, f"missing {label} between ShouldProcess and first mutation")
 
+    payload_revalidation = find(
+        body,
+        re.escape("Assert-InstallPayloadSnapshotEqual -Expected $payloadSnapshot -Actual (Get-InstallPayloadSnapshot -Directory $installFull)"),
+        "immediate payload revalidation",
+    )
     require(
-        "Assert-InstallPayloadSnapshotEqual -Expected $payloadSnapshot -Actual (Get-InstallPayloadSnapshot -Directory $installFull)"
-        in body[first_mutation:quarantine_move.end()],
-        "payload must be revalidated immediately before quarantine move",
+        approval < payload_revalidation.start() < quarantine_move.start(),
+        "payload must be revalidated after approval and before quarantine move",
     )
     require(
         "Assert-RegistryTreeSnapshotEqual -Expected $entry.Snapshot -Actual (Get-RegistryTreeSnapshot -Path $entry.Target.AppKey)"

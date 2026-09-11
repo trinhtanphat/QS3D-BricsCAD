@@ -104,7 +104,9 @@ function Get-RegistryTreeSnapshot {
     $key = Get-Item -LiteralPath $Path
     try {
         $values = @()
-        foreach ($name in $key.GetValueNames()) {
+        $valueNames = @($key.GetValueNames())
+        [Array]::Sort($valueNames, [StringComparer]::Ordinal)
+        foreach ($name in $valueNames) {
             $values += [pscustomobject]@{
                 Name = [string]$name
                 Value = $key.GetValue($name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
@@ -112,6 +114,7 @@ function Get-RegistryTreeSnapshot {
             }
         }
         $childNames = @($key.GetSubKeyNames())
+        [Array]::Sort($childNames, [StringComparer]::Ordinal)
     }
     finally {
         $key.Close()
@@ -130,13 +133,78 @@ function Get-RegistryTreeSnapshot {
     }
 }
 
+function Get-InstallPayloadSnapshot {
+    param([Parameter(Mandatory = $true)][string]$Directory)
+
+    $root = [IO.Path]::GetFullPath($Directory).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    if (-not (Test-Path -LiteralPath $root -PathType Container)) { throw "Install payload disappeared before uninstall admission: $root" }
+    $items = @(Get-ChildItem -LiteralPath $root -Recurse -Force)
+    foreach ($item in $items) {
+        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Refusing uninstall payload snapshot containing ReparsePoint: $($item.FullName)"
+        }
+    }
+    $files = @($items | Where-Object { -not $_.PSIsContainer })
+    $rows = foreach ($file in $files) {
+        $relative = $file.FullName.Substring($root.Length).TrimStart([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+        [pscustomobject]@{ RelativePath = $relative; Length = [long]$file.Length; Sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
+    }
+    return @($rows | Sort-Object -Property RelativePath)
+}
+
+function Assert-InstallPayloadSnapshotEqual {
+    param($Expected, $Actual)
+    $expectedRows = @($Expected); $actualRows = @($Actual)
+    if ($expectedRows.Count -ne $actualRows.Count) { throw 'Install payload changed while uninstall approval was pending.' }
+    for ($i = 0; $i -lt $expectedRows.Count; $i++) {
+        $e = $expectedRows[$i]; $a = $actualRows[$i]
+        if (-not [string]::Equals([string]$e.RelativePath, [string]$a.RelativePath, [StringComparison]::Ordinal) -or [long]$e.Length -ne [long]$a.Length -or -not [string]::Equals([string]$e.Sha256, [string]$a.Sha256, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Install payload changed while uninstall approval was pending: $($e.RelativePath)"
+        }
+    }
+}
+
+function Assert-RegistryTreeSnapshotEqual {
+    param($Expected, $Actual)
+    if ($null -eq $Expected -and $null -eq $Actual) { return }
+    if ($null -eq $Expected -or $null -eq $Actual) { throw 'DemandLoad registry generation changed while uninstall approval was pending.' }
+    $expectedJson = $Expected | ConvertTo-Json -Depth 100 -Compress
+    $actualJson = $Actual | ConvertTo-Json -Depth 100 -Compress
+    if (-not [string]::Equals($expectedJson, $actualJson, [StringComparison]::Ordinal)) {
+        throw "DemandLoad registry generation changed while uninstall approval was pending: $($Expected.Path)"
+    }
+}
+
+function Get-RegistryRemovalPlan {
+    param([string[]]$RequestedVersions, [string[]]$RequestedLanguages)
+    $plan = @()
+    foreach ($target in @(Get-DemandLoadTargets -RequestedVersions $RequestedVersions -RequestedLanguages $RequestedLanguages)) {
+        $snapshot = Get-RegistryTreeSnapshot -Path $target.AppKey
+        if ($null -ne $snapshot) { $plan += [pscustomobject]@{ Target = $target; Snapshot = $snapshot } }
+    }
+    return @($plan)
+}
+
+function Assert-RegistryPlanEqual {
+    param($Expected, $Actual)
+    $expectedPlan = @($Expected); $actualPlan = @($Actual)
+    if ($expectedPlan.Count -ne $actualPlan.Count) { throw 'DemandLoad registry plan changed while uninstall approval was pending.' }
+    for ($i = 0; $i -lt $expectedPlan.Count; $i++) {
+        $e = $expectedPlan[$i]; $a = $actualPlan[$i]
+        foreach ($name in @('Version','Language','AppKey')) {
+            if (-not [string]::Equals([string]$e.Target.$name, [string]$a.Target.$name, [StringComparison]::OrdinalIgnoreCase)) { throw 'DemandLoad registry plan changed while uninstall approval was pending.' }
+        }
+        Assert-RegistryTreeSnapshotEqual -Expected $e.Snapshot -Actual $a.Snapshot
+    }
+}
+
 function Restore-RegistryTreeSnapshot {
     param($Snapshot)
 
     if ($null -eq $Snapshot) { return }
     $path = [string]$Snapshot.Path
     if (Test-Path -LiteralPath $path) {
-        Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop
+        throw "Refusing registry rollback because DemandLoad path was recreated: $path"
     }
     New-Item -Path $path -Force | Out-Null
 
@@ -199,20 +267,15 @@ try {
         $installFull = Assert-InstallDirectorySafeToRemove -Directory $InstallDirectory -ForceDelete:$Force
     }
 
-    $registryPlan = @()
-    foreach ($target in @(Get-DemandLoadTargets -RequestedVersions $VersionKeys -RequestedLanguages $LanguageKeys)) {
-        $snapshot = Get-RegistryTreeSnapshot -Path $target.AppKey
-        if ($null -ne $snapshot) {
-            $registryPlan += [pscustomobject]@{
-                Target = $target
-                Snapshot = $snapshot
-            }
-        }
-    }
+    $registryPlan = @(Get-RegistryRemovalPlan -RequestedVersions $VersionKeys -RequestedLanguages $LanguageKeys)
 
     $stageFiles = (-not $KeepFiles -and
         -not [string]::IsNullOrWhiteSpace($installFull) -and
         (Test-Path -LiteralPath $installFull -PathType Container))
+    $payloadSnapshot = @()
+    if ($stageFiles) {
+        $payloadSnapshot = @(Get-InstallPayloadSnapshot -Directory $installFull)
+    }
 
     if ($registryPlan.Count -eq 0 -and -not $stageFiles) {
         Write-Host 'No selected QS3D V25 DemandLoad registrations or installed payload require removal.'
@@ -225,6 +288,18 @@ try {
         return
     }
 
+    $freshRegistryPlan = @(Get-RegistryRemovalPlan -RequestedVersions $VersionKeys -RequestedLanguages $LanguageKeys)
+    Assert-RegistryPlanEqual -Expected $registryPlan -Actual $freshRegistryPlan
+    $registryPlan = @($freshRegistryPlan)
+
+    if ($stageFiles) {
+        $freshInstallFull = Assert-InstallDirectorySafeToRemove -Directory $InstallDirectory -ForceDelete:$Force
+        $freshPayloadSnapshot = Get-InstallPayloadSnapshot -Directory $freshInstallFull
+        Assert-InstallPayloadSnapshotEqual -Expected $payloadSnapshot -Actual $freshPayloadSnapshot
+        $installFull = $freshInstallFull
+        $payloadSnapshot = @($freshPayloadSnapshot)
+    }
+
     $quarantine = $null
     $removedSnapshots = @()
     try {
@@ -232,10 +307,12 @@ try {
             $parent = Split-Path -Parent $installFull
             if ([string]::IsNullOrWhiteSpace($parent)) { throw 'InstallDirectory must have a parent directory for rollback-safe uninstall.' }
             $quarantine = Join-Path $parent ('.qs3d-uninstall-' + [Guid]::NewGuid().ToString('N'))
+            Assert-InstallPayloadSnapshotEqual -Expected $payloadSnapshot -Actual (Get-InstallPayloadSnapshot -Directory $installFull)
             Move-Item -LiteralPath $installFull -Destination $quarantine -ErrorAction Stop
         }
 
         foreach ($entry in $registryPlan) {
+            Assert-RegistryTreeSnapshotEqual -Expected $entry.Snapshot -Actual (Get-RegistryTreeSnapshot -Path $entry.Target.AppKey)
             $removedSnapshots += $entry.Snapshot
             Remove-Item -LiteralPath $entry.Target.AppKey -Recurse -Force -ErrorAction Stop
         }
