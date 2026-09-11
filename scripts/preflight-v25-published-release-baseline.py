@@ -11,7 +11,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 GATE = ROOT / "scripts" / "v25-release-batch-gate.py"
 DISPATCHER = ROOT / ".github" / "workflows" / "dispatch-v25-cloud-after-main-integration.yml"
-SERIES = "v0.1.0-preview."
+SERIES = "v0.2.0-preview."
 
 
 class RegressionError(RuntimeError):
@@ -57,6 +57,8 @@ def run_gate(repo: Path, source_sha: str, *extra: str) -> subprocess.CompletedPr
             source_sha,
             "--minimum-changes",
             "10",
+            "--series-prefix",
+            SERIES,
             *extra,
         ],
         repo,
@@ -119,8 +121,12 @@ def validate_dispatcher_contract() -> None:
     required = (
         'gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100"',
         'if [[ "${release_draft}" != "false" || -z "${release_published_at}" ]]',
-        'if [[ ! "${release_tag}" =~ ^v0\\.1\\.0-preview\\.([1-9][0-9]*)$ ]]',
+        'series_prefix="v${committed_major}.${committed_minor}.${committed_patch}-preview."',
+        'if [[ ! "${release_tag}" =~ ^v([0-9]+)\\.([0-9]+)\\.([0-9]+)-preview\\.([1-9][0-9]*)$ ]]',
+        'release_series_prefix="v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}-preview."',
+        'if [[ "${release_series_prefix}" != "${series_prefix}" ]]; then',
         'if (( ordinal > published_preview_ordinal )); then',
+        '--series-prefix "${series_prefix}"',
         '--previous-published-tag "${published_preview_tag}"',
         'version_project="src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj"',
         "committed_preview_ordinal=",
@@ -136,6 +142,7 @@ def validate_dispatcher_contract() -> None:
         'consider_preview "${BASH_REMATCH[1]}" "Published"',
         'consider_preview "${BASH_REMATCH[1]}" "Existing tag"',
         'git tag --list "${series_prefix}*"',
+        'series_prefix="v0.1.0-preview."',
         "max_preview=",
         "preview=$((max_preview + 1))",
     ):
@@ -145,15 +152,17 @@ def validate_dispatcher_contract() -> None:
                 + forbidden
             )
 
-    release_query = source.index('releases?per_page=100')
-    gate_call = source.index('--previous-published-tag "${published_preview_tag}"')
     committed_version = source.index('version_project="src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj"')
+    series_derivation = source.index('series_prefix="v${committed_major}.${committed_minor}.${committed_patch}-preview."')
+    release_query = source.index('releases?per_page=100')
+    gate_series = source.index('--series-prefix "${series_prefix}"')
+    gate_call = source.index('--previous-published-tag "${published_preview_tag}"')
     published_guard = source.index('if (( committed_preview_ordinal <= published_preview_ordinal )); then')
     reservation = source.index("reservation_issue=1441")
     dispatch = source.index("gh workflow run release-v25-cloud.yml")
-    if not (release_query < gate_call < committed_version < published_guard < reservation < dispatch):
+    if not (committed_version < series_derivation < release_query < gate_series < gate_call < published_guard < reservation < dispatch):
         raise RegressionError(
-            "dispatcher must derive published Release baseline, run batch admission, validate committed identity against that baseline, then reserve and dispatch"
+            "dispatcher must derive the exact committed preview series before published Release enumeration, pass that same series into batch admission, then reserve and dispatch"
         )
 
 
