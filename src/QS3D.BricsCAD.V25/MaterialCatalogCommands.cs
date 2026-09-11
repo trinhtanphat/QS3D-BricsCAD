@@ -1,6 +1,7 @@
 using System;
 using Bricscad.ApplicationServices;
 using QS3D.BricsCAD.V25.UI;
+using QS3D.Core.Domain;
 using Teigha.Runtime;
 
 namespace QS3D.BricsCAD.V25
@@ -62,14 +63,17 @@ namespace QS3D.BricsCAD.V25
 
             MaterialCatalogWindow? window = null;
             PublishedManager? candidate = null;
+            ProjectState? admittedProject = null;
             var nativeDatabaseIdentity = IntPtr.Zero;
             try
             {
                 nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
                 if (!ExistingProjectMutationContext.TryGet(document, out var project))
                     throw new InvalidOperationException("Material Catalog cần QS3D project hiện hữu. Hãy chạy QS3DINIT hoặc mở/nạp project trước.");
+                admittedProject = project;
 
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                if (!IsActiveProjectGeneration(document, nativeDatabaseIdentity, project)) return;
 
                 var pending = _pending;
                 if (pending != null)
@@ -82,6 +86,7 @@ namespace QS3D.BricsCAD.V25
                         }
 
                         if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                        if (!IsActiveProjectGeneration(document, nativeDatabaseIdentity, project)) return;
                         try { PaletteCoordinator.SetStatus("Material Catalog đang được mở cho bản vẽ hiện hành."); } catch { }
                         return;
                     }
@@ -99,11 +104,13 @@ namespace QS3D.BricsCAD.V25
                         {
                             try { previous.Window.Activate(); } catch { }
                             if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                            if (!IsActiveProjectGeneration(document, nativeDatabaseIdentity, project)) return;
                             try { PaletteCoordinator.SetStatus("Material Catalog đã mở cho bản vẽ hiện hành."); } catch { }
                             return;
                         }
 
                         if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                        if (!IsActiveProjectGeneration(document, nativeDatabaseIdentity, project)) return;
                         try { previous.Window.Close(); }
                         catch (Exception closeError)
                         {
@@ -123,6 +130,7 @@ namespace QS3D.BricsCAD.V25
                 }
 
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                if (!IsActiveProjectGeneration(document, nativeDatabaseIdentity, project)) return;
                 window = new MaterialCatalogWindow(document, project);
                 candidate = new PublishedManager(window, document);
                 var reserved = candidate;
@@ -134,7 +142,8 @@ namespace QS3D.BricsCAD.V25
                     if (ReferenceEquals(_published, reserved)) _published = null;
                 };
 
-                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity) ||
+                    !IsActiveProjectGeneration(document, nativeDatabaseIdentity, project))
                 {
                     CloseCandidateOnAffinityDrift(reserved);
                     candidate = null;
@@ -142,7 +151,8 @@ namespace QS3D.BricsCAD.V25
                     return;
                 }
                 Application.ShowModelessWindow(IntPtr.Zero, window, true);
-                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity) ||
+                    !IsActiveProjectGeneration(document, nativeDatabaseIdentity, project))
                 {
                     CloseCandidateOnAffinityDrift(reserved);
                     candidate = null;
@@ -158,7 +168,8 @@ namespace QS3D.BricsCAD.V25
                 _published = reserved;
                 candidate = null;
                 window = null;
-                if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity) &&
+                    IsActiveProjectGeneration(document, nativeDatabaseIdentity, project))
                 {
                     try { PaletteCoordinator.SetStatus("Material Catalog: built-in + custom + apply theo semantic selection • khóa theo bản vẽ đang mở."); } catch { }
                 }
@@ -168,6 +179,8 @@ namespace QS3D.BricsCAD.V25
                 CloseCandidateAfterFailure(candidate, window);
 
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                if (admittedProject != null &&
+                    !IsActiveProjectGeneration(document, nativeDatabaseIdentity, admittedProject)) return;
                 const string message = "QS3DMATERIALS không thể mở Material Catalog an toàn; trạng thái hiện tại được giữ nguyên.";
                 try { PaletteCoordinator.SetStatus(message); } catch { }
                 try { document.Editor.WriteMessage("\n" + message); } catch { }
@@ -195,6 +208,22 @@ namespace QS3D.BricsCAD.V25
                        database.UnmanagedObject == nativeDatabaseIdentity;
             }
             catch { return false; }
+        }
+
+        private static bool IsActiveProjectGeneration(Document document, IntPtr nativeDatabaseIdentity, ProjectState project)
+        {
+            if (project == null || !IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return false;
+            try
+            {
+                if (!ProjectContextCoordinator.TryGetCached(document, out var cachedProject) ||
+                    !ReferenceEquals(cachedProject, project)) return false;
+                ProjectContextCoordinator.RequireBackingStoreUnchanged(document, project, "Material Catalog publication");
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static void CloseCandidateOnAffinityDrift(PublishedManager candidate)
