@@ -73,19 +73,44 @@ function Open-HeldGeneration {
     }
 }
 
+function Get-HeldStreamSha256 {
+    param([Parameter(Mandatory = $true)][IO.Stream]$Stream)
+
+    if (-not $Stream.CanSeek) { throw 'Held V25 release input stream must be seekable for exact-generation digest admission.' }
+    $priorPosition = $Stream.Position
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        $Stream.Position = 0
+        $digest = $sha.ComputeHash($Stream)
+        return (-join ($digest | ForEach-Object { $_.ToString('x2') }))
+    }
+    finally {
+        $Stream.Position = $priorPosition
+        $sha.Dispose()
+    }
+}
+
+function Publish-CommercialZipDigest {
+    param(
+        [Parameter(Mandatory = $true)][string]$CanonicalPath,
+        [Parameter(Mandatory = $true)][string]$Digest
+    )
+
+    # This process-scoped admission value intentionally belongs to one exact release asset only.
+    # Hashing update manifests or other files must never overwrite the ZIP generation admitted for extraction.
+    if ([string]::Equals([IO.Path]::GetFileName($CanonicalPath), 'QS3D-BricsCAD-V25.zip', [StringComparison]::Ordinal)) {
+        if ($Digest -notmatch '^[0-9a-f]{64}$') { throw 'Held V25 commercial ZIP digest is malformed.' }
+        $env:QS3D_V25_COMMERCIAL_ZIP_SHA256 = $Digest.ToLowerInvariant()
+    }
+}
+
 $held = Open-HeldGeneration -LiteralPath $Path
 try {
     switch ($Operation) {
         'Hash' {
-            $sha = [Security.Cryptography.SHA256]::Create()
-            try {
-                $digest = $sha.ComputeHash($held.Stream)
-                $hex = -join ($digest | ForEach-Object { $_.ToString('x2') })
-                Write-Output $hex
-            }
-            finally {
-                $sha.Dispose()
-            }
+            $hex = Get-HeldStreamSha256 -Stream $held.Stream
+            Publish-CommercialZipDigest -CanonicalPath $held.CanonicalPath -Digest $hex
+            Write-Output $hex
         }
         'Copy' {
             if ([string]::IsNullOrWhiteSpace($Destination)) {
@@ -113,6 +138,8 @@ try {
                 Remove-Item -LiteralPath $destinationFull -Force -ErrorAction SilentlyContinue
                 throw "Held V25 release copy length mismatch: $destinationFull"
             }
+            $copyDigest = Get-HeldStreamSha256 -Stream $held.Stream
+            Publish-CommercialZipDigest -CanonicalPath $held.CanonicalPath -Digest $copyDigest
             Write-Output $destinationFull
         }
     }

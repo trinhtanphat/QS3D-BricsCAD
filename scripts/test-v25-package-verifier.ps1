@@ -173,3 +173,5 @@ try {
 finally {
     Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
+
+& (Join-Path $PSScriptRoot 'test-v25-commercial-safe-archive-extraction.ps1')
