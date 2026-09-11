@@ -1488,24 +1488,7 @@ namespace QS3D.BricsCAD.V25
         private static string SanitizePublicError(string message)
         {
             var value = string.IsNullOrWhiteSpace(message) ? "MCP request failed." : message;
-            value = Regex.Replace(value, @"(?i)(Authorization\s*:\s*(?:Bearer|Basic)\s+)[^\s,;]+", "$1[REDACTED]");
-            value = Regex.Replace(value, @"(?i)\b(api[-_]?key|access[-_]?token|auth[-_]?token|secret|password)\b\s*[:=]\s*[^\s,;]+", "$1=[REDACTED]");
-            value = Regex.Replace(value, @"(?i)\bBearer\s+[A-Za-z0-9._~+/-]+=*", "Bearer [REDACTED]");
-            value = Regex.Replace(value, @"(?i)(?:[A-Z]:\\|\\\\)[^\r\n\t]+", "[PATH]");
-            value = Regex.Replace(value, @"(?i)(?:/home/|/Users/|/tmp/|/var/tmp/)[^\r\n\t]+", "[PATH]");
-            var clean = new StringBuilder(Math.Min(value.Length, MaxPublicErrorCharacters));
-            foreach (var ch in value)
-            {
-                if (clean.Length >= MaxPublicErrorCharacters) break;
-                if (char.IsControl(ch))
-                {
-                    if (ch == '\r' || ch == '\n' || ch == '\t') clean.Append(' ');
-                    continue;
-                }
-                clean.Append(ch);
-            }
-            var bounded = clean.ToString().Trim();
-            return bounded.Length == 0 ? "MCP request failed." : bounded;
+            return McpPublicTextSanitizer.Sanitize(value);
         }
 
         private static string ToolError(string message)
