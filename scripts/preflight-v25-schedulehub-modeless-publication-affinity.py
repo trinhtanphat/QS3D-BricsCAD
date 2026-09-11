@@ -12,6 +12,8 @@ required = [
     "var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
     "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;",
     "var owner = new PublishedManager(window, document, nativeDatabaseIdentity);",
+    "var releaseOwner = owner;",
+    "window.Closed += (_, __) => ReleaseOwnedWindow(releaseOwner);",
     "_pending = owner;",
     "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
     "if (!window.IsLoaded)",
@@ -25,6 +27,8 @@ for needle in required:
     if needle not in text:
         errors.append("missing Schedule Hub publication contract: " + needle)
 
+if "window.Closed += (_, __) => ReleaseOwnedWindow(owner);" in text:
+    errors.append("Schedule Hub Closed callback must not capture the mutable local owner that is nulled after publication")
 if "ex.Message" in text:
     errors.append("Schedule Hub must not publish native exception details to UI")
 
@@ -36,8 +40,14 @@ publish = text.find("_published = owner;", exact)
 if min(show, reserve, loaded, exact, publish) < 0 or not (reserve < show < loaded < exact < publish):
     errors.append("Schedule Hub must reserve pending ownership before host show and publish only after loaded/exact-owner proof")
 
-prepare = text.find("if (!PreparePublishedWindow(document, nativeDatabaseIdentity))")
 construct = text.find("var window = new ScheduleHubWindow(document);")
+release_token = text.find("var releaseOwner = owner;", construct)
+closed = text.find("window.Closed += (_, __) => ReleaseOwnedWindow(releaseOwner);", release_token)
+reserve_after_construct = text.find("_pending = owner;", closed)
+if min(construct, release_token, closed, reserve_after_construct) < 0 or not (construct < release_token < closed < reserve_after_construct):
+    errors.append("Schedule Hub must bind Closed to an immutable exact-owner token before pending publication")
+
+prepare = text.find("if (!PreparePublishedWindow(document, nativeDatabaseIdentity))")
 if prepare < 0 or construct < 0:
     errors.append("Schedule Hub admission/construction boundary is missing")
 else:
@@ -62,4 +72,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
 
-print("PASS: Schedule Hub uses pending-first exact document/native-generation publication, residue-safe cleanup, and redacted UI failures.")
+print("PASS: Schedule Hub uses pending-first exact document/native-generation publication, stable Closed ownership, residue-safe cleanup, and redacted UI failures.")
