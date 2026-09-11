@@ -1,9 +1,11 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "ScheduleHubCommands.cs"
+COMMAND_SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "ScheduleHubCommands.cs"
+WINDOW_SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "UI" / "ScheduleHubWindow.xaml.cs"
 
-text = SOURCE.read_text(encoding="utf-8")
+text = COMMAND_SOURCE.read_text(encoding="utf-8")
+window = WINDOW_SOURCE.read_text(encoding="utf-8")
 errors = []
 
 required = [
@@ -30,7 +32,7 @@ for needle in required:
 if "window.Closed += (_, __) => ReleaseOwnedWindow(owner);" in text:
     errors.append("Schedule Hub Closed callback must not capture the mutable local owner that is nulled after publication")
 if "ex.Message" in text:
-    errors.append("Schedule Hub must not publish native exception details to UI")
+    errors.append("Schedule Hub launcher must not publish native exception details to UI")
 
 show = text.find("Application.ShowModelessWindow(IntPtr.Zero, window, true);")
 reserve = text.find("_pending = owner;")
@@ -65,6 +67,29 @@ if "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)" no
 if "database.UnmanagedObject == nativeDatabaseIdentity" not in text:
     errors.append("Schedule Hub exact document-generation predicate must include native database identity")
 
+window_required = [
+    "private readonly IntPtr _nativeDatabaseIdentity;",
+    "_nativeDatabaseIdentity = GetNativeDatabaseIdentity(_document);",
+    "private bool IsBoundActiveDocumentGeneration()",
+    "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)",
+    "database.UnmanagedObject == _nativeDatabaseIdentity",
+    "if (!IsBoundActiveDocumentGeneration())",
+]
+for needle in window_required:
+    if needle not in window:
+        errors.append("missing bound Schedule Hub window generation contract: " + needle)
+if "ex.Message" in window:
+    errors.append("Schedule Hub window must not publish exception details to local/global UI")
+
+set_status = window.find("private void SetStatus(string text)")
+if set_status < 0:
+    errors.append("Schedule Hub window status helper is missing")
+else:
+    global_status = window.find("PaletteCoordinator.SetStatus(StatusText.Text)", set_status)
+    gate = window.rfind("IsBoundActiveDocumentGeneration()", set_status, global_status)
+    if global_status < 0 or gate < set_status:
+        errors.append("Schedule Hub global Palette status must be gated to the exact bound active document/native generation")
+
 print("QS3D V25 Schedule Hub modeless publication affinity preflight")
 if errors:
     for error in errors:
@@ -72,4 +97,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
 
-print("PASS: Schedule Hub uses pending-first exact document/native-generation publication, stable Closed ownership, residue-safe cleanup, and redacted UI failures.")
+print("PASS: Schedule Hub launcher/window use exact document/native-generation affinity, stable ownership, residue-safe cleanup, and redacted UI failures.")
