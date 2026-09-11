@@ -252,7 +252,7 @@ namespace QS3D.Core.Persistence
                             RecordRollbackFailure(publicationFailure, ex);
                         }
                     }
-                    RestorePreviousBackup(previousBackupSafety, backupPath);
+                    RestorePreviousBackup(previousBackupSafety, backupPath, publicationFailure);
                 }
                 else if (!string.IsNullOrWhiteSpace(previousBackupSafety))
                 {
@@ -285,23 +285,48 @@ namespace QS3D.Core.Persistence
             publicationFailure.Data[RollbackFailureDataKey] = rollbackFailure;
         }
 
-        private static void RestorePreviousBackup(string? previousBackupSafety, string backupPath)
+        private static void RestorePreviousBackup(
+            string? previousBackupSafety,
+            string backupPath,
+            Exception? publicationFailure = null)
         {
             if (string.IsNullOrWhiteSpace(previousBackupSafety)) return;
             var previousBackupPath = previousBackupSafety!;
-            if (!File.Exists(previousBackupPath)) return;
+            if (!File.Exists(previousBackupPath))
+            {
+                if (publicationFailure != null)
+                {
+                    RecordRollbackFailure(
+                        publicationFailure,
+                        new IOException("QS3D could not restore the previous backup because its staged safety file is missing."));
+                }
+                return;
+            }
+
             try
             {
                 RequireSafe(previousBackupPath, "previous-backup safety");
                 RequireSafe(backupPath, "backup");
-                if (!File.Exists(backupPath))
+                if (File.Exists(backupPath) || Directory.Exists(backupPath))
                 {
-                    RequireSafe(previousBackupPath, "previous-backup safety");
-                    RequireSafe(backupPath, "backup");
-                    File.Move(previousBackupPath, backupPath);
+                    if (publicationFailure != null)
+                    {
+                        RecordRollbackFailure(
+                            publicationFailure,
+                            new IOException("QS3D could not restore the previous backup because the canonical backup path became occupied during rollback."));
+                    }
+                    return;
                 }
+
+                RequireSafe(previousBackupPath, "previous-backup safety");
+                RequireSafe(backupPath, "backup");
+                File.Move(previousBackupPath, backupPath);
             }
-            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException) { }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidDataException)
+            {
+                if (publicationFailure != null)
+                    RecordRollbackFailure(publicationFailure, ex);
+            }
         }
 
         private static void Validate(string tempPath, string destinationPath, out string temp, out string destination)

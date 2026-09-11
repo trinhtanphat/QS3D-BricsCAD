@@ -28,6 +28,7 @@ required_move_tokens = (
     "RecordRollbackFailure(publicationFailure",
     "Directory.Exists(destinationPath)",
     "!File.Exists(backupPath)",
+    "RestorePreviousBackup(previousBackupSafety, backupPath, publicationFailure);",
 )
 missing = [token for token in required_move_tokens if token not in move_with_recovery]
 if missing:
@@ -49,6 +50,25 @@ publication_catch = re.search(
 if publication_catch is None:
     print("ERROR: AtomicFileCommit.MoveWithRecovery must rethrow the captured publication failure with bare throw;.")
     sys.exit(1)
+
+restore_start = text.find("private static void RestorePreviousBackup", end)
+restore_end = text.find("private static void Validate", restore_start)
+if restore_start < 0 or restore_end < 0:
+    print("ERROR: AtomicFileCommit.RestorePreviousBackup boundary not found.")
+    sys.exit(1)
+restore_previous_backup = text[restore_start:restore_end]
+for token in (
+    "Exception? publicationFailure",
+    "catch (Exception ex)",
+    "if (publicationFailure != null)",
+    "RecordRollbackFailure(publicationFailure, ex);",
+):
+    if token not in restore_previous_backup:
+        print(
+            "ERROR: AtomicFileCommit.RestorePreviousBackup can still discard previous-backup "
+            "recovery evidence while a publication failure is active: " + token
+        )
+        sys.exit(1)
 
 if "private const string RollbackFailureDataKey = \"QS3D.AtomicFileCommit.RollbackFailure\";" not in text:
     print("ERROR: AtomicFileCommit is missing the stable rollback evidence Data key.")
