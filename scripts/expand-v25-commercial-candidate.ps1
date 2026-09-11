@@ -166,11 +166,11 @@ try {
 
             if (-not $isDirectory) {
                 if ($entry.Length -lt 0 -or $entry.Length -gt $MaxExpandedBytes -or $expandedBytes -gt ($MaxExpandedBytes - [long]$entry.Length)) {
-                    throw "Commercial candidate archive exceeds the allowed expanded size ($MaxExpandedBytes bytes)."
+                    throw "Commercial candidate archive exceeds the allowed declared expanded size ($MaxExpandedBytes bytes)."
                 }
                 $expandedBytes += [int64]$entry.Length
                 if ($expandedBytes -gt $MaxExpandedBytes) {
-                    throw "Commercial candidate archive exceeds the allowed expanded size ($MaxExpandedBytes bytes)."
+                    throw "Commercial candidate archive exceeds the allowed declared expanded size ($MaxExpandedBytes bytes)."
                 }
             }
 
@@ -214,6 +214,8 @@ try {
             throw 'Commercial candidate archive contains no entries.'
         }
 
+        [long]$materializedBytes = 0
+        $buffer = New-Object byte[] 81920
         foreach ($record in $records) {
             if ($record.IsDirectory) {
                 Ensure-SafeDirectory -Path $record.Target -BoundaryRoot $destinationFull
@@ -225,20 +227,35 @@ try {
             Assert-ExistingSafePathChain -Path $parent -BoundaryRoot $destinationFull
             $input = $record.Entry.Open()
             $output = $null
+            $entryStartBytes = $materializedBytes
             try {
                 $output = [IO.File]::Open([string]$record.Target, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-                $input.CopyTo($output)
+                while (($read = $input.Read($buffer, 0, $buffer.Length)) -gt 0) {
+                    if ($materializedBytes -gt ($MaxExpandedBytes - [int64]$read)) {
+                        throw "Commercial candidate archive exceeded the actual materialization budget ($MaxExpandedBytes bytes)."
+                    }
+                    $output.Write($buffer, 0, $read)
+                    $materializedBytes += [int64]$read
+                }
                 $output.Flush()
             }
             finally {
                 if ($output) { $output.Dispose() }
                 $input.Dispose()
             }
+            $actualEntryBytes = $materializedBytes - $entryStartBytes
+            if ($actualEntryBytes -ne [long]$record.Entry.Length) {
+                throw "Commercial candidate archive entry materialized a byte count different from its admitted ZIP metadata: $($record.Name)"
+            }
             $written = Get-Item -LiteralPath ([string]$record.Target) -Force -ErrorAction Stop
-            if (($written.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or [long]$written.Length -ne [long]$record.Entry.Length) {
+            if (($written.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or [long]$written.Length -ne $actualEntryBytes) {
                 throw "Commercial candidate archive entry did not materialize as the exact admitted ordinary file: $($record.Name)"
             }
             Assert-ExistingSafePathChain -Path $parent -BoundaryRoot $destinationFull
+        }
+
+        if ($materializedBytes -ne $expandedBytes) {
+            throw "Commercial candidate archive actual expanded byte count differs from admitted ZIP metadata. Declared=$expandedBytes Actual=$materializedBytes"
         }
     }
     finally {
@@ -255,4 +272,4 @@ finally {
     $zipStream.Dispose()
 }
 
-Write-Host "Safely extracted V25 commercial candidate archive: entries=$entryCount expandedBytes=$expandedBytes destination=$destinationFull"
+Write-Host "Safely extracted V25 commercial candidate archive: entries=$entryCount declaredExpandedBytes=$expandedBytes materializedBytes=$materializedBytes destination=$destinationFull"
