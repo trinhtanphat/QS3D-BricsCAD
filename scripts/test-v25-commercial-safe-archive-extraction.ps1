@@ -17,7 +17,13 @@ function New-TestArchive {
             $entry = $archive.CreateEntry([string]$spec.Name, [IO.Compression.CompressionLevel]::Optimal)
             $stream = $entry.Open()
             try {
-                [byte[]]$bytes = if ($spec.ContainsKey('Bytes')) { [byte[]]$spec.Bytes } else { [Text.Encoding]::UTF8.GetBytes([string]$spec.Text) }
+                [byte[]]$bytes = @()
+                if ($spec.ContainsKey('Bytes')) {
+                    $bytes = [byte[]]$spec.Bytes
+                }
+                else {
+                    $bytes = [Text.Encoding]::UTF8.GetBytes([string]$spec.Text)
+                }
                 if ($bytes.Length -gt 0) { $stream.Write($bytes, 0, $bytes.Length) }
             }
             finally { $stream.Dispose() }
@@ -147,7 +153,6 @@ try {
             if ((Test-Path -LiteralPath $insidePath -PathType Leaf) -or (Test-Path -LiteralPath $outsideInside -PathType Leaf)) { break }
             if (Test-Path -LiteralPath $racePath -PathType Container) {
                 try {
-                    $moved = Join-Path $Destination 'race-original'
                     Rename-Item -LiteralPath $racePath -NewName 'race-original' -ErrorAction Stop
                     New-Item -ItemType Junction -Path $racePath -Target $Outside -ErrorAction Stop | Out-Null
                     Write-Output 'REPLACED'
