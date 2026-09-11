@@ -206,7 +206,7 @@ if not errors:
                 "if (!ReferenceEquals(_pending, reserved))",
                 "_pending = null;",
                 "_published = reserved;",
-                "if (candidate != null && ReferenceEquals(_pending, candidate))",
+                "if (!window.IsLoaded && candidate != null && ReferenceEquals(_pending, candidate)) _pending = null;",
                 "if (ReferenceEquals(_pending, reserved)) _pending = null;",
                 "if (ReferenceEquals(_published, reserved)) _published = null;",
             ):
