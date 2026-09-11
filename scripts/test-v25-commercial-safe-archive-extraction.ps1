@@ -133,8 +133,10 @@ try {
 
     # Adversarial parent-generation substitution: put an explicit directory first, then enough filler
     # entries to create a deterministic attack window before the final child under that directory.
-    # The attacker may either be blocked by the held generation or win the tiny create->hold race; if it
-    # wins, the extractor must fail closed on the no-follow handle. In neither case may bytes escape.
+    # A replacement that wins before/during the protected materialization window must fail closed.
+    # A replacement may legitimately succeed after extraction has completed and released its handles;
+    # that late case is accepted only if the renamed original generation contains the exact admitted
+    # child and the outside junction target contains no payload bytes.
     $raceZip = Join-Path $tempRoot 'parent-substitution.zip'
     $raceEntries = [Collections.Generic.List[object]]::new()
     $raceEntries.Add(@{Name='race/';Text=''})
@@ -144,6 +146,7 @@ try {
     $raceDestination = Join-Path $tempRoot 'parent-substitution-output'
     $outsideTarget = Join-Path $tempRoot 'outside-junction-target'
     New-Item -ItemType Directory -Path $outsideTarget -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $outsideTarget 'outside-sentinel.txt') -Value 'outside-must-survive' -Encoding ASCII
     $attacker = Start-Job -ArgumentList $raceDestination,$outsideTarget -ScriptBlock {
         param($Destination,$Outside)
         $racePath = Join-Path $Destination 'race'
@@ -169,9 +172,21 @@ try {
     $attackerResult = @($attacker | Receive-Job -Wait)
     Remove-Job -Job $attacker -Force -ErrorAction SilentlyContinue
     if (Test-Path -LiteralPath (Join-Path $outsideTarget 'inside.txt') -PathType Leaf) { throw 'Parent substitution wrote archive bytes outside the extraction root.' }
+    if ((Get-Content -LiteralPath (Join-Path $outsideTarget 'outside-sentinel.txt') -Raw).Trim() -ne 'outside-must-survive') { throw 'Parent substitution modified the outside sentinel.' }
     if ($attackerResult -contains 'REPLACED') {
-        if ([string]::IsNullOrWhiteSpace($raceError)) { throw 'Parent directory was replaced by a junction without fail-closed extraction.' }
-        Write-Host "Expected fail-closed parent-substitution rejection: $raceError"
+        if ([string]::IsNullOrWhiteSpace($raceError)) {
+            $renamedOriginalInside = Join-Path $raceDestination 'race-original\inside.txt'
+            if (-not (Test-Path -LiteralPath $renamedOriginalInside -PathType Leaf)) {
+                throw 'Parent directory was replaced without fail-closed extraction or proof that replacement occurred after protected materialization.'
+            }
+            if ((Get-Content -LiteralPath $renamedOriginalInside -Raw) -ne 'must-stay-inside') {
+                throw 'Post-completion parent replacement did not preserve the exact admitted payload in the original held generation.'
+            }
+            Write-Host 'Parent substitution occurred only after protected materialization completed; original generation retained exact payload and outside target remained untouched.'
+        }
+        else {
+            Write-Host "Expected fail-closed parent-substitution rejection: $raceError"
+        }
     }
     else {
         if (-not [string]::IsNullOrWhiteSpace($raceError)) { throw "Parent-substitution attacker was blocked but extraction failed unexpectedly: $raceError" }

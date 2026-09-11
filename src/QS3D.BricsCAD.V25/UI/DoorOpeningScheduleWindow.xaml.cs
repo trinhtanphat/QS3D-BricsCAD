@@ -18,6 +18,7 @@ namespace QS3D.BricsCAD.V25.UI
     public partial class DoorOpeningScheduleWindow : Window
     {
         private readonly Document _document;
+        private readonly IntPtr _nativeDatabaseIdentity;
         private IReadOnlyList<DoorOpeningScheduleRow> _rows = Array.Empty<DoorOpeningScheduleRow>();
 
         private sealed class RowView
@@ -41,6 +42,7 @@ namespace QS3D.BricsCAD.V25.UI
         public DoorOpeningScheduleWindow(Document document)
         {
             _document = document ?? throw new ArgumentNullException(nameof(document));
+            _nativeDatabaseIdentity = GetNativeDatabaseIdentity(_document);
             InitializeComponent();
             DocumentBoundWindowLifetime.Attach(this, _document);
             Loaded += (_, __) => RefreshRows();
@@ -73,7 +75,10 @@ namespace QS3D.BricsCAD.V25.UI
                 DoorOpeningXlsxExporter.Export(dialog.FileName, current);
                 SetStatus("Đã làm mới (preview regen " + regenerated + ") và xuất " + current.Count + " nhóm Cửa/Lỗ → " + dialog.FileName);
             }
-            catch (Exception ex) { SetStatus("Xuất Door/Opening XLSX lỗi: " + ex.Message); }
+            catch
+            {
+                SetStatus("Door/Opening XLSX không thể xuất an toàn; hãy kích hoạt lại đúng bản vẽ và thử lại.");
+            }
         }
 
         private void RefreshRows()
@@ -85,11 +90,11 @@ namespace QS3D.BricsCAD.V25.UI
                 ApplyFilter();
                 SetStatus("Đã nạp " + _rows.Count + " nhóm schedule • preview regen " + regenerated + " cấu kiện dirty.");
             }
-            catch (Exception ex)
+            catch
             {
                 _rows = Array.Empty<DoorOpeningScheduleRow>();
                 ApplyFilter();
-                SetStatus("Đọc Door/Opening Schedule lỗi: " + ex.Message);
+                SetStatus("Door/Opening Schedule không thể đọc snapshot an toàn; dữ liệu hiển thị đã được làm trống.");
             }
         }
 
@@ -127,21 +132,57 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void EnsureActive(string operation)
         {
-            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document))
+            if (!IsBoundActiveDocumentGeneration())
                 throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Door/Opening Schedule trước khi " + operation + ".");
+        }
+
+        private bool IsBoundActiveDocumentGeneration()
+        {
+            if (_nativeDatabaseIdentity == IntPtr.Zero) return false;
+            try
+            {
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, _document)) return false;
+                var database = _document.Database;
+                return database != null &&
+                       database.UnmanagedObject != IntPtr.Zero &&
+                       database.UnmanagedObject == _nativeDatabaseIdentity;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static IntPtr GetNativeDatabaseIdentity(Document document)
+        {
+            var database = document.Database;
+            if (database == null)
+                throw new InvalidOperationException("Door/Opening Schedule requires a BricsCAD document database.");
+
+            var identity = database.UnmanagedObject;
+            if (identity == IntPtr.Zero)
+                throw new InvalidOperationException("Door/Opening Schedule requires a live native BricsCAD database.");
+            return identity;
         }
 
         private static string DrawingLabel(Document document)
         {
-            var name = document.Name ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(name)) return "Bản vẽ chưa lưu";
-            try { return Path.GetFileName(name); }
-            catch { return name; }
+            try
+            {
+                var name = document.Name ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(name)) return "Bản vẽ chưa lưu";
+                return Path.GetFileName(name);
+            }
+            catch
+            {
+                return "Bản vẽ nguồn";
+            }
         }
 
         private void SetStatus(string text)
         {
             StatusText.Text = text ?? string.Empty;
+            if (!IsBoundActiveDocumentGeneration()) return;
             try { PaletteCoordinator.SetStatus(StatusText.Text); } catch { }
         }
     }
