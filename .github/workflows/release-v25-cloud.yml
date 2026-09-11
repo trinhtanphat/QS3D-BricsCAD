@@ -29,9 +29,87 @@ concurrency:
   queue: max
 
 jobs:
-  release:
+  source-admission:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' }}
     runs-on: windows-latest
+    permissions:
+      contents: read
+    outputs:
+      proceed: ${{ steps.classify.outputs.proceed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          fetch-tags: false
+          persist-credentials: false
+
+      - name: Classify trusted current-main release source
+        id: classify
+        shell: powershell
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:GITHUB_REF -ne 'refs/heads/main') {
+            throw "Cloud V25 preview releases must be dispatched from refs/heads/main. Current ref: $env:GITHUB_REF"
+          }
+          $sourceSha = ([string]$env:SOURCE_SHA).Trim().ToLowerInvariant()
+          if ($sourceSha -notmatch '^[0-9a-f]{40}$') {
+            throw "Cloud release source_sha must be one exact 40-hex commit. Got: $env:SOURCE_SHA"
+          }
+          & git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not refresh protected main for trusted V25 source admission.'
+          }
+          $currentMain = ([string](& git rev-parse --verify origin/main)).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $currentMain -notmatch '^[0-9a-f]{40}$') {
+            throw 'Could not resolve protected main for trusted V25 source admission.'
+          }
+          & git merge-base --is-ancestor $sourceSha $currentMain
+          if ($LASTEXITCODE -ne 0) {
+            throw "Cloud release source SHA must be an ancestor of protected main before trusted admission: $sourceSha"
+          }
+          $releaseRelevantPaths = @(
+            'src/',
+            'tests/',
+            'scripts/',
+            'samples/generated/',
+            'external/QS3D-Platform',
+            '.gitmodules',
+            'Directory.Build.props',
+            'QS3D.sln',
+            'QS3D.V26.sln',
+            '.github/workflows/dispatch-v25-cloud-after-main-integration.yml',
+            '.github/workflows/release-v25-cloud.yml'
+          )
+          & git diff --quiet --no-ext-diff $sourceSha $currentMain -- $releaseRelevantPaths
+          $driftStatus = $LASTEXITCODE
+          if ($driftStatus -eq 1) {
+            "proceed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            $message = "Protected main superseded SOURCE_SHA before stale source execution. SOURCE_SHA=$sourceSha currentMain=$currentMain"
+            Write-Host "::notice title=V25 release source superseded::$message"
+            Write-Host "V25_RELEASE_SUPERSEDED source_sha=$sourceSha current_main=$currentMain"
+            @"
+          ### V25 trusted source admission
+
+          - SOURCE_SHA: `$sourceSha`
+          - Current protected main: `$currentMain`
+          - Result: **successful no-op before stale source scripts/build/package execute**
+          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            exit 0
+          }
+          if ($driftStatus -ne 0) {
+            throw "Could not classify trusted SOURCE_SHA..currentMain release-relevant drift. git diff exit=$driftStatus"
+          }
+          "proceed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+  release:
+    needs: source-admission
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE' && needs.source-admission.outputs.proceed == 'true' }}
+    runs-on: windows-latest
+    permissions:
+      contents: write
     env:
       SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
       RELEASE_TAG: ${{ inputs.release_tag }}
