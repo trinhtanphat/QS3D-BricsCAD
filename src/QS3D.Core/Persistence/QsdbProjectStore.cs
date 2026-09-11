@@ -14,6 +14,7 @@ namespace QS3D.Core.Persistence
     {
         private const long MaxProjectFileBytes = 64L * 1024L * 1024L;
         private const string BackupRecoveryReason = "Primary QSDB was invalid; loaded validated backup.";
+        private const string FailedSaveRollbackRevisionDriftMessage = "QSDB save rollback refused to overwrite a newer project persistence revision.";
 
         public void Save(ProjectState project, string path)
         {
@@ -70,13 +71,19 @@ namespace QS3D.Core.Persistence
             var previousSchemaVersion = project.SchemaVersion;
             var previousUpdatedUtc = project.UpdatedUtc;
             var previousChangeVersion = project.ChangeVersion;
+            var saveOwnedSchemaVersion = previousSchemaVersion;
+            var saveOwnedUpdatedUtc = previousUpdatedUtc;
+            var saveOwnedChangeVersion = previousChangeVersion;
             string? tempPath = null;
             var committed = false;
 
             try
             {
                 project.SchemaVersion = ProjectState.CurrentSchemaVersion;
+                saveOwnedSchemaVersion = project.SchemaVersion;
                 project.Touch();
+                saveOwnedUpdatedUtc = project.UpdatedUtc;
+                saveOwnedChangeVersion = checked(previousChangeVersion + 1L);
                 var document = Serialize(project);
                 ValidateSerializedSize(document, maximumBytes);
 
@@ -100,11 +107,39 @@ namespace QS3D.Core.Persistence
             {
                 if (!committed)
                 {
-                    project.SchemaVersion = previousSchemaVersion;
-                    project.RestorePersistenceState(previousUpdatedUtc, previousChangeVersion);
+                    RestoreFailedSavePersistenceState(
+                        project,
+                        previousSchemaVersion,
+                        previousUpdatedUtc,
+                        previousChangeVersion,
+                        saveOwnedSchemaVersion,
+                        saveOwnedUpdatedUtc,
+                        saveOwnedChangeVersion);
                 }
                 AtomicFileCommit.TryDelete(tempPath);
             }
+        }
+
+        private static bool RestoreFailedSavePersistenceState(
+            ProjectState project,
+            int previousSchemaVersion,
+            DateTime previousUpdatedUtc,
+            long previousChangeVersion,
+            int saveOwnedSchemaVersion,
+            DateTime saveOwnedUpdatedUtc,
+            long saveOwnedChangeVersion)
+        {
+            if (project.SchemaVersion != saveOwnedSchemaVersion ||
+                project.UpdatedUtc != saveOwnedUpdatedUtc ||
+                project.ChangeVersion != saveOwnedChangeVersion)
+            {
+                System.Diagnostics.Trace.TraceWarning(FailedSaveRollbackRevisionDriftMessage);
+                return false;
+            }
+
+            project.SchemaVersion = previousSchemaVersion;
+            project.RestorePersistenceState(previousUpdatedUtc, previousChangeVersion);
+            return true;
         }
 
         private enum SaveMode

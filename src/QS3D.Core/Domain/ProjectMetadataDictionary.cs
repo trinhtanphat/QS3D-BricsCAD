@@ -305,6 +305,7 @@ namespace QS3D.Core.Domain
         {
             return ProjectMeasurementWorkItemMappingCodec.IsReservedKey(key) ||
                    ProjectTbqWorkspaceCodec.IsReservedKey(key) ||
+                   ProjectBqReviewLedgerCodec.IsReservedKey(key) ||
                    CoordinationIssuePersistenceCodec.IsReservedKey(key);
         }
 
@@ -332,6 +333,7 @@ namespace QS3D.Core.Domain
         {
             ProjectMeasurementWorkItemMappingCodec.Read(metadata);
             ProjectTbqWorkspaceCodec.Read(metadata);
+            ProjectBqReviewLedgerCodec.Read(metadata);
             CoordinationIssuePersistenceCodec.Read(metadata);
         }
 
