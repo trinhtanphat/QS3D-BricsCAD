@@ -160,12 +160,12 @@ namespace QS3D.BricsCAD.V25
                     try { PaletteCoordinator.SetStatus("Project Tools: tầng • vật liệu • template • module • health • khóa theo bản vẽ."); } catch { }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 ClosePendingAfterFailure(candidate, window);
 
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
-                var message = "QS3DPROJECTTOOLS lỗi: " + ex.Message;
+                const string message = "QS3DPROJECTTOOLS không thể mở Project Tools an toàn; trạng thái hiện tại được giữ nguyên.";
                 try { PaletteCoordinator.SetStatus(message); } catch { }
                 try { document.Editor.WriteMessage("\n" + message); } catch { }
             }
