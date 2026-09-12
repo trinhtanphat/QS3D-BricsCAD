@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             RejectsNonUtcWaiverAndEvaluationTimestamps();
             AppliesConfigurableSeverityThreshold();
             DetectsIfcPsetSpatialTypeAndGuidConsistency();
+            MissingStoreyWithSpatialContainmentBlocksStrictGate();
             DuplicateGuidWaiverMustCoverEveryConflictingElement();
             DuplicateElementIdentityIsNonWaivable();
             HardGateDemandFailsClosedForGuardedWorkflows();
@@ -149,6 +150,26 @@ namespace QS3D.Core.SmokeTests
             Expect(decision.ActiveFindings.Any(x => x.RuleId == "QA2.SPATIAL_MISMATCH" && x.ElementId == "E6"), "storey/spatial mismatch must be detected");
             Expect(decision.ActiveFindings.Any(x => x.RuleId == "QA2.TYPE_ASSIGNMENT_MISMATCH" && x.ElementId == "E6"), "element type/IFC type assignment mismatch must be detected");
             Expect(decision.Status == QsQaGateStatus.Blocked, "IFC consistency failures must block strict profile");
+        }
+
+        private static void MissingStoreyWithSpatialContainmentBlocksStrictGate()
+        {
+            var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "IfcGuid", "GUID-STOREY" },
+                { "IfcPset.Pset_Qto", "present" },
+                { "IfcPset.Pset_Identity", "present" },
+                { "IfcRel.SpatialContainer", "L01" },
+                { "IfcRel.TypeAssignment", "Wall" }
+            };
+            var element = new QsModelElementSnapshot("E-STOREY", "Wall", "Concrete", "A-WALL", string.Empty, 4d, 0.2d, 3d, properties);
+            var decision = new QsQaGate2().Evaluate(new[] { element }, QsQaRuleProfile.SolibriQuantityStrict(), null!, Utc(2026, 9, 12));
+
+            var finding = decision.ActiveFindings.SingleOrDefault(x => x.RuleId == "QA2.MISSING_STOREY" && x.ElementId == "E-STOREY");
+            Expect(finding != null && finding.Severity == QsQaSeverity.Critical, "spatial containment without canonical storey must produce a Critical missing-storey finding");
+            Expect(decision.Status == QsQaGateStatus.Blocked, "missing canonical storey must block strict QA2");
+            Expect(!decision.CanTakeoff && !decision.CanBoq && !decision.CanEstimate, "missing canonical storey must block all guarded quantity workflows");
+            Expect(!decision.ActiveFindings.Any(x => x.RuleId == "QA2.MISSING_RELATIONSHIP"), "present spatial/type relationships must not be misreported as missing");
         }
 
         private static void DuplicateGuidWaiverMustCoverEveryConflictingElement()
