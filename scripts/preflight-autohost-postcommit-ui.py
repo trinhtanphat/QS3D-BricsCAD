@@ -17,10 +17,11 @@ else:
     if min(start, finalize, report, single) < 0 or not start < finalize < report < single:
         errors.append("cannot isolate Auto Host command/UI helpers")
     else:
-        affinity = text.find("private static bool IsActiveDocument", start)
+        affinity = text.find("private static bool IsActiveDocumentGeneration", start)
         command_end = affinity if start < affinity < finalize else finalize
         command = text[start:command_end]
         for token in (
+            "nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
             "ReadSelectedHandles(document)",
             "ExistingProjectMutationContext.TryGet(document, out var project)",
             "new OpeningHostMatcher()",
@@ -28,27 +29,22 @@ else:
             "service.LinkOpening(project, item.Opening.Id, item.HostId);",
             "regenerated = linked > 0 ? Regenerate(project, regenerationTargets) : 0;",
             "rollback.Restore(project);",
-            "FinalizeAutoHostUi(document, summary);",
+            "FinalizeAutoHostUi(document, nativeDatabaseIdentity, summary);",
         ):
             if token not in command:
                 errors.append("Auto Host post-commit boundary missing token: " + token)
 
-        legacy_failure = "ReportAutoHostError(document, ex);"
-        redacted_failure = "ReportAutoHostError(document);"
-        if legacy_failure not in command and redacted_failure not in command:
-            errors.append("Auto Host post-commit boundary missing best-effort business failure reporter")
+        redacted_failure = "ReportAutoHostError(document, nativeDatabaseIdentity);"
+        if redacted_failure not in command:
+            errors.append("Auto Host post-commit boundary missing generation-bound best-effort business failure reporter")
 
         regen = command.find("regenerated = linked > 0 ? Regenerate(project, regenerationTargets) : 0;")
         summary = command.find('var summary = "Auto Host: linked="', regen)
-        success = command.find("FinalizeAutoHostUi(document, summary);", summary)
-        legacy_catch = command.rfind("catch (System.Exception ex)")
-        redacted_catch = command.rfind("catch (System.Exception)")
-        outer_catch = max(legacy_catch, redacted_catch)
-        failure = command.find(legacy_failure, outer_catch)
-        if failure < 0:
-            failure = command.find(redacted_failure, outer_catch)
+        success = command.find("FinalizeAutoHostUi(document, nativeDatabaseIdentity, summary);", summary)
+        outer_catch = command.rfind("catch (System.Exception)")
+        failure = command.find(redacted_failure, outer_catch)
         if min(regen, summary, success, outer_catch, failure) < 0 or not regen < summary < success < outer_catch < failure:
-            errors.append("Auto Host must finish semantic mutation/regeneration before best-effort summary UI, with business failures routed separately")
+            errors.append("Auto Host must finish semantic mutation/regeneration before generation-bound best-effort summary UI, with business failures routed separately")
 
         after_regen = command[regen:]
         for forbidden in (
@@ -61,28 +57,30 @@ else:
 
         success_helper = text[finalize:report]
         for token in (
-            "try { TryRefreshProject(document); }",
-            "try { TrySetPaletteStatus(document, summary); }",
-            "try { document.Editor.WriteMessage(",
+            "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;",
+            "try { TryRefreshProject(document, nativeDatabaseIdentity); }",
+            "try { TrySetPaletteStatus(document, nativeDatabaseIdentity, summary); }",
+            "if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))",
+            "document.Editor.WriteMessage(",
         ):
             if token not in success_helper:
-                errors.append("FinalizeAutoHostUi missing best-effort token: " + token)
-        if "Cảnh báo UI sau Auto Host commit" not in success_helper and "PostCommitUiWarning" not in success_helper:
+                errors.append("FinalizeAutoHostUi missing generation-safe best-effort token: " + token)
+        if "PostCommitUiWarning" not in success_helper:
             errors.append("FinalizeAutoHostUi missing committed-state UI warning")
         if "throw" in success_helper:
             errors.append("FinalizeAutoHostUi must not throw after committed Auto Host mutation")
 
         error_helper = text[report:single]
         for token in (
-            "try { TrySetPaletteStatus(document, message); }",
-            "try { document.Editor.WriteMessage(",
+            "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;",
+            "try { TrySetPaletteStatus(document, nativeDatabaseIdentity, message); }",
+            "if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))",
+            "document.Editor.WriteMessage(",
         ):
             if token not in error_helper:
-                errors.append("ReportAutoHostError missing best-effort failure-report token: " + token)
-        legacy_message = 'var message = "QS3DAUTOLINKHOSTS lỗi: " + error.Message;'
-        redacted_message = "var message = OperationFailure;"
-        if legacy_message not in error_helper and redacted_message not in error_helper:
-            errors.append("ReportAutoHostError missing supported legacy/redacted message construction")
+                errors.append("ReportAutoHostError missing generation-safe best-effort failure-report token: " + token)
+        if "var message = OperationFailure;" not in error_helper:
+            errors.append("ReportAutoHostError missing redacted message construction")
         if "throw" in error_helper:
             errors.append("ReportAutoHostError must not throw while reporting business failure")
 
@@ -100,4 +98,4 @@ if errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("PASS: Auto Host keeps matching/rollback/regeneration semantics intact while committed batch results and business failures use source-document-affined non-throwing UI/reporting boundaries.")
+print("PASS: Auto Host keeps matching/rollback/regeneration semantics intact while committed batch results and business failures use exact document/database-generation non-throwing UI/reporting boundaries.")

@@ -113,13 +113,19 @@ if not errors:
     link_end = auto_host.find("private static HashSet<string> ReadSelectedHandles", link_start + 1)
     link_body = auto_host[link_start:link_end] if link_start >= 0 and link_end > link_start else ""
     for token in (
-        "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)",
+        "var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
+        "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))",
         "ReferenceEquals(currentProject, project)",
+        "var expectedProjectId = project.ProjectId;",
+        "var expectedChangeVersion = project.ChangeVersion;",
+        "currentProject.ChangeVersion != expectedChangeVersion",
         "new OpeningHostMatcher().Match",
         "new HostLinkService().LinkOpening(project, opening.Id, match.HostElementId)",
     ):
         if token not in link_body:
-            errors.append("single-opening Auto Host overload missing exact-project contract: " + token)
+            errors.append("single-opening Auto Host overload missing exact document/database/project-generation contract: " + token)
+    if link_body.count("if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))") < 2:
+        errors.append("single-opening Auto Host overload must fence native database generation before and after CAD evaluation")
     if "RegenerateDirty" in link_body:
         errors.append("single-opening Auto Host overload must leave scoped regeneration to its exact authoring caller")
 
@@ -132,4 +138,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Direct Draw and QS3DDRAWWINDOW preserve prompt/project freshness and regenerate only the newly authored semantic closure; unrelated dirty project elements stay outside the authoring side effect.")
+print("PASS: Direct Draw and QS3DDRAWWINDOW preserve prompt/project freshness and scoped regeneration, while single-opening Auto Host is fenced to the exact document/database/project generation.")
