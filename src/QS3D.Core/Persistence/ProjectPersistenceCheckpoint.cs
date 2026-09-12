@@ -104,7 +104,7 @@ namespace QS3D.Core.Persistence
             {
                 var element = project.FindElement(pair.Key);
                 if (element == null || !ReferenceEquals(element, pair.Value.Owner) || !pair.Value.Matches(element))
-                    throw new InvalidOperationException("Cannot capture a persistence checkpoint while captured element persistence state is changing.");
+                    throw new InvalidOperationException("Cannot capture a persistence checkpoint while captured element persistence or semantic state is changing.");
             }
 
             return new ProjectPersistenceCheckpoint(
@@ -159,6 +159,17 @@ namespace QS3D.Core.Persistence
                 project.UpdatedUtc != _projectUpdatedUtc)
                 throw new InvalidOperationException("Cannot restore a persistence checkpoint because the project revision changed since checkpoint capture.");
 
+            // Element semantic mutations do not necessarily advance the owning ProjectState
+            // revision. Validate every captured semantic generation before restoring any
+            // persistence metadata so a newer semantic generation cannot receive stale
+            // Dirty/UpdatedUtc values from this checkpoint.
+            foreach (var pair in _elements)
+            {
+                if (!pair.Value.SemanticMatches(targets[pair.Key]))
+                    throw new InvalidOperationException(
+                        "Cannot restore a persistence checkpoint because captured element semantic state changed: " + pair.Key + ".");
+            }
+
             foreach (var pair in _elements)
                 pair.Value.Restore(targets[pair.Key]);
             project.RestorePersistenceState(_projectUpdatedUtc, _projectChangeVersion);
@@ -195,11 +206,14 @@ namespace QS3D.Core.Persistence
 
         private sealed class ElementPersistenceState
         {
+            private readonly ElementSemanticState _semanticState;
+
             public ElementPersistenceState(ProjectElement owner, ElementDirtyFlags dirty, DateTime updatedUtc)
             {
                 Owner = owner ?? throw new ArgumentNullException(nameof(owner));
                 Dirty = dirty;
                 UpdatedUtc = updatedUtc;
+                _semanticState = ElementSemanticState.Capture(owner);
             }
 
             public ProjectElement Owner { get; }
@@ -207,10 +221,145 @@ namespace QS3D.Core.Persistence
             public DateTime UpdatedUtc { get; }
 
             public bool Matches(ProjectElement element) =>
-                element.Dirty == Dirty && element.UpdatedUtc == UpdatedUtc;
+                element.Dirty == Dirty && element.UpdatedUtc == UpdatedUtc && SemanticMatches(element);
+
+            public bool SemanticMatches(ProjectElement element) => _semanticState.Matches(element);
 
             public void Restore(ProjectElement element) =>
                 element.RestorePersistenceState(Dirty, UpdatedUtc);
+        }
+
+        private sealed class ElementSemanticState
+        {
+            private readonly ElementCategory _category;
+            private readonly string _familyId;
+            private readonly string _floorId;
+            private readonly string _zoneId;
+            private readonly string _drawingFingerprint;
+            private readonly string[] _sourceHandles;
+            private readonly string[] _dependsOn;
+            private readonly KeyValuePair<string, string>[] _properties;
+            private readonly KeyValuePair<string, double>[] _quantities;
+
+            private ElementSemanticState(
+                ElementCategory category,
+                string familyId,
+                string floorId,
+                string zoneId,
+                string drawingFingerprint,
+                string[] sourceHandles,
+                string[] dependsOn,
+                KeyValuePair<string, string>[] properties,
+                KeyValuePair<string, double>[] quantities)
+            {
+                _category = category;
+                _familyId = familyId;
+                _floorId = floorId;
+                _zoneId = zoneId;
+                _drawingFingerprint = drawingFingerprint;
+                _sourceHandles = sourceHandles;
+                _dependsOn = dependsOn;
+                _properties = properties;
+                _quantities = quantities;
+            }
+
+            public static ElementSemanticState Capture(ProjectElement element)
+            {
+                if (element == null) throw new ArgumentNullException(nameof(element));
+
+                return new ElementSemanticState(
+                    element.Category,
+                    element.FamilyId,
+                    element.FloorId,
+                    element.ZoneId,
+                    element.DrawingFingerprint,
+                    CaptureSequence(element.SourceHandles, "source handles"),
+                    CaptureSequence(element.DependsOn, "dependencies"),
+                    CaptureMap(element.Properties, "properties"),
+                    CaptureMap(element.Quantities, "quantities"));
+            }
+
+            public bool Matches(ProjectElement element)
+            {
+                if (element == null) return false;
+                if (element.Category != _category ||
+                    !string.Equals(element.FamilyId, _familyId, StringComparison.Ordinal) ||
+                    !string.Equals(element.FloorId, _floorId, StringComparison.Ordinal) ||
+                    !string.Equals(element.ZoneId, _zoneId, StringComparison.Ordinal) ||
+                    !string.Equals(element.DrawingFingerprint, _drawingFingerprint, StringComparison.Ordinal))
+                    return false;
+
+                return SequenceMatches(element.SourceHandles, _sourceHandles) &&
+                       SequenceMatches(element.DependsOn, _dependsOn) &&
+                       MapMatches(element.Properties, _properties, StringComparer.Ordinal) &&
+                       MapMatches(element.Quantities, _quantities, EqualityComparer<double>.Default);
+            }
+
+            private static string[] CaptureSequence(IList<string> values, string label)
+            {
+                if (values == null) throw new InvalidOperationException("Persistence checkpoint element " + label + " collection is missing.");
+                var expected = RequireSupportedNestedCount(values.Count, label);
+                var snapshot = new List<string>(expected);
+                foreach (var value in values)
+                {
+                    if (snapshot.Count >= expected)
+                        throw new InvalidOperationException("Persistence checkpoint element " + label + " count changed during capture.");
+                    snapshot.Add(value);
+                }
+                if (snapshot.Count != expected || values.Count != expected)
+                    throw new InvalidOperationException("Persistence checkpoint element " + label + " count changed during capture.");
+                return snapshot.ToArray();
+            }
+
+            private static KeyValuePair<TKey, TValue>[] CaptureMap<TKey, TValue>(IDictionary<TKey, TValue> values, string label)
+            {
+                if (values == null) throw new InvalidOperationException("Persistence checkpoint element " + label + " collection is missing.");
+                var expected = RequireSupportedNestedCount(values.Count, label);
+                var snapshot = new List<KeyValuePair<TKey, TValue>>(expected);
+                foreach (var value in values)
+                {
+                    if (snapshot.Count >= expected)
+                        throw new InvalidOperationException("Persistence checkpoint element " + label + " count changed during capture.");
+                    snapshot.Add(value);
+                }
+                if (snapshot.Count != expected || values.Count != expected)
+                    throw new InvalidOperationException("Persistence checkpoint element " + label + " count changed during capture.");
+                return snapshot.ToArray();
+            }
+
+            private static int RequireSupportedNestedCount(int count, string label)
+            {
+                if (count < 0)
+                    throw new InvalidOperationException("Persistence checkpoint element " + label + " collection reported a negative count.");
+                if (count > MaximumElementCount)
+                    throw new InvalidOperationException(
+                        "Persistence checkpoint element " + label + " collection exceeds the supported " + MaximumElementCount + " entry limit.");
+                return count;
+            }
+
+            private static bool SequenceMatches(IList<string> values, IReadOnlyList<string> expected)
+            {
+                if (values == null || values.Count != expected.Count) return false;
+                for (var i = 0; i < expected.Count; i++)
+                {
+                    if (!string.Equals(values[i], expected[i], StringComparison.Ordinal)) return false;
+                }
+                return values.Count == expected.Count;
+            }
+
+            private static bool MapMatches<TValue>(
+                IDictionary<string, TValue> values,
+                IReadOnlyList<KeyValuePair<string, TValue>> expected,
+                IEqualityComparer<TValue> valueComparer)
+            {
+                if (values == null || values.Count != expected.Count) return false;
+                foreach (var pair in expected)
+                {
+                    if (!values.TryGetValue(pair.Key, out var actual) || !valueComparer.Equals(actual, pair.Value))
+                        return false;
+                }
+                return values.Count == expected.Count;
+            }
         }
     }
 }
