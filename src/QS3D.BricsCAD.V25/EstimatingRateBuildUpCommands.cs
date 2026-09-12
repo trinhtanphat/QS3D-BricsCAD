@@ -7,11 +7,32 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class EstimatingRateBuildUpCommands
     {
+        private sealed class WindowOwner
+        {
+            private readonly WeakReference<Document> _document;
+
+            public WindowOwner(Document document, IntPtr nativeDatabaseIdentity)
+            {
+                _document = new WeakReference<Document>(document);
+                NativeDatabaseIdentity = nativeDatabaseIdentity;
+            }
+
+            public IntPtr NativeDatabaseIdentity { get; }
+
+            public bool Matches(Document document, IntPtr nativeDatabaseIdentity)
+            {
+                return NativeDatabaseIdentity == nativeDatabaseIdentity &&
+                       _document.TryGetTarget(out var ownedDocument) &&
+                       ReferenceEquals(ownedDocument, document);
+            }
+        }
+
         private static EstimatingRateBuildUpWindow? _window;
+        private static WindowOwner? _windowOwner;
         private static EstimatingRateBuildUpWindow? _unpublishedCandidate;
+        private static WindowOwner? _unpublishedOwner;
         private static EstimatingRateBuildUpWindow? _publicationInFlightCandidate;
         private static EstimatingRateBuildUpWindow? _cleanupInFlightCandidate;
-        private static IntPtr _nativeDatabaseIdentity;
 
         [CommandMethod("QS3DESTIMATE", CommandFlags.Modal)]
         [CommandMethod("QS3DRATEBUILDUP", CommandFlags.Modal)]
@@ -22,43 +43,60 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
+                var requestedIdentity = GetNativeDatabaseIdentity(document);
+                if (!IsActiveDocumentGeneration(document, requestedIdentity))
+                    return;
+
                 if (!PrepareUnpublishedCandidate())
                 {
-                    Report(document, "QS3DESTIMATE: a previous unpublished estimating window has not reached terminal Closed.");
+                    ReportIfActive(document, requestedIdentity, "QS3DESTIMATE: a previous unpublished estimating window has not reached terminal Closed.");
                     return;
                 }
 
-                var requestedIdentity = GetNativeDatabaseIdentity(document);
-                if (!PreparePublishedWindow(requestedIdentity))
+                if (!IsActiveDocumentGeneration(document, requestedIdentity))
+                    return;
+
+                if (!PreparePublishedWindow(document, requestedIdentity))
                 {
-                    Report(document, "QS3DESTIMATE: the existing estimating window belongs to another drawing and could not close safely.");
+                    ReportIfActive(document, requestedIdentity, "QS3DESTIMATE: the existing estimating window belongs to another drawing and could not close safely.");
                     return;
                 }
+
+                if (!IsActiveDocumentGeneration(document, requestedIdentity))
+                    return;
 
                 if (_window != null)
                 {
                     try { _window.Activate(); } catch { }
-                    Report(document, "Estimating rate build-up workspace activated.");
+                    ReportIfActive(document, requestedIdentity, "Estimating rate build-up workspace activated.");
                     return;
                 }
 
                 var candidate = new EstimatingRateBuildUpWindow(document, requestedIdentity);
+                var candidateOwner = new WindowOwner(document, requestedIdentity);
                 candidate.Closed += (_, __) => ReleaseCandidate(candidate);
                 _unpublishedCandidate = candidate;
+                _unpublishedOwner = candidateOwner;
                 _publicationInFlightCandidate = candidate;
                 try
                 {
+                    if (!IsActiveDocumentGeneration(document, requestedIdentity))
+                    {
+                        CloseUnpublishedCandidate(candidate);
+                        return;
+                    }
+
                     Application.ShowModelessWindow(IntPtr.Zero, candidate, true);
                 }
                 catch (Exception)
                 {
                     if (!CloseUnpublishedCandidate(candidate))
                     {
-                        Report(document, "QS3DESTIMATE: failed to publish the workspace and the candidate could not close safely.");
+                        ReportIfActive(document, requestedIdentity, "QS3DESTIMATE: failed to publish the workspace and the candidate could not close safely.");
                         return;
                     }
 
-                    Report(document, "QS3DESTIMATE: unable to open the estimating workspace.");
+                    ReportIfActive(document, requestedIdentity, "QS3DESTIMATE: unable to open the estimating workspace.");
                     return;
                 }
                 finally
@@ -67,21 +105,25 @@ namespace QS3D.BricsCAD.V25
                         _publicationInFlightCandidate = null;
                 }
 
-                if (!candidate.IsLoaded)
+                if (!candidate.IsLoaded || !IsActiveDocumentGeneration(document, requestedIdentity))
                 {
                     CloseUnpublishedCandidate(candidate);
                     return;
                 }
 
                 _window = candidate;
-                _nativeDatabaseIdentity = requestedIdentity;
+                _windowOwner = candidateOwner;
                 if (ReferenceEquals(_unpublishedCandidate, candidate))
+                {
                     _unpublishedCandidate = null;
-                Report(document, "Estimating workspace opened: rate build-up • provenance • revisions • review/approval.");
+                    _unpublishedOwner = null;
+                }
+
+                ReportIfActive(document, requestedIdentity, "Estimating workspace opened: rate build-up • provenance • revisions • review/approval.");
             }
             catch (Exception)
             {
-                Report(document, "QS3DESTIMATE: unable to open the estimating workspace.");
+                TryReportCurrentDocument(document, "QS3DESTIMATE: unable to open the estimating workspace.");
             }
         }
 
@@ -93,7 +135,7 @@ namespace QS3D.BricsCAD.V25
             return candidate == null || CloseUnpublishedCandidate(candidate);
         }
 
-        private static bool PreparePublishedWindow(IntPtr requestedNativeDatabaseIdentity)
+        private static bool PreparePublishedWindow(Document requestedDocument, IntPtr requestedNativeDatabaseIdentity)
         {
             var published = _window;
             if (published == null) return true;
@@ -102,8 +144,14 @@ namespace QS3D.BricsCAD.V25
                 ReleaseCandidate(published);
                 return true;
             }
-            if (_nativeDatabaseIdentity == requestedNativeDatabaseIdentity)
+
+            var owner = _windowOwner;
+            if (owner != null &&
+                owner.Matches(requestedDocument, requestedNativeDatabaseIdentity) &&
+                IsActiveDocumentGeneration(requestedDocument, requestedNativeDatabaseIdentity))
+            {
                 return true;
+            }
 
             _cleanupInFlightCandidate = published;
             try
@@ -168,10 +216,13 @@ namespace QS3D.BricsCAD.V25
             if (ReferenceEquals(_window, candidate))
             {
                 _window = null;
-                _nativeDatabaseIdentity = IntPtr.Zero;
+                _windowOwner = null;
             }
             if (ReferenceEquals(_unpublishedCandidate, candidate))
+            {
                 _unpublishedCandidate = null;
+                _unpublishedOwner = null;
+            }
         }
 
         private static IntPtr GetNativeDatabaseIdentity(Document document)
@@ -183,6 +234,40 @@ namespace QS3D.BricsCAD.V25
             if (identity == IntPtr.Zero)
                 throw new InvalidOperationException("Estimating workspace requires a live native BricsCAD database.");
             return identity;
+        }
+
+        private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (nativeDatabaseIdentity == IntPtr.Zero ||
+                !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))
+            {
+                return false;
+            }
+
+            try
+            {
+                return document.Database != null &&
+                       document.Database.UnmanagedObject == nativeDatabaseIdentity;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void ReportIfActive(Document document, IntPtr nativeDatabaseIdentity, string message)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                return;
+            Report(document, message);
+        }
+
+        private static void TryReportCurrentDocument(Document document, string message)
+        {
+            IntPtr nativeDatabaseIdentity;
+            try { nativeDatabaseIdentity = GetNativeDatabaseIdentity(document); }
+            catch { return; }
+            ReportIfActive(document, nativeDatabaseIdentity, message);
         }
 
         private static void Report(Document document, string message)
