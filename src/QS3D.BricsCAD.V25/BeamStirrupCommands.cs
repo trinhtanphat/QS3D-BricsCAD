@@ -24,6 +24,7 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
+            var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
             try
             {
                 var selectedIds = CadSelectionGuard.AcquireCurrentSelection(document);
@@ -75,7 +76,7 @@ namespace QS3D.BricsCAD.V25
                 var message = result.Stirrups == 0
                     ? "Beam Stirrup 3D: chọn Beam semantic LINE có RebarStirrupNotation (ví dụ D8@150 hoặc 20D8)."
                     : "Beam Stirrup 3D: đã tạo/cập nhật " + result.Stirrups + " đai trên " + result.Elements + " dầm.";
-                FinalizeUi(document, message);
+                FinalizeUi(document, nativeDatabaseIdentity, message);
             }
             catch (Exception)
             {
@@ -127,19 +128,64 @@ namespace QS3D.BricsCAD.V25
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-        private static void FinalizeUi(Document document, string message)
+        private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            try
+            {
+                RefreshModelTree(document, nativeDatabaseIdentity);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                document.Editor.Regen();
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                SetPaletteStatusForDocument(document, nativeDatabaseIdentity, message);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                document.Editor.WriteMessage("\nQS3D " + message);
+            }
+            catch (Exception ex)
+            {
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                TryWriteMessage(document, "\nQS3D " + message + " " + UiSyncWarning + " (" + ex.GetType().Name + ").");
+            }
+        }
+
+        private static IntPtr GetNativeDatabaseIdentity(Document document)
         {
             try
             {
-                RefreshProjectForDocument(document);
-                document.Editor.Regen();
-                SetPaletteStatusForDocument(document, message);
-                document.Editor.WriteMessage("\nQS3D " + message);
+                return document.Database.UnmanagedObject;
             }
-            catch (Exception)
+            catch
             {
-                TryWriteMessage(document, "\nQS3D " + message + " " + UiSyncWarning);
+                return IntPtr.Zero;
             }
+        }
+
+        private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (nativeDatabaseIdentity == IntPtr.Zero ||
+                !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))
+                return false;
+
+            try
+            {
+                return document.Database.UnmanagedObject == nativeDatabaseIdentity;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void RefreshModelTree(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            PaletteCoordinator.RefreshProject();
+        }
+
+        private static void SetPaletteStatusForDocument(Document document, IntPtr nativeDatabaseIdentity, string message)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            PaletteCoordinator.SetStatus(message);
         }
 
         private static bool IsActiveDocument(Document document)
@@ -152,12 +198,6 @@ namespace QS3D.BricsCAD.V25
             {
                 return false;
             }
-        }
-
-        private static void RefreshProjectForDocument(Document document)
-        {
-            if (!IsActiveDocument(document)) return;
-            PaletteCoordinator.RefreshProject();
         }
 
         private static void SetPaletteStatusForDocument(Document document, string message)
