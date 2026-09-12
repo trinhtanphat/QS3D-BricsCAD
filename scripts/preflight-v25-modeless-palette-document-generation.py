@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,10 +36,11 @@ if 'RecordProject(normalized)' in START_PANEL:
 # Activation callbacks are host-pumping boundaries too. A refresh can throw after the managed
 # Document wrapper survives a native Database replacement, so exception diagnostics/clear-state
 # publication must prove the same captured generation rather than writing to the event document or
-# clearing the palette unconditionally.
-if 'TryWriteRefreshDiagnostic(document, nativeDatabaseIdentity)' not in START:
+# clearing the palette unconditionally. Keep these call-site checks whitespace-insensitive so
+# formatting cannot create a false regression.
+if re.search(r'TryWriteRefreshDiagnostic\s*\(\s*document\s*,\s*nativeDatabaseIdentity\s*\)', START) is None:
     raise SystemExit('Start Center activation diagnostics must be generation-fenced before Editor publication')
-if 'ShowUnavailableIfCurrent(document, nativeDatabaseIdentity,' not in PROJECT:
+if re.search(r'ShowUnavailableIfCurrent\s*\(\s*document\s*,\s*nativeDatabaseIdentity\s*,', PROJECT) is None:
     raise SystemExit('Project Information activation failure clearing must be generation-fenced before UI publication')
 
 for text in (START, PROJECT, START_PANEL, PROJECT_PANEL):
