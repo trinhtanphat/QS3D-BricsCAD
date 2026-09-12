@@ -31,8 +31,8 @@ namespace QS3D.Core.BenchmarkParity
             Subject = QsModelElementSnapshot.Require(subject, "subject");
             Scopes = new ReadOnlyCollection<string>((scopes ?? Enumerable.Empty<string>())
                 .Select(x => QsModelElementSnapshot.Require(x, "scopes"))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(x => x, StringComparer.Ordinal)
                 .ToList());
         }
 
@@ -41,7 +41,7 @@ namespace QS3D.Core.BenchmarkParity
 
         public bool HasScope(string scope)
         {
-            return Scopes.Contains(scope, StringComparer.OrdinalIgnoreCase) || Scopes.Contains("qs3d.admin", StringComparer.OrdinalIgnoreCase);
+            return Scopes.Contains(scope, StringComparer.Ordinal) || Scopes.Contains("qs3d.admin", StringComparer.Ordinal);
         }
     }
 
