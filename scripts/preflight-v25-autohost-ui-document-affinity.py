@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic guard for Auto Host post-commit Workspace/document affinity."""
+"""Deterministic guard for Auto Host post-commit exact document/database-generation affinity."""
 
 from pathlib import Path
 import re
@@ -17,7 +17,7 @@ def fail(message: str) -> None:
 
 def method_body(name: str) -> str:
     signature = re.search(
-        rf"(?:private|internal)\s+static\s+(?:bool|void|string)\s+{re.escape(name)}\s*\([^)]*\)\s*\{{",
+        rf"(?:private|internal)\s+static\s+(?:bool|void|string|IntPtr)\s+{re.escape(name)}\s*\([^)]*\)\s*\{{",
         text,
         re.S,
     )
@@ -38,35 +38,48 @@ def method_body(name: str) -> str:
     return ""
 
 
-is_active_pattern = re.compile(
-    r"private\s+static\s+bool\s+IsActiveDocument\s*\(\s*Document\s+document\s*\)\s*"
-    r"(?:=>\s*ReferenceEquals\(document,\s*Application\.DocumentManager\.MdiActiveDocument\)\s*;|"
-    r"\{[^{}]*ReferenceEquals\(document,\s*Application\.DocumentManager\.MdiActiveDocument\)[^{}]*\})",
-    re.S,
-)
-if not is_active_pattern.search(text):
-    fail("IsActiveDocument must use exact native Document identity")
+identity = method_body("GetNativeDatabaseIdentity")
+if "document.Database?.UnmanagedObject ?? IntPtr.Zero" not in identity:
+    fail("GetNativeDatabaseIdentity must capture the native database generation")
+
+generation = method_body("IsActiveDocumentGeneration")
+for token in (
+    "nativeDatabaseIdentity == IntPtr.Zero",
+    "ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)",
+    "document.Database.UnmanagedObject == nativeDatabaseIdentity",
+):
+    if token not in generation:
+        fail("IsActiveDocumentGeneration missing exact managed/native identity token: " + token)
 
 refresh = method_body("TryRefreshProject")
-if "if (!IsActiveDocument(document)) return;" not in refresh or "PaletteCoordinator.RefreshProject();" not in refresh:
-    fail("TryRefreshProject must fail closed for stale source documents before global Workspace refresh")
+if "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;" not in refresh or "PaletteCoordinator.RefreshProject();" not in refresh:
+    fail("TryRefreshProject must fail closed for stale document/database generations before global Workspace refresh")
 
 status = method_body("TrySetPaletteStatus")
-if "if (!IsActiveDocument(document)) return;" not in status or "PaletteCoordinator.SetStatus(message);" not in status:
-    fail("TrySetPaletteStatus must fail closed for stale source documents before global status publication")
+if "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;" not in status or "PaletteCoordinator.SetStatus(message);" not in status:
+    fail("TrySetPaletteStatus must fail closed for stale document/database generations before global status publication")
 
 finalize = method_body("FinalizeAutoHostUi")
 if "PaletteCoordinator.RefreshProject();" in finalize or "PaletteCoordinator.SetStatus(" in finalize:
     fail("FinalizeAutoHostUi must not publish process-global Workspace state directly")
-if "TryRefreshProject(document);" not in finalize:
-    fail("FinalizeAutoHostUi must route refresh through the exact-document affinity fence")
-if "TrySetPaletteStatus(document, summary);" not in finalize:
-    fail("FinalizeAutoHostUi must route status through the exact-document affinity fence")
+for token in (
+    "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;",
+    "TryRefreshProject(document, nativeDatabaseIdentity);",
+    "TrySetPaletteStatus(document, nativeDatabaseIdentity, summary);",
+    "if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))",
+):
+    if token not in finalize:
+        fail("FinalizeAutoHostUi missing exact document/database-generation fence: " + token)
 
 report = method_body("ReportAutoHostError")
 if "PaletteCoordinator.SetStatus(" in report:
     fail("ReportAutoHostError must not publish process-global status directly")
-if "TrySetPaletteStatus(document, message);" not in report:
-    fail("ReportAutoHostError must route status through the exact-document affinity fence")
+for token in (
+    "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;",
+    "TrySetPaletteStatus(document, nativeDatabaseIdentity, message);",
+    "if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))",
+):
+    if token not in report:
+        fail("ReportAutoHostError missing exact document/database-generation fence: " + token)
 
-print("PASS: Auto Host Workspace/status publication is fenced to the exact active source Document")
+print("PASS: Auto Host Workspace/status/editor publication is fenced to the exact active source Document and native database generation")
