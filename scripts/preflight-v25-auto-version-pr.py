@@ -189,6 +189,9 @@ def test_helper_source_contract() -> None:
         "Closes #",
         "Automation-Key:",
         "Target-Version:",
+        'token_env_var="GH_TOKEN"',
+        'token_env_var="QS3D_AUTOMERGE_TOKEN"',
+        'env["GH_TOKEN"] = token',
     )
     for token in required:
         if token not in source:
@@ -207,7 +210,7 @@ def test_workflow_contract() -> None:
     source = DISPATCH.read_text(encoding="utf-8")
     required = (
         "QS3D_AUTOMERGE_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}",
-        'GH_TOKEN="${QS3D_AUTOMERGE_TOKEN}"',
+        'GH_TOKEN: ${{ github.token }}',
         "python scripts/v25-auto-version-pr.py prepare",
         "protected V25 version PR preparation",
         "committed_preview_ordinal <= published_preview_ordinal",
@@ -225,6 +228,7 @@ def test_workflow_contract() -> None:
         "git push --force",
         "gh pr merge",
         "/pulls/${pull_number}/merge",
+        'GH_TOKEN="${QS3D_AUTOMERGE_TOKEN}" python scripts/v25-auto-version-pr.py prepare',
     ):
         if forbidden in source:
             fail(f"dispatcher contains forbidden protected-main integration primitive: {forbidden}")

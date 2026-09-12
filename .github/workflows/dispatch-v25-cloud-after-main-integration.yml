@@ -286,7 +286,7 @@ jobs:
               fi
             fi
             echo "Entering protected V25 version PR preparation: ${preparation_reason}"
-            GH_TOKEN="${QS3D_AUTOMERGE_TOKEN}" python scripts/v25-auto-version-pr.py prepare \
+            python scripts/v25-auto-version-pr.py prepare \
               --repository "${GITHUB_REPOSITORY}" \
               --source-sha "${source_sha}" \
               --base-sha "${preparation_base_sha}" \
