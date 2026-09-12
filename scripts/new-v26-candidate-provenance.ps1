@@ -249,6 +249,7 @@ if (-not ('Qs3dProvenanceGenerationNative' -as [type])) {
 using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Text;
 using Microsoft.Win32.SafeHandles;
 
 public static class Qs3dProvenanceGenerationNative
@@ -258,8 +259,6 @@ public static class Qs3dProvenanceGenerationNative
     private const uint GenericWrite = 0x40000000;
     private const uint FileReadAttributes = 0x00000080;
     private const uint FileShareRead = 0x00000001;
-    private const uint FileShareWrite = 0x00000002;
-    private const uint FileShareDelete = 0x00000004;
     private const uint CreateNew = 1;
     private const uint OpenExisting = 3;
     private const uint FileAttributeNormal = 0x00000080;
@@ -310,6 +309,11 @@ public static class Qs3dProvenanceGenerationNative
         SafeFileHandle file, FileInfoByHandleClass informationClass,
         ref FileDispositionInformation information, uint bufferSize);
 
+    [DllImport("kernel32.dll", SetLastError = true, EntryPoint = "SetFileInformationByHandle")]
+    private static extern bool SetFileInformationByHandleBuffer(
+        SafeFileHandle file, FileInfoByHandleClass informationClass,
+        IntPtr information, uint bufferSize);
+
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool WriteFile(
         SafeFileHandle file, byte[] buffer, uint bytesToWrite,
@@ -345,7 +349,7 @@ public static class Qs3dProvenanceGenerationNative
         var handle = CreateFileW(
             path,
             GenericRead | GenericWrite | DeleteAccess | FileReadAttributes,
-            FileShareRead | FileShareWrite | FileShareDelete,
+            FileShareRead,
             IntPtr.Zero,
             CreateNew,
             FileAttributeNormal | FileFlagOpenReparsePoint,
@@ -421,6 +425,28 @@ public static class Qs3dProvenanceGenerationNative
     public static string GetOwnedProvenanceGenerationIdentity(SafeFileHandle handle)
     {
         return Identity(Information(handle));
+    }
+
+    public static void RenameOwnedProvenanceGeneration(SafeFileHandle handle, string destinationPath, bool replaceExisting)
+    {
+        Information(handle);
+        var nameBytes = Encoding.Unicode.GetBytes(destinationPath);
+        var rootOffset = IntPtr.Size == 8 ? 8 : 4;
+        var lengthOffset = rootOffset + IntPtr.Size;
+        var nameOffset = lengthOffset + sizeof(uint);
+        var bufferSize = checked(nameOffset + nameBytes.Length);
+        var buffer = Marshal.AllocHGlobal(bufferSize);
+        try
+        {
+            for (var i = 0; i < bufferSize; i++) Marshal.WriteByte(buffer, i, 0);
+            Marshal.WriteByte(buffer, 0, replaceExisting ? (byte)1 : (byte)0);
+            Marshal.WriteIntPtr(buffer, rootOffset, IntPtr.Zero);
+            Marshal.WriteInt32(buffer, lengthOffset, nameBytes.Length);
+            Marshal.Copy(nameBytes, 0, IntPtr.Add(buffer, nameOffset), nameBytes.Length);
+            if (!SetFileInformationByHandleBuffer(handle, FileInfoByHandleClass.FileRenameInfo, buffer, (uint)bufferSize))
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "SetFileInformationByHandle(FileRenameInfo) failed for owned provenance generation.");
+        }
+        finally { Marshal.FreeHGlobal(buffer); }
     }
 
     public static void RemoveOwnedProvenanceGeneration(SafeFileHandle handle)
@@ -559,7 +585,8 @@ try {
     $parent = Split-Path -Parent $outputFull
     if (-not (Test-Path -LiteralPath $parent -PathType Container)) { New-Item -ItemType Directory -Path $parent | Out-Null }
     $null = Resolve-OrdinaryDirectory -Path $parent -Label 'V26 provenance output directory'
-    if (Test-Path -LiteralPath $outputFull) { $null = Resolve-OrdinaryFile -Path $outputFull -Label 'V26 provenance output' }
+    $replaceExisting = Test-Path -LiteralPath $outputFull
+    if ($replaceExisting) { $null = Resolve-OrdinaryFile -Path $outputFull -Label 'V26 provenance output' }
 
     $tempPath = Join-Path $parent ('.' + [IO.Path]::GetFileName($outputFull) + '.' + [Guid]::NewGuid().ToString('N') + '.tmp')
     $provenanceText = ($provenance | ConvertTo-Json -Depth 5) + [Environment]::NewLine
@@ -567,29 +594,18 @@ try {
     if ($provenanceBytes.Length -gt $maxMetadataBytes) { throw 'V26 candidate provenance exceeds the metadata safety limit.' }
 
     $tempGeneration = New-OwnedProvenanceGeneration -Path $tempPath -Bytes $provenanceBytes -Label 'V26 provenance staging generation'
-    $publishedGeneration = $null
     $publicationCommitted = $false
     try {
         $attemptIdentity = Get-OwnedProvenanceGenerationIdentity -Generation $tempGeneration
-        if (Test-Path -LiteralPath $outputFull) {
-            $null = Resolve-OrdinaryFile -Path $outputFull -Label 'V26 provenance output'
-            [IO.File]::Replace($tempPath, $outputFull, $null)
-        }
-        else { [IO.File]::Move($tempPath, $outputFull) }
-
-        $publishedGeneration = Open-PinnedPublishedProvenanceGeneration -Path $outputFull -ExpectedIdentity $attemptIdentity
-        Assert-PinnedPublishedProvenanceBytes -Generation $publishedGeneration -ExpectedBytes $provenanceBytes
-        Close-OwnedProvenanceGeneration -Generation $tempGeneration
-        $tempGeneration = $null
+        [Qs3dProvenanceGenerationNative]::RenameOwnedProvenanceGeneration($tempGeneration.Handle, $outputFull, [bool]$replaceExisting)
+        $renamedIdentity = Get-OwnedProvenanceGenerationIdentity -Generation $tempGeneration
+        if (-not [string]::Equals($renamedIdentity, $attemptIdentity, [StringComparison]::Ordinal)) { throw "V26 provenance generation identity changed during handle-owned publication: expected $attemptIdentity, got $renamedIdentity" }
+        Assert-PinnedPublishedProvenanceBytes -Generation $tempGeneration -ExpectedBytes $provenanceBytes
         $publicationCommitted = $true
     }
     finally {
-        if ($publicationCommitted) {
-            if ($null -ne $publishedGeneration) { Close-OwnedProvenanceGeneration -Generation $publishedGeneration }
-        }
-        elseif ($null -ne $publishedGeneration) { Remove-OwnedProvenanceGeneration -Generation $publishedGeneration }
+        if ($publicationCommitted) { Close-OwnedProvenanceGeneration -Generation $tempGeneration }
         elseif ($null -ne $tempGeneration) { Remove-OwnedProvenanceGeneration -Generation $tempGeneration }
-        $publishedGeneration = $null
         $tempGeneration = $null
     }
 
