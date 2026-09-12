@@ -81,7 +81,7 @@ namespace QS3D.Core.SmokeTests
             var numericInventory = bridge.BuildInventory(highDynamicRange);
             Equal(1, numericInventory.Count, "numeric inventory group count");
             Near(1e16 + 2d, numericInventory[0].Quantity, 0d, "high dynamic range inventory quantity");
-            Equal(3, numericInventory[0].Count, "numeric inventory component count");
+            Equal(3, numericInventory[0].SourceCount, "numeric inventory component count");
 
             const string separator = "\u001f";
             var groupingCollision = new[]
