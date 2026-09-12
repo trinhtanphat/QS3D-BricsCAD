@@ -10,6 +10,13 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             var calibration = new DrawingCalibration(100d, 5d, "m");
+            ExpectThrows<ArgumentOutOfRangeException>(() => new DrawingSheet2D(
+                "A099", "Invalid source", (DrawingSheetSourceKind)999, "drawings/A099.bin", "R1", calibration),
+                "invalid drawing source kind rejection");
+            ExpectThrows<ArgumentOutOfRangeException>(() => new TakeoffMarkup2D(
+                "M-INVALID", "A099", (TakeoffMeasurementKind)999, 1d, "WALL", "ZONE-A", "Takeoff-Wall", "pdf:M-INVALID"),
+                "invalid measurement kind rejection");
+
             var ingestor = new Qs2DSheetIngestor();
             var validPdf = Encoding.ASCII.GetBytes("%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\r\n");
             var ingested = ingestor.IngestPdf("A100", "Valid PDF", "drawings/A100.pdf", "R1", calibration, validPdf, 1);
