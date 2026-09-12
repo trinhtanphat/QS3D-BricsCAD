@@ -1,0 +1,131 @@
+<Window x:Class="QS3D.BricsCAD.V25.UI.ContractAdministrationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="QS3D Contract Administration" Width="1120" Height="760"
+        MinWidth="940" MinHeight="620" WindowStartupLocation="CenterOwner"
+        Background="#161B22" Foreground="#E6EDF3">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        <Style TargetType="TextBox">
+            <Setter Property="Margin" Value="4"/><Setter Property="Padding" Value="7"/>
+            <Setter Property="Background" Value="#0D1117"/><Setter Property="Foreground" Value="#E6EDF3"/>
+            <Setter Property="BorderBrush" Value="#30363D"/>
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Margin" Value="4"/><Setter Property="Padding" Value="6"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="4"/><Setter Property="Padding" Value="10,7"/>
+        </Style>
+        <Style TargetType="GroupBox">
+            <Setter Property="Margin" Value="6"/><Setter Property="Padding" Value="8"/>
+            <Setter Property="Foreground" Value="#E6EDF3"/><Setter Property="BorderBrush" Value="#30363D"/>
+        </Style>
+        <Style TargetType="TextBlock"><Setter Property="Margin" Value="4"/></Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="#0D1117" BorderBrush="#30363D" BorderThickness="1" CornerRadius="4" Padding="10" Margin="6">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="240"/></Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Contract administration" FontSize="22" FontWeight="SemiBold"/>
+                    <TextBlock Text="Events • contractual notices • EOT lifecycle • claims • immutable revision audit" Foreground="#8B949E"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1">
+                    <TextBlock Text="Actor / contract administrator"/>
+                    <TextBox x:Name="ActorBox" Text="QS"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="3*"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <GroupBox Header="1. Contract event register">
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                            <StackPanel Grid.Row="0" Grid.Column="0"><TextBlock Text="Event ID"/><TextBox x:Name="EventIdBox" Text="EVT-001"/></StackPanel>
+                            <StackPanel Grid.Row="0" Grid.Column="1"><TextBlock Text="Event type"/><TextBox x:Name="EventTypeBox" Text="delay"/></StackPanel>
+                            <StackPanel Grid.Row="0" Grid.Column="2"><TextBlock Text="Occurred (yyyy-MM-dd)"/><TextBox x:Name="EventDateBox"/></StackPanel>
+                            <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"><TextBlock Text="Title"/><TextBox x:Name="EventTitleBox" Text="Contract event"/></StackPanel>
+                            <StackPanel Grid.Row="1" Grid.Column="2"><TextBlock Text="Responsible party"/><TextBox x:Name="ResponsiblePartyBox" Text="Contractor"/></StackPanel>
+                            <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"><TextBlock Text="Description"/><TextBox x:Name="EventDescriptionBox" Text="Record the contractual event and its particulars."/></StackPanel>
+                            <Button Grid.Row="2" Grid.Column="2" Content="Register event" Click="RegisterEvent_Click" VerticalAlignment="Bottom"/>
+                        </Grid>
+                    </GroupBox>
+
+                    <GroupBox Header="2. Contractual notice">
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                            <StackPanel Grid.Row="0" Grid.Column="0"><TextBlock Text="Notice ID"/><TextBox x:Name="NoticeIdBox" Text="NTC-001"/></StackPanel>
+                            <StackPanel Grid.Row="0" Grid.Column="1"><TextBlock Text="Direction"/><ComboBox x:Name="NoticeDirectionBox" SelectedIndex="0"><ComboBoxItem Content="Outgoing"/><ComboBoxItem Content="Incoming"/></ComboBox></StackPanel>
+                            <StackPanel Grid.Row="0" Grid.Column="2"><TextBlock Text="Required by (yyyy-MM-dd)"/><TextBox x:Name="NoticeDeadlineBox"/></StackPanel>
+                            <StackPanel Grid.Row="1" Grid.Column="0"><TextBlock Text="Clause"/><TextBox x:Name="NoticeClauseBox" Text="Clause 20.2"/></StackPanel>
+                            <StackPanel Grid.Row="1" Grid.Column="1"><TextBlock Text="From"/><TextBox x:Name="NoticeFromBox" Text="Contractor"/></StackPanel>
+                            <StackPanel Grid.Row="1" Grid.Column="2"><TextBlock Text="To"/><TextBox x:Name="NoticeToBox" Text="Engineer"/></StackPanel>
+                            <StackPanel Grid.Row="2" Grid.Column="0"><Button Content="Create pending notice" Click="CreateNotice_Click"/></StackPanel>
+                            <StackPanel Grid.Row="2" Grid.Column="1"><Button Content="Issue notice" Click="IssueNotice_Click"/></StackPanel>
+                            <StackPanel Grid.Row="2" Grid.Column="2"><Button Content="Receive notice" Click="ReceiveNotice_Click"/></StackPanel>
+                        </Grid>
+                    </GroupBox>
+
+                    <GroupBox Header="3. Extension of time">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0"><TextBlock Text="EOT ID"/><TextBox x:Name="EotIdBox" Text="EOT-001"/></StackPanel>
+                                <StackPanel Grid.Column="1"><TextBlock Text="Requested days"/><TextBox x:Name="RequestedDaysBox" Text="10"/></StackPanel>
+                                <StackPanel Grid.Column="2"><TextBlock Text="Assessment / decision days"/><TextBox x:Name="EotDecisionDaysBox" Text="7"/></StackPanel>
+                            </Grid>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Create EOT" Click="CreateEot_Click"/>
+                                <Button Content="Advance EOT" Click="AdvanceEot_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <GroupBox Header="4. Claim administration">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0"><TextBlock Text="Claim ID"/><TextBox x:Name="ClaimIdBox" Text="CLM-001"/></StackPanel>
+                                <StackPanel Grid.Column="1"><TextBlock Text="Claim type"/><TextBox x:Name="ClaimTypeBox" Text="time-related"/></StackPanel>
+                                <StackPanel Grid.Column="2"><TextBlock Text="Narrative"/><TextBox x:Name="ClaimNarrativeBox" Text="Claim linked to event, notice and supporting evidence."/></StackPanel>
+                            </Grid>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Create claim" Click="CreateClaim_Click"/>
+                                <Button Content="Advance claim" Click="AdvanceClaim_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </GroupBox>
+                </StackPanel>
+            </ScrollViewer>
+
+            <GroupBox Grid.Column="1" Header="Commercial audit provenance">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <TextBlock x:Name="StatusText" Text="No contract-administration revisions recorded." TextWrapping="Wrap" Foreground="#79C0FF"/>
+                    <ListBox x:Name="AuditList" Grid.Row="1" Margin="4" Background="#0D1117" Foreground="#E6EDF3" BorderBrush="#30363D"/>
+                </Grid>
+            </GroupBox>
+        </Grid>
+
+        <Border Grid.Row="2" Background="#0D1117" BorderBrush="#30363D" BorderThickness="1" CornerRadius="4" Padding="8" Margin="6">
+            <TextBlock Text="Session-scoped workspace. Variation/IPC/Final Account valuation and durable project persistence remain outside this lane." Foreground="#8B949E"/>
+        </Border>
+    </Grid>
+</Window>

@@ -37,6 +37,7 @@ namespace QS3D.Core.SmokeTests
                 AtomicFileCommitRollbackFailureSmoke.Run();
                 QsLiveWorkbookApiSmoke.Run();
                 EstimatingRateBuildUpSmoke.Run();
+                ContractAdministrationWorkflowSmoke.Run();
 
                 var legacyMain = typeof(Program).GetMethod(
                     "Main",
