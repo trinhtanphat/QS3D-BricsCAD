@@ -66,9 +66,8 @@ namespace QS3D.Core.BenchmarkParity
                 foreach (var propertyRef in ReferencesAt(set.Args, 4))
                 {
                     StepRecord property;
-                    if (!records.TryGetValue(propertyRef, out property) || property.Entity != "IFCPROPERTYSINGLEVALUE")
-                        throw new InvalidDataException("Property set references unsupported or missing property " + propertyRef + ".");
-                    nodes.Add(new IfcPropertyNode((prefix.Length == 0 ? "Pset" : prefix) + "." + TextAt(property.Args, 0), ScalarTextAt(property.Args, 2)));
+                    if (!records.TryGetValue(propertyRef, out property)) throw new InvalidDataException("Property set references missing property " + propertyRef + ".");
+                    nodes.AddRange(ParsePropertyNodes(property, prefix, records));
                 }
                 propertySets.Add(set.Id, new ReadOnlyCollection<IfcPropertyNode>(nodes.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList()));
             }
@@ -233,6 +232,119 @@ namespace QS3D.Core.BenchmarkParity
             }
         }
 
+        private static IReadOnlyList<IfcPropertyNode> ParsePropertyNodes(StepRecord property, string prefix, IDictionary<string, StepRecord> records)
+        {
+            if (property.Args.Count < 3) throw new InvalidDataException(property.Entity + " " + property.Id + " is incomplete.");
+            var propertyName = TextAt(property.Args, 0);
+            if (propertyName.Length == 0) throw new InvalidDataException(property.Entity + " " + property.Id + " has no property name.");
+            var baseName = (prefix.Length == 0 ? "Pset" : prefix) + "." + propertyName;
+            switch (property.Entity)
+            {
+                case "IFCPROPERTYSINGLEVALUE":
+                    return new ReadOnlyCollection<IfcPropertyNode>(new List<IfcPropertyNode> { new IfcPropertyNode(baseName, ScalarTextAt(property.Args, 2)) });
+                case "IFCPROPERTYENUMERATEDVALUE":
+                    return ParseEnumeratedProperty(property, baseName, records);
+                case "IFCPROPERTYLISTVALUE":
+                    return IndexedPropertyNodes(baseName, ParsePropertyValueAggregate(property.Args[2], property.Id + " list values"));
+                case "IFCPROPERTYBOUNDEDVALUE":
+                    return ParseBoundedProperty(property, baseName);
+                default:
+                    throw new InvalidDataException("Property set references unsupported property entity " + property.Entity + " " + property.Id + ".");
+            }
+        }
+
+        private static IReadOnlyList<IfcPropertyNode> ParseEnumeratedProperty(StepRecord property, string baseName, IDictionary<string, StepRecord> records)
+        {
+            if (property.Args.Count < 4) throw new InvalidDataException("IFCPROPERTYENUMERATEDVALUE " + property.Id + " is incomplete.");
+            var selected = ParsePropertyValueAggregate(property.Args[2], property.Id + " enumeration values");
+            var reference = property.Args[3].Trim();
+            if (reference != "$" && reference != "*")
+            {
+                if (!reference.StartsWith("#", StringComparison.Ordinal)) throw new InvalidDataException("IFCPROPERTYENUMERATEDVALUE " + property.Id + " has invalid EnumerationReference " + reference + ".");
+                StepRecord enumeration;
+                if (!records.TryGetValue(reference, out enumeration) || enumeration.Entity != "IFCPROPERTYENUMERATION" || enumeration.Args.Count < 2)
+                    throw new InvalidDataException("IFCPROPERTYENUMERATEDVALUE " + property.Id + " references invalid IFCPROPERTYENUMERATION " + reference + ".");
+                var allowed = ParsePropertyValueAggregate(enumeration.Args[1], enumeration.Id + " allowed enumeration values");
+                if (allowed.Count == 0) throw new InvalidDataException("IFCPROPERTYENUMERATION " + enumeration.Id + " has no allowed values.");
+                if (selected.Count > 0 && !string.Equals(selected[0].Type, allowed[0].Type, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("IFC enumeration value type mismatch for " + property.Id + ".");
+                var allowedKeys = new HashSet<string>(allowed.Select(x => x.Key), StringComparer.Ordinal);
+                foreach (var value in selected)
+                    if (!allowedKeys.Contains(value.Key)) throw new InvalidDataException("IFC enumeration value " + value.Value + " is not admitted by " + enumeration.Id + ".");
+            }
+            return IndexedPropertyNodes(baseName, selected);
+        }
+
+        private static IReadOnlyList<IfcPropertyNode> ParseBoundedProperty(StepRecord property, string baseName)
+        {
+            if (property.Args.Count < 5) throw new InvalidDataException("IFCPROPERTYBOUNDEDVALUE " + property.Id + " is incomplete.");
+            var upper = ParseOptionalPropertyValue(property.Args[2], property.Id + " upper bound");
+            var lower = ParseOptionalPropertyValue(property.Args[3], property.Id + " lower bound");
+            var setPoint = property.Args.Count > 5 ? ParseOptionalPropertyValue(property.Args[5], property.Id + " set point") : null;
+            var values = new[] { upper, lower, setPoint }.Where(x => x != null).ToList();
+            if (values.Count == 0) return new ReadOnlyCollection<IfcPropertyNode>(new List<IfcPropertyNode> { new IfcPropertyNode(baseName, string.Empty) });
+            var type = values[0].Type;
+            if (values.Any(x => !string.Equals(x.Type, type, StringComparison.OrdinalIgnoreCase))) throw new InvalidDataException("IFCPROPERTYBOUNDEDVALUE " + property.Id + " mixes value types.");
+            var nodes = new List<IfcPropertyNode>();
+            if (lower != null) nodes.Add(new IfcPropertyNode(baseName + ".Lower", lower.Value));
+            if (upper != null) nodes.Add(new IfcPropertyNode(baseName + ".Upper", upper.Value));
+            if (setPoint != null) nodes.Add(new IfcPropertyNode(baseName + ".SetPoint", setPoint.Value));
+            return new ReadOnlyCollection<IfcPropertyNode>(nodes);
+        }
+
+        private static IReadOnlyList<IfcPropertyNode> IndexedPropertyNodes(string baseName, IReadOnlyList<ParsedPropertyValue> values)
+        {
+            if (values.Count == 0) return new ReadOnlyCollection<IfcPropertyNode>(new List<IfcPropertyNode> { new IfcPropertyNode(baseName, string.Empty) });
+            var nodes = new List<IfcPropertyNode>();
+            for (var i = 0; i < values.Count; i++) nodes.Add(new IfcPropertyNode(baseName + "[" + i.ToString("D10", CultureInfo.InvariantCulture) + "]", values[i].Value));
+            return new ReadOnlyCollection<IfcPropertyNode>(nodes);
+        }
+
+        private static IReadOnlyList<ParsedPropertyValue> ParsePropertyValueAggregate(string token, string context)
+        {
+            token = (token ?? string.Empty).Trim();
+            if (token == "$" || token == "*") return new ReadOnlyCollection<ParsedPropertyValue>(new List<ParsedPropertyValue>());
+            if (token.Length < 2 || token[0] != '(' || token[token.Length - 1] != ')') throw new InvalidDataException("Expected IFC property value aggregate for " + context + ", got " + token + ".");
+            var raw = SplitTopLevel(token.Substring(1, token.Length - 2));
+            if (raw.Count == 0 || (raw.Count == 1 && raw[0].Length == 0)) throw new InvalidDataException("IFC property value aggregate is empty for " + context + ".");
+            var values = raw.Select(x => ParseRequiredPropertyValue(x, context)).ToList();
+            var type = values[0].Type;
+            if (values.Any(x => !string.Equals(x.Type, type, StringComparison.OrdinalIgnoreCase))) throw new InvalidDataException("IFC property value aggregate mixes value types for " + context + ".");
+            return new ReadOnlyCollection<ParsedPropertyValue>(values);
+        }
+
+        private static ParsedPropertyValue ParseOptionalPropertyValue(string token, string context)
+        {
+            token = (token ?? string.Empty).Trim();
+            return token == "$" || token == "*" ? null : ParseRequiredPropertyValue(token, context);
+        }
+
+        private static ParsedPropertyValue ParseRequiredPropertyValue(string token, string context)
+        {
+            token = (token ?? string.Empty).Trim();
+            var open = token.IndexOf('(');
+            if (open <= 0 || token[token.Length - 1] != ')') throw new InvalidDataException("Expected typed IFC property value for " + context + ", got " + token + ".");
+            var type = token.Substring(0, open).Trim().ToUpperInvariant();
+            if (type.Length == 0) throw new InvalidDataException("IFC property value type is empty for " + context + ".");
+            var scalar = token.Substring(open + 1, token.Length - open - 2).Trim();
+            if (scalar.Length == 0) throw new InvalidDataException("IFC property value is empty for " + context + ".");
+            var value = ScalarTokenText(scalar);
+            return new ParsedPropertyValue(type, value, PropertyValueKey(type, scalar));
+        }
+
+        private static string PropertyValueKey(string type, string scalar)
+        {
+            scalar = scalar.Trim();
+            if (scalar == ".T.") return type + "|B:TRUE";
+            if (scalar == ".F.") return type + "|B:FALSE";
+            if (scalar == ".U.") return type + "|B:UNKNOWN";
+            if (scalar.Length >= 2 && scalar[0] == '\'' && scalar[scalar.Length - 1] == '\'') return type + "|S:" + Unquote(scalar);
+            double number;
+            if (double.TryParse(scalar, NumberStyles.Float, CultureInfo.InvariantCulture, out number) && !double.IsNaN(number) && !double.IsInfinity(number))
+                return type + "|N:" + number.ToString("R", CultureInfo.InvariantCulture);
+            return type + "|S:" + Unquote(scalar);
+        }
+
         private static ParsedQuantity ParseQuantity(StepRecord record, QuantityUnitResolver units)
         {
             if (record.Args.Count < 4) throw new InvalidDataException(record.Entity + " has no quantity value.");
@@ -254,12 +366,12 @@ namespace QS3D.Core.BenchmarkParity
         }
 
         private static string TextAt(IReadOnlyList<string> args, int index) { return index >= args.Count ? string.Empty : Unquote(args[index]); }
-        private static string ScalarTextAt(IReadOnlyList<string> args, int index)
+        private static string ScalarTextAt(IReadOnlyList<string> args, int index) { return index >= args.Count ? string.Empty : ScalarTokenText(args[index]); }
+        private static string ScalarTokenText(string token)
         {
-            if (index >= args.Count) return string.Empty;
-            var token = args[index].Trim();
+            token = (token ?? string.Empty).Trim();
             var open = token.IndexOf('(');
-            if (open > 0 && token[token.Length - 1] == ')') token = token.Substring(open + 1, token.Length - open - 2);
+            if (open > 0 && token[token.Length - 1] == ')') token = token.Substring(open + 1, token.Length - open - 2).Trim();
             if (token == ".T.") return "TRUE";
             if (token == ".F.") return "FALSE";
             return Unquote(token);
@@ -546,6 +658,13 @@ namespace QS3D.Core.BenchmarkParity
             internal string Id { get; private set; }
             internal string Entity { get; private set; }
             internal IReadOnlyList<string> Args { get; private set; }
+        }
+        private sealed class ParsedPropertyValue
+        {
+            internal ParsedPropertyValue(string type, string value, string key) { Type = type; Value = value; Key = key; }
+            internal string Type { get; private set; }
+            internal string Value { get; private set; }
+            internal string Key { get; private set; }
         }
         private sealed class ParsedQuantity
         {
