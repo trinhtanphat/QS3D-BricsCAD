@@ -351,7 +351,7 @@ namespace QS3D.BricsCAD.V25
                 }
                 catch (Exception ex)
                 {
-                    Report(document, "Đã tạo tài liệu MCP tại " + path + " nhưng không mở được bằng shell (" + ex.GetType().Name + ").");
+                    Report(document, "Đã tạo tài liệu MCP tại " + path + " nhưng không mở được bằng shell: " + ex.Message);
                 }
             });
         }
@@ -630,7 +630,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                return new McpProbeResult(false, "TCP unavailable: " + ex.GetType().Name + ".");
+                return new McpProbeResult(false, "TCP unavailable: " + ex.Message);
             }
         }
 
