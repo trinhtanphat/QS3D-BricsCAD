@@ -135,7 +135,13 @@ def mutation_regressions(text: str) -> None:
             else:
                 fail("guard self-test failed: parser-before-uniqueness mutant was accepted")
 
-    missing = admitted.replace("'signerThumbprint'", "'signerThumbprint_REMOVED'", 1)
+    if loop < 0 or parse < 0:
+        fail("guard self-test failed: uniqueness loop boundary unavailable for mutation")
+    admission = admitted[loop:parse]
+    if "'signerThumbprint'" not in admission:
+        fail("guard self-test failed: signerThumbprint is absent from admitted uniqueness loop")
+    missing_admission = admission.replace("'signerThumbprint'", "'signerThumbprint_REMOVED'", 1)
+    missing = admitted[:loop] + missing_admission + admitted[parse:]
     try:
         validate_source(missing)
     except AssertionError:
