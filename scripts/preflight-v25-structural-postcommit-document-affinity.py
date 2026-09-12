@@ -20,6 +20,9 @@ for source in SOURCES:
         "ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)",
         "document.Database.UnmanagedObject == nativeDatabaseIdentity",
         "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;",
+        "RefreshModelTree(document, nativeDatabaseIdentity);",
+        "private static void RefreshModelTree(Document document, IntPtr nativeDatabaseIdentity)",
+        "ex.GetType().Name",
     ]
     for needle in required:
         if needle not in text:
@@ -33,19 +36,33 @@ for source in SOURCES:
         if body_end < 0:
             body_end = len(text)
         body = text[finalize:body_end]
+        refresh = body.find("RefreshModelTree(document, nativeDatabaseIdentity);")
         regen = body.find("document.Editor.Regen();")
-        fence = body.find("if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;")
-        if regen < 0:
-            errors.append(f"{label}: missing post-commit Regen")
-        elif fence < 0 or fence > regen:
-            errors.append(f"{label}: exact document-generation fence must precede post-commit Regen")
+        first_fence = body.find("if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;")
+        if refresh < 0 or regen < 0:
+            errors.append(f"{label}: missing post-commit refresh/Regen")
+        elif first_fence < 0 or first_fence > refresh or refresh > regen:
+            errors.append(f"{label}: exact generation fence must precede ordered refresh -> Regen")
+        elif body.find("if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;", refresh) < 0:
+            errors.append(f"{label}: generation must be revalidated after palette refresh before Regen")
+        if "ex.Message" in body:
+            errors.append(f"{label}: post-commit UI warning must redact exception message")
+
+    refresh_method = text.find("private static void RefreshModelTree(Document document, IntPtr nativeDatabaseIdentity)")
+    if refresh_method >= 0:
+        refresh_end = text.find("private static", refresh_method + 20)
+        if refresh_end < 0:
+            refresh_end = len(text)
+        refresh_body = text[refresh_method:refresh_end]
+        if "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;" not in refresh_body:
+            errors.append(f"{label}: palette refresh helper lacks exact generation fence")
 
     for forbidden in [
         "private static bool IsActiveDocument(Document document)",
         "FinalizeUi(document, message);",
     ]:
         if forbidden in text:
-            errors.append(f"{label}: stale document-only UI topology remains: {forbidden}")
+            errors.append(f"{label}: stale mutation UI topology remains: {forbidden}")
 
 print("QS3D V25 structural post-commit document-generation preflight")
 if errors:
