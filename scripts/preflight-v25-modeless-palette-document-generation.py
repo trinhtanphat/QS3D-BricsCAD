@@ -32,6 +32,15 @@ if 'RecordProject(normalized)' in START_PANEL:
     if guard < 0 or guard > record:
         raise SystemExit('Start Center recent-project persistence must be fenced before publication')
 
+# Activation callbacks are host-pumping boundaries too. A refresh can throw after the managed
+# Document wrapper survives a native Database replacement, so exception diagnostics/clear-state
+# publication must prove the same captured generation rather than writing to the event document or
+# clearing the palette unconditionally.
+if 'TryWriteRefreshDiagnostic(document, nativeDatabaseIdentity)' not in START:
+    raise SystemExit('Start Center activation diagnostics must be generation-fenced before Editor publication')
+if 'ShowUnavailableIfCurrent(document, nativeDatabaseIdentity,' not in PROJECT:
+    raise SystemExit('Project Information activation failure clearing must be generation-fenced before UI publication')
+
 for text in (START, PROJECT, START_PANEL, PROJECT_PANEL):
     for forbidden in ('ex.Message', 'error.Message', 'Exception.Message'):
         if forbidden in text:
