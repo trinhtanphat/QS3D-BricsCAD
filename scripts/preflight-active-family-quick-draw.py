@@ -37,7 +37,7 @@ if SOURCE.is_file():
         "!string.Equals(currentFamily.Id, expectedFamilyId, StringComparison.OrdinalIgnoreCase)",
         "currentFamily.Category != expectedCategory",
         "currentWindowRouting != expectedWindowRouting",
-        "Dispatch(document, dispatchFamily, advanced, operation)",
+        "Dispatch(document, nativeDatabaseIdentity, dispatchFamily, advanced, operation)",
         "new DirectDrawCommands().DrawWall()",
         "new DirectDrawCommands().DrawBeam()",
         "new DirectDrawCommands().DrawColumn()",
@@ -71,7 +71,7 @@ if SOURCE.is_file():
     family_read = text.find("ProjectFamilyActivationService.GetActive(project)", first_read)
     snapshot = text.find("var expectedProjectId = project.ProjectId;", family_read)
     revalidate = text.find("RequireCurrentDispatchSnapshot(", snapshot)
-    dispatch = text.find("Dispatch(document, dispatchFamily, advanced, operation)", revalidate)
+    dispatch = text.find("Dispatch(document, nativeDatabaseIdentity, dispatchFamily, advanced, operation)", revalidate)
     if min(first_read, family_read, snapshot, revalidate, dispatch) < 0 or not (first_read < family_read < snapshot < revalidate < dispatch):
         errors.append("active-family dispatcher must read, freeze immutable routing values, revalidate them, then dispatch")
 
