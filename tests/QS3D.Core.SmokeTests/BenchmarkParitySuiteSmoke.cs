@@ -18,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             Qs2DTakeoffWorkflowSmoke.Run();
             QsTakeoffPackageUxSmoke.Run();
             WorkbookLiveLinkRefresh();
+            LiveWorkbookDependencyAggregationPrecision();
             IntegrationRoutes();
             IntegrationApiRejectsNonFiniteEstimateAmount();
             IntegrationApiNormalizesRevisionTimeDeterministically();
@@ -153,6 +154,26 @@ namespace QS3D.Core.SmokeTests
             Equal(LiveLinkRefreshState.Updated, refreshed.Single(x => x.Link.SourceId == "E1").State, "updated source");
             Equal(LiveLinkRefreshState.Current, refreshed.Single(x => x.Link.SourceId == "E2").State, "current source");
             Equal(LiveLinkRefreshState.MissingSource, refreshed.Single(x => x.Link.SourceId == "E3").State, "missing source");
+        }
+
+        private static void LiveWorkbookDependencyAggregationPrecision()
+        {
+            var bindings = new[]
+            {
+                new LiveWorkbookBinding("A", "WB", "BOQ", "A1", "", LiveWorkbookSourceKind.BimElement, "", "", Array.Empty<string>(), 1d, 1e16, 0d),
+                new LiveWorkbookBinding("B", "WB", "BOQ", "A2", "", LiveWorkbookSourceKind.BimElement, "", "", Array.Empty<string>(), 1d, 1d, 0d),
+                new LiveWorkbookBinding("C", "WB", "BOQ", "A3", "", LiveWorkbookSourceKind.BimElement, "", "", Array.Empty<string>(), 1d, 1d, 0d),
+                new LiveWorkbookBinding("TOTAL", "WB", "BOQ", "A4", "BOQ-1", LiveWorkbookSourceKind.BimElement, "", "", new[] { "A", "B", "C" }, 1d, 0d, 0d)
+            };
+
+            var batch = new LiveWorkbookRefreshEngine2().Refresh(bindings, Array.Empty<LiveWorkbookSourceSnapshot>(), "R1");
+            var total = batch.Results.Single(x => x.Binding.BindingId == "TOTAL");
+            Equal(LiveWorkbookFreshness.Refreshed, total.Freshness, "dependency cascade freshness");
+            Equal(10000000000000002d, total.Value, "dependency cascade compensated total");
+            Equal(3, total.Trace.Count, "dependency trace count preserved");
+            True(total.Trace[0].StartsWith("binding:A="), "dependency trace remains deterministically ordered");
+            True(total.Trace[1].StartsWith("binding:B="), "dependency trace remains deterministically ordered 2");
+            True(total.Trace[2].StartsWith("binding:C="), "dependency trace remains deterministically ordered 3");
         }
 
         private static void IntegrationRoutes()
