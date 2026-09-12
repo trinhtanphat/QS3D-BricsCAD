@@ -50,6 +50,19 @@ metadata_parse = source.index("$metadata = $metadataText | ConvertFrom-Json -Err
 if not (metadata_expected < metadata_assert < metadata_parse):
     raise SystemExit("ERROR: PACKAGE-METADATA identity cardinality must be proved before ConvertFrom-Json")
 
+# Publication must retain an attempt-owned handle until the output pathname has been
+# pinned back to that exact generation. Otherwise a pathname swap between Move/Replace
+# and Open-Pinned can make pinning fail after the old handle was discarded, leaving an
+# unvalidated generation published with no owned handle available for rollback.
+publication_start = source.index("$tempGeneration = New-OwnedProvenanceGeneration")
+pin_published = source.index("$publishedGeneration = Open-PinnedPublishedProvenanceGeneration", publication_start)
+close_temp = source.index("Close-OwnedProvenanceGeneration -Generation $tempGeneration", publication_start)
+rollback_temp = source.index("elseif ($null -ne $tempGeneration) { Remove-OwnedProvenanceGeneration -Generation $tempGeneration }", publication_start)
+if not (publication_start < pin_published < close_temp < rollback_temp):
+    raise SystemExit(
+        "ERROR: V26 provenance publication must keep the attempt-owned generation handle through exact output pinning so pin failure can roll back by identity"
+    )
+
 # Exercise the production lexical decoder and path scoping directly. PowerShell JSON
 # consumers can collapse literal, JSON-escaped-equivalent, and case-variant names;
 # unrelated nested extension keys must not count as duplicate identity at the consumed path.
@@ -114,4 +127,4 @@ if completed.returncode != 0:
         + (completed.stderr or completed.stdout).strip()
     )
 
-print("PASS: V26 provenance generator proves root and Files[] identity cardinality before parsing with path-aware duplicate rejection")
+print("PASS: V26 provenance generator proves path-scoped input identity before parsing and retains rollback ownership through publication pinning")
