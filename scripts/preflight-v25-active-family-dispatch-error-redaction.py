@@ -27,7 +27,7 @@ for forbidden in (
 
 for required in (
     'catch (Exception)',
-    'Report(document, operation + ": không thể hoàn tất thao tác. Vui lòng thử lại.");',
+    'Report(document, nativeDatabaseIdentity, operation + ": không thể hoàn tất thao tác. Vui lòng thử lại.");',
 ):
     if required not in method:
         failures.append("Active Family dispatcher is missing stable redacted failure behavior: " + required)
@@ -38,7 +38,7 @@ for required in (
     "if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))",
     "currentProject.ChangeVersion != expectedChangeVersion",
     "if (routingChanged)",
-    "Dispatch(document, dispatchFamily, advanced, operation);",
+    "Dispatch(document, nativeDatabaseIdentity, dispatchFamily, advanced, operation);",
 ):
     if required not in text:
         failures.append("Active Family dispatch safety invariant changed unexpectedly: " + required)
