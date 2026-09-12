@@ -111,6 +111,7 @@ namespace QS3D.BricsCAD.V25
             RequireSameActiveDocument(discovery.Document);
             RequireSameTargetUiThread(discovery, hwnd);
             RequireFreshSemanticDiscovery(expectedDiscoveryGeneration, hwnd);
+            RequireForegroundWindowOwnedByCurrentProcess();
 
             // This compare-and-invalidate operation is the provider-attempt boundary. It prevents a
             // concurrent discovery from silently replacing the generation between validation and UIA.
@@ -261,6 +262,23 @@ namespace QS3D.BricsCAD.V25
             if (TargetWindowThreadId(hwnd) == GetCurrentThreadId())
                 throw new InvalidOperationException(
                     "Background semantic provider mutation is rejected on the same target UI thread; use a background MCP call with fresh semantic discovery.");
+        }
+
+        private static void RequireForegroundWindowOwnedByCurrentProcess()
+        {
+            var foreground = GetForegroundWindow();
+            if (foreground == IntPtr.Zero)
+                throw new InvalidOperationException("Background semantic provider mutation requires BricsCAD to already own the foreground window; no provider attempt was made.");
+
+            uint processId;
+            if (GetWindowThreadProcessId(foreground, out processId) == 0 || processId == 0)
+                throw new InvalidOperationException("Could not resolve the foreground window owner before semantic provider mutation.");
+
+            using (var current = Process.GetCurrentProcess())
+            {
+                if (processId != unchecked((uint)current.Id))
+                    throw new InvalidOperationException("Background semantic provider mutation requires BricsCAD to already own the foreground window; no provider attempt was made.");
+            }
         }
 
         private static uint TargetWindowThreadId(IntPtr hwnd)
@@ -738,6 +756,7 @@ namespace QS3D.BricsCAD.V25
         [DllImport("user32.dll")] private static extern bool IsWindow(IntPtr hWnd);
         [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
         [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
+        [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
         [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
     }
 }
