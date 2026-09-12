@@ -68,13 +68,15 @@ namespace QS3D.BricsCAD.V25
         private const double ExcavationClearanceMm = 500d;
         private const double ExcavationExtraBottomMm = 300d;
         private const int McpConnectTimeoutMilliseconds = 2000;
+        private const string StaleGenerationMessage = "BLT command cancelled because the active drawing generation changed.";
 
         [CommandMethod("QS3DBLTPILELOWER", CommandFlags.Modal | CommandFlags.UsePickSet)]
         public void LowerPilesToPileCap()
         {
-            Run("QS3DBLTPILELOWER", document =>
+            RunAuthoring("QS3DBLTPILELOWER", (document, nativeDatabaseIdentity) =>
             {
                 if (!DrawingUnitWorkflow.EnsureResolved(document, "QS3DBLTPILELOWER")) return;
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
 
                 var snapshots = EntitySnapshotReader.ReadCurrentSelection(document);
                 if (snapshots.Count == 0)
@@ -100,6 +102,7 @@ namespace QS3D.BricsCAD.V25
                     BltToolRuntimeState.PileEmbedMillimeters,
                     allowZero: true);
                 if (!embedMillimeters.HasValue) return;
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
                 if (!BltToolRuntimeState.TrySetPileEmbedMillimeters(
                         embedMillimeters.Value.ToString("R", CultureInfo.InvariantCulture),
                         out _))
@@ -110,9 +113,11 @@ namespace QS3D.BricsCAD.V25
                 var moved = 0;
                 var alreadyAligned = 0;
 
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
                 using (document.LockDocument())
                 using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
+                    RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
                     var cap = transaction.GetObject(capResult.ObjectId, OpenMode.ForRead, false) as Entity;
                     if (cap == null || cap.IsErased)
                         throw new InvalidOperationException("Đài/móng chuẩn không còn tồn tại.");
@@ -145,9 +150,9 @@ namespace QS3D.BricsCAD.V25
                     transaction.Commit();
                 }
 
-                document.Editor.Regen();
-                Report(
+                RegenAndReportIfActive(
                     document,
+                    nativeDatabaseIdentity,
                     "Hạ cọc: đã căn " + moved + " đối tượng; " + alreadyAligned
                     + " đối tượng đã đúng cao độ; đỉnh cọc = đáy đài + "
                     + embedMillimeters.Value.ToString("0.###", CultureInfo.CurrentCulture) + " mm.");
@@ -157,9 +162,10 @@ namespace QS3D.BricsCAD.V25
         [CommandMethod("QS3DBLTLEANCONCRETE", CommandFlags.Modal)]
         public void CreateLeanConcrete()
         {
-            Run("QS3DBLTLEANCONCRETE", document =>
+            RunAuthoring("QS3DBLTLEANCONCRETE", (document, nativeDatabaseIdentity) =>
             {
                 if (!DrawingUnitWorkflow.EnsureResolved(document, "QS3DBLTLEANCONCRETE")) return;
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
                 var referenceId = PromptReferenceEntity(document, "Chọn móng/đài để tạo bê tông lót: ");
                 if (!referenceId.HasValue) return;
 
@@ -167,15 +173,18 @@ namespace QS3D.BricsCAD.V25
                 if (!thicknessMm.HasValue) return;
                 var overhangMm = PromptMillimeters(document.Editor, "Phần vươn mỗi phía (mm)", LeanConcreteOverhangMm, true);
                 if (!overhangMm.HasValue) return;
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
 
                 var thickness = CadUnitService.MetersToDrawingUnits(document, thicknessMm.Value / 1000d);
                 var overhang = CadUnitService.MetersToDrawingUnits(document, overhangMm.Value / 1000d);
                 var overhangRequestedPositive = overhangMm.Value > 0d;
                 string handle;
 
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
                 using (document.LockDocument())
                 using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
+                    RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
                     var reference = transaction.GetObject(referenceId.Value, OpenMode.ForRead, false) as Entity;
                     if (reference == null || reference.IsErased)
                         throw new InvalidOperationException("Móng/đài tham chiếu không còn tồn tại.");
@@ -213,9 +222,9 @@ namespace QS3D.BricsCAD.V25
                     transaction.Commit();
                 }
 
-                document.Editor.Regen();
-                Report(
+                RegenAndReportIfActive(
                     document,
+                    nativeDatabaseIdentity,
                     "Bê tông lót: đã tạo native Solid3d " + handle
                     + " theo bounding box móng, dày " + thicknessMm.Value.ToString("0.###", CultureInfo.CurrentCulture)
                     + " mm, vươn " + overhangMm.Value.ToString("0.###", CultureInfo.CurrentCulture)
@@ -226,9 +235,10 @@ namespace QS3D.BricsCAD.V25
         [CommandMethod("QS3DBLTFOUNDATIONEXCAVATE", CommandFlags.Modal)]
         public void CreateFoundationExcavationVolume()
         {
-            Run("QS3DBLTFOUNDATIONEXCAVATE", document =>
+            RunAuthoring("QS3DBLTFOUNDATIONEXCAVATE", (document, nativeDatabaseIdentity) =>
             {
                 if (!DrawingUnitWorkflow.EnsureResolved(document, "QS3DBLTFOUNDATIONEXCAVATE")) return;
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
                 var referenceId = PromptReferenceEntity(document, "Chọn móng/đài để tạo thể tích hố đào: ");
                 if (!referenceId.HasValue) return;
 
@@ -236,6 +246,7 @@ namespace QS3D.BricsCAD.V25
                 if (!clearanceMm.HasValue) return;
                 var extraBottomMm = PromptMillimeters(document.Editor, "Đào sâu thêm dưới đáy móng (mm)", ExcavationExtraBottomMm, true);
                 if (!extraBottomMm.HasValue) return;
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
 
                 var clearance = CadUnitService.MetersToDrawingUnits(document, clearanceMm.Value / 1000d);
                 var extraBottom = CadUnitService.MetersToDrawingUnits(document, extraBottomMm.Value / 1000d);
@@ -243,9 +254,11 @@ namespace QS3D.BricsCAD.V25
                 var extraBottomRequestedPositive = extraBottomMm.Value > 0d;
                 string handle;
 
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
                 using (document.LockDocument())
                 using (var transaction = document.Database.TransactionManager.StartTransaction())
                 {
+                    RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
                     var reference = transaction.GetObject(referenceId.Value, OpenMode.ForRead, false) as Entity;
                     if (reference == null || reference.IsErased)
                         throw new InvalidOperationException("Móng/đài tham chiếu không còn tồn tại.");
@@ -285,9 +298,9 @@ namespace QS3D.BricsCAD.V25
                     transaction.Commit();
                 }
 
-                document.Editor.Regen();
-                Report(
+                RegenAndReportIfActive(
                     document,
+                    nativeDatabaseIdentity,
                     "Đào hố móng: đã tạo native Solid3d thể tích đào " + handle
                     + " theo bounding box móng, khoảng thao tác " + clearanceMm.Value.ToString("0.###", CultureInfo.CurrentCulture)
                     + " mm, sâu thêm " + extraBottomMm.Value.ToString("0.###", CultureInfo.CurrentCulture)
@@ -407,6 +420,84 @@ namespace QS3D.BricsCAD.V25
             catch (Exception ex)
             {
                 Report(document, operation + " lỗi: " + ex.Message);
+            }
+        }
+
+        private static void RunAuthoring(string operation, Action<Document, IntPtr> action)
+        {
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null) return;
+
+            IntPtr nativeDatabaseIdentity;
+            try
+            {
+                nativeDatabaseIdentity = document.Database.UnmanagedObject;
+            }
+            catch
+            {
+                return;
+            }
+            if (nativeDatabaseIdentity == IntPtr.Zero) return;
+
+            try
+            {
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
+                action(document, nativeDatabaseIdentity);
+            }
+            catch (Exception ex)
+            {
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                try
+                {
+                    Report(document, "Lệnh " + operation + " lỗi (" + ex.GetType().Name + ").");
+                }
+                catch
+                {
+                    // A diagnostic must not become a second command failure.
+                }
+            }
+        }
+
+        private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (document == null || nativeDatabaseIdentity == IntPtr.Zero) return false;
+            try
+            {
+                return ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)
+                       && document.Database.UnmanagedObject == nativeDatabaseIdentity;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void RequireActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                throw new InvalidOperationException(StaleGenerationMessage);
+        }
+
+        private static void RegenAndReportIfActive(Document document, IntPtr nativeDatabaseIdentity, string message)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            try
+            {
+                document.Editor.Regen();
+            }
+            catch
+            {
+                return;
+            }
+
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            try
+            {
+                Report(document, message);
+            }
+            catch
+            {
+                // CAD mutation already committed; UI publication is best-effort only.
             }
         }
 
