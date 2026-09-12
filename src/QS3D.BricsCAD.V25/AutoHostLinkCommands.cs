@@ -40,8 +40,10 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
+            var nativeDatabaseIdentity = IntPtr.Zero;
             try
             {
+                nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
                 var selected = ReadSelectedHandles(document);
                 if (selected.Count == 0)
                 {
@@ -125,6 +127,7 @@ namespace QS3D.BricsCAD.V25
 
                 RequireCurrentMutationAuthority(
                     document,
+                    nativeDatabaseIdentity,
                     project,
                     expectedProjectId,
                     expectedChangeVersion,
@@ -179,24 +182,25 @@ namespace QS3D.BricsCAD.V25
 
                 var summary = "Auto Host: linked=" + linked + " • unchanged=" + unchanged + " • ambiguous=" + ambiguous + " • unmatched=" + unmatched + " • invalid=" + invalid;
                 if (regenerated > 0) summary += " • regen=" + regenerated;
-                FinalizeAutoHostUi(document, summary);
+                FinalizeAutoHostUi(document, nativeDatabaseIdentity, summary);
             }
             catch (System.Exception)
             {
-                ReportAutoHostError(document);
+                ReportAutoHostError(document, nativeDatabaseIdentity);
             }
         }
 
         private static void RequireCurrentMutationAuthority(
             Document document,
+            IntPtr nativeDatabaseIdentity,
             ProjectState project,
             string expectedProjectId,
             long expectedChangeVersion,
             HashSet<string> expectedOpeningIds,
             HashSet<string> selected)
         {
-            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
-                throw new InvalidOperationException("Auto Host: DWG active đã thay đổi trong lúc đánh giá host; hãy chạy lại lệnh.");
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                throw new InvalidOperationException("Auto Host: DWG/database generation đã thay đổi trong lúc đánh giá host; hãy chạy lại lệnh.");
 
             if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject) ||
                 !ReferenceEquals(currentProject, project))
@@ -211,41 +215,63 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("Auto Host: Door/WallOpening target set đã thay đổi trong lúc đánh giá host; hãy chọn lại target.");
         }
 
-        private static bool IsActiveDocument(Document document) =>
-            ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument);
-
-        private static void TryRefreshProject(Document document)
+        private static IntPtr GetNativeDatabaseIdentity(Document document)
         {
-            if (!IsActiveDocument(document)) return;
+            if (document == null) return IntPtr.Zero;
+            try { return document.Database?.UnmanagedObject ?? IntPtr.Zero; }
+            catch { return IntPtr.Zero; }
+        }
+
+        private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (document == null || nativeDatabaseIdentity == IntPtr.Zero) return false;
+            if (!ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)) return false;
+            try { return document.Database != null && document.Database.UnmanagedObject == nativeDatabaseIdentity; }
+            catch { return false; }
+        }
+
+        private static void TryRefreshProject(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             PaletteCoordinator.RefreshProject();
         }
 
-        private static void TrySetPaletteStatus(Document document, string message)
+        private static void TrySetPaletteStatus(Document document, IntPtr nativeDatabaseIdentity, string message)
         {
-            if (!IsActiveDocument(document)) return;
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             PaletteCoordinator.SetStatus(message);
         }
 
-        private static void FinalizeAutoHostUi(Document document, string summary)
+        private static void FinalizeAutoHostUi(Document document, IntPtr nativeDatabaseIdentity, string summary)
         {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             var warning = false;
-            try { TryRefreshProject(document); }
+            try { TryRefreshProject(document, nativeDatabaseIdentity); }
             catch (System.Exception) { warning = true; }
-            try { TrySetPaletteStatus(document, summary); }
+            try { TrySetPaletteStatus(document, nativeDatabaseIdentity, summary); }
             catch (System.Exception) { warning = true; }
-            try { document.Editor.WriteMessage("\nQS3D " + summary + ". Chạy QS3DCUTOPENINGS khi muốn áp physical boolean."); }
+            try
+            {
+                if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                    document.Editor.WriteMessage("\nQS3D " + summary + ". Chạy QS3DCUTOPENINGS khi muốn áp physical boolean.");
+            }
             catch (System.Exception) { warning = true; }
-            if (!warning) return;
+            if (!warning || !IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             try { document.Editor.WriteMessage("\n" + PostCommitUiWarning); }
             catch { }
         }
 
-        private static void ReportAutoHostError(Document document)
+        private static void ReportAutoHostError(Document document, IntPtr nativeDatabaseIdentity)
         {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             var message = OperationFailure;
-            try { TrySetPaletteStatus(document, message); }
+            try { TrySetPaletteStatus(document, nativeDatabaseIdentity, message); }
             catch { }
-            try { document.Editor.WriteMessage("\n" + message); }
+            try
+            {
+                if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                    document.Editor.WriteMessage("\n" + message);
+            }
             catch { }
         }
 
@@ -254,10 +280,13 @@ namespace QS3D.BricsCAD.V25
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (string.IsNullOrWhiteSpace(openingId)) throw new ArgumentException("Opening id is required.", nameof(openingId));
-            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
-                throw new InvalidOperationException("Auto Host single-opening mutation requires the DWG that started authoring to remain active.");
+            var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                throw new InvalidOperationException("Auto Host single-opening mutation requires the exact DWG/database generation that started authoring to remain active.");
             if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject) || !ReferenceEquals(currentProject, project))
                 throw new InvalidOperationException("Auto Host single-opening mutation requires the exact canonical project authorized by the authoring command.");
+            var expectedProjectId = project.ProjectId;
+            var expectedChangeVersion = project.ChangeVersion;
 
             var opening = project.FindElement(openingId) ??
                 throw new InvalidOperationException("Opening element not found: " + openingId);
@@ -277,6 +306,14 @@ namespace QS3D.BricsCAD.V25
                 match = new OpeningHostMatcher().Match(location.Plan, candidates, maxGapM, ambiguityM);
                 transaction.Commit();
             }
+
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                throw new InvalidOperationException("Auto Host single-opening mutation refused a stale DWG/database generation after CAD evaluation.");
+            if (!ProjectContextCoordinator.TryGetReadOnly(document, out currentProject) || !ReferenceEquals(currentProject, project))
+                throw new InvalidOperationException("Auto Host single-opening mutation refused a stale canonical project after CAD evaluation.");
+            if (!string.Equals(currentProject.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase) ||
+                currentProject.ChangeVersion != expectedChangeVersion)
+                throw new InvalidOperationException("Auto Host single-opening mutation refused an in-place project generation change after CAD evaluation.");
 
             if (match.Status == OpeningHostMatchStatus.Ambiguous)
                 throw new InvalidOperationException(
