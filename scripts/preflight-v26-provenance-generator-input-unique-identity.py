@@ -79,11 +79,14 @@ if rollback_after < rename_owned:
 if "[IO.File]::Move(" in publication or "[IO.File]::Replace(" in publication or "Open-PinnedPublishedProvenanceGeneration -Path" in publication:
     raise SystemExit("ERROR: V26 provenance publication must not reopen or pathname-move the admitted generation")
 
-# Exercise the production lexical decoder and path scoping directly. PowerShell JSON
-# consumers can collapse literal, JSON-escaped-equivalent, and case-variant names;
-# unrelated nested extension keys must not count as duplicate identity at the consumed path.
+# Compile and execute the exact native helper on the Windows CI runner. This catches invalid
+# FILE_RENAME_INFO layout/PInvoke declarations and proves the owned handle survives rename,
+# retains identity/bytes, and denies a second writer while publication is being verified.
+native_wrapper_start = source.index("if (-not ('Qs3dProvenanceGenerationNative' -as [type]))")
+native_wrapper_end = source.index("function New-OwnedProvenanceGeneration", native_wrapper_start)
+native_wrapper = source[native_wrapper_start:native_wrapper_end]
 helpers = source[helper_start:reader_start]
-probe = helpers + r'''
+probe = native_wrapper + "\n" + helpers + r'''
 $rootCases = @(
     @{ Json='{"Name":"bricscad.exe"}'; Name='Name'; Expected=1 },
     @{ Json='{"Name":"bricscad.exe","Name":"evil"}'; Name='Name'; Expected=2 },
@@ -123,6 +126,46 @@ try {
 }
 catch { $rejected = $true }
 if (-not $rejected) { throw 'provenance-generator Files[] escaped-equivalent duplicate record identity was not rejected' }
+
+$probeDir = Join-Path ([IO.Path]::GetTempPath()) ('qs3d-v26-provenance-' + [Guid]::NewGuid().ToString('N'))
+[IO.Directory]::CreateDirectory($probeDir) | Out-Null
+$sourcePath = Join-Path $probeDir 'owned.tmp'
+$destinationPath = Join-Path $probeDir 'published.json'
+$payload = [Text.UTF8Encoding]::new($false, $true).GetBytes('{"probe":true}')
+$owned = $null
+try {
+    $owned = [Qs3dProvenanceGenerationNative]::CreateOwnedProvenanceGeneration($sourcePath, $payload)
+    $before = [Qs3dProvenanceGenerationNative]::GetOwnedProvenanceGenerationIdentity($owned)
+    [Qs3dProvenanceGenerationNative]::RenameOwnedProvenanceGeneration($owned, $destinationPath, $false)
+    $after = [Qs3dProvenanceGenerationNative]::GetOwnedProvenanceGenerationIdentity($owned)
+    if (-not [string]::Equals($before, $after, [StringComparison]::Ordinal)) { throw 'owned provenance identity changed across handle rename' }
+    if (Test-Path -LiteralPath $sourcePath) { throw 'owned provenance source pathname still exists after handle rename' }
+    if (-not (Test-Path -LiteralPath $destinationPath -PathType Leaf)) { throw 'owned provenance destination missing after handle rename' }
+
+    $writerBlocked = $false
+    try {
+        $other = [IO.File]::Open($destinationPath, [IO.FileMode]::Open, [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite)
+        $other.Dispose()
+    }
+    catch [IO.IOException] { $writerBlocked = $true }
+    if (-not $writerBlocked) { throw 'owned provenance handle did not block a concurrent writer during publication verification' }
+
+    $actualBytes = [Qs3dProvenanceGenerationNative]::ReadPinnedPublishedProvenanceBytes($owned, $payload.Length)
+    if ($actualBytes.Length -ne $payload.Length) { throw 'owned provenance payload length changed after handle rename' }
+    for ($i = 0; $i -lt $payload.Length; $i++) {
+        if ($actualBytes[$i] -ne $payload[$i]) { throw 'owned provenance payload changed after handle rename' }
+    }
+
+    [Qs3dProvenanceGenerationNative]::RemoveOwnedProvenanceGeneration($owned)
+    $owned = $null
+}
+finally {
+    if ($null -ne $owned) {
+        try { [Qs3dProvenanceGenerationNative]::RemoveOwnedProvenanceGeneration($owned) }
+        catch { $owned.Dispose() }
+    }
+    if (Test-Path -LiteralPath $probeDir) { Remove-Item -LiteralPath $probeDir -Recurse -Force -ErrorAction SilentlyContinue }
+}
 '''
 
 with tempfile.NamedTemporaryFile("w", suffix=".ps1", encoding="utf-8", delete=False) as tmp:
@@ -139,8 +182,8 @@ finally:
     probe_path.unlink(missing_ok=True)
 if completed.returncode != 0:
     raise SystemExit(
-        "ERROR: behavioral V26 provenance-generator duplicate/path-scope probe failed: "
+        "ERROR: behavioral V26 provenance-generator identity/publication probe failed: "
         + (completed.stderr or completed.stdout).strip()
     )
 
-print("PASS: V26 provenance generator proves path-scoped input identity and publishes by one rollback-capable owned handle")
+print("PASS: V26 provenance generator proves path-scoped input identity and handle-owned rollback-safe publication behavior")
