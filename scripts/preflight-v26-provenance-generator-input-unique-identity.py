@@ -80,8 +80,8 @@ if "[IO.File]::Move(" in publication or "[IO.File]::Replace(" in publication or 
     raise SystemExit("ERROR: V26 provenance publication must not reopen or pathname-move the admitted generation")
 
 # Compile and execute the exact native helper on the Windows CI runner. This catches invalid
-# FILE_RENAME_INFO layout/PInvoke declarations and proves the owned handle survives rename,
-# retains identity/bytes, and denies a second writer while publication is being verified.
+# FILE_RENAME_INFO layout/PInvoke declarations and proves both first publication and replace-
+# existing publication retain the admitted identity/bytes and deny concurrent writers.
 native_wrapper_start = source.index("if (-not ('Qs3dProvenanceGenerationNative' -as [type]))")
 native_wrapper_end = source.index("function New-OwnedProvenanceGeneration", native_wrapper_start)
 native_wrapper = source[native_wrapper_start:native_wrapper_end]
@@ -127,43 +127,58 @@ try {
 catch { $rejected = $true }
 if (-not $rejected) { throw 'provenance-generator Files[] escaped-equivalent duplicate record identity was not rejected' }
 
+function Assert-OwnedPublication([string]$SourcePath, [string]$DestinationPath, [byte[]]$Payload, [bool]$ReplaceExisting) {
+    $owned = $null
+    try {
+        $owned = [Qs3dProvenanceGenerationNative]::CreateOwnedProvenanceGeneration($SourcePath, $Payload)
+        $before = [Qs3dProvenanceGenerationNative]::GetOwnedProvenanceGenerationIdentity($owned)
+        [Qs3dProvenanceGenerationNative]::RenameOwnedProvenanceGeneration($owned, $DestinationPath, $ReplaceExisting)
+        $after = [Qs3dProvenanceGenerationNative]::GetOwnedProvenanceGenerationIdentity($owned)
+        if (-not [string]::Equals($before, $after, [StringComparison]::Ordinal)) { throw 'owned provenance identity changed across handle rename' }
+        if (Test-Path -LiteralPath $SourcePath) { throw 'owned provenance source pathname still exists after handle rename' }
+        if (-not (Test-Path -LiteralPath $DestinationPath -PathType Leaf)) { throw 'owned provenance destination missing after handle rename' }
+
+        $writerBlocked = $false
+        try {
+            $other = [IO.File]::Open($DestinationPath, [IO.FileMode]::Open, [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite)
+            $other.Dispose()
+        }
+        catch [IO.IOException] { $writerBlocked = $true }
+        if (-not $writerBlocked) { throw 'owned provenance handle did not block a concurrent writer during publication verification' }
+
+        $actualBytes = [Qs3dProvenanceGenerationNative]::ReadPinnedPublishedProvenanceBytes($owned, $Payload.Length)
+        if ($actualBytes.Length -ne $Payload.Length) { throw 'owned provenance payload length changed after handle rename' }
+        for ($i = 0; $i -lt $Payload.Length; $i++) {
+            if ($actualBytes[$i] -ne $Payload[$i]) { throw 'owned provenance payload changed after handle rename' }
+        }
+
+        [Qs3dProvenanceGenerationNative]::RemoveOwnedProvenanceGeneration($owned)
+        $owned = $null
+    }
+    finally {
+        if ($null -ne $owned) {
+            try { [Qs3dProvenanceGenerationNative]::RemoveOwnedProvenanceGeneration($owned) }
+            catch { $owned.Dispose() }
+        }
+    }
+}
+
 $probeDir = Join-Path ([IO.Path]::GetTempPath()) ('qs3d-v26-provenance-' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($probeDir) | Out-Null
-$sourcePath = Join-Path $probeDir 'owned.tmp'
-$destinationPath = Join-Path $probeDir 'published.json'
-$payload = [Text.UTF8Encoding]::new($false, $true).GetBytes('{"probe":true}')
-$owned = $null
 try {
-    $owned = [Qs3dProvenanceGenerationNative]::CreateOwnedProvenanceGeneration($sourcePath, $payload)
-    $before = [Qs3dProvenanceGenerationNative]::GetOwnedProvenanceGenerationIdentity($owned)
-    [Qs3dProvenanceGenerationNative]::RenameOwnedProvenanceGeneration($owned, $destinationPath, $false)
-    $after = [Qs3dProvenanceGenerationNative]::GetOwnedProvenanceGenerationIdentity($owned)
-    if (-not [string]::Equals($before, $after, [StringComparison]::Ordinal)) { throw 'owned provenance identity changed across handle rename' }
-    if (Test-Path -LiteralPath $sourcePath) { throw 'owned provenance source pathname still exists after handle rename' }
-    if (-not (Test-Path -LiteralPath $destinationPath -PathType Leaf)) { throw 'owned provenance destination missing after handle rename' }
+    $destinationPath = Join-Path $probeDir 'published.json'
+    $firstSource = Join-Path $probeDir 'owned-first.tmp'
+    $firstPayload = [Text.UTF8Encoding]::new($false, $true).GetBytes('{"probe":"first"}')
+    Assert-OwnedPublication -SourcePath $firstSource -DestinationPath $destinationPath -Payload $firstPayload -ReplaceExisting $false
+    if (Test-Path -LiteralPath $destinationPath) { throw 'first owned provenance generation remained after handle-owned cleanup' }
 
-    $writerBlocked = $false
-    try {
-        $other = [IO.File]::Open($destinationPath, [IO.FileMode]::Open, [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite)
-        $other.Dispose()
-    }
-    catch [IO.IOException] { $writerBlocked = $true }
-    if (-not $writerBlocked) { throw 'owned provenance handle did not block a concurrent writer during publication verification' }
-
-    $actualBytes = [Qs3dProvenanceGenerationNative]::ReadPinnedPublishedProvenanceBytes($owned, $payload.Length)
-    if ($actualBytes.Length -ne $payload.Length) { throw 'owned provenance payload length changed after handle rename' }
-    for ($i = 0; $i -lt $payload.Length; $i++) {
-        if ($actualBytes[$i] -ne $payload[$i]) { throw 'owned provenance payload changed after handle rename' }
-    }
-
-    [Qs3dProvenanceGenerationNative]::RemoveOwnedProvenanceGeneration($owned)
-    $owned = $null
+    [IO.File]::WriteAllText($destinationPath, '{"old":true}', [Text.UTF8Encoding]::new($false))
+    $secondSource = Join-Path $probeDir 'owned-replacement.tmp'
+    $secondPayload = [Text.UTF8Encoding]::new($false, $true).GetBytes('{"probe":"replacement"}')
+    Assert-OwnedPublication -SourcePath $secondSource -DestinationPath $destinationPath -Payload $secondPayload -ReplaceExisting $true
+    if (Test-Path -LiteralPath $destinationPath) { throw 'replacement owned provenance generation remained after handle-owned cleanup' }
 }
 finally {
-    if ($null -ne $owned) {
-        try { [Qs3dProvenanceGenerationNative]::RemoveOwnedProvenanceGeneration($owned) }
-        catch { $owned.Dispose() }
-    }
     if (Test-Path -LiteralPath $probeDir) { Remove-Item -LiteralPath $probeDir -Recurse -Force -ErrorAction SilentlyContinue }
 }
 '''
