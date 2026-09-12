@@ -21,6 +21,11 @@ namespace QS3D.BricsCAD.V25
         private const int CommandCompletionTimeoutMilliseconds = 30000;
         private const int DbmodSettleTimeoutMilliseconds = 3000;
         private const int PollMilliseconds = 25;
+        private const int CadContextDispatchTimeoutMilliseconds = 8000;
+        private const int CadContextQueued = 0;
+        private const int CadContextRunning = 1;
+        private const int CadContextCancelledBeforeStart = 2;
+        private const int CadContextTerminal = 3;
         private static readonly object RetainedCleanupGate = new object();
         private static readonly List<NativeSaveOperation> RetainedCleanup = new List<NativeSaveOperation>();
 
@@ -34,6 +39,82 @@ namespace QS3D.BricsCAD.V25
 
             internal string FileName { get; private set; }
             internal int DbmodAfterSave { get; private set; }
+        }
+
+        private sealed class NativeCadContextWorkItem
+        {
+            internal Action Action = null!;
+            internal Exception? Error;
+            internal readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
+            internal int State = CadContextQueued;
+            internal int Abandoned;
+        }
+
+        private static void InvokeMutationInCadContext(Action action)
+        {
+            if (action == null) throw new ArgumentNullException(nameof(action));
+            var item = new NativeCadContextWorkItem { Action = action };
+            try
+            {
+                Application.DocumentManager.ExecuteInApplicationContext(ExecuteMutationCadContext, item);
+            }
+            catch (Exception ex)
+            {
+                item.Done.Dispose();
+                throw new InvalidOperationException("Could not queue native QSAVE CAD-context work.", ex);
+            }
+
+            if (!item.Done.Wait(CadContextDispatchTimeoutMilliseconds))
+            {
+                var cancelled = Interlocked.CompareExchange(ref item.State, CadContextCancelledBeforeStart, CadContextQueued) == CadContextQueued;
+                if (cancelled)
+                {
+                    Interlocked.Exchange(ref item.Abandoned, 1);
+                    throw new TimeoutException("Timed out waiting for BricsCAD application context; queued native QSAVE work was cancelled before start.");
+                }
+
+                // Side-effecting CAD work has started. Do not return a false-safe timeout and
+                // release caller/writer ownership while native setup or detach can still run.
+                // Wait for the exact callback to become terminal; callers must not replay QSAVE.
+                item.Done.Wait();
+            }
+
+            try
+            {
+                if (item.Error != null)
+                    throw new InvalidOperationException("Native QSAVE CAD-context work failed.", item.Error);
+            }
+            finally
+            {
+                item.Done.Dispose();
+            }
+        }
+
+        private static void ExecuteMutationCadContext(object state)
+        {
+            var item = (NativeCadContextWorkItem)state;
+            try
+            {
+                if (Interlocked.CompareExchange(ref item.State, CadContextRunning, CadContextQueued) != CadContextQueued)
+                    return;
+                item.Action();
+            }
+            catch (Exception ex)
+            {
+                item.Error = ex;
+            }
+            finally
+            {
+                Interlocked.Exchange(ref item.State, CadContextTerminal);
+                try { item.Done.Set(); }
+                finally
+                {
+                    if (Volatile.Read(ref item.Abandoned) != 0)
+                    {
+                        try { item.Done.Dispose(); } catch (ObjectDisposedException) { }
+                    }
+                }
+            }
         }
 
         internal static SaveResult SaveCurrentDocument(Action ensureRunning, Action<string>? audit)
@@ -51,12 +132,7 @@ namespace QS3D.BricsCAD.V25
             var detached = false;
             try
             {
-                McpDiagnosticHub.InvokeInCadContext(() =>
-                {
-                    EnsureCommandContextAutomationNotStopped();
-                    operation.QueueInCadContext();
-                    return string.Empty;
-                });
+                InvokeMutationInCadContext(operation.QueueInCadContext);
 
                 if (!operation.Done.Wait(CommandCompletionTimeoutMilliseconds))
                     throw new TimeoutException(
@@ -270,11 +346,7 @@ namespace QS3D.BricsCAD.V25
                 try
                 {
                     var detached = false;
-                    McpDiagnosticHub.InvokeInCadContext(() =>
-                    {
-                        detached = DetachInCadContext();
-                        return string.Empty;
-                    });
+                    InvokeMutationInCadContext(() => { detached = DetachInCadContext(); });
                     return detached;
                 }
                 catch

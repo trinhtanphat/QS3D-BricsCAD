@@ -168,6 +168,7 @@ namespace QS3D.Core.BenchmarkParity
             MeasuredQuantity = QsModelElementSnapshot.Finite(measuredQuantity, "measuredQuantity");
             FormulaQuantity = QsModelElementSnapshot.Finite(formulaQuantity, "formulaQuantity");
             UnitRate = QsModelElementSnapshot.Finite(unitRate, "unitRate");
+            EstimatedCost = QsModelElementSnapshot.Finite(FormulaQuantity * UnitRate, "estimatedCost");
             if (evidenceCount < 1) throw new ArgumentOutOfRangeException("evidenceCount");
             EvidenceCount = evidenceCount;
         }
@@ -178,7 +179,7 @@ namespace QS3D.Core.BenchmarkParity
         public double FormulaQuantity { get; private set; }
         public double UnitRate { get; private set; }
         public int EvidenceCount { get; private set; }
-        public double EstimatedCost { get { return FormulaQuantity * UnitRate; } }
+        public double EstimatedCost { get; private set; }
     }
 
     public sealed class AutodeskTakeoffWorkflow
