@@ -1,7 +1,10 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Persistence
@@ -104,7 +107,7 @@ namespace QS3D.Core.Persistence
             {
                 var element = project.FindElement(pair.Key);
                 if (element == null || !ReferenceEquals(element, pair.Value.Owner) || !pair.Value.Matches(element))
-                    throw new InvalidOperationException("Cannot capture a persistence checkpoint while captured element persistence state is changing.");
+                    throw new InvalidOperationException("Cannot capture a persistence checkpoint while captured element persistence state is changing or semantic state changed.");
             }
 
             return new ProjectPersistenceCheckpoint(
@@ -159,6 +162,17 @@ namespace QS3D.Core.Persistence
                 project.UpdatedUtc != _projectUpdatedUtc)
                 throw new InvalidOperationException("Cannot restore a persistence checkpoint because the project revision changed since checkpoint capture.");
 
+            // Element semantic mutations do not necessarily advance the owning ProjectState
+            // revision. Validate every captured semantic generation before restoring any
+            // persistence metadata so a newer semantic generation cannot receive stale
+            // Dirty/UpdatedUtc values from this checkpoint.
+            foreach (var pair in _elements)
+            {
+                if (!pair.Value.SemanticMatches(targets[pair.Key]))
+                    throw new InvalidOperationException(
+                        "Cannot restore a persistence checkpoint because captured element semantic state changed: " + pair.Key + ".");
+            }
+
             foreach (var pair in _elements)
                 pair.Value.Restore(targets[pair.Key]);
             project.RestorePersistenceState(_projectUpdatedUtc, _projectChangeVersion);
@@ -195,11 +209,14 @@ namespace QS3D.Core.Persistence
 
         private sealed class ElementPersistenceState
         {
+            private readonly ElementSemanticState _semanticState;
+
             public ElementPersistenceState(ProjectElement owner, ElementDirtyFlags dirty, DateTime updatedUtc)
             {
                 Owner = owner ?? throw new ArgumentNullException(nameof(owner));
                 Dirty = dirty;
                 UpdatedUtc = updatedUtc;
+                _semanticState = ElementSemanticState.Capture(owner);
             }
 
             public ProjectElement Owner { get; }
@@ -207,10 +224,125 @@ namespace QS3D.Core.Persistence
             public DateTime UpdatedUtc { get; }
 
             public bool Matches(ProjectElement element) =>
-                element.Dirty == Dirty && element.UpdatedUtc == UpdatedUtc;
+                element.Dirty == Dirty && element.UpdatedUtc == UpdatedUtc && SemanticMatches(element);
+
+            public bool SemanticMatches(ProjectElement element) => _semanticState.Matches(element);
 
             public void Restore(ProjectElement element) =>
                 element.RestorePersistenceState(Dirty, UpdatedUtc);
+        }
+
+        private sealed class ElementSemanticState
+        {
+            private readonly byte[] _signature;
+
+            private ElementSemanticState(byte[] signature)
+            {
+                _signature = signature ?? throw new ArgumentNullException(nameof(signature));
+            }
+
+            public static ElementSemanticState Capture(ProjectElement element) =>
+                new ElementSemanticState(ComputeSignature(element));
+
+            public bool Matches(ProjectElement element)
+            {
+                byte[] candidate;
+                try
+                {
+                    candidate = ComputeSignature(element);
+                }
+                catch (InvalidOperationException)
+                {
+                    return false;
+                }
+
+                if (candidate.Length != _signature.Length) return false;
+                for (var i = 0; i < _signature.Length; i++)
+                {
+                    if (candidate[i] != _signature[i]) return false;
+                }
+                return true;
+            }
+
+            private static byte[] ComputeSignature(ProjectElement element)
+            {
+                if (element == null) throw new ArgumentNullException(nameof(element));
+
+                using var hash = SHA256.Create();
+                using var crypto = new CryptoStream(Stream.Null, hash, CryptoStreamMode.Write);
+                using var writer = new BinaryWriter(crypto, Encoding.UTF8, leaveOpen: true);
+
+                writer.Write((int)element.Category);
+                writer.Write(element.FamilyId ?? string.Empty);
+                writer.Write(element.FloorId ?? string.Empty);
+                writer.Write(element.ZoneId ?? string.Empty);
+                writer.Write(element.DrawingFingerprint ?? string.Empty);
+                WriteSequence(writer, element.SourceHandles, "source handles");
+                WriteSequence(writer, element.DependsOn, "dependencies");
+                WriteMap(writer, element.Properties, "properties", (output, value) => output.Write(value ?? string.Empty));
+                WriteMap(writer, element.Quantities, "quantities", (output, value) => output.Write(value));
+
+                writer.Flush();
+                crypto.FlushFinalBlock();
+                var signature = hash.Hash;
+                if (signature == null || signature.Length == 0)
+                    throw new InvalidOperationException("Persistence checkpoint could not finalize the element semantic signature.");
+                return (byte[])signature.Clone();
+            }
+
+            private static void WriteSequence(BinaryWriter writer, IList<string> values, string label)
+            {
+                if (values == null) throw new InvalidOperationException("Persistence checkpoint element " + label + " collection is missing.");
+                var expected = RequireSupportedNestedCount(values.Count, label);
+                writer.Write(expected);
+                var observed = 0;
+                foreach (var value in values)
+                {
+                    if (observed >= expected)
+                        throw new InvalidOperationException("Persistence checkpoint element " + label + " count changed during capture.");
+                    writer.Write(value ?? string.Empty);
+                    observed++;
+                }
+                if (observed != expected || values.Count != expected)
+                    throw new InvalidOperationException("Persistence checkpoint element " + label + " count changed during capture.");
+            }
+
+            private static void WriteMap<TValue>(
+                BinaryWriter writer,
+                IDictionary<string, TValue> values,
+                string label,
+                Action<BinaryWriter, TValue> writeValue)
+            {
+                if (values == null) throw new InvalidOperationException("Persistence checkpoint element " + label + " collection is missing.");
+                var expected = RequireSupportedNestedCount(values.Count, label);
+                var snapshot = new List<KeyValuePair<string, TValue>>(expected);
+                foreach (var pair in values)
+                {
+                    if (snapshot.Count >= expected)
+                        throw new InvalidOperationException("Persistence checkpoint element " + label + " count changed during capture.");
+                    snapshot.Add(pair);
+                }
+                if (snapshot.Count != expected || values.Count != expected)
+                    throw new InvalidOperationException("Persistence checkpoint element " + label + " count changed during capture.");
+
+                snapshot.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.Key, right.Key));
+                writer.Write(expected);
+                foreach (var pair in snapshot)
+                {
+                    writer.Write(pair.Key ?? string.Empty);
+                    writeValue(writer, pair.Value);
+                }
+            }
+
+            private static int RequireSupportedNestedCount(int count, string label)
+            {
+                if (count < 0)
+                    throw new InvalidOperationException("Persistence checkpoint element " + label + " collection reported a negative count.");
+                if (count > MaximumElementCount)
+                    throw new InvalidOperationException(
+                        "Persistence checkpoint element " + label + " collection exceeds the supported " + MaximumElementCount + " entry limit.");
+                return count;
+            }
         }
     }
 }
