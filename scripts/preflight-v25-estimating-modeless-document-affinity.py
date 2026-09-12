@@ -33,6 +33,21 @@ else:
     if "CloseUnpublishedCandidate(candidate)" not in between:
         errors.append("stale post-host candidate must be terminal-close attempted before abandoning publication")
 
+report_start = text.find("private static void ReportIfActive(Document document, IntPtr nativeDatabaseIdentity, string message)")
+report_end = text.find("private static void TryReportCurrentDocument", report_start)
+if report_start < 0 or report_end < 0:
+    errors.append("generation-safe reporting helper not found")
+else:
+    report_body = text[report_start:report_end]
+    write = report_body.find('document.Editor.WriteMessage("\\n" + message)')
+    status = report_body.find("PaletteCoordinator.SetStatus(message)")
+    if write < 0 or status < 0 or status <= write:
+        errors.append("reporting helper must write editor status before palette status")
+    else:
+        between_report_calls = report_body[write:status]
+        if "IsActiveDocumentGeneration(document, nativeDatabaseIdentity)" not in between_report_calls:
+            errors.append("document generation must be revalidated after editor output before palette status publication")
+
 if "private static IntPtr _nativeDatabaseIdentity;" in text:
     errors.append("raw global native identity must not be the sole published-window ownership authority")
 
@@ -42,4 +57,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
-print("PASS: estimating modeless publication is bound to the exact managed document/native database generation.")
+print("PASS: estimating modeless publication and status are bound to the exact managed document/native database generation.")
