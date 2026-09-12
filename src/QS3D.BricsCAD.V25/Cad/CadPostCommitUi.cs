@@ -8,6 +8,7 @@ namespace QS3D.BricsCAD.V25.Cad
         public static void TryRegen(Document document, string operation)
         {
             if (document == null) return;
+            if (Application.DocumentManager.IsApplicationContext) return;
             try
             {
                 document.Editor.Regen();
