@@ -281,7 +281,7 @@ namespace QS3D.Core.BenchmarkParity
             var upper = ParseOptionalPropertyValue(property.Args[2], property.Id + " upper bound");
             var lower = ParseOptionalPropertyValue(property.Args[3], property.Id + " lower bound");
             var setPoint = property.Args.Count > 5 ? ParseOptionalPropertyValue(property.Args[5], property.Id + " set point") : null;
-            var values = new[] { upper, lower, setPoint }.Where(x => x != null).ToList();
+            var values = new[] { upper, lower, setPoint }.OfType<ParsedPropertyValue>().ToList();
             if (values.Count == 0) return new ReadOnlyCollection<IfcPropertyNode>(new List<IfcPropertyNode> { new IfcPropertyNode(baseName, string.Empty) });
             var type = values[0].Type;
             if (values.Any(x => !string.Equals(x.Type, type, StringComparison.OrdinalIgnoreCase))) throw new InvalidDataException("IFCPROPERTYBOUNDEDVALUE " + property.Id + " mixes value types.");
@@ -313,7 +313,7 @@ namespace QS3D.Core.BenchmarkParity
             return new ReadOnlyCollection<ParsedPropertyValue>(values);
         }
 
-        private static ParsedPropertyValue ParseOptionalPropertyValue(string token, string context)
+        private static ParsedPropertyValue? ParseOptionalPropertyValue(string token, string context)
         {
             token = (token ?? string.Empty).Trim();
             return token == "$" || token == "*" ? null : ParseRequiredPropertyValue(token, context);
