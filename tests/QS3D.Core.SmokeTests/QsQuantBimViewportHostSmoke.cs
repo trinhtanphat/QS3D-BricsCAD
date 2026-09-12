@@ -23,10 +23,16 @@ namespace QS3D.Core.SmokeTests
                 new QuantBimStandaloneSceneBuilder(new TriangleResolver()),
                 renderer);
 
+            True(host.CurrentDocument == null, "unopened document state");
+            True(host.CurrentPresentation == null, "unopened presentation state");
+            Throws<InvalidOperationException>(() => host.FitAll(), "navigation before open rejected");
+
             var opened = host.Open("viewport.ifc");
             Equal(2, opened.VisibleGuids.Count, "open visible count");
             Equal("G1", opened.VisibleGuids[0], "open deterministic visibility");
             Equal(1, renderer.PresentCount, "open presents scene");
+            True(host.CurrentDocument != null, "opened document state");
+            True(host.CurrentPresentation != null, "opened presentation state");
 
             var filtered = host.ApplyFilter(new IfcWorkbenchFilter("IfcWall", string.Empty, "External", string.Empty));
             Equal(1, filtered.VisibleGuids.Count, "filtered visible count");
@@ -113,8 +119,8 @@ namespace QS3D.Core.SmokeTests
         private sealed class FakeRenderer : IQuantBimViewportRenderer
         {
             public int PresentCount { get; private set; }
-            public QuantBimViewportPresentation LastPresentation { get; private set; }
-            public IfcViewCommand LastNavigation { get; private set; }
+            public QuantBimViewportPresentation LastPresentation { get; private set; } = null!;
+            public IfcViewCommand LastNavigation { get; private set; } = null!;
             public QuantBimViewportStandardView LastStandardView { get; private set; }
 
             public void Present(QuantBimViewportPresentation presentation)
