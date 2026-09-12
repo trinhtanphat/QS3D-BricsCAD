@@ -1,12 +1,12 @@
 # QuantBIM IFC STEP ingestion
 
-Issue #6500 introduced the host-neutral IFC STEP source consumed by the canonical `QuantBimStandaloneWorkbench`. Issue #6560 added quantity-specific and project/global SI-unit resolution. Issue #6565 extends that same resolver with bounded `IfcConversionBasedUnit` support; no second workbench or BricsCAD dependency is introduced into `QS3D.Core`.
+Issue #6500 introduced the host-neutral IFC STEP source consumed by the canonical `QuantBimStandaloneWorkbench`. Issue #6560 added quantity-specific and project/global SI-unit resolution. Issue #6565 extended that same resolver with bounded `IfcConversionBasedUnit` support. Issue #6577 broadens the same parser's QS-facing product envelope for common structural and building-envelope elements; no second workbench or BricsCAD dependency is introduced into `QS3D.Core`.
 
 ## Supported QS ingestion slice
 
 `IfcStepStandaloneSource` implements `IIfcStandaloneSource` and deterministically resolves the IFC subset needed for quantity review:
 
-- product identity for wall/slab/beam/column/door/window/space;
+- product identity for wall/slab/beam/column/door/window/space plus footing/pile/roof/curtain-wall/member/plate;
 - `IfcRelContainedInSpatialStructure` storey containment;
 - `IfcRelDefinesByType` type names;
 - `IfcPropertySet` / `IfcPropertySingleValue` values;
@@ -17,6 +17,8 @@ Issue #6500 introduced the host-neutral IFC STEP source consumed by the canonica
 - bounded `IfcConversionBasedUnit -> IfcMeasureWithUnit` chains for length, area, volume and mass when the component unit ultimately resolves to a supported SI or conversion-based unit of the same dimensional type;
 - `IfcClassificationReference` + `IfcRelAssociatesClassification` classification codes;
 - content-derived `IFCSTEP-*` revision fingerprints and `ifc-step://#id` evidence locators.
+
+The additional QS product entities normalize to `IfcFooting`, `IfcPile`, `IfcRoof`, `IfcCurtainWall`, `IfcMember`, and `IfcPlate`. They reuse the same storey/type/classification/property/QTO/evidence pipeline as the original bounded entity set. The parser remains allow-list based: unrelated IFC products are not silently retyped into a supported QS entity.
 
 Supported quantities continue to normalize into the existing downstream units `m`, `m2`, `m3`, `kg`, and `count`. Conversion-unit names are not trusted as conversion authority: scale comes from the IFC conversion-factor graph and dimensional metadata.
 
@@ -32,7 +34,7 @@ Count remains canonical `count`; explicit count-unit extensions are outside this
 
 ## Conversion-based unit resolution
 
-For a supported `IfcConversionBasedUnit`, the resolver now requires:
+For a supported `IfcConversionBasedUnit`, the resolver requires:
 
 - an `IfcDimensionalExponents` reference matching the declared unit type;
 - a valid `IfcMeasureWithUnit` conversion-factor record;
@@ -42,7 +44,7 @@ For a supported `IfcConversionBasedUnit`, the resolver now requires:
 
 This supports data-driven units such as foot, square foot, cubic foot and nested inch-through-foot chains without hard-coding those names. Quantity-specific conversion units still override global project units.
 
-The representative `tests/fixtures/quantbim/conversion-qto.ifc` fixture and `QsQuantBimConversionUnitSmoke` exercise global foot length, explicit square-foot area, global cubic-foot volume, SI gram compatibility, a nested inch conversion chain, and deterministic fail-closed cases.
+The representative `tests/fixtures/quantbim/conversion-qto.ifc` fixture and `QsQuantBimConversionUnitSmoke` exercise global foot length, explicit square-foot area, global cubic-foot volume, SI gram compatibility, a nested inch conversion chain, and deterministic fail-closed cases. `QsQuantBimEntityCoverageSmoke` exercises the six additional QS product entities through containment, classification, QTO, workbench BOQ aggregation and traceable evidence while proving an unrelated entity remains outside the bounded parser envelope.
 
 ## Fail-closed behavior
 
@@ -58,4 +60,4 @@ Geometry tessellation remains outside this parser boundary. `GeometryReference` 
 
 ## Remaining bounded IFC work
 
-This slice does not claim schema-complete IFC support. Legitimate follow-up work includes broader entity/schema coverage, richer property/value types, additional standards-backed unit forms where commercially relevant, and production tessellation adapters. Each requires a separate ownership/evidence carrier and must reuse `IfcStandaloneDocument`, QTO and downstream commercial contracts rather than fork them.
+This slice does not claim schema-complete IFC support. Legitimate follow-up work includes additional explicitly selected IFC entity/schema coverage, richer property/value types, additional standards-backed unit forms where commercially relevant, and production tessellation adapters. Each requires a separate ownership/evidence carrier and must reuse `IfcStandaloneDocument`, QTO and downstream commercial contracts rather than fork them.

@@ -206,7 +206,8 @@ namespace QS3D.Core.BenchmarkParity
         {
             switch (record.Entity)
             {
-                case "IFCWALL": case "IFCWALLSTANDARDCASE": case "IFCSLAB": case "IFCBEAM": case "IFCCOLUMN": case "IFCDOOR": case "IFCWINDOW": case "IFCSPACE": return true;
+                case "IFCWALL": case "IFCWALLSTANDARDCASE": case "IFCSLAB": case "IFCBEAM": case "IFCCOLUMN": case "IFCDOOR": case "IFCWINDOW": case "IFCSPACE":
+                case "IFCFOOTING": case "IFCPILE": case "IFCROOF": case "IFCCURTAINWALL": case "IFCMEMBER": case "IFCPLATE": return true;
                 default: return false;
             }
         }
@@ -222,6 +223,12 @@ namespace QS3D.Core.BenchmarkParity
                 case "IFCDOOR": return "IfcDoor";
                 case "IFCWINDOW": return "IfcWindow";
                 case "IFCSPACE": return "IfcSpace";
+                case "IFCFOOTING": return "IfcFooting";
+                case "IFCPILE": return "IfcPile";
+                case "IFCROOF": return "IfcRoof";
+                case "IFCCURTAINWALL": return "IfcCurtainWall";
+                case "IFCMEMBER": return "IfcMember";
+                case "IFCPLATE": return "IfcPlate";
                 default: throw new InvalidDataException("Unsupported IFC product entity " + entity + ".");
             }
         }

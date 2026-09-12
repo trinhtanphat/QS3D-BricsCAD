@@ -29,6 +29,7 @@ namespace QS3D.Core.SmokeTests
             P5RebarEvidenceRules();
             P6SpecialCategoryEvidenceRules();
             P7ReviewDocumentationEvidenceRules();
+            P8DrawingInteroperabilityEvidenceRules();
         }
 
         private static ParityFeatureRecord Record(string id, ParityEvidenceStage stage) =>
@@ -171,9 +172,26 @@ namespace QS3D.Core.SmokeTests
             }
             var drawingManager = manifest.GetRequired(new FeatureId("drawing-manager"));
             Equal(ParityApplicability.Applicable, drawingManager.Applicability);
-            Equal(ParityEvidenceStage.ReferenceCaptured, drawingManager.EvidenceStage);
+            // P7 established the minimum reference evidence. Later parity phases may
+            // monotonically advance this same canonical row and own the exact stage.
+            if (drawingManager.EvidenceStage < ParityEvidenceStage.ReferenceCaptured)
+                throw new InvalidOperationException("P7 Drawing Manager evidence regressed below ReferenceCaptured.");
             if (manifest.CatalogComplete)
                 throw new InvalidOperationException("P7 must not mark the parity catalog complete.");
+        }
+        private static void P8DrawingInteroperabilityEvidenceRules()
+        {
+            var path = Path.Combine("docs", "BLT3D-PARITY-MANIFEST.tsv");
+            var manifest = ParityManifestParser.Parse(File.ReadAllLines(path));
+            foreach (var id in new[] { "drawing-manager", "ifc" })
+            {
+                var record = manifest.GetRequired(new FeatureId(id));
+                Equal(id, record.WorkflowKey);
+                Equal(ParityApplicability.Applicable, record.Applicability);
+                Equal(ParityEvidenceStage.CommandWired, record.EvidenceStage);
+            }
+            if (manifest.CatalogComplete)
+                throw new InvalidOperationException("P8 must not mark the parity catalog complete.");
         }
         private static void RepositoryManifestBlocksPrematureClosure()
         {
