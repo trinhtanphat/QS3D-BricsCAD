@@ -51,6 +51,9 @@ required_state_tokens = (
     'WriteMap(writer, element.Properties, "properties"',
     'WriteMap(writer, element.Quantities, "quantities"',
     "snapshot.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.Key, right.Key))",
+    "writer.Write(CanonicalizeOrdinalIgnoreCaseIdentity(value))",
+    "writer.Write(CanonicalizeOrdinalIgnoreCaseIdentity(pair.Key))",
+    "(value ?? string.Empty).ToUpperInvariant()",
     "RequireSupportedNestedCount",
 )
 for token in required_state_tokens:
@@ -83,6 +86,8 @@ required_smoke_tokens = (
     'SourceHandles.Add("AB12")',
     "element.Category = ElementCategory.GlassWall",
     "element.MarkDirty(ElementDirtyFlags.Quantity)",
+    'element.SetProperty("alpha", "1")',
+    'element.SourceHandles.Add("ab12")',
     "checkpoint.Restore(project);",
     "captured element semantic state changed",
 )
