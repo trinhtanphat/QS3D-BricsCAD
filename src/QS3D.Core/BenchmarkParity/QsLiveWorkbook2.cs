@@ -246,12 +246,19 @@ namespace QS3D.Core.BenchmarkParity
                     trace.Add("source:" + key + "@" + source.Revision);
                 }
 
-                var dependencyValue = 0d;
+                var dependencyValues = new List<double>();
                 foreach (var dependencyId in binding.DependsOnBindingIds.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
                 {
                     var dependency = results[dependencyId];
-                    dependencyValue += dependency.Value;
+                    dependencyValues.Add(dependency.Value);
                     trace.Add("binding:" + dependencyId + "=" + dependency.Value.ToString("R", System.Globalization.CultureInfo.InvariantCulture));
+                }
+
+                double dependencyValue;
+                if (!TryCompensatedSum(dependencyValues, out dependencyValue))
+                {
+                    results[id] = Failure(binding, LiveWorkbookFreshness.Error, "Refresh dependency aggregation produced a non-finite value.");
+                    continue;
                 }
 
                 var value = (sourceValue + dependencyValue) * binding.Multiplier + binding.Offset;
@@ -281,6 +288,40 @@ namespace QS3D.Core.BenchmarkParity
                 .ThenBy(x => x.Binding.Sheet, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Binding.Cell, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Binding.BindingId, StringComparer.OrdinalIgnoreCase));
+        }
+
+        private static bool TryCompensatedSum(IEnumerable<double> values, out double total)
+        {
+            var sum = 0d;
+            var compensation = 0d;
+            foreach (var value in values)
+            {
+                var tentative = sum + value;
+                if (double.IsNaN(tentative) || double.IsInfinity(tentative))
+                {
+                    total = 0d;
+                    return false;
+                }
+
+                compensation += Math.Abs(sum) >= Math.Abs(value)
+                    ? (sum - tentative) + value
+                    : (value - tentative) + sum;
+                if (double.IsNaN(compensation) || double.IsInfinity(compensation))
+                {
+                    total = 0d;
+                    return false;
+                }
+                sum = tentative;
+            }
+
+            total = sum + compensation;
+            if (double.IsNaN(total) || double.IsInfinity(total))
+            {
+                total = 0d;
+                return false;
+            }
+            if (total == 0d) total = 0d;
+            return true;
         }
 
         private static IReadOnlyList<string> TopologicalOrder(IDictionary<string, LiveWorkbookBinding> bindings)
