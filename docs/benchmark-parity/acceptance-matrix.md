@@ -4,14 +4,14 @@ This matrix records source-safe regression evidence for the six benchmark groups
 
 | Benchmark group | Source-safe acceptance evidence on `main` | Automatically exercised boundary | Remaining / separate boundary |
 | --- | --- | --- | --- |
-| RIB CostX | calibrated 2D takeoff, takeoff-package revision UX, workbook live-link contracts, quantity/cost/export regression | `BenchmarkParitySuiteSmoke`, including `Qs2DTakeoffWorkflowSmoke`, `QsTakeoffPackageUxSmoke`, and `QsLiveWorkbookApiSmoke` | native PDF/raster/CAD interaction and licensed-host UX remain separate; active source-handle provenance carrier #6549/#6550 owns its reserved paths |
-| Cubicost | concrete/formwork calculation and downstream quantity workflow | `ConcreteAndFormwork` plus `QsCubicostQuantBimSmoke` | customer-model/native-host qualification remains separate |
-| Autodesk Takeoff / Forma | calibrated 2D measurement, revision/package workflow and source traceability | `CalibratedTwoDimensionalTakeoff`, `Qs2DTakeoffWorkflowSmoke`, `QsTakeoffPackageUxSmoke` | browser/cloud/vendor-service equivalence is not claimed by host-neutral Core smoke |
-| Solibri | strict IFC QA gating and IFC quantity workbench behavior | `QaGateBlocksInvalidModel`, `QsQaGate2Smoke`, `IfcWorkbench` | native Solibri interoperability/UI equivalence requires explicit external qualification if pursued |
-| Trimble | construction lifecycle and deterministic project-controls/ERP interchange | `ConstructionLifecycle`, `QsTrimbleConstructionLifecycleSmoke` | external ERP/vendor SDK execution remains an outer-adapter concern |
-| QuantBIM | IFC/QTO workflow, standalone scene/viewport carriers and deterministic selection/navigation contracts | `QsCubicostQuantBimSmoke`; dedicated scene/viewport module-initializer smokes run independently where registered | rendered/native UI fidelity and licensed BricsCAD-host behavior remain separate |
+| RIB CostX | calibrated 2D takeoff, PDF/raster sheet ingestion, takeoff-package revision UX, source-handle revision provenance, workbook live-link contracts, quantity/cost/export regression | `BenchmarkParitySuiteSmoke`, including `Qs2DTakeoffWorkflowSmoke`, `QsTakeoffPackageUxSmoke`, and `QsLiveWorkbookApiSmoke`; #6549/#6550 source-handle provenance is integrated on current `main` | licensed-host CAD interaction and full CostX desktop UX equivalence remain separate; hosted smoke is source-safe evidence only |
+| Cubicost | concrete/formwork calculation and reviewed-quantity downstream workflow into existing estimate/tender/procurement boundaries | `ConcreteAndFormwork`, `QsCubicostQuantBimSmoke`, and separately registered `QsCubicostDownstreamSmoke` | customer-model/native-host qualification and proprietary desktop UX remain separate |
+| Autodesk Takeoff / Forma | calibrated 2D measurement, PDF/raster sheet ingestion, revision/package workflow and source traceability | `CalibratedTwoDimensionalTakeoff`, `Qs2DTakeoffWorkflowSmoke`, `QsTakeoffPackageUxSmoke` | browser/cloud/vendor-service equivalence is not claimed by host-neutral Core smoke |
+| Solibri | strict IFC QA gating and guarded downstream execution before quantity workflows | `QaGateBlocksInvalidModel`, `QsQaGate2Smoke`, `IfcWorkbench` | complete proprietary ruleset coverage and native Solibri review/UI equivalence require separate evidence if pursued |
+| Trimble | supplier governance, commitments, PO/delivery tracking, field progress, actual-vs-commitment control and deterministic project-controls/ERP interchange | `ConstructionLifecycle`, `QsTrimbleConstructionLifecycleSmoke` | external ERP/vendor SDK execution remains an outer-adapter concern; hosted CI is not external-system certification |
+| QuantBIM | standalone IFC/QTO workflow, traceable takeoff, IFC STEP ingestion, renderer-neutral scene contract and standalone viewport orchestration | `QsCubicostQuantBimSmoke`; dedicated `QsQuantBimSceneSmoke` and `QsQuantBimViewportHostSmoke` module initializers execute when the smoke assembly loads | a concrete Windows renderer/desktop shell, packaging/signing and customer-style native UI qualification remain separate |
 
-## P0 Live Workbook and Integration API acceptance
+## Live Workbook and Integration API acceptance
 
 `QsLiveWorkbookApiSmoke` is deliberately invoked by the consolidated `BenchmarkParitySuiteSmoke`. This prevents the existing Live Workbook v2 / API v1 test from becoming dead regression coverage merely because the file itself has no module initializer.
 
@@ -32,6 +32,14 @@ The older `WorkbookLiveLinkEngine` and `QsIntegrationRouteCatalog` checks remain
 ## Acceptance rules
 
 1. Hosted/Core smoke may prove deterministic source-safe behavior only. It must never be described as licensed BricsCAD `LOCAL_PASS` evidence.
-2. A benchmark item is not considered fully closed solely because this matrix has a green row. Native host, vendor service, UI, file-format, customer-model or external-system qualification remains separate whenever the feature depends on those environments.
-3. Active Reservation-v2 ownership must be respected. In particular, #6549/#6550 currently owns the CostX/Autodesk-style takeoff source-handle revision-provenance paths; this acceptance carrier does not modify them.
-4. New benchmark regressions should extend the canonical implementation/test surface rather than introducing parallel engines for the same domain.
+2. A benchmark item is not considered fully closed solely because this matrix has a green source-safe row. Native host, vendor service, UI, file-format, customer-model or external-system qualification remains separate whenever the feature depends on those environments.
+3. Reservation-v2 ownership must be respected. The CostX source-handle provenance carrier #6549/#6550 is now integrated; this acceptance carrier still does not modify its production/test/doc paths.
+4. A smoke file that is neither registered, called by a registered suite, nor a module initializer is not acceptance evidence.
+5. New benchmark regressions should extend the canonical implementation/test surface rather than introducing parallel engines for the same domain.
+6. Exact-head Shared CI and Hybrid Coordinator must both be terminal green on a branch that is current-main-safe before merge.
+
+## Coordinator status after CostX provenance integration
+
+Trimble construction lifecycle/project-controls is source-safe complete. CostX source-handle provenance #6549/#6550 is integrated. This #6552 carrier closes the cross-cutting regression hole in which Live Workbook v2 / Integration API v1 smoke existed but was not executed by the consolidated benchmark suite.
+
+The overall six-group benchmark program must still not be called complete solely from hosted CI. In particular, QuantBIM currently stops at a renderer-neutral scene plus viewport-host boundary: repository `src/` has no standalone Windows/QuantBIM desktop project, so a concrete renderer/desktop shell and its packaging/native UI qualification remain a distinct P1 product-parity gap unless the program explicitly declares that boundary out of scope.
