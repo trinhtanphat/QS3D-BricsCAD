@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.SmokeTests
@@ -13,6 +14,10 @@ namespace QS3D.Core.SmokeTests
             RejectedMutationsDoNotAdvance();
             RevisionOverflowFailsBeforeMutation();
             ProjectQuantityRuleRevisionLifecycleSmoke.Run();
+            AuditEventStructuralMutationsAdvanceExactlyOnce();
+            AuditEventNoOpMutationsDoNotAdvance();
+            AuditTrailMutationsAdvanceExactlyOnce();
+            AuditEventRevisionOverflowFailsBeforeMutation();
         }
 
         private static void StructuralMutationsAdvanceExactlyOnce()
@@ -101,6 +106,62 @@ namespace QS3D.Core.SmokeTests
             throw new Exception("Expected element structural mutation to fail before mutation when ChangeVersion overflows.");
         }
 
+        private static void AuditEventStructuralMutationsAdvanceExactlyOnce()
+        {
+            var project = Project();
+            var first = Audit("one");
+            var second = Audit("two");
+            var third = Audit("three");
+
+            AssertAdvance(project, () => project.AuditEvents.Add(first), "audit Add");
+            AssertAdvance(project, () => project.AuditEvents.Insert(0, second), "audit Insert");
+            AssertAdvance(project, () => project.AuditEvents[1] = third, "audit index replacement");
+            if (!ReferenceEquals(project.AuditEvents[1], third)) throw new Exception("Expected replacement audit event to be installed.");
+            AssertAdvance(project, () =>
+            {
+                if (!project.AuditEvents.Remove(second)) throw new Exception("Expected audit Remove to succeed.");
+            }, "audit Remove");
+            project.AuditEvents.Add(first);
+            AssertAdvance(project, () => project.AuditEvents.RemoveAt(0), "audit RemoveAt");
+            if (project.AuditEvents.Count == 0) project.AuditEvents.Add(first);
+            AssertAdvance(project, project.AuditEvents.Clear, "audit Clear");
+        }
+
+        private static void AuditEventNoOpMutationsDoNotAdvance()
+        {
+            var project = Project();
+            var first = Audit("one");
+            project.AuditEvents.Add(first);
+            var version = project.ChangeVersion;
+
+            project.AuditEvents[0] = first;
+            Equal(version, project.ChangeVersion, "audit same-reference replacement");
+            if (project.AuditEvents.Remove(Audit("missing"))) throw new Exception("Unexpected removal of missing audit event.");
+            Equal(version, project.ChangeVersion, "audit remove-missing");
+            project.AuditEvents.Clear();
+            var emptyVersion = project.ChangeVersion;
+            project.AuditEvents.Clear();
+            Equal(emptyVersion, project.ChangeVersion, "audit clear-empty");
+        }
+
+        private static void AuditTrailMutationsAdvanceExactlyOnce()
+        {
+            var project = Project();
+            var trail = AuditTrail.ForProject(project);
+            AssertAdvance(project, () => trail.Record("record", string.Empty, "detail"), "AuditTrail.Record");
+            AssertAdvance(project, trail.Clear, "AuditTrail.Clear");
+        }
+
+        private static void AuditEventRevisionOverflowFailsBeforeMutation()
+        {
+            var project = Project();
+            SetChangeVersion(project, long.MaxValue);
+            var beforeCount = project.AuditEvents.Count;
+            Throws<OverflowException>(() => project.AuditEvents.Add(Audit("overflow")));
+            Equal(beforeCount, project.AuditEvents.Count, "audit overflow count");
+            Equal(long.MaxValue, project.ChangeVersion, "audit overflow revision");
+        }
+
         private static void AssertAdvance(ProjectState project, Action action, string operation)
         {
             var before = project.ChangeVersion;
@@ -132,6 +193,12 @@ namespace QS3D.Core.SmokeTests
         private static ProjectState Project() => new ProjectState("element-structural-revision", "Element structural revision");
 
         private static ProjectElement Element(string id) => new ProjectElement(id, ElementCategory.Beam);
+
+        private static AuditEvent Audit(string action) => new AuditEvent
+        {
+            Utc = DateTime.UtcNow,
+            Action = action
+        };
 
         private static void SetChangeVersion(ProjectState project, long value)
         {
