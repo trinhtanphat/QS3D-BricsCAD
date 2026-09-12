@@ -15,7 +15,7 @@ Refresh states are explicit:
 
 - `Fresh` — accepted value and source revision remain current;
 - `Refreshed` — the current source/dependency cascade changed the value or revision;
-- `Stale` — usable evidence exists but its source revision is not the requested current revision;
+- `Stale` — usable evidence exists but either the binding's source revision is not the requested current revision or at least one resolved upstream dependency is stale;
 - `MissingSource` — no authoritative source exists for the binding;
 - `Conflict` — duplicate cell/binding identity or conflicting source snapshots make the result ambiguous;
 - `Error` — missing/cyclic dependency, an unusable upstream result, or non-finite cascade arithmetic prevents deterministic recalculation.
@@ -29,6 +29,8 @@ The deterministic calculation for a binding is:
 `value = (authoritative source quantity + sum(resolved dependency values)) * multiplier + offset`
 
 Bindings with no source can act as deterministic calculated cells over upstream bindings. Cycles are rejected as errors. Conflicting source snapshots are rejected instead of selecting an arbitrary winner. If otherwise finite admitted values overflow or produce `NaN`/infinity during the cascade, the affected binding returns `Error`, preserves its last accepted value, and blocks its dependents through the normal unusable-upstream path. The engine still returns deterministic results for unrelated bindings in the same batch instead of aborting the entire refresh operation.
+
+Staleness is transitive across the dependency graph. A binding remains usable when an upstream dependency is stale, but it is also reported `Stale` even when its own direct source is current or absent. This prevents a calculated BOQ/workbook cell from being presented as current while any value in its dependency lineage still depends on an older revision. The stale result identifies an immediate stale upstream binding in its diagnostic message, while the existing trace retains the resolved dependency values.
 
 ## REST API v1 contract
 
@@ -66,7 +68,7 @@ Version `1.0` supplies stable DTOs for project, source, quantity, BOQ, estimate,
 
 ETag identity uses deterministic length-framed hexadecimal segments for project id, revision and resource kind rather than delimiter concatenation. This prevents project/revision pairs such as `P1-R2` + `X` and `P1` + `R2-X` from producing the same validator. Existing API routes and DTOs remain unchanged; clients holding a pre-hardening validator simply receive one 200 response and cache the new validator.
 
-Workbook refresh returns 409 with `WORKBOOK_REFRESH_CONFLICT` when the deterministic batch contains a missing source, conflict or dependency error. A route/batch workbook mismatch returns 409 with `WORKBOOK_IDENTITY_MISMATCH`. Stale-but-resolvable refreshes return 200 with `STALE_SOURCE_REVISION` so clients can display the value while preventing silent freshness assumptions.
+Workbook refresh returns 409 with `WORKBOOK_REFRESH_CONFLICT` when the deterministic batch contains a missing source, conflict or dependency error. A route/batch workbook mismatch returns 409 with `WORKBOOK_IDENTITY_MISMATCH`. Stale-but-resolvable refreshes return 200 with `STALE_SOURCE_REVISION` so clients can display the value while preventing silent freshness assumptions. Because stale state now propagates transitively, this status also applies when the requested workbook cell has a current direct source but depends on any stale upstream binding.
 
 ## Power BI / ERP / CRM hosting guidance
 
@@ -81,7 +83,7 @@ A host should:
 
 ## Backward compatibility
 
-No existing benchmark type or route is removed. The original `WorkbookLiveLinkEngine` and four-route `QsIntegrationRouteCatalog` remain valid. V2 live-link and API v1 types use new names and can be adopted incrementally by existing workbook/export adapters. The ETag hardening changes only cache-validator values, not DTO shape, routes, scopes or response representation. Non-finite cascade containment changes only a previous exceptional failure mode: callers now receive a normal batch with blocking `Error` results and preserved last accepted values.
+No existing benchmark type or route is removed. The original `WorkbookLiveLinkEngine` and four-route `QsIntegrationRouteCatalog` remain valid. V2 live-link and API v1 types use new names and can be adopted incrementally by existing workbook/export adapters. The ETag hardening changes only cache-validator values, not DTO shape, routes, scopes or response representation. Non-finite cascade containment changes only a previous exceptional failure mode: callers now receive a normal batch with blocking `Error` results and preserved last accepted values. Transitive stale propagation changes only freshness classification for values that were already derived from stale upstream data; those values remain usable and numerically unchanged, but they can no longer be labeled `Fresh` or `Refreshed` until their stale dependency chain is current.
 
 ## Smoke coverage
 
@@ -89,7 +91,8 @@ No existing benchmark type or route is removed. The original `WorkbookLiveLinkEn
 
 - input-order-independent BIM + drawing refresh cascade;
 - source evidence and upstream trace;
-- stale and missing-source indicators;
+- direct and transitive stale indicators;
+- stale propagation through calculated cells and bindings with otherwise-current direct sources;
 - accepted refresh becoming fresh on the next pass;
 - conflicting source snapshots;
 - dependency-cycle rejection;
