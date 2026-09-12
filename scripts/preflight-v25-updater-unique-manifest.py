@@ -29,7 +29,11 @@ def validate_source(text: str) -> None:
     if helper < 0:
         fail("V25 updater must define raw JSON property occurrence counting before manifest parsing")
 
-    ignore_case = text.find("[StringComparison]::OrdinalIgnoreCase", helper)
+    helper_end = text.find("function Convert-ToStrictSemVer", helper)
+    if helper_end <= helper:
+        fail("V25 updater duplicate-property helper boundary could not be isolated")
+
+    ignore_case = text.find("[StringComparison]::OrdinalIgnoreCase", helper, helper_end)
     if ignore_case < 0:
         fail("V25 updater JSON property-name comparison must match PowerShell case-insensitive property semantics")
 
