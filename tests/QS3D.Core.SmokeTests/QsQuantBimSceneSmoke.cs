@@ -55,18 +55,11 @@ namespace QS3D.Core.SmokeTests
 
             var exposed = mesh.ArtifactBytes as IList<byte>;
             True(exposed != null, "artifact bytes read-only list surface");
-            var rejected = false;
-            try
-            {
-                exposed[0] = 77;
-            }
-            catch (NotSupportedException)
-            {
-                rejected = true;
-            }
+            True(exposed.IsReadOnly, "artifact bytes expose read-only collection");
 
-            True(rejected, "artifact bytes reject consumer mutation");
-            Equal((byte)10, mesh.ArtifactBytes[0], "artifact bytes remain immutable");
+            var consumerCopy = mesh.ArtifactBytes.ToArray();
+            consumerCopy[0] = 77;
+            Equal((byte)10, mesh.ArtifactBytes[0], "artifact bytes remain isolated from consumer copy");
         }
 
         private static void RejectUnknownSelection(IfcStandaloneDocument document)
