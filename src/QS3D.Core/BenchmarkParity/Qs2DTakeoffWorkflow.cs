@@ -149,7 +149,8 @@ namespace QS3D.Core.BenchmarkParity
         }
         private static bool Equivalent(TakeoffQuantityEvidence2D left, TakeoffQuantityEvidence2D right)
         {
-            return string.Equals(left.Classification, right.Classification, StringComparison.OrdinalIgnoreCase)
+            return string.Equals(left.SourceHandle, right.SourceHandle, StringComparison.Ordinal)
+                && string.Equals(left.Classification, right.Classification, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(left.Zone, right.Zone, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(left.Layer, right.Layer, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(left.Unit, right.Unit, StringComparison.OrdinalIgnoreCase)
