@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             CorrectedDimensionsFlowIntoBothDomains();
             ProposedRowsFailReviewedPublication();
             DuplicateDomainIdentityFailsClosed();
+            QsCubicostLegacyInventoryAggregationSmoke.Run();
         }
 
         private static void SplitsCombinedQuantitiesWithoutLosingEvidence()
