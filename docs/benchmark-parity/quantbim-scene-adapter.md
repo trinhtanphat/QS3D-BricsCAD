@@ -13,7 +13,7 @@ The Core scene contract contains:
 - triangle mesh payload as finite XYZ vertices and zero-based triangle indices;
 - optional renderer/source artifact bytes exposed as `IReadOnlyList<byte>`;
 - defensive copying of artifact-byte input so caller-owned buffers cannot mutate scene state after construction;
-- a read-only artifact-byte surface backed by `ReadOnlyCollection<byte>`, so consumers cannot assume the scene payload is writable;
+- a getter-only artifact-byte view backed by `ReadOnlyCollection<byte>`; consumers copy that view before creating mutable/native renderer buffers;
 - selection/highlight state projected from the workbench selection set;
 - document revision/path identity retained on the scene;
 - navigation intent reused from `QuantBimStandaloneWorkbench.DefaultNavigation`.
@@ -42,4 +42,4 @@ No existing IFC-QTO, evidence, workbench, `IfcStandaloneElement`, `IfcViewComman
 
 ## Acceptance
 
-`QsQuantBimSceneSmoke` verifies deterministic node ordering, geometry resolution, selected/unselected projection, focus-selection navigation, immutable artifact-byte defensive-copy semantics, rejection of consumer mutation, and fail-closed handling for unknown selections, missing geometry and invalid triangle topology.
+`QsQuantBimSceneSmoke` verifies deterministic node ordering, geometry resolution, selected/unselected projection, focus-selection navigation, artifact-byte defensive-copy semantics, getter-only/read-only exposure, consumer-copy isolation, and fail-closed handling for unknown selections, missing geometry and invalid triangle topology.
