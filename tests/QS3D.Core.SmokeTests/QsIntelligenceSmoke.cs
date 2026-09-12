@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using QS3D.Core.BenchmarkParity;
 using QS3D.Core.Cost;
 using QS3D.Core.Intelligence;
 
@@ -18,6 +19,7 @@ namespace QS3D.Core.SmokeTests
             BoqSuggestionCompositeKeyCollision();
             CostImpact();
             UnifiedPipeline();
+            QaGate2Integration();
         }
 
         private static void AutoClassification()
@@ -166,6 +168,91 @@ namespace QS3D.Core.SmokeTests
             Equal(2, report.BoqSuggestions.Count, "pipeline BOQ count");
             True(report.QualityFindings.All(x => x.Severity != QsQualitySeverity.Error), "pipeline no QA errors");
             Equal(450m, report.CostImpact!.KnownDeltaCost, "pipeline cost impact");
+        }
+
+        private static void QaGate2Integration()
+        {
+            var now = new DateTime(2026, 9, 12, 0, 0, 0, DateTimeKind.Utc);
+            var records = new[]
+            {
+                Record("A", "Beam", "Dầm bê tông A", "Volume", 12d, "m3", "Structure", "STR.BEAM", "WBS-1", "CONC-BEAM", "BEAM-A")
+            };
+            var required = new[] { "STR.BEAM" };
+            var blockedSnapshot = QaElement("A", includeTypeRelationship: false);
+            var pipeline = new QsIntelligencePipeline();
+
+            var blocked = false;
+            try
+            {
+                pipeline.RunWithQaGate2(
+                    new[] { blockedSnapshot },
+                    QsQaRuleProfile.SolibriQuantityStrict(),
+                    null,
+                    now,
+                    null,
+                    records,
+                    required,
+                    BuildRateBook(),
+                    "VND",
+                    now);
+            }
+            catch (InvalidOperationException)
+            {
+                blocked = true;
+            }
+            True(blocked, "QA2 integration must fail closed before QS Intelligence downstream execution");
+
+            var waiver = new QsQaWaiver(
+                "QA2.MISSING_RELATIONSHIP",
+                "A",
+                "Approved legacy IFC type-assignment exception",
+                "lead.qs",
+                now.AddDays(-1),
+                now.AddDays(1));
+            var waived = pipeline.RunWithQaGate2(
+                new[] { blockedSnapshot },
+                QsQaRuleProfile.SolibriQuantityStrict(),
+                new[] { waiver },
+                now,
+                null,
+                records,
+                required,
+                BuildRateBook(),
+                "VND",
+                now);
+            Equal(QsQaGateStatus.Pass, waived.QaDecision.Status, "waived QA2 integration status");
+            Equal(1, waived.QaDecision.WaivedFindings.Count, "waived QA2 finding remains auditable");
+            Equal(1, waived.IntelligenceReport.BoqSuggestions.Count, "waived QA2 allows BOQ");
+            True(waived.IntelligenceReport.CostImpact != null, "waived QA2 allows estimate/cost impact");
+
+            var warningProfile = new QsQaRuleProfile(
+                new string[0],
+                new[] { "TypeAssignment" },
+                new Dictionary<string, QsQaSeverity> { { "QA2.MISSING_RELATIONSHIP", QsQaSeverity.Warning } },
+                QsQaSeverity.Error);
+            var warning = pipeline.RunWithQaGate2(
+                new[] { blockedSnapshot },
+                warningProfile,
+                null,
+                now,
+                null,
+                records,
+                required);
+            Equal(QsQaGateStatus.PassWithWarnings, warning.QaDecision.Status, "warning QA2 integration status");
+            Equal(1, warning.IntelligenceReport.BoqSuggestions.Count, "warning QA2 allows BOQ");
+        }
+
+        private static QsModelElementSnapshot QaElement(string id, bool includeTypeRelationship)
+        {
+            var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "IfcGuid", "GUID-" + id },
+                { "IfcPset.Pset_Qto", "present" },
+                { "IfcPset.Pset_Identity", "present" },
+                { "IfcRel.SpatialContainer", "L01" }
+            };
+            if (includeTypeRelationship) properties["IfcRel.TypeAssignment"] = "Beam";
+            return new QsModelElementSnapshot(id, "Beam", "Concrete", "STR.BEAM", "L01", 4d, 0.3d, 0.6d, properties);
         }
 
         private static RateBook BuildRateBook()
