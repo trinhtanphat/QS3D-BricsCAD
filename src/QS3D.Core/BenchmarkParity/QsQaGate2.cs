@@ -187,7 +187,14 @@ namespace QS3D.Core.BenchmarkParity
         private static IReadOnlyList<QsQaFinding> Analyze(IReadOnlyList<QsModelElementSnapshot> elements, QsQaRuleProfile profile)
         {
             var result = new List<QsQaFinding>();
-            var ifcGuids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var duplicateIfcGuids = new HashSet<string>(
+                elements
+                    .Select(x => GetIfcGuid(x))
+                    .Where(x => x != null)
+                    .GroupBy(x => x!, StringComparer.OrdinalIgnoreCase)
+                    .Where(x => x.Count() > 1)
+                    .Select(x => x.Key),
+                StringComparer.OrdinalIgnoreCase);
 
             foreach (var element in elements)
             {
@@ -195,11 +202,15 @@ namespace QS3D.Core.BenchmarkParity
                 AddIf(result, element.Type.Length == 0, profile, "QA2.MISSING_TYPE", QsQaSeverity.Error, element.Id, "Type assignment is required.");
                 AddIf(result, element.Length <= 0d || element.Width <= 0d || element.Height <= 0d, profile, "QA2.INVALID_DIMENSIONS", QsQaSeverity.Error, element.Id, "Positive length, width and height are required.");
 
-                string guid;
-                if (element.Properties.TryGetValue("IfcGuid", out guid) && !string.IsNullOrWhiteSpace(guid))
-                {
-                    AddIf(result, !ifcGuids.Add(guid.Trim()), profile, "QA2.DUPLICATE_IFC_GUID", QsQaSeverity.Critical, element.Id, "IFC GUID must be unique.");
-                }
+                var guid = GetIfcGuid(element);
+                AddIf(
+                    result,
+                    guid != null && duplicateIfcGuids.Contains(guid),
+                    profile,
+                    "QA2.DUPLICATE_IFC_GUID",
+                    QsQaSeverity.Critical,
+                    element.Id,
+                    "IFC GUID must be unique.");
 
                 foreach (var pset in profile.RequiredPsets)
                 {
@@ -256,6 +267,13 @@ namespace QS3D.Core.BenchmarkParity
                 .OrderBy(x => x.ElementId, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.RuleId, StringComparer.OrdinalIgnoreCase)
                 .ToList());
+        }
+
+        private static string? GetIfcGuid(QsModelElementSnapshot element)
+        {
+            string guid;
+            if (!element.Properties.TryGetValue("IfcGuid", out guid) || string.IsNullOrWhiteSpace(guid)) return null;
+            return guid.Trim();
         }
 
         private static void AddIf(List<QsQaFinding> result, bool condition, QsQaRuleProfile profile, string ruleId, QsQaSeverity fallback, string elementId, string message)
