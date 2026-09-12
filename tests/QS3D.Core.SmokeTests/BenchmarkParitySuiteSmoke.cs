@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             CalibratedTwoDimensionalTakeoff();
             Qs2DTakeoffWorkflowSmoke.Run();
             QsTakeoffPackageUxSmoke.Run();
+            TakeoffPackageEvidenceSourceAffinitySmoke.Run();
             WorkbookLiveLinkRefresh();
             IntegrationRoutes();
             QsLiveWorkbookApiSmoke.Run();
