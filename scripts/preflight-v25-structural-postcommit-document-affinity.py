@@ -13,10 +13,12 @@ for source in SOURCES:
     label = source.name
     required = [
         "var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
+        "RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);",
         "FinalizeUi(document, nativeDatabaseIdentity, message);",
         "private static IntPtr GetNativeDatabaseIdentity(Document document)",
         "return document.Database.UnmanagedObject;",
         "private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)",
+        "private static void RequireActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)",
         "ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)",
         "document.Database.UnmanagedObject == nativeDatabaseIdentity",
         "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;",
@@ -27,6 +29,13 @@ for source in SOURCES:
     for needle in required:
         if needle not in text:
             errors.append(f"{label}: missing contract: {needle}")
+
+    mutation = text.find("BuildSelected(document, project, selectedIds")
+    mutation_fence = text.rfind("RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);", 0, mutation)
+    if mutation < 0:
+        errors.append(f"{label}: structural BuildSelected mutation call not found")
+    elif mutation_fence < 0:
+        errors.append(f"{label}: exact document-generation authority fence must precede geometry handoff")
 
     finalize = text.find("private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message)")
     if finalize < 0:
@@ -64,10 +73,10 @@ for source in SOURCES:
         if forbidden in text:
             errors.append(f"{label}: stale mutation UI topology remains: {forbidden}")
 
-print("QS3D V25 structural post-commit document-generation preflight")
+print("QS3D V25 structural document-generation/geometry-handoff preflight")
 if errors:
     for error in errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
-print("PASS: structural authoring post-commit UI is bound to the exact managed document/native database generation.")
+print("PASS: structural authoring geometry handoff and post-commit UI are bound to the exact managed document/native database generation.")
