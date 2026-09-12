@@ -104,20 +104,79 @@ function Get-JsonPropertyOccurrenceCount {
         [Parameter(Mandatory = $true)][string]$JsonText,
         [Parameter(Mandatory = $true)][string]$PropertyName
     )
-    $propertyPattern = '(?m)(?:"(?:[^"\\]|\\.)*")\s*:'
+
+    $firstNonWhitespace = 0
+    while ($firstNonWhitespace -lt $JsonText.Length -and [char]::IsWhiteSpace($JsonText[$firstNonWhitespace])) {
+        $firstNonWhitespace++
+    }
+    if ($firstNonWhitespace -ge $JsonText.Length -or $JsonText[$firstNonWhitespace] -ne '{') {
+        throw 'Downloaded V25 draft JSON identity document must have a top-level object.'
+    }
+
     $count = 0
-    foreach ($match in [regex]::Matches($JsonText, $propertyPattern)) {
-        $rawPropertyToken = [regex]::Match($match.Value, '^("(?:[^"\\]|\\.)*")').Groups[1].Value
-        if (-not $rawPropertyToken) { continue }
-        try {
-            $decodedPropertyName = $rawPropertyToken | ConvertFrom-Json -ErrorAction Stop
+    $objectDepth = 0
+    $arrayDepth = 0
+    $i = 0
+    while ($i -lt $JsonText.Length) {
+        $ch = $JsonText[$i]
+        if ($ch -eq '"') {
+            $tokenStart = $i
+            $i++
+            $closed = $false
+            while ($i -lt $JsonText.Length) {
+                if ($JsonText[$i] -eq '\') {
+                    $i += 2
+                    continue
+                }
+                if ($JsonText[$i] -eq '"') {
+                    $closed = $true
+                    break
+                }
+                $i++
+            }
+            if (-not $closed) {
+                throw 'Downloaded V25 draft JSON contains an unterminated string token.'
+            }
+
+            $tokenEnd = $i
+            $lookahead = $tokenEnd + 1
+            while ($lookahead -lt $JsonText.Length -and [char]::IsWhiteSpace($JsonText[$lookahead])) {
+                $lookahead++
+            }
+            if ($objectDepth -eq 1 -and $arrayDepth -eq 0 -and
+                $lookahead -lt $JsonText.Length -and $JsonText[$lookahead] -eq ':') {
+                $rawPropertyToken = $JsonText.Substring($tokenStart, $tokenEnd - $tokenStart + 1)
+                try {
+                    $decodedPropertyName = $rawPropertyToken | ConvertFrom-Json -ErrorAction Stop
+                }
+                catch {
+                    throw 'Downloaded V25 draft JSON contains malformed property encoding.'
+                }
+                if ([string]::Equals([string]$decodedPropertyName, $PropertyName, [StringComparison]::OrdinalIgnoreCase)) {
+                    $count++
+                }
+            }
+            $i = $tokenEnd + 1
+            continue
         }
-        catch {
-            throw 'Downloaded V25 draft JSON contains malformed property encoding.'
+
+        switch ($ch) {
+            '{' { $objectDepth++ }
+            '}' {
+                $objectDepth--
+                if ($objectDepth -lt 0) { throw 'Downloaded V25 draft JSON has invalid object nesting.' }
+            }
+            '[' { $arrayDepth++ }
+            ']' {
+                $arrayDepth--
+                if ($arrayDepth -lt 0) { throw 'Downloaded V25 draft JSON has invalid array nesting.' }
+            }
         }
-        if ([string]::Equals([string]$decodedPropertyName, $PropertyName, [StringComparison]::OrdinalIgnoreCase)) {
-            $count++
-        }
+        $i++
+    }
+
+    if ($objectDepth -ne 0 -or $arrayDepth -ne 0) {
+        throw 'Downloaded V25 draft JSON has unbalanced container nesting.'
     }
     return $count
 }
