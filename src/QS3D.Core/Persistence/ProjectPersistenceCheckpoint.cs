@@ -104,7 +104,7 @@ namespace QS3D.Core.Persistence
             {
                 var element = project.FindElement(pair.Key);
                 if (element == null || !ReferenceEquals(element, pair.Value.Owner) || !pair.Value.Matches(element))
-                    throw new InvalidOperationException("Cannot capture a persistence checkpoint while captured element persistence or semantic state is changing.");
+                    throw new InvalidOperationException("Cannot capture a persistence checkpoint while captured element persistence state is changing or semantic state changed.");
             }
 
             return new ProjectPersistenceCheckpoint(
