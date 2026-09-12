@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.BenchmarkParity;
 
 namespace QS3D.Core.SmokeTests
@@ -53,7 +54,8 @@ namespace QS3D.Core.SmokeTests
 
             for (var i = 0; i < values.Length; i++)
             {
-                var element = new QsModelElementSnapshot("NF-" + i, "Wall", "Concrete", "A-WALL", "L01", values[i], 0.2d, 3d, properties);
+                var element = new QsModelElementSnapshot("NF-" + i, "Wall", "Concrete", "A-WALL", "L01", 4d, 0.2d, 3d, properties);
+                SetSnapshotDimensionForDefenseTest(element, "Length", values[i]);
                 var decision = new QsQaGate2().Evaluate(
                     new[] { element },
                     QsQaRuleProfile.SolibriQuantityStrict(),
@@ -64,6 +66,15 @@ namespace QS3D.Core.SmokeTests
                 True(decision.ActiveFindings.Any(x => x.RuleId == "QA2.INVALID_DIMENSIONS" && x.ElementId == element.Id), "non-finite QA2 dimension finding");
                 True(!decision.CanTakeoff && !decision.CanBoq && !decision.CanEstimate, "non-finite QA2 dimension hard gate");
             }
+        }
+
+        private static void SetSnapshotDimensionForDefenseTest(QsModelElementSnapshot element, string propertyName, double value)
+        {
+            var property = typeof(QsModelElementSnapshot).GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
+            True(property != null, "snapshot dimension property exists");
+            var setter = property!.GetSetMethod(true);
+            True(setter != null, "snapshot dimension private setter exists");
+            setter!.Invoke(element, new object[] { value });
         }
 
         private static void CalibratedTwoDimensionalTakeoff()
