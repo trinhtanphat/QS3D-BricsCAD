@@ -7,7 +7,7 @@ COMMANDS = ROOT / "src/QS3D.BricsCAD.V25/ContractAdministrationCommands.cs"
 UI = ROOT / "src/QS3D.BricsCAD.V25/UI/ContractAdministrationWindow.xaml.cs"
 XAML = ROOT / "src/QS3D.BricsCAD.V25/UI/ContractAdministrationWindow.xaml"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/ContractAdministrationWorkflowSmoke.cs"
-REGISTRY = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs"
+ENTRYPOINT = ROOT / "tests/QS3D.Core.SmokeTests/SmokeTestEntryPoint.cs"
 
 
 def fail(message: str) -> None:
@@ -26,7 +26,7 @@ commands = text(COMMANDS)
 ui = text(UI)
 xaml = text(XAML)
 smoke = text(SMOKE)
-registry = text(REGISTRY)
+entrypoint = text(ENTRYPOINT)
 
 for token in [
     "public sealed class ContractAdministrationWorkflow",
@@ -104,10 +104,10 @@ for token in [
     if token not in smoke:
         fail("contract-administration smoke lost deterministic oracle: " + token)
 
-if "ContractAdministrationWorkflowSmoke.Run();" not in registry:
-    fail("contract-administration smoke is not registered through SmokeTestRegistration.")
+if "ContractAdministrationWorkflowSmoke.Run();" not in entrypoint:
+    fail("contract-administration smoke is not registered through SmokeTestEntryPoint.")
 
 if "[ModuleInitializer]" in smoke or "RegisterAndRun()" in smoke:
-    fail("contract-administration smoke must use the explicit deterministic smoke registry.")
+    fail("contract-administration smoke must use the explicit deterministic smoke entrypoint.")
 
 print("PASS: contract administration preserves revision provenance, deterministic deadlines, EOT/claim lifecycle, audit authority, and thin V25 boundaries.")
