@@ -96,7 +96,25 @@ namespace QS3D.Core.BenchmarkParity
         public IReadOnlyList<TakeoffPackageValidationIssue> Issues { get; private set; }
         public IReadOnlyList<TakeoffWorkflowLine> Inventory { get; private set; }
         public bool CanEstimate { get { return Readiness == TakeoffPackageReadiness.Ready; } }
-        public double EstimatedCost { get { return Inventory.Sum(x => x.EstimatedCost); } }
+        public double EstimatedCost { get { return SumEstimatedCosts(Inventory); } }
+
+        private static double SumEstimatedCosts(IEnumerable<TakeoffWorkflowLine> inventory)
+        {
+            var sum = 0d;
+            var compensation = 0d;
+            foreach (var line in inventory)
+            {
+                var value = line.EstimatedCost;
+                var next = sum + value;
+                compensation += Math.Abs(sum) >= Math.Abs(value)
+                    ? (sum - next) + value
+                    : (value - next) + sum;
+                sum = next;
+            }
+
+            var total = QsModelElementSnapshot.Finite(sum + compensation, "estimatedCost");
+            return total == 0d ? 0d : total;
+        }
     }
 
     public sealed class AutodeskTakeoffPackageCoordinator

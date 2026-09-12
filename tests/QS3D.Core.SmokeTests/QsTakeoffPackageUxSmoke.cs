@@ -12,6 +12,9 @@ namespace QS3D.Core.SmokeTests
         {
             BlocksStaleDrawingRevision();
             BuildsReadyMixedSourcePackage();
+            RejectsNonFiniteLineEstimatedCost();
+            PreservesHighDynamicRangeEstimatedCost();
+            CanonicalizesSignedZeroEstimatedCost();
             ComparesPackageDrawingRevisions();
             PreservesHighDynamicRangePackageQuantityDelta();
             AdmitsPdfAndRasterSheetPayloads();
@@ -67,6 +70,50 @@ namespace QS3D.Core.SmokeTests
             Near(26.25d, result.Inventory[0].FormulaQuantity, 1e-12, "mixed package formula quantity");
             Near(2625d, result.EstimatedCost, 1e-12, "mixed package estimated cost");
             True(result.CanEstimate, "mixed package can estimate");
+        }
+
+        private static void RejectsNonFiniteLineEstimatedCost()
+        {
+            Throws<ArgumentOutOfRangeException>(
+                () => new TakeoffWorkflowLine("ARC.OVERFLOW", "L01", "ea", 1d, double.MaxValue, 2d, 1),
+                "finite operands overflowing line estimated cost");
+        }
+
+        private static void PreservesHighDynamicRangeEstimatedCost()
+        {
+            var package = new TakeoffPackageDefinition("PKG-COST", "Cost Stability", "R1", "Uniclass", "Default");
+            var inventory = new[]
+            {
+                new TakeoffWorkflowLine("A", "", "ea", 1d, 1e16, 1d, 1),
+                new TakeoffWorkflowLine("B", "", "ea", 1d, 1d, 1d, 1),
+                new TakeoffWorkflowLine("C", "", "ea", 1d, 1d, 1d, 1)
+            };
+            var result = new TakeoffPackageBuildResult(
+                package,
+                TakeoffPackageReadiness.Ready,
+                Enumerable.Empty<TakeoffPackageSource>(),
+                Enumerable.Empty<TakeoffPackageValidationIssue>(),
+                inventory);
+
+            Near(10000000000000002d, result.EstimatedCost, 0d, "high dynamic range estimated cost");
+            Equal(3, result.Inventory.Sum(x => x.EvidenceCount), "estimated cost evidence count invariant");
+        }
+
+        private static void CanonicalizesSignedZeroEstimatedCost()
+        {
+            var package = new TakeoffPackageDefinition("PKG-ZERO", "Zero Cost", "R1", "Uniclass", "Default");
+            var inventory = new[]
+            {
+                new TakeoffWorkflowLine("ZERO", "", "ea", 1d, 0d, -1d, 1)
+            };
+            var result = new TakeoffPackageBuildResult(
+                package,
+                TakeoffPackageReadiness.Ready,
+                Enumerable.Empty<TakeoffPackageSource>(),
+                Enumerable.Empty<TakeoffPackageValidationIssue>(),
+                inventory);
+
+            Equal(0L, BitConverter.DoubleToInt64Bits(result.EstimatedCost), "estimated cost signed zero canonicalization");
         }
 
         private static void ComparesPackageDrawingRevisions()
