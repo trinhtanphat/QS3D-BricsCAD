@@ -48,6 +48,7 @@ namespace QS3D.Core.BenchmarkParity
                 {
                     { "QA2.MISSING_MATERIAL", QsQaSeverity.Error },
                     { "QA2.MISSING_TYPE", QsQaSeverity.Error },
+                    { "QA2.MISSING_CLASSIFICATION", QsQaSeverity.Error },
                     { "QA2.INVALID_DIMENSIONS", QsQaSeverity.Error },
                     { "QA2.MISSING_PSET", QsQaSeverity.Error },
                     { "QA2.MISSING_RELATIONSHIP", QsQaSeverity.Critical },
@@ -218,6 +219,7 @@ namespace QS3D.Core.BenchmarkParity
                 AddIf(result, duplicateElementIds.Contains(element.Id), profile, "QA2.DUPLICATE_ELEMENT_ID", QsQaSeverity.Critical, element.Id, "Element identity must be unique before QA waivers can be evaluated safely.");
                 AddIf(result, element.Material.Length == 0, profile, "QA2.MISSING_MATERIAL", QsQaSeverity.Error, element.Id, "Material is required.");
                 AddIf(result, element.Type.Length == 0, profile, "QA2.MISSING_TYPE", QsQaSeverity.Error, element.Id, "Type assignment is required.");
+                AddIf(result, element.Classification.Length == 0, profile, "QA2.MISSING_CLASSIFICATION", QsQaSeverity.Error, element.Id, "Classification is required before quantity workflows can run.");
                 AddIf(result, !IsFinitePositive(element.Length) || !IsFinitePositive(element.Width) || !IsFinitePositive(element.Height), profile, "QA2.INVALID_DIMENSIONS", QsQaSeverity.Error, element.Id, "Finite positive length, width and height are required.");
 
                 var guid = GetIfcGuid(element);
