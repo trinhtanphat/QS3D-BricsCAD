@@ -384,9 +384,12 @@ def main() -> int:
                 "hybrid PR coordinator",
                 failures,
             )
-            if "contents: write" in text or "actions: write" in text:
+            permissions_match = re.search(r"(?ms)^permissions:\s*\n(?P<body>(?:^[ \t]+[^\n]*\n)+)", text)
+            permissions_body = permissions_match.group("body") if permissions_match else ""
+            if "contents: write" in permissions_body or "actions: write" in permissions_body:
                 failures.append(f"{HYBRID_COORDINATOR}: workflow-level write permissions must stay narrow")
-
+            if not re.search(r"(?m)^\s{2}actions:\s*read\s*$", permissions_body):
+                failures.append(f"{HYBRID_COORDINATOR}: workflow-level Actions permission must remain read-only")
     if failures:
         print("Repository professionalism preflight FAILED")
         for failure in failures:
