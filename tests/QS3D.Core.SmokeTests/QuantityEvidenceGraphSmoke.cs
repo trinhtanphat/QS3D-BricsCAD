@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             VolumeAndFormworkParity();
             DeterministicIdentityAndOrdering();
             DeductionProvenance();
+            MixedSignAdjustmentAggregationIsOrderStable();
             GeometryEvidenceAdapterParity();
             BltFoundationReferenceArithmetic();
             InvalidEvidenceFailsClosed();
@@ -145,6 +146,65 @@ namespace QS3D.Core.SmokeTests
             Equal(deduction.EvidenceId, row.EvidenceId, "deduction evidence id");
         }
 
+        private static void MixedSignAdjustmentAggregationIsOrderStable()
+        {
+            var selector = QuantityEvidenceSelector.ForIntersection("S-OVERFLOW", "T-OVERFLOW", "cut-overflow");
+            var positives = Enumerable.Range(0, 128)
+                .Select(i => QuantityAdjustment.Create(
+                    "overflow.add." + i,
+                    "overflow-rule-" + i,
+                    "Near-limit add",
+                    QuantityEvidenceOperation.Add,
+                    "S-OVERFLOW",
+                    "T-OVERFLOW",
+                    i == 0 ? decimal.MaxValue : 1m,
+                    selector))
+                .ToArray();
+            var negatives = Enumerable.Range(0, 128)
+                .Select(i => QuantityAdjustment.Create(
+                    "overflow.deduct." + i,
+                    "overflow-deduct-rule-" + i,
+                    "Cancellation deduct",
+                    QuantityEvidenceOperation.Deduct,
+                    "S-OVERFLOW",
+                    "T-OVERFLOW",
+                    -1m,
+                    selector))
+                .ToArray();
+
+            QuantityAdjustment max = positives[0];
+            QuantityAdjustment? plusOne = null;
+            QuantityAdjustment? minusOne = null;
+            foreach (var positive in positives.Skip(1))
+            {
+                foreach (var negative in negatives)
+                {
+                    var ordered = new[] { max, positive, negative }
+                        .OrderBy(item => item.EvidenceId, StringComparer.Ordinal)
+                        .ToArray();
+                    if (ordered[2] == negative && (ordered[0] == max || ordered[1] == max))
+                    {
+                        plusOne = positive;
+                        minusOne = negative;
+                        break;
+                    }
+                }
+                if (plusOne != null) break;
+            }
+            True(plusOne != null && minusOne != null, "deterministic overflow-order fixture");
+            var selectedPlusOne = plusOne ?? throw new Exception("Missing deterministic positive adjustment fixture.");
+            var selectedMinusOne = minusOne ?? throw new Exception("Missing deterministic negative adjustment fixture.");
+
+            var graph = QuantityExplanation.Create(
+                "S-OVERFLOW",
+                "Evidence",
+                "MixedSignDecimal",
+                "unit",
+                0m,
+                decimal.MaxValue,
+                adjustments: new[] { max, selectedPlusOne, selectedMinusOne });
+            Equal(decimal.MaxValue, graph.NetValue, "mixed-sign adjustment exact total");
+        }
         private static void GeometryEvidenceAdapterParity()
         {
             var faces = new[]

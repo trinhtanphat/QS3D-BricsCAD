@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -419,7 +420,7 @@ public sealed class QuantityExplanation
             .OrderBy(static item => item.EvidenceId, StringComparer.Ordinal)
             .ToArray();
 
-        var adjustmentTotal = orderedAdjustments.Sum(static adjustment => adjustment.Delta);
+        var adjustmentTotal = QuantityEvidenceDecimalMath.SumExactly(orderedAdjustments);
         var expectedNet = grossValue + adjustmentTotal;
         if (expectedNet != netValue)
         {
@@ -440,6 +441,61 @@ public sealed class QuantityExplanation
     }
 }
 
+internal static class QuantityEvidenceDecimalMath
+{
+    private static readonly BigInteger MaximumDecimalCoefficient = (BigInteger.One << 96) - BigInteger.One;
+
+    internal static decimal SumExactly(IReadOnlyList<QuantityAdjustment> adjustments)
+    {
+        if (adjustments is null) throw new ArgumentNullException(nameof(adjustments));
+
+        var coefficient = BigInteger.Zero;
+        var scale = 0;
+        for (var i = 0; i < adjustments.Count; i++)
+        {
+            var bits = decimal.GetBits(adjustments[i].Delta);
+            var valueScale = (bits[3] >> 16) & 0x7F;
+            var valueCoefficient =
+                ((BigInteger)(uint)bits[2] << 64) |
+                ((BigInteger)(uint)bits[1] << 32) |
+                (uint)bits[0];
+            if ((bits[3] & int.MinValue) != 0)
+            {
+                valueCoefficient = -valueCoefficient;
+            }
+
+            if (valueScale > scale)
+            {
+                coefficient *= BigInteger.Pow(10, valueScale - scale);
+                scale = valueScale;
+            }
+            else if (valueScale < scale)
+            {
+                valueCoefficient *= BigInteger.Pow(10, scale - valueScale);
+            }
+
+            coefficient += valueCoefficient;
+        }
+
+        var negative = coefficient.Sign < 0;
+        coefficient = BigInteger.Abs(coefficient);
+        while (scale > 0 && coefficient % 10 == 0)
+        {
+            coefficient /= 10;
+            scale--;
+        }
+
+        if (scale > 28 || coefficient > MaximumDecimalCoefficient)
+        {
+            throw new OverflowException("Quantity evidence adjustment total exceeds the representable decimal range.");
+        }
+
+        var low = unchecked((int)(uint)(coefficient & uint.MaxValue));
+        var mid = unchecked((int)(uint)((coefficient >> 32) & uint.MaxValue));
+        var high = unchecked((int)(uint)((coefficient >> 64) & uint.MaxValue));
+        return new decimal(low, mid, high, negative, (byte)scale);
+    }
+}
 internal static class QuantityEvidenceCollectionSnapshot
 {
     internal const int MaximumItems = 10000;
