@@ -38,7 +38,7 @@ $cases = @(
     @{ Json='{"product":"QS3D"}'; Name='product'; Expected=1 },
     @{ Json='{"product":"QS3D","product":"evil"}'; Name='product'; Expected=2 },
     @{ Json='{"pro\u0064uct":"QS3D","product":"evil"}'; Name='product'; Expected=2 },
-    @{ Json='{"target":"BricsCAD","TARGET":"evil"}'; Name='target'; Expected=1 }
+    @{ Json='{"target":"BricsCAD","TARGET":"evil"}'; Name='target'; Expected=2 }
 )
 '''
 probe += r'''
@@ -63,5 +63,5 @@ try:
 finally:
     probe_path.unlink(missing_ok=True)
 if completed.returncode != 0:
-    raise SystemExit("ERROR: behavioral duplicate/escaped-key probe failed: " + (completed.stderr or completed.stdout).strip())
-print("PASS: V26 package/update identity uniqueness is pre-parse and duplicate/escaped-key aware")
+    raise SystemExit("ERROR: behavioral duplicate/escaped/case-variant-key probe failed: " + (completed.stderr or completed.stdout).strip())
+print("PASS: V26 package/update identity uniqueness is pre-parse and duplicate/escaped/case-variant-key aware")
