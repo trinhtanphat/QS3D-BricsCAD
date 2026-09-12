@@ -9,7 +9,7 @@ errors = []
 
 AUTHORITY_CALL_RE = re.compile(
     r"RequireCurrentMutationAuthority\s*\(\s*"
-    r"document\s*,\s*project\s*,\s*expectedProjectId\s*,\s*"
+    r"document\s*,\s*nativeDatabaseIdentity\s*,\s*project\s*,\s*expectedProjectId\s*,\s*"
     r"expectedChangeVersion\s*,\s*expectedOpeningIds\s*,\s*selected\s*\)\s*;",
     re.MULTILINE,
 )
@@ -36,9 +36,11 @@ else:
     if "expectedOpeningIds.SetEquals(openings.Select(x => x.Id))" not in text:
         errors.append("Auto Host must revalidate the selected Opening target set after canonical bind")
     if authority_call is None:
-        errors.append("Auto Host must revalidate active-document/exact-project generation after CAD matching and before semantic mutation")
-    if "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)" not in text:
-        errors.append("Auto Host final mutation fence must require the exact active managed Document")
+        errors.append("Auto Host must revalidate exact managed/native document and project generation after CAD matching and before semantic mutation")
+    if "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))" not in text:
+        errors.append("Auto Host final mutation fence must require the exact active managed/native database generation")
+    if "document.Database.UnmanagedObject == nativeDatabaseIdentity" not in text:
+        errors.append("Auto Host generation authority must compare the live native database identity")
     if "ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject)" not in text:
         errors.append("Auto Host final mutation fence must re-read canonical project authority")
     if "!ReferenceEquals(currentProject, project)" not in text:
@@ -46,6 +48,7 @@ else:
     if "expectedOpeningIds.SetEquals(currentOpenings.Select(x => x.Id))" not in text:
         errors.append("Auto Host final mutation fence must reject target-set drift after CAD matching")
 
+    native_identity_index = text.find("nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);")
     selected_index = text.find("var selected = ReadSelectedHandles(document);")
     empty_selection_index = text.find("if (selected.Count == 0)")
     readonly_index = text.find("if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))")
@@ -61,6 +64,7 @@ else:
     rollback_index = text.find("var rollback = ProjectStateSnapshot.Capture(project);")
     link_index = text.find("service.LinkOpening(project, item.Opening.Id, item.HostId);")
     if min(
+        native_identity_index,
         selected_index,
         empty_selection_index,
         readonly_index,
@@ -76,13 +80,13 @@ else:
         rollback_index,
         link_index,
     ) < 0:
-        errors.append("missing expected Auto Host selection/read-only/canonical/precommit freshness ordering tokens")
+        errors.append("missing expected Auto Host generation/selection/read-only/canonical/precommit freshness ordering tokens")
     elif not (
-        selected_index < empty_selection_index < readonly_index < preview_resolve_index < zero_target_index <
+        native_identity_index < selected_index < empty_selection_index < readonly_index < preview_resolve_index < zero_target_index <
         project_guard_index < freshness_index < canonical_resolve_index < target_freshness_index <
         scan_commit_index < final_authority_index < semantic_service_index < rollback_index < link_index
     ):
-        errors.append("Auto Host must revalidate the exact document/project/target generation after CAD scan and before rollback snapshot or semantic linking")
+        errors.append("Auto Host must revalidate the exact managed/native document, project and target generation after CAD scan and before rollback snapshot or semantic linking")
 
     if text.count("ExistingProjectMutationContext.TryGet(document, out var project)") != 1:
         errors.append("QS3DAUTOLINKHOSTS must canonicalize the batch mutation project exactly once")
@@ -93,4 +97,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: Auto Host binds canonical state once, revalidates exact document/project/target authority after CAD matching, and preserves rollback coverage before semantic mutation.")
+print("PASS: Auto Host binds canonical state once, revalidates exact managed/native document, project and target authority after CAD matching, and preserves rollback coverage before semantic mutation.")
