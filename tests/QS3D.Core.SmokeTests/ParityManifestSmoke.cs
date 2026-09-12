@@ -30,6 +30,7 @@ namespace QS3D.Core.SmokeTests
             P6SpecialCategoryEvidenceRules();
             P7ReviewDocumentationEvidenceRules();
             P8DrawingInteroperabilityEvidenceRules();
+            P9AiMcpEvidenceRules();
         }
 
         private static ParityFeatureRecord Record(string id, ParityEvidenceStage stage) =>
@@ -193,7 +194,20 @@ namespace QS3D.Core.SmokeTests
             if (manifest.CatalogComplete)
                 throw new InvalidOperationException("P8 must not mark the parity catalog complete.");
         }
-        private static void RepositoryManifestBlocksPrematureClosure()
+        private static void P9AiMcpEvidenceRules()
+        {
+            var path = Path.Combine("docs", "BLT3D-PARITY-MANIFEST.tsv");
+            var manifest = ParityManifestParser.Parse(File.ReadAllLines(path));
+            foreach (var id in new[] { "ai.luna", "mcp.direct-cad" })
+            {
+                var record = manifest.GetRequired(new FeatureId(id));
+                Equal(id, record.WorkflowKey);
+                Equal(ParityApplicability.Applicable, record.Applicability);
+                Equal(ParityEvidenceStage.CommandWired, record.EvidenceStage);
+            }
+            if (manifest.CatalogComplete)
+                throw new InvalidOperationException("P9 must not mark the parity catalog complete.");
+        }        private static void RepositoryManifestBlocksPrematureClosure()
         {
             var path = Path.Combine("docs", "BLT3D-PARITY-MANIFEST.tsv");
             if (!File.Exists(path)) throw new InvalidOperationException("Missing parity manifest: " + path);

@@ -33,8 +33,8 @@ quantity	Quantity	BLT3D / DINH LUONG	quantity	Applicable	CommandWired	-	-
 revision	Revision	BLT3D / BAN SUA DOI	revision	Applicable	CommandWired	-	-
 drawing-manager	DrawingManager	BLT3D / Drawing Manager	drawing-manager	Applicable	CommandWired	-	-
 ifc	Interoperability	BLT3D / IFC	ifc	Applicable	CommandWired	-	-
-ai.luna	AI	BLT3D / LUNA AI	ai.luna	Applicable	ReferenceCaptured	-	-
-mcp.direct-cad	MCP	BLT3D MCP reference + QS3D direct MCP-to-CAD requirement	mcp.direct-cad	Applicable	ReferenceCaptured	-	-
+ai.luna	AI	BLT3D / LUNA AI	ai.luna	Applicable	CommandWired	-	-
+mcp.direct-cad	MCP	BLT3D MCP reference + QS3D direct MCP-to-CAD requirement	mcp.direct-cad	Applicable	CommandWired	-	-
 settings	Settings	BLT3D / Settings	settings	Applicable	ReferenceCaptured	-	-
 launcher	Infrastructure	BLT3D Launcher observed workflow	launcher	Applicable	ReferenceCaptured	-	-
 license.activation	Infrastructure	BLT3D activation UX reference; QS3D-owned implementation	license.activation	Applicable	ReferenceCaptured	-	-

@@ -31,6 +31,7 @@ namespace QS3D.Core.SmokeTests
             P6SpecialCategoryBindings();
             P7ReviewDocumentationBindings();
             P8DrawingInteroperabilityBindings();
+            P9AiMcpBindings();
         }
 
         private static void P2ShellProjectBindings()
@@ -144,7 +145,17 @@ namespace QS3D.Core.SmokeTests
             AssertBinding(registry, "ifc", ParityWorkflowKind.Infrastructure,
                 ParityWorkflowSurface.Ui, ParityWorkflowRequirement.ActiveDocument);
         }
-        private static void AssertBinding(ParityWorkflowRegistry registry, string id,
+        private static void P9AiMcpBindings()
+        {
+            var registry = ParityAiMcpCatalog.CreateRegistry();
+            if (registry.Bindings.Count != 2)
+                throw new InvalidOperationException("P9 AI/MCP catalog must contain exactly two bindings.");
+
+            AssertBinding(registry, "ai.luna", ParityWorkflowKind.Infrastructure,
+                ParityWorkflowSurface.Ui | ParityWorkflowSurface.Mcp, ParityWorkflowRequirement.None);
+            AssertBinding(registry, "mcp.direct-cad", ParityWorkflowKind.Infrastructure,
+                ParityWorkflowSurface.Mcp, ParityWorkflowRequirement.ActiveDocument);
+        }        private static void AssertBinding(ParityWorkflowRegistry registry, string id,
             ParityWorkflowKind kind, ParityWorkflowSurface surfaces, ParityWorkflowRequirement requirements)
         {
             var binding = registry.GetRequired(new FeatureId(id));
