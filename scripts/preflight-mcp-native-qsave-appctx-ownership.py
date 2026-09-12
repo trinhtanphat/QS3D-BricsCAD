@@ -17,9 +17,11 @@ for token in (
     "CadContextQueued",
     "CadContextRunning",
     "CadContextCancelledBeforeStart",
+    "CadContextTerminal",
     "InvokeMutationInCadContext",
     "ExecuteInApplicationContext(ExecuteMutationCadContext",
     "Interlocked.CompareExchange(ref item.State, CadContextCancelledBeforeStart, CadContextQueued)",
+    "Interlocked.Exchange(ref item.State, CadContextTerminal)",
     "item.Done.Wait()",
 ):
     if token not in text:
