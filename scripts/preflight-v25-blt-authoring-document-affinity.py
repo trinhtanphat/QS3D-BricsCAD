@@ -43,22 +43,25 @@ for start_marker, end_marker in commands:
 
 # A committed native transaction must not be reported as command failure merely
 # because Regen/status pumps host work or the originating generation becomes stale.
-for marker in ["transaction.Commit();"]:
-    if marker not in text:
-        errors.append("expected native commit marker missing")
+if "transaction.Commit();" not in text:
+    errors.append("expected native commit marker missing")
 if "document.Editor.Regen();\n                Report(" in text:
     errors.append("raw Regen + Report after commit must be replaced by generation-safe post-commit UI publication")
 
-run_start = text.find("private static void Run(string operation")
-run_end = text.find("private static Extents3d RequireExtents", run_start)
+# Only the authoring runner belongs to this C03 carrier. The generic Run helper also
+# serves MCP commands and must remain outside this guard's behavioral contract.
+run_start = text.find("private static void RunAuthoring(string operation")
+run_end = text.find("private static bool IsActiveDocumentGeneration", run_start)
 if run_start < 0 or run_end < 0:
-    errors.append("Run helper not found")
+    errors.append("RunAuthoring helper not found")
 else:
     run_body = text[run_start:run_end]
     if "ex.Message" in run_body:
-        errors.append("common command failure path must redact raw exception messages")
+        errors.append("authoring command failure path must redact raw exception messages")
     if "Report(document, operation + \" lỗi:" in run_body:
-        errors.append("common command failure path must not publish through an unvalidated captured document")
+        errors.append("authoring command failure path must not publish through an unvalidated captured document")
+    if "IsActiveDocumentGeneration(document, nativeDatabaseIdentity)" not in run_body:
+        errors.append("authoring failure publication must be generation-safe")
 
 print("QS3D V25 BLT structural-authoring document-generation affinity preflight")
 if errors:
