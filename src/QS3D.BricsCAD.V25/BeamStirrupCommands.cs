@@ -188,27 +188,13 @@ namespace QS3D.BricsCAD.V25
             PaletteCoordinator.SetStatus(message);
         }
 
-        private static bool IsActiveDocument(Document document)
+        private static void TrySetPaletteStatusForDocument(Document document, string message)
         {
             try
             {
-                return ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument);
+                if (ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))
+                    PaletteCoordinator.SetStatus(message);
             }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private static void SetPaletteStatusForDocument(Document document, string message)
-        {
-            if (!IsActiveDocument(document)) return;
-            PaletteCoordinator.SetStatus(message);
-        }
-
-        private static void TrySetPaletteStatusForDocument(Document document, string message)
-        {
-            try { SetPaletteStatusForDocument(document, message); }
             catch { }
         }
 
