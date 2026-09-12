@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             AllowsPersistenceOnlyRollback();
             AllowsEquivalentPropertyMapReorderingRollback();
             AllowsEquivalentPropertyKeyCaseRecanonicalizationRollback();
+            AllowsEquivalentRelationCaseRecanonicalizationRollback();
         }
 
         private static void RejectsPropertyDriftBeforePersistenceRollback()
@@ -155,6 +156,31 @@ namespace QS3D.Core.SmokeTests
             Equal("1", element.Properties["Alpha"], "Case-equivalent property map lost Alpha semantic identity.");
             Equal(capturedDirty, element.Dirty, "Case-equivalent property restore did not restore captured Dirty.");
             Equal(capturedUpdatedUtc, element.UpdatedUtc, "Case-equivalent property restore did not restore captured UpdatedUtc.");
+        }
+
+        private static void AllowsEquivalentRelationCaseRecanonicalizationRollback()
+        {
+            var project = new ProjectState("P-CHECKPOINT-ELEMENT-RELATION-CASE", "Checkpoint relation case identity");
+            var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall);
+            element.SourceHandles.Add("AB12");
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+            project.Touch();
+
+            var checkpoint = ProjectPersistenceCheckpoint.Capture(project, new[] { element.Id });
+            var capturedDirty = element.Dirty;
+            var capturedUpdatedUtc = element.UpdatedUtc;
+
+            Equal(true, element.SourceHandles.Remove("AB12"), "Relation case fixture could not remove AB12.");
+            element.SourceHandles.Add("ab12");
+            Equal(true, element.SourceHandles.Contains("AB12"), "Case-equivalent relation identity was not preserved.");
+            Equal(false, checkpoint.Matches(project), "Checkpoint unexpectedly matched case-recanonicalized relation persistence metadata.");
+
+            checkpoint.Restore(project);
+
+            Equal("ab12", element.SourceHandles[0], "Case-equivalent relation semantic identity was changed by restore.");
+            Equal(capturedDirty, element.Dirty, "Case-equivalent relation restore did not restore captured Dirty.");
+            Equal(capturedUpdatedUtc, element.UpdatedUtc, "Case-equivalent relation restore did not restore captured UpdatedUtc.");
         }
 
         private static TException Throws<TException>(Action action) where TException : Exception
