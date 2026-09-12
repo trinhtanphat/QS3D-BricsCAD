@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             BlocksTakeoffBoqAndEstimateOnCriticalRelationshipFailure();
             HonorsExplicitUnexpiredWaiver();
             RejectsExpiredWaiver();
+            RejectsFutureDatedWaiverUntilApprovalTime();
             AppliesConfigurableSeverityThreshold();
             DetectsIfcPsetSpatialTypeAndGuidConsistency();
             DuplicateGuidWaiverMustCoverEveryConflictingElement();
@@ -63,6 +64,34 @@ namespace QS3D.Core.SmokeTests
 
             Expect(decision.Status == QsQaGateStatus.Blocked, "expired waiver must not release gate");
             Expect(decision.WaivedFindings.Count == 0, "expired waiver must not hide finding");
+        }
+
+        private static void RejectsFutureDatedWaiverUntilApprovalTime()
+        {
+            var profile = new QsQaRuleProfile(
+                new string[0],
+                new[] { "TypeAssignment" },
+                null!,
+                QsQaSeverity.Error);
+            var now = Utc(2026, 9, 12);
+            var element = ValidElement("E13", "GUID-13", includeTypeRelationship: false);
+            var approval = now.AddHours(2);
+            var waiver = new QsQaWaiver(
+                "QA2.MISSING_RELATIONSHIP",
+                "E13",
+                "Approved for the next coordination window",
+                "lead.qs",
+                approval,
+                approval.AddDays(1));
+
+            var beforeApproval = new QsQaGate2().Evaluate(new[] { element }, profile, new[] { waiver }, now);
+            Expect(beforeApproval.Status == QsQaGateStatus.Blocked, "future-dated waiver must not release gate before approval time");
+            Expect(beforeApproval.WaivedFindings.Count == 0, "future-dated waiver must not hide a finding before approval time");
+            Expect(beforeApproval.ActiveFindings.Any(x => x.RuleId == "QA2.MISSING_RELATIONSHIP" && x.ElementId == "E13"), "future-dated waiver must leave the finding active");
+
+            var atApproval = new QsQaGate2().Evaluate(new[] { element }, profile, new[] { waiver }, approval);
+            Expect(atApproval.Status == QsQaGateStatus.Pass, "waiver must become effective at its approval timestamp");
+            Expect(atApproval.WaivedFindings.Count == 1 && atApproval.ActiveFindings.Count == 0, "effective waiver must remain auditable and release the finding");
         }
 
         private static void AppliesConfigurableSeverityThreshold()
