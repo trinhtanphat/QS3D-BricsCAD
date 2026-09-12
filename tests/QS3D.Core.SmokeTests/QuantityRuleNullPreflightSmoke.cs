@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Rules;
@@ -10,6 +12,14 @@ namespace QS3D.Core.SmokeTests
         [ModuleInitializer]
         internal static void Initialize() => Run();
 
+        private static void InjectLegacyNullRuleForIntegrityTest(ProjectState project)
+        {
+            var field = project.QuantityRules.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Expected structural quantity-rule backing list for legacy-corruption smoke coverage.");
+            var items = field.GetValue(project.QuantityRules) as IList
+                ?? throw new InvalidOperationException("Expected list-compatible quantity-rule backing storage.");
+            items.Add(null);
+        }
         internal static void Run()
         {
             var malformed = new ProjectState("QTY-RULE-NULL", "Quantity rule null");
@@ -17,7 +27,7 @@ namespace QS3D.Core.SmokeTests
             malformed.Elements.Add(malformedElement);
             malformedElement.SetQuantity("Stale", 9d);
             malformedElement.Properties["Rule:Stale"] = "OLD@1";
-            malformed.QuantityRules.Add(null!);
+            InjectLegacyNullRuleForIntegrityTest(malformed);
 
             var updatedUtc = malformedElement.UpdatedUtc;
             var staleValue = malformedElement.Quantities["Stale"];

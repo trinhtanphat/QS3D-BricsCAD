@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             NoOpMutationsDoNotAdvance();
             RejectedMutationsDoNotAdvance();
             RevisionOverflowFailsBeforeMutation();
+            ProjectQuantityRuleRevisionLifecycleSmoke.Run();
         }
 
         private static void StructuralMutationsAdvanceExactlyOnce()
