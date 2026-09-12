@@ -48,6 +48,59 @@ namespace QS3D.Core.SmokeTests
             Expect(Math.Abs(wall.FormulaQuantity - 11d) < 1e-12, "formula stage");
             Expect(Math.Abs(wall.EstimatedCost - 1100d) < 1e-12, "estimate stage");
             Expect(wall.EvidenceCount == 2, "drawing+BIM evidence count");
+
+            var precisionInventory = workflow.BuildInventoryAndEstimate(
+                new[]
+                {
+                    new TakeoffQuantityEvidence2D("M-LARGE", "A900", "R1", "drawings/A900.pdf", "pdf:M-LARGE", "PRECISION", "ZONE-P", "Takeoff", 1e16d, "m")
+                },
+                new[]
+                {
+                    new IfcQtoItem("ifc-small-1", "IfcWall", "ZONE-P", "PRECISION", "Length", 1d, "m"),
+                    new IfcQtoItem("ifc-small-2", "IfcWall", "ZONE-P", "PRECISION", "Length", 1d, "m")
+                },
+                (classification, quantity) => quantity,
+                (classification, unit) => 2d);
+            var precision = precisionInventory.Single(x => x.Classification == "PRECISION" && x.Zone == "ZONE-P" && x.Unit == "m");
+            Expect(precision.MeasuredQuantity == 10000000000000002d, "compensated Drawing+BIM aggregation");
+            Expect(precision.FormulaQuantity == 10000000000000002d, "formula receives compensated quantity");
+            Expect(precision.EstimatedCost == 20000000000000004d, "estimate uses compensated quantity");
+            Expect(precision.EvidenceCount == 3, "precision evidence count");
+
+            var ordered = workflow.BuildInventoryAndEstimate(
+                new[]
+                {
+                    new TakeoffQuantityEvidence2D("M-U2", "A901", "R1", "drawings/A901.pdf", "pdf:M-U2", "ORDER", "ZONE-O", "Takeoff", 1d, "m2"),
+                    new TakeoffQuantityEvidence2D("M-U1", "A901", "R1", "drawings/A901.pdf", "pdf:M-U1", "ORDER", "ZONE-O", "Takeoff", 1d, "m")
+                },
+                Array.Empty<IfcQtoItem>(),
+                (classification, quantity) => quantity,
+                (classification, unit) => 1d);
+            Expect(ordered.Count == 2 && ordered[0].Unit == "m" && ordered[1].Unit == "m2", "deterministic unit ordering");
+
+            ExpectThrows<ArgumentException>(() => workflow.BuildInventoryAndEstimate(
+                new TakeoffQuantityEvidence2D[] { null! },
+                Array.Empty<IfcQtoItem>(),
+                (classification, quantity) => quantity,
+                (classification, unit) => 1d), "null drawing evidence rejection");
+            ExpectThrows<ArgumentException>(() => workflow.BuildInventoryAndEstimate(
+                Array.Empty<TakeoffQuantityEvidence2D>(),
+                new IfcQtoItem[] { null! },
+                (classification, quantity) => quantity,
+                (classification, unit) => 1d), "null BIM quantity rejection");
+        }
+
+        private static void ExpectThrows<T>(Action action, string name) where T : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (T)
+            {
+                return;
+            }
+            throw new InvalidOperationException("2D takeoff workflow smoke failed: " + name + ".");
         }
 
         private static void Expect(bool condition, string name)

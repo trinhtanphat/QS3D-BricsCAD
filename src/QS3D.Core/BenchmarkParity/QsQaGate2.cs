@@ -76,10 +76,12 @@ namespace QS3D.Core.BenchmarkParity
             ElementId = QsModelElementSnapshot.Require(elementId, "elementId");
             Reason = QsModelElementSnapshot.Require(reason, "reason");
             ApprovedBy = QsModelElementSnapshot.Require(approvedBy, "approvedBy");
-            ApprovedUtc = approvedUtc.Kind == DateTimeKind.Utc ? approvedUtc : approvedUtc.ToUniversalTime();
-            ExpiresUtc = expiresUtc.HasValue
-                ? (expiresUtc.Value.Kind == DateTimeKind.Utc ? expiresUtc.Value : expiresUtc.Value.ToUniversalTime())
-                : (DateTime?)null;
+            if (approvedUtc.Kind != DateTimeKind.Utc)
+                throw new ArgumentException("Waiver approval timestamp must be UTC.", "approvedUtc");
+            if (expiresUtc.HasValue && expiresUtc.Value.Kind != DateTimeKind.Utc)
+                throw new ArgumentException("Waiver expiry timestamp must be UTC.", "expiresUtc");
+            ApprovedUtc = approvedUtc;
+            ExpiresUtc = expiresUtc;
             if (ExpiresUtc.HasValue && ExpiresUtc.Value < ApprovedUtc) throw new ArgumentException("Waiver expiry cannot predate approval.", "expiresUtc");
         }
 
@@ -159,7 +161,8 @@ namespace QS3D.Core.BenchmarkParity
         {
             if (elements == null) throw new ArgumentNullException("elements");
             if (profile == null) throw new ArgumentNullException("profile");
-            if (nowUtc.Kind != DateTimeKind.Utc) nowUtc = nowUtc.ToUniversalTime();
+            if (nowUtc.Kind != DateTimeKind.Utc)
+                throw new ArgumentException("QA evaluation timestamp must be UTC.", "nowUtc");
 
             var materialized = elements.ToList();
             if (materialized.Any(x => x == null)) throw new ArgumentException("Element collection contains null.", "elements");
