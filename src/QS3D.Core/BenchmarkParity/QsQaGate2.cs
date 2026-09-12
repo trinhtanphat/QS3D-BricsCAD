@@ -95,6 +95,7 @@ namespace QS3D.Core.BenchmarkParity
             if (finding == null) return false;
             if (!string.Equals(RuleId, finding.RuleId, StringComparison.OrdinalIgnoreCase)) return false;
             if (!string.Equals(ElementId, finding.ElementId, StringComparison.OrdinalIgnoreCase)) return false;
+            if (nowUtc < ApprovedUtc) return false;
             return !ExpiresUtc.HasValue || nowUtc <= ExpiresUtc.Value;
         }
     }
