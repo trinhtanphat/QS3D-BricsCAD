@@ -160,14 +160,6 @@ namespace QS3D.BricsCAD.V25
                             if (previousHostId.Length > 0 && project.FindElement(previousHostId) != null)
                                 regenerationTargets.Add(previousHostId);
 
-                            RequireCurrentMutationAuthority(
-                                document,
-                                nativeDatabaseIdentity,
-                                project,
-                                expectedProjectId,
-                                expectedChangeVersion,
-                                expectedOpeningIds,
-                                selected);
                             service.LinkOpening(project, item.Opening.Id, item.HostId);
                             if (UpdateAutoHostMetadata(item.Opening, item.GapM)) project.Touch();
                             linked++;
