@@ -155,6 +155,10 @@ namespace QS3D.Core.Persistence
                 targets.Add(id, element);
             }
 
+            if (project.ChangeVersion != _projectChangeVersion ||
+                project.UpdatedUtc != _projectUpdatedUtc)
+                throw new InvalidOperationException("Cannot restore a persistence checkpoint because the project revision changed since checkpoint capture.");
+
             foreach (var pair in _elements)
                 pair.Value.Restore(targets[pair.Key]);
             project.RestorePersistenceState(_projectUpdatedUtc, _projectChangeVersion);
