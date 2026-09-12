@@ -14,6 +14,7 @@ namespace QS3D.Core.SmokeTests
             RejectsExpiredWaiver();
             AppliesConfigurableSeverityThreshold();
             DetectsIfcPsetSpatialTypeAndGuidConsistency();
+            DuplicateGuidWaiverMustCoverEveryConflictingElement();
             HardGateDemandFailsClosedForGuardedWorkflows();
             GuardedExecutorBlocksBeforeWorkflowInvocation();
         }
@@ -91,11 +92,53 @@ namespace QS3D.Core.SmokeTests
             var b = new QsModelElementSnapshot("E6", "Wall", "Concrete", "A-WALL", "L02", 4d, 0.2d, 3d, badProperties);
             var decision = new QsQaGate2().Evaluate(new[] { a, b }, QsQaRuleProfile.SolibriQuantityStrict(), null!, Utc(2026, 9, 12));
 
-            Expect(decision.ActiveFindings.Any(x => x.RuleId == "QA2.DUPLICATE_IFC_GUID"), "duplicate IFC GUID must be detected");
+            var duplicateFindings = decision.ActiveFindings.Where(x => x.RuleId == "QA2.DUPLICATE_IFC_GUID").ToList();
+            Expect(duplicateFindings.Count == 2, "every element participating in a duplicate IFC GUID must be flagged");
+            Expect(duplicateFindings.Any(x => x.ElementId == "E5") && duplicateFindings.Any(x => x.ElementId == "E6"), "duplicate IFC GUID findings must identify the complete conflict set");
             Expect(decision.ActiveFindings.Any(x => x.RuleId == "QA2.MISSING_PSET" && x.ElementId == "E6"), "missing required Pset must be detected");
             Expect(decision.ActiveFindings.Any(x => x.RuleId == "QA2.SPATIAL_MISMATCH" && x.ElementId == "E6"), "storey/spatial mismatch must be detected");
             Expect(decision.ActiveFindings.Any(x => x.RuleId == "QA2.TYPE_ASSIGNMENT_MISMATCH" && x.ElementId == "E6"), "element type/IFC type assignment mismatch must be detected");
             Expect(decision.Status == QsQaGateStatus.Blocked, "IFC consistency failures must block strict profile");
+        }
+
+        private static void DuplicateGuidWaiverMustCoverEveryConflictingElement()
+        {
+            var now = Utc(2026, 9, 12);
+            var a = ValidElement("E11", "  guid-shared  ", includeTypeRelationship: true);
+            var b = ValidElement("E12", "GUID-SHARED", includeTypeRelationship: true);
+            var oneSidedWaiver = new QsQaWaiver(
+                "QA2.DUPLICATE_IFC_GUID",
+                "E12",
+                "Temporary federated-model exception",
+                "lead.qs",
+                now.AddHours(-1),
+                now.AddDays(1));
+
+            var partiallyWaived = new QsQaGate2().Evaluate(
+                new[] { a, b },
+                QsQaRuleProfile.SolibriQuantityStrict(),
+                new[] { oneSidedWaiver },
+                now);
+
+            Expect(partiallyWaived.Status == QsQaGateStatus.Blocked, "waiving only one duplicate participant must not release the hard gate");
+            Expect(partiallyWaived.WaivedFindings.Count(x => x.RuleId == "QA2.DUPLICATE_IFC_GUID") == 1, "one-sided waiver must remain auditable");
+            Expect(partiallyWaived.ActiveFindings.Any(x => x.RuleId == "QA2.DUPLICATE_IFC_GUID" && x.ElementId == "E11"), "unwaived duplicate participant must remain active");
+
+            var matchingWaiver = new QsQaWaiver(
+                "QA2.DUPLICATE_IFC_GUID",
+                "E11",
+                "Temporary federated-model exception",
+                "lead.qs",
+                now.AddHours(-1),
+                now.AddDays(1));
+            var fullyWaived = new QsQaGate2().Evaluate(
+                new[] { a, b },
+                QsQaRuleProfile.SolibriQuantityStrict(),
+                new[] { oneSidedWaiver, matchingWaiver },
+                now);
+
+            Expect(fullyWaived.Status == QsQaGateStatus.Pass, "all duplicate participants may be explicitly waived under existing element-scoped policy");
+            Expect(fullyWaived.WaivedFindings.Count(x => x.RuleId == "QA2.DUPLICATE_IFC_GUID") == 2, "every conflicting element waiver must remain auditable");
         }
 
         private static void HardGateDemandFailsClosedForGuardedWorkflows()
