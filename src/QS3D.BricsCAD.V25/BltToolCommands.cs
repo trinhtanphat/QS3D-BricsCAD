@@ -419,14 +419,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                try
-                {
-                    Report(document, "Lệnh " + operation + " lỗi (" + ex.GetType().Name + ").");
-                }
-                catch
-                {
-                    // Diagnostics are best-effort; never mask the original command failure.
-                }
+                Report(document, operation + " lỗi: " + ex.Message);
             }
         }
 
