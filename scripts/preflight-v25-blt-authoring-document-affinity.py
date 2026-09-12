@@ -11,9 +11,9 @@ required = [
     "ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)",
     "document.Database.UnmanagedObject == nativeDatabaseIdentity",
     "Action<Document, IntPtr> action",
-    "var nativeDatabaseIdentity = document.Database.UnmanagedObject;",
+    "nativeDatabaseIdentity = document.Database.UnmanagedObject;",
     "RequireActiveDocumentGeneration(document, nativeDatabaseIdentity)",
-    "RegenAndReportIfActive(document, nativeDatabaseIdentity",
+    "private static void RegenAndReportIfActive(Document document, IntPtr nativeDatabaseIdentity, string message)",
 ]
 for needle in required:
     if needle not in text:
@@ -21,7 +21,8 @@ for needle in required:
 
 # The three BLT geometry authoring workflows retain ObjectIds across one or more
 # Editor prompts. Each must fence the exact managed/native generation after the
-# last prompt and before the transaction/LockDocument mutation handoff.
+# last prompt and before the transaction/LockDocument mutation handoff, and must
+# use generation-safe post-commit UI publication.
 commands = [
     ("public void LowerPilesToPileCap()", "public void CreateLeanConcrete()"),
     ("public void CreateLeanConcrete()", "public void CreateFoundationExcavationVolume()"),
@@ -40,6 +41,8 @@ for start_marker, end_marker in commands:
         errors.append(start_marker + ": native mutation lock not found")
     elif fence < 0:
         errors.append(start_marker + ": exact document/native generation must be fenced immediately before mutation handoff")
+    if "RegenAndReportIfActive(" not in body:
+        errors.append(start_marker + ": post-commit Regen/status must be generation-safe")
 
 # A committed native transaction must not be reported as command failure merely
 # because Regen/status pumps host work or the originating generation becomes stale.
