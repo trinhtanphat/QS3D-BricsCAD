@@ -15,6 +15,7 @@ namespace QS3D.Core.SmokeTests
             RejectsRelationDriftBeforePersistenceRollback();
             RejectsScalarDriftBeforePersistenceRollback();
             AllowsPersistenceOnlyRollback();
+            AllowsEquivalentPropertyMapReorderingRollback();
         }
 
         private static void RejectsPropertyDriftBeforePersistenceRollback()
@@ -102,6 +103,32 @@ namespace QS3D.Core.SmokeTests
             Equal(capturedUpdatedUtc, element.UpdatedUtc, "Persistence-only restore did not restore captured UpdatedUtc.");
             Equal(projectVersion, project.ChangeVersion, "Persistence-only restore changed project ChangeVersion.");
             Equal(projectUpdatedUtc, project.UpdatedUtc, "Persistence-only restore changed project UpdatedUtc.");
+        }
+
+        private static void AllowsEquivalentPropertyMapReorderingRollback()
+        {
+            var project = new ProjectState("P-CHECKPOINT-ELEMENT-MAP-ORDER", "Checkpoint property map ordering");
+            var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall);
+            element.SetProperty("Alpha", "1");
+            element.SetProperty("Beta", "2");
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+            project.Touch();
+
+            var checkpoint = ProjectPersistenceCheckpoint.Capture(project, new[] { element.Id });
+            var capturedDirty = element.Dirty;
+            var capturedUpdatedUtc = element.UpdatedUtc;
+
+            Equal(true, element.Properties.Remove("Alpha"), "Property reorder fixture could not remove Alpha.");
+            element.SetProperty("Alpha", "1");
+            Equal(false, checkpoint.Matches(project), "Checkpoint unexpectedly matched reordered element persistence metadata.");
+
+            checkpoint.Restore(project);
+
+            Equal("1", element.Properties["Alpha"], "Equivalent property map lost Alpha.");
+            Equal("2", element.Properties["Beta"], "Equivalent property map lost Beta.");
+            Equal(capturedDirty, element.Dirty, "Equivalent property map restore did not restore captured Dirty.");
+            Equal(capturedUpdatedUtc, element.UpdatedUtc, "Equivalent property map restore did not restore captured UpdatedUtc.");
         }
 
         private static TException Throws<TException>(Action action) where TException : Exception
