@@ -49,6 +49,8 @@ Warnings below the blocking threshold return `PassWithWarnings` and execute norm
 
 Production callers that have the authoritative model/IFC snapshot should use `QsIntelligencePipeline.RunWithQaGate2(...)`. The additive extension accepts the QA snapshot, configurable profile, waivers and a UTC QA evaluation timestamp together with the existing normalized quantity inputs. It evaluates QA once, then wraps the unified Intelligence execution in Takeoff, BOQ and Estimate guarded boundaries before `QsIntelligencePipeline.Run(...)` is invoked.
 
+The authoritative QA snapshot is evaluated before any normalized QS Intelligence downstream work is entered; the quantity records remain downstream business inputs, not substitutes for model-quality evidence.
+
 A blocked decision therefore prevents the Intelligence pipeline from producing revision-derived BOQ or estimate/cost output at all. The returned `QsQaGuardedIntelligenceReport` carries both the authoritative `QsQaGate2Decision` (including waived findings) and the normal `QsIntelligenceReport`, so clients do not need to re-run QA to render audit evidence.
 
 Do not synthesize IFC relationship/Pset evidence from `QsQuantityRecord`: those normalized records do not contain enough typed spatial/material/dimension context to prove Solibri-style completeness. Pass an authoritative `QsModelElementSnapshot` collection from the BIM/IFC adapter instead.
