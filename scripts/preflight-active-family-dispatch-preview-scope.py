@@ -71,7 +71,7 @@ else:
     required = (
         "RequireCurrentDispatchSnapshot(",
         "using (DirectDrawProjectPreviewContext.BeginDispatchScope(document))",
-        "Dispatch(document, dispatchFamily, advanced, operation);",
+        "Dispatch(document, nativeDatabaseIdentity, dispatchFamily, advanced, operation);",
     )
     for token in required:
         if token not in text:
@@ -79,7 +79,7 @@ else:
 
     route = text.find("var dispatchFamily = RequireCurrentDispatchSnapshot(")
     arm = text.find("using (DirectDrawProjectPreviewContext.BeginDispatchScope(document))", route)
-    dispatch = text.find("Dispatch(document, dispatchFamily, advanced, operation);", arm)
+    dispatch = text.find("Dispatch(document, nativeDatabaseIdentity, dispatchFamily, advanced, operation);", arm)
     if route < 0 or arm < 0 or dispatch < 0 or not (route < arm < dispatch):
         errors.append("active-family routing must be validated before the preview scope is armed and before target dispatch")
 
