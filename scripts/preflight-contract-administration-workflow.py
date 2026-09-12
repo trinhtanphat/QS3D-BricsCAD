@@ -64,9 +64,17 @@ for token in [
     "ContractAdministrationWindow",
     "Application.ShowModelessWindow",
     "database.UnmanagedObject",
+    "_unpublishedCandidate",
+    "_publicationInFlightCandidate",
+    "_cleanupInFlightCandidate",
+    "PrepareUnpublishedCandidate()",
+    "PreparePublishedWindow(requestedIdentity)",
+    "CloseUnpublishedCandidate(candidate)",
+    "ReferenceEquals(_publicationInFlightCandidate, candidate)",
+    "if (!candidate.IsLoaded)",
 ]:
     if token not in commands:
-        fail("contract-administration command surface lost required modeless binding token: " + token)
+        fail("contract-administration command surface lost required modeless publication/lifecycle token: " + token)
 
 for token in [
     "new ContractAdministrationWorkflow()",
@@ -110,4 +118,4 @@ if "ContractAdministrationWorkflowSmoke.Run();" not in entrypoint:
 if "[ModuleInitializer]" in smoke or "RegisterAndRun()" in smoke:
     fail("contract-administration smoke must use the explicit deterministic smoke entrypoint.")
 
-print("PASS: contract administration preserves revision provenance, deterministic deadlines, EOT/claim lifecycle, audit authority, and thin V25 boundaries.")
+print("PASS: contract administration preserves revision provenance, deterministic deadlines, EOT/claim lifecycle, audit authority, hardened modeless publication, and thin V25 boundaries.")
