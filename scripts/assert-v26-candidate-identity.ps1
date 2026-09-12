@@ -133,7 +133,7 @@ function Get-JsonPropertyOccurrenceCount([string]$JsonText, [string]$PropertyNam
         $encodedName = $match.Value.Substring(0, $colon).Trim()
         try { $decodedName = [string]($encodedName | ConvertFrom-Json -ErrorAction Stop) }
         catch { continue }
-        if ([string]::Equals($decodedName, $PropertyName, [StringComparison]::Ordinal)) { $count++ }
+        if ([string]::Equals($decodedName, $PropertyName, [StringComparison]::OrdinalIgnoreCase)) { $count++ }
     }
     return $count
 }
@@ -191,6 +191,11 @@ try {
         try { $reader = [IO.StreamReader]::new($entryStream, $strictUtf8, $false, 4096, $true); try { $metadataText = $reader.ReadToEnd() } finally { $reader.Dispose() } }
         finally { $entryStream.Dispose() }
     } finally { $archive.Dispose(); $zipHeld.Stream.Position = 0 }
+    foreach ($propertyName in @('product', 'target', 'framework', 'productVersion')) {
+        if ((Get-JsonPropertyOccurrenceCount -JsonText $metadataText -PropertyName $propertyName) -ne 1) {
+            throw "V26 PACKAGE-METADATA.json must contain exactly one $propertyName property."
+        }
+    }
     try { $metadata = $metadataText | ConvertFrom-Json -ErrorAction Stop }
     catch { throw "V26 PACKAGE-METADATA.json is invalid JSON: $($_.Exception.Message)" }
     if ([string]$metadata.product -ne 'QS3D' -or [string]$metadata.target -ne 'BricsCAD V26 x64' -or [string]$metadata.framework -ne 'net8.0-windows') { throw 'V26 candidate ZIP metadata identity is invalid.' }
@@ -213,7 +218,7 @@ try {
         $expectedSigner = $ExpectedSignerThumbprint.ToUpperInvariant()
 
         $updateText = Read-HeldText -Held $updateHeld -Label 'V26 update manifest'
-        foreach ($propertyName in @('schemaVersion', 'packageUri', 'sha256', 'signerThumbprint')) {
+        foreach ($propertyName in @('product', 'target', 'productVersion', 'schemaVersion', 'packageUri', 'sha256', 'signerThumbprint')) {
             if ((Get-JsonPropertyOccurrenceCount -JsonText $updateText -PropertyName $propertyName) -ne 1) {
                 throw "V26 update manifest must contain exactly one $propertyName property."
             }
